@@ -6,7 +6,7 @@ from typing import Any
 import pytest_asyncio
 from authzed.api.v1 import Relationship, RelationshipUpdate, SubjectReference, WriteRelationshipsRequest
 from sanic import Sanic
-from sanic_testing.testing import SanicASGITestClient
+from sanic_testing.testing import SanicASGITestClient, TestingResponse
 from ulid import ULID
 
 from components.renku_data_services.utils.middleware import validate_null_byte
@@ -212,6 +212,26 @@ async def sanic_client(
 
 
 @pytest_asyncio.fixture
+async def post(sanic_client, user_headers, admin_headers):
+    async def post_helper(url: str, admin: bool = False, payload: dict[str, Any] = None) -> TestingResponse:
+        headers = admin_headers if admin else user_headers
+        _, response = await sanic_client.post(url, headers=headers, json=payload)
+        return response
+
+    return post_helper
+
+
+@pytest_asyncio.fixture
+async def patch(sanic_client, user_headers, admin_headers):
+    async def patch_helper(url: str, admin: bool = False, payload: Any | None = None) -> TestingResponse:
+        headers = admin_headers if admin else user_headers
+        _, response = await sanic_client.patch(url, headers=headers, json=payload)
+        return response
+
+    return patch_helper
+
+
+@pytest_asyncio.fixture
 async def create_project(sanic_client, user_headers, admin_headers, regular_user, admin_user):
     async def create_project_helper(
         name: str, admin: bool = False, members: list[dict[str, str]] = None, **payload
@@ -306,6 +326,7 @@ async def create_session_environment(sanic_client: SanicASGITestClient, admin_he
         payload.update({"name": name})
         payload["description"] = payload.get("description") or "A session environment."
         payload["container_image"] = payload.get("container_image") or "some_image:some_tag"
+        payload["environment_image_source"] = payload.get("environment_image_source") or "image"
 
         _, res = await sanic_client.post("/api/data/environments", headers=admin_headers, json=payload)
 
@@ -324,9 +345,10 @@ async def create_session_launcher(sanic_client: SanicASGITestClient, user_header
         payload["description"] = payload.get("description") or "A session launcher."
         if "environment" not in payload:
             payload["environment"] = {
-                "environment_kind": "CUSTOM",
+                "environment_kind": "custom",
                 "name": "Test",
                 "container_image": "some_image:some_tag",
+                "environment_image_source": "image",
             }
 
         _, res = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)

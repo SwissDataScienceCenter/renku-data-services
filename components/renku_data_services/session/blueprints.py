@@ -7,7 +7,7 @@ from sanic.response import JSONResponse
 from sanic_ext import validate
 from ulid import ULID
 
-from renku_data_services import base_models
+from renku_data_services import base_models, errors
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_query
@@ -55,7 +55,7 @@ class EnvironmentsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.EnvironmentPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.EnvironmentPost) -> JSONResponse:
-            new_environment = validate_unsaved_environment(body, models.EnvironmentKind.GLOBAL)
+            new_environment = validate_unsaved_environment(body, models.EnvironmentKind.global_)
             environment = await self.session_repo.insert_environment(user=user, environment=new_environment)
             return validated_json(apispec.Environment, environment, status=201)
 
@@ -135,12 +135,22 @@ class SessionLaunchersBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        @validate(json=apispec.SessionLauncherPatch)
-        async def _patch(
-            _: Request, user: base_models.APIUser, launcher_id: ULID, body: apispec.SessionLauncherPatch
-        ) -> JSONResponse:
+        async def _patch(request: Request, user: base_models.APIUser, launcher_id: ULID) -> JSONResponse:
             async with self.session_repo.session_maker() as session, session.begin():
                 current_launcher = await self.session_repo.get_launcher(user, launcher_id)
+                body = apispec.SessionLauncherPatch.model_validate(request.json)
+
+                # NOTE: This is required to deal with the multiple possible types for the environment field: If some
+                # random fields are passed then the validation chooses the environment type to be EnvironmentIdOnlyPatch
+                # which might not be the case and would set the session's environment ID to None.
+                # TODO: Check how validation exactly works for Union types to see if we can do this in a clear way.
+                if isinstance(body.environment, apispec.EnvironmentIdOnlyPatch) and "id" not in request.json.get(
+                    "environment", {}
+                ):
+                    raise errors.ValidationError(
+                        message="There are errors in the following fields, id: Input should be a valid string"
+                    )
+
                 launcher_patch = validate_session_launcher_patch(body, current_launcher)
                 launcher = await self.session_repo.update_launcher(
                     user=user, launcher_id=launcher_id, patch=launcher_patch, session=session

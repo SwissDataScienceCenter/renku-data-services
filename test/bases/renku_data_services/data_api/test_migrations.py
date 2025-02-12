@@ -199,7 +199,7 @@ async def test_migration_to_1ef98b967767_and_086eb60b42c8(app_config_instance: C
         '--ServerApp.token="" --ServerApp.password="" --ServerApp.allow_remote_access=true '
         "--ContentsManager.allow_hidden=true --ServerApp.allow_origin=*",
     ]
-    assert global_env["environment_kind"] == "GLOBAL"
+    assert global_env["environment_kind"] == "global"
     async with app_config_instance.db.async_session_maker() as session, session.begin():
         res = await session.execute(
             sa.text("SELECT * FROM sessions.environments WHERE name != :name").bindparams(name="global env")
@@ -220,7 +220,7 @@ async def test_migration_to_1ef98b967767_and_086eb60b42c8(app_config_instance: C
         '--ServerApp.token="" --ServerApp.password="" --ServerApp.allow_remote_access=true '
         "--ContentsManager.allow_hidden=true --ServerApp.allow_origin=*",
     ]
-    assert custom_env["environment_kind"] == "CUSTOM"
+    assert custom_env["environment_kind"] == "custom"
     async with app_config_instance.db.async_session_maker() as session, session.begin():
         res = await session.execute(
             sa.text("SELECT * FROM sessions.launchers WHERE id = :id").bindparams(id=custom_launcher_id)
