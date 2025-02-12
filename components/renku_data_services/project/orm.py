@@ -209,5 +209,5 @@ class ProjectMigrationsORM(BaseORM):
     project_id: Mapped[ULID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     """The new project of the migration of the v1."""
 
-    project: Mapped[Optional[ProjectORM]] = relationship("ProjectORM", foreign_keys=[project_id], default=None)
+    project: Mapped[ProjectORM] = relationship(init=False, repr=False, lazy="selectin")
     """Relationship to the new project."""
