@@ -788,6 +788,22 @@ class SessionRepository:
                     message=f"Session environment with id '{build.environment_id}' does not exist or you do not have access to it."  # noqa: E501
                 )
 
+            # We check if there is any in-progress build
+            in_progress_builds = (
+                await session.scalars(
+                    select(schemas.BuildORM)
+                    .where(schemas.BuildORM.environment_id == build.environment_id)
+                    .where(schemas.BuildORM.status == models.BuildStatus.in_progress)
+                    .order_by(schemas.BuildORM.id.desc())
+                )
+            ).all()
+            for item in in_progress_builds:
+                await self._refresh_build(build=item, session=session)
+                if item.status == models.BuildStatus.in_progress:
+                    raise errors.ConflictError(
+                        message=f"Session environment with id '{build.environment_id}' already has a build in progress."
+                    )
+
             build_orm = schemas.BuildORM(
                 environment_id=build.environment_id,
                 status=models.BuildStatus.in_progress,
