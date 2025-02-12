@@ -629,10 +629,8 @@ components:
       pattern: "^[a-z0-9]+((\\.|_|__|-+)[a-z0-9]+)*(\\/[a-z0-9]+((\\.|_|__|-+)[a-z0-9]+)*)*(:[a-zA-Z0-9_][a-zA-Z0-9._-]{0,127}|@sha256:[a-fA-F0-9]{64}){0,1}$"
       example: renku/renkulab-py:3.10-0.18.1
     Repository:
-      description: The repository used as a basis for a custom builder
+      description: A git repository URL
       type: string
-      maxLength: 500
-      example: "https://github.com/voila-gallery/gaussian-density"
     DefaultUrl:
       description: The default path to open in a session
       type: string
