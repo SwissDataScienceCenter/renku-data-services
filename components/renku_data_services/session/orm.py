@@ -238,7 +238,7 @@ class BuildORM(BaseORM):
         result = self._dump_result()
         return models.Build(
             id=self.id,
-            environment_id=ULID.from_str("1V7AD1KQ2H01E3Q907EN8GBJE3"),  # TODO: use real environment_id foreign key
+            environment_id=self.environment_id,
             created_at=self.created_at,
             status=self.status,
             result=result,

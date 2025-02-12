@@ -972,11 +972,25 @@ async def test_starting_session_anonymous(
 
 
 @pytest.mark.asyncio
-async def test_post_build(
-    sanic_client: SanicASGITestClient,
-    user_headers,
-) -> None:
-    payload = {"environment_id": "7232Y90Z6XSAXJPT79GB5Y269E"}
+async def test_post_build(sanic_client: SanicASGITestClient, user_headers, create_project) -> None:
+    project = await create_project("Some project")
+    payload = {
+        "name": "Launcher 1",
+        "project_id": project["id"],
+        "description": "A session launcher.",
+        "environment": {
+            "repository": "https://github.com/some/repo",
+            "builder_variant": "pip",
+            "frontend_variant": "vscodium",
+            "environment_image_source": "build",
+        },
+    }
+    _, response = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    launcher = response.json
+    environment_id = launcher["environment"]["id"]
+
+    payload = {"environment_id": environment_id}
 
     _, response = await sanic_client.post(
         "/api/data/builds",
@@ -988,18 +1002,32 @@ async def test_post_build(
     assert response.json is not None
     build = response.json
     assert build.get("id") is not None
-    assert build.get("environment_id") is not None
+    assert build.get("environment_id") == environment_id
     assert build.get("created_at") is not None
     assert build.get("status") == "in_progress"
     assert build.get("result") is None
 
 
 @pytest.mark.asyncio
-async def test_get_build(
-    sanic_client: SanicASGITestClient,
-    user_headers,
-) -> None:
-    payload = {"environment_id": "7232Y90Z6XSAXJPT79GB5Y269E"}
+async def test_get_build(sanic_client: SanicASGITestClient, user_headers, create_project) -> None:
+    project = await create_project("Some project")
+    payload = {
+        "name": "Launcher 1",
+        "project_id": project["id"],
+        "description": "A session launcher.",
+        "environment": {
+            "repository": "https://github.com/some/repo",
+            "builder_variant": "pip",
+            "frontend_variant": "vscodium",
+            "environment_image_source": "build",
+        },
+    }
+    _, response = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    launcher = response.json
+    environment_id = launcher["environment"]["id"]
+
+    payload = {"environment_id": environment_id}
     _, response = await sanic_client.post(
         "/api/data/builds",
         json=payload,
@@ -1011,23 +1039,37 @@ async def test_get_build(
 
     _, response = await sanic_client.get(
         f"/api/data/builds/{build_id}",
+        headers=user_headers,
     )
 
     assert response.status_code == 200, response.text
     assert response.json is not None
     assert response.json.get("id") == build_id
-    assert response.json.get("environment_id") is not None
+    assert response.json.get("environment_id") == environment_id
     assert response.json.get("created_at") is not None
     assert response.json.get("status") == "in_progress"
     assert response.json.get("result") is None
 
 
 @pytest.mark.asyncio
-async def test_get_environment_builds(
-    sanic_client: SanicASGITestClient,
-    user_headers,
-) -> None:
-    environment_id = "7232Y90Z6XSAXJPT79GB5Y269E"
+async def test_get_environment_builds(sanic_client: SanicASGITestClient, user_headers, create_project) -> None:
+    project = await create_project("Some project")
+    payload = {
+        "name": "Launcher 1",
+        "project_id": project["id"],
+        "description": "A session launcher.",
+        "environment": {
+            "repository": "https://github.com/some/repo",
+            "builder_variant": "pip",
+            "frontend_variant": "vscodium",
+            "environment_image_source": "build",
+        },
+    }
+    _, response = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    launcher = response.json
+    environment_id = launcher["environment"]["id"]
+
     payload = {"environment_id": environment_id}
     _, response = await sanic_client.post(
         "/api/data/builds",
@@ -1047,6 +1089,7 @@ async def test_get_environment_builds(
 
     _, response = await sanic_client.get(
         f"/api/data/environments/{environment_id}/builds",
+        headers=user_headers,
     )
 
     assert response.status_code == 200, response.text
@@ -1057,11 +1100,25 @@ async def test_get_environment_builds(
 
 
 @pytest.mark.asyncio
-async def test_patch_build(
-    sanic_client: SanicASGITestClient,
-    user_headers,
-) -> None:
-    payload = {"environment_id": "7232Y90Z6XSAXJPT79GB5Y269E"}
+async def test_patch_build(sanic_client: SanicASGITestClient, user_headers, create_project) -> None:
+    project = await create_project("Some project")
+    payload = {
+        "name": "Launcher 1",
+        "project_id": project["id"],
+        "description": "A session launcher.",
+        "environment": {
+            "repository": "https://github.com/some/repo",
+            "builder_variant": "pip",
+            "frontend_variant": "vscodium",
+            "environment_image_source": "build",
+        },
+    }
+    _, response = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    launcher = response.json
+    environment_id = launcher["environment"]["id"]
+
+    payload = {"environment_id": environment_id}
     _, response = await sanic_client.post(
         "/api/data/builds",
         json=payload,
@@ -1086,12 +1143,13 @@ async def test_patch_build(
 
     _, response = await sanic_client.get(
         f"/api/data/builds/{build_id}",
+        headers=user_headers,
     )
 
     assert response.status_code == 200, response.text
     assert response.json is not None
     assert response.json.get("id") == build_id
-    assert response.json.get("environment_id") is not None
+    assert response.json.get("environment_id") == environment_id
     assert response.json.get("created_at") is not None
     assert response.json.get("status") == "cancelled"
     assert response.json.get("result") is None
