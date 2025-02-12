@@ -319,7 +319,8 @@ components:
             environment_image_source:
               $ref: "#/components/schemas/EnvironmentImageSourceImage"
             environment_kind:
-              $ref: "#/components/schemas/EnvironmentKind"
+              allOf:
+                - $ref: "#/components/schemas/EnvironmentKind"
               default: custom
           required:
             - environment_image_source
@@ -335,9 +336,14 @@ components:
               $ref: "#/components/schemas/BuildParameters"
             environment_image_source:
               $ref: "#/components/schemas/EnvironmentImageSourceBuild"
+            environment_kind:
+              allOf:
+                - $ref: "#/components/schemas/EnvironmentKind"
+              default: custom
           required:
             - build_parameters
             - environment_image_source
+            - environment_kind
     EnvironmentPostInLauncherHelper:
       allOf:
         - $ref: "#/components/schemas/EnvironmentPost"
@@ -364,17 +370,14 @@ components:
         default_url:
           allOf:
             - $ref: "#/components/schemas/DefaultUrl"
-            - default: /lab
           default: /lab
         uid:
           allOf:
             - $ref: "#/components/schemas/EnvironmentUid"
-            - default: 1000
           default: 1000
         gid:
           allOf:
             - $ref: "#/components/schemas/EnvironmentGid"
-            - default: 1000
           default: 1000
         working_directory:
           $ref: "#/components/schemas/EnvironmentWorkingDirectory"
@@ -383,14 +386,14 @@ components:
         port:
           allOf:
             - $ref: "#/components/schemas/EnvironmentPort"
-            - default: 8080
           default: 8080
         command:
           $ref: "#/components/schemas/EnvironmentCommand"
         args:
           $ref: "#/components/schemas/EnvironmentArgs"
         is_archived:
-          $ref: "#/components/schemas/IsArchived"
+          allOf:
+            - $ref: "#/components/schemas/IsArchived"
           default: false
         environment_image_source:
           $ref: "#/components/schemas/EnvironmentImageSourceImage"
@@ -599,22 +602,14 @@ components:
         - builder_variant
         - frontend_variant
     BuildParametersPost:
-      description: Data required to create a build
-      type: object
-      properties:
-        repository:
-          $ref: "#/components/schemas/Repository"
-        builder_variant:
-          $ref: "#/components/schemas/BuilderVariant"
-        frontend_variant:
-          $ref: "#/components/schemas/FrontendVariant"
-        environment_image_source:
-          $ref: "#/components/schemas/EnvironmentImageSourceBuild"
-      required:
-        - repository
-        - builder_variant
-        - frontend_variant
-        - environment_image_source
+      allOf:
+        - $ref: "#/components/schemas/BuildParameters"
+        - type: object
+          properties:
+            environment_image_source:
+              $ref: "#/components/schemas/EnvironmentImageSourceBuild"
+          required:
+            - environment_image_source
     BuildParametersPatch:
       description: Data for updating a build
       type: object
@@ -700,13 +695,13 @@ components:
       items:
         type: string
       description: The command that will be run i.e. will overwrite the image Dockerfile ENTRYPOINT, equivalent to command in Kubernetes
-      minLength: 1
+      minItems: 1
     EnvironmentArgs:
       type: array
       items:
         type: string
       description: The arguments that will follow the command, i.e. will overwrite the image Dockerfile CMD, equivalent to args in Kubernetes
-      minLength: 1
+      minItems: 1
     IsArchived:
       type: boolean
       description: Whether this environment is archived and not for use in new projects or not
