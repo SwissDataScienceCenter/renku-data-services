@@ -4,10 +4,9 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from renku_data_services.session.cr_shipwright_buildrun import Build, Git, Strategy
+from renku_data_services.session.cr_shipwright_buildrun import Build, Git, ParamValue, Strategy
 from renku_data_services.session.cr_shipwright_buildrun import Model as _BuildRun
 from renku_data_services.session.cr_shipwright_buildrun import Output as BuildOutput
-from renku_data_services.session.cr_shipwright_buildrun import ParamValue2 as ParamValue
 from renku_data_services.session.cr_shipwright_buildrun import Source as BuildSource
 from renku_data_services.session.cr_shipwright_buildrun import Spec as BuildRunSpec
 from renku_data_services.session.cr_shipwright_buildrun import Spec1 as BuildSpec
@@ -37,3 +36,10 @@ class BuildRun(_BuildRun):
     apiVersion: str = "shipwright.io/v1beta1"
     # Here we overwrite the default from ASModel because it is too weakly typed
     metadata: Metadata  # type: ignore[assignment]
+
+
+class GitSource(BuildSource):
+    """Git repository as a source for builds."""
+
+    type: str = "Git"
+    git: Git

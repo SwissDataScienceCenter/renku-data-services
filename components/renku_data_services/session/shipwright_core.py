@@ -81,9 +81,9 @@ async def create_build(
             spec=sw_schemas.BuildRunSpec(
                 build=sw_schemas.Build(
                     spec=sw_schemas.BuildSpec(
-                        source=sw_schemas.BuildSource(git=sw_schemas.Git(url=git_repository), type="Git"),
+                        source=sw_schemas.GitSource(git=sw_schemas.Git(url=git_repository)),
                         strategy=sw_schemas.Strategy(kind="BuildStrategy", name=build_strategy_name),
-                        paramValues=[],
+                        paramValues=[sw_schemas.ParamValue(name="run-image", value=run_image)],
                         output=sw_schemas.BuildOutput(
                             image=output_image,
                             pushSecret=push_secret_name,

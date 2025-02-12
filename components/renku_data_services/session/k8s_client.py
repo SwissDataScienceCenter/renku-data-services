@@ -154,17 +154,6 @@ class ShipwrightClient:
         self.base_client = base_client
         self.skip_cache_if_unavailable = skip_cache_if_unavailable
 
-    # @classmethod
-    # def from_env(cls, namespace: str, skip_cache_if_unavailable: bool = False) -> "ShipwrightClient":
-    #     """Generate a configuration from environment variables."""
-    #     # TODO: how to pass this?
-    #     cache_url = os.environ["NB_AMALTHEA_V2__CACHE_URL"]
-    #     return cls(
-    #         cache=ShipwrightCache(url=cache_url),
-    #         base_client=ShipwrightClientBase(namespace=namespace),
-    #         skip_cache_if_unavailable=skip_cache_if_unavailable,
-    #     )
-
     async def list_build_runs(self) -> list[BuildRun]:
         """Get a list of ShipWright BuildRuns."""
         if self.cache is None:
