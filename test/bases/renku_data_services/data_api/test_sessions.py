@@ -1055,6 +1055,7 @@ async def test_get_environment_builds(
     assert len(builds) == 2
     assert {build.get("id") for build in builds} == {build1["id"], build2["id"]}
 
+
 @pytest.mark.asyncio
 async def test_patch_build(
     sanic_client: SanicASGITestClient,
