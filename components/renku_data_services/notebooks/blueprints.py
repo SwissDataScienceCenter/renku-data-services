@@ -333,16 +333,10 @@ class NotebooksNewBP(CustomBlueprint):
                 git_providers,
                 storage_mount,
                 work_dir,
-            )
-            extra_containers = await get_extra_containers(
-                self.nb_config,
-                user,
-                repositories,
-                git_providers,
                 uid=environment.uid,
                 gid=environment.gid,
-                fs_group=environment.gid,
             )
+            extra_containers = await get_extra_containers(self.nb_config, user, repositories, git_providers)
             extra_volumes.extend(extra_init_volumes_dc)
             extra_init_containers.extend(extra_init_containers_dc)
 

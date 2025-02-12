@@ -21,9 +21,6 @@ async def main_container(
     config: NotebooksConfig,
     repositories: list[Repository],
     git_providers: list[GitProvider],
-    uid: int = 1000,
-    gid: int = 1000,
-    fs_group: int = 100,
 ) -> client.V1Container | None:
     """The patch that adds the git proxy container to a session statefulset."""
     if not user.is_authenticated or not repositories or user.access_token is None or user.refresh_token is None:
@@ -70,9 +67,8 @@ async def main_container(
     container = client.V1Container(
         image=config.sessions.git_proxy.image,
         security_context={
-            "fsGroup": fs_group,
-            "runAsGroup": gid,
-            "runAsUser": uid,
+            "runAsGroup": 1000,
+            "runAsUser": 1000,
             "allowPrivilegeEscalation": False,
             "runAsNonRoot": True,
         },

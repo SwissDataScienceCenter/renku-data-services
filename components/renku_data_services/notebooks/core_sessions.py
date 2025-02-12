@@ -56,6 +56,8 @@ async def get_extra_init_containers(
     git_providers: list[GitProvider],
     storage_mount: PurePosixPath,
     work_dir: PurePosixPath,
+    uid: int = 1000,
+    gid: int = 1000,
 ) -> tuple[list[InitContainer], list[ExtraVolume]]:
     """Get all extra init containers that should be added to an amalthea session."""
     cert_init, cert_vols = init_containers.certificates_container(nb_config)
@@ -68,6 +70,8 @@ async def get_extra_init_containers(
         git_providers=git_providers,
         workspace_mount_path=storage_mount,
         work_dir=work_dir,
+        uid=uid,
+        gid=gid,
     )
     if git_clone is not None:
         session_init_containers.append(InitContainer.model_validate(git_clone))
@@ -79,20 +83,11 @@ async def get_extra_containers(
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     repositories: list[Repository],
     git_providers: list[GitProvider],
-    uid: int,
-    gid: int,
-    fs_group: int,
 ) -> list[ExtraContainer]:
     """Get the extra containers added to amalthea sessions."""
     conts: list[ExtraContainer] = []
     git_proxy_container = await git_proxy.main_container(
-        user=user,
-        config=nb_config,
-        repositories=repositories,
-        git_providers=git_providers,
-        uid=uid,
-        gid=gid,
-        fs_group=fs_group,
+        user=user, config=nb_config, repositories=repositories, git_providers=git_providers
     )
     if git_proxy_container:
         conts.append(ExtraContainer.model_validate(nb_config.k8s_v2_client.sanitize(git_proxy_container)))
@@ -441,9 +436,6 @@ async def patch_session(
         user,
         repositories,
         git_providers,
-        gid=session.spec.session.runAsGroup,
-        fs_group=session.spec.session.runAsGroup,
-        uid=session.spec.session.runAsUser,
     )
     if extra_containers:
         patch.spec.extraContainers = extra_containers

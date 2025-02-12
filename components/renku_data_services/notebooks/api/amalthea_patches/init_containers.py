@@ -29,6 +29,8 @@ async def git_clone_container_v2(
     workspace_mount_path: PurePosixPath,
     work_dir: PurePosixPath,
     lfs_auto_fetch: bool = False,
+    uid: int = 1000,
+    gid: int = 1000,
 ) -> dict[str, Any] | None:
     """Returns the specification for the container that clones the user's repositories for new operator."""
     amalthea_session_work_volume: str = "amalthea-volume"
@@ -136,9 +138,8 @@ async def git_clone_container_v2(
         },
         "securityContext": {
             "allowPrivilegeEscalation": False,
-            "fsGroup": 100,
-            "runAsGroup": 100,
-            "runAsUser": 1000,
+            "runAsGroup": gid,
+            "runAsUser": uid,
             "runAsNonRoot": True,
         },
         "volumeMounts": [
@@ -261,7 +262,6 @@ async def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
         },
         "securityContext": {
             "allowPrivilegeEscalation": False,
-            "fsGroup": 100,
             "runAsGroup": 100,
             "runAsUser": 1000,
             "runAsNonRoot": True,
