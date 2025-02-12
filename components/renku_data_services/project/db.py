@@ -931,14 +931,11 @@ class ProjectMigrationRepository:
         project_migration = result.one_or_none()
         if project_migration is not None:
             raise errors.ValidationError(message=f"Project V1 with id '{project_v1_id}' already exists.")
-        created_project = await self.project_repo.insert_project(user, project)
+        created_project = await self.project_repo.insert_project(user, project, session=session)
         if not created_project:
             raise errors.ValidationError(
                 message=f"Failed to create a project for migration from v1 (project_v1_id={project_v1_id})."
             )
-
-        if not created_project.id:
-            raise errors.ValidationError(message="Failed to create project with a valid ID.")
 
         migration_orm = schemas.ProjectMigrationsORM(project_id=created_project.id, project_v1_id=project_v1_id)
 

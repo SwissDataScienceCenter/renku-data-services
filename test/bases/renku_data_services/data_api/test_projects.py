@@ -1741,7 +1741,12 @@ async def test_get_project_after_group_moved(
 
 
 @pytest.mark.asyncio
-async def test_migrate_v1_project(sanic_client, app_config, user_headers, regular_user, create_project) -> None:
+async def test_migrate_v1_project(
+    sanic_client,
+    app_config,
+    user_headers,
+    regular_user,
+) -> None:
     v1_id = 1122
     v1_project = {
         "name": "New Migrated Project",
@@ -1770,26 +1775,15 @@ async def test_migrate_v1_project(sanic_client, app_config, user_headers, regula
     assert migrated_project["keywords"] == ["old", "project"]
     assert migrated_project["repositories"] == ["http://old-repository.com"]
 
-    # events = await app_config.event_repo.get_pending_events()
-    # assert len(events) == 2
-    # project_created_event = next(e for e in events if e.get_message_type() == "project.created")
-    # project_created = deserialize_event(project_created_event)
-    # assert project_created.name == v1_project["name"]
-    # assert project_created.slug == v1_project["slug"]
-    # project_auth_added_event = next(e for e in events if e.get_message_type() == "projectAuth.added")
-    # project_auth_added = deserialize_event(project_auth_added_event)
-    # assert project_auth_added.userId == "user"
-    # assert project_auth_added.role == MemberRole.OWNER
-
-    # migrated_project_id = migrated_project["id"]
-    # _, response = await sanic_client.get(f"/api/data/projects/{migrated_project_id}", headers=user_headers)
-    # assert response.status_code == 200, response.text
-    # migrated_project = response.json
-    # assert migrated_project["name"] == "New Migrated Project"
-    # assert migrated_project["slug"] == "new-project-slug"
-    # assert migrated_project["created_by"] == "user"
-    # assert migrated_project["namespace"] == regular_user.namespace.slug
-    # assert migrated_project["description"] == "Old project for migration"
-    # assert migrated_project["visibility"] == "private"
-    # assert migrated_project["keywords"] == ["old", "project"]
-    # assert migrated_project["repositories"] == ["http://old-repository.com"]
+    migrated_project_id = migrated_project["id"]
+    _, response = await sanic_client.get(f"/api/data/projects/{migrated_project_id}", headers=user_headers)
+    assert response.status_code == 200, response.text
+    migrated_project = response.json
+    assert migrated_project["name"] == "New Migrated Project"
+    assert migrated_project["slug"] == "new-project-slug"
+    assert migrated_project["created_by"] == "user"
+    assert migrated_project["namespace"] == regular_user.namespace.slug
+    assert migrated_project["description"] == "Old project for migration"
+    assert migrated_project["visibility"] == "private"
+    assert migrated_project["keywords"] == ["old", "project"]
+    assert migrated_project["repositories"] == ["http://old-repository.com"]
