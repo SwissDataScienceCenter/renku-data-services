@@ -321,7 +321,6 @@ class NotebooksNewBP(CustomBlueprint):
                 user=user,
                 data_connectors_stream=data_connectors_stream,
                 work_dir=work_dir,
-                storage_mount=storage_mount,
                 cloud_storage_overrides=body.cloudstorage or [],
                 user_repo=self.user_repo,
             )
