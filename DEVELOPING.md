@@ -122,7 +122,7 @@ From the root folder of the repository, run:
 2. `devcontainer up --workspace-folder .`
 3. `make schemas`
 4. `make amalthea_schema`
-5. `make k3d_cluster`
+5. `make k3d_cluster` # Is this really necessary, I don't think so.
 
 Then you can run the test as usual directly from PyCharm by clicking on the green arrow next to a specific test, or a
 whole test suite or part of the test hierarchy.
