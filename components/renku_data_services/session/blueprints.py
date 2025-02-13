@@ -196,7 +196,7 @@ class BuildsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         async def _get_one(_: Request, user: base_models.APIUser, build_id: ULID) -> JSONResponse:
             build = await self.session_repo.get_build(user=user, build_id=build_id)
-            return validated_json(apispec_extras.RootBuild, build)
+            return validated_json(apispec_extras.Build, build)
 
         return "/builds/<build_id:ulid>", ["GET"], _get_one
 
@@ -208,7 +208,7 @@ class BuildsBP(CustomBlueprint):
         async def _post(_: Request, user: base_models.APIUser, environment_id: ULID) -> JSONResponse:
             new_build = validate_unsaved_build(environment_id=environment_id)
             build = await self.session_repo.insert_build(user=user, build=new_build)
-            return validated_json(apispec_extras.RootBuild, build, status=201)
+            return validated_json(apispec_extras.Build, build, status=201)
 
         return "/environments/<environment_id:ulid>/builds", ["POST"], _post
 
@@ -223,7 +223,7 @@ class BuildsBP(CustomBlueprint):
         ) -> JSONResponse:
             build_patch = validate_build_patch(body)
             build = await self.session_repo.update_build(user=user, build_id=build_id, patch=build_patch)
-            return validated_json(apispec_extras.RootBuild, build)
+            return validated_json(apispec_extras.Build, build)
 
         return "/builds/<build_id:ulid>", ["PATCH"], _patch
 
