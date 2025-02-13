@@ -21,8 +21,7 @@ async def update_build_status(
         logging.warning("ShipWright client not defined, BuildRun refresh skipped.")
         return None
 
-    k8s_name = build.get_k8s_name()
-    k8s_build = await shipwright_client.get_build_run(name=k8s_name)
+    k8s_build = await shipwright_client.get_build_run(name=build.k8s_name)
 
     if k8s_build is None:
         return models.ShipWrightBuildStatusUpdate(status=models.BuildStatus.failed)
@@ -84,7 +83,7 @@ async def create_build(
         push_secret_name = builds_config.push_secret_name or constants.BUILD_DEFAULT_PUSH_SECRET_NAME
 
         build_run = crs.BuildRun(
-            metadata=crs.Metadata(name=build.get_k8s_name()),
+            metadata=crs.Metadata(name=build.k8s_name),
             spec=crs.BuildRunSpec(
                 build=crs.Build(
                     spec=crs.BuildSpec(
@@ -108,4 +107,4 @@ async def cancel_build(build: models.Build, shipwright_client: ShipwrightClient 
     if shipwright_client is None:
         logging.warning("ShipWright client not defined, BuildRun deletion skipped.")
     else:
-        await shipwright_client.delete_build_run(name=build.get_k8s_name())
+        await shipwright_client.delete_build_run(name=build.k8s_name)

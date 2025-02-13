@@ -823,7 +823,7 @@ class SessionRepository:
             self.builds_config.build_output_image_prefix or constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
         )
         output_image_name = constants.BUILD_OUTPUT_IMAGE_NAME
-        output_image_tag = result.get_k8s_name()
+        output_image_tag = result.k8s_name
         output_image = f"{output_image_prefix}{output_image_name}:{output_image_tag}"
 
         await shipwright_core.create_build(
