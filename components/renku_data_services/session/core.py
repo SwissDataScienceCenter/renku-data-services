@@ -280,9 +280,9 @@ def validate_session_launcher_patch(
     )
 
 
-def validate_unsaved_build(build: apispec.BuildPost) -> models.UnsavedBuild:
+def validate_unsaved_build(environment_id: ULID) -> models.UnsavedBuild:
     """Validate an unsaved container image build."""
-    return models.UnsavedBuild(environment_id=ULID.from_str(build.environment_id))
+    return models.UnsavedBuild(environment_id=environment_id)
 
 
 def validate_build_patch(patch: apispec.BuildPatch) -> models.BuildPatch:

@@ -205,13 +205,12 @@ class BuildsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        @validate(json=apispec.BuildPost)
-        async def _post(_: Request, user: base_models.APIUser, body: apispec.BuildPost) -> JSONResponse:
-            new_build = validate_unsaved_build(body)
+        async def _post(_: Request, user: base_models.APIUser, environment_id: ULID) -> JSONResponse:
+            new_build = validate_unsaved_build(environment_id=environment_id)
             build = await self.session_repo.insert_build(user=user, build=new_build)
             return validated_json(apispec_extras.RootBuild, build, status=201)
 
-        return "/builds", ["POST"], _post
+        return "/environments/<environment_id:ulid>/builds", ["POST"], _post
 
     def patch(self) -> BlueprintFactoryResponse:
         """Update a specific container image build."""

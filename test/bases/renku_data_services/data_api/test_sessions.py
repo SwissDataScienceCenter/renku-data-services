@@ -990,11 +990,8 @@ async def test_post_build(sanic_client: SanicASGITestClient, user_headers, creat
     launcher = response.json
     environment_id = launcher["environment"]["id"]
 
-    payload = {"environment_id": environment_id}
-
     _, response = await sanic_client.post(
-        "/api/data/builds",
-        json=payload,
+        f"/api/data/environments/{environment_id}/builds",
         headers=user_headers,
     )
 
@@ -1027,10 +1024,8 @@ async def test_get_build(sanic_client: SanicASGITestClient, user_headers, create
     launcher = response.json
     environment_id = launcher["environment"]["id"]
 
-    payload = {"environment_id": environment_id}
     _, response = await sanic_client.post(
-        "/api/data/builds",
-        json=payload,
+        f"/api/data/environments/{environment_id}/builds",
         headers=user_headers,
     )
     assert response.status_code == 201, response.text
@@ -1070,18 +1065,22 @@ async def test_get_environment_builds(sanic_client: SanicASGITestClient, user_he
     launcher = response.json
     environment_id = launcher["environment"]["id"]
 
-    payload = {"environment_id": environment_id}
     _, response = await sanic_client.post(
-        "/api/data/builds",
-        json=payload,
+        f"/api/data/environments/{environment_id}/builds",
         headers=user_headers,
     )
     assert response.status_code == 201, response.text
     build1 = response.json
+    # Note: cancel this build so that we can post the next one
+    _, response = await sanic_client.patch(
+        f"/api/data/builds/{build1['id']}",
+        json={"status": "cancelled"},
+        headers=user_headers,
+    )
+    assert response.status_code == 200, response.text
 
     _, response = await sanic_client.post(
-        "/api/data/builds",
-        json=payload,
+        f"/api/data/environments/{environment_id}/builds",
         headers=user_headers,
     )
     assert response.status_code == 201, response.text
@@ -1118,10 +1117,8 @@ async def test_patch_build(sanic_client: SanicASGITestClient, user_headers, crea
     launcher = response.json
     environment_id = launcher["environment"]["id"]
 
-    payload = {"environment_id": environment_id}
     _, response = await sanic_client.post(
-        "/api/data/builds",
-        json=payload,
+        f"/api/data/environments/{environment_id}/builds",
         headers=user_headers,
     )
     assert response.status_code == 201, response.text
