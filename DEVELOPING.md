@@ -111,7 +111,7 @@ function if you prefer to keep your favorite shell.
 ## Running Tests
 
 You can run style checks using `make style_checks`.
-To run the test test suite, use `make tests` (you likely need to run in the devcontainer for this to work, as it needs
+To run the test suite, use `make tests` (you likely need to run in the devcontainer for this to work, as it needs
 some surrounding services to run).
 
 ### Directly from PyCharm
@@ -122,7 +122,11 @@ From the root folder of the repository, run:
 2. `devcontainer up --workspace-folder .`
 3. `make schemas`
 4. `make amalthea_schema`
-5. `make k3d_cluster`
+
+> **WARNING:**
+> 
+> Be careful with the kubernetes environment in your shell, as in case of badly setup tests and environment you might try
+> to run some tests against your default cluster.
 
 Then you can run the test as usual directly from PyCharm by clicking on the green arrow next to a specific test, or a
 whole test suite or part of the test hierarchy.
