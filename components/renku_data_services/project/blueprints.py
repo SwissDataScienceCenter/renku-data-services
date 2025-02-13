@@ -85,17 +85,17 @@ class ProjectsBP(CustomBlueprint):
 
         return "/projects", ["POST"], _post
 
-    def get_all_migrations(self) -> BlueprintFactoryResponse:
+    def get_migration(self) -> BlueprintFactoryResponse:
         """List all project migrations by project v1 id."""
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _get_all_migrations(_: Request, user: base_models.APIUser, v1_id: int) -> JSONResponse:
-            projects = await self.project_migration_repo.get_migrations_by_project_id(user, v1_id)
-            projects_dump = [self._dump_project(p) for p in projects]
-            return validated_json(apispec.ProjectsList, projects_dump)
+        async def _get_migration(_: Request, user: base_models.APIUser, v1_id: int) -> JSONResponse:
+            project = await self.project_migration_repo.get_migration_by_project_id(user, v1_id)
+            project_dump = self._dump_project(project)
+            return validated_json(apispec.Project, project_dump)
 
-        return "/renku_v1_projects/<v1_id:int>/migrations", ["GET"], _get_all_migrations
+        return "/renku_v1_projects/<v1_id:int>/migrations", ["GET"], _get_migration
 
     def post_migration(self) -> BlueprintFactoryResponse:
         """Migrate v1 project."""

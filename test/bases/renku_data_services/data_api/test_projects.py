@@ -1787,3 +1787,15 @@ async def test_migrate_v1_project(
     assert migrated_project["visibility"] == "private"
     assert migrated_project["keywords"] == ["old", "project"]
     assert migrated_project["repositories"] == ["http://old-repository.com"]
+
+    _, response = await sanic_client.get(f"/api/data/renku_v1_projects/{v1_id}/migrations", headers=user_headers)
+    assert response.status_code == 200, response.text
+    migrated_project = response.json
+    assert migrated_project["name"] == "New Migrated Project"
+    assert migrated_project["slug"] == "new-project-slug"
+    assert migrated_project["created_by"] == "user"
+    assert migrated_project["namespace"] == regular_user.namespace.slug
+    assert migrated_project["description"] == "Old project for migration"
+    assert migrated_project["visibility"] == "private"
+    assert migrated_project["keywords"] == ["old", "project"]
+    assert migrated_project["repositories"] == ["http://old-repository.com"]

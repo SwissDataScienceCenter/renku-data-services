@@ -948,7 +948,7 @@ class ProjectMigrationRepository:
 
         return created_project
 
-    async def get_migrations_by_project_id(self, user: base_models.APIUser, v1_id: int) -> list[models.Project]:
+    async def get_migration_by_project_id(self, user: base_models.APIUser, v1_id: int) -> models.Project:
         """Retrieve all migration records for a given project v1 ID."""
         if user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
@@ -959,16 +959,20 @@ class ProjectMigrationRepository:
             project_ids = [row[0] for row in result.fetchall()]
 
             if not project_ids:
-                return []
+                raise errors.MissingResourceError(message=f"Migration for project v1 with id '{v1_id}' does not exist.")
 
             # NOTE: Show only those projects that user has access to
-            allowed_project_ids = await self.authz.resources_with_permission(
-                user, user.id, ResourceType.project, scope=Scope.WRITE
-            )
-            stmt = select(schemas.ProjectORM).where(
-                schemas.ProjectORM.id.in_(project_ids), schemas.ProjectORM.id.in_(allowed_project_ids)
-            )
+            allowed_projects = await self.authz.resources_with_direct_membership(user, ResourceType.project)
+            project_id_list = [str(row.project_id) for row in project_ids]
+            stmt = select(schemas.ProjectORM)
+            stmt = stmt.where(schemas.ProjectORM.id.in_(project_id_list))
+            stmt = stmt.where(schemas.ProjectORM.id.in_(allowed_projects))
             result = await session.execute(stmt)
-            project_orms = result.scalars().all()
+            project_orm = result.scalars().first()
 
-            return [p.dump() for p in project_orms]
+            if project_orm is None:
+                raise errors.MissingResourceError(
+                    message="Project migrated does not exist or you dont have permissions to open it."
+                )
+
+            return project_orm.dump()
