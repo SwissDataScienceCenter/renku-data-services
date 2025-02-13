@@ -228,7 +228,7 @@ class BuildPatch:
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class ShipWrightBuildStatusUpdate:
-    """Model to represent an update from about a build from ShipWright."""
+    """Model to represent an update about a build from ShipWright."""
 
     status: BuildStatus
     result: BuildResult | None = None
