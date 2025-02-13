@@ -206,8 +206,9 @@ class Build:
     status: BuildStatus
     result: BuildResult | None = None
 
-    def get_k8s_name(self) -> str:
-        """Returns the name of the corresponding BuildRun."""
+    @property
+    def k8s_name(self) -> str:
+        """Returns the name of the corresponding ShipWright BuildRun."""
         name = f"renku-{self.id}"
         return name.lower()
 
