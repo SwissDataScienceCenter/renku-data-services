@@ -253,27 +253,6 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - session_launchers
-  /builds:
-    post:
-      summary: Create a new container image build
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/BuildPost"
-      responses:
-        "201":
-          description: The build was created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Build"
-        # TODO: 409 CONFLICT responce
-        default:
-          $ref: "#/components/responses/Error"
-      tags:
-        - builds
   /builds/{build_id}:
     parameters:
       - in: path
@@ -349,6 +328,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BuildList"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - builds
+    post:
+      summary: Create a new container image build
+      responses:
+        "201":
+          description: The build was created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Build"
+        # TODO: 409 CONFLICT responce
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -860,15 +853,6 @@ components:
       type: array
       items:
         $ref: "#/components/schemas/Build"
-    BuildPost:
-      description: A container image build
-      type: object
-      properties:
-        environment_id:
-          $ref: "#/components/schemas/Ulid"
-      required:
-        - environment_id
-      additionalProperties: false
     BuildPatch:
       description: The requested update of a container image build
       type: object
