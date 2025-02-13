@@ -12,6 +12,7 @@ from renku_data_services.errors.errors import CannotStartBuildError, DeleteBuild
 from renku_data_services.notebooks.errors.intermittent import CacheError, IntermittentError
 from renku_data_services.notebooks.errors.programming import ProgrammingError
 from renku_data_services.notebooks.util.retries import retry_with_exponential_backoff_async
+from renku_data_services.session import crs, models
 from renku_data_services.session.crs import BuildRun
 
 
@@ -188,3 +189,80 @@ class ShipwrightClient:
     async def delete_build_run(self, name: str) -> None:
         """Delete a ShipWright BuildRun."""
         return await self.base_client.delete_build_run(name)
+
+    async def create_image_build(self, params: models.ShipWrightBuildRunParams) -> None:
+        """Create a new BuildRun in ShipWright to support a newly created build."""
+        build_run = BuildRun(
+            metadata=crs.Metadata(name=params.name),
+            spec=crs.BuildRunSpec(
+                build=crs.Build(
+                    spec=crs.BuildSpec(
+                        source=crs.GitSource(git=crs.Git(url=params.git_repository)),
+                        strategy=crs.Strategy(kind="BuildStrategy", name=params.build_strategy_name),
+                        paramValues=[crs.ParamValue(name="run-image", value=params.run_image)],
+                        output=crs.BuildOutput(
+                            image=params.output_image,
+                            pushSecret=params.push_secret_name,
+                        ),
+                    )
+                )
+            ),
+        )
+        await self.create_build_run(build_run)
+
+    async def update_image_build_status(self, buildrun_name: str) -> models.ShipWrightBuildStatusUpdate:
+        """Update the status of a build by pulling the corresponding BuildRun from ShipWright."""
+        k8s_build = await self.get_build_run(name=buildrun_name)
+
+        if k8s_build is None:
+            return models.ShipWrightBuildStatusUpdate(
+                update=models.ShipWrightBuildStatusUpdateContent(status=models.BuildStatus.failed)
+            )
+
+        k8s_build_status = k8s_build.status
+        completion_time = k8s_build_status.completionTime if k8s_build_status else None
+
+        if k8s_build_status is None or completion_time is None:
+            return models.ShipWrightBuildStatusUpdate(update=None)
+
+        conditions = k8s_build_status.conditions
+        condition = next(filter(lambda c: c.type == "Succeeded", conditions or []), None)
+
+        buildSpec = k8s_build_status.buildSpec
+        output = buildSpec.output if buildSpec else None
+        result_image = output.image if output else "unknown"
+
+        source = buildSpec.source if buildSpec else None
+        git_obj = source.git if source else None
+        result_repository_url = git_obj.url if git_obj else "unknown"
+
+        source_2 = k8s_build_status.source
+        git_obj_2 = source_2.git if source_2 else None
+        result_repository_git_commit_sha = git_obj_2.commitSha if git_obj_2 else None
+        result_repository_git_commit_sha = result_repository_git_commit_sha or "unknown"
+
+        if condition is not None and condition.status == "True":
+            return models.ShipWrightBuildStatusUpdate(
+                update=models.ShipWrightBuildStatusUpdateContent(
+                    status=models.BuildStatus.succeeded,
+                    completed_at=completion_time,
+                    result=models.BuildResult(
+                        completed_at=completion_time,
+                        image=result_image,
+                        repository_url=result_repository_url,
+                        repository_git_commit_sha=result_repository_git_commit_sha,
+                    ),
+                )
+            )
+        else:
+            return models.ShipWrightBuildStatusUpdate(
+                update=models.ShipWrightBuildStatusUpdateContent(
+                    status=models.BuildStatus.failed,
+                    completed_at=completion_time,
+                )
+            )
+
+    async def cancel_image_build(self, buildrun_name: str) -> None:
+        """Cancel a build by deleting the corresponding BuildRun from ShipWright."""
+        # TODO: use proper cancellation, see: https://shipwright.io/docs/build/buildrun/#canceling-a-buildrun
+        await self.delete_build_run(name=buildrun_name)

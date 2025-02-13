@@ -228,9 +228,31 @@ class BuildPatch:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class ShipWrightBuildStatusUpdate:
+class ShipWrightBuildRunParams:
+    """Model to represent the parameters used to create a new ShipWright BuildRun."""
+
+    name: str
+    git_repository: str
+    run_image: str
+    output_image: str
+    build_strategy_name: str
+    push_secret_name: str
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ShipWrightBuildStatusUpdateContent:
     """Model to represent an update about a build from ShipWright."""
 
     status: BuildStatus
     result: BuildResult | None = None
     completed_at: datetime | None = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ShipWrightBuildStatusUpdate:
+    """Model to represent an update about a build from ShipWright."""
+
+    update: ShipWrightBuildStatusUpdateContent | None
+    """The update about a build.
+
+    None represents "no update"."""

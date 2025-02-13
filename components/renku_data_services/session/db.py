@@ -18,7 +18,7 @@ from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import RESET
 from renku_data_services.crc.db import ResourcePoolRepository
-from renku_data_services.session import constants, models, shipwright_core
+from renku_data_services.session import constants, models
 from renku_data_services.session import orm as schemas
 from renku_data_services.session.k8s_client import ShipwrightClient
 
@@ -814,26 +814,9 @@ class SessionRepository:
 
         result = build_orm.dump()
 
-        git_repository = build_parameters.repository
-
-        # TODO: define the run image from `build_parameters`
-        run_image = self.builds_config.vscodium_python_run_image or constants.BUILD_VSCODIUM_PYTHON_DEFAULT_RUN_IMAGE
-
-        output_image_prefix = (
-            self.builds_config.build_output_image_prefix or constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
-        )
-        output_image_name = constants.BUILD_OUTPUT_IMAGE_NAME
-        output_image_tag = result.k8s_name
-        output_image = f"{output_image_prefix}{output_image_name}:{output_image_tag}"
-
-        await shipwright_core.create_build(
-            build=result,
-            git_repository=git_repository,
-            run_image=run_image,
-            output_image=output_image,
-            shipwright_client=self.shipwright_client,
-            builds_config=self.builds_config,
-        )
+        if self.shipwright_client is not None:
+            params = self._get_buildrun_params(build=result, build_parameters=build_parameters)
+            await self.shipwright_client.create_image_build(params=params)
 
         return result
 
@@ -888,31 +871,35 @@ class SessionRepository:
 
         build_model = build.dump()
 
-        await shipwright_core.cancel_build(build=build_model, shipwright_client=self.shipwright_client)
+        if self.shipwright_client is not None:
+            await self.shipwright_client.cancel_image_build(buildrun_name=build_model.k8s_name)
 
         return build_model
 
     async def _refresh_build(self, build: schemas.BuildORM, session: AsyncSession) -> None:
+        """Refresh the status of a build by querying ShipWright."""
         if build.status != models.BuildStatus.in_progress:
             return
 
-        status_update = await shipwright_core.update_build_status(
-            build=build.dump(), shipwright_client=self.shipwright_client
-        )
+        # Note: We can't get an update about the build if there is no client for ShipWright.
+        if self.shipwright_client is None:
+            return
 
-        if status_update is not None and status_update.status == models.BuildStatus.failed:
+        status_update = await self.shipwright_client.update_image_build_status(buildrun_name=build.dump().k8s_name)
+
+        if status_update.update is None:
+            return
+
+        update = status_update.update
+        if update is not None and update.status == models.BuildStatus.failed:
             build.status = models.BuildStatus.failed
-            build.completed_at = status_update.completed_at
-        elif (
-            status_update is not None
-            and status_update.status == models.BuildStatus.succeeded
-            and status_update.result is not None
-        ):
+            build.completed_at = update.completed_at
+        elif update is not None and update.status == models.BuildStatus.succeeded and update.result is not None:
             build.status = models.BuildStatus.succeeded
-            build.completed_at = status_update.completed_at
-            build.result_image = status_update.result.image
-            build.result_repository_url = status_update.result.repository_url
-            build.result_repository_git_commit_sha = status_update.result.repository_git_commit_sha
+            build.completed_at = update.completed_at
+            build.result_image = update.result.image
+            build.result_repository_url = update.result.repository_url
+            build.result_repository_git_commit_sha = update.result.repository_git_commit_sha
             # Also update the session environment here
             # TODO: move this to its own method where build parameters determine args
             environment = build.environment
@@ -928,3 +915,32 @@ class SessionRepository:
 
         await session.flush()
         await session.refresh(build)
+
+    def _get_buildrun_params(
+        self, build: models.Build, build_parameters: models.BuildParameters
+    ) -> models.ShipWrightBuildRunParams:
+        """Derive the ShipWright BuildRun params from a Build instance and a BuildParameters instance."""
+        git_repository = build_parameters.repository
+
+        # TODO: define the run image from `build_parameters`
+        run_image = self.builds_config.vscodium_python_run_image or constants.BUILD_VSCODIUM_PYTHON_DEFAULT_RUN_IMAGE
+
+        output_image_prefix = (
+            self.builds_config.build_output_image_prefix or constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
+        )
+        output_image_name = constants.BUILD_OUTPUT_IMAGE_NAME
+        output_image_tag = build.k8s_name
+        output_image = f"{output_image_prefix}{output_image_name}:{output_image_tag}"
+
+        # TODO: define the build strategy from `build_parameters`
+        build_strategy_name = self.builds_config.build_strategy_name or constants.BUILD_DEFAULT_BUILD_STRATEGY_NAME
+        push_secret_name = self.builds_config.push_secret_name or constants.BUILD_DEFAULT_PUSH_SECRET_NAME
+
+        return models.ShipWrightBuildRunParams(
+            name=build.k8s_name,
+            git_repository=git_repository,
+            run_image=run_image,
+            output_image=output_image,
+            build_strategy_name=build_strategy_name,
+            push_secret_name=push_secret_name,
+        )
