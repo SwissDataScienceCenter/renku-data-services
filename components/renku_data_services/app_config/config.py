@@ -65,7 +65,7 @@ from renku_data_services.project.db import ProjectMemberRepository, ProjectRepos
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsRepo
 from renku_data_services.session.db import SessionRepository
-from renku_data_services.session.k8s_client import ShipwrightClient, ShipwrightClientBase
+from renku_data_services.session.k8s_client import ShipwrightClient
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.config import UserPreferencesConfig
 from renku_data_services.users.db import UserPreferencesRepository
@@ -160,12 +160,10 @@ class BuildsConfig:
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
             shipwright_client = None
         else:
-            # TODO: Use the k8s cache
-            shipwright_cache = None
-            shipwright_base_client = ShipwrightClientBase(namespace=namespace)
             shipwright_client = ShipwrightClient(
-                cache=shipwright_cache,
-                base_client=shipwright_base_client,
+                namespace=namespace,
+                # TODO: Use the k8s cache
+                cache_url=None,
             )
 
         return cls(

@@ -28,7 +28,7 @@ class ShipwrightBuildRunV1Beta1Kr8s(APIObject):
     endpoint: str = "buildruns"
 
 
-class ShipwrightClientBase:
+class _ShipwrightClientBase:
     """Client for managing ShipWright resources in kubernetes."""
 
     def __init__(self, namespace: str):
@@ -89,7 +89,7 @@ class ShipwrightClientBase:
         return None
 
 
-class ShipwrightCache:
+class _ShipwrightCache:
     """Utility class for calling the ShipWright k8s cache."""
 
     def __init__(self, url: str):
@@ -144,14 +144,14 @@ class ShipwrightClient:
 
     def __init__(
         self,
-        cache: ShipwrightCache | None,
-        base_client: ShipwrightClientBase,
+        namespace: str,
+        cache_url: str | None,
         # NOTE: If cache skipping is enabled then when the cache fails a large number of
         # buildruns can overload the k8s API by submitting a lot of calls directly.
         skip_cache_if_unavailable: bool = False,
     ) -> None:
-        self.cache = cache
-        self.base_client = base_client
+        self.cache = _ShipwrightCache(url=cache_url) if cache_url else None
+        self.base_client = _ShipwrightClientBase(namespace=namespace)
         self.skip_cache_if_unavailable = skip_cache_if_unavailable
 
     async def list_build_runs(self) -> list[BuildRun]:
