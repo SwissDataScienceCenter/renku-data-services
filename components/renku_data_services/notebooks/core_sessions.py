@@ -169,7 +169,6 @@ async def get_data_sources(
     server_name: str,
     data_connectors_stream: AsyncIterator[DataConnectorWithSecrets],
     work_dir: PurePosixPath,
-    storage_mount: PurePosixPath,
     cloud_storage_overrides: list[apispec.SessionCloudStoragePost],
     user_repo: UserRepo,
 ) -> tuple[list[DataSource], list[ExtraSecret], dict[str, list[DataConnectorSecret]]]:
@@ -208,7 +207,7 @@ async def get_data_sources(
                 quiet=True,
             )
         if csr.target_path is not None and not PurePosixPath(csr.target_path).is_absolute():
-            csr.target_path = (storage_mount / csr.target_path).as_posix()
+            csr.target_path = (work_dir / csr.target_path).as_posix()
         dcs[csr_id] = dcs[csr_id].with_override(csr)
     for cs_id, cs in dcs.items():
         secret_name = f"{server_name}-ds-{cs_id.lower()}"
