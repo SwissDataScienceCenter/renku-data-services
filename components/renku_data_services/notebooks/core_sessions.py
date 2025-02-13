@@ -56,6 +56,8 @@ async def get_extra_init_containers(
     git_providers: list[GitProvider],
     storage_mount: PurePosixPath,
     work_dir: PurePosixPath,
+    uid: int = 1000,
+    gid: int = 1000,
 ) -> tuple[list[InitContainer], list[ExtraVolume]]:
     """Get all extra init containers that should be added to an amalthea session."""
     cert_init, cert_vols = init_containers.certificates_container(nb_config)
@@ -68,6 +70,8 @@ async def get_extra_init_containers(
         git_providers=git_providers,
         workspace_mount_path=storage_mount,
         work_dir=work_dir,
+        uid=uid,
+        gid=gid,
     )
     if git_clone is not None:
         session_init_containers.append(InitContainer.model_validate(git_clone))
@@ -368,7 +372,11 @@ async def patch_session(
     """Patch an Amalthea session."""
     session = await nb_config.k8s_v2_client.get_server(session_id, user.id)
     if session is None:
-        raise errors.MissingResourceError(message=f"The sesison with ID {session_id} does not exist", quiet=True)
+        raise errors.MissingResourceError(message=f"The session with ID {session_id} does not exist", quiet=True)
+    if session.spec is None:
+        raise errors.ProgrammingError(
+            message=f"The session {session_id} being patched is missing the expected 'spec' field.", quiet=True
+        )
 
     patch = AmaltheaSessionV1Alpha1Patch(spec=AmaltheaSessionV1Alpha1SpecPatch())
     is_getting_hibernated: bool = False

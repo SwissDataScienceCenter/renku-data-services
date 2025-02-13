@@ -332,6 +332,8 @@ class NotebooksNewBP(CustomBlueprint):
                 git_providers,
                 storage_mount,
                 work_dir,
+                uid=environment.uid,
+                gid=environment.gid,
             )
             extra_containers = await get_extra_containers(self.nb_config, user, repositories, git_providers)
             extra_volumes.extend(extra_init_volumes_dc)
@@ -340,7 +342,7 @@ class NotebooksNewBP(CustomBlueprint):
             base_server_url = self.nb_config.sessions.ingress.base_url(server_name)
             base_server_path = self.nb_config.sessions.ingress.base_path(server_name)
             ui_path: str = (
-                f"{base_server_path.rstrip("/")}/{environment.default_url.lstrip("/")}"
+                f"{base_server_path.rstrip('/')}/{environment.default_url.lstrip('/')}"
                 if len(environment.default_url) > 0
                 else base_server_path
             )
