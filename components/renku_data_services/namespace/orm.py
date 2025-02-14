@@ -214,15 +214,26 @@ class NamespaceOldORM(BaseORM):
 
 
 class EntitySlugORM(BaseORM):
-    """Entity slugs."""
+    """Entity slugs.
+
+    Note that valid combinations here are:
+    - namespace_id + project_id
+    - namespace_id + project_id + data_connector_id
+    - namespace_id + data_connector_id
+    """
 
     __tablename__ = "entity_slugs"
     __table_args__ = (
-        Index("entity_slugs_unique_slugs", "namespace_id", "slug", unique=True),
-        CheckConstraint(
-            "CAST (project_id IS NOT NULL AS int) + CAST (data_connector_id IS NOT NULL AS int) BETWEEN 0 AND 1",
-            name="either_project_id_or_data_connector_id_is_set",
+        Index(
+            "entity_slugs_unique_slugs",
+            "namespace_id",
+            "project_id",
+            "data_connector_id",
+            "slug",
+            unique=True,
+            postgresql_nulls_not_distinct=True,
         ),
+        # TODO: Add the constraint that at least 1 of project and data_connector has to be set
     )
 
     id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, init=False)
@@ -230,7 +241,7 @@ class EntitySlugORM(BaseORM):
     project_id: Mapped[ULID | None] = mapped_column(
         ForeignKey(ProjectORM.id, ondelete="CASCADE", name="entity_slugs_project_id_fk"), index=True, nullable=True
     )
-    project: Mapped[ProjectORM | None] = relationship(init=False, repr=False, back_populates="slug")
+    project: Mapped[ProjectORM | None] = relationship(init=False, repr=False, back_populates="slug", lazy="selectin")
     data_connector_id: Mapped[ULID | None] = mapped_column(
         ForeignKey(DataConnectorORM.id, ondelete="CASCADE", name="entity_slugs_data_connector_id_fk"),
         index=True,
@@ -253,11 +264,17 @@ class EntitySlugORM(BaseORM):
         )
 
     @classmethod
-    def create_data_connector_slug(cls, slug: str, data_connector_id: ULID, namespace_id: ULID) -> "EntitySlugORM":
+    def create_data_connector_slug(
+        cls,
+        slug: str,
+        data_connector_id: ULID,
+        namespace_id: ULID,
+        project_id: ULID | None = None,
+    ) -> "EntitySlugORM":
         """Create an entity slug for a data connector."""
         return cls(
             slug=slug,
-            project_id=None,
+            project_id=project_id,
             data_connector_id=data_connector_id,
             namespace_id=namespace_id,
         )
