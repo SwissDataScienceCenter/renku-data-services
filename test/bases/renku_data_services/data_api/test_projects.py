@@ -1,5 +1,6 @@
 """Tests for projects blueprint."""
 
+import asyncio
 import time
 from base64 import b64decode
 from typing import Any
@@ -1225,8 +1226,8 @@ async def test_project_copy_includes_session_launchers(
     project = await create_project("Project")
     project_id = project["id"]
     environment = await create_session_environment("Some environment")
-    launcher_1 = await create_session_launcher("Launcher 1", project["id"], environment={"id": environment["id"]})
-    launcher_2 = await create_session_launcher("Launcher 2", project["id"], environment={"id": environment["id"]})
+    launcher_1 = await create_session_launcher("Launcher 1", project_id, environment={"id": environment["id"]})
+    launcher_2 = await create_session_launcher("Launcher 2", project_id, environment={"id": environment["id"]})
 
     copy_project = await create_project_copy(project_id, regular_user.namespace.slug, "Copy Project")
     project_id = copy_project["id"]
@@ -1237,7 +1238,77 @@ async def test_project_copy_includes_session_launchers(
     assert {launcher["name"] for launcher in launchers} == {"Launcher 1", "Launcher 2"}
     assert launchers[0]["project_id"] == launchers[1]["project_id"] == project_id
     # NOTE: Check that new launchers are created
-    assert {launcher["id"] for launcher in launchers} != {launcher_1["id"], launcher_2["id"]}
+    assert not any({launcher["id"] in {launcher_1["id"], launcher_2["id"]} for launcher in launchers})
+    # NOTE: Check that session environments are the same since they are global
+    assert launchers[0]["environment"]["id"] == launchers[1]["environment"]["id"] == environment["id"]
+
+
+@pytest.mark.asyncio
+async def test_project_copy_creates_new_custom_environment_instance(
+    sanic_client,
+    user_headers,
+    regular_user,
+    create_project,
+    create_session_launcher,
+    create_project_copy,
+    create_resource_pool,
+) -> None:
+    project = await create_project("Project")
+    project_id = project["id"]
+    resource_pool = await create_resource_pool(admin=True)
+    launcher_with_custom_env = await create_session_launcher(
+        "Launcher",
+        project_id,
+        environment={
+            "container_image": "some_image:some_tag",
+            "environment_kind": "CUSTOM",
+            "name": "custom_env",
+            "description": "Custom environment",
+            "port": 42,
+            "default_url": "/lab",
+            "uid": 2000,
+            "gid": 2000,
+            "working_directory": "/work",
+            "mount_directory": "/work",
+            "command": ["python"],
+            "args": ["script.py"],
+        },
+        resource_class_id=resource_pool["classes"][0]["id"],
+        disk_storage=42,
+    )
+
+    await asyncio.sleep(1)
+
+    copy_project = await create_project_copy(project_id, regular_user.namespace.slug, "Copy Project")
+    project_id = copy_project["id"]
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/session_launchers", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    launcher = response.json[0]
+    # NOTE: Check that a new launcher is created
+    assert launcher["id"] != launcher_with_custom_env["id"]
+    assert launcher["project_id"] == project_id
+    assert launcher["name"] == launcher_with_custom_env["name"]
+    assert launcher["description"] == launcher_with_custom_env["description"]
+    assert launcher["resource_class_id"] == launcher_with_custom_env["resource_class_id"]
+    assert launcher["disk_storage"] == launcher_with_custom_env["disk_storage"]
+    assert launcher["creation_date"] != launcher_with_custom_env["creation_date"]
+    # NOTE: Check that a new environment is created
+    environment = launcher["environment"]
+    assert environment["id"] != launcher_with_custom_env["environment"]["id"]
+    assert environment["name"] == launcher_with_custom_env["environment"]["name"]
+    assert environment["creation_date"] != launcher_with_custom_env["environment"]["creation_date"]
+    assert environment["description"] == launcher_with_custom_env["environment"]["description"]
+    assert environment["container_image"] == launcher_with_custom_env["environment"]["container_image"]
+    assert environment["default_url"] == launcher_with_custom_env["environment"]["default_url"]
+    assert environment["uid"] == launcher_with_custom_env["environment"]["uid"]
+    assert environment["gid"] == launcher_with_custom_env["environment"]["gid"]
+    assert environment["working_directory"] == launcher_with_custom_env["environment"]["working_directory"]
+    assert environment["mount_directory"] == launcher_with_custom_env["environment"]["mount_directory"]
+    assert environment["port"] == launcher_with_custom_env["environment"]["port"]
+    assert environment["command"] == launcher_with_custom_env["environment"]["command"]
+    assert environment["args"] == launcher_with_custom_env["environment"]["args"]
+    assert environment["is_archived"] == launcher_with_custom_env["environment"]["is_archived"]
 
 
 @pytest.mark.asyncio
