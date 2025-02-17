@@ -281,6 +281,26 @@ class DataConnectorsBP(CustomBlueprint):
 
         return "/projects/<project_id:ulid>/data_connector_links", ["GET"], _get_all_data_connectors_links_to_project
 
+    def get_inaccessible_data_connectors_links_to_project(self) -> BlueprintFactoryResponse:
+        """The number of data connector links in a given project the user has no access to."""
+
+        @authenticate(self.authenticator)
+        async def _get_inaccessible_data_connectors_links_to_project(
+            _: Request,
+            user: base_models.APIUser,
+            project_id: ULID,
+        ) -> JSONResponse:
+            link_ids = await self.data_connector_to_project_link_repo.get_inaccessible_links_to_project(
+                user=user, project_id=project_id
+            )
+            return validated_json(apispec.InaccessibleDataConnectorLinks, {"count": len(link_ids)})
+
+        return (
+            "/projects/<project_id:ulid>/inaccessible_data_connector_links",
+            ["GET"],
+            _get_inaccessible_data_connectors_links_to_project,
+        )
+
     def get_secrets(self) -> BlueprintFactoryResponse:
         """List all saved secrets for a data connector."""
 
