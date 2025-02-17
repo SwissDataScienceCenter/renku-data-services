@@ -11,6 +11,7 @@ from renku_data_services.authn.dummy import DummyAuthenticator
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.storage.rclone import RCloneValidator
+from renku_data_services.storage.rclone_patches import BANNED_STORAGE, OAUTH_PROVIDERS
 from test.utils import SanicReusableASGITestClient
 
 _valid_storage: dict[str, Any] = {
@@ -590,14 +591,44 @@ async def test_storage_validate_error_sensitive(storage_test_client) -> None:
 
 
 @pytest.mark.asyncio
-async def test_storage_schema(storage_test_client) -> None:
+async def test_storage_schema_patches(storage_test_client) -> None:
     storage_test_client, _ = storage_test_client
     _, res = await storage_test_client.get("/api/data/storage_schema")
     assert res.status_code == 200
-    assert not next((e for e in res.json if e["prefix"] == "alias"), None)  # prohibited storage
-    s3 = next(e for e in res.json if e["prefix"] == "s3")
+    schema = res.json
+    assert not next((e for e in schema if e["prefix"] == "alias"), None)  # prohibited storage
+    s3 = next(e for e in schema if e["prefix"] == "s3")
     assert s3
     providers = next(p for p in s3["options"] if p["name"] == "provider")
     assert providers
     assert providers.get("examples")
+
+    # check that switch provider is added to s3
     assert any(e["value"] == "Switch" for e in providers.get("examples"))
+
+    # assert banned storage is not in schema
+    assert all(s["prefix"] not in BANNED_STORAGE for s in schema)
+
+    # assert webdav password is sensitive
+    webdav = next((e for e in schema if e["prefix"] == "webdav"), None)
+    assert webdav
+    pwd = next((o for o in webdav["options"] if o["name"] == "pass"), None)
+    assert pwd
+    assert pwd.get("sensitive")
+
+    # ensure that the endpoint is required for custom s3 storage
+    endpoints = [
+        o
+        for o in s3["options"]
+        if o["name"] == "endpoint" and o["provider"].startswith("!AWS,ArvanCloud,IBMCOS,IDrive,IONOS,")
+    ]
+    assert endpoints
+    assert all(e.get("required") for e in endpoints)
+
+    # assert oauth is disabled for all providers
+    oauth_providers = [s for s in schema if s["prefix"] in OAUTH_PROVIDERS]
+    assert all(o["name"] != "client_id" and o["name"] != "client_secret" for p in oauth_providers for o in p["options"])
+
+    # check custom webdav storage is added
+    assert any(s["prefix"] == "polybox" for s in schema)
+    assert any(s["prefix"] == "switchDrive" for s in schema)
