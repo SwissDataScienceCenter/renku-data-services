@@ -6,7 +6,7 @@ from typing import Any
 import pytest_asyncio
 from authzed.api.v1 import Relationship, RelationshipUpdate, SubjectReference, WriteRelationshipsRequest
 from sanic import Sanic
-from sanic_testing.testing import SanicASGITestClient, TestingResponse
+from sanic_testing.testing import SanicASGITestClient
 from ulid import ULID
 
 from components.renku_data_services.utils.middleware import validate_null_byte
@@ -209,26 +209,6 @@ async def sanic_client(
     await sync_admins_from_keycloak(app_config_instance.kc_api, app_config_instance.authz)
     await app_config_instance.group_repo.generate_user_namespaces()
     return sanic_client_with_migrations
-
-
-@pytest_asyncio.fixture
-async def post(sanic_client, user_headers, admin_headers):
-    async def post_helper(url: str, admin: bool = False, payload: dict[str, Any] = None) -> TestingResponse:
-        headers = admin_headers if admin else user_headers
-        _, response = await sanic_client.post(url, headers=headers, json=payload)
-        return response
-
-    return post_helper
-
-
-@pytest_asyncio.fixture
-async def patch(sanic_client, user_headers, admin_headers):
-    async def patch_helper(url: str, admin: bool = False, payload: Any | None = None) -> TestingResponse:
-        headers = admin_headers if admin else user_headers
-        _, response = await sanic_client.patch(url, headers=headers, json=payload)
-        return response
-
-    return patch_helper
 
 
 @pytest_asyncio.fixture

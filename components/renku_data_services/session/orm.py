@@ -3,7 +3,7 @@
 from datetime import datetime
 from pathlib import PurePosixPath
 
-from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Enum, MetaData, String, false, func
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, MetaData, String, false, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
@@ -54,9 +54,7 @@ class EnvironmentORM(BaseORM):
     mount_directory: Mapped[PurePosixPath | None] = mapped_column("mount_directory", PurePosixPathType, nullable=True)
     uid: Mapped[int] = mapped_column("uid")
     gid: Mapped[int] = mapped_column("gid")
-    environment_kind: Mapped[models.EnvironmentKind] = mapped_column(
-        "environment_kind", Enum(models.EnvironmentKind, values_callable=lambda e: [v.value for v in e])
-    )
+    environment_kind: Mapped[models.EnvironmentKind] = mapped_column("environment_kind")
     environment_image_source: Mapped[models.EnvironmentImageSource] = mapped_column(
         "environment_image_source", server_default="image", nullable=False
     )

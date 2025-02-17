@@ -35,16 +35,13 @@ class EnvironmentImageSource(StrEnum):
 class BuilderVariant(StrEnum):
     """The type of environment builder."""
 
-    conda = "conda"
-    pip = "pip"
+    python = "python"
 
 
 class FrontendVariant(StrEnum):
     """The environment frontend choice."""
 
     vscodium = "vscodium"
-    jupyterlab = "jupyterlab"
-    streamlit = "streamlit"
 
 
 @dataclass(kw_only=True, frozen=True, eq=True)
