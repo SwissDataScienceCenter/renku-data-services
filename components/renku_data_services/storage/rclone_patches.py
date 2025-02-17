@@ -1,11 +1,11 @@
 """Patches to apply to phe rclone storage schema."""
 
 from copy import deepcopy
-from typing import Any
+from typing import Any, Final
 
 from renku_data_services import errors
 
-BANNED_STORAGE = {
+BANNED_STORAGE: Final[set[str]] = {
     "alias",
     "crypt",
     "cache",
@@ -18,7 +18,7 @@ BANNED_STORAGE = {
     "union",
 }
 
-OAUTH_PROVIDERS = [
+OAUTH_PROVIDERS: Final[set[str]] = {
     "acd",
     "box",
     "drive",
@@ -36,7 +36,7 @@ OAUTH_PROVIDERS = [
     "sharefile",
     "yandex",
     "zoho",
-]
+}
 
 
 def find_storage(spec: list[dict[str, Any]], prefix: str) -> dict[str, Any]:
@@ -50,15 +50,14 @@ def find_storage(spec: list[dict[str, Any]], prefix: str) -> dict[str, Any]:
     return storage
 
 
-def patch_schema_remove_unsafe(spec: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def __patch_schema_remove_unsafe(spec: list[dict[str, Any]]) -> None:
     """Remove storages that aren't safe to use in the service."""
     indices = [i for i, v in enumerate(spec) if v["Prefix"] in BANNED_STORAGE]
     for i in sorted(indices, reverse=True):
         spec.pop(i)
-    return spec
 
 
-def patch_schema_sensitive(spec: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def __patch_schema_sensitive(spec: list[dict[str, Any]]) -> None:
     """Fix sensitive settings on providers."""
     for storage in spec:
         if storage["Prefix"] == "azureblob":
@@ -71,10 +70,9 @@ def patch_schema_sensitive(spec: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     option["Sensitive"] = False
                 if option["Name"] == "pass":
                     option["Sensitive"] = True
-    return spec
 
 
-def patch_schema_s3_endpoint_required(spec: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def __patch_schema_s3_endpoint_required(spec: list[dict[str, Any]]) -> None:
     """Make endpoint required for 'Other' provider."""
     for storage in spec:
         if storage["Prefix"] == "s3":
@@ -83,10 +81,9 @@ def patch_schema_s3_endpoint_required(spec: list[dict[str, Any]]) -> list[dict[s
                     "!AWS,ArvanCloud,IBMCOS,IDrive,IONOS,"
                 ):
                     option["Required"] = True
-    return spec
 
 
-def patch_schema_add_switch_provider(spec: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def __patch_schema_add_switch_provider(spec: list[dict[str, Any]]) -> None:
     """Adds a fake provider to help with setting up switch storage."""
     s3 = find_storage(spec, "s3")
     providers = next(o for o in s3["Options"] if o["Name"] == "provider")
@@ -120,10 +117,9 @@ def patch_schema_add_switch_provider(spec: list[dict[str, Any]]) -> list[dict[st
         o for o in s3["Options"] if o["Name"] == "endpoint" and o["Provider"].startswith("!AWS,")
     )
     existing_endpoint_spec["Provider"] += ",Switch"
-    return spec
 
 
-def patch_schema_remove_oauth_propeties(spec: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def __patch_schema_remove_oauth_propeties(spec: list[dict[str, Any]]) -> None:
     """Removes OAuth2 fields since we can't do an oauth flow in the rclone CSI."""
     for storage in spec:
         if storage["Prefix"] in OAUTH_PROVIDERS:
@@ -132,7 +128,6 @@ def patch_schema_remove_oauth_propeties(spec: list[dict[str, Any]]) -> list[dict
                 if option["Name"] not in ["client_id", "client_secret"]:
                     options.append(option)
             storage["Options"] = options
-    return spec
 
 
 def add_webdav_based_storage(
@@ -142,7 +137,7 @@ def add_webdav_based_storage(
     description: str,
     url_value: str,
     public_link_help: str,
-) -> list[dict[str, Any]]:
+) -> None:
     """Create a modified copy of WebDAV storage and add it to the schema."""
     # Find WebDAV storage schema and create a modified copy
     storage_copy = deepcopy(find_storage(spec, "webdav"))
@@ -220,12 +215,11 @@ def add_webdav_based_storage(
     ]
 
     spec.append(storage_copy)
-    return spec
 
 
-def patch_polybox_storage(spec: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def __patch_polybox_storage(spec: list[dict[str, Any]]) -> None:
     """Add polybox virtual storage that uses webdav."""
-    return add_webdav_based_storage(
+    add_webdav_based_storage(
         spec,
         prefix="polybox",
         name="PolyBox",
@@ -235,9 +229,9 @@ def patch_polybox_storage(spec: list[dict[str, Any]]) -> list[dict[str, Any]]:
     )
 
 
-def patch_switchdrive_storage(spec: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def __patch_switchdrive_storage(spec: list[dict[str, Any]]) -> None:
     """Add switchdrive virtual storage that uses webdav."""
-    return add_webdav_based_storage(
+    add_webdav_based_storage(
         spec,
         prefix="switchDrive",
         name="SwitchDrive",
@@ -247,18 +241,17 @@ def patch_switchdrive_storage(spec: list[dict[str, Any]]) -> list[dict[str, Any]
     )
 
 
-def apply_patches(spec: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def apply_patches(spec: list[dict[str, Any]]) -> None:
     """Apply patches to RClone schema."""
     patches = [
-        patch_schema_remove_unsafe,
-        patch_schema_sensitive,
-        patch_schema_s3_endpoint_required,
-        patch_schema_add_switch_provider,
-        patch_schema_remove_oauth_propeties,
-        patch_polybox_storage,
-        patch_switchdrive_storage,
+        __patch_schema_remove_unsafe,
+        __patch_schema_sensitive,
+        __patch_schema_s3_endpoint_required,
+        __patch_schema_add_switch_provider,
+        __patch_schema_remove_oauth_propeties,
+        __patch_polybox_storage,
+        __patch_switchdrive_storage,
     ]
 
     for patch in patches:
-        spec = patch(spec)
-    return spec
+        patch(spec)
