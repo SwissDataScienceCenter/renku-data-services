@@ -1551,3 +1551,113 @@ async def test_users_cannot_see_private_data_connectors_in_project(
     assert response.json[0]["id"] == project_dc_id
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}/data_connector_links", headers=user_headers)
     assert response.json[0]["data_connector_id"] == project_dc_id
+
+
+@pytest.mark.asyncio
+async def test_number_of_inaccessible_data_connector_links_in_project(
+    sanic_client,
+    member_1_user: UserInfo,
+    member_1_headers,
+    regular_user: UserInfo,
+    user_headers,
+) -> None:
+    # Create a public project
+    payload = {
+        "name": "prj1",
+        "namespace": member_1_user.namespace.path.serialize(),
+        "slug": "prj1",
+        "visibility": "public",
+    }
+    _, response = await sanic_client.post("/api/data/projects", headers=member_1_headers, json=payload)
+    assert response.status_code == 201, response.text
+    project_id = response.json["id"]
+
+    # Add user to the project
+    payload = [
+        {
+            "id": regular_user.id,
+            "role": "viewer",
+        }
+    ]
+    _, response = await sanic_client.patch(
+        f"/api/data/projects/{project_id}/members", headers=member_1_headers, json=payload
+    )
+    assert response.status_code == 200, response.text
+
+    # Create a private data connector in the project
+    storage_config = {
+        "configuration": {"type": "s3", "endpoint": "http://s3.aws.com"},
+        "source_path": "giab",
+        "target_path": "giab",
+    }
+    dc_namespace = f"{member_1_user.namespace.path.serialize()}/prj1"
+    payload = {
+        "name": "dc1",
+        "namespace": dc_namespace,
+        "slug": "dc1",
+        "storage": storage_config,
+        "visibility": "private",
+    }
+    _, response = await sanic_client.post("/api/data/data_connectors", headers=member_1_headers, json=payload)
+    assert response.status_code == 201, response.text
+    assert response.json["namespace"] == dc_namespace
+    project_dc_id = response.json["id"]
+
+    # Link the data connector to the project
+    payload = {"project_id": project_id}
+    _, response = await sanic_client.post(
+        f"/api/data/data_connectors/{project_dc_id}/project_links", headers=member_1_headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+
+    # Create a private data connector in the owner user namespace
+    storage_config = {
+        "configuration": {"type": "s3", "endpoint": "http://s3.aws.com"},
+        "source_path": "giab",
+        "target_path": "giab",
+    }
+    payload = {
+        "name": "dc1",
+        "namespace": member_1_user.namespace.path.serialize(),
+        "slug": "dc1",
+        "storage": storage_config,
+        "visibility": "private",
+    }
+    _, response = await sanic_client.post("/api/data/data_connectors", headers=member_1_headers, json=payload)
+    assert response.status_code == 201, response.text
+    assert response.json["namespace"] == member_1_user.namespace.path.serialize()
+    project_dc_id = response.json["id"]
+
+    # Link the data connector to the project
+    payload = {"project_id": project_id}
+    _, response = await sanic_client.post(
+        f"/api/data/data_connectors/{project_dc_id}/project_links", headers=member_1_headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+
+    # Ensure that anonymous users cannot see both of the data connectors
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/inaccessible_data_connector_links")
+    assert "count" in response.json
+    assert response.json["count"] == 2
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/data_connector_links")
+    assert len(response.json) == 0
+
+    # Ensure that the owner gets a zero in their inaccessible data connectors count
+    _, response = await sanic_client.get(
+        f"/api/data/projects/{project_id}/inaccessible_data_connector_links", headers=member_1_headers
+    )
+    assert "count" in response.json
+    assert response.json["count"] == 0
+    _, response = await sanic_client.get(
+        f"/api/data/projects/{project_id}/data_connector_links", headers=member_1_headers
+    )
+    assert len(response.json) == 2
+
+    # Ensure that the project member can NOT see 1 DC - the owners private DC
+    _, response = await sanic_client.get(
+        f"/api/data/projects/{project_id}/inaccessible_data_connector_links", headers=user_headers
+    )
+    assert "count" in response.json
+    assert response.json["count"] == 1
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/data_connector_links", headers=user_headers)
+    assert len(response.json) == 1
