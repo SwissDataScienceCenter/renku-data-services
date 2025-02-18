@@ -56,11 +56,11 @@ spec:
           name: platform-env
       resources:
         limits:
-          cpu: 500m
-          memory: 1Gi
+          cpu: 4000m
+          memory: 8Gi
         requests:
-          cpu: 250m
-          memory: 65Mi
+          cpu: 2000m
+          memory: 4Gi
   volumes:
     - name: platform-env
       emptyDir: {}
