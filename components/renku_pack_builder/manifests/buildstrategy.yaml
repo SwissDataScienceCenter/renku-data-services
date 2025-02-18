@@ -13,20 +13,20 @@ spec:
         The process to execute at launch time
         https://buildpacks.io/docs/for-buildpack-authors/how-to/write-buildpacks/specify-launch-processes/
       default: "web"
+    - default: docker.io/renku/renkulab-vscode:latest
+      description: The image to use as a frontend.
+      name: run-image
+    - name: procfile
+      description: |
+        Define entrypoints
+      default: |
+        bash: /bin/bash
   steps:
-    - name: build-and-push
-      image: docker.io/paketobuildpacks/builder-jammy-full:latest
+    - name: prep-procfile
+      image: alpine
       imagePullPolicy: IfNotPresent
-      env: 
-        - name: CNB_PLATFORM_API
-          value: $(params.platform-api-version)
-      command:
-        - /cnb/lifecycle/creator
-      args:
-        - "-app=$(params.shp-source-context)"
-        - "-report=/tmp/report.toml"
-        - "-process-type=$(params.process-type)"
-        - "$(params.shp-output-image)"
+      command: ["/bin/sh", "-c"]
+      args: ["echo \"$(params.procfile)\" > $(params.shp-source-context)/Procfile"]
       volumeMounts:
         - mountPath: /platform/env
           name: platform-env
@@ -37,6 +37,30 @@ spec:
         requests:
           cpu: 250m
           memory: 65Mi
+    - name: build-and-push
+      image: docker.io/paketobuildpacks/builder-jammy-full:latest
+      imagePullPolicy: IfNotPresent
+      env:
+        - name: CNB_PLATFORM_API
+          value: $(params.platform-api-version)
+      command:
+        - /cnb/lifecycle/creator
+      args:
+        - "-app=$(params.shp-source-context)"
+        - "-report=/tmp/report.toml"
+        - "-process-type=$(params.process-type)"
+        - -run-image=$(params.run-image)
+        - "$(params.shp-output-image)"
+      volumeMounts:
+        - mountPath: /platform/env
+          name: platform-env
+      resources:
+        limits:
+          cpu: 4000m
+          memory: 8Gi
+        requests:
+          cpu: 2000m
+          memory: 4Gi
   volumes:
     - name: platform-env
       emptyDir: {}
