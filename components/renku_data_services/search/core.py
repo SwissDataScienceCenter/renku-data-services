@@ -9,6 +9,7 @@ from renku_data_services.message_queue.models import Reprovisioning
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.search.db import SearchUpdatesRepo
+from renku_data_services.solr.solr_client import SolrClient
 from renku_data_services.users.db import UserRepo
 
 
@@ -57,3 +58,8 @@ async def reprovision(
         ## TODO error handling. skip or fail?
     finally:
         await reprovisioning_repo.stop()
+
+
+async def update_solr(search_updates_repo: SearchUpdatesRepo, solr_client: SolrClient) -> None:
+    """Selects entries from the search staging table and updates SOLR."""
+    pass

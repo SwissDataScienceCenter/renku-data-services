@@ -53,3 +53,33 @@ async def test_user_insert_only(app_config_instance):
     assert db_user.entity_type == "User"
     user = UserDoc.model_validate(db_user.payload)
     assert user.lastName == "Pogacar"
+
+async def test_select_next(app_config_instance):
+    run_migrations_for_app("common")
+
+    repo = SearchUpdatesRepo(app_config_instance.db.async_session_maker)
+    user1 = UserInfo(id="user123", first_name="Tadej", last_name="Pogacar", namespace=user_namespace)
+    id1 = await repo.insert(user1, started_at=None)
+    user2 = UserInfo(id="user234", first_name="Greg", last_name="Lemond", namespace=user_namespace)
+    id2 = await repo.insert(user2, started_at=None)
+
+    records = await repo.select_next(10)
+    assert len(records) == 2
+    assert [e.id for e in records] == [id1, id2]
+
+    records2 = await repo.select_next(10)
+    assert len(records2) == 0
+
+async def test_mark_processed(app_config_instance):
+    run_migrations_for_app("common")
+
+    repo = SearchUpdatesRepo(app_config_instance.db.async_session_maker)
+    user1 = UserInfo(id="user123", first_name="Tadej", last_name="Pogacar", namespace=user_namespace)
+    await repo.insert(user1, started_at=None)
+    user2 = UserInfo(id="user234", first_name="Greg", last_name="Lemond", namespace=user_namespace)
+    await repo.insert(user2, started_at=None)
+
+    records = await repo.select_next(1)
+    assert len(records) == 1
+
+    await repo.mark_processed([e.id for e in records])
