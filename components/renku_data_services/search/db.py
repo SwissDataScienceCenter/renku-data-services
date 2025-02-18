@@ -1,18 +1,20 @@
 """Database operations for search."""
 
+from ast import And
 import json
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import text
+from sqlalchemy import text, select, update
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
 from renku_data_services.base_models.core import Slug
 from renku_data_services.namespace.models import Group
 from renku_data_services.project.models import Project
-from renku_data_services.search.orm import SearchUpdatesORM
+from renku_data_services.search.orm import RecordState, SearchUpdatesORM
 from renku_data_services.solr.entity_documents import Group as GroupDoc
 from renku_data_services.solr.entity_documents import Project as ProjectDoc
 from renku_data_services.solr.entity_documents import User as UserDoc
@@ -149,3 +151,40 @@ class SearchUpdatesRepo:
         async with self.session_maker() as session, session.begin():
             await session.execute(text("TRUNCATE TABLE search_updates"))
             return None
+
+    async def select_next(self, size: int) -> list[SearchUpdatesORM]:
+        """Select and mark the next records and return them in a list."""
+        async with self.session_maker() as session, session.begin():
+            stmt = (
+                select(SearchUpdatesORM)
+                .where(SearchUpdatesORM.state.is_(None))
+                # lock retrieved rows, skip already locked ones, to deal with concurrency
+                .with_for_update(skip_locked=True)
+                .limit(size)
+                .order_by(SearchUpdatesORM.id)
+            )
+            result = await session.scalars(stmt)
+            records = result.all()
+            for r in records:
+                r.state = RecordState.Locked
+                session.add(r)
+            await session.commit()
+
+            return list(records)
+
+    async def mark_processed(self, ids: list[ULID]) -> None:
+        """Mark these rows as processed so they can be deleted."""
+        async with self.session_maker() as session, session.begin():
+            stmt = (
+                update(SearchUpdatesORM)
+                .where(SearchUpdatesORM.state == RecordState.Locked and SearchUpdatesORM.id.in_(ids))
+                .values(state=RecordState.Processed)
+            )
+            await session.execute(stmt)
+
+    async def reset_locked(self) -> None:
+        """Resets all locked rows to open."""
+        async with self.session_maker() as session, session.begin():
+            stmt = update(SearchUpdatesORM).where(SearchUpdatesORM.state == RecordState.Locked).values(state=None)
+            print(stmt)
+            await session.execute(stmt)

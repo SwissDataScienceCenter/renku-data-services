@@ -6,6 +6,7 @@ Create Date: 2025-02-06 17:42:12.792331
 
 """
 
+from renku_data_services.search.orm import RecordState
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
@@ -30,6 +31,7 @@ def upgrade() -> None:
         sa.Column(
             "payload", sa.JSON().with_variant(postgresql.JSONB(astext_type=sa.Text()), "postgresql"), nullable=False
         ),
+        sa.Column("state", sa.Enum(RecordState), nullable=True, server_default=sa.text("null")),
         sa.PrimaryKeyConstraint("id"),
         schema="events",
     )
