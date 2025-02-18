@@ -25,6 +25,41 @@ class EnvironmentKind(StrEnum):
     CUSTOM = "CUSTOM"
 
 
+class EnvironmentImageSource(StrEnum):
+    """The source of the environment image."""
+
+    image = "image"
+    build = "build"
+
+
+class BuilderVariant(StrEnum):
+    """The type of environment builder."""
+
+    python = "python"
+
+
+class FrontendVariant(StrEnum):
+    """The environment frontend choice."""
+
+    vscodium = "vscodium"
+
+
+@dataclass(kw_only=True, frozen=True, eq=True)
+class UnsavedBuildParameters:
+    """The parameters of a build."""
+
+    repository: str
+    builder_variant: str
+    frontend_variant: str
+
+
+@dataclass(kw_only=True, frozen=True, eq=True)
+class BuildParameters(UnsavedBuildParameters):
+    """BuildParameters saved in the database."""
+
+    id: ULID
+
+
 @dataclass(kw_only=True, frozen=True, eq=True)
 class UnsavedEnvironment:
     """Session environment model that has not been saved."""
@@ -39,6 +74,7 @@ class UnsavedEnvironment:
     uid: int = 1000
     gid: int = 1000
     environment_kind: EnvironmentKind
+    environment_image_source: EnvironmentImageSource
     args: list[str] | None = None
     command: list[str] | None = None
     is_archived: bool = False
@@ -72,9 +108,20 @@ class Environment(UnsavedEnvironment):
     mount_directory: PurePosixPath | None
     uid: int
     gid: int
+    build_parameters: BuildParameters | None
+    build_parameters_id: ULID | None
 
 
-@dataclass(frozen=True, eq=True, kw_only=True)
+@dataclass(kw_only=True, frozen=True, eq=True)
+class BuildParametersPatch:
+    """Patch for parameters of a build."""
+
+    repository: str | None = None
+    builder_variant: str | None = None
+    frontend_variant: str | None = None
+
+
+@dataclass(eq=True, kw_only=True)
 class EnvironmentPatch:
     """Model for changes requested on a session environment."""
 
@@ -90,6 +137,8 @@ class EnvironmentPatch:
     args: list[str] | None | ResetType = None
     command: list[str] | None | ResetType = None
     is_archived: bool | None = None
+    build_parameters: BuildParametersPatch | None = None
+    environment_image_source: EnvironmentImageSource | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -101,7 +150,7 @@ class UnsavedSessionLauncher:
     description: str | None
     resource_class_id: int | None
     disk_storage: int | None
-    environment: str | UnsavedEnvironment
+    environment: str | UnsavedEnvironment | UnsavedBuildParameters
     """When a string is passed for the environment it should be the ID of an existing environment."""
 
 
@@ -121,8 +170,8 @@ class SessionLauncherPatch:
 
     name: str | None = None
     description: str | None = None
-    # NOTE: When unsaved environment is used it means a brand new environment should be created for the
+    # NOTE: When unsaved environment is used it means a brand-new environment should be created for the
     # launcher with the update of the launcher.
-    environment: str | EnvironmentPatch | UnsavedEnvironment | None = None
+    environment: str | EnvironmentPatch | UnsavedEnvironment | UnsavedBuildParameters | None = None
     resource_class_id: int | None | ResetType = None
     disk_storage: int | None | ResetType = None

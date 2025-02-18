@@ -467,7 +467,6 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
 
         If the request to the cache fails, fallback to the k8s API.
         """
-        server = None
         try:
             server = await self.cache.get_server(name)
         except CacheError:
