@@ -242,10 +242,11 @@ class BuildsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _get_logs(_: Request, user: base_models.APIUser, build_id: ULID) -> JSONResponse:
-            # logs = await self.nb_config.k8s_v2_client.get_server_logs(session_id, user.id, query.max_lines)
-            # return json(apispec.SessionLogsResponse.model_validate(logs).model_dump(exclude_none=True))
-            logs = await self.session_repo.get_build_logs(user=user, build_id=build_id)
-            return JSONResponse(body=logs)
+        @validate(query=apispec.BuildsBuildIdLogsGetParametersQuery)
+        async def _get_logs(
+            _: Request, user: base_models.APIUser, build_id: ULID, query: apispec.BuildsBuildIdLogsGetParametersQuery
+        ) -> JSONResponse:
+            logs = await self.session_repo.get_build_logs(user=user, build_id=build_id, max_log_lines=query.max_lines)
+            return validated_json(apispec.BuildLogs, logs)
 
         return "/builds/<build_id:ulid>/logs", ["GET"], _get_logs
