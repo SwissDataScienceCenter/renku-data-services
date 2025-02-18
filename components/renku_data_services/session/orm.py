@@ -55,6 +55,10 @@ class EnvironmentORM(BaseORM):
     uid: Mapped[int] = mapped_column("uid")
     gid: Mapped[int] = mapped_column("gid")
     environment_kind: Mapped[models.EnvironmentKind] = mapped_column("environment_kind")
+    environment_image_source: Mapped[models.EnvironmentImageSource] = mapped_column(
+        "environment_image_source", server_default="image", nullable=False
+    )
+
     args: Mapped[list[str] | None] = mapped_column("args", JSONVariant, nullable=True)
     command: Mapped[list[str] | None] = mapped_column("command", JSONVariant, nullable=True)
 
@@ -66,6 +70,15 @@ class EnvironmentORM(BaseORM):
     is_archived: Mapped[bool] = mapped_column(
         "is_archived", Boolean(), default=False, server_default=false(), nullable=False
     )
+
+    build_parameters_id: Mapped[ULID | None] = mapped_column(
+        "build_parameters_id",
+        ForeignKey("build_parameters.id", ondelete="CASCADE", name="environments_build_parameters_id_fk"),
+        nullable=True,
+        server_default=None,
+        default=None,
+    )
+    build_parameters: Mapped["BuildParametersORM"] = relationship(lazy="joined", default=None)
 
     def dump(self) -> models.Environment:
         """Create a session environment model from the EnvironmentORM."""
@@ -86,6 +99,9 @@ class EnvironmentORM(BaseORM):
             args=self.args,
             command=self.command,
             is_archived=self.is_archived,
+            environment_image_source=self.environment_image_source,
+            build_parameters=self.build_parameters.dump() if self.build_parameters else None,
+            build_parameters_id=self.build_parameters_id,
         )
 
 
@@ -162,4 +178,28 @@ class SessionLauncherORM(BaseORM):
             resource_class_id=self.resource_class_id,
             disk_storage=self.disk_storage,
             environment=self.environment.dump(),
+        )
+
+
+class BuildParametersORM(BaseORM):
+    """A Renku 2.0 session build parameters."""
+
+    __tablename__ = "build_parameters"
+
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    """Id of this session build parameters object."""
+
+    repository: Mapped[str] = mapped_column("repository", String(500))
+
+    builder_variant: Mapped[str] = mapped_column("builder_variant", String(99))
+
+    frontend_variant: Mapped[str] = mapped_column("frontend_variant", String(99))
+
+    def dump(self) -> models.BuildParameters:
+        """Create a session build parameters model from the BuildParametersORM."""
+        return models.BuildParameters(
+            id=self.id,
+            repository=self.repository,
+            builder_variant=self.builder_variant,
+            frontend_variant=self.frontend_variant,
         )
