@@ -4,6 +4,7 @@ from pathlib import PurePosixPath
 
 from ulid import ULID
 
+from renku_data_services import errors
 from renku_data_services.base_models.core import RESET, ResetType
 from renku_data_services.session import apispec, models
 
@@ -26,6 +27,63 @@ def validate_unsaved_environment(
         args=environment.args,
         command=environment.command,
         is_archived=environment.is_archived,
+        environment_image_source=models.EnvironmentImageSource.image,
+    )
+
+
+def validate_unsaved_build_parameters(
+    environment: apispec.BuildParameters | apispec.BuildParametersPatch,
+) -> models.UnsavedBuildParameters:
+    """Validate an unsaved build parameters object."""
+    if environment.builder_variant is None:
+        raise errors.ValidationError(message="The field 'builder_variant' is required")
+    if environment.frontend_variant is None:
+        raise errors.ValidationError(message="The field 'frontend_variant' is required")
+    if environment.repository is None:
+        raise errors.ValidationError(message="The field 'repository' is required")
+    if environment.builder_variant not in models.BuilderVariant:
+        raise errors.ValidationError(
+            message=(
+                f"Invalid value for the field 'builder_variant': {environment.builder_variant}: "
+                f"Valid values are {[e.value for e in models.BuilderVariant]}"
+            )
+        )
+    if environment.frontend_variant not in models.FrontendVariant:
+        raise errors.ValidationError(
+            message=(
+                f"Invalid value for the field 'frontend_variant': {environment.frontend_variant}: "
+                f"Valid values are {[e.value for e in models.FrontendVariant]}"
+            )
+        )
+
+    return models.UnsavedBuildParameters(
+        repository=environment.repository,
+        builder_variant=environment.builder_variant,
+        frontend_variant=environment.frontend_variant,
+    )
+
+
+def validate_build_parameters_patch(environment: apispec.BuildParametersPatch) -> models.BuildParametersPatch:
+    """Validate an unsaved build parameters object."""
+    if environment.builder_variant is not None and environment.builder_variant not in models.BuilderVariant:
+        raise errors.ValidationError(
+            message=(
+                f"Invalid value for the field 'builder_variant': {environment.builder_variant}: "
+                f"Valid values are {[e.value for e in models.BuilderVariant]}"
+            )
+        )
+    if environment.frontend_variant is not None and environment.frontend_variant not in models.FrontendVariant:
+        raise errors.ValidationError(
+            message=(
+                f"Invalid value for the field 'frontend_variant': {environment.frontend_variant}: "
+                f"Valid values are {[e.value for e in models.FrontendVariant]}"
+            )
+        )
+
+    return models.BuildParametersPatch(
+        repository=environment.repository,
+        builder_variant=environment.builder_variant,
+        frontend_variant=environment.frontend_variant,
     )
 
 
@@ -64,6 +122,20 @@ def validate_environment_patch(patch: apispec.EnvironmentPatch) -> models.Enviro
     )
 
 
+def validate_environment_patch_in_launcher(patch: apispec.EnvironmentPatchInLauncher) -> models.EnvironmentPatch:
+    """Validate the update to a session environment inside a session launcher."""
+    environment_patch = validate_environment_patch(patch)
+    environment_patch.environment_image_source = (
+        None
+        if patch.environment_image_source is None
+        else models.EnvironmentImageSource(patch.environment_image_source.value)
+    )
+    environment_patch.build_parameters = (
+        None if patch.build_parameters is None else validate_build_parameters_patch(patch.build_parameters)
+    )
+    return environment_patch
+
+
 def validate_unsaved_session_launcher(launcher: apispec.SessionLauncherPost) -> models.UnsavedSessionLauncher:
     """Validate an unsaved session launcher."""
     return models.UnsavedSessionLauncher(
@@ -73,9 +145,11 @@ def validate_unsaved_session_launcher(launcher: apispec.SessionLauncherPost) -> 
         resource_class_id=launcher.resource_class_id,
         disk_storage=launcher.disk_storage,
         # NOTE: When you create an environment with a launcher the environment can only be custom
-        environment=validate_unsaved_environment(launcher.environment, models.EnvironmentKind.CUSTOM)
-        if isinstance(launcher.environment, apispec.EnvironmentPostInLauncher)
-        else launcher.environment.id,
+        environment=launcher.environment.id
+        if isinstance(launcher.environment, apispec.EnvironmentIdOnlyPost)
+        else validate_unsaved_build_parameters(launcher.environment)
+        if isinstance(launcher.environment, apispec.BuildParametersPost)
+        else validate_unsaved_environment(launcher.environment, models.EnvironmentKind.CUSTOM),
     )
 
 
@@ -84,37 +158,112 @@ def validate_session_launcher_patch(
 ) -> models.SessionLauncherPatch:
     """Validate the update to a session launcher."""
     data_dict = patch.model_dump(exclude_unset=True, mode="json")
-    environment: str | models.EnvironmentPatch | models.UnsavedEnvironment | None = None
-    if (
-        isinstance(patch.environment, apispec.EnvironmentPatchInLauncher)
-        and current_launcher is not None
-        and current_launcher.environment.environment_kind == models.EnvironmentKind.GLOBAL
-        and patch.environment.environment_kind == apispec.EnvironmentKind.CUSTOM
-    ):
-        # This means that the global environment is being swapped for a custom one,
-        # so we have to create a brand new environment, but we have to validate here.
-        validated_env = apispec.EnvironmentPostInLauncher.model_validate(data_dict["environment"])
-        environment = models.UnsavedEnvironment(
-            name=validated_env.name,
-            description=validated_env.description,
-            container_image=validated_env.container_image,
-            default_url=validated_env.default_url,
-            port=validated_env.port,
-            working_directory=PurePosixPath(validated_env.working_directory)
-            if validated_env.working_directory
-            else None,
-            mount_directory=PurePosixPath(validated_env.mount_directory) if validated_env.mount_directory else None,
-            uid=validated_env.uid,
-            gid=validated_env.gid,
-            environment_kind=models.EnvironmentKind(validated_env.environment_kind.value),
-            args=validated_env.args,
-            command=validated_env.command,
-        )
-    elif isinstance(patch.environment, apispec.EnvironmentPatchInLauncher):
-        environment = validate_environment_patch(patch.environment)
+    environment: str | models.EnvironmentPatch | models.UnsavedEnvironment | models.UnsavedBuildParameters | None = None
+    if isinstance(patch.environment, apispec.EnvironmentPatchInLauncher):
+        match current_launcher.environment.environment_kind, patch.environment.environment_kind:
+            case models.EnvironmentKind.GLOBAL, apispec.EnvironmentKind.CUSTOM:
+                # This means that the global environment is being swapped for a custom one,
+                # so we have to create a brand-new environment, but we have to validate here.
+                if (
+                    patch.environment.environment_image_source == apispec.EnvironmentImageSourceImage.image
+                    or patch.environment.environment_image_source is None
+                ):
+                    # NOTE: The custom environment is being created from an image.
+                    validated_env = apispec.EnvironmentPostInLauncherHelper.model_validate(data_dict["environment"])
+                    environment = models.UnsavedEnvironment(
+                        name=validated_env.name,
+                        description=validated_env.description,
+                        container_image=validated_env.container_image,
+                        default_url=validated_env.default_url,
+                        port=validated_env.port,
+                        working_directory=PurePosixPath(validated_env.working_directory)
+                        if validated_env.working_directory
+                        else None,
+                        mount_directory=PurePosixPath(validated_env.mount_directory)
+                        if validated_env.mount_directory
+                        else None,
+                        uid=validated_env.uid,
+                        gid=validated_env.gid,
+                        environment_kind=models.EnvironmentKind(validated_env.environment_kind.value),
+                        args=validated_env.args,
+                        command=validated_env.command,
+                        environment_image_source=models.EnvironmentImageSource.image,
+                    )
+                elif patch.environment.environment_image_source == apispec.EnvironmentImageSourceBuild.build:
+                    # NOTE: The environment type is changed to be built, so, all required fields should be passed (as in
+                    # a POST request).
+                    validated_build_parameters = apispec.BuildParameters.model_validate(
+                        data_dict.get("environment", {}).get("build_parameters", {})
+                    )
+                    environment = validate_unsaved_build_parameters(validated_build_parameters)
+            case models.EnvironmentKind.GLOBAL, None:
+                # Trying to patch a global environment with a custom environment patch.
+                raise errors.ValidationError(
+                    message=(
+                        "There are errors in the following fields, environment.environment_kind: Input should be "
+                        "'custom'"
+                    )
+                )
+            case _, apispec.EnvironmentKind.GLOBAL:
+                # This means that the custom environment is being swapped for a global one, but the patch is not valid.
+                raise errors.ValidationError(
+                    message="There are errors in the following fields, environment.id: Input should be a valid string"
+                )
+            case models.EnvironmentKind.CUSTOM, _:
+                # This means that the custom environment is being updated.
+                current = current_launcher.environment.environment_image_source.value
+                new = (
+                    patch.environment.environment_image_source.value
+                    if patch.environment.environment_image_source
+                    else None
+                )
+
+                if (
+                    new == "image" or (new is None and current == "image")
+                ) and patch.environment.build_parameters is not None:
+                    raise errors.ValidationError(
+                        message="There are errors in the following fields, environment.build_parameters: Must be null"
+                    )
+                elif (
+                    new == "build" or (new is None and current == "build")
+                ) and patch.environment.build_parameters is None:
+                    raise errors.ValidationError(
+                        message="There are errors in the following fields, environment.build_parameters: Must be set"
+                    )
+                if current == "image" and new == "build":
+                    if not patch.environment.build_parameters:
+                        raise errors.ValidationError(
+                            message=(
+                                "There are errors in the following fields, environment.build_parameters: Must be set"
+                            )
+                        )
+                    environment = validate_unsaved_build_parameters(patch.environment.build_parameters)
+                elif current == "build" and new == "image":
+                    validated_env = apispec.EnvironmentPostInLauncherHelper.model_validate(data_dict["environment"])
+                    environment = models.UnsavedEnvironment(
+                        name=validated_env.name,
+                        description=validated_env.description,
+                        container_image=validated_env.container_image,
+                        default_url=validated_env.default_url,
+                        port=validated_env.port,
+                        working_directory=PurePosixPath(validated_env.working_directory)
+                        if validated_env.working_directory
+                        else None,
+                        mount_directory=PurePosixPath(validated_env.mount_directory)
+                        if validated_env.mount_directory
+                        else None,
+                        uid=validated_env.uid,
+                        gid=validated_env.gid,
+                        environment_kind=models.EnvironmentKind(validated_env.environment_kind.value),
+                        args=validated_env.args,
+                        command=validated_env.command,
+                        environment_image_source=models.EnvironmentImageSource.image,
+                    )
+                else:
+                    environment = validate_environment_patch_in_launcher(patch.environment)
     elif isinstance(patch.environment, apispec.EnvironmentIdOnlyPatch):
         environment = patch.environment.id
-    resource_class_id: int | None | ResetType = None
+    resource_class_id: int | None | ResetType
     if "resource_class_id" in data_dict and data_dict["resource_class_id"] is None:
         # NOTE: This means that the resource class set in the DB should be removed so that the
         # default resource class currently set in the CRC will be used.
