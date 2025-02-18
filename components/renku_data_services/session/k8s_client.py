@@ -6,7 +6,6 @@ import httpx
 from kr8s import NotFoundError, ServerError
 from kr8s.asyncio.objects import APIObject, Pod
 from kubernetes.client import ApiClient
-from sanic.log import logger
 
 from renku_data_services import errors
 from renku_data_services.errors.errors import CannotStartBuildError
@@ -206,7 +205,6 @@ class _ShipwrightCache:
             )
             raise CacheError(f"The K8s Cache produced an unexpected status code: {res.status_code}")
         output = res.json()
-        logger.info(f"TaskRun cache response = {output}")
         if len(output) == 0:
             return None
         if len(output) > 1:
@@ -350,13 +348,11 @@ class ShipwrightClient:
 
     async def get_image_build_logs(self, buildrun_name: str, max_log_lines: int | None = None) -> dict[str, str]:
         """Get the logs from a Shipwright BuildRun."""
-        logger.info(f"BuildRun name = {buildrun_name}")
         buildrun = await self.get_build_run(name=buildrun_name)
         if not buildrun:
             raise errors.MissingResourceError(message=f"Cannot find buildrun {buildrun_name} to retrieve logs.")
         status = buildrun.status
         task_run_name = status.taskRunName if status else None
-        logger.info(f"TaskRun name = {task_run_name}")
         if not task_run_name:
             raise errors.MissingResourceError(
                 message=f"The buildrun {buildrun_name} has no taskrun to retrieve logs from."
@@ -367,7 +363,6 @@ class ShipwrightClient:
                 message=f"Cannot find taskrun from buildrun {buildrun_name} to retrieve logs."
             )
         pod_name = taskrun.status.podName if taskrun.status else None
-        logger.info(f"Pod name = {pod_name}")
         if not pod_name:
             raise errors.MissingResourceError(message=f"The buildrun {buildrun_name} has no pod to retrieve logs from.")
         return await self.base_client.get_pod_logs(name=pod_name, max_log_lines=max_log_lines)
