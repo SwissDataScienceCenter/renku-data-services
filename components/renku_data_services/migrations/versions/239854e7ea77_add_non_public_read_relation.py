@@ -1,7 +1,7 @@
 """Add non-public-read relation
 
 Revision ID: 239854e7ea77
-Revises: d71f0f795d30
+Revises: 75c83dd9d619
 Create Date: 2025-01-17 14:34:47.305393
 
 """
