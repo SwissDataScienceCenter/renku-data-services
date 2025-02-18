@@ -25,6 +25,12 @@ class SolrUser:
     username: str
     password: str
 
+    def __str__(self) -> str:
+        pw = "***"
+        if self.password == "":
+            pw = ""
+        return f"(user={self.username}, password={pw})"
+
 
 @dataclass
 @final
@@ -52,6 +58,13 @@ class SolrClientConfig:
 
         user = SolrUser(username=username, password=str(password)) if username is not None else None
         return cls(url, core, user, timeout)
+
+    def __str__(self) -> str:
+        return (
+            f"SolrClientConfig(base_url={self.base_url}, "
+            f"core={self.core}, user={self.user}, "
+            f"timeout={self.timeout})"
+        )
 
 
 class SortDirection(StrEnum):
