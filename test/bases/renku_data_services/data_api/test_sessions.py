@@ -980,7 +980,7 @@ async def test_post_build(sanic_client: SanicASGITestClient, user_headers, creat
         "description": "A session launcher.",
         "environment": {
             "repository": "https://github.com/some/repo",
-            "builder_variant": "pip",
+            "builder_variant": "python",
             "frontend_variant": "vscodium",
             "environment_image_source": "build",
         },
@@ -1014,7 +1014,7 @@ async def test_get_build(sanic_client: SanicASGITestClient, user_headers, create
         "description": "A session launcher.",
         "environment": {
             "repository": "https://github.com/some/repo",
-            "builder_variant": "pip",
+            "builder_variant": "python",
             "frontend_variant": "vscodium",
             "environment_image_source": "build",
         },
@@ -1055,7 +1055,7 @@ async def test_get_environment_builds(sanic_client: SanicASGITestClient, user_he
         "description": "A session launcher.",
         "environment": {
             "repository": "https://github.com/some/repo",
-            "builder_variant": "pip",
+            "builder_variant": "python",
             "frontend_variant": "vscodium",
             "environment_image_source": "build",
         },
@@ -1107,7 +1107,7 @@ async def test_patch_build(sanic_client: SanicASGITestClient, user_headers, crea
         "description": "A session launcher.",
         "environment": {
             "repository": "https://github.com/some/repo",
-            "builder_variant": "pip",
+            "builder_variant": "python",
             "frontend_variant": "vscodium",
             "environment_image_source": "build",
         },
