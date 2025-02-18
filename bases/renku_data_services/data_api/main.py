@@ -141,7 +141,7 @@ def create_app() -> Sanic:
 
     @app.main_process_start
     async def do_solr_migrations(_: Sanic) -> None:
-        logger.info("Running SOLR migrations")
+        logger.info(f"Running SOLR migrations at: {config.solr_config}")
         migrator = SchemaMigrator(config.solr_config)
         result = await migrator.migrate(entity_schema.all_migrations)
         logger.info(f"SOLR migration done: {result}")
