@@ -433,7 +433,7 @@ async def test_post_session_launcher_with_environment_build(
         "environment": {
             "repository": "https://github.com/some/repo",
             "builder_variant": "python",
-            "frontend_variant": "jupyterlab",
+            "frontend_variant": "vscodium",
             "environment_image_source": "build",
         },
     }
@@ -452,7 +452,7 @@ async def test_post_session_launcher_with_environment_build(
     assert environment.get("build_parameters") == {
         "repository": "https://github.com/some/repo",
         "builder_variant": "python",
-        "frontend_variant": "jupyterlab",
+        "frontend_variant": "vscodium",
     }
     assert environment.get("environment_image_source") == "build"
     assert environment.get("container_image") == "image:unknown-at-the-moment"
@@ -681,7 +681,7 @@ async def test_patch_session_launcher_environment(
             "build_parameters": {
                 "repository": "https://github.com/some/repo",
                 "builder_variant": "python",
-                "frontend_variant": "jupyterlab",
+                "frontend_variant": "vscodium",
             },
         },
     }
@@ -702,7 +702,7 @@ async def test_patch_session_launcher_environment(
     assert environment.get("build_parameters") == {
         "repository": "https://github.com/some/repo",
         "builder_variant": "python",
-        "frontend_variant": "jupyterlab",
+        "frontend_variant": "vscodium",
     }
     assert environment.get("environment_image_source") == "build"
     assert environment.get("container_image") == "image:unknown-at-the-moment"
@@ -744,7 +744,7 @@ async def test_patch_session_launcher_environment_with_build_parameters(
             "build_parameters": {
                 "repository": "https://github.com/some/repo",
                 "builder_variant": "python",
-                "frontend_variant": "jupyterlab",
+                "frontend_variant": "vscodium",
             },
         },
     }
@@ -765,7 +765,7 @@ async def test_patch_session_launcher_environment_with_build_parameters(
     assert environment.get("build_parameters") == {
         "repository": "https://github.com/some/repo",
         "builder_variant": "python",
-        "frontend_variant": "jupyterlab",
+        "frontend_variant": "vscodium",
     }
     assert environment.get("environment_image_source") == "build"
     assert environment.get("container_image") == "image:unknown-at-the-moment"
@@ -775,7 +775,6 @@ async def test_patch_session_launcher_environment_with_build_parameters(
         "environment": {
             "build_parameters": {
                 "repository": "new_repo",
-                "builder_variant": "conda",
             },
         },
     }
@@ -795,8 +794,8 @@ async def test_patch_session_launcher_environment_with_build_parameters(
     assert environment.get("environment_kind") == "CUSTOM"
     assert environment.get("build_parameters") == {
         "repository": "new_repo",
-        "builder_variant": "conda",
-        "frontend_variant": "jupyterlab",
+        "builder_variant": "python",
+        "frontend_variant": "vscodium",
     }
     assert environment.get("environment_image_source") == "build"
     assert environment.get("container_image") == "image:unknown-at-the-moment"
