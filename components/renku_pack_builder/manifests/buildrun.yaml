@@ -29,4 +29,4 @@ spec:
           value: renku/renkulab-vscodium-python-runimage:ubuntu-c794f36
       output:
         image: harbor.dev.renku.ch/renku-builds/renku-build:renku-01jmcagx9nfphatdd4ev99bmrq
-        pushSecret: renku-buils-docker-secret
+        pushSecret: renku-builds-docker-secret
