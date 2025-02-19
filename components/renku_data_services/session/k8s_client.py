@@ -272,6 +272,19 @@ class ShipwrightClient:
 
     async def create_image_build(self, params: models.ShipwrightBuildRunParams) -> None:
         """Create a new BuildRun in Shipwright to support a newly created build."""
+        retention: crs.Retention | None = None
+        if params.retention_after_failed or params.retention_after_succeeded:
+            retention_after_failed = (
+                int(params.retention_after_failed.total_seconds()) if params.retention_after_failed else None
+            )
+            retention_after_succeeded = (
+                int(params.retention_after_succeeded.total_seconds()) if params.retention_after_succeeded else None
+            )
+            retention = crs.Retention(
+                ttlAfterFailed=f"{retention_after_failed}s" if retention_after_failed else None,
+                ttlAfterSucceeded=f"{retention_after_succeeded}s" if retention_after_succeeded else None,
+            )
+
         build_run = BuildRun(
             metadata=crs.Metadata(name=params.name),
             spec=crs.BuildRunSpec(
@@ -285,7 +298,8 @@ class ShipwrightClient:
                             pushSecret=params.push_secret_name,
                         ),
                     )
-                )
+                ),
+                retention=retention,
             ),
         )
         await self.create_build_run(build_run)
