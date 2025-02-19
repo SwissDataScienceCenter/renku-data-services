@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-KPACK_VERSION=0.15.0
 SHIPWRIGHT_VERSION=v0.14.0
 INTERNL_RE="host\.k3d\.internal"
 REGISTRY_NAME="dev-registry.local"
@@ -78,32 +77,6 @@ function copy_image() {
     kubectl delete job copy-image
 }
 
-function setup_kpack() {
-    # deploy kpack
-    kubectl apply -f https://github.com/buildpacks-community/kpack/releases/download/v$KPACK_VERSION/release-$KPACK_VERSION.yaml
-    kubectl --namespace kpack wait deployments.apps/kpack-controller --for='jsonpath={.status.conditions[?(@.type=="Available")].status}=True'
-
-    # create kpack resources
-    kubectl apply -f .devcontainer/kpack/clusterstore.yaml
-    kubectl wait --for=condition=Ready=True clusterstores.kpack.io/default
-    kubectl apply -f .devcontainer/kpack/clusterstack.yaml
-    kubectl wait --for=condition=Ready=True clusterstack.kpack.io/base
-    kubectl apply -f .devcontainer/kpack/python-builder.yaml
-
-    # Fails sometimes because it seems some things happens a bit too fast and it
-    # looks like the reconciler does not retry to reconcile the builder.
-    # Recreating it fixes the situation
-    set +e
-    kubectl wait --for=condition=Ready=True builder.kpack.io/python-builder
-    if [[ $? -eq 1 ]]
-    then
-        kubectl delete -f builder.yaml
-        kubectl apply -f builder.yaml
-    fi
-    set -e
-    kubectl wait --for=condition=Ready=True builder.kpack.io/python-builder
-}
-
 function setup_shipwright() {
     # Setup tekton
     curl --silent --location https://raw.githubusercontent.com/shipwright-io/build/$SHIPWRIGHT_VERSION/hack/install-tekton.sh | bash
@@ -149,7 +122,6 @@ EOF
 }
 
 reset=false
-deploy_kpack=false
 deploy_shipwright=false
 create_image=false
 test_build=false
@@ -158,10 +130,6 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         --reset)
             reset=true
-            shift # past value
-            ;;
-        --deploy-kpack)
-            deploy_kpack=true
             shift # past value
             ;;
         --deploy-shipwright)
@@ -193,11 +161,6 @@ setup_cluster
 
 setup_dns
 
-if [[ $deploy_kpack == true ]]
-then
-    copy_image
-    setup_kpack
-fi
 
 if [[ $deploy_shipwright == true ]]
 then
