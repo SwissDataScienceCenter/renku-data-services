@@ -1,4 +1,4 @@
 mirrors:
-  "kpack-registry.local:5000":
+  "shipwright-registry.local:5000":
     endpoint:
-      - http://k3d-kpack-registry.local:5000
+      - http://k3d-shipwright-registry.local:5000
