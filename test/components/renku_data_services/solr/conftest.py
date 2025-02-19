@@ -15,6 +15,8 @@ from renku_data_services.solr import entity_schema
 from renku_data_services.solr.solr_client import SolrClientConfig
 from renku_data_services.solr.solr_migrate import SchemaMigrator
 
+logger = logging.getLogger(__name__)
+
 
 @pytest.fixture(scope="session")
 def free_port() -> int:
@@ -61,7 +63,7 @@ async def solr_instance(tmp_path_factory, free_port, monkeysession, solr_bin_pat
     solr_root = tmp_path_factory.mktemp("solr")
     solr_bin = solr_bin_path
     port = free_port
-    logging.info(f"Starting SOLR at port {port}")
+    logger.info(f"Starting SOLR at port {port}")
     proc = subprocess.Popen(
         [
             solr_bin,
@@ -88,7 +90,7 @@ async def solr_instance(tmp_path_factory, free_port, monkeysession, solr_bin_pat
     try:
         proc.terminate()
     except Exception as err:
-        logging.error(f"Encountered error when shutting down solr for testing {err}")
+        logger.error(f"Encountered error when shutting down solr for testing {err}")
         proc.kill()
 
 
@@ -124,7 +126,3 @@ async def solr_search(solr_config):
     result = await migrator.migrate(migrations)
     assert result.migrations_run == len(migrations)
     return solr_config
-
-
-logging.basicConfig()
-logging.getLogger().setLevel(logging.DEBUG)

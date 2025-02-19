@@ -7,9 +7,9 @@ from typing import Any
 from sqlalchemy import JSON, DateTime, Enum, MetaData, String, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
+from ulid import ULID
 
 from renku_data_services.utils.sqlalchemy import ULIDType
-from ulid import ULID
 
 JSONVariant = JSON().with_variant(JSONB(), "postgresql")
 

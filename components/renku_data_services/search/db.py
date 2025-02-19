@@ -1,13 +1,11 @@
 """Database operations for search."""
 
-from ast import And
 import json
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import text, select, update
-import sqlalchemy as sa
+from sqlalchemy import select, text, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
@@ -149,7 +147,7 @@ class SearchUpdatesRepo:
     async def clear_all(self) -> None:
         """Clears the staging table of all data."""
         async with self.session_maker() as session, session.begin():
-            await session.execute(text("TRUNCATE TABLE search_updates"))
+            await session.execute(text("TRUNCATE TABLE events.search_updates"))
             return None
 
     async def select_next(self, size: int) -> list[SearchUpdatesORM]:
@@ -173,12 +171,20 @@ class SearchUpdatesRepo:
             return list(records)
 
     async def mark_processed(self, ids: list[ULID]) -> None:
-        """Mark these rows as processed so they can be deleted."""
+        """Remove processed rows."""
+        async with self.session_maker() as session, session.begin():
+            stmt = delete(SearchUpdatesORM).where(
+                SearchUpdatesORM.state == RecordState.Locked and SearchUpdatesORM.id.in_(ids)
+            )
+            await session.execute(stmt)
+
+    async def mark_reset(self, ids: list[ULID]) -> None:
+        """Mark these rows as open so they can be processed."""
         async with self.session_maker() as session, session.begin():
             stmt = (
                 update(SearchUpdatesORM)
                 .where(SearchUpdatesORM.state == RecordState.Locked and SearchUpdatesORM.id.in_(ids))
-                .values(state=RecordState.Processed)
+                .values(state=None)
             )
             await session.execute(stmt)
 
