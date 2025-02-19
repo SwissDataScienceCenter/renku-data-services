@@ -88,6 +88,7 @@
       'environment': dict({
         'container_image': 'some_image:some_tag',
         'default_url': '/lab',
+        'environment_image_source': 'image',
         'environment_kind': 'CUSTOM',
         'gid': 1000,
         'is_archived': False,
@@ -102,6 +103,7 @@
       'environment': dict({
         'container_image': 'some_image:some_tag',
         'default_url': '/lab',
+        'environment_image_source': 'image',
         'environment_kind': 'CUSTOM',
         'gid': 1000,
         'is_archived': False,
@@ -116,6 +118,7 @@
       'environment': dict({
         'container_image': 'some_image:some_tag',
         'default_url': '/lab',
+        'environment_image_source': 'image',
         'environment_kind': 'CUSTOM',
         'gid': 1000,
         'is_archived': False,

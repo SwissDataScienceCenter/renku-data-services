@@ -11,7 +11,7 @@ Data Services follows a [polylith](https://polylith.gitbook.io/polylith) approac
 * `components` contain all the application code, divided into modules based on entity types
 * `bases` contains the glue code to bring the different components together into a single unit/api. The
   entrypoint of applications is usually a `main.py` in one of the bases
-* `projects` contains the Dockerfiles and pyproject.toml's for each deployed service
+* `projects` contains the Dockerfiles and pyproject.toml for each deployed service
 
 #### Bases/Projects
 There are three independent services/deployments (projects/bases):
@@ -27,7 +27,7 @@ Within components, there are the following modules:
 * *base_api*: Common functionality shared by different APIs
 * *base_models*: Common functionality shared by all domain models
 * *base_orm*: Common functionality shared by database object relational models
-* *connected_services*: Code concerning third-party integrations (e.g. Gitlab/Github)
+* *connected_services*: Code concerning third-party integrations (e.g. Gitlab/GitHub)
 * *crc*: Compute resource controls code, dealing with resource classes and resource pools for interactive compute
 * *db_config*: Database configuration
 * *errors*: Common application error types shared by all apis
@@ -98,7 +98,7 @@ environment can be created:
    necessary external services, like the PostgreSQL database.
 3. Run `poetry install` to install the python venv
 
-Then `make run`, `make tests` etc can be used as usual.
+Then `make run`, `make tests` etc. can be used as usual.
 
 The environment also contains other useful tools, like ruff-lsp,
 pyright and more. Instead of a vm, a development environment using
@@ -111,19 +111,19 @@ function if you prefer to keep your favorite shell.
 ## Running Tests
 
 You can run style checks using `make style_checks`.
-To run the test test suite, use `make tests` (you likely need to run in the devcontainer for this to work, as it needs
+To run the test suite, use `make tests` (you likely need to run in the devcontainer for this to work, as it needs
 some surrounding services to run).
 
 We use [Syrupy](https://github.com/syrupy-project/syrupy) for snapshotting data in tests.
 
-To update the snapshotted data, run the following command in the devcontainer:
+To update the snapshot data, run the following command in the devcontainer:
 ```bash
 $ poetry run pytest -m "not schemathesis" -n auto --snapshot-update
 ```
 
 ## Migrations
 
-We use Alembic for migrations and we have a single version table for all schemas. This version table
+We use Alembic for migrations, and we have a single version table for all schemas. This version table
 is used by Alembic to determine what migrations have been applied or not and it resides in the `common`
 schema. That is why all the Alembic commands include the `--name common` argument.
 
