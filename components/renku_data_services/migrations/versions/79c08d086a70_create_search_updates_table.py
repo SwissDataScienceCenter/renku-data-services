@@ -6,11 +6,11 @@ Create Date: 2025-02-06 17:42:12.792331
 
 """
 
-from renku_data_services.search.orm import RecordState
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
+from renku_data_services.search.orm import RecordState
 from renku_data_services.utils.sqlalchemy import ULIDType
 
 # revision identifiers, used by Alembic.

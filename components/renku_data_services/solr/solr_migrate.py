@@ -201,7 +201,7 @@ class SchemaMigrator:
         remain = [e for e in migrations if e.version > initialDoc.current_schema_version_l]
         logging.info(f"There are {len(remain)} migrations to run")
         if remain == []:
-            return MigrateResult.empty(version = initialDoc.current_schema_version_l)
+            return MigrateResult.empty(version=initialDoc.current_schema_version_l)
 
         remain.sort(key=lambda m: m.version)
         schema = await client.get_schema()

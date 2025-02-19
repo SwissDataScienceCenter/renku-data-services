@@ -14,6 +14,7 @@ from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.search.core import reprovision
 from renku_data_services.search.db import SearchUpdatesRepo
+from renku_data_services.solr.solr_client import SolrClientConfig
 from renku_data_services.users.db import UserRepo
 
 
@@ -27,6 +28,7 @@ class SearchBP(CustomBlueprint):
     group_repo: GroupRepository
     project_repo: ProjectRepository
     search_updates_repo: SearchUpdatesRepo
+    solr_config: SolrClientConfig
     authz: Authz
 
     def post(self) -> BlueprintFactoryResponse:
@@ -43,6 +45,7 @@ class SearchBP(CustomBlueprint):
                     reprovisioning=reprovisioning,
                     search_updates_repo=self.search_updates_repo,
                     reprovisioning_repo=self.reprovisioning_repo,
+                    solr_config=self.solr_config,
                     user_repo=self.user_repo,
                     group_repo=self.group_repo,
                     project_repo=self.project_repo,

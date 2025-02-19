@@ -54,6 +54,7 @@ async def test_user_insert_only(app_config_instance):
     user = UserDoc.model_validate(db_user.payload)
     assert user.lastName == "Pogacar"
 
+
 async def test_select_next(app_config_instance):
     run_migrations_for_app("common")
 
@@ -69,6 +70,7 @@ async def test_select_next(app_config_instance):
 
     records2 = await repo.select_next(10)
     assert len(records2) == 0
+
 
 async def test_mark_processed(app_config_instance):
     run_migrations_for_app("common")

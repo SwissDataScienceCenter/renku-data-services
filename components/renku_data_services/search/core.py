@@ -9,8 +9,16 @@ from renku_data_services.message_queue.models import Reprovisioning
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.search.db import SearchUpdatesRepo
-from renku_data_services.solr.solr_client import SolrClient
+from renku_data_services.solr.solr_client import (
+    DefaultSolrClient,
+    RawDocument,
+    SolrClient,
+    SolrClientConfig,
+    SolrDocument,
+)
 from renku_data_services.users.db import UserRepo
+
+logger = logging.getLogger(__name__)
 
 
 async def reprovision(
@@ -18,6 +26,7 @@ async def reprovision(
     reprovisioning: Reprovisioning,
     search_updates_repo: SearchUpdatesRepo,
     reprovisioning_repo: ReprovisioningRepository,
+    solr_config: SolrClientConfig,
     user_repo: UserRepo,
     group_repo: GroupRepository,
     project_repo: ProjectRepository,
@@ -26,12 +35,14 @@ async def reprovision(
 
     def log_counter(c: int) -> None:
         if c % 50 == 0:
-            logging.info(f"Inserted {c}. entities into staging table...")
+            logger.info(f"Inserted {c}. entities into staging table...")
 
     try:
-        logging.info(f"Starting reprovisioning with ID {reprovisioning.id}")
+        logger.info(f"Starting reprovisioning with ID {reprovisioning.id}")
         started = datetime.now()
         await search_updates_repo.clear_all()
+        async with DefaultSolrClient(solr_config) as client:
+            await client.delete("_type:*")
         counter = 0
         all_users = user_repo.get_all_users(requested_by=requested_by)
         async for user_entity in all_users:
@@ -51,15 +62,38 @@ async def reprovision(
             counter += 1
             log_counter(counter)
 
-        logging.info(f"Inserted {counter} entities into the staging table.")
+        logger.info(f"Inserted {counter} entities into the staging table.")
 
     except Exception as e:
-        logging.error("Error while reprovisioning entities!", e)
+        logger.error("Error while reprovisioning entities!", e)
         ## TODO error handling. skip or fail?
     finally:
         await reprovisioning_repo.stop()
 
 
-async def update_solr(search_updates_repo: SearchUpdatesRepo, solr_client: SolrClient) -> None:
+async def update_solr(search_updates_repo: SearchUpdatesRepo, solr_client: SolrClient, batch_size: int) -> None:
     """Selects entries from the search staging table and updates SOLR."""
-    pass
+    counter = 0
+    while True:
+        entries = await search_updates_repo.select_next(batch_size)
+        if entries == []:
+            break
+
+        ids = [e.id for e in entries]
+        try:
+            docs: list[SolrDocument] = [RawDocument(e.payload) for e in entries]
+            result = await solr_client.upsert(docs)
+            if result == "VersionConflict":
+                await search_updates_repo.mark_reset(ids)
+            else:
+                counter = counter + len(entries)
+                await search_updates_repo.mark_processed(ids)
+        except Exception as e:
+            logger.error(f"Error while updating solr with entities {ids}", e)
+            try:
+                await search_updates_repo.mark_reset(ids)
+            except Exception as e2:
+                logger.error("Error while resetting search entities", e2)
+
+    if counter > 0:
+        logger.info(f"Updated {counter} entries in SOLR")

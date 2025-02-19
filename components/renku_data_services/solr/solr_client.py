@@ -168,11 +168,30 @@ class SolrDocument(Protocol):
     All documents should have an `id` property denoting their primary identity.
     """
 
-    id: str
+    @property
+    def id(self) -> str:
+        """The document id."""
+        ...
 
     def to_dict(self) -> dict[str, Any]:
         """Return a dict representation of this document."""
         ...
+
+
+@dataclass
+class RawDocument(SolrDocument):
+    """A simple wrapper around a JSON dictionary."""
+
+    data: dict[str, Any]
+
+    @property
+    def id(self) -> str:
+        """Return the document id."""
+        return str(self.data["id"])
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the data dictionary."""
+        return self.data
 
 
 class ResponseBody(BaseModel):
@@ -239,6 +258,11 @@ class SolrClient(AbstractAsyncContextManager, ABC):
     @abstractmethod
     async def get_schema(self) -> CoreSchema:
         """Return the schema of the core."""
+        ...
+
+    @abstractmethod
+    async def delete(self, query: str) -> Response:
+        """Delete data that matches the `query`."""
         ...
 
 
@@ -323,6 +347,16 @@ class DefaultSolrClient(SolrClient):
         resp = await self.delegate.get("/schema")
         cs = CoreSchema.model_validate(resp.json()["schema"])
         return cs
+
+    async def delete(self, query: str) -> Response:
+        """Delete all documents that matches `query`."""
+        cmd = {"delete": {"query": query}}
+        return await self.delegate.post(
+            "/update",
+            params={"commit": "true"},
+            content=json.dumps(cmd).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
 
     async def close(self) -> None:
         """Close this client and free resources."""
