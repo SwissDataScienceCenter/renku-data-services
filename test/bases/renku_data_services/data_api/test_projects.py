@@ -1295,6 +1295,7 @@ async def test_project_copy_creates_new_custom_environment_instance(
         environment={
             "container_image": "some_image:some_tag",
             "environment_kind": "CUSTOM",
+            "environment_image_source": "image",
             "name": "custom_env",
             "description": "Custom environment",
             "port": 42,

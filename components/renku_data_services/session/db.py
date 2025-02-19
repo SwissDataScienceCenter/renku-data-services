@@ -233,12 +233,9 @@ class SessionRepository:
             environment.is_archived = update.is_archived
 
     async def __update_environment_build_parameters(
-        self,
-        environment: schemas.EnvironmentORM,
-        update: models.EnvironmentPatch,
-        session: AsyncSession,
-        launcher: schemas.SessionLauncherORM,
+        self, environment: schemas.EnvironmentORM, update: models.EnvironmentPatch
     ) -> None:
+        # TODO: For now, we don't allow updating other fields of a session environment
         if not update.build_parameters:
             return
 
@@ -250,34 +247,6 @@ class SessionRepository:
             environment.build_parameters.builder_variant = build_parameters.builder_variant
         if build_parameters.frontend_variant is not None:
             environment.build_parameters.frontend_variant = build_parameters.frontend_variant
-
-        build_parameters_orm = environment.build_parameters
-        created_by_id = environment.created_by_id
-
-        environment.build_parameters_id = None
-        await session.delete(environment)
-
-        environment_orm = schemas.EnvironmentORM(
-            name=launcher.name,
-            created_by_id=created_by_id,
-            description=f"Generated environment for {launcher.name}",
-            container_image="image:unknown-at-the-moment",  # TODO: This should come from the build
-            default_url="/lab",  # TODO: This should come from the build
-            port=8888,  # TODO: This should come from the build
-            working_directory=None,  # TODO: This should come from the build
-            mount_directory=None,  # TODO: This should come from the build
-            uid=1000,  # TODO: This should come from the build
-            gid=1000,  # TODO: This should come from the build
-            environment_kind=models.EnvironmentKind.CUSTOM,
-            command=None,  # TODO: This should come from the build
-            args=None,  # TODO: This should come from the build
-            creation_date=datetime.now(UTC).replace(microsecond=0),
-            environment_image_source=models.EnvironmentImageSource.build,
-            build_parameters_id=build_parameters_orm.id,
-            build_parameters=build_parameters_orm,
-        )
-        session.add(environment_orm)
-        launcher.environment = environment_orm
 
     async def update_environment(
         self, user: base_models.APIUser, environment_id: ULID, patch: models.EnvironmentPatch
@@ -654,24 +623,73 @@ class SessionRepository:
                     # with any launchers.
                     await session.delete(old_environment)
             case models.EnvironmentPatch(), models.EnvironmentKind.CUSTOM:
-                # Custom environment being updated
+                # The custom environment is updated without changing the image source
                 if launcher.environment.environment_image_source == models.EnvironmentImageSource.build:
-                    await self.__update_environment_build_parameters(launcher.environment, update, session, launcher)
+                    await self.__update_environment_build_parameters(launcher.environment, update)
                 else:
                     self.__update_environment(launcher.environment, update)
-            case models.UnsavedEnvironment() as new_custom_environment, _ if (
-                new_custom_environment.environment_kind == models.EnvironmentKind.CUSTOM
-            ):
+            case models.UnsavedEnvironment() as new_custom_environment, models.EnvironmentKind.GLOBAL:
                 # Global environment replaced by a custom one
                 new_env = self.__insert_environment(user, session, new_custom_environment)
+                launcher.environment_id = new_env.id
                 launcher.environment = new_env
                 await session.flush()
-            case models.UnsavedBuildParameters() as new_custom_build_parameters_environment, _:
+            case models.UnsavedEnvironment() as new_custom_environment, models.EnvironmentKind.CUSTOM:
+                # Custom environment with build is replaced by a custom environment with image
+                build_parameters = launcher.environment.build_parameters
+
+                launcher.environment.name = update.name
+                launcher.environment.description = update.description
+                launcher.environment.container_image = update.container_image
+                launcher.environment.default_url = update.default_url
+                launcher.environment.port = update.port
+                launcher.environment.working_directory = update.working_directory
+                launcher.environment.mount_directory = update.mount_directory
+                launcher.environment.uid = update.uid
+                launcher.environment.gid = update.gid
+                launcher.environment.environment_kind = models.EnvironmentKind.CUSTOM
+                launcher.environment.command = update.command
+                launcher.environment.args = update.args
+                launcher.environment.environment_image_source = models.EnvironmentImageSource.image
+                launcher.environment.build_parameters_id = None
+
+                # NOTE: Delete the build parameters since they are not used by any other environment
+                await session.delete(build_parameters)
+
+                await session.flush()
+            case models.UnsavedBuildParameters() as new_custom_built_environment, models.EnvironmentKind.GLOBAL:
                 # Global environment replaced by a custom one which will be built
                 new_env = self.__insert_build_parameters_environment(
-                    user, session, launcher, new_custom_build_parameters_environment
+                    user, session, launcher, new_custom_built_environment
                 )
+                launcher.environment_id = new_env.id
                 launcher.environment = new_env
+                await session.flush()
+            case models.UnsavedBuildParameters() as new_custom_built_environment, models.EnvironmentKind.CUSTOM:
+                # Custom environment with image is replaced by a custom environment with build
+                build_parameters_orm = schemas.BuildParametersORM(
+                    builder_variant=new_custom_built_environment.builder_variant,
+                    frontend_variant=new_custom_built_environment.frontend_variant,
+                    repository=new_custom_built_environment.repository,
+                )
+                session.add(build_parameters_orm)
+
+                launcher.environment.container_image = (
+                    "image:unknown-at-the-moment"  # TODO: This should come from the build
+                )
+                launcher.environment.default_url = "/lab"  # TODO: This should come from the build
+                launcher.environment.port = 8888  # TODO: This should come from the build
+                launcher.environment.working_directory = None  # TODO: This should come from the build
+                launcher.environment.mount_directory = None  # TODO: This should come from the build
+                launcher.environment.uid = 1000  # TODO: This should come from the build
+                launcher.environment.gid = 1000  # TODO: This should come from the build
+                launcher.environment.environment_kind = models.EnvironmentKind.CUSTOM
+                launcher.environment.command = None  # TODO: This should come from the build
+                launcher.environment.args = None  # TODO: This should come from the build
+                launcher.environment.environment_image_source = models.EnvironmentImageSource.build
+                launcher.environment.build_parameters_id = build_parameters_orm.id
+                launcher.environment.build_parameters = build_parameters_orm
+
                 await session.flush()
             case _:
                 raise errors.ValidationError(

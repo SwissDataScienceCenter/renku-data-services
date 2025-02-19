@@ -23,8 +23,9 @@ def launch_session(
     event_loop: AbstractEventLoop,
 ):
     async def launch_session_helper(
-        payload: dict, headers: dict = user_headers, user: UserInfo = regular_user
+        payload: dict, headers: dict = None, user: UserInfo = regular_user
     ) -> TestingResponse:
+        headers = headers or user_headers
         _, res = await sanic_client.post("/api/data/sessions", headers=headers, json=payload)
         assert res.status_code == 201, res.text
         assert res.json is not None
@@ -652,6 +653,8 @@ async def test_patch_session_launcher_environment(
     )
     assert res.status_code == 200, res.text
 
+    environment_id = res.json["environment"]["id"]
+
     # Should be able to patch some fields of the custom environment
     patch_payload = {
         "environment": {"container_image": "nginx:latest", "args": ["a", "b", "c"]},
@@ -660,6 +663,7 @@ async def test_patch_session_launcher_environment(
         f"/api/data/session_launchers/{launcher_id}", headers=user_headers, json=patch_payload
     )
     assert res.status_code == 200, res.text
+    assert res.json["environment"]["id"] == environment_id
     assert res.json["environment"]["container_image"] == "nginx:latest"
     assert res.json["environment"]["args"] == ["a", "b", "c"]
 
@@ -671,6 +675,7 @@ async def test_patch_session_launcher_environment(
         f"/api/data/session_launchers/{launcher_id}", headers=user_headers, json=patch_payload
     )
     assert res.status_code == 200, res.text
+    assert res.json["environment"]["id"] == environment_id
     assert res.json["environment"].get("args") is None
     assert res.json["environment"].get("command") is None
 
@@ -705,8 +710,8 @@ async def test_patch_session_launcher_environment(
     assert res.json.get("project_id") == project["id"]
     assert res.json.get("description") == "A session launcher."
     environment = res.json.get("environment", {})
-    assert environment.get("id") is not None
-    assert environment.get("name") == "Launcher 1"
+    assert environment.get("id") == environment_id
+    assert environment.get("name") == "new_custom"
     assert environment.get("environment_kind") == "CUSTOM"
     assert environment.get("build_parameters") == {
         "repository": "https://github.com/some/repo",
@@ -769,6 +774,7 @@ async def test_patch_session_launcher_environment_with_build_parameters(
     assert res.json.get("description") == "A session launcher."
     environment = res.json.get("environment", {})
     assert environment.get("id") is not None
+    assert environment.get("id") != global_env["id"]
     assert environment.get("name") == "Launcher 1"
     assert environment.get("environment_kind") == "CUSTOM"
     assert environment.get("build_parameters") == {
@@ -778,6 +784,8 @@ async def test_patch_session_launcher_environment_with_build_parameters(
     }
     assert environment.get("environment_image_source") == "build"
     assert environment.get("container_image") == "image:unknown-at-the-moment"
+
+    environment_id = environment["id"]
 
     # Patch the build parameters
     patch_payload = {
@@ -799,7 +807,7 @@ async def test_patch_session_launcher_environment_with_build_parameters(
     assert res.json.get("project_id") == project["id"]
     assert res.json.get("description") == "A session launcher."
     environment = res.json.get("environment", {})
-    assert environment.get("id") is not None
+    assert environment.get("id") == environment_id
     assert environment.get("name") == "Launcher 1"
     assert environment.get("environment_kind") == "CUSTOM"
     assert environment.get("build_parameters") == {
@@ -827,12 +835,72 @@ async def test_patch_session_launcher_environment_with_build_parameters(
     assert res.json.get("project_id") == project["id"]
     assert res.json.get("description") == "A session launcher."
     environment = res.json.get("environment", {})
-    assert environment.get("id") is not None
+    assert environment.get("id") == environment_id
     assert environment.get("name") == "new_custom"
     assert environment.get("environment_kind") == "CUSTOM"
     assert environment.get("build_parameters") is None
     assert environment.get("environment_image_source") == "image"
     assert environment.get("container_image") == "new_image"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("builder_variant, frontend_variant", [("conda", "vscodium"), ("python", "jupyter")])
+async def test_post_session_launcher_environment_with_invalid_build_parameters(
+    sanic_client, user_headers, create_project, builder_variant, frontend_variant
+) -> None:
+    project = await create_project("Project")
+
+    payload = {
+        "name": "Launcher 1",
+        "project_id": project["id"],
+        "environment": {
+            "repository": "https://github.com/some/repo",
+            "builder_variant": builder_variant,
+            "frontend_variant": frontend_variant,
+            "environment_image_source": "build",
+        },
+    }
+
+    _, res = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
+    assert res.status_code == 422, res.text
+    assert "Invalid value for the field" in res.text
+    assert "Valid values are" in res.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("builder_variant, frontend_variant", [("conda", "vscodium"), ("python", "jupyter")])
+async def test_patch_session_launcher_environment_with_invalid_build_parameters(
+    sanic_client, user_headers, create_project, create_session_launcher, builder_variant, frontend_variant
+) -> None:
+    project = await create_project("Project")
+
+    session_launcher = await create_session_launcher(
+        name="Launcher",
+        project_id=project["id"],
+        environment={
+            "repository": "https://github.com/some/repo",
+            "builder_variant": "python",
+            "frontend_variant": "vscodium",
+            "environment_image_source": "build",
+        },
+    )
+    launcher_id = session_launcher["id"]
+
+    patch_payload = {
+        "environment": {
+            "build_parameters": {
+                "builder_variant": builder_variant,
+                "frontend_variant": frontend_variant,
+            },
+        }
+    }
+
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher_id}", headers=user_headers, json=patch_payload
+    )
+    assert res.status_code == 422, res.text
+    assert "Invalid value for the field" in res.text
+    assert "Valid values are" in res.text
 
 
 @pytest.mark.asyncio
@@ -938,7 +1006,6 @@ async def test_starting_session_anonymous(
     admin_headers,
     launch_session,
     anonymous_user_headers,
-    cluster,
 ) -> None:
     _, res = await sanic_client.post(
         "/api/data/resource_pools",

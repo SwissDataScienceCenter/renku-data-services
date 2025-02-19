@@ -349,7 +349,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Build"
-        # TODO: 409 CONFLICT responce
+        # TODO: 409 CONFLICT response
         default:
           $ref: "#/components/responses/Error"
       tags:
