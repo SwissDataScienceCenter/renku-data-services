@@ -24,7 +24,7 @@ class RecordState(StrEnum):
     """Indicates the state of a row wrt processing."""
 
     Locked = "Locked"
-    Processed = "Processed"
+    Failed = "Failed"
 
 
 class SearchUpdatesORM(BaseORM):

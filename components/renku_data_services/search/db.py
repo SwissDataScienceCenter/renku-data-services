@@ -5,7 +5,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import select, text, update, delete
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
@@ -170,6 +170,16 @@ class SearchUpdatesRepo:
 
             return list(records)
 
+    async def __mark_rows(self, state: RecordState | None, ids: list[ULID]) -> None:
+        """Mark rows with the given state."""
+        async with self.session_maker() as session, session.begin():
+            stmt = (
+                update(SearchUpdatesORM)
+                .where(SearchUpdatesORM.state == RecordState.Locked and SearchUpdatesORM.id.in_(ids))
+                .values(state=state)
+            )
+            await session.execute(stmt)
+
     async def mark_processed(self, ids: list[ULID]) -> None:
         """Remove processed rows."""
         async with self.session_maker() as session, session.begin():
@@ -180,13 +190,11 @@ class SearchUpdatesRepo:
 
     async def mark_reset(self, ids: list[ULID]) -> None:
         """Mark these rows as open so they can be processed."""
-        async with self.session_maker() as session, session.begin():
-            stmt = (
-                update(SearchUpdatesORM)
-                .where(SearchUpdatesORM.state == RecordState.Locked and SearchUpdatesORM.id.in_(ids))
-                .values(state=None)
-            )
-            await session.execute(stmt)
+        await self.__mark_rows(None, ids)
+
+    async def mark_failed(self, ids: list[ULID]) -> None:
+        """Marke these rows as failed."""
+        await self.__mark_rows(RecordState.Failed, ids)
 
     async def reset_locked(self) -> None:
         """Resets all locked rows to open."""

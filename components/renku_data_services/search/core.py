@@ -65,7 +65,7 @@ async def reprovision(
         logger.info(f"Inserted {counter} entities into the staging table.")
 
     except Exception as e:
-        logger.error("Error while reprovisioning entities!", e)
+        logger.error("Error while reprovisioning entities!", exc_info=e)
         ## TODO error handling. skip or fail?
     finally:
         await reprovisioning_repo.stop()
@@ -89,11 +89,11 @@ async def update_solr(search_updates_repo: SearchUpdatesRepo, solr_client: SolrC
                 counter = counter + len(entries)
                 await search_updates_repo.mark_processed(ids)
         except Exception as e:
-            logger.error(f"Error while updating solr with entities {ids}", e)
+            logger.error(f"Error while updating solr with entities {ids}", exc_info=e)
             try:
-                await search_updates_repo.mark_reset(ids)
+                await search_updates_repo.mark_failed(ids)
             except Exception as e2:
-                logger.error("Error while resetting search entities", e2)
+                logger.error("Error while setting search entities to failed", exc_info=e2)
 
     if counter > 0:
         logger.info(f"Updated {counter} entries in SOLR")
