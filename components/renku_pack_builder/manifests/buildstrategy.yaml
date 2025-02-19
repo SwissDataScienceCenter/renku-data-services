@@ -33,10 +33,10 @@ spec:
       resources:
         limits:
           cpu: 500m
-          memory: 4Gi
+          memory: 1Gi
         requests:
           cpu: 250m
-          memory: 2Gi
+          memory: 65Mi
     - name: build-and-push
       image: docker.io/paketobuildpacks/builder-jammy-full:latest
       imagePullPolicy: IfNotPresent
@@ -56,11 +56,11 @@ spec:
           name: platform-env
       resources:
         limits:
-          cpu: 500m
-          memory: 1Gi
+          cpu: 4000m
+          memory: 8Gi
         requests:
-          cpu: 250m
-          memory: 65Mi
+          cpu: 2000m
+          memory: 4Gi
   volumes:
     - name: platform-env
       emptyDir: {}
