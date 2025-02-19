@@ -61,7 +61,9 @@ def renku_2_make_server_name(user: AuthenticatedAPIUser | AnonymousAPIUser, proj
     safe_username = safe_username.lower()
     safe_username = re.sub(r"[^a-z0-9-]", "-", safe_username)
     prefix = _make_server_name_prefix(safe_username)
-    server_string_for_hashing = f"{user.id}-{project_id}-{launcher_id}"
+    #/run/secrets/kcubeconfigs/<names>
+    # TODO: LSA Validate kubeconfig to contain only ONE cluster definition
+    server_string_for_hashing = f"{user.id}-{project_id}-{launcher_id}-{...}" # TODO: add host + namespace
     server_hash = md5(server_string_for_hashing.encode(), usedforsecurity=False).hexdigest().lower()
     # NOTE: A K8s object name can only contain lowercase alphanumeric characters, hyphens, or dots.
     # Must be no more than 63 characters because the name is used to create a k8s Service and Services

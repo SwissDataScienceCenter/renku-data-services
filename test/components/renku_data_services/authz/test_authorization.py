@@ -39,7 +39,7 @@ async def bootstrap_admins(app_config_instance: Config, event_loop) -> None:
                 relationship=Relationship(resource=_AuthzConverter.platform(), relation="admin", subject=sub),
             )
         )
-    await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=rels))
+    await authz._k8s_client.WriteRelationships(WriteRelationshipsRequest(updates=rels))
 
 
 @pytest.mark.asyncio
@@ -65,7 +65,7 @@ async def test_adding_deleting_project(app_config_instance: Config, bootstrap_ad
         secrets_mount_directory=project_constants.DEFAULT_SESSION_SECRETS_MOUNT_DIR,
     )
     authz_changes = authz._add_project(project)
-    await authz.client.WriteRelationships(authz_changes.apply)
+    await authz._k8s_client.WriteRelationships(authz_changes.apply)
     assert await authz.has_permission(project_owner, ResourceType.project, project_id, Scope.DELETE)
     assert await authz.has_permission(project_owner, ResourceType.project, project_id, Scope.WRITE)
     assert await authz.has_permission(project_owner, ResourceType.project, project_id, Scope.READ)
@@ -79,7 +79,7 @@ async def test_adding_deleting_project(app_config_instance: Config, bootstrap_ad
     assert not await authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.WRITE)
     assert not await authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.DELETE)
     authz_changes = await authz._remove_project(project_owner, project)
-    await authz.client.WriteRelationships(authz_changes.apply)
+    await authz._k8s_client.WriteRelationships(authz_changes.apply)
     assert not await authz.has_permission(admin_user, ResourceType.project, project_id, Scope.READ)
     assert not await authz.has_permission(admin_user, ResourceType.project, project_id, Scope.WRITE)
     assert not await authz.has_permission(admin_user, ResourceType.project, project_id, Scope.DELETE)
@@ -117,7 +117,7 @@ async def test_granting_access(
         created_by=project_owner.id,
     )
     authz_changes = authz._add_project(project)
-    await authz.client.WriteRelationships(authz_changes.apply)
+    await authz._k8s_client.WriteRelationships(authz_changes.apply)
     assert public_project == await authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.READ)
     assert not await authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.WRITE)
     assert not await authz.has_permission(regular_user2, ResourceType.project, project_id, Scope.DELETE)
@@ -178,7 +178,7 @@ async def test_listing_users_with_access(app_config_instance: Config, public_pro
     )
     for p in [project1, project2]:
         changes = authz._add_project(p)
-        await authz.client.WriteRelationships(changes.apply)
+        await authz._k8s_client.WriteRelationships(changes.apply)
     proj1_users = set(await authz.users_with_permission(project_owner, ResourceType.project, project1_id, Scope.READ))
     proj2_users = set(await authz.users_with_permission(regular_user2, ResourceType.project, project2_id, Scope.READ))
     if public_project:
@@ -235,7 +235,7 @@ async def test_listing_projects_with_access(app_config_instance: Config, bootstr
     )
     for p in [public_project, private_project1, private_project2]:
         changes = authz._add_project(p)
-        await authz.client.WriteRelationships(changes.apply)
+        await authz._k8s_client.WriteRelationships(changes.apply)
     assert {public_project_id_str, private_project_id1_str, private_project_id2_str} == set(
         await authz.resources_with_permission(project_owner, regular_user1.id, ResourceType.project, Scope.DELETE)
     )
@@ -298,7 +298,7 @@ async def test_listing_projects_with_access(app_config_instance: Config, bootstr
     )
     # Test project deletion
     changes = await authz._remove_project(project_owner, private_project1)
-    await authz.client.WriteRelationships(changes.apply)
+    await authz._k8s_client.WriteRelationships(changes.apply)
     assert private_project_id1_str not in set(
         await authz.resources_with_permission(admin_user, project_owner.id, ResourceType.project, Scope.READ)
     )

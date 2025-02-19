@@ -455,10 +455,19 @@ class _SessionConfig:
 
 
 @dataclass
+class _RemoteClusterConfig:
+    name: str
+    description: str
+    context_name: str
+    kube_config_path: str
+#TODO: LSA: DONT FORGET THIS
+
+@dataclass
 class _K8sConfig:
     """Defines the k8s client and namespace."""
 
     renku_namespace: str = "default"
+    remote_clusters: list[_RemoteClusterConfig] = field(default_factory=list)
 
     @classmethod
     def from_env(cls) -> Self:

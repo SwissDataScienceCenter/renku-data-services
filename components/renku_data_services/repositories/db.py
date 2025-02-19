@@ -115,7 +115,7 @@ class GitRepositoriesRepository:
             connection,
             _,
         ):
-            adapter = get_provider_adapter(connection.client)
+            adapter = get_provider_adapter(connection._k8s_client)
             request_url = adapter.get_repository_api_url(repository_url)
             headers = adapter.api_common_headers or dict()
             if etag:
@@ -126,12 +126,12 @@ class GitRepositoriesRepository:
                 return "304"
             if response.status_code > 200:
                 return models.RepositoryProviderMatch(
-                    provider_id=connection.client.id, connection_id=connection_id, repository_metadata=None
+                    provider_id=connection._k8s_client.id, connection_id=connection_id, repository_metadata=None
                 )
 
             repository = adapter.api_validate_repository_response(response, is_anonymous=False)
             return models.RepositoryProviderMatch(
-                provider_id=connection.client.id, connection_id=connection_id, repository_metadata=repository
+                provider_id=connection._k8s_client.id, connection_id=connection_id, repository_metadata=repository
             )
 
     async def _get_repository_from_internal_gitlab(
