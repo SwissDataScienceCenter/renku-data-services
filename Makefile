@@ -142,8 +142,7 @@ help:  ## Display this help.
 
 .PHONY: k3d_cluster
 k3d_cluster:  ## Creates a k3d cluster for testing
-	k3d cluster delete
-	k3d cluster create --agents 1 --k3s-arg --disable=metrics-server@server:0
+	./setup-k3d-cluster.sh --reset --deploy-shipwright
 
 .PHONY: install_amaltheas
 install_amaltheas:  ## Installs both version of amalthea in the. NOTE: It uses the currently active k8s context.
@@ -167,3 +166,17 @@ amalthea_schema:  ## Updates generates pydantic classes from CRDs
 # newer than the requirements these steps won't be re-triggered.
 # Ignore the return value when there are more differences.
 	( git diff --exit-code -I "^#   timestamp\: " $@ >/dev/null && git checkout $@ ) || true
+
+# Devcontainer
+
+.PHONY: devcontainer_up
+devcontainer_up:
+	devcontainer up --workspace-folder .
+
+.PHONY: devcontainer_rebuild
+devcontainer_rebuild:
+	devcontainer up --remove-existing-container --workspace-folder .
+
+.PHONY: devcontainer_exec
+devcontainer_exec: devcontainer_up
+	devcontainer exec --container-id renku-data-services_devcontainer-data_service-1 -- bash

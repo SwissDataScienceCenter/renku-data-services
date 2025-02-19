@@ -769,9 +769,8 @@ components:
         - https://github.com/SwissDataScienceCenter/project-1.git
         - git@github.com:SwissDataScienceCenter/project-2.git
     Repository:
-      description: A project's repository
+      description: A git repository URL
       type: string
-      example: git@github.com:SwissDataScienceCenter/project-1.git
     Visibility:
       description: Project's visibility levels
       type: string
