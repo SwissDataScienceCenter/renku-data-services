@@ -35,7 +35,7 @@ API_SPECS := \
     components/renku_data_services/platform/apispec.py \
     components/renku_data_services/message_queue/apispec.py \
     components/renku_data_services/data_connectors/apispec.py \
-		components/renku_data_services/search/apispec.py
+    components/renku_data_services/search/apispec.py
 
 components/renku_data_services/crc/apispec.py: components/renku_data_services/crc/api.spec.yaml
 components/renku_data_services/storage/apispec.py: components/renku_data_services/storage/api.spec.yaml
