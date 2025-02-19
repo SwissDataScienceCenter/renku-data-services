@@ -6,6 +6,9 @@ import pytest
 import sqlalchemy as sa
 from alembic.script import ScriptDirectory
 from sanic_testing.testing import SanicASGITestClient
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import bindparam
 from ulid import ULID
 
 from renku_data_services.app_config.config import Config
@@ -271,3 +274,184 @@ async def test_migration_create_global_envs(
     assert len(envs) == 2
     assert any(e.name == "Python/Jupyter" for e in envs)
     assert any(e.name == "Rstudio" for e in envs)
+
+
+@pytest.mark.asyncio
+async def test_migration_to_75c83dd9d619(app_config_instance: Config, admin_user: UserInfo) -> None:
+    """Tests the migration for copying session environments of copied projects."""
+
+    async def insert_project(session: AsyncSession, payload: dict[str, Any]) -> None:
+        bindparams: list[sa.BindParameter] = []
+        cols: list[str] = list(payload.keys())
+        cols_joined = ", ".join(cols)
+        ids = ", ".join([":" + col for col in cols])
+        if "visibility" in payload:
+            bindparams.append(bindparam("visibility", literal_execute=True))
+        stmt = sa.text(
+            f"INSERT INTO projects.projects({cols_joined}) VALUES({ids})",
+        ).bindparams(*bindparams, **payload)
+        await session.execute(stmt)
+
+    async def insert_environment(session: AsyncSession, payload: dict[str, Any]) -> None:
+        bindparams: list[sa.BindParameter] = []
+        cols: list[str] = list(payload.keys())
+        cols_joined = ", ".join(cols)
+        ids = ", ".join([":" + col for col in cols])
+        if "command" in payload:
+            bindparams.append(bindparam("command", type_=JSONB))
+        if "args" in payload:
+            bindparams.append(bindparam("args", type_=JSONB))
+        if "environment_kind" in payload:
+            bindparams.append(bindparam("environment_kind", literal_execute=True))
+        stmt = sa.text(f"INSERT INTO sessions.environments({cols_joined}) VALUES ({ids})").bindparams(
+            *bindparams,
+            **payload,
+        )
+        await session.execute(stmt)
+
+    async def insert_session_launcher(session: AsyncSession, payload: dict[str, Any]) -> None:
+        cols: list[str] = list(payload.keys())
+        cols_joined = ", ".join(cols)
+        ids = ", ".join([":" + col for col in cols])
+        stmt = sa.text(f"INSERT INTO sessions.launchers({cols_joined}) VALUES ({ids})").bindparams(
+            **payload,
+        )
+        await session.execute(stmt)
+
+    run_migrations_for_app("common", "450ae3930996")
+    await app_config_instance.kc_user_repo.initialize(app_config_instance.kc_api)
+    await app_config_instance.group_repo.generate_user_namespaces()
+    custom_launcher_id = str(ULID())
+    custom_launcher_id_cloned = str(ULID())
+    project_id = str(ULID())
+    cloned_project_id = str(ULID())
+    custom_env_id = str(ULID())
+    random_project_id = str(ULID())
+    random_env_id = str(ULID())
+    random_launcher_id = str(ULID())
+    async with app_config_instance.db.async_session_maker() as session, session.begin():
+        # Create template project
+        await insert_project(
+            session,
+            dict(
+                id=project_id,
+                name="test_project",
+                created_by_id=admin_user.id,
+                creation_date=datetime.now(UTC),
+                visibility="public",
+            ),
+        )
+        # Create clone project
+        await insert_project(
+            session,
+            dict(
+                id=cloned_project_id,
+                name="cloned_project",
+                created_by_id="some-other-user-id",
+                creation_date=datetime.now(UTC),
+                visibility="public",
+                template_id=project_id,
+            ),
+        )
+        # Create unrelated project
+        await insert_project(
+            session,
+            dict(
+                id=random_project_id,
+                name="random_project",
+                created_by_id=admin_user.id,
+                creation_date=datetime.now(UTC),
+                visibility="public",
+            ),
+        )
+        # Create a single environment
+        await insert_environment(
+            session,
+            dict(
+                id=custom_env_id,
+                name="custom env",
+                created_by_id=admin_user.id,
+                creation_date=datetime.now(UTC),
+                container_image="env_image",
+                default_url="/env_url",
+                port=8888,
+                args=["arg1"],
+                command=["command1"],
+                uid=1000,
+                gid=1000,
+                environment_kind="CUSTOM",
+            ),
+        )
+        # Create an unrelated environment
+        await insert_environment(
+            session,
+            dict(
+                id=random_env_id,
+                name="random env",
+                created_by_id=admin_user.id,
+                creation_date=datetime.now(UTC),
+                container_image="env_image",
+                default_url="/env_url",
+                port=8888,
+                args=["arg1"],
+                command=["command1"],
+                uid=1000,
+                gid=1000,
+                environment_kind="CUSTOM",
+            ),
+        )
+        # Create two session launchers for each project, but both are using the same env
+        await insert_session_launcher(
+            session,
+            dict(
+                id=custom_launcher_id,
+                name="custom",
+                created_by_id=admin_user.id,
+                creation_date=datetime.now(UTC),
+                environment_id=custom_env_id,
+                project_id=project_id,
+            ),
+        )
+        await insert_session_launcher(
+            session,
+            dict(
+                id=custom_launcher_id_cloned,
+                name="custom_for_cloned_project",
+                created_by_id=admin_user.id,
+                creation_date=datetime.now(UTC),
+                environment_id=custom_env_id,
+                project_id=cloned_project_id,
+            ),
+        )
+        # Create an unrelated session launcher that should be unaffected by the migrations
+        await insert_session_launcher(
+            session,
+            dict(
+                id=random_launcher_id,
+                name="random_launcher",
+                created_by_id=admin_user.id,
+                creation_date=datetime.now(UTC),
+                environment_id=random_env_id,
+                project_id=random_project_id,
+            ),
+        )
+    run_migrations_for_app("common", "75c83dd9d619")
+    async with app_config_instance.db.async_session_maker() as session, session.begin():
+        launchers = (await session.execute(sa.text("SELECT environment_id, name FROM sessions.launchers"))).all()
+        envs = (
+            await session.execute(
+                sa.text("SELECT created_by_id, id, name FROM sessions.environments WHERE environment_kind = 'CUSTOM'")
+            )
+        ).all()
+    assert len(launchers) == 3
+    assert len(envs) == 3
+    # Check that the launcher that does not need changes is unchanged
+    assert launchers[1][0] == random_env_id
+    assert launchers[1][1] == "random_launcher"
+    assert envs[1][0] == admin_user.id
+    assert envs[1][1] == random_env_id
+    # Check that each of the launchers refers to a separate environment
+    assert launchers[0][0] == custom_env_id
+    assert launchers[0][0] != launchers[2][0]
+    assert envs[0][0] == admin_user.id
+    assert envs[2][0] == "some-other-user-id"
