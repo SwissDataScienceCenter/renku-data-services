@@ -17,11 +17,9 @@ from renku_data_services.notebooks.api.classes.data_service import (
     GitProviderHelper,
 )
 from renku_data_services.notebooks.api.classes.k8s_client import (
-    AmaltheaSessionV1Alpha1Kr8s,
-    JupyterServerV1Alpha1Kr8s,
     K8sClient,
-    NamespacedK8sClient,
-    ServerCache,
+    BaseK8sClient,
+    ServerCache, JupyterServerV1Alpha1Kr8s, AmaltheaSessionV1Alpha1Kr8s,
 )
 from renku_data_services.notebooks.api.classes.repository import GitProvider
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
@@ -133,7 +131,7 @@ class NotebooksConfig:
             )
 
         k8s_config = _K8sConfig.from_env()
-        renku_ns_client = NamespacedK8sClient(
+        renku_ns_client = BaseK8sClient(
             k8s_config.renku_namespace, JupyterServerV1Alpha1, JupyterServerV1Alpha1Kr8s
         )
         js_cache = ServerCache(amalthea_config.cache_url, JupyterServerV1Alpha1)
@@ -145,7 +143,7 @@ class NotebooksConfig:
             skip_cache_if_unavailable=dummy_stores,
         )
         v2_cache = ServerCache(amalthea_v2_config.cache_url, AmaltheaSessionV1Alpha1)
-        renku_ns_v2_client = NamespacedK8sClient(
+        renku_ns_v2_client = BaseK8sClient(
             k8s_config.renku_namespace, AmaltheaSessionV1Alpha1, AmaltheaSessionV1Alpha1Kr8s
         )
         k8s_v2_client = K8sClient(

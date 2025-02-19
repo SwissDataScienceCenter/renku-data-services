@@ -93,6 +93,7 @@ class ResourceClass(ResourcesCompareMixin):
     node_affinities: list[NodeAffinity] = field(default_factory=list)
     tolerations: list[str] = field(default_factory=list)
     quota: str | None = None
+    k8s_context_name: Optional[str] = None # TODO: LSA Give a context as a parameter or a kubeconfig file, or both?
 
     def __post_init__(self) -> None:
         if len(self.name) > 40:
@@ -171,6 +172,14 @@ class Quota(ResourcesCompareMixin):
             return self
         return self.from_dict({**asdict(self), "id": str(uuid4())})
 
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ValidKubeConnectionSettings:
+    """Cluster connection"""
+
+    context_name: str
+    node_affinities: list[str]
+    tolerations: list[str]
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class ResourcePool:

@@ -39,6 +39,7 @@ class UserServer(ABC):
         user: AnonymousAPIUser | AuthenticatedAPIUser,
         server_name: str,
         image: str | None,
+        cluster_name: str | None,
         server_options: ServerOptions,
         environment_variables: dict[str, str],
         user_secrets: K8sUserSecrets | None,
@@ -51,12 +52,14 @@ class UserServer(ABC):
         using_default_image: bool = False,
         is_image_private: bool = False,
         repositories: list[Repository] | None = None,
+        host: str | None = None,
     ):
         self._user = user
         self.server_name = server_name
         self._k8s_client: K8sClient[JupyterServerV1Alpha1, JupyterServerV1Alpha1Kr8s] = k8s_client
         self.safe_username = self._user.id
         self.image = image
+        self.cluster_name = cluster_name
         self.server_options = server_options
         self.environment_variables = environment_variables
         self.user_secrets = user_secrets
@@ -65,6 +68,7 @@ class UserServer(ABC):
         self.work_dir = work_dir
         self.cloudstorage = cloudstorage
         self.is_image_private = is_image_private
+        self.host = host or config.sessions.ingress.host
         self.config = config
         self.internal_gitlab_user = internal_gitlab_user
 
@@ -88,6 +92,13 @@ class UserServer(ABC):
         self._repositories: list[Repository] = repositories or []
         self._git_providers: list[GitProvider] | None = None
         self._has_configured_git_providers = False
+
+    @property
+    def preferred_namespace(self) -> str:
+     """Get the preferred namespace for a server."""
+     if (ns := self.k8s_client.preferred_cluster_namespace(self.host)) is not None:
+         return ns
+     return self.k8s_client.preferred_namespace
 
     @property
     def user(self) -> AnonymousAPIUser | AuthenticatedAPIUser:
@@ -121,11 +132,11 @@ class UserServer(ABC):
         """The URL where a user can access their session."""
         if self._user.is_authenticated:
             return urljoin(
-                f"https://{self.config.sessions.ingress.host}",
+                f"https://{self.host}",
                 f"sessions/{self.server_name}",
             )
         return urljoin(
-            f"https://{self.config.sessions.ingress.host}",
+            f"https://{self.host}",
             f"sessions/{self.server_name}?token={self._user.id}",
         )
 
@@ -157,7 +168,7 @@ class UserServer(ABC):
             )
         session_manifest = await self._get_session_manifest()
         manifest = JupyterServerV1Alpha1.model_validate(session_manifest)
-        return await self._k8s_client.create_server(manifest, self.safe_username)
+        return await self._k8s_client.create_session(manifest, self.safe_username)
 
     @staticmethod
     def _check_environment_variables_overrides(patches_list: list[dict[str, Any]]) -> None:
@@ -234,6 +245,15 @@ class UserServer(ABC):
                 "token": self._user.id,
                 "oidc": {"enabled": False},
             }
+
+        ingress_annotations = self.config.sessions.ingress.annotations
+
+        if self.cluster_name:
+            parent_host = self.config.sessions.ingress.host
+            ingress_annotations["nginx.ingress.kubernetes.io/configuration-snippet"] = (
+                f"""more_set_headers "Content-Security-Policy: frame-ancestors 'self' {parent_host}";"""
+            )
+
         # Combine everything into the manifest
         manifest = {
             "apiVersion": f"{self.config.amalthea.group}/{self.config.amalthea.version}",
@@ -265,7 +285,7 @@ class UserServer(ABC):
                 "routing": {
                     "host": urlparse(self.server_url).netloc,
                     "path": urlparse(self.server_url).path,
-                    "ingressAnnotations": self.config.sessions.ingress.annotations,
+                    "ingressAnnotations": ingress_annotations,
                     "tls": {
                         "enabled": self.config.sessions.ingress.tls_secret is not None,
                         "secretName": self.config.sessions.ingress.tls_secret,
@@ -378,6 +398,7 @@ class Renku1UserServer(UserServer):
         commit_sha: str,
         notebook: str | None,  # TODO: Is this value actually needed?
         image: str | None,
+        cluster_name: str | None,
         server_options: ServerOptions,
         environment_variables: dict[str, str],
         user_secrets: K8sUserSecrets | None,
@@ -390,6 +411,7 @@ class Renku1UserServer(UserServer):
         internal_gitlab_user: APIUser,
         using_default_image: bool = False,
         is_image_private: bool = False,
+        host: str | None = None,
         **_: dict,
     ):
         self.gitlab_project = gitlab_project
@@ -410,6 +432,7 @@ class Renku1UserServer(UserServer):
             user=user,
             server_name=server_name,
             image=image,
+            cluster_name=cluster_name,
             server_options=server_options,
             environment_variables=environment_variables,
             user_secrets=user_secrets,
@@ -420,6 +443,7 @@ class Renku1UserServer(UserServer):
             using_default_image=using_default_image,
             is_image_private=is_image_private,
             repositories=[single_repository] if single_repository is not None else [],
+            host=host,
             config=config,
             internal_gitlab_user=internal_gitlab_user,
         )

@@ -4,10 +4,11 @@ import multiprocessing.synchronize
 from copy import deepcopy
 from multiprocessing import Lock
 from multiprocessing.synchronize import Lock as LockType
-from typing import Any
+from typing import Any, Optional
 from uuid import uuid4
 
 from kubernetes import client, config
+from kubernetes.config import new_client_from_config
 from kubernetes.config.config_exception import ConfigException
 from kubernetes.config.incluster_config import SERVICE_CERT_FILENAME, SERVICE_TOKEN_FILENAME, InClusterConfigLoader
 
@@ -72,6 +73,9 @@ class K8sSchedulingClient(K8sSchedudlingClientInterface):  # pragma:nocover
         except ConfigException:
             config.load_config()
         self.client = client.SchedulingV1Api()
+
+    def init_with(self, config_file: str, context: Optional[str] = None) -> None:
+        self.client = new_client_from_config(config_file=config_file, context=context, persist_config=True, client_configuration=None)
 
     def create_priority_class(self, body: Any, **kwargs: Any) -> Any:
         """Create a priority class."""
