@@ -157,7 +157,7 @@ class BuildsConfig:
         build_strategy_name = os.environ.get(f"{prefix}BUILD_STRATEGY_NAME")
         push_secret_name = os.environ.get(f"{prefix}BUILD_PUSH_SECRET_NAME")
 
-        if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
+        if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true" or not enabled:
             shipwright_client = None
         else:
             # TODO: is there a reason to use a different cache URL here?
