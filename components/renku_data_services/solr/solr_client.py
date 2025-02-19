@@ -26,10 +26,8 @@ class SolrUser:
     password: str
 
     def __str__(self) -> str:
-        pw = "***"
-        if self.password == "":
-            pw = ""
-        return f"(user={self.username}, password={pw})"
+        pstr = "***" if self.password != "" else ""  # nosec
+        return f"(user={self.username}, password={pstr})"
 
 
 @dataclass
