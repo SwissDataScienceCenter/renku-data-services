@@ -186,7 +186,7 @@ class BuildsConfig:
             timedelta(seconds=buildrun_build_timeout_seconds) if buildrun_build_timeout_seconds > 0 else None
         )
 
-        if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
+        if (not enabled) or (os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true"):
             shipwright_client = None
         else:
             # TODO: is there a reason to use a different cache URL here?
