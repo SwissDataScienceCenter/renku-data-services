@@ -26,6 +26,8 @@ services:
       NB_SERVER_OPTIONS__DEFAULTS_PATH: /workspace/server_defaults.json
       NB_SERVER_OPTIONS__UI_CHOICES_PATH: /workspace/server_options.json
       KUBECONFIG: "/workspace/.k3d-config.yaml"
+      SOLR_URL: "http://127.0.0.1:8983"
+      SOLR_CORE: "renku-search-dev"
     network_mode: service:db
     depends_on:
       - db
@@ -70,5 +72,16 @@ services:
     command:
       - serve
 
+  solr:
+    image: solr:9
+    restart: unless-stopped
+    volumes:
+      - solr_data:/var/solr
+    command:
+      - bash
+      - -c
+      - 'precreate-core renku-search-dev; exec solr -f -Dsolr.modules=analysis-extras'
+
 volumes:
   postgres-data:
+  solr_data:
