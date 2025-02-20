@@ -354,6 +354,18 @@ async def test_migration_to_75c83dd9d619(app_config_instance: Config, admin_user
                 template_id=project_id,
             ),
         )
+        # Create a clone project that has removed its parent reference
+        cloned_project_orphan_id = str(ULID())
+        await insert_project(
+            session,
+            dict(
+                id=cloned_project_orphan_id,
+                name="cloned_project_orphan",
+                created_by_id="some-other-user-id",
+                creation_date=datetime.now(UTC),
+                visibility="public",
+            ),
+        )
         # Create unrelated project
         random_project_id = str(ULID())
         await insert_project(
@@ -429,6 +441,19 @@ async def test_migration_to_75c83dd9d619(app_config_instance: Config, admin_user
                 project_id=cloned_project_id,
             ),
         )
+        # A session launcher for the cloned orphaned project
+        custom_launcher_id_orphan_cloned = str(ULID())
+        await insert_session_launcher(
+            session,
+            dict(
+                id=custom_launcher_id_orphan_cloned,
+                name="custom_for_cloned_orphaned_project",
+                created_by_id=admin_user.id,
+                creation_date=datetime.now(UTC),
+                environment_id=custom_env_id,
+                project_id=cloned_project_orphan_id,
+            ),
+        )
         # Create an unrelated session launcher that should be unaffected by the migrations
         random_launcher_id = str(ULID())
         await insert_session_launcher(
@@ -450,8 +475,8 @@ async def test_migration_to_75c83dd9d619(app_config_instance: Config, admin_user
                 sa.text("SELECT id, created_by_id, name FROM sessions.environments WHERE environment_kind = 'CUSTOM'")
             )
         ).all()
-    assert len(launchers) == 3
-    assert len(envs) == 3
+    assert len(launchers) == 4
+    assert len(envs) == 4
     # Filter the results from the DB
     random_env_row = find_by_col(envs, random_env_id, 0)
     assert random_env_row is not None
@@ -478,3 +503,14 @@ async def test_migration_to_75c83dd9d619(app_config_instance: Config, admin_user
     random_env_row[0] == admin_user.id
     random_env_row[1] == random_env_id
     random_env_row[2] == "random env"
+    # Check that the orphaned cloned project's environment has been also decoupled
+    orphan_launcher_row = find_by_col(launchers, custom_launcher_id_orphan_cloned, 0)
+    assert orphan_launcher_row is not None
+    orphan_env_row = find_by_col(envs, orphan_launcher_row[1], 0)
+    assert orphan_env_row is not None
+    assert custom_launcher_row[0] != orphan_launcher_row[0]
+    assert custom_launcher_row[1] != orphan_launcher_row[1]
+    assert custom_launcher_row[2] != orphan_launcher_row[2]
+    assert env1_row[0] != orphan_env_row[0]
+    assert env1_row[1] != orphan_env_row[1]
+    assert env1_row[2] == orphan_env_row[2]
