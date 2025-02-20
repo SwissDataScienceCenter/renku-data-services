@@ -1,11 +1,15 @@
 import base64
+from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import pytest
 import sqlalchemy as sa
 from alembic.script import ScriptDirectory
 from sanic_testing.testing import SanicASGITestClient
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import bindparam
 from ulid import ULID
 
 from renku_data_services.app_config.config import Config
@@ -271,3 +275,242 @@ async def test_migration_create_global_envs(
     assert len(envs) == 2
     assert any(e.name == "Python/Jupyter" for e in envs)
     assert any(e.name == "Rstudio" for e in envs)
+
+
+@pytest.mark.asyncio
+async def test_migration_to_75c83dd9d619(app_config_instance: Config, admin_user: UserInfo) -> None:
+    """Tests the migration for copying session environments of copied projects."""
+
+    async def insert_project(session: AsyncSession, payload: dict[str, Any]) -> None:
+        bindparams: list[sa.BindParameter] = []
+        cols: list[str] = list(payload.keys())
+        cols_joined = ", ".join(cols)
+        ids = ", ".join([":" + col for col in cols])
+        if "visibility" in payload:
+            bindparams.append(bindparam("visibility", literal_execute=True))
+        stmt = sa.text(
+            f"INSERT INTO projects.projects({cols_joined}) VALUES({ids})",
+        ).bindparams(*bindparams, **payload)
+        await session.execute(stmt)
+
+    async def insert_environment(session: AsyncSession, payload: dict[str, Any]) -> None:
+        bindparams: list[sa.BindParameter] = []
+        cols: list[str] = list(payload.keys())
+        cols_joined = ", ".join(cols)
+        ids = ", ".join([":" + col for col in cols])
+        if "command" in payload:
+            bindparams.append(bindparam("command", type_=JSONB))
+        if "args" in payload:
+            bindparams.append(bindparam("args", type_=JSONB))
+        if "environment_kind" in payload:
+            bindparams.append(bindparam("environment_kind", literal_execute=True))
+        stmt = sa.text(f"INSERT INTO sessions.environments({cols_joined}) VALUES ({ids})").bindparams(
+            *bindparams,
+            **payload,
+        )
+        await session.execute(stmt)
+
+    async def insert_session_launcher(session: AsyncSession, payload: dict[str, Any]) -> None:
+        cols: list[str] = list(payload.keys())
+        cols_joined = ", ".join(cols)
+        ids = ", ".join([":" + col for col in cols])
+        stmt = sa.text(f"INSERT INTO sessions.launchers({cols_joined}) VALUES ({ids})").bindparams(
+            **payload,
+        )
+        await session.execute(stmt)
+
+    def find_by_col(data: Sequence[sa.Row[Any]], id_value: Any, id_index: int) -> tuple | None:
+        for row in data:
+            if row.tuple()[id_index] == id_value:
+                return cast(tuple, row.tuple())
+        return None
+
+    run_migrations_for_app("common", "450ae3930996")
+    await app_config_instance.kc_user_repo.initialize(app_config_instance.kc_api)
+    await app_config_instance.group_repo.generate_user_namespaces()
+    async with app_config_instance.db.async_session_maker() as session, session.begin():
+        # Create template project
+        project_id = str(ULID())
+        await insert_project(
+            session,
+            dict(
+                id=project_id,
+                name="test_project",
+                created_by_id=admin_user.id,
+                creation_date=datetime.now(UTC),
+                visibility="public",
+            ),
+        )
+        # Create clone project
+        cloned_project_id = str(ULID())
+        await insert_project(
+            session,
+            dict(
+                id=cloned_project_id,
+                name="cloned_project",
+                created_by_id="some-other-user-id",
+                creation_date=datetime.now(UTC),
+                visibility="public",
+                template_id=project_id,
+            ),
+        )
+        # Create a clone project that has removed its parent reference
+        cloned_project_orphan_id = str(ULID())
+        await insert_project(
+            session,
+            dict(
+                id=cloned_project_orphan_id,
+                name="cloned_project_orphan",
+                created_by_id="some-other-user-id",
+                creation_date=datetime.now(UTC),
+                visibility="public",
+            ),
+        )
+        # Create unrelated project
+        random_project_id = str(ULID())
+        await insert_project(
+            session,
+            dict(
+                id=random_project_id,
+                name="random_project",
+                created_by_id=admin_user.id,
+                creation_date=datetime.now(UTC),
+                visibility="public",
+            ),
+        )
+        # Create a single environment
+        custom_env_id = str(ULID())
+        await insert_environment(
+            session,
+            dict(
+                id=custom_env_id,
+                name="custom env",
+                created_by_id=admin_user.id,
+                creation_date=datetime.now(UTC),
+                container_image="env_image",
+                default_url="/env_url",
+                port=8888,
+                args=["arg1"],
+                command=["command1"],
+                uid=1000,
+                gid=1000,
+                environment_kind="CUSTOM",
+            ),
+        )
+        # Create an unrelated environment
+        random_env_id = str(ULID())
+        await insert_environment(
+            session,
+            dict(
+                id=random_env_id,
+                name="random env",
+                created_by_id=admin_user.id,
+                creation_date=datetime.now(UTC),
+                container_image="env_image",
+                default_url="/env_url",
+                port=8888,
+                args=["arg1"],
+                command=["command1"],
+                uid=1000,
+                gid=1000,
+                environment_kind="CUSTOM",
+            ),
+        )
+        # Create two session launchers for each project, but both are using the same env
+        custom_launcher_id = str(ULID())
+        await insert_session_launcher(
+            session,
+            dict(
+                id=custom_launcher_id,
+                name="custom",
+                created_by_id=admin_user.id,
+                creation_date=datetime.now(UTC),
+                environment_id=custom_env_id,
+                project_id=project_id,
+            ),
+        )
+        custom_launcher_id_cloned = str(ULID())
+        await insert_session_launcher(
+            session,
+            dict(
+                id=custom_launcher_id_cloned,
+                name="custom_for_cloned_project",
+                created_by_id=admin_user.id,
+                creation_date=datetime.now(UTC),
+                environment_id=custom_env_id,
+                project_id=cloned_project_id,
+            ),
+        )
+        # A session launcher for the cloned orphaned project
+        custom_launcher_id_orphan_cloned = str(ULID())
+        await insert_session_launcher(
+            session,
+            dict(
+                id=custom_launcher_id_orphan_cloned,
+                name="custom_for_cloned_orphaned_project",
+                created_by_id=admin_user.id,
+                creation_date=datetime.now(UTC),
+                environment_id=custom_env_id,
+                project_id=cloned_project_orphan_id,
+            ),
+        )
+        # Create an unrelated session launcher that should be unaffected by the migrations
+        random_launcher_id = str(ULID())
+        await insert_session_launcher(
+            session,
+            dict(
+                id=random_launcher_id,
+                name="random_launcher",
+                created_by_id=admin_user.id,
+                creation_date=datetime.now(UTC),
+                environment_id=random_env_id,
+                project_id=random_project_id,
+            ),
+        )
+    run_migrations_for_app("common", "75c83dd9d619")
+    async with app_config_instance.db.async_session_maker() as session, session.begin():
+        launchers = (await session.execute(sa.text("SELECT id, environment_id, name FROM sessions.launchers"))).all()
+        envs = (
+            await session.execute(
+                sa.text("SELECT id, created_by_id, name FROM sessions.environments WHERE environment_kind = 'CUSTOM'")
+            )
+        ).all()
+    assert len(launchers) == 4
+    assert len(envs) == 4
+    # Filter the results from the DB
+    random_env_row = find_by_col(envs, random_env_id, 0)
+    assert random_env_row is not None
+    random_launcher_row = find_by_col(launchers, random_launcher_id, 0)
+    assert random_launcher_row is not None
+    custom_launcher_row = find_by_col(launchers, custom_launcher_id, 0)
+    assert custom_launcher_row is not None
+    custom_launcher_clone_row = find_by_col(launchers, custom_launcher_id_cloned, 0)
+    assert custom_launcher_clone_row is not None
+    env1_row = find_by_col(envs, custom_launcher_row[1], 0)
+    assert env1_row is not None
+    env2_row = find_by_col(envs, custom_launcher_clone_row[1], 0)
+    assert env2_row is not None
+    # Check that the session launcher for the cloned project is not using the same env as the parent
+    assert custom_launcher_row[0] != custom_launcher_clone_row[0]
+    assert custom_launcher_row[1] != custom_launcher_clone_row[1]
+    assert custom_launcher_row[2] != custom_launcher_clone_row[2]
+    # The copied and original env should have different ids and created_by fields
+    assert env1_row[0] != env2_row[0]
+    assert env1_row[1] != env2_row[1]
+    # The copied and the original env have the same name
+    assert env1_row[2] == env2_row[2]
+    # Check that the random environment is unchanged
+    random_env_row[0] == admin_user.id
+    random_env_row[1] == random_env_id
+    random_env_row[2] == "random env"
+    # Check that the orphaned cloned project's environment has been also decoupled
+    orphan_launcher_row = find_by_col(launchers, custom_launcher_id_orphan_cloned, 0)
+    assert orphan_launcher_row is not None
+    orphan_env_row = find_by_col(envs, orphan_launcher_row[1], 0)
+    assert orphan_env_row is not None
+    assert custom_launcher_row[0] != orphan_launcher_row[0]
+    assert custom_launcher_row[1] != orphan_launcher_row[1]
+    assert custom_launcher_row[2] != orphan_launcher_row[2]
+    assert env1_row[0] != orphan_env_row[0]
+    assert env1_row[1] != orphan_env_row[1]
+    assert env1_row[2] == orphan_env_row[2]
