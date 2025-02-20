@@ -89,6 +89,37 @@ class SessionRepository:
         session.add(environment)
         return environment
 
+    def __copy_environment(
+        self,
+        user: base_models.APIUser,
+        session: AsyncSession,
+        environment: models.Environment,
+    ) -> schemas.EnvironmentORM:
+        if user.id is None:
+            raise errors.UnauthorizedError(
+                message="You have to be authenticated to insert an environment in the DB.", quiet=True
+            )
+        new_environment = schemas.EnvironmentORM(
+            name=environment.name,
+            created_by_id=user.id,
+            description=environment.description,
+            container_image=environment.container_image,
+            default_url=environment.default_url,
+            port=environment.port,
+            working_directory=environment.working_directory,
+            mount_directory=environment.mount_directory,
+            uid=environment.uid,
+            gid=environment.gid,
+            environment_kind=environment.environment_kind,
+            command=environment.command,
+            args=environment.args,
+            creation_date=datetime.now(UTC).replace(microsecond=0),
+            is_archived=environment.is_archived,
+        )
+
+        session.add(new_environment)
+        return new_environment
+
     async def insert_environment(
         self, user: base_models.APIUser, environment: models.UnsavedEnvironment
     ) -> models.Environment:
@@ -355,11 +386,17 @@ class SessionRepository:
                     message=f"Project with id '{project_id}' does not exist or you do not have access to it."
                 )
 
+            if launcher.environment.environment_kind == models.EnvironmentKind.CUSTOM:
+                environment = self.__copy_environment(user, session, launcher.environment)
+                environment_id = environment.id
+            else:
+                environment_id = launcher.environment.id
+
             launcher_orm = schemas.SessionLauncherORM(
                 name=launcher.name,
                 project_id=project_id,
                 description=launcher.description,
-                environment_id=launcher.environment.id,
+                environment_id=environment_id,
                 resource_class_id=launcher.resource_class_id,
                 disk_storage=launcher.disk_storage,
                 created_by_id=user.id,
@@ -481,7 +518,7 @@ class SessionRepository:
                 launcher.environment_id = new_environment_id
                 launcher.environment = new_environment
                 if old_environment.environment_kind == models.EnvironmentKind.CUSTOM:
-                    # A custom environment exists but it is being updated to a global one
+                    # A custom environment exists, but it is being updated to a global one
                     # We remove the custom environment to avoid accumulating custom environments that are not associated
                     # with any launchers.
                     await session.delete(old_environment)
