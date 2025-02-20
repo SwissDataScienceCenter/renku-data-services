@@ -102,13 +102,14 @@ class ProjectsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        @validate(json=apispec.ProjectPost)
+        @validate(json=apispec.ProjectMigrationPost)
         async def _post_migration(
-            _: Request, user: base_models.APIUser, v1_id: int, body: apispec.ProjectPost
+            _: Request, user: base_models.APIUser, v1_id: int, body: apispec.ProjectMigrationPost
         ) -> JSONResponse:
-            new_project = validate_unsaved_project(body, created_by=user.id or "")
+            new_project = validate_unsaved_project(body.project, created_by=user.id or "")
+
             result = await self.project_migration_repo.migrate_v1_project(
-                user, project=new_project, project_v1_id=v1_id
+                user, project=new_project, project_v1_id=v1_id, session_launcher=body.session_launcher
             )
             return validated_json(apispec.Project, self._dump_project(result), status=201)
 
