@@ -91,7 +91,7 @@ class SearchUpdatesRepo:
                     "payload": json.dumps(dp.to_dict()),
                 }
 
-    async def upsert(self, entity: UserInfo | Group | Project, started_at: datetime | None) -> ULID:
+    async def upsert(self, entity: UserInfo | Group | Project, started_at: datetime | None = None) -> ULID:
         """Add entity documents to the staging table.
 
         If a user already exists, it is updated.
