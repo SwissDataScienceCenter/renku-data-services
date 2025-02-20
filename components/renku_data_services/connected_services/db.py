@@ -357,7 +357,7 @@ class ConnectedServicesRepository:
             adapter,
         ):
             # NOTE: App installations are only available from GitHub
-            if connection._k8s_client.kind == ProviderKind.github and isinstance(adapter, GitHubAdapter):
+            if connection.client.kind == ProviderKind.github and isinstance(adapter, GitHubAdapter):
                 request_url = urljoin(adapter.api_url, "user/installations")
                 params = dict(page=pagination.page, per_page=pagination.per_page)
                 response = await oauth2_client.get(request_url, params=params, headers=adapter.api_common_headers)

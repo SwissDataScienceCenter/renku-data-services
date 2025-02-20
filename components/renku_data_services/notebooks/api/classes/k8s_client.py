@@ -2,18 +2,16 @@
 
 import asyncio
 import base64
-import functools
 import json
 import logging
 from contextlib import suppress
-from typing import Any, Generic, Optional, Self, Sequence, TypeVar, cast
+from typing import Any, Generic, Optional, Self, TypeVar, cast
 from urllib.parse import urljoin
 
 import httpx
 import kr8s
 import kubernetes
 from box import Box
-from datamodel_code_generator.arguments import namespace
 from kr8s import NotFoundError, ServerError
 from kr8s.asyncio.objects import APIObject, Pod, Secret, StatefulSet
 from kubernetes.client import V1Secret
@@ -64,11 +62,9 @@ class JupyterServerV1Alpha1Kr8s(APIObject):
 _SessionType = TypeVar("_SessionType", JupyterServerV1Alpha1, AmaltheaSessionV1Alpha1)
 _Kr8sType = TypeVar("_Kr8sType", JupyterServerV1Alpha1Kr8s, AmaltheaSessionV1Alpha1Kr8s)
 
-# K8sClient <-compose- CachedK8sClient <-subclass- BaseK8sClient
-
-# CachedClient <- subclass- BaseClient
-# BaseClient
-# Use Baseclient everywhere
+# WARNING:
+#   As of mypy 1.14.1, it does not support instantiating an object using a field containing a type, which is why we have
+#   a mix of new and old syntax for the generics.
 
 
 class BaseK8sClient(Generic[_SessionType, _Kr8sType]):
@@ -193,7 +189,7 @@ class BaseK8sClient(Generic[_SessionType, _Kr8sType]):
         try:
             await sts.patch(patch, type=patch_type)
         except ServerError as err:
-            if err.status == 404:
+            if err.response is not None and err.response.status_code == 404:
                 # NOTE: It can happen potentially that another request or something else
                 # deleted the session as this request was going on, in this case we ignore
                 # the missing statefulset
@@ -237,6 +233,7 @@ class BaseK8sClient(Generic[_SessionType, _Kr8sType]):
 
     async def list_sessions(self, safe_username: str) -> list[_SessionType]:
         """Get a list of k8s jupyterserver objects for a specific user."""
+
         # NOTE: we use the selector if for network efficiency, we do not guarantee the sessions are limited to
         # the ones belonging to safe_username
         label_selector = f"{self._username_label}={safe_username}"
@@ -475,7 +472,7 @@ class ServerCache(Generic[_SessionType]):
         return self.server_type.model_validate(output[0])
 
 
-class CachedK8sClient[_SessionType, _Kr8sType](BaseK8sClient):
+class _CachedK8sClient[_SessionType, _Kr8sType](BaseK8sClient):
     """Cached K8s client. NB: Not everything is cached at the moment."""
 
     def __init__(
@@ -531,13 +528,15 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
         username_label: str,
         skip_cache_if_unavailable: bool = False,
     ):
-        self._k8s_client: BaseK8sClient[_SessionType, _Kr8sType] = CachedK8sClient(
+        self._k8s_client: BaseK8sClient[_SessionType, _Kr8sType] = _CachedK8sClient(
             server_type, kr8s_type, api, cache_url, username_label, skip_cache_if_unavailable
         )
 
         self.username_label = username_label
         if not self.username_label:
             raise ProgrammingError("username_label has to be provided to K8sClient")
+
+        self.sanitize = self._k8s_client.sanitize
 
     async def list_sessions(self, safe_username: str) -> list[_SessionType]:
         """Get a list of servers that belong to a user.
@@ -637,3 +636,14 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
     def preferred_namespace(self) -> str:
         """Get the preferred namespace for creating jupyter servers."""
         return self._k8s_client.namespace
+
+    async def patch_statefulset(
+        self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]]
+    ) -> StatefulSet | None:
+        return await self._k8s_client.patch_statefulset(server_name, patch)
+
+    async def create_secret(self, secret: V1Secret) -> V1Secret:
+        return await self._k8s_client.create_secret(secret)
+
+    async def delete_secret(self, name: str) -> None:
+        await self._k8s_client.delete_secret(name)

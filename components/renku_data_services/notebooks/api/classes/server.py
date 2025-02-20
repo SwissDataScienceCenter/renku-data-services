@@ -96,8 +96,6 @@ class UserServer(ABC):
     @property
     def preferred_namespace(self) -> str:
      """Get the preferred namespace for a server."""
-     if (ns := self.k8s_client.preferred_cluster_namespace(self.host)) is not None:
-         return ns
      return self.k8s_client.preferred_namespace
 
     @property

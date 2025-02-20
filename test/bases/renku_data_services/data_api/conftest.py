@@ -173,7 +173,7 @@ async def bootstrap_admins(
             relationship=Relationship(resource=_AuthzConverter.platform(), relation="admin", subject=sub),
         )
     )
-    await authz._k8s_client.WriteRelationships(WriteRelationshipsRequest(updates=rels))
+    await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=rels))
 
 
 @pytest_asyncio.fixture(scope="session")
