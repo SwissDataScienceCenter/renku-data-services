@@ -742,33 +742,45 @@ components:
         project:
           $ref: "#/components/schemas/ProjectPost"
         session_launcher:
-          $ref: "../session/api.spec.yaml#/components/schemas/SessionLauncherPost"
+          $ref: "#/components/schemas/MigrationSessionLauncherPost"
       required:
-        - "id"
-        - "name"
-      example:
-        project:
-          id: "01AN4Z79ZS5XN0F25N3DB94T4R"
-          name: "Renku R Project"
-          namespace: "our-projects"
-          slug: "r-project"
-          created_by:
-            id: "owner-KC-id"
-          visibility: "public"
-          repositories:
-            - url: https://github.com/SwissDataScienceCenter/project-1.git
-            - url: git@github.com:SwissDataScienceCenter/project-2.git
-          keywords:
-            - "keyword 1"
-            - "keyword 2"
-          template_id: "01JC3CB5426KC7P5STS5X3KSS8"
-          secrets_mount_directory: "/secrets"
-        session_launcher:
-          project_id: 01AN4Z79ZS5XN0F25N3DB94T4R
-          name: Renku R Session
-          environment:
-            name: Renku R Session
-            environment_kind: CUSTOM
+        - "project"
+    MigrationSessionLauncherPost:
+      description: Data required to create a session launcher for a project migrated
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/SessionName"
+        container_image:
+          $ref: "#/components/schemas/ContainerImage"
+        default_url:
+          allOf:
+            - $ref: "#/components/schemas/DefaultUrl"
+            - default: /lab
+          default: /lab
+      required:
+        - name
+        - container_image
+    SessionName:
+      description: Renku session name
+      type: string
+      minLength: 1
+      maxLength: 99
+      example: My Renku Session :)
+    ContainerImage:
+      description: A container image
+      type: string
+      maxLength: 500
+      # NOTE: regex for an image name, optionally with a tag or sha256 specified
+      # based on https://github.com/opencontainers/distribution-spec/blob/main/spec.md
+      pattern: "^[a-z0-9]+((\\.|_|__|-+)[a-z0-9]+)*(\\/[a-z0-9]+((\\.|_|__|-+)[a-z0-9]+)*)*(:[a-zA-Z0-9_][a-zA-Z0-9._-]{0,127}|@sha256:[a-fA-F0-9]{64}){0,1}$"
+      example: renku/renkulab-py:3.10-0.18.1
+    DefaultUrl:
+      description: The default path to open in a session
+      type: string
+      maxLength: 200
+      example: "/lab"
     Ulid:
       description: ULID identifier
       type: string

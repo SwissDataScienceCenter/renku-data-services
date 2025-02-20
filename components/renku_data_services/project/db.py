@@ -39,6 +39,11 @@ from renku_data_services.search.decorators import update_search_document
 from renku_data_services.secrets import orm as secrets_schemas
 from renku_data_services.secrets.core import encrypt_user_secret
 from renku_data_services.secrets.models import SecretKind
+from renku_data_services.session import apispec as session_apispec
+from renku_data_services.session.core import (
+    validate_unsaved_session_launcher,
+)
+from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage import orm as storage_schemas
 from renku_data_services.users.db import UserRepo
 from renku_data_services.users.orm import UserORM
@@ -904,12 +909,14 @@ class ProjectMigrationRepository:
         message_queue: IMessageQueue,
         event_repo: EventRepository,
         project_repo: ProjectRepository,
+        session_repo: SessionRepository,
     ) -> None:
         self.session_maker = session_maker
         self.authz = authz
         self.message_queue: IMessageQueue = message_queue
         self.project_repo = project_repo
         self.event_repo: EventRepository = event_repo
+        self.session_repo = session_repo
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.create, ResourceType.project)
@@ -919,6 +926,7 @@ class ProjectMigrationRepository:
         user: base_models.APIUser,
         project: models.UnsavedProject,
         project_v1_id: int,
+        session_launcher: project_apispec.MigrationSessionLauncherPost | None = None,
         session: AsyncSession | None = None,
     ) -> models.Project:
         """Migrate a v1 project by creating a new project and tracking the migration."""
@@ -936,6 +944,33 @@ class ProjectMigrationRepository:
             raise errors.ValidationError(
                 message=f"Failed to create a project for migration from v1 (project_v1_id={project_v1_id})."
             )
+
+        if session_launcher is not None:
+            unsaved_session_launcher = session_apispec.SessionLauncherPost(
+                project_id=str(created_project.id),
+                name=session_launcher.name,
+                description=None,
+                resource_class_id=None,
+                disk_storage=None,
+                environment=session_apispec.EnvironmentPostInLauncher(
+                    name=session_launcher.name,
+                    container_image=session_launcher.container_image,
+                    default_url=session_launcher.default_url,
+                    environment_kind=session_apispec.EnvironmentKind.CUSTOM,
+                    description=None,
+                    uid=1000,
+                    gid=1000,
+                    working_directory=None,
+                    mount_directory=None,
+                    port=8080,
+                    command=None,
+                    args=None,
+                    is_archived=False,
+                ),
+            )
+
+            new_launcher = validate_unsaved_session_launcher(unsaved_session_launcher)
+            await self.session_repo.insert_launcher(user=user, launcher=new_launcher)
 
         migration_orm = schemas.ProjectMigrationsORM(project_id=created_project.id, project_v1_id=project_v1_id)
 

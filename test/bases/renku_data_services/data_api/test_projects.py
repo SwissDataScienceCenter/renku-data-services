@@ -1749,13 +1749,15 @@ async def test_migrate_v1_project(
 ) -> None:
     v1_id = 1122
     v1_project = {
-        "name": "New Migrated Project",
-        "slug": "new-project-slug",
-        "namespace": regular_user.namespace.slug,
-        "description": "Old project for migration",
-        "repositories": ["http://old-repository.com"],
-        "visibility": "private",
-        "keywords": ["old", "project"],
+        "project": {
+            "name": "New Migrated Project",
+            "slug": "new-project-slug",
+            "namespace": regular_user.namespace.slug,
+            "description": "Old project for migration",
+            "repositories": ["http://old-repository.com"],
+            "visibility": "private",
+            "keywords": ["old", "project"],
+        }
     }
 
     await app_config.event_repo.delete_all_events()

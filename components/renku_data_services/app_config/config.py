@@ -429,6 +429,7 @@ class Config:
                 message_queue=self.message_queue,
                 project_repo=self.project_repo,
                 event_repo=self.event_repo,
+                session_repo=self.session_repo,
             )
         return self._project_migration_repo
 
