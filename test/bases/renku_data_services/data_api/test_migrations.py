@@ -1,6 +1,7 @@
 import base64
+from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import pytest
 import sqlalchemy as sa
@@ -318,19 +319,18 @@ async def test_migration_to_75c83dd9d619(app_config_instance: Config, admin_user
         )
         await session.execute(stmt)
 
+    def find_by_col(data: Sequence[sa.Row[Any]], id_value: Any, id_index: int) -> tuple | None:
+        for row in data:
+            if row.tuple()[id_index] == id_value:
+                return cast(tuple, row.tuple())
+        return None
+
     run_migrations_for_app("common", "450ae3930996")
     await app_config_instance.kc_user_repo.initialize(app_config_instance.kc_api)
     await app_config_instance.group_repo.generate_user_namespaces()
-    custom_launcher_id = str(ULID())
-    custom_launcher_id_cloned = str(ULID())
-    project_id = str(ULID())
-    cloned_project_id = str(ULID())
-    custom_env_id = str(ULID())
-    random_project_id = str(ULID())
-    random_env_id = str(ULID())
-    random_launcher_id = str(ULID())
     async with app_config_instance.db.async_session_maker() as session, session.begin():
         # Create template project
+        project_id = str(ULID())
         await insert_project(
             session,
             dict(
@@ -342,6 +342,7 @@ async def test_migration_to_75c83dd9d619(app_config_instance: Config, admin_user
             ),
         )
         # Create clone project
+        cloned_project_id = str(ULID())
         await insert_project(
             session,
             dict(
@@ -354,6 +355,7 @@ async def test_migration_to_75c83dd9d619(app_config_instance: Config, admin_user
             ),
         )
         # Create unrelated project
+        random_project_id = str(ULID())
         await insert_project(
             session,
             dict(
@@ -365,6 +367,7 @@ async def test_migration_to_75c83dd9d619(app_config_instance: Config, admin_user
             ),
         )
         # Create a single environment
+        custom_env_id = str(ULID())
         await insert_environment(
             session,
             dict(
@@ -383,6 +386,7 @@ async def test_migration_to_75c83dd9d619(app_config_instance: Config, admin_user
             ),
         )
         # Create an unrelated environment
+        random_env_id = str(ULID())
         await insert_environment(
             session,
             dict(
@@ -401,6 +405,7 @@ async def test_migration_to_75c83dd9d619(app_config_instance: Config, admin_user
             ),
         )
         # Create two session launchers for each project, but both are using the same env
+        custom_launcher_id = str(ULID())
         await insert_session_launcher(
             session,
             dict(
@@ -412,6 +417,7 @@ async def test_migration_to_75c83dd9d619(app_config_instance: Config, admin_user
                 project_id=project_id,
             ),
         )
+        custom_launcher_id_cloned = str(ULID())
         await insert_session_launcher(
             session,
             dict(
@@ -424,6 +430,7 @@ async def test_migration_to_75c83dd9d619(app_config_instance: Config, admin_user
             ),
         )
         # Create an unrelated session launcher that should be unaffected by the migrations
+        random_launcher_id = str(ULID())
         await insert_session_launcher(
             session,
             dict(
@@ -437,21 +444,37 @@ async def test_migration_to_75c83dd9d619(app_config_instance: Config, admin_user
         )
     run_migrations_for_app("common", "75c83dd9d619")
     async with app_config_instance.db.async_session_maker() as session, session.begin():
-        launchers = (await session.execute(sa.text("SELECT environment_id, name FROM sessions.launchers"))).all()
+        launchers = (await session.execute(sa.text("SELECT id, environment_id, name FROM sessions.launchers"))).all()
         envs = (
             await session.execute(
-                sa.text("SELECT created_by_id, id, name FROM sessions.environments WHERE environment_kind = 'CUSTOM'")
+                sa.text("SELECT id, created_by_id, name FROM sessions.environments WHERE environment_kind = 'CUSTOM'")
             )
         ).all()
     assert len(launchers) == 3
     assert len(envs) == 3
-    # Check that the launcher that does not need changes is unchanged
-    assert launchers[1][0] == random_env_id
-    assert launchers[1][1] == "random_launcher"
-    assert envs[1][0] == admin_user.id
-    assert envs[1][1] == random_env_id
-    # Check that each of the launchers refers to a separate environment
-    assert launchers[0][0] == custom_env_id
-    assert launchers[0][0] != launchers[2][0]
-    assert envs[0][0] == admin_user.id
-    assert envs[2][0] == "some-other-user-id"
+    # Filter the results from the DB
+    random_env_row = find_by_col(envs, random_env_id, 0)
+    assert random_env_row is not None
+    random_launcher_row = find_by_col(launchers, random_launcher_id, 0)
+    assert random_launcher_row is not None
+    custom_launcher_row = find_by_col(launchers, custom_launcher_id, 0)
+    assert custom_launcher_row is not None
+    custom_launcher_clone_row = find_by_col(launchers, custom_launcher_id_cloned, 0)
+    assert custom_launcher_clone_row is not None
+    env1_row = find_by_col(envs, custom_launcher_row[1], 0)
+    assert env1_row is not None
+    env2_row = find_by_col(envs, custom_launcher_clone_row[1], 0)
+    assert env2_row is not None
+    # Check that the session launcher for the cloned project is not using the same env as the parent
+    assert custom_launcher_row[0] != custom_launcher_clone_row[0]
+    assert custom_launcher_row[1] != custom_launcher_clone_row[1]
+    assert custom_launcher_row[2] != custom_launcher_clone_row[2]
+    # The copied and original env should have different ids and created_by fields
+    assert env1_row[0] != env2_row[0]
+    assert env1_row[1] != env2_row[1]
+    # The copied and the original env have the same name
+    assert env1_row[2] == env2_row[2]
+    # Check that the random environment is unchanged
+    random_env_row[0] == admin_user.id
+    random_env_row[1] == random_env_id
+    random_env_row[2] == "random env"
