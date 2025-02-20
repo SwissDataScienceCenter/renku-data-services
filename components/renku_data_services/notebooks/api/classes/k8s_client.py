@@ -86,23 +86,6 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
         self.namespace = api.namespace
         self._username_label = username_label
 
-    @classmethod
-    async def new(
-        cls,
-        kubeconfig: str | None,
-        context: str | None,
-        server_type: type[_SessionType],
-        kr8s_type: type[_Kr8sType],
-        username_label: str,
-    ) -> Self:
-        if kubeconfig is not None:
-            api = await kr8s.asyncio.api(kubeconfig=kubeconfig, context=context)
-        else:
-            # TODO go to / allow incluster config ? ADD CHECKS ?
-            api = await kr8s.asyncio.api(kubeconfig=kubeconfig, context=context)
-
-        return cls(server_type, kr8s_type, api, username_label)
-
     async def get_pod_logs(self, name: str, max_log_lines: int | None = None) -> dict[str, str]:
         """Get the logs of all containers in the session."""
         pod = await Pod.get(api=self._api, namespace=self.namespace, name=name)
@@ -540,6 +523,25 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
             raise ProgrammingError("username_label has to be provided to K8sClient")
 
         self.sanitize = self._k8s_client.sanitize
+
+    @classmethod
+    async def new(
+        cls,
+        server_type: type[_SessionType],
+        kr8s_type: type[_Kr8sType],
+        kubeconfig: str | None,
+        context: str | None,
+        cache_url: str,
+        username_label: str,
+        skip_cache_if_unavailable: bool = False,
+    ) -> Self:
+        if kubeconfig is not None:
+            api = await kr8s.asyncio.api(kubeconfig=kubeconfig, context=context)
+        else:
+            # TODO go to / allow incluster config ? ADD CHECKS ?
+            api = await kr8s.asyncio.api(kubeconfig=kubeconfig, context=context)
+
+        return cls(server_type, kr8s_type, api, cache_url, username_label, skip_cache_if_unavailable)
 
     async def list_sessions(self, safe_username: str) -> list[_SessionType]:
         """Get a list of servers that belong to a user."""
