@@ -67,7 +67,7 @@ _Kr8sType = TypeVar("_Kr8sType", JupyterServerV1Alpha1Kr8s, AmaltheaSessionV1Alp
 #   a mix of new and old syntax for the generics.
 
 
-class BaseK8sClient(Generic[_SessionType, _Kr8sType]):
+class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
     """A kubernetes client that operates in a specific namespace."""
 
     # Mypy does not support inferring type dynamically from another generic type (_SessionType => _Kr8sType)
@@ -420,7 +420,7 @@ class BaseK8sClient(Generic[_SessionType, _Kr8sType]):
             await secret.patch(patch, type=patch_type)
 
 
-class ServerCache(Generic[_SessionType]):
+class _ServerCache(Generic[_SessionType]):
     """Utility class for calling the jupyter server cache."""
 
     def __init__(self, url: str, server_type: type[_SessionType]):
@@ -472,7 +472,7 @@ class ServerCache(Generic[_SessionType]):
         return self.server_type.model_validate(output[0])
 
 
-class _CachedK8sClient[_SessionType, _Kr8sType](BaseK8sClient):
+class _CachedK8sClient[_SessionType, _Kr8sType](_BaseK8sClient):
     """Cached K8s client. NB: Not everything is cached at the moment."""
 
     def __init__(
@@ -487,7 +487,7 @@ class _CachedK8sClient[_SessionType, _Kr8sType](BaseK8sClient):
         skip_cache_if_unavailable: bool = False,
     ):
         super().__init__(server_type, kr8s_type, api, username_label)
-        self._cache: ServerCache = ServerCache(cache_url, server_type)
+        self._cache: _ServerCache = _ServerCache(cache_url, server_type)
         self._username_label = username_label
         self._skip_cache_if_unavailable = skip_cache_if_unavailable
 
@@ -506,7 +506,10 @@ class _CachedK8sClient[_SessionType, _Kr8sType](BaseK8sClient):
                 raise
 
     async def get_server(self, name: str, num_retries: int = 0) -> _SessionType | None:
-        """Get a server."""
+        """Get a list a server.
+
+        Attempt to use the cache first but if the cache fails then use the k8s API.
+        """
         try:
             return await self._cache.get_server(name)
         except JSCacheError:
@@ -528,7 +531,7 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
         username_label: str,
         skip_cache_if_unavailable: bool = False,
     ):
-        self._k8s_client: BaseK8sClient[_SessionType, _Kr8sType] = _CachedK8sClient(
+        self._k8s_client: _BaseK8sClient[_SessionType, _Kr8sType] = _CachedK8sClient(
             server_type, kr8s_type, api, cache_url, username_label, skip_cache_if_unavailable
         )
 
@@ -539,10 +542,7 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
         self.sanitize = self._k8s_client.sanitize
 
     async def list_sessions(self, safe_username: str) -> list[_SessionType]:
-        """Get a list of servers that belong to a user.
-
-        Attempt to use the cache first but if the cache fails then use the k8s API.
-        """
+        """Get a list of servers that belong to a user."""
         sessions: list[_SessionType] = await self._k8s_client.list_sessions(safe_username=safe_username)
         return [
             session
