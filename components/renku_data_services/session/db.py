@@ -674,29 +674,23 @@ class SessionRepository:
             result = await session.scalars(stmt)
             build = result.one_or_none()
 
+            err_message = f"Build with id '{build_id}' does not exist or you do not have access to it."
             if build is None:
-                raise errors.MissingResourceError(
-                    message=f"Build with id '{build_id}' does not exist or you do not have access to it."
-                )
+                raise errors.MissingResourceError(message=err_message)
 
-            if build.environment.environment_kind == models.EnvironmentKind.GLOBAL:
-                authorized = True
-            else:
+            authorized = build.environment.environment_kind == models.EnvironmentKind.GLOBAL
+            if not authorized:
                 launcher = await session.scalar(
                     select(schemas.SessionLauncherORM).where(
                         schemas.SessionLauncherORM.environment_id == build.environment_id
                     )
                 )
-                if launcher is None:
-                    authorized = False
-                else:
+                if launcher:
                     authorized = await self.project_authz.has_permission(
                         user, ResourceType.project, launcher.project_id, Scope.READ
                     )
             if not authorized:
-                raise errors.MissingResourceError(
-                    message=f"Build with id '{build_id}' does not exist or you do not have access to it."
-                )
+                raise errors.MissingResourceError(message=err_message)
 
             # Check and refresh the status of in-progress builds
             await self._refresh_build(build=build, session=session)
@@ -790,14 +784,14 @@ class SessionRepository:
 
             # We check if there is any in-progress build
             in_progress_builds = (
-                await session.scalars(
+                await session.stream_scalars(
                     select(schemas.BuildORM)
                     .where(schemas.BuildORM.environment_id == build.environment_id)
                     .where(schemas.BuildORM.status == models.BuildStatus.in_progress)
                     .order_by(schemas.BuildORM.id.desc())
                 )
-            ).all()
-            for item in in_progress_builds:
+            )
+            async for item in in_progress_builds:
                 await self._refresh_build(build=item, session=session)
                 if item.status == models.BuildStatus.in_progress:
                     raise errors.ConflictError(

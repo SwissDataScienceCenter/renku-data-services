@@ -30,7 +30,10 @@ class ShipwrightBuildRunV1Beta1Kr8s(APIObject):
 
 
 class _ShipwrightClientBase:
-    """Client for managing ShipWright resources in kubernetes."""
+    """Client for managing ShipWright resources in kubernetes.
+    
+    NOTE: This does not apply any authentication or authorization on the requests.
+    """
 
     def __init__(self, namespace: str):
         self.namespace = namespace
@@ -141,7 +144,11 @@ class _ShipwrightCache:
 
 
 class ShipwrightClient:
-    """The K8s client that combines a base client and a cache."""
+    """
+    The K8s client that combines a base client and a cache.
+    
+    No authentication or authorization is performed - this is the responsibility of the caller.
+    """
 
     def __init__(
         self,
