@@ -32,7 +32,7 @@
           };
           services.dev-solr = {
             enable = true;
-            cores = [ "renku-search-dev"];
+            cores = ["renku-search-dev"];
             heap = 1024;
           };
         };
@@ -126,6 +126,8 @@
             DB_HOST = "localhost";
             DB_PORT = "15432";
             AUTHZ_DB_HOST = "localhost";
+            SOLR_URL = "http://localhost:18983";
+            SOLR_CORE = "renku-search-dev";
           });
 
         cnt = let
@@ -148,6 +150,8 @@
               DB_HOST = "rsdevcnt";
               DB_PORT = "5432";
               AUTHZ_DB_HOST = "localhost";
+              SOLR_URL = "http://rsdevcnt:8983";
+              SOLR_CORE = "renku-search-dev";
             }
           );
       };

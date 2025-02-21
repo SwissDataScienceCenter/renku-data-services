@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 from abc import ABC, abstractmethod
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
@@ -24,6 +25,10 @@ class SolrUser:
     username: str
     password: str
 
+    def __str__(self) -> str:
+        pstr = "***" if self.password != "" else ""  # nosec
+        return f"(user={self.username}, password={pstr})"
+
 
 @dataclass
 @final
@@ -34,6 +39,30 @@ class SolrClientConfig:
     core: str
     user: Optional[SolrUser] = None
     timeout: int = 600
+
+    @classmethod
+    def from_env(cls, prefix: str = "") -> "SolrClientConfig":
+        """Create a configuration from environment variables."""
+        url = os.environ[f"{prefix}SOLR_URL"]
+        core = os.environ.get(f"{prefix}SOLR_CORE", "renku-search")
+        username = os.environ.get(f"{prefix}SOLR_USER")
+        password = os.environ.get(f"{prefix}SOLR_PASSWORD")
+        tstr = os.environ.get(f"{prefix}SOLR_REQUEST_TIMEOUT", "600")
+        try:
+            timeout = int(tstr) if tstr is not None else 600
+        except ValueError:
+            logging.warning(f"SOLR_REQUEST_TIMEOUT is not an integer: {tstr}")
+            timeout = 600
+
+        user = SolrUser(username=username, password=str(password)) if username is not None else None
+        return cls(url, core, user, timeout)
+
+    def __str__(self) -> str:
+        return (
+            f"SolrClientConfig(base_url={self.base_url}, "
+            f"core={self.core}, user={self.user}, "
+            f"timeout={self.timeout})"
+        )
 
 
 class SortDirection(StrEnum):
@@ -137,11 +166,30 @@ class SolrDocument(Protocol):
     All documents should have an `id` property denoting their primary identity.
     """
 
-    id: str
+    @property
+    def id(self) -> str:
+        """The document id."""
+        ...
 
     def to_dict(self) -> dict[str, Any]:
         """Return a dict representation of this document."""
         ...
+
+
+@dataclass
+class RawDocument(SolrDocument):
+    """A simple wrapper around a JSON dictionary."""
+
+    data: dict[str, Any]
+
+    @property
+    def id(self) -> str:
+        """Return the document id."""
+        return str(self.data["id"])
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the data dictionary."""
+        return self.data
 
 
 class ResponseBody(BaseModel):
@@ -208,6 +256,11 @@ class SolrClient(AbstractAsyncContextManager, ABC):
     @abstractmethod
     async def get_schema(self) -> CoreSchema:
         """Return the schema of the core."""
+        ...
+
+    @abstractmethod
+    async def delete(self, query: str) -> Response:
+        """Delete data that matches the `query`."""
         ...
 
 
@@ -292,6 +345,16 @@ class DefaultSolrClient(SolrClient):
         resp = await self.delegate.get("/schema")
         cs = CoreSchema.model_validate(resp.json()["schema"])
         return cs
+
+    async def delete(self, query: str) -> Response:
+        """Delete all documents that matches `query`."""
+        cmd = {"delete": {"query": query}}
+        return await self.delegate.post(
+            "/update",
+            params={"commit": "true"},
+            content=json.dumps(cmd).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
 
     async def close(self) -> None:
         """Close this client and free resources."""
