@@ -207,7 +207,7 @@ class BuildsBP(CustomBlueprint):
         @only_authenticated
         async def _post(_: Request, user: base_models.APIUser, environment_id: ULID) -> JSONResponse:
             new_build = validate_unsaved_build(environment_id=environment_id)
-            build = await self.session_repo.insert_build(user=user, build=new_build)
+            build = await self.session_repo.start_build(user=user, build=new_build)
             return validated_json(apispec_extras.Build, build, status=201)
 
         return "/environments/<environment_id:ulid>/builds", ["POST"], _post
