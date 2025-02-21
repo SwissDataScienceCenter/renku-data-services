@@ -741,7 +741,7 @@ class SessionRepository:
 
             return [build.dump() for build in builds]
 
-    async def insert_build(self, user: base_models.APIUser, build: models.UnsavedBuild) -> models.Build:
+    async def start_build(self, user: base_models.APIUser, build: models.UnsavedBuild) -> models.Build:
         """Insert a new build."""
         if not user.is_authenticated or user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
