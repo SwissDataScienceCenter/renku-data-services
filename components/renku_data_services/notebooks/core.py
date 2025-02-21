@@ -323,11 +323,8 @@ async def launch_notebook_helper(
     project: str | None,  # Renku 1.0
     branch: str | None,  # Renku 1.0
     commit_sha: str | None,  # Renku 1.0
-    notebook: str | None,  # Renku 1.0
     gl_project: GitlabProject | None,  # Renku 1.0
     gl_project_path: str | None,  # Renku 1.0
-    project_id: str | None,  # Renku 2.0
-    launcher_id: str | None,  # Renku 2.0
     repositories: list[apispec.LaunchNotebookRequestRepository] | None,  # Renku 2.0
     internal_gitlab_user: APIUser,
     user_repo: UserRepo,
@@ -344,7 +341,6 @@ async def launch_notebook_helper(
 
     # Add annotation for old and new notebooks
     is_image_private = False
-    using_default_image = False
     if image:
         # A specific image was requested
         parsed_image = Image.from_path(image)
@@ -359,7 +355,6 @@ async def launch_notebook_helper(
             image_repo = image_repo.with_oauth2_token(internal_gitlab_user.access_token)
             image_exists_privately = await image_repo.image_exists(parsed_image)
         if not image_exists_privately and not image_exists_publicly:
-            using_default_image = True
             image = nb_config.sessions.default_image
             parsed_image = Image.from_path(image)
         if image_exists_privately:
@@ -484,16 +479,14 @@ async def launch_notebook_helper(
     if user_secrets:
         k8s_user_secret = K8sUserSecrets(f"{server_name}-secret", **user_secrets.model_dump())
 
+    # Renku 1-only parameters
     extra_kwargs: dict = dict(
         commit_sha=commit_sha,
         branch=branch,
         project=project,
         namespace=namespace,
-        launcher_id=launcher_id,
-        project_id=project_id,
-        notebook=notebook,
-        internal_gitlab_user=internal_gitlab_user,  # Renku 1
-        gitlab_project=gl_project,  # Renku 1
+        internal_gitlab_user=internal_gitlab_user,
+        gitlab_project=gl_project,
     )
     server = server_class(
         user=user,
@@ -506,7 +499,6 @@ async def launch_notebook_helper(
         k8s_client=nb_config.k8s_client,
         workspace_mount_path=mount_path,
         work_dir=server_work_dir,
-        using_default_image=using_default_image,
         is_image_private=is_image_private,
         repositories=[Repository.from_dict(r.model_dump()) for r in repositories],
         config=nb_config,
@@ -639,11 +631,8 @@ async def launch_notebook(
         project=launch_request.project,
         branch=launch_request.branch,
         commit_sha=launch_request.commit_sha,
-        notebook=launch_request.notebook,
         gl_project=gl_project,
         gl_project_path=gl_project_path,
-        project_id=None,
-        launcher_id=None,
         repositories=None,
         internal_gitlab_user=internal_gitlab_user,
         user_repo=user_repo,
