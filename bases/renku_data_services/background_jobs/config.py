@@ -64,6 +64,7 @@ class SyncConfig:
             event_repo=event_repo,
             group_authz=Authz(authz_config),
             message_queue=message_queue,
+            search_updates_repo=search_updates_repo,
         )
         project_repo = ProjectRepository(
             session_maker=session_maker,
@@ -93,6 +94,7 @@ class SyncConfig:
             message_queue=message_queue,
             event_repo=event_repo,
             group_repo=group_repo,
+            search_updates_repo=search_updates_repo,
             encryption_key=None,
             authz=Authz(authz_config),
         )

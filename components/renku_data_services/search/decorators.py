@@ -7,10 +7,10 @@ from typing import Concatenate, ParamSpec, Protocol, TypeVar
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.errors import errors
-from renku_data_services.namespace.models import Group
-from renku_data_services.project.models import Project
+from renku_data_services.namespace.models import DeletedGroup, Group
+from renku_data_services.project.models import DeletedProject, Project, ProjectUpdate
 from renku_data_services.search.db import SearchUpdatesRepo
-from renku_data_services.users.models import UserInfo
+from renku_data_services.users.models import DeletedUser, UserInfo, UserInfoUpdate
 
 
 class WithSearchUpdateRepo(Protocol):
@@ -48,14 +48,33 @@ def update_search_document(
             case Project() as p:
                 await self.search_updates_repo.upsert(p)
 
+            case ProjectUpdate() as p:
+                await self.search_updates_repo.upsert(p.new)
+
+            case DeletedProject() as p:
+                pass  # todo: oops, forgot that case 😅
+
             case UserInfo() as u:
                 await self.search_updates_repo.upsert(u)
+
+            case UserInfoUpdate() as u:
+                await self.search_updates_repo.upsert(u.new)
+
+            case DeletedUser() as u:
+                pass  # todo: oops, forgot that case 😅
 
             case Group() as g:
                 await self.search_updates_repo.upsert(g)
 
+            case DeletedGroup() as g:
+                pass  # todo: oops, forgot that case 😅
+
             case _:
-                pass
+                if isinstance(result, list):
+                    for element in result:
+                        match element:
+                            case UserInfo() as u:
+                                await self.search_updates_repo.upsert(u)
 
         return result
 

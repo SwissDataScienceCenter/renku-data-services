@@ -221,6 +221,7 @@ class ProjectRepository:
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.create, ResourceType.project)
+    @dispatch_message(avro_schema_v2.ProjectCreated)
     @update_search_document
     async def insert_project(
         self,
@@ -293,6 +294,7 @@ class ProjectRepository:
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.update, ResourceType.project)
     @dispatch_message(avro_schema_v2.ProjectUpdated)
+    @update_search_document
     async def update_project(
         self,
         user: base_models.APIUser,
@@ -406,6 +408,7 @@ class ProjectRepository:
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.delete, ResourceType.project)
     @dispatch_message(avro_schema_v2.ProjectRemoved)
+    @update_search_document
     async def delete_project(
         self, user: base_models.APIUser, project_id: ULID, *, session: AsyncSession | None = None
     ) -> models.DeletedProject | None:
