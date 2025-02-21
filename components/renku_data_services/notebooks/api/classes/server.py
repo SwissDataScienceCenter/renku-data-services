@@ -49,7 +49,6 @@ class UserServer(ABC):
         work_dir: PurePosixPath,
         config: NotebooksConfig,
         internal_gitlab_user: APIUser,
-        using_default_image: bool = False,
         is_image_private: bool = False,
         repositories: list[Repository] | None = None,
         host: str | None = None,
@@ -63,7 +62,6 @@ class UserServer(ABC):
         self.server_options = server_options
         self.environment_variables = environment_variables
         self.user_secrets = user_secrets
-        self.using_default_image = using_default_image
         self.workspace_mount_path = workspace_mount_path
         self.work_dir = work_dir
         self.cloudstorage = cloudstorage
@@ -191,8 +189,7 @@ class UserServer(ABC):
 
     def _get_start_errors(self) -> list[str]:
         """Check if there are any errors before starting the server."""
-        errors: list[str]
-        errors = []
+        errors: list[str] = []
         if self.image is None:
             errors.append(f"image {self.image} does not exist or cannot be accessed")
         return errors
@@ -389,7 +386,6 @@ class Renku1UserServer(UserServer):
         project: str,
         branch: str,
         commit_sha: str,
-        notebook: str | None,  # TODO: Is this value actually needed?
         image: str | None,
         cluster_name: str | None,
         server_options: ServerOptions,
@@ -402,24 +398,19 @@ class Renku1UserServer(UserServer):
         config: NotebooksConfig,
         gitlab_project: Project | None,
         internal_gitlab_user: APIUser,
-        using_default_image: bool = False,
         is_image_private: bool = False,
         host: str | None = None,
-        **_: dict,
     ):
-        self.gitlab_project = gitlab_project
-        self.internal_gitlab_user = internal_gitlab_user
-        self.gitlab_project_name = f"{namespace}/{project}"
-        single_repository = (
+        repositories = [
             Repository(
-                url=self.gitlab_project.http_url_to_repo,
-                dirname=self.gitlab_project.path,
+                url=p.http_url_to_repo,
+                dirname=p.path,
                 branch=branch,
                 commit_sha=commit_sha,
             )
-            if self.gitlab_project is not None
-            else None
-        )
+            for p in [gitlab_project]
+            if p is not None
+        ]
 
         super().__init__(
             user=user,
@@ -433,9 +424,8 @@ class Renku1UserServer(UserServer):
             k8s_client=k8s_client,
             workspace_mount_path=workspace_mount_path,
             work_dir=work_dir,
-            using_default_image=using_default_image,
             is_image_private=is_image_private,
-            repositories=[single_repository] if single_repository is not None else [],
+            repositories=repositories,
             host=host,
             config=config,
             internal_gitlab_user=internal_gitlab_user,
@@ -444,9 +434,8 @@ class Renku1UserServer(UserServer):
         self.project = project
         self.branch = branch
         self.commit_sha = commit_sha
-        self.notebook = notebook
         self.git_host = urlparse(config.git.url).netloc
-        self.single_repository = single_repository
+        self.gitlab_project = gitlab_project
 
     def _get_start_errors(self) -> list[str]:
         """Check if there are any errors before starting the server."""
