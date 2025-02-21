@@ -207,11 +207,8 @@ class UsersSync:
         self.group_repo = group_repo
         self.user_repo = user_repo
         self.authz = authz
+        self.search_updates_repo = user_repo.search_updates_repo
 
-    @property
-    def search_updates_repo(self) -> SearchUpdatesRepo:
-        """Return the SearchUpdatesRepo to fulfill the decorator requirements."""
-        return self.search_updates_repo
 
     async def _get_user(self, id: str) -> UserInfo | None:
         """Get a specific user."""
@@ -223,8 +220,8 @@ class UsersSync:
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.update_or_insert, ResourceType.user)
-    @dispatch_message(events.UpdateOrInsertUser)
     @update_search_document
+    @dispatch_message(events.UpdateOrInsertUser)
     async def update_or_insert_user(
         self, user: UnsavedUserInfo, *, session: AsyncSession | None = None
     ) -> UserInfoUpdate:

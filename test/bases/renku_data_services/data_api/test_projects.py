@@ -59,6 +59,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
     }
 
     await app_config.event_repo.delete_all_events()
+    await app_config.search_updates_repo.clear_all()
 
     _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
 
@@ -82,6 +83,11 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
 
     events = await app_config.event_repo.get_pending_events()
     assert len(events) == 2
+    search_updates = await app_config.search_updates_repo.select_next(10)
+    assert len(search_updates) == 1
+    for e in search_updates:
+        assert e.entity_type == "Project"
+
     project_created_event = next((e for e in events if e.get_message_type() == "project.created"), None)
     assert project_created_event
     created_event = deserialize_binary(
@@ -366,6 +372,7 @@ async def test_delete_project(create_project, sanic_client, user_headers, app_co
 
 @pytest.mark.asyncio
 async def test_patch_project(create_project, get_project, sanic_client, user_headers, app_config) -> None:
+    await app_config.search_updates_repo.clear_all()
     # Create some projects
     await create_project("Project 1")
     project = await create_project("Project 2", repositories=["http://renkulab.io/repository-0"], keywords=["keyword"])
@@ -386,6 +393,10 @@ async def test_patch_project(create_project, get_project, sanic_client, user_hea
     _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=headers, json=patch)
 
     assert response.status_code == 200, response.text
+
+    search_updates = await app_config.search_updates_repo.select_next(20)
+    assert len(search_updates) == 3
+    assert len(set([e.entity_id for e in search_updates])) == 3
 
     events = await app_config.event_repo.get_pending_events()
     assert len(events) == 11
