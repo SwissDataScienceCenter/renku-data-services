@@ -1,7 +1,7 @@
 """create search update table
 
 Revision ID: 64edf7ac0de0
-Revises: 239854e7ea77
+Revises: d71f0f795d30
 Create Date: 2025-02-20 11:55:42.824506
 
 """
@@ -14,7 +14,7 @@ from renku_data_services.utils.sqlalchemy import ULIDType
 
 # revision identifiers, used by Alembic.
 revision = "64edf7ac0de0"
-down_revision = "239854e7ea77"
+down_revision = "d71f0f795d30"
 branch_labels = None
 depends_on = None
 
