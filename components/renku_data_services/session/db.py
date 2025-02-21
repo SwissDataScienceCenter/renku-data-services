@@ -674,23 +674,15 @@ class SessionRepository:
             result = await session.scalars(stmt)
             build = result.one_or_none()
 
-            err_message = f"Build with id '{build_id}' does not exist or you do not have access to it."
+            not_found_message = f"Build with id '{build_id}' does not exist or you do not have access to it."
             if build is None:
-                raise errors.MissingResourceError(message=err_message)
+                raise errors.MissingResourceError(message=not_found_message)
 
-            authorized = build.environment.environment_kind == models.EnvironmentKind.GLOBAL
+            authorized = await self._get_environment_authorization(
+                session=session, user=user, environment=build.environment, scope=Scope.READ
+            )
             if not authorized:
-                launcher = await session.scalar(
-                    select(schemas.SessionLauncherORM).where(
-                        schemas.SessionLauncherORM.environment_id == build.environment_id
-                    )
-                )
-                if launcher:
-                    authorized = await self.project_authz.has_permission(
-                        user, ResourceType.project, launcher.project_id, Scope.READ
-                    )
-            if not authorized:
-                raise errors.MissingResourceError(message=err_message)
+                raise errors.MissingResourceError(message=not_found_message)
 
             # Check and refresh the status of in-progress builds
             await self._refresh_build(build=build, session=session)
@@ -704,28 +696,18 @@ class SessionRepository:
             environment = await session.scalar(
                 select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == environment_id)
             )
+
+            not_found_message = (
+                f"Session environment with id '{environment_id}' does not exist or you do not have access to it."
+            )
             if environment is None:
-                raise errors.MissingResourceError(
-                    message=f"Session environment with id '{environment_id}' does not exist or you do not have access to it."  # noqa: E501
-                )
-            if environment.environment_kind == models.EnvironmentKind.GLOBAL:
-                authorized = True
-            else:
-                launcher = await session.scalar(
-                    select(schemas.SessionLauncherORM).where(
-                        schemas.SessionLauncherORM.environment_id == environment_id
-                    )
-                )
-                if launcher is None:
-                    authorized = False
-                else:
-                    authorized = await self.project_authz.has_permission(
-                        user, ResourceType.project, launcher.project_id, Scope.READ
-                    )
+                raise errors.MissingResourceError(message=not_found_message)
+
+            authorized = await self._get_environment_authorization(
+                session=session, user=user, environment=environment, scope=Scope.READ
+            )
             if not authorized:
-                raise errors.MissingResourceError(
-                    message=f"Session environment with id '{environment_id}' does not exist or you do not have access to it."  # noqa: E501
-                )
+                raise errors.MissingResourceError(message=not_found_message)
 
             stmt = (
                 select(schemas.BuildORM)
@@ -750,46 +732,27 @@ class SessionRepository:
             environment = await session.scalar(
                 select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == build.environment_id)
             )
+
+            not_found_message = (
+                f"Session environment with id '{build.environment_id}' does not exist or you do not have access to it."
+            )
             if environment is None:
-                raise errors.MissingResourceError(
-                    message=f"Session environment with id '{build.environment_id}' does not exist or you do not have access to it."  # noqa: E501
-                )
-            if (
-                environment.environment_image_source != models.EnvironmentImageSource.build
-                or environment.build_parameters is None
-            ):
-                raise errors.ValidationError(
-                    message=f"Session environment with id '{build.environment_id}' does not support builds."
-                )
+                raise errors.MissingResourceError(message=not_found_message)
+
+            authorized = await self._get_environment_authorization(
+                session=session, user=user, environment=environment, scope=Scope.READ
+            )
+            if not authorized:
+                raise errors.MissingResourceError(message=not_found_message)
+
             build_parameters = environment.build_parameters.dump()
 
-            if environment.environment_kind == models.EnvironmentKind.GLOBAL:
-                authorized = user.is_admin
-            else:
-                launcher = await session.scalar(
-                    select(schemas.SessionLauncherORM).where(
-                        schemas.SessionLauncherORM.environment_id == build.environment_id
-                    )
-                )
-                if launcher is None:
-                    authorized = False
-                else:
-                    authorized = await self.project_authz.has_permission(
-                        user, ResourceType.project, launcher.project_id, Scope.WRITE
-                    )
-            if not authorized:
-                raise errors.MissingResourceError(
-                    message=f"Session environment with id '{build.environment_id}' does not exist or you do not have access to it."  # noqa: E501
-                )
-
             # We check if there is any in-progress build
-            in_progress_builds = (
-                await session.stream_scalars(
-                    select(schemas.BuildORM)
-                    .where(schemas.BuildORM.environment_id == build.environment_id)
-                    .where(schemas.BuildORM.status == models.BuildStatus.in_progress)
-                    .order_by(schemas.BuildORM.id.desc())
-                )
+            in_progress_builds = await session.stream_scalars(
+                select(schemas.BuildORM)
+                .where(schemas.BuildORM.environment_id == build.environment_id)
+                .where(schemas.BuildORM.status == models.BuildStatus.in_progress)
+                .order_by(schemas.BuildORM.id.desc())
             )
             async for item in in_progress_builds:
                 await self._refresh_build(build=item, session=session)
@@ -824,29 +787,15 @@ class SessionRepository:
             result = await session.scalars(stmt)
             build = result.one_or_none()
 
+            not_found_message = f"Build with id '{build_id}' does not exist or you do not have access to it."
             if build is None:
-                raise errors.MissingResourceError(
-                    message=f"Build with id '{build_id}' does not exist or you do not have access to it."
-                )
+                raise errors.MissingResourceError(message=not_found_message)
 
-            if build.environment.environment_kind == models.EnvironmentKind.GLOBAL:
-                authorized = user.is_admin
-            else:
-                launcher = await session.scalar(
-                    select(schemas.SessionLauncherORM).where(
-                        schemas.SessionLauncherORM.environment_id == build.environment_id
-                    )
-                )
-                if launcher is None:
-                    authorized = False
-                else:
-                    authorized = await self.project_authz.has_permission(
-                        user, ResourceType.project, launcher.project_id, Scope.WRITE
-                    )
+            authorized = await self._get_environment_authorization(
+                session=session, user=user, environment=build.environment, scope=Scope.WRITE
+            )
             if not authorized:
-                raise errors.MissingResourceError(
-                    message=f"Build with id '{build_id}' does not exist or you do not have access to it."
-                )
+                raise errors.MissingResourceError(message=not_found_message)
 
             # Check and refresh the status of in-progress builds
             await self._refresh_build(build=build, session=session)
@@ -938,3 +887,17 @@ class SessionRepository:
             build_strategy_name=build_strategy_name,
             push_secret_name=push_secret_name,
         )
+
+    async def _get_environment_authorization(
+        self, session: AsyncSession, user: base_models.APIUser, environment: schemas.EnvironmentORM, scope: Scope
+    ) -> bool:
+        """Checks whether the provided user has a specific permission on a session environment."""
+        if environment.environment_kind == models.EnvironmentKind.GLOBAL:
+            return scope == Scope.READ or user.is_admin
+
+        launcher = await session.scalar(
+            select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.environment_id == environment.id)
+        )
+        if launcher:
+            authorized = await self.project_authz.has_permission(user, ResourceType.project, launcher.project_id, scope)
+        return authorized

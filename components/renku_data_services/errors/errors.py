@@ -169,11 +169,3 @@ class CannotStartBuildError(ProgrammingError):
 
     code: int = 1512
     message: str = "An error occurred creating an image build." ""
-
-
-@dataclass
-class DeleteBuildError(ProgrammingError):
-    """Raised when an image build couldn't be deleted."""
-
-    code: int = 1513
-    message: str = "An error occurred deleting an image build." ""

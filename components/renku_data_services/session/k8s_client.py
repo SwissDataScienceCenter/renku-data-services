@@ -1,14 +1,14 @@
 """An abstraction over the kr8s kubernetes client and the k8s-watcher."""
 
-import logging
 from urllib.parse import urljoin
 
 import httpx
 from kr8s import NotFoundError, ServerError
 from kr8s.asyncio.objects import APIObject
 from kubernetes.client import ApiClient
+from sanic.log import logger
 
-from renku_data_services.errors.errors import CannotStartBuildError, DeleteBuildError
+from renku_data_services.errors.errors import CannotStartBuildError
 from renku_data_services.notebooks.errors.intermittent import CacheError, IntermittentError
 from renku_data_services.notebooks.errors.programming import ProgrammingError
 from renku_data_services.notebooks.util.retries import retry_with_exponential_backoff_async
@@ -31,7 +31,7 @@ class ShipwrightBuildRunV1Beta1Kr8s(APIObject):
 
 class _ShipwrightClientBase:
     """Client for managing ShipWright resources in kubernetes.
-    
+
     NOTE: This does not apply any authentication or authorization on the requests.
     """
 
@@ -47,7 +47,7 @@ class _ShipwrightClientBase:
         try:
             await build_run.create()
         except ServerError as e:
-            logging.exception(f"Cannot create the image build {build_run_name} because of {e}")
+            logger.exception(f"Cannot create the image build {build_run_name} because of {e}")
             raise CannotStartBuildError(message=f"Cannot create the image build {build_run_name}")
         await build_run.refresh()
         build_resource = await retry_with_exponential_backoff_async(lambda x: x is None)(self.get_build_run)(
@@ -65,7 +65,7 @@ class _ShipwrightClientBase:
             return None
         except ServerError as e:
             if not e.response or e.response.status_code not in [400, 404]:
-                logging.exception(f"Cannot get the build {name} because of {e}")
+                logger.exception(f"Cannot get the build {name} because of {e}")
                 raise IntermittentError(f"Cannot get build {name} from the k8s API.")
             return None
         return BuildRun.model_validate(build.to_dict())
@@ -76,7 +76,7 @@ class _ShipwrightClientBase:
             builds = await ShipwrightBuildRunV1Beta1Kr8s.list(namespace=self.namespace, label_selector=label_selector)
         except ServerError as e:
             if not e.response or e.response.status_code not in [400, 404]:
-                logging.exception(f"Cannot list builds because of {e}")
+                logger.exception(f"Cannot list builds because of {e}")
                 raise IntermittentError("Cannot list builds")
             return []
         output = [BuildRun.model_validate(b.to_dict()) for b in builds]
@@ -88,8 +88,7 @@ class _ShipwrightClientBase:
         try:
             await build.delete(propagation_policy="Foreground")
         except ServerError as e:
-            logging.exception(f"Cannot delete build {name} because of {e}")
-            raise DeleteBuildError()
+            logger.exception(f"Cannot delete build {name} because of {e}")
         return None
 
 
@@ -106,10 +105,10 @@ class _ShipwrightCache:
         try:
             res = await self.client.get(url, timeout=10)
         except httpx.RequestError as err:
-            logging.warning(f"Shipwright k8s cache at {url} cannot be reached: {err}")
+            logger.warning(f"Shipwright k8s cache at {url} cannot be reached: {err}")
             raise CacheError("The shipwright k8s cache is not available")
         if res.status_code != 200:
-            logging.warning(
+            logger.warning(
                 f"Listing build runs at {url} from "
                 f"shipwright k8s cache failed with status code: {res.status_code} "
                 f"and body: {res.text}"
@@ -124,10 +123,10 @@ class _ShipwrightCache:
         try:
             res = await self.client.get(url, timeout=10)
         except httpx.RequestError as err:
-            logging.warning(f"Shipwright k8s cache at {url} cannot be reached: {err}")
+            logger.warning(f"Shipwright k8s cache at {url} cannot be reached: {err}")
             raise CacheError("The shipwright k8s cache is not available")
         if res.status_code != 200:
-            logging.warning(
+            logger.warning(
                 f"Reading build run at {url} from "
                 f"shipwright k8s cache failed with status code: {res.status_code} "
                 f"and body: {res.text}"
@@ -144,9 +143,8 @@ class _ShipwrightCache:
 
 
 class ShipwrightClient:
-    """
-    The K8s client that combines a base client and a cache.
-    
+    """The K8s client that combines a base client and a cache.
+
     No authentication or authorization is performed - this is the responsibility of the caller.
     """
 
@@ -171,7 +169,7 @@ class ShipwrightClient:
             return await self.cache.list_build_runs()
         except CacheError:
             if self.skip_cache_if_unavailable:
-                logging.warning("Skipping the cache to list BuildRuns")
+                logger.warning("Skipping the cache to list BuildRuns")
                 return await self.base_client.list_build_runs()
             else:
                 raise
