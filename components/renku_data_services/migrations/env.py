@@ -11,6 +11,7 @@ from renku_data_services.migrations.utils import logging_config, run_migrations
 from renku_data_services.namespace.orm import BaseORM as namespaces
 from renku_data_services.platform.orm import BaseORM as platform
 from renku_data_services.project.orm import BaseORM as project
+from renku_data_services.search.orm import BaseORM as search
 from renku_data_services.secrets.orm import BaseORM as secrets
 from renku_data_services.session.orm import BaseORM as sessions
 from renku_data_services.storage.orm import BaseORM as storage
@@ -33,6 +34,7 @@ all_metadata = [
     sessions.metadata,
     storage.metadata,
     users.metadata,
+    search.metadata,
 ]
 
 run_migrations(all_metadata)
