@@ -17,9 +17,9 @@ from renku_data_services.notebooks.api.classes.data_service import (
     GitProviderHelper,
 )
 from renku_data_services.notebooks.api.classes.k8s_client import (
-    K8sClient,
-    JupyterServerV1Alpha1Kr8s,
     AmaltheaSessionV1Alpha1Kr8s,
+    JupyterServerV1Alpha1Kr8s,
+    K8sClient,
 )
 from renku_data_services.notebooks.api.classes.repository import GitProvider
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
@@ -119,6 +119,8 @@ class NotebooksConfig:
             amalthea_v2_config = _AmaltheaV2Config(cache_url="http://not.specified")
             git_config = _GitConfig("http://not.specified", "registry.not.specified")
         else:
+            # FIXME: LSA: DO WE NEED TO PASS THE CONFIG FILE FOR THE CLUSTER HERE TO BOTH K8sCoreClient(),
+            #  K8sSchedulingClient()?
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
             rp_repo = ResourcePoolRepository(db_config.async_session_maker, quota_repo)
             crc_validator = CRCValidator(rp_repo)
@@ -132,17 +134,17 @@ class NotebooksConfig:
 
         k8s_config = _K8sConfig.from_env()
         k8s_client = K8sClient(
-            JupyterServerV1Alpha1, JupyterServerV1Alpha1Kr8s,
-            None, # TODO: LSA FIXME We need to pass an API OBJECT HERE
-            amalthea_config.cache_url,
+            server_type=JupyterServerV1Alpha1,
+            kr8s_type=JupyterServerV1Alpha1Kr8s,
+            cache_url=amalthea_config.cache_url,
             username_label="renku.io/userId",
             # NOTE: if testing then we should skip the cache if unavailable because we dont deploy the cache in tests
             skip_cache_if_unavailable=dummy_stores,
         )
         k8s_v2_client = K8sClient(
-            AmaltheaSessionV1Alpha1, AmaltheaSessionV1Alpha1Kr8s,
-            None,  # TODO: LSA FIXME We need to pass an API OBJECT HERE
-            amalthea_v2_config.cache_url,
+            server_type=AmaltheaSessionV1Alpha1,
+            kr8s_type=AmaltheaSessionV1Alpha1Kr8s,
+            cache_url=amalthea_v2_config.cache_url,
             # NOTE: v2 sessions have no userId label, the safe-username label is the keycloak user ID
             username_label="renku.io/safe-username",
             # NOTE: if testing then we should skip the cache if unavailable because we dont deploy the cache in tests

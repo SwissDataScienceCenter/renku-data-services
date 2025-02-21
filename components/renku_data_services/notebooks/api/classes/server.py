@@ -44,7 +44,7 @@ class UserServer(ABC):
         environment_variables: dict[str, str],
         user_secrets: K8sUserSecrets | None,
         cloudstorage: Sequence[ICloudStorageRequest],
-        k8s_client: K8sClient,
+        k8s_client: K8sClient[JupyterServerV1Alpha1, JupyterServerV1Alpha1Kr8s],
         workspace_mount_path: PurePosixPath,
         work_dir: PurePosixPath,
         config: NotebooksConfig,
@@ -56,7 +56,7 @@ class UserServer(ABC):
     ):
         self._user = user
         self.server_name = server_name
-        self._k8s_client: K8sClient[JupyterServerV1Alpha1, JupyterServerV1Alpha1Kr8s] = k8s_client
+        self._k8s_client = k8s_client
         self.safe_username = self._user.id
         self.image = image
         self.cluster_name = cluster_name
@@ -95,18 +95,13 @@ class UserServer(ABC):
 
     @property
     def preferred_namespace(self) -> str:
-     """Get the preferred namespace for a server."""
-     return self.k8s_client.preferred_namespace
+        """Get the preferred namespace for a server."""
+        return self._k8s_client.preferred_namespace
 
     @property
     def user(self) -> AnonymousAPIUser | AuthenticatedAPIUser:
         """Getter for server's user."""
         return self._user
-
-    @property
-    def k8s_client(self) -> K8sClient:
-        """Return server's k8s client."""
-        return self._k8s_client
 
     async def repositories(self) -> list[Repository]:
         """Get the list of repositories in the project."""

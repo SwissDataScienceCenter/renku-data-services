@@ -93,7 +93,7 @@ class ResourceClass(ResourcesCompareMixin):
     node_affinities: list[NodeAffinity] = field(default_factory=list)
     tolerations: list[str] = field(default_factory=list)
     quota: str | None = None
-    k8s_context_name: Optional[str] = None # TODO: LSA Give a context as a parameter or a kubeconfig file, or both?
+    k8s_config_name: Optional[str] = None
 
     def __post_init__(self) -> None:
         if len(self.name) > 40:
@@ -174,12 +174,13 @@ class Quota(ResourcesCompareMixin):
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class ValidKubeConnectionSettings:
-    """Cluster connection"""
+class KubeClusterSettings:
+    """K8s Cluster settings."""
 
-    context_name: str
+    config_name: str
     node_affinities: list[str]
     tolerations: list[str]
+
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class ResourcePool:
@@ -193,6 +194,7 @@ class ResourcePool:
     hibernation_threshold: Optional[int] = None
     default: bool = False
     public: bool = False
+    cluster: Optional[KubeClusterSettings] = None
 
     def __post_init__(self) -> None:
         """Validate the resource pool after initialization."""

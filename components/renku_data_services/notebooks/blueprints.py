@@ -23,6 +23,7 @@ from renku_data_services.data_connectors.db import (
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec, core
 from renku_data_services.notebooks.api.amalthea_patches.init_containers import user_secrets_container
+from renku_data_services.notebooks.api.classes.k8s_client import DEFAULT_K8S_CLUSTER
 from renku_data_services.notebooks.api.classes.repository import Repository
 from renku_data_services.notebooks.api.schemas.config_server_options import ServerOptionsEndpointResponse
 from renku_data_services.notebooks.api.schemas.logs import ServerLogs
@@ -139,7 +140,7 @@ class NotebooksBP(CustomBlueprint):
 
         return "/notebooks/servers", ["POST"], _launch_notebook
 
-# TODO: LSA STUFF TO RETRIEVE REMOTE CLUSTER?
+    # TODO: LSA STUFF TO RETRIEVE REMOTE CLUSTER?
 
     def patch_server(self) -> BlueprintFactoryResponse:
         """Patch a user server by name based on the query param."""
@@ -251,10 +252,11 @@ class NotebooksNewBP(CustomBlueprint):
             body: apispec.SessionPostRequest,
         ) -> JSONResponse:
             # gitlab_client = NotebooksGitlabClient(self.nb_config.git.url, internal_gitlab_user.access_token)
+            cluster_name = DEFAULT_K8S_CLUSTER  # TODO: LSA: RETRIEVE FROM REQUEST SOMEHOW
             launcher = await self.session_repo.get_launcher(user, ULID.from_str(body.launcher_id))
             project = await self.project_repo.get_project(user=user, project_id=launcher.project_id)
             server_name = renku_2_make_server_name(
-                user=user, project_id=str(launcher.project_id), launcher_id=body.launcher_id
+                user=user, project_id=str(launcher.project_id), launcher_id=body.launcher_id, cluster_name=cluster_name
             )
             existing_session = await self.nb_config.k8s_v2_client.get_session(server_name, user.id)
             if existing_session is not None and existing_session.spec is not None:

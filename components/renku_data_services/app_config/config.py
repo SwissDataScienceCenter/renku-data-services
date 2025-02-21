@@ -498,6 +498,8 @@ class Config:
             secrets_service_public_key = serialization.load_pem_public_key(
                 Path(secrets_service_public_key_path).read_bytes()
             )
+            # FIXME: LSA: DO WE NEED TO PASS THE CONFIG FILE FOR THE CLUSTER HERE TO BOTH K8sCoreClient(),
+            #  K8sSchedulingClient()?
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
             keycloak_url = os.environ.get(f"{prefix}KEYCLOAK_URL")
             if keycloak_url is None:

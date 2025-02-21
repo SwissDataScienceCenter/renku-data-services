@@ -4,18 +4,20 @@ import asyncio
 import base64
 import json
 import logging
+import os
 from contextlib import suppress
-from typing import Any, Generic, Optional, Self, TypeVar, cast
+from typing import Any, Generic, Optional, TypeVar, cast
 from urllib.parse import urljoin
 
 import httpx
 import kr8s
 import kubernetes
-from box import Box
+from box.box import Box
 from kr8s import NotFoundError, ServerError
 from kr8s.asyncio.objects import APIObject, Pod, Secret, StatefulSet
 from kubernetes.client import V1Secret
 
+from renku_data_services.crc.models import ResourcePool
 from renku_data_services.errors import errors
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
@@ -31,6 +33,8 @@ from renku_data_services.notebooks.util.kubernetes_ import find_env_var
 from renku_data_services.notebooks.util.retries import (
     retry_with_exponential_backoff_async,
 )
+
+DEFAULT_K8S_CLUSTER = "default_k8s_cluster"
 
 
 # NOTE The type ignore below is because the kr8s library has no type stubs, they claim pyright better handles type hints
@@ -62,9 +66,11 @@ class JupyterServerV1Alpha1Kr8s(APIObject):
 _SessionType = TypeVar("_SessionType", JupyterServerV1Alpha1, AmaltheaSessionV1Alpha1)
 _Kr8sType = TypeVar("_Kr8sType", JupyterServerV1Alpha1Kr8s, AmaltheaSessionV1Alpha1Kr8s)
 
+
 # WARNING:
-#   As of mypy 1.14.1, it does not support instantiating an object using a field containing a type, which is why we have
-#   a mix of new and old syntax for the generics.
+#   As of mypy 1.14.1, it does not support instantiating an object using a field containing a type using the new syntax,
+#    which is why we have a mix of new and old syntax for the generics.
+# TODO: LSA Validate kubeconfig to contain only ONE cluster definition
 
 
 class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
@@ -118,6 +124,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
 
     async def create_server(self, manifest: _SessionType) -> _SessionType:
         """Create a jupyter server in the cluster."""
+
         # NOTE: You have to exclude none when using model dump below because otherwise we get
         # namespace=null which seems to break the kr8s client or simply k8s does not translate
         # namespace = null to the default namespace.
@@ -502,7 +509,7 @@ class _CachedK8sClient[_SessionType, _Kr8sType](_BaseK8sClient):
                 raise
 
 
-class K8sClient(Generic[_SessionType, _Kr8sType]):
+class _SingleK8sClient(Generic[_SessionType, _Kr8sType]):
     """The K8s client that combines a namespaced client and a jupyter server cache."""
 
     def __init__(
@@ -524,25 +531,6 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
 
         self.sanitize = self._k8s_client.sanitize
 
-    @classmethod
-    async def new(
-        cls,
-        server_type: type[_SessionType],
-        kr8s_type: type[_Kr8sType],
-        kubeconfig: str | None,
-        context: str | None,
-        cache_url: str,
-        username_label: str,
-        skip_cache_if_unavailable: bool = False,
-    ) -> Self:
-        if kubeconfig is not None:
-            api = await kr8s.asyncio.api(kubeconfig=kubeconfig, context=context)
-        else:
-            # TODO go to / allow incluster config ? ADD CHECKS ?
-            api = await kr8s.asyncio.api(kubeconfig=kubeconfig, context=context)
-
-        return cls(server_type, kr8s_type, api, cache_url, username_label, skip_cache_if_unavailable)
-
     async def list_sessions(self, safe_username: str) -> list[_SessionType]:
         """Get a list of servers that belong to a user."""
         sessions: list[_SessionType] = await self._k8s_client.list_sessions(safe_username=safe_username)
@@ -553,19 +541,6 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
             and session.metadata.labels is not None
             and session.metadata.labels.get(self.username_label) == safe_username
         ]
-
-        # TODO: LSA: ADD MULTI CLUSTER SUPPORT?
-        #
-        #  logging.warning(f"Skipping the cache to list servers for user: {safe_username}")
-        #  label_selector = f"{self.username_label}={safe_username}"
-        #  remote_cluster_servers = [
-        #      s for c in self.remote_cluster_clients.values() for s in c.list_servers(label_selector)
-        #  ]
-        #  return (
-        #      self.renku_ns_client.list_servers(label_selector)
-        #      + (self.session_ns_client.list_servers(label_selector) if self.session_ns_client is not None else [])
-        #      + remote_cluster_servers
-        #  )
 
     async def get_session(self, name: str, safe_username: str) -> _SessionType | None:
         """Attempt to get a specific server by name from the cache.
@@ -649,3 +624,161 @@ class K8sClient(Generic[_SessionType, _Kr8sType]):
 
     async def delete_secret(self, name: str) -> None:
         await self._k8s_client.delete_secret(name)
+
+
+class _MultipleK8sClient(Generic[_SessionType, _Kr8sType]):
+    def __init__(
+        self,
+        server_type: type[_SessionType],
+        kr8s_type: type[_Kr8sType],
+        cache_url: str,
+        username_label: str,
+        skip_cache_if_unavailable: bool = False,
+        resource_pools: list[ResourcePool] = [],
+    ):
+        self._kube_conf_root_dir = "/secrets/kube_configs"
+
+        kube_conf_names = [f.name for f in os.scandir(self.kube_conf_root_dir)]
+        self._clients: dict[str, _SingleK8sClient[_SessionType, _Kr8sType]] = dict(
+            [
+                (
+                    name,
+                    _SingleK8sClient(
+                        server_type,
+                        kr8s_type,
+                        kr8s.api(kubeconfig=f"{self.kube_conf_root_dir}/{name}.yaml"),
+                        cache_url,
+                        username_label,
+                        skip_cache_if_unavailable,
+                    ),
+                )
+                for name in kube_conf_names
+            ]
+        )
+
+        # Add at least one connection, to the default cluster.
+        self._clients[DEFAULT_K8S_CLUSTER] = _SingleK8sClient(
+            server_type, kr8s_type, kr8s.api(), cache_url, username_label, skip_cache_if_unavailable
+        )
+
+        # maps pool_id to k8s client
+        self._pool2client: dict[str, _SingleK8sClient[_SessionType, _Kr8sType]] = {}
+        self.update_resource_pools(resource_pools)
+
+        # maps session/server name to k8s client
+        self._session2client: dict[str, _SingleK8sClient[_SessionType, _Kr8sType]] = {}
+        self.sanitize = self._clients[DEFAULT_K8S_CLUSTER].sanitize
+
+    def _client_by_session(self, session_name: str) -> _SingleK8sClient[_SessionType, _Kr8sType] | None:
+        return self._session2client.get(session_name)
+
+    @property
+    def kube_conf_root_dir(self) -> str:
+        return self._kube_conf_root_dir
+
+    def client_by_pool(self, pool_name: str) -> _SingleK8sClient[_SessionType, _Kr8sType] | None:
+        return self._pool2client.get(pool_name)
+
+    def update_resource_pools(self, resource_pools: list[ResourcePool]) -> None:
+        """Update the mapping used to lookup cluster connection by resource pool."""
+
+        # Ensure we always have at least the default cluster
+        cluster_map = {DEFAULT_K8S_CLUSTER: self._clients[DEFAULT_K8S_CLUSTER]}
+
+        for pool in resource_pools:
+            cluster_name = DEFAULT_K8S_CLUSTER
+            if pool.cluster is not None:
+                cluster_name = pool.cluster.config_name
+            # If there is no cluster connection configured, fall back to the default one
+            cluster_map[pool.name] = self._clients.get(cluster_name, self._clients[DEFAULT_K8S_CLUSTER])
+
+        self._pool2client = cluster_map
+
+    async def list_sessions(self, safe_username: str) -> list[_SessionType]:
+        # Don't blame me, blame python's list comprehension syntax
+        return [s for c in self._clients.values() for s in await c.list_sessions(safe_username)]
+
+    async def create_session(self, manifest: _SessionType, safe_username: str) -> _SessionType:
+        pool_id = manifest.metadata.annotations["renku.io/resource_class_id"]
+        server_name = manifest.metadata.name
+
+        client = self.client_by_pool(pool_id)
+        if client is None:
+            raise CannotStartServerError(
+                message=f"Cannot start the session {server_name}, "
+                f"kubernetes connection not found for resource pool {pool_id}"
+            )
+
+        session = await client.create_session(manifest, safe_username)
+        self._session2client[server_name] = client
+
+        return session
+
+    async def get_session(self, name: str, safe_username: str) -> _SessionType | None:
+        client = self._client_by_session(name)
+        if client is not None:
+            return await client.get_session(name, safe_username)
+
+        return None
+
+    async def get_session_logs(
+        self, server_name: str, safe_username: str, max_log_lines: Optional[int] = None
+    ) -> dict[str, str]:
+        client = self._client_by_session(server_name)
+        if client is not None:
+            return await client.get_session_logs(server_name, safe_username, max_log_lines)
+
+        raise errors.MissingResourceError(
+            message=f"Cannot find server {server_name} for user {safe_username} to retrieve logs."
+        )
+
+    async def patch_session(
+        self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
+    ) -> _SessionType:
+        client = self._client_by_session(server_name)
+        if client is not None:
+            return await client.patch_session(server_name, safe_username, patch)
+
+        raise errors.MissingResourceError(
+            message=f"Cannot find cluster connection to server {server_name}"
+            f" for user {safe_username} in order to patch it."
+        )
+
+    async def delete_session(self, server_name: str, safe_username: str) -> None:
+        # Retrieve and remove from the mapping to the k8s client for this session
+        client = self._session2client.pop(server_name, None)
+        if client is not None:
+            await client.delete_session(server_name, safe_username)
+
+    async def patch_session_tokens(
+        self, server_name: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken
+    ) -> None:
+        client = self._client_by_session(server_name)
+        if client is not None:
+            await client.patch_session_tokens(server_name, renku_tokens, gitlab_token)
+
+    @property
+    def preferred_namespace(self) -> str:
+        # TODO: LSA Does not break current code, but bad, as it may be different based on the cluster
+        return self._clients[DEFAULT_K8S_CLUSTER].preferred_namespace
+
+    async def patch_statefulset(
+        self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]]
+    ) -> StatefulSet | None:
+        client = self._client_by_session(server_name)
+        if client is not None:
+            return await client.patch_statefulset(server_name, patch)
+
+        # If the stateful set is missing, we ignore the operation
+        return None
+
+    async def create_secret(self, secret: V1Secret) -> V1Secret:
+        # TODO: LSA Does not break current code, but bad, as it may be different based on the cluster
+        return await self._clients[DEFAULT_K8S_CLUSTER].create_secret(secret)
+
+    async def delete_secret(self, name: str) -> None:
+        # TODO: LSA Does not break current code, but bad, as it may be different based on the cluster
+        await self._clients[DEFAULT_K8S_CLUSTER].delete_secret(name)
+
+
+K8sClient = _MultipleK8sClient

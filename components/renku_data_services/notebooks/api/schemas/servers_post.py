@@ -35,7 +35,7 @@ class LaunchNotebookRequestWithoutStorageBase(Schema):
     # User uploaded secrets
     # Contains secret id list and mount path
     user_secrets = fields.Nested(UserSecrets(), required=False, load_default=None)
-    cluster_name = fields.Str(required=False, load_default=None)  # TODO: LSA Give a context as a parameter or a kubeconfig file, or both?
+    cluster_name = fields.Str(required=False, load_default=None)
 
 
 class LaunchNotebookRequestWithoutStorage(LaunchNotebookRequestWithoutStorageBase):
