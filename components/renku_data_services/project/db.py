@@ -221,8 +221,8 @@ class ProjectRepository:
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.create, ResourceType.project)
-    @dispatch_message(avro_schema_v2.ProjectCreated)
     @update_search_document
+    @dispatch_message(avro_schema_v2.ProjectCreated)
     async def insert_project(
         self,
         user: base_models.APIUser,
