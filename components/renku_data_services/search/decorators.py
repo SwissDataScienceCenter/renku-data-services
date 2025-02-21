@@ -2,7 +2,7 @@
 
 import functools
 from collections.abc import Awaitable, Callable
-from typing import Concatenate, ParamSpec, Protocol, TypeVar
+from typing import Concatenate, ParamSpec, Protocol, TypeVar, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -69,12 +69,12 @@ def update_search_document(
             case DeletedGroup() as g:
                 pass  # todo: oops, forgot that case 😅
 
-            case _:
-                if isinstance(result, list):
-                    for element in result:
-                        match element:
-                            case UserInfo() as u:
-                                await self.search_updates_repo.upsert(u)
+            case list():
+                match result:
+                    case [UserInfo(), *_] as els:
+                        users = cast(list[UserInfo], els)
+                        for u in users:
+                            await self.search_updates_repo.upsert(u)
 
         return result
 
