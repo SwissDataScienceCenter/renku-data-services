@@ -148,6 +148,59 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - projects
+  /renku_v1_projects/{v1_id}/migrations:
+    get:
+      summary: Check if a v1 project has been migrated to v2
+      parameters:
+        - in: path
+          name: v1_id
+          required: true
+          description: The ID of the project in Renku v1
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Project exists in v2 and has been migrated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          description: No corresponding project found in v2
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - projects
+    post:
+      summary: Create a new project migrated from Renku v1
+      parameters:
+        - in: path
+          name: v1_id
+          required: true
+          description: The ID of the project in Renku v1
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectMigrationPost"
+      responses:
+        "201":
+          description: The project was created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - projects
   /namespaces/{namespace}/projects/{slug}:
     get:
       summary: Get a project by namespace and project slug
@@ -681,6 +734,53 @@ components:
           $ref: "#/components/schemas/IsTemplate"
         secrets_mount_directory:
           $ref: "#/components/schemas/SecretsMountDirectoryPatch"
+    ProjectMigrationPost:
+      description: Project v1 data to be migrated in Renku
+      type: object
+      additionalProperties: false
+      properties:
+        project:
+          $ref: "#/components/schemas/ProjectPost"
+        session_launcher:
+          $ref: "#/components/schemas/MigrationSessionLauncherPost"
+      required:
+        - "project"
+    MigrationSessionLauncherPost:
+      description: Data required to create a session launcher for a project migrated
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/SessionName"
+        container_image:
+          $ref: "#/components/schemas/ContainerImage"
+        default_url:
+          allOf:
+            - $ref: "#/components/schemas/DefaultUrl"
+            - default: /lab
+          default: /lab
+      required:
+        - name
+        - container_image
+    SessionName:
+      description: Renku session name
+      type: string
+      minLength: 1
+      maxLength: 99
+      example: My Renku Session :)
+    ContainerImage:
+      description: A container image
+      type: string
+      maxLength: 500
+      # NOTE: regex for an image name, optionally with a tag or sha256 specified
+      # based on https://github.com/opencontainers/distribution-spec/blob/main/spec.md
+      pattern: "^[a-z0-9]+((\\.|_|__|-+)[a-z0-9]+)*(\\/[a-z0-9]+((\\.|_|__|-+)[a-z0-9]+)*)*(:[a-zA-Z0-9_][a-zA-Z0-9._-]{0,127}|@sha256:[a-fA-F0-9]{64}){0,1}$"
+      example: renku/renkulab-py:3.10-0.18.1
+    DefaultUrl:
+      description: The default path to open in a session
+      type: string
+      maxLength: 200
+      example: "/lab"
     Ulid:
       description: ULID identifier
       type: string
