@@ -22,6 +22,8 @@ from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import dispatch_message
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.namespace.orm import NamespaceORM
+from renku_data_services.search.db import SearchUpdatesRepo
+from renku_data_services.search.decorators import update_search_document
 from renku_data_services.users.config import UserPreferencesConfig
 from renku_data_services.users.kc_api import IKeycloakAPI
 from renku_data_services.users.models import (
@@ -48,6 +50,7 @@ class UserRepo:
     message_queue: IMessageQueue
     event_repo: EventRepository
     group_repo: GroupRepository
+    search_updates_repo: SearchUpdatesRepo
     encryption_key: bytes | None = field(repr=False)
     authz: Authz
 
@@ -146,6 +149,7 @@ class UserRepo:
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.delete, ResourceType.user)
     @dispatch_message(avro_schema_v2.UserRemoved)
+    @update_search_document
     async def _remove_user(
         self, requested_by: APIUser, user_id: str, *, session: AsyncSession | None = None
     ) -> DeletedUser | None:
@@ -204,6 +208,11 @@ class UsersSync:
         self.user_repo = user_repo
         self.authz = authz
 
+    @property
+    def search_updates_repo(self) -> SearchUpdatesRepo:
+        """Return the SearchUpdatesRepo to fulfill the decorator requirements."""
+        return self.search_updates_repo
+
     async def _get_user(self, id: str) -> UserInfo | None:
         """Get a specific user."""
         async with self.session_maker() as session, session.begin():
@@ -215,6 +224,7 @@ class UsersSync:
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.update_or_insert, ResourceType.user)
     @dispatch_message(events.UpdateOrInsertUser)
+    @update_search_document
     async def update_or_insert_user(
         self, user: UnsavedUserInfo, *, session: AsyncSession | None = None
     ) -> UserInfoUpdate:
