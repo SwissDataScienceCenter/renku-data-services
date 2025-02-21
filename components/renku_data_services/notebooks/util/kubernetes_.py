@@ -24,7 +24,7 @@ from hashlib import md5
 from typing import Any, TypeAlias, cast
 
 import escapism
-from box import Box
+from box.box import Box
 
 from renku_data_services.base_models.core import AnonymousAPIUser, AuthenticatedAPIUser, Slug
 from renku_data_services.notebooks.crs import Patch, PatchType

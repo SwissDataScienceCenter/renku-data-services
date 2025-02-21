@@ -9,7 +9,7 @@ from typing import Any, Generic, Optional, TypeVar, cast
 from urllib.parse import urljoin
 
 import httpx
-from box import Box
+from box.box import Box
 from kr8s import NotFoundError, ServerError
 from kr8s.asyncio.objects import APIObject, Pod, Secret, StatefulSet
 from kubernetes.client import ApiClient, V1Secret
