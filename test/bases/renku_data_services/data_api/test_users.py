@@ -21,7 +21,6 @@ async def test_get_all_users_as_admin(sanic_client, users) -> None:
             kind=NamespaceKind.user,
             underlying_resource_id="admin-id",
             created_by="admin-id",
-            path=["admin.adminson"],
         ),
     )
     admin_token = {

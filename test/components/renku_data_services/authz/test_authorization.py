@@ -59,7 +59,6 @@ async def test_adding_deleting_project(app_config_instance: Config, bootstrap_ad
             NamespaceKind.user,
             created_by=project_owner.id,
             underlying_resource_id=project_owner.id,
-            path=["namespace"],
         ),
         visibility=Visibility.PUBLIC if public_project else Visibility.PRIVATE,
         created_by=project_owner.id,
@@ -113,7 +112,6 @@ async def test_granting_access(
             NamespaceKind.user,
             created_by=project_owner.id,
             underlying_resource_id=project_owner.id,
-            path=["namespace"],
         ),
         visibility=Visibility.PUBLIC if public_project else Visibility.PRIVATE,
         created_by=project_owner.id,
@@ -159,7 +157,6 @@ async def test_listing_users_with_access(app_config_instance: Config, public_pro
             NamespaceKind.user,
             created_by=project_owner.id,
             underlying_resource_id=project_owner.id,
-            path=[project_owner.id],
         ),
         visibility=Visibility.PUBLIC if public_project else Visibility.PRIVATE,
         created_by=project_owner.id,
@@ -175,7 +172,6 @@ async def test_listing_users_with_access(app_config_instance: Config, public_pro
             NamespaceKind.user,
             created_by=regular_user2.id,
             underlying_resource_id=regular_user2.id,
-            path=[regular_user2.id],
         ),
         visibility=Visibility.PRIVATE,
         created_by=regular_user2.id,
@@ -210,7 +206,6 @@ async def test_listing_projects_with_access(app_config_instance: Config, bootstr
         NamespaceKind.user,
         created_by=project_owner.id,
         underlying_resource_id=project_owner.id,
-        path=[project_owner.id],
     )
     assert project_owner.id
     assert regular_user2.id

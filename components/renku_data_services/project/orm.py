@@ -12,7 +12,7 @@ from ulid import ULID
 
 from renku_data_services.authz import models as authz_models
 from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
-from renku_data_services.namespace.models import Namespace, NamespaceKind
+from renku_data_services.namespace.models import Namespace, NamespaceKind, NamespacePath
 from renku_data_services.project import constants, models
 from renku_data_services.project.apispec import Visibility
 from renku_data_services.secrets.orm import SecretORM
@@ -95,9 +95,10 @@ class ProjectORM(BaseORM):
             secrets_mount_directory=self.secrets_mount_directory or constants.DEFAULT_SESSION_SECRETS_MOUNT_DIR,
         )
 
-    def dump_as_namespace(self) -> Namespace:
-        """Get the namespace representation of the project."""
-        return Namespace(
+    def dump_as_namespace_path(self) -> NamespacePath:
+        """Get the namespace path representation of the project."""
+        parent = self.slug.namespace.dump()
+        child = Namespace(
             id=self.id,
             slug=self.slug.slug,
             kind=NamespaceKind.project,
@@ -106,8 +107,8 @@ class ProjectORM(BaseORM):
             latest_slug=self.slug.slug,
             name=self.name,
             creation_date=self.creation_date,
-            path=[self.slug.namespace.slug, self.slug.slug],
         )
+        return parent / child
 
 
 class ProjectRepositoryORM(BaseORM):

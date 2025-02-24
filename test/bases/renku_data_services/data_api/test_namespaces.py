@@ -368,7 +368,7 @@ async def test_listing_project_namespaces(sanic_client, user_headers) -> None:
     assert len(response.json) == 2
     assert response.json[0]["name"] == "proj1"
     assert response.json[0]["namespace_kind"] == "project"
-    assert response.json[0]["path"] == ["test1", "proj1"]
+    assert response.json[0]["slug"] == "test1/proj1"
     assert response.json[1]["name"] == "proj2"
     assert response.json[1]["namespace_kind"] == "project"
-    assert response.json[1]["path"] == ["test1", "proj2"]
+    assert response.json[1]["slug"] == "test1/proj2"

@@ -684,7 +684,7 @@ class Authz:
                     if result.old.visibility != result.new.visibility:
                         user = _extract_user_from_args(*func_args, **func_kwargs)
                         authz_change.extend(await db_repo.authz._update_data_connector_visibility(user, result.new))
-                    if result.old.namespace.id != result.new.namespace.id:
+                    if result.old.namespace != result.new.namespace:
                         user = _extract_user_from_args(*func_args, **func_kwargs)
                         authz_change.extend(await db_repo.authz._update_data_connector_namespace(user, result.new))
                 case AuthzOperation.delete_link, ResourceType.data_connector if result is None:
@@ -1566,21 +1566,21 @@ class Authz:
     def _add_data_connector(self, data_connector: DataConnector) -> _AuthzChange:
         """Create the new data connector and associated resources and relations in the DB."""
         data_connector_res = _AuthzConverter.data_connector(data_connector.id)
-        match data_connector.namespace.kind:
+        match data_connector.namespace.last.kind:
             case NamespaceKind.project:
                 project_id = (
-                    ULID.from_str(data_connector.namespace.underlying_resource_id)
-                    if isinstance(data_connector.namespace.underlying_resource_id, str)
-                    else data_connector.namespace.underlying_resource_id
+                    ULID.from_str(data_connector.namespace.last.underlying_resource_id)
+                    if isinstance(data_connector.namespace.last.underlying_resource_id, str)
+                    else data_connector.namespace.last.underlying_resource_id
                 )
                 owned_by = _AuthzConverter.project(project_id)
             case NamespaceKind.user:
-                owned_by = _AuthzConverter.user_namespace(data_connector.namespace.id)
+                owned_by = _AuthzConverter.user_namespace(data_connector.namespace.last.id)
             case NamespaceKind.group:
                 group_id = (
-                    ULID.from_str(data_connector.namespace.underlying_resource_id)
-                    if isinstance(data_connector.namespace.underlying_resource_id, str)
-                    else data_connector.namespace.underlying_resource_id
+                    ULID.from_str(data_connector.namespace.last.underlying_resource_id)
+                    if isinstance(data_connector.namespace.last.underlying_resource_id, str)
+                    else data_connector.namespace.last.underlying_resource_id
                 )
                 owned_by = _AuthzConverter.group(group_id)
             case _:
@@ -1795,13 +1795,30 @@ class Authz:
                 message=f"The data connector with ID {data_connector.id} whose namespace is being updated "
                 "does not currently have a namespace."
             )
-        if current_namespace.relationship.subject.object.object_id == data_connector.namespace.id:
+        if current_namespace.relationship.subject.object.object_id == data_connector.namespace.last.id:
             return _AuthzChange()
-        new_namespace_sub = (
-            SubjectReference(object=_AuthzConverter.group(data_connector.namespace.id))
-            if data_connector.namespace.kind == NamespaceKind.group
-            else SubjectReference(object=_AuthzConverter.user_namespace(data_connector.namespace.id))
-        )
+        new_dc_ns = data_connector.namespace.last
+        match new_dc_ns.kind:
+            case NamespaceKind.user:
+                new_namespace_owner = _AuthzConverter.user_namespace(new_dc_ns.id)
+            case NamespaceKind.group:
+                new_namespace_owner = _AuthzConverter.group(
+                    ULID.from_str(new_dc_ns.underlying_resource_id)
+                    if isinstance(new_dc_ns.underlying_resource_id, str)
+                    else new_dc_ns.underlying_resource_id
+                )
+            case NamespaceKind.project:
+                new_namespace_owner = _AuthzConverter.project(
+                    ULID.from_str(new_dc_ns.underlying_resource_id)
+                    if isinstance(new_dc_ns.underlying_resource_id, str)
+                    else new_dc_ns.underlying_resource_id
+                )
+            case x:
+                raise errors.ProgrammingError(
+                    message=f"Received unknown namespace kind {x} when updating namespace of a data connector."
+                )
+
+        new_namespace_sub = SubjectReference(object=new_namespace_owner)
         old_namespace_sub = (
             SubjectReference(
                 object=_AuthzConverter.group(ULID.from_str(current_namespace.relationship.subject.object.object_id))
