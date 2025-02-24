@@ -13,6 +13,7 @@ import functools
 import os
 import secrets
 from dataclasses import dataclass, field
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, Optional
 
@@ -147,6 +148,8 @@ class BuildsConfig:
     vscodium_python_run_image: str | None = None
     build_strategy_name: str | None = None
     push_secret_name: str | None = None
+    buildrun_retention_after_failed: timedelta | None = None
+    buildrun_retention_after_succeeded: timedelta | None = None
 
     @classmethod
     def from_env(cls, prefix: str = "", namespace: str = "") -> "BuildsConfig":
@@ -156,6 +159,22 @@ class BuildsConfig:
         vscodium_python_run_image = os.environ.get(f"{prefix}BUILD_VSCODIUM_PYTHON_RUN_IMAGE")
         build_strategy_name = os.environ.get(f"{prefix}BUILD_STRATEGY_NAME")
         push_secret_name = os.environ.get(f"{prefix}BUILD_PUSH_SECRET_NAME")
+        buildrun_retention_after_failed_seconds = int(
+            os.environ.get(f"{prefix}BUILD_RUN_RETENTION_AFTER_FAILED_SECONDS") or "0"
+        )
+        buildrun_retention_after_failed = (
+            timedelta(seconds=buildrun_retention_after_failed_seconds)
+            if buildrun_retention_after_failed_seconds > 0
+            else None
+        )
+        buildrun_retention_after_succeeded_seconds = int(
+            os.environ.get(f"{prefix}BUILD_RUN_RETENTION_AFTER_SUCCEEDED_SECONDS") or "0"
+        )
+        buildrun_retention_after_succeeded = (
+            timedelta(seconds=buildrun_retention_after_succeeded_seconds)
+            if buildrun_retention_after_succeeded_seconds > 0
+            else None
+        )
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
             shipwright_client = None
@@ -174,6 +193,8 @@ class BuildsConfig:
             build_strategy_name=build_strategy_name or None,
             push_secret_name=push_secret_name or None,
             shipwright_client=shipwright_client,
+            buildrun_retention_after_failed=buildrun_retention_after_failed,
+            buildrun_retention_after_succeeded=buildrun_retention_after_succeeded,
         )
 
 
