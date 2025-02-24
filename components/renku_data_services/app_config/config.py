@@ -163,10 +163,11 @@ class BuildsConfig:
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
             shipwright_client = None
         else:
+            # TODO: is there a reason to use a different cache URL here?
+            cache_url = os.environ["NB_AMALTHEA_V2__CACHE_URL"]
             shipwright_client = ShipwrightClient(
                 namespace=namespace,
-                # TODO: Use the k8s cache
-                cache_url=None,
+                cache_url=cache_url,
             )
 
         return cls(
