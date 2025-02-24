@@ -131,8 +131,11 @@ class NamespaceORM(BaseORM):
             underlying_resource_id=self.underlying_resource_id,
             latest_slug=self.slug,
             name=self.name,
-            path=[self.slug],
         )
+
+    def dump_as_namespace_path(self) -> models.NamespacePath:
+        """Create a namespace path."""
+        return models.NamespacePath(self.dump())
 
     def dump_user(self) -> UserInfo:
         """Create a user with namespace from the ORM."""
@@ -190,7 +193,6 @@ class NamespaceOldORM(BaseORM):
                 kind=models.NamespaceKind.group,
                 underlying_resource_id=self.latest_slug.group_id,
                 name=self.latest_slug.group.name,
-                path=[self.slug],
             )
 
         if not self.latest_slug.user or not self.latest_slug.user_id:
@@ -212,8 +214,11 @@ class NamespaceOldORM(BaseORM):
             kind=models.NamespaceKind.user,
             underlying_resource_id=self.latest_slug.user_id,
             name=name,
-            path=[self.slug],
         )
+
+    def dump_as_namespace_path(self) -> models.NamespacePath:
+        """Create a namespace path."""
+        return models.NamespacePath(self.dump())
 
 
 class EntitySlugORM(BaseORM):
@@ -281,6 +286,12 @@ class EntitySlugORM(BaseORM):
             data_connector_id=data_connector_id,
             namespace_id=namespace_id,
         )
+
+    def dump_as_namespace_path(self) -> models.NamespacePath:
+        """Convert to a namespace path."""
+        if self.project:
+            return self.project.dump_as_namespace_path()
+        return self.namespace.dump_as_namespace_path()
 
 
 class EntitySlugOldORM(BaseORM):

@@ -39,7 +39,6 @@ async def admin_user() -> UserInfo:
             kind=NamespaceKind.user,
             underlying_resource_id="admin",
             created_by="admin",
-            path=["admin.doe"],
         ),
     )
 
@@ -57,7 +56,6 @@ async def regular_user() -> UserInfo:
             kind=NamespaceKind.user,
             underlying_resource_id="user",
             created_by="user",
-            path=["user.doe"],
         ),
     )
 
@@ -75,7 +73,6 @@ async def member_1_user() -> UserInfo:
             kind=NamespaceKind.user,
             underlying_resource_id="member-1",
             created_by="member-1",
-            path=["member-1.doe"],
         ),
     )
 
@@ -93,7 +90,6 @@ async def member_2_user() -> UserInfo:
             kind=NamespaceKind.user,
             underlying_resource_id="member-2",
             created_by="member-2",
-            path=["member-2.doe"],
         ),
     )
 

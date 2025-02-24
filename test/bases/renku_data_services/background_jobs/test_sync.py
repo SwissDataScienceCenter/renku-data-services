@@ -47,8 +47,6 @@ from renku_data_services.namespace.models import Namespace, NamespaceKind
 from renku_data_services.namespace.orm import NamespaceORM
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.models import UnsavedProject
-from renku_data_services.storage.models import UnsavedCloudStorage
-from renku_data_services.storage.orm import CloudStorageORM
 from renku_data_services.users.db import UserRepo, UsersSync
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import KeycloakAdminEvent, UnsavedUserInfo, UserInfo, UserInfoFieldUpdate
@@ -225,7 +223,6 @@ async def test_total_users_sync(
             kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
             created_by="user-1-id",
-            path=["user-1"],
         ),
     )
     user2 = UserInfo(
@@ -239,7 +236,6 @@ async def test_total_users_sync(
             kind=NamespaceKind.user,
             underlying_resource_id="user-2-id",
             created_by="user-2-id",
-            path=["user-2"],
         ),
     )
     assert admin_user.id
@@ -254,7 +250,6 @@ async def test_total_users_sync(
             kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
             created_by=admin_user.id,
-            path=["admin"],
         ),
     )
     user_roles = {admin_user.id: get_kc_roles(["renku-admin"])}
@@ -287,13 +282,13 @@ async def test_total_users_sync(
     )
     assert len(nss) == 1
     assert user1.email
-    assert nss[0].slug == user1.email.split("@")[0]
+    assert nss[0].last.slug == user1.email.split("@")[0]
     nss, _ = await sync_config.syncer.group_repo.get_namespaces(
         user=APIUser(id=user2.id), pagination=PaginationRequest(1, 100)
     )
     assert len(nss) == 1
     assert user2.email
-    assert nss[0].slug == user2.email.split("@")[0]
+    assert nss[0].last.slug == user2.email.split("@")[0]
 
 
 @pytest.mark.asyncio
@@ -310,7 +305,6 @@ async def test_user_events_update(get_app_configs, admin_user: APIUser) -> None:
             created_by="user-1-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["john.doe"],
         ),
     )
     assert admin_user.id
@@ -325,7 +319,6 @@ async def test_user_events_update(get_app_configs, admin_user: APIUser) -> None:
             created_by=admin_user.id,
             kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin-user"],
         ),
     )
     kc_api.users = get_kc_users([user1])
@@ -352,7 +345,6 @@ async def test_user_events_update(get_app_configs, admin_user: APIUser) -> None:
             created_by="user-2-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-2-id",
-            path=["jane.doe"],
         ),
     )
     user1_update = UserInfoFieldUpdate("user-1-id", datetime.utcnow(), "first_name", "Johnathan")
@@ -373,7 +365,7 @@ async def test_user_events_update(get_app_configs, admin_user: APIUser) -> None:
     )
     assert len(nss) == 1
     assert user2.email
-    assert nss[0].slug == user2.email.split("@")[0]
+    assert nss[0].last.slug == user2.email.split("@")[0]
 
 
 @pytest.mark.asyncio
@@ -390,7 +382,6 @@ async def test_admin_events(get_app_configs, admin_user: APIUser) -> None:
             created_by="user-1-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["john.doe"],
         ),
     )
     user2 = UserInfo(
@@ -404,7 +395,6 @@ async def test_admin_events(get_app_configs, admin_user: APIUser) -> None:
             created_by="user-2-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-2-id",
-            path=["jane.doe"],
         ),
     )
     assert admin_user.id
@@ -419,7 +409,6 @@ async def test_admin_events(get_app_configs, admin_user: APIUser) -> None:
             created_by=admin_user.id,
             kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin-user"],
         ),
     )
     kc_api.users = get_kc_users([user1, user2, admin_user_info])
@@ -437,7 +426,7 @@ async def test_admin_events(get_app_configs, admin_user: APIUser) -> None:
     )
     assert len(nss) == 1
     assert user2.email
-    assert nss[0].slug == user2.email.split("@")[0]
+    assert nss[0].last.slug == user2.email.split("@")[0]
     db_users = await user_repo.get_users(admin_user)
     assert set(u.id for u in kc_users) == set(u.id for u in db_users)
     # Add admin events
@@ -470,7 +459,6 @@ async def test_events_update_error(get_app_configs, admin_user: APIUser) -> None
             created_by="user-1-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["john.doe"],
         ),
     )
     user2 = UserInfo(
@@ -484,7 +472,6 @@ async def test_events_update_error(get_app_configs, admin_user: APIUser) -> None
             created_by="user-2-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-2-id",
-            path=["jane.doe"],
         ),
     )
     assert admin_user.id
@@ -499,7 +486,6 @@ async def test_events_update_error(get_app_configs, admin_user: APIUser) -> None
             created_by=admin_user.id,
             kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin-user"],
         ),
     )
     kc_api.users = get_kc_users([user1, user2])
@@ -555,7 +541,6 @@ async def test_removing_non_existent_user(get_app_configs, admin_user: APIUser) 
             created_by="user-1-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["john.doe"],
         ),
     )
     non_existent_user = UserInfo(
@@ -569,7 +554,6 @@ async def test_removing_non_existent_user(get_app_configs, admin_user: APIUser) 
             created_by="noone",
             kind=NamespaceKind.user,
             underlying_resource_id="non-existent-id",
-            path=["not.exist"],
         ),
     )
     assert admin_user.id
@@ -584,7 +568,6 @@ async def test_removing_non_existent_user(get_app_configs, admin_user: APIUser) 
             created_by=admin_user.id,
             kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin-user"],
         ),
     )
     kc_api.users = get_kc_users([user1, admin_user_info])
@@ -624,7 +607,6 @@ async def test_avoiding_namespace_slug_duplicates(
                 created_by=f"user-{i}-id",
                 kind=NamespaceKind.user,
                 underlying_resource_id=f"user-{i}-id",
-                path=["john.doe"],
             ),
         )
         for i in range(1, num_users + 1)
@@ -641,7 +623,6 @@ async def test_avoiding_namespace_slug_duplicates(
             created_by=admin_user.id,
             kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin"],
         ),
     )
     kc_api.users = get_kc_users(users + [admin_user_info])
@@ -657,11 +638,11 @@ async def test_avoiding_namespace_slug_duplicates(
         ns = nss[0]
         assert user.email
         prefix = user.email.split("@")[0]
-        if re.match(rf"^{re.escape(prefix)}-[a-z0-9]{{8}}$", ns.slug):
+        if re.match(rf"^{re.escape(prefix)}-[a-z0-9]{{8}}$", ns.last.slug):
             random_count += 1
-        elif re.match(rf"^{re.escape(prefix)}-[1-5]$", ns.slug):
+        elif re.match(rf"^{re.escape(prefix)}-[1-5]$", ns.last.slug):
             enumerated_count += 1
-        elif ns.slug == prefix:
+        elif ns.last.slug == prefix:
             original_count += 1
     assert original_count == 1
     assert enumerated_count == 5
@@ -682,7 +663,6 @@ async def test_authz_admin_sync(get_app_configs, admin_user: APIUser) -> None:
             created_by="user-1-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["john.doe"],
         ),
     )
     assert admin_user.id
@@ -697,7 +677,6 @@ async def test_authz_admin_sync(get_app_configs, admin_user: APIUser) -> None:
             created_by=admin_user.id,
             kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin-user"],
         ),
     )
     kc_api.users = get_kc_users([user1, admin_user_info])
@@ -753,7 +732,6 @@ async def test_bootstraping_user_namespaces(get_app_configs, admin_user: APIUser
             created_by="user-1-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["john.doe"],
         ),
     )
     user2 = UserInfo(
@@ -767,7 +745,6 @@ async def test_bootstraping_user_namespaces(get_app_configs, admin_user: APIUser
             created_by="user-2-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-2-id",
-            path=["jane.doe"],
         ),
     )
     assert admin_user.id
@@ -810,7 +787,6 @@ async def test_fixing_project_group_namespace_relations(
             created_by=admin_user.id,
             kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin-user"],
         ),
     )
     user1 = UserInfo(
@@ -824,7 +800,6 @@ async def test_fixing_project_group_namespace_relations(
             created_by="user-1-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["john.doe"],
         ),
     )
     user2 = UserInfo(
@@ -838,7 +813,6 @@ async def test_fixing_project_group_namespace_relations(
             created_by="user-2-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-2-id",
-            path=["jane.doe"],
         ),
     )
     user1_api = APIUser(is_admin=False, id=user1.id, access_token="access_token")
@@ -904,7 +878,6 @@ async def test_migrate_groups_make_all_public(
             created_by=admin_user.id,
             kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin-user"],
         ),
     )
     user = UserInfo(
@@ -918,7 +891,6 @@ async def test_migrate_groups_make_all_public(
             created_by="user-1-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["john.doe"],
         ),
     )
     user_api = APIUser(is_admin=False, id=user.id, access_token="access_token")
@@ -968,7 +940,6 @@ async def test_migrate_user_namespaces_make_all_public(
             created_by=admin_user.id,
             kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin-user"],
         ),
     )
     user = UserInfo(
@@ -982,7 +953,6 @@ async def test_migrate_user_namespaces_make_all_public(
             created_by="user-1-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["john.doe"],
         ),
     )
     anon_user_api = APIUser(is_admin=False)

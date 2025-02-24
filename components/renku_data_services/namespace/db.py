@@ -345,7 +345,7 @@ class GroupRepository:
         pagination: PaginationRequest,
         minimum_role: Role | None = None,
         kinds: list[models.NamespaceKind] | None = None,
-    ) -> tuple[list[models.Namespace], int]:
+    ) -> tuple[list[models.NamespacePath], int]:
         """Get all namespaces."""
         scope = Scope.READ
         if minimum_role == Role.VIEWER:
@@ -383,13 +383,13 @@ class GroupRepository:
             ]
 
             results = await paginate_queries(pagination, session, queries)
-            output: list[models.Namespace] = []
+            output: list[models.NamespacePath] = []
             for res in results:
                 match res:
                     case schemas.NamespaceORM():
-                        output.append(res.dump())
+                        output.append(models.NamespacePath(res.dump()))
                     case ProjectORM():
-                        output.append(res.dump_as_namespace())
+                        output.append(res.dump_as_namespace_path())
                     case _:
                         raise errors.ProgrammingError()
             return output, len(group_ids) + len(user_ids) + len(project_ids)

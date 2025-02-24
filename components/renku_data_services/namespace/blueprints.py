@@ -198,13 +198,12 @@ class GroupsBP(CustomBlueprint):
                 apispec.NamespaceResponseList,
                 [
                     dict(
-                        id=ns.id,
-                        name=ns.name,
-                        slug=ns.latest_slug if ns.latest_slug else ns.slug,
-                        created_by=ns.created_by,
-                        creation_date=ns.creation_date,
-                        namespace_kind=apispec.NamespaceKind(ns.kind.value),
-                        path=ns.path,
+                        id=ns.last.id,
+                        name=ns.last.name,
+                        slug=ns.path,
+                        created_by=ns.last.created_by,
+                        creation_date=ns.last.creation_date,
+                        namespace_kind=apispec.NamespaceKind(ns.last.kind.value),
                     )
                     for ns in nss
                 ],
@@ -225,11 +224,10 @@ class GroupsBP(CustomBlueprint):
                 dict(
                     id=ns.id,
                     name=ns.name,
-                    slug=ns.latest_slug if ns.latest_slug else ns.slug,
+                    slug=ns.latest_slug or ns.slug,
                     created_by=ns.created_by,
                     creation_date=None,  # NOTE: we do not save creation date in the DB
                     namespace_kind=apispec.NamespaceKind(ns.kind.value),
-                    path=ns.path,
                 ),
             )
 

@@ -323,7 +323,7 @@ class DataConnectorRepository:
         if patch.visibility is not None and patch.visibility != old_data_connector.visibility:
             # NOTE: changing the visibility requires the user to be owner which means they should have DELETE permission
             required_scope = Scope.DELETE
-        if patch.namespace is not None and patch.namespace != old_data_connector.namespace.slug:
+        if patch.namespace is not None and patch.namespace != old_data_connector.namespace.last.slug:
             # NOTE: changing the namespace requires the user to be owner which means they should have DELETE permission # noqa E501
             required_scope = Scope.DELETE
         if patch.slug is not None and patch.slug != old_data_connector.slug:
@@ -348,7 +348,7 @@ class DataConnectorRepository:
                 else apispec.Visibility(patch.visibility.value)
             )
             data_connector.visibility = visibility_orm
-        if patch.namespace is not None and patch.namespace != old_data_connector.namespace.slug:
+        if patch.namespace is not None and patch.namespace != old_data_connector.namespace.last.slug:
             ns = await session.scalar(
                 select(ns_schemas.NamespaceORM).where(ns_schemas.NamespaceORM.slug == patch.namespace.lower())
             )
