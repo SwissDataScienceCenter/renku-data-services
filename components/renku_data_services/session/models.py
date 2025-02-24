@@ -1,7 +1,7 @@
 """Models for sessions."""
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 from pathlib import PurePosixPath
 
@@ -237,6 +237,8 @@ class ShipwrightBuildRunParams:
     output_image: str
     build_strategy_name: str
     push_secret_name: str
+    retention_after_failed: timedelta | None = None
+    retention_after_succeeded: timedelta | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
