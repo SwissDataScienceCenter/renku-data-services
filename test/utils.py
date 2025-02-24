@@ -17,7 +17,7 @@ from yaml import safe_load
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
-from renku_data_services.app_config.config import Config, SentryConfig, TrustedProxiesConfig
+from renku_data_services.app_config.config import BuildsConfig, Config, SentryConfig, TrustedProxiesConfig
 from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.authz.authz import Authz
 from renku_data_services.authz.config import AuthzConfig
@@ -203,6 +203,7 @@ class TestAppConfig(Config):
         trusted_proxies = TrustedProxiesConfig.from_env(prefix)
         message_queue = RedisQueue(redis)
         nb_config = NotebooksConfig.from_env(db)
+        builds_config = BuildsConfig.from_env(prefix)
 
         return cls(
             version=version,
@@ -225,6 +226,7 @@ class TestAppConfig(Config):
             gitlab_url=gitlab_url,
             authz_config=AuthzConfigStack.from_env(),
             nb_config=nb_config,
+            builds_config=builds_config,
         )
 
     def __post_init__(self) -> None:

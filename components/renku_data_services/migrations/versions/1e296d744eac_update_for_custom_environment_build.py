@@ -1,7 +1,7 @@
 """Update for custom environment build
 
 Revision ID: 1e296d744eac
-Revises: d71f0f795d30
+Revises: 239854e7ea77
 Create Date: 2025-02-03 23:09:31.954635
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "1e296d744eac"
-down_revision = "d71f0f795d30"
+down_revision = "239854e7ea77"
 branch_labels = None
 depends_on = None
 
