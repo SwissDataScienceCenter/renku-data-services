@@ -175,3 +175,84 @@ class SessionLauncherPatch:
     environment: str | EnvironmentPatch | UnsavedEnvironment | UnsavedBuildParameters | None = None
     resource_class_id: int | None | ResetType = None
     disk_storage: int | None | ResetType = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class BuildResult:
+    """Model to represent the result of a build of a container image."""
+
+    image: str
+    completed_at: datetime
+    repository_url: str
+    repository_git_commit_sha: str
+
+
+class BuildStatus(StrEnum):
+    """The status of a build."""
+
+    in_progress = "in_progress"
+    failed = "failed"
+    cancelled = "cancelled"
+    succeeded = "succeeded"
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class Build:
+    """Model to represent the build of a container image."""
+
+    id: ULID
+    environment_id: ULID
+    created_at: datetime
+    status: BuildStatus
+    result: BuildResult | None = None
+
+    @property
+    def k8s_name(self) -> str:
+        """Returns the name of the corresponding Shipwright BuildRun."""
+        name = f"renku-{self.id}"
+        return name.lower()
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedBuild:
+    """Model to represent a requested container image build."""
+
+    environment_id: ULID
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class BuildPatch:
+    """Model to represent the requested update to a container image build."""
+
+    status: BuildStatus | None = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ShipwrightBuildRunParams:
+    """Model to represent the parameters used to create a new Shipwright BuildRun."""
+
+    name: str
+    git_repository: str
+    run_image: str
+    output_image: str
+    build_strategy_name: str
+    push_secret_name: str
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ShipwrightBuildStatusUpdateContent:
+    """Model to represent an update about a build from Shipwright."""
+
+    status: BuildStatus
+    result: BuildResult | None = None
+    completed_at: datetime | None = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ShipwrightBuildStatusUpdate:
+    """Model to represent an update about a build from Shipwright."""
+
+    update: ShipwrightBuildStatusUpdateContent | None
+    """The update about a build.
+
+    None represents "no update"."""
