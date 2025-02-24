@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
+from sanic.log import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
@@ -774,6 +775,8 @@ class SessionRepository:
         if self.shipwright_client is not None:
             params = self._get_buildrun_params(build=result, build_parameters=build_parameters)
             await self.shipwright_client.create_image_build(params=params)
+        else:
+            logger.error("Shipwright client is None")
 
         return result
 
@@ -816,6 +819,8 @@ class SessionRepository:
 
         if self.shipwright_client is not None:
             await self.shipwright_client.cancel_image_build(buildrun_name=build_model.k8s_name)
+        else:
+            logger.error("Shipwright client is None")
 
         return build_model
 
@@ -826,8 +831,10 @@ class SessionRepository:
 
         # Note: We can't get an update about the build if there is no client for ShipWright.
         if self.shipwright_client is None:
+            logger.error("Shipwright client is None")
             return
 
+        # TODO: consider how we can parallelize calls to `shipwright_client` for refreshes.
         status_update = await self.shipwright_client.update_image_build_status(buildrun_name=build.dump().k8s_name)
 
         if status_update.update is None:
