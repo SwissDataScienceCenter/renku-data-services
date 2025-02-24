@@ -18,7 +18,7 @@ from renku_data_services.session.crs import BuildRun
 
 # NOTE The type ignore below is because the kr8s library has no type stubs, they claim pyright better handles type hints
 class ShipwrightBuildRunV1Beta1Kr8s(APIObject):
-    """Spec for ShipWright BuildRuns used by the k8s client."""
+    """Spec for Shipwright BuildRuns used by the k8s client."""
 
     kind: str = "BuildRun"
     version: str = "shipwright.io/v1beta1"
@@ -30,7 +30,7 @@ class ShipwrightBuildRunV1Beta1Kr8s(APIObject):
 
 
 class _ShipwrightClientBase:
-    """Client for managing ShipWright resources in kubernetes.
+    """Client for managing Shipwright resources in kubernetes.
 
     NOTE: This does not apply any authentication or authorization on the requests.
     """
@@ -40,7 +40,7 @@ class _ShipwrightClientBase:
         self.sanitize = ApiClient().sanitize_for_serialization
 
     async def create_build_run(self, manifest: BuildRun) -> BuildRun:
-        """Create a new ShipWright BuildRun."""
+        """Create a new Shipwright BuildRun."""
         manifest.metadata.namespace = self.namespace
         build_run = await ShipwrightBuildRunV1Beta1Kr8s(manifest.model_dump(exclude_none=True, mode="json"))
         build_run_name = manifest.metadata.name
@@ -58,7 +58,7 @@ class _ShipwrightClientBase:
         return build_resource
 
     async def get_build_run(self, name: str) -> BuildRun | None:
-        """Get a ShipWright BuildRun."""
+        """Get a Shipwright BuildRun."""
         try:
             build = await ShipwrightBuildRunV1Beta1Kr8s.get(name=name, namespace=self.namespace)
         except NotFoundError:
@@ -71,7 +71,7 @@ class _ShipwrightClientBase:
         return BuildRun.model_validate(build.to_dict())
 
     async def list_build_runs(self, label_selector: str | None = None) -> list[BuildRun]:
-        """Get a list of ShipWright BuildRuns."""
+        """Get a list of Shipwright BuildRuns."""
         try:
             builds = await ShipwrightBuildRunV1Beta1Kr8s.list(namespace=self.namespace, label_selector=label_selector)
         except ServerError as e:
@@ -83,7 +83,7 @@ class _ShipwrightClientBase:
         return output
 
     async def delete_build_run(self, name: str) -> None:
-        """Delete a ShipWright BuildRun."""
+        """Delete a Shipwright BuildRun."""
         build = await ShipwrightBuildRunV1Beta1Kr8s(dict(metadata=dict(name=name, namespace=self.namespace)))
         try:
             await build.delete(propagation_policy="Foreground")
@@ -93,14 +93,14 @@ class _ShipwrightClientBase:
 
 
 class _ShipwrightCache:
-    """Utility class for calling the ShipWright k8s cache."""
+    """Utility class for calling the Shipwright k8s cache."""
 
     def __init__(self, url: str):
         self.url = url
         self.client = httpx.AsyncClient(timeout=10)
 
     async def list_build_runs(self) -> list[BuildRun]:
-        """Get a list of ShipWright BuildRuns."""
+        """Get a list of Shipwright BuildRuns."""
         url = urljoin(self.url, "/buildruns")
         try:
             res = await self.client.get(url, timeout=10)
@@ -118,7 +118,7 @@ class _ShipwrightCache:
         return [BuildRun.model_validate(server) for server in res.json()]
 
     async def get_build_run(self, name: str) -> BuildRun | None:
-        """Get a ShipWright BuildRun."""
+        """Get a Shipwright BuildRun."""
         url = urljoin(self.url, f"/buildruns/{name}")
         try:
             res = await self.client.get(url, timeout=10)
@@ -161,7 +161,7 @@ class ShipwrightClient:
         self.skip_cache_if_unavailable = skip_cache_if_unavailable
 
     async def list_build_runs(self) -> list[BuildRun]:
-        """Get a list of ShipWright BuildRuns."""
+        """Get a list of Shipwright BuildRuns."""
         if self.cache is None:
             return await self.base_client.list_build_runs()
 
@@ -175,7 +175,7 @@ class ShipwrightClient:
                 raise
 
     async def get_build_run(self, name: str) -> BuildRun | None:
-        """Get a ShipWright BuildRun."""
+        """Get a Shipwright BuildRun."""
         if self.cache is None:
             return await self.base_client.get_build_run(name)
 
@@ -188,15 +188,15 @@ class ShipwrightClient:
                 raise
 
     async def create_build_run(self, manifest: BuildRun) -> BuildRun:
-        """Create a new ShipWright BuildRun."""
+        """Create a new Shipwright BuildRun."""
         return await self.base_client.create_build_run(manifest)
 
     async def delete_build_run(self, name: str) -> None:
-        """Delete a ShipWright BuildRun."""
+        """Delete a Shipwright BuildRun."""
         return await self.base_client.delete_build_run(name)
 
-    async def create_image_build(self, params: models.ShipWrightBuildRunParams) -> None:
-        """Create a new BuildRun in ShipWright to support a newly created build."""
+    async def create_image_build(self, params: models.ShipwrightBuildRunParams) -> None:
+        """Create a new BuildRun in Shipwright to support a newly created build."""
         build_run = BuildRun(
             metadata=crs.Metadata(name=params.name),
             spec=crs.BuildRunSpec(
@@ -215,20 +215,20 @@ class ShipwrightClient:
         )
         await self.create_build_run(build_run)
 
-    async def update_image_build_status(self, buildrun_name: str) -> models.ShipWrightBuildStatusUpdate:
-        """Update the status of a build by pulling the corresponding BuildRun from ShipWright."""
+    async def update_image_build_status(self, buildrun_name: str) -> models.ShipwrightBuildStatusUpdate:
+        """Update the status of a build by pulling the corresponding BuildRun from Shipwright."""
         k8s_build = await self.get_build_run(name=buildrun_name)
 
         if k8s_build is None:
-            return models.ShipWrightBuildStatusUpdate(
-                update=models.ShipWrightBuildStatusUpdateContent(status=models.BuildStatus.failed)
+            return models.ShipwrightBuildStatusUpdate(
+                update=models.ShipwrightBuildStatusUpdateContent(status=models.BuildStatus.failed)
             )
 
         k8s_build_status = k8s_build.status
         completion_time = k8s_build_status.completionTime if k8s_build_status else None
 
         if k8s_build_status is None or completion_time is None:
-            return models.ShipWrightBuildStatusUpdate(update=None)
+            return models.ShipwrightBuildStatusUpdate(update=None)
 
         conditions = k8s_build_status.conditions
         condition = next(filter(lambda c: c.type == "Succeeded", conditions or []), None)
@@ -247,8 +247,8 @@ class ShipwrightClient:
         result_repository_git_commit_sha = result_repository_git_commit_sha or "unknown"
 
         if condition is not None and condition.status == "True":
-            return models.ShipWrightBuildStatusUpdate(
-                update=models.ShipWrightBuildStatusUpdateContent(
+            return models.ShipwrightBuildStatusUpdate(
+                update=models.ShipwrightBuildStatusUpdateContent(
                     status=models.BuildStatus.succeeded,
                     completed_at=completion_time,
                     result=models.BuildResult(
@@ -260,14 +260,14 @@ class ShipwrightClient:
                 )
             )
         else:
-            return models.ShipWrightBuildStatusUpdate(
-                update=models.ShipWrightBuildStatusUpdateContent(
+            return models.ShipwrightBuildStatusUpdate(
+                update=models.ShipwrightBuildStatusUpdateContent(
                     status=models.BuildStatus.failed,
                     completed_at=completion_time,
                 )
             )
 
     async def cancel_image_build(self, buildrun_name: str) -> None:
-        """Cancel a build by deleting the corresponding BuildRun from ShipWright."""
+        """Cancel a build by deleting the corresponding BuildRun from Shipwright."""
         # TODO: use proper cancellation, see: https://shipwright.io/docs/build/buildrun/#canceling-a-buildrun
         await self.delete_build_run(name=buildrun_name)

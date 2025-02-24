@@ -208,7 +208,7 @@ class Build:
 
     @property
     def k8s_name(self) -> str:
-        """Returns the name of the corresponding ShipWright BuildRun."""
+        """Returns the name of the corresponding Shipwright BuildRun."""
         name = f"renku-{self.id}"
         return name.lower()
 
@@ -228,8 +228,8 @@ class BuildPatch:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class ShipWrightBuildRunParams:
-    """Model to represent the parameters used to create a new ShipWright BuildRun."""
+class ShipwrightBuildRunParams:
+    """Model to represent the parameters used to create a new Shipwright BuildRun."""
 
     name: str
     git_repository: str
@@ -240,8 +240,8 @@ class ShipWrightBuildRunParams:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class ShipWrightBuildStatusUpdateContent:
-    """Model to represent an update about a build from ShipWright."""
+class ShipwrightBuildStatusUpdateContent:
+    """Model to represent an update about a build from Shipwright."""
 
     status: BuildStatus
     result: BuildResult | None = None
@@ -249,10 +249,10 @@ class ShipWrightBuildStatusUpdateContent:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class ShipWrightBuildStatusUpdate:
-    """Model to represent an update about a build from ShipWright."""
+class ShipwrightBuildStatusUpdate:
+    """Model to represent an update about a build from Shipwright."""
 
-    update: ShipWrightBuildStatusUpdateContent | None
+    update: ShipwrightBuildStatusUpdateContent | None
     """The update about a build.
 
     None represents "no update"."""

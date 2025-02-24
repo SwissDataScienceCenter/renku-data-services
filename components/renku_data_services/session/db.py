@@ -825,11 +825,11 @@ class SessionRepository:
         return build_model
 
     async def _refresh_build(self, build: schemas.BuildORM, session: AsyncSession) -> None:
-        """Refresh the status of a build by querying ShipWright."""
+        """Refresh the status of a build by querying Shipwright."""
         if build.status != models.BuildStatus.in_progress:
             return
 
-        # Note: We can't get an update about the build if there is no client for ShipWright.
+        # Note: We can't get an update about the build if there is no client for Shipwright.
         if self.shipwright_client is None:
             logger.error("Shipwright client is None")
             return
@@ -868,8 +868,8 @@ class SessionRepository:
 
     def _get_buildrun_params(
         self, build: models.Build, build_parameters: models.BuildParameters
-    ) -> models.ShipWrightBuildRunParams:
-        """Derive the ShipWright BuildRun params from a Build instance and a BuildParameters instance."""
+    ) -> models.ShipwrightBuildRunParams:
+        """Derive the Shipwright BuildRun params from a Build instance and a BuildParameters instance."""
         git_repository = build_parameters.repository
 
         # TODO: define the run image from `build_parameters`
@@ -886,7 +886,7 @@ class SessionRepository:
         build_strategy_name = self.builds_config.build_strategy_name or constants.BUILD_DEFAULT_BUILD_STRATEGY_NAME
         push_secret_name = self.builds_config.push_secret_name or constants.BUILD_DEFAULT_PUSH_SECRET_NAME
 
-        return models.ShipWrightBuildRunParams(
+        return models.ShipwrightBuildRunParams(
             name=build.k8s_name,
             git_repository=git_repository,
             run_image=run_image,

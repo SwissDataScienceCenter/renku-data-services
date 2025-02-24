@@ -30,7 +30,7 @@ class Metadata(BaseModel):
 
 
 class BuildRun(_BuildRun):
-    """ShipWright BuildRun."""
+    """Shipwright BuildRun."""
 
     kind: str = "BuildRun"
     apiVersion: str = "shipwright.io/v1beta1"
