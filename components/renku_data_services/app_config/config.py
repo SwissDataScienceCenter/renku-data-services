@@ -65,6 +65,7 @@ from renku_data_services.project.db import ProjectMemberRepository, ProjectRepos
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsRepo
 from renku_data_services.session.db import SessionRepository
+from renku_data_services.session.k8s_client import ShipwrightClient
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.config import UserPreferencesConfig
 from renku_data_services.users.db import UserPreferencesRepository
@@ -136,6 +137,46 @@ class TrustedProxiesConfig:
 
 
 @dataclass
+class BuildsConfig:
+    """Configuration for container image builds."""
+
+    shipwright_client: ShipwrightClient | None
+
+    enabled: bool = False
+    build_output_image_prefix: str | None = None
+    vscodium_python_run_image: str | None = None
+    build_strategy_name: str | None = None
+    push_secret_name: str | None = None
+
+    @classmethod
+    def from_env(cls, prefix: str = "", namespace: str = "") -> "BuildsConfig":
+        """Create a config from environment variables."""
+        enabled = os.environ.get(f"{prefix}IMAGE_BUILDERS_ENABLED", "false").lower() == "true"
+        build_output_image_prefix = os.environ.get(f"{prefix}BUILD_OUTPUT_IMAGE_PREFIX")
+        vscodium_python_run_image = os.environ.get(f"{prefix}BUILD_VSCODIUM_PYTHON_RUN_IMAGE")
+        build_strategy_name = os.environ.get(f"{prefix}BUILD_STRATEGY_NAME")
+        push_secret_name = os.environ.get(f"{prefix}BUILD_PUSH_SECRET_NAME")
+
+        if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
+            shipwright_client = None
+        else:
+            shipwright_client = ShipwrightClient(
+                namespace=namespace,
+                # TODO: Use the k8s cache
+                cache_url=None,
+            )
+
+        return cls(
+            enabled=enabled or False,
+            build_output_image_prefix=build_output_image_prefix or None,
+            vscodium_python_run_image=vscodium_python_run_image or None,
+            build_strategy_name=build_strategy_name or None,
+            push_secret_name=push_secret_name or None,
+            shipwright_client=shipwright_client,
+        )
+
+
+@dataclass
 class Config:
     """Configuration for the Data service."""
 
@@ -153,6 +194,7 @@ class Config:
     message_queue: IMessageQueue
     gitlab_url: str | None
     nb_config: NotebooksConfig
+    builds_config: BuildsConfig
 
     secrets_service_public_key: rsa.RSAPublicKey
     """The public key of the secrets service, used to encrypt user secrets that only it can decrypt."""
@@ -339,7 +381,11 @@ class Config:
         """The DB adapter for sessions."""
         if not self._session_repo:
             self._session_repo = SessionRepository(
-                session_maker=self.db.async_session_maker, project_authz=self.authz, resource_pools=self.rp_repo
+                session_maker=self.db.async_session_maker,
+                project_authz=self.authz,
+                resource_pools=self.rp_repo,
+                shipwright_client=self.builds_config.shipwright_client,
+                builds_config=self.builds_config,
             )
         return self._session_repo
 
@@ -539,6 +585,7 @@ class Config:
         trusted_proxies = TrustedProxiesConfig.from_env(prefix)
         message_queue = RedisQueue(redis)
         nb_config = NotebooksConfig.from_env(db)
+        builds_config = BuildsConfig.from_env(prefix, k8s_namespace)
 
         return cls(
             version=version,
@@ -560,4 +607,5 @@ class Config:
             secrets_service_public_key=secrets_service_public_key,
             gitlab_url=gitlab_url,
             nb_config=nb_config,
+            builds_config=builds_config,
         )
