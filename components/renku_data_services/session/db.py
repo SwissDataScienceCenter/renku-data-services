@@ -969,6 +969,14 @@ class SessionRepository:
         build_strategy_name = self.builds_config.build_strategy_name or constants.BUILD_DEFAULT_BUILD_STRATEGY_NAME
         push_secret_name = self.builds_config.push_secret_name or constants.BUILD_DEFAULT_PUSH_SECRET_NAME
 
+        retention_after_failed = (
+            self.builds_config.buildrun_retention_after_failed or constants.BUILD_RUN_DEFAULT_RETENTION_AFTER_FAILED
+        )
+        retention_after_succeeded = (
+            self.builds_config.buildrun_retention_after_succeeded
+            or constants.BUILD_RUN_DEFAULT_RETENTION_AFTER_SUCCEEDED
+        )
+
         return models.ShipwrightBuildRunParams(
             name=build.k8s_name,
             git_repository=git_repository,
@@ -976,6 +984,8 @@ class SessionRepository:
             output_image=output_image,
             build_strategy_name=build_strategy_name,
             push_secret_name=push_secret_name,
+            retention_after_failed=retention_after_failed,
+            retention_after_succeeded=retention_after_succeeded,
         )
 
     async def _get_environment_authorization(
