@@ -151,20 +151,17 @@ class ShipwrightClient:
     def __init__(
         self,
         namespace: str,
-        cache_url: str | None,
+        cache_url: str,
         # NOTE: If cache skipping is enabled then when the cache fails a large number of
         # buildruns can overload the k8s API by submitting a lot of calls directly.
         skip_cache_if_unavailable: bool = False,
     ) -> None:
-        self.cache = _ShipwrightCache(url=cache_url) if cache_url else None
+        self.cache = _ShipwrightCache(url=cache_url)
         self.base_client = _ShipwrightClientBase(namespace=namespace)
         self.skip_cache_if_unavailable = skip_cache_if_unavailable
 
     async def list_build_runs(self) -> list[BuildRun]:
         """Get a list of Shipwright BuildRuns."""
-        if self.cache is None:
-            return await self.base_client.list_build_runs()
-
         try:
             return await self.cache.list_build_runs()
         except CacheError:
@@ -176,9 +173,6 @@ class ShipwrightClient:
 
     async def get_build_run(self, name: str) -> BuildRun | None:
         """Get a Shipwright BuildRun."""
-        if self.cache is None:
-            return await self.base_client.get_build_run(name)
-
         try:
             return await self.cache.get_build_run(name)
         except CacheError:
