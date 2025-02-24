@@ -140,6 +140,7 @@ class NotebooksConfig:
             username_label="renku.io/userId",
             # NOTE: if testing then we should skip the cache if unavailable because we dont deploy the cache in tests
             skip_cache_if_unavailable=dummy_stores,
+            rp_repo=rp_repo,
         )
         k8s_v2_client = K8sClient(
             server_type=AmaltheaSessionV1Alpha1,
@@ -149,6 +150,7 @@ class NotebooksConfig:
             username_label="renku.io/safe-username",
             # NOTE: if testing then we should skip the cache if unavailable because we dont deploy the cache in tests
             skip_cache_if_unavailable=dummy_stores,
+            rp_repo=rp_repo,
         )
         return cls(
             server_options=server_options,

@@ -138,7 +138,7 @@ def image_pull_secret(server: "UserServer", access_token: str | None) -> list[di
                             "kind": "Secret",
                             "metadata": {
                                 "name": image_pull_secret_name,
-                                "namespace": server.preferred_namespace,
+                                "namespace": server.namespace,
                             },
                             "type": "kubernetes.io/dockerconfigjson",
                         },

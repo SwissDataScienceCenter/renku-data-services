@@ -93,7 +93,6 @@ class ResourceClass(ResourcesCompareMixin):
     node_affinities: list[NodeAffinity] = field(default_factory=list)
     tolerations: list[str] = field(default_factory=list)
     quota: str | None = None
-    k8s_config_name: Optional[str] = None
 
     def __post_init__(self) -> None:
         if len(self.name) > 40:

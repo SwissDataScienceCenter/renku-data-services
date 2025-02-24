@@ -94,9 +94,9 @@ class UserServer(ABC):
         self._has_configured_git_providers = False
 
     @property
-    def preferred_namespace(self) -> str:
+    def namespace(self) -> str:
         """Get the preferred namespace for a server."""
-        return self._k8s_client.preferred_namespace
+        return self._k8s_client.namespace
 
     @property
     def user(self) -> AnonymousAPIUser | AuthenticatedAPIUser:
@@ -441,7 +441,7 @@ class Renku1UserServer(UserServer):
             internal_gitlab_user=internal_gitlab_user,
         )
 
-        self.namespace = namespace
+        # self.namespace = namespace # We retrieve it directly from the k8s client, but is this correct?
         self.project = project
         self.branch = branch
         self.commit_sha = commit_sha

@@ -17,6 +17,7 @@ from kr8s import NotFoundError, ServerError
 from kr8s.asyncio.objects import APIObject, Pod, Secret, StatefulSet
 from kubernetes.client import V1Secret
 
+from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.crc.models import ResourcePool
 from renku_data_services.errors import errors
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
@@ -70,7 +71,6 @@ _Kr8sType = TypeVar("_Kr8sType", JupyterServerV1Alpha1Kr8s, AmaltheaSessionV1Alp
 # WARNING:
 #   As of mypy 1.14.1, it does not support instantiating an object using a field containing a type using the new syntax,
 #    which is why we have a mix of new and old syntax for the generics.
-# TODO: LSA Validate kubeconfig to contain only ONE cluster definition
 
 
 class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
@@ -89,12 +89,15 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
             raise errors.ProgrammingError(message="Incompatible manifest and client types in k8s client")
 
         self.sanitize = kubernetes.client.ApiClient().sanitize_for_serialization
-        self.namespace = api.namespace
         self._username_label = username_label
+
+    @property
+    def namespace(self) -> str:
+        return self._api.namespace
 
     async def get_pod_logs(self, name: str, max_log_lines: int | None = None) -> dict[str, str]:
         """Get the logs of all containers in the session."""
-        pod = await Pod.get(api=self._api, namespace=self.namespace, name=name)
+        pod = await Pod.get(api=self._api, name=name)
         logs: dict[str, str] = {}
         containers = [container.name for container in pod.spec.containers + pod.spec.get("initContainers", [])]
         for container in containers:
@@ -117,7 +120,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
     async def get_secret(self, name: str) -> Secret | None:
         """Read a specific secret from the cluster."""
         try:
-            secret = await Secret.get(api=self._api, namespace=self.namespace, name=name)
+            secret = await Secret.get(api=self._api, name=name)
         except NotFoundError:
             return None
         return secret
@@ -202,7 +205,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
     async def get_server(self, name: str, num_retries: int = 0) -> _SessionType | None:
         """Get a specific JupyterServer object."""
         try:
-            server = await self._kr8s_type.get(api=self._api, namespace=self.namespace, name=name)
+            server = await self._kr8s_type.get(api=self._api, name=name)
         except NotFoundError:
             return None
         except ServerError as err:
@@ -231,9 +234,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
             # We cannot use kr8s.APIObject.list as it ignores the api object argument and instead instantiate a default
             # one, so let's do this by hand (Mostly a copy-pasta of the aforementioned function, adapted to use the
             # correct api object).
-            resources = await self._api.async_get(
-                kind=APIObject, api=self._api, namespace=self.namespace, label_selector=label_selector
-            )
+            resources = await self._api.async_get(kind=APIObject, api=self._api, label_selector=label_selector)
             if not isinstance(resources, list):
                 resources = [resources]
             servers = [resource for resource in resources if isinstance(resource, APIObject)]
@@ -374,7 +375,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
         if self._server_type != JupyterServerV1Alpha1 or self._kr8s_type != JupyterServerV1Alpha1Kr8s:
             raise NotImplementedError("patch_statefulset_tokens is only implemented for JupyterServers")
         try:
-            sts = await StatefulSet.get(api=self._api, namespace=self.namespace, name=name)
+            sts = await StatefulSet.get(api=self._api, name=name)
         except NotFoundError:
             return None
 
@@ -610,7 +611,7 @@ class _SingleK8sClient(Generic[_SessionType, _Kr8sType]):
         await self._k8s_client.patch_image_pull_secret(server_name, gitlab_token)
 
     @property
-    def preferred_namespace(self) -> str:
+    def namespace(self) -> str:
         """Get the preferred namespace for creating jupyter servers."""
         return self._k8s_client.namespace
 
@@ -633,10 +634,11 @@ class _MultipleK8sClient(Generic[_SessionType, _Kr8sType]):
         kr8s_type: type[_Kr8sType],
         cache_url: str,
         username_label: str,
+        rp_repo: ResourcePoolRepository,
         skip_cache_if_unavailable: bool = False,
-        resource_pools: list[ResourcePool] = [],
     ):
         self._kube_conf_root_dir = "/secrets/kube_configs"
+        self._rp_repo = rp_repo
 
         kube_conf_names = [f.name for f in os.scandir(self.kube_conf_root_dir)]
         self._clients: dict[str, _SingleK8sClient[_SessionType, _Kr8sType]] = dict(
@@ -646,7 +648,7 @@ class _MultipleK8sClient(Generic[_SessionType, _Kr8sType]):
                     _SingleK8sClient(
                         server_type,
                         kr8s_type,
-                        kr8s.api(kubeconfig=f"{self.kube_conf_root_dir}/{name}.yaml"),
+                        kr8s.api(kubeconfig=f"{self.kube_conf_root_dir}/{name}"),
                         cache_url,
                         username_label,
                         skip_cache_if_unavailable,
@@ -661,9 +663,8 @@ class _MultipleK8sClient(Generic[_SessionType, _Kr8sType]):
             server_type, kr8s_type, kr8s.api(), cache_url, username_label, skip_cache_if_unavailable
         )
 
-        # maps pool_id to k8s client
-        self._pool2client: dict[str, _SingleK8sClient[_SessionType, _Kr8sType]] = {}
-        self.update_resource_pools(resource_pools)
+        # maps resource classes ids to k8s client
+        self._class_id2client: dict[int, tuple[str, _SingleK8sClient[_SessionType, _Kr8sType]]] = {}
 
         # maps session/server name to k8s client
         self._session2client: dict[str, _SingleK8sClient[_SessionType, _Kr8sType]] = {}
@@ -676,37 +677,72 @@ class _MultipleK8sClient(Generic[_SessionType, _Kr8sType]):
     def kube_conf_root_dir(self) -> str:
         return self._kube_conf_root_dir
 
-    def client_by_pool(self, pool_name: str) -> _SingleK8sClient[_SessionType, _Kr8sType] | None:
-        return self._pool2client.get(pool_name)
+    @property
+    def namespace(self) -> str:
+        # TODO: LSA Does not break current code, but bad, as it may be different based on the cluster
+        return self._clients[DEFAULT_K8S_CLUSTER].namespace
 
-    def update_resource_pools(self, resource_pools: list[ResourcePool]) -> None:
+    async def client_by_class_id(self, class_id: str) -> _SingleK8sClient[_SessionType, _Kr8sType] | None:
+        # **NOTE**: This assumes class_ids are unique over all the clusters.
+        try:
+            _id = int(class_id)
+        except ValueError:
+            return None
+
+        await self.update_resource_mappings()
+        _, client = self._class_id2client.get(_id, (DEFAULT_K8S_CLUSTER, None))
+        return client
+
+    async def cluster_name_by_class_id(self, class_id: int | None) -> str:
+        cluster_name = DEFAULT_K8S_CLUSTER
+        if class_id is not None:
+            await self.update_resource_mappings()
+            cluster_name, _ = self._class_id2client.get(class_id, (DEFAULT_K8S_CLUSTER, None))
+
+        return cluster_name
+
+    async def update_resource_mappings(self) -> None:
         """Update the mapping used to lookup cluster connection by resource pool."""
+
+        resource_pools: list[
+            ResourcePool
+        ] = []  # await self._rp_repo.get_resource_pools() # FIXME: LSA: I need somehow a APIUser here?!?!
 
         # Ensure we always have at least the default cluster
         cluster_map = {DEFAULT_K8S_CLUSTER: self._clients[DEFAULT_K8S_CLUSTER]}
+        classes_map = {}
 
+        # We usually have the resource class id, and from that we need to map it to the cluster client which is
+        # referenced by the resource pool the class belongs to.
+        # As the resource classes do not have a backlink to their parent resource pools, we need to build ourselves the
+        # mapping:
         for pool in resource_pools:
             cluster_name = DEFAULT_K8S_CLUSTER
             if pool.cluster is not None:
                 cluster_name = pool.cluster.config_name
+
             # If there is no cluster connection configured, fall back to the default one
             cluster_map[pool.name] = self._clients.get(cluster_name, self._clients[DEFAULT_K8S_CLUSTER])
 
-        self._pool2client = cluster_map
+            for c in pool.classes:
+                if c.id is not None:
+                    classes_map[c.id] = (pool.name, cluster_map[pool.name])
+
+        self._class_id2client = classes_map
 
     async def list_sessions(self, safe_username: str) -> list[_SessionType]:
         # Don't blame me, blame python's list comprehension syntax
         return [s for c in self._clients.values() for s in await c.list_sessions(safe_username)]
 
     async def create_session(self, manifest: _SessionType, safe_username: str) -> _SessionType:
-        pool_id = manifest.metadata.annotations["renku.io/resource_class_id"]
+        class_id = manifest.metadata.annotations["renku.io/resource_class_id"]
         server_name = manifest.metadata.name
 
-        client = self.client_by_pool(pool_id)
+        client = await self.client_by_class_id(class_id)
         if client is None:
             raise CannotStartServerError(
                 message=f"Cannot start the session {server_name}, "
-                f"kubernetes connection not found for resource pool {pool_id}"
+                f"kubernetes connection not found for resource class {class_id}"
             )
 
         session = await client.create_session(manifest, safe_username)
@@ -756,11 +792,6 @@ class _MultipleK8sClient(Generic[_SessionType, _Kr8sType]):
         client = self._client_by_session(server_name)
         if client is not None:
             await client.patch_session_tokens(server_name, renku_tokens, gitlab_token)
-
-    @property
-    def preferred_namespace(self) -> str:
-        # TODO: LSA Does not break current code, but bad, as it may be different based on the cluster
-        return self._clients[DEFAULT_K8S_CLUSTER].preferred_namespace
 
     async def patch_statefulset(
         self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]]

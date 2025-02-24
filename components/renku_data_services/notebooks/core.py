@@ -20,7 +20,6 @@ from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
 from renku_data_services.notebooks.api.classes.image import Image
-from renku_data_services.notebooks.api.classes.k8s_client import DEFAULT_K8S_CLUSTER
 from renku_data_services.notebooks.api.classes.repository import Repository
 from renku_data_services.notebooks.api.classes.server import Renku1UserServer, UserServer
 from renku_data_services.notebooks.api.classes.server_manifest import UserServerManifest
@@ -554,7 +553,7 @@ async def launch_notebook_helper(
     if k8s_user_secret is not None:
         request_data: dict[str, Any] = {
             "name": k8s_user_secret.name,
-            "namespace": server.preferred_namespace,
+            "namespace": server.namespace,
             "secret_ids": [str(id_) for id_ in k8s_user_secret.user_secret_ids],
             "owner_references": [owner_reference],
         }
@@ -568,7 +567,7 @@ async def launch_notebook_helper(
                 base_name = f"{server_name}-ds-{icloud_storage}"
             request_data = {
                 "name": f"{base_name}-secrets",
-                "namespace": server.preferred_namespace,
+                "namespace": server.namespace,
                 "secret_ids": list(cloud_storage.secrets.keys()),
                 "owner_references": [owner_reference],
                 "key_mapping": cloud_storage.secrets,
@@ -587,7 +586,9 @@ async def launch_notebook(
     storage_repo: StorageRepository,
 ) -> tuple[UserServerManifest, int]:
     """Starts a server using the old operator."""
-    cluster_name = DEFAULT_K8S_CLUSTER  # TODO: LSA: RETRIEVE FROM REQUEST SOMEHOW
+
+    cluster_name = await config.k8s_client.cluster_name_by_class_id(launch_request.resource_class_id)
+
     if isinstance(user, AnonymousAPIUser):
         safe_username = escapism.escape(user.id, escape_char="-").lower()
     else:
