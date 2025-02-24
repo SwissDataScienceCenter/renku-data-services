@@ -12,7 +12,6 @@ from renku_data_services.background_jobs.core import (
     fix_mismatched_project_namespace_ids,
     generate_user_namespaces,
     migrate_groups_make_all_public,
-    migrate_storages_v2_to_data_connectors,
     migrate_user_namespaces_make_all_public,
 )
 from renku_data_services.background_jobs.utils import error_handler
@@ -35,7 +34,6 @@ async def short_period_sync() -> None:
             fix_mismatched_project_namespace_ids(config),
             migrate_groups_make_all_public(config),
             migrate_user_namespaces_make_all_public(config),
-            migrate_storages_v2_to_data_connectors(config),
         ]
     )
 
