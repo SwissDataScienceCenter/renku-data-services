@@ -4,16 +4,17 @@ from urllib.parse import urljoin
 
 import httpx
 from kr8s import NotFoundError, ServerError
-from kr8s.asyncio.objects import APIObject
+from kr8s.asyncio.objects import APIObject, Pod
 from kubernetes.client import ApiClient
 from sanic.log import logger
 
+from renku_data_services import errors
 from renku_data_services.errors.errors import CannotStartBuildError
 from renku_data_services.notebooks.errors.intermittent import CacheError, IntermittentError
 from renku_data_services.notebooks.errors.programming import ProgrammingError
 from renku_data_services.notebooks.util.retries import retry_with_exponential_backoff_async
 from renku_data_services.session import crs, models
-from renku_data_services.session.crs import BuildRun
+from renku_data_services.session.crs import BuildRun, TaskRun
 
 
 # NOTE The type ignore below is because the kr8s library has no type stubs, they claim pyright better handles type hints
@@ -27,6 +28,19 @@ class ShipwrightBuildRunV1Beta1Kr8s(APIObject):
     singular: str = "buildrun"
     scalable: bool = False
     endpoint: str = "buildruns"
+
+
+# NOTE The type ignore below is because the kr8s library has no type stubs, they claim pyright better handles type hints
+class TektonTaskRunV1Kr8s(APIObject):
+    """Spec for Tekton TaskRuns used by the k8s client."""
+
+    kind: str = "TaskRun"
+    version: str = "tekton.dev/v1"
+    namespaced: bool = True
+    plural: str = "taskruns"
+    singular: str = "taskrun"
+    scalable: bool = False
+    endpoint: str = "taskruns"
 
 
 class _ShipwrightClientBase:
@@ -91,6 +105,41 @@ class _ShipwrightClientBase:
             logger.exception(f"Cannot delete build {name} because of {e}")
         return None
 
+    async def get_task_run(self, name: str) -> TaskRun | None:
+        """Get a Tekton TaskRun."""
+        try:
+            task = await TektonTaskRunV1Kr8s.get(name=name, namespace=self.namespace)
+        except NotFoundError:
+            return None
+        except ServerError as e:
+            if not e.response or e.response.status_code not in [400, 404]:
+                logger.exception(f"Cannot get the build {name} because of {e}")
+                raise IntermittentError(f"Cannot get build {name} from the k8s API.")
+            return None
+        return TaskRun.model_validate(task.to_dict())
+
+    async def get_pod_logs(self, name: str, max_log_lines: int | None = None) -> dict[str, str]:
+        """Get the logs of all containers in a given pod."""
+        pod = await Pod.get(name=name, namespace=self.namespace)
+        logs: dict[str, str] = {}
+        containers = [container.name for container in pod.spec.containers + pod.spec.get("initContainers", [])]
+        for container in containers:
+            try:
+                # NOTE: calling pod.logs without a container name set crashes the library
+                clogs: list[str] = [clog async for clog in pod.logs(container=container, tail_lines=max_log_lines)]
+            except httpx.ResponseNotRead:
+                # NOTE: This occurs when the container is still starting but we try to read its logs
+                continue
+            except NotFoundError:
+                raise errors.MissingResourceError(message=f"The pod {name} does not exist.")
+            except ServerError as err:
+                if err.response is not None and err.response.status_code == 404:
+                    raise errors.MissingResourceError(message=f"The pod {name} does not exist.")
+                raise
+            else:
+                logs[container] = "\n".join(clogs)
+        return logs
+
 
 class _ShipwrightCache:
     """Utility class for calling the Shipwright k8s cache."""
@@ -141,6 +190,28 @@ class _ShipwrightCache:
             )
         return BuildRun.model_validate(output[0])
 
+    async def get_task_run(self, name: str) -> TaskRun | None:
+        """Get a Tekton TaskRun."""
+        url = urljoin(self.url, f"/taskruns/{name}")
+        try:
+            res = await self.client.get(url, timeout=10)
+        except httpx.RequestError as err:
+            logger.warning(f"Tekton k8s cache at {url} cannot be reached: {err}")
+            raise CacheError("The tekton k8s cache is not available")
+        if res.status_code != 200:
+            logger.warning(
+                f"Reading task run at {url} from "
+                f"tekton k8s cache failed with status code: {res.status_code} "
+                f"and body: {res.text}"
+            )
+            raise CacheError(f"The K8s Cache produced an unexpected status code: {res.status_code}")
+        output = res.json()
+        if len(output) == 0:
+            return None
+        if len(output) > 1:
+            raise ProgrammingError(message=f"Expected to find 1 task run when getting run {name}, found {len(output)}.")
+        return TaskRun.model_validate(output[0])
+
 
 class ShipwrightClient:
     """The K8s client that combines a base client and a cache.
@@ -188,6 +259,16 @@ class ShipwrightClient:
     async def delete_build_run(self, name: str) -> None:
         """Delete a Shipwright BuildRun."""
         return await self.base_client.delete_build_run(name)
+
+    async def get_task_run(self, name: str) -> TaskRun | None:
+        """Get a Tekton TaskRun."""
+        try:
+            return await self.cache.get_task_run(name)
+        except CacheError:
+            if self.skip_cache_if_unavailable:
+                return await self.base_client.get_task_run(name)
+            else:
+                raise
 
     async def create_image_build(self, params: models.ShipwrightBuildRunParams) -> None:
         """Create a new BuildRun in Shipwright to support a newly created build."""
@@ -265,3 +346,24 @@ class ShipwrightClient:
         """Cancel a build by deleting the corresponding BuildRun from Shipwright."""
         # TODO: use proper cancellation, see: https://shipwright.io/docs/build/buildrun/#canceling-a-buildrun
         await self.delete_build_run(name=buildrun_name)
+
+    async def get_image_build_logs(self, buildrun_name: str, max_log_lines: int | None = None) -> dict[str, str]:
+        """Get the logs from a Shipwright BuildRun."""
+        buildrun = await self.get_build_run(name=buildrun_name)
+        if not buildrun:
+            raise errors.MissingResourceError(message=f"Cannot find buildrun {buildrun_name} to retrieve logs.")
+        status = buildrun.status
+        task_run_name = status.taskRunName if status else None
+        if not task_run_name:
+            raise errors.MissingResourceError(
+                message=f"The buildrun {buildrun_name} has no taskrun to retrieve logs from."
+            )
+        taskrun = await self.get_task_run(name=task_run_name)
+        if not taskrun:
+            raise errors.MissingResourceError(
+                message=f"Cannot find taskrun from buildrun {buildrun_name} to retrieve logs."
+            )
+        pod_name = taskrun.status.podName if taskrun.status else None
+        if not pod_name:
+            raise errors.MissingResourceError(message=f"The buildrun {buildrun_name} has no pod to retrieve logs from.")
+        return await self.base_client.get_pod_logs(name=pod_name, max_log_lines=max_log_lines)
