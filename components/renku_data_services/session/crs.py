@@ -10,6 +10,7 @@ from renku_data_services.session.cr_shipwright_buildrun import Output as BuildOu
 from renku_data_services.session.cr_shipwright_buildrun import Source as BuildSource
 from renku_data_services.session.cr_shipwright_buildrun import Spec as BuildRunSpec
 from renku_data_services.session.cr_shipwright_buildrun import Spec1 as BuildSpec
+from renku_data_services.session.cr_tekton_taskrun import TaskRunBase as _TaskRunBase
 
 
 class Metadata(BaseModel):
@@ -43,3 +44,9 @@ class GitSource(BuildSource):
 
     type: str = "Git"
     git: Git
+
+
+class TaskRun(_TaskRunBase):
+    """Tekton TaskRun."""
+
+    metadata: Metadata

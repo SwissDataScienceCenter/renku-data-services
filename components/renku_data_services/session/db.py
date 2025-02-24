@@ -862,6 +862,51 @@ class SessionRepository:
 
         return build_model
 
+    async def get_build_logs(
+        self, user: base_models.APIUser, build_id: ULID, max_log_lines: int | None = None
+    ) -> dict[str, str]:
+        """Get the logs of a build by querying Shipwright."""
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session, session.begin():
+            stmt = select(schemas.BuildORM).where(schemas.BuildORM.id == build_id)
+            result = await session.scalars(stmt)
+            build = result.one_or_none()
+
+            if build is None:
+                raise errors.MissingResourceError(
+                    message=f"Build with id '{build_id}' does not exist or you do not have access to it."
+                )
+
+            if build.environment.environment_kind == models.EnvironmentKind.GLOBAL:
+                authorized = True
+            else:
+                launcher = await session.scalar(
+                    select(schemas.SessionLauncherORM).where(
+                        schemas.SessionLauncherORM.environment_id == build.environment_id
+                    )
+                )
+                if launcher is None:
+                    authorized = False
+                else:
+                    authorized = await self.project_authz.has_permission(
+                        user, ResourceType.project, launcher.project_id, Scope.WRITE
+                    )
+            if not authorized:
+                raise errors.MissingResourceError(
+                    message=f"Build with id '{build_id}' does not exist or you do not have access to it."
+                )
+
+        build_model = build.dump()
+
+        if self.shipwright_client is None:
+            raise errors.MissingResourceError(message=f"Build with id '{build_id}' does not have logs.")
+
+        return await self.shipwright_client.get_image_build_logs(
+            buildrun_name=build_model.k8s_name, max_log_lines=max_log_lines
+        )
+
     async def _refresh_build(self, build: schemas.BuildORM, session: AsyncSession) -> None:
         """Refresh the status of a build by querying Shipwright."""
         if build.status != models.BuildStatus.in_progress:

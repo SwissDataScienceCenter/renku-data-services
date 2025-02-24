@@ -301,6 +301,14 @@ paths:
           $ref: "#/components/schemas/Ulid"
     get:
       summary: Get the logs of a container image build
+      parameters:
+        - description: The maximum number of most-recent lines to return for each container
+          in: query
+          name: max_lines
+          required: false
+          schema:
+            type: integer
+            default: 250
       responses:
         "200":
           description: The build logs
@@ -864,17 +872,12 @@ components:
       additionalProperties: false
     BuildLogs:
       description: The logs of a container image build
-      type: array
-      items:
-        description: The logs of build step
-        type: object
-        properties:
-          process_name:
-            type: string
-          stdout:
-            type: string
-          stderr:
-            type: string
+      type: object
+      additionalProperties:
+        type: string
+      example:
+        "container-A": "Log line 1\nLog line 2"
+        "container-B": "Log line 1\nLog line 2"
     BuildResult:
       description: The result of a container image build
       type: object
