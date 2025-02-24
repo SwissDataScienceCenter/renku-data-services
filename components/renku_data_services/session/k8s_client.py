@@ -6,6 +6,7 @@ import httpx
 from kr8s import NotFoundError, ServerError
 from kr8s.asyncio.objects import APIObject, Pod
 from kubernetes.client import ApiClient
+from sanic.log import logger
 
 from renku_data_services import errors
 from renku_data_services.errors.errors import CannotStartBuildError
