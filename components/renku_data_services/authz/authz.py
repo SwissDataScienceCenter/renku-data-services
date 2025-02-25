@@ -45,7 +45,7 @@ from renku_data_services.authz.models import (
     Scope,
     Visibility,
 )
-from renku_data_services.base_models.core import InternalServiceAdmin
+from renku_data_services.base_models.core import InternalServiceAdmin, ResourceType
 from renku_data_services.data_connectors.models import (
     DataConnector,
     DataConnectorToProjectLink,
@@ -153,18 +153,6 @@ class _Relation(StrEnum):
         raise errors.ProgrammingError(message=f"Cannot map relation {self} to any role")
 
 
-class ResourceType(StrEnum):
-    """All possible resources stored in Authzed."""
-
-    project = "project"
-    user = "user"
-    anonymous_user = "anonymous_user"
-    platform = "platform"
-    group = "group"
-    user_namespace = "user_namespace"
-    data_connector = "data_connector"
-
-
 class AuthzOperation(StrEnum):
     """The type of change that requires authorization database update."""
 
@@ -210,10 +198,12 @@ class _AuthzConverter:
 
     @staticmethod
     def group(id: ULID) -> ObjectReference:
+        """The id should be the id of the GroupORM object in the DB."""
         return ObjectReference(object_type=ResourceType.group, object_id=str(id))
 
     @staticmethod
     def user_namespace(id: ULID) -> ObjectReference:
+        """The id should be the id of the NamespaceORM object in the DB."""
         return ObjectReference(object_type=ResourceType.user_namespace, object_id=str(id))
 
     @staticmethod

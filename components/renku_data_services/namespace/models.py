@@ -2,12 +2,13 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from ulid import ULID
 
 from renku_data_services.authz.models import Role
+from renku_data_services.base_models.core import ResourceType
 from renku_data_services.errors import errors
 
 
@@ -57,12 +58,22 @@ class GroupMemberDetails:
     last_name: str | None = None
 
 
-class NamespaceKind(str, Enum):
+class NamespaceKind(StrEnum):
     """Allowed kinds of namespaces."""
 
     group = "group"
     user = "user"
     project = "project"  # For now only applicable to data connectors
+
+    def to_resource_type(self) -> ResourceType:
+        """Conver the namespace kind to the corresponding resource type."""
+        if self == NamespaceKind.group:
+            return ResourceType.group
+        elif self == NamespaceKind.user:
+            return ResourceType.user_namespace
+        elif self == NamespaceKind.project:
+            return ResourceType.project
+        raise errors.ProgrammingError(message=f"Unhandled namespace kind {self}")
 
 
 @dataclass(eq=True)
@@ -129,6 +140,10 @@ class NamespacePath:
     def __repr__(self) -> str:
         namespaces = ", ".join([str(i) for i in self.__value])
         return f"NamespacePath({namespaces})"
+
+    def to_list(self) -> list[Namespace]:
+        """Return a copy of the list of namespaces."""
+        return [i for i in self.__value]
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

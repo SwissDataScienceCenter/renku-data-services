@@ -1,7 +1,10 @@
 """Exceptions for the server."""
 
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Optional
+
+from ulid import ULID
 
 
 @dataclass
@@ -161,3 +164,10 @@ class SecretCreationError(BaseError):
     code: int = 1511
     message: str = "An error occurred creating secrets."
     status_code: int = 500
+
+
+def missing_or_unauthorized(resource_type: str | StrEnum, id: str | int | ULID) -> MissingResourceError:
+    """Generate a missing resource error with an ambiguous message."""
+    return MissingResourceError(
+        message=f"The {resource_type} with ID {id} does not exist or you do not have permissions to access it",
+    )

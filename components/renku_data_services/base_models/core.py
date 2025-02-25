@@ -206,6 +206,11 @@ class Slug:
     def __repr__(self) -> str:
         return self.value
 
+    @classmethod
+    def from_path(cls, path: str) -> list[Self]:
+        """Decompose a path into a list of slugs."""
+        return [cls(slug) for slug in path.split("/")]
+
 
 @dataclass(frozen=True, eq=True)
 class EntityPath:
@@ -283,3 +288,15 @@ This type should have only one instance, defined in the same file as this type.
 
 RESET: ResetType = ResetType(object())
 """The single instance of the ResetType, can be compared to similar to None, i.e. `if value is RESET`"""
+
+
+class ResourceType(StrEnum):
+    """All possible resources stored in Authzed."""
+
+    project = "project"
+    user = "user"
+    anonymous_user = "anonymous_user"
+    platform = "platform"
+    group = "group"
+    user_namespace = "user_namespace"
+    data_connector = "data_connector"
