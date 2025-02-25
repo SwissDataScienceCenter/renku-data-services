@@ -24,8 +24,8 @@ def upgrade() -> None:
     op.create_table(
         "search_updates",
         sa.Column("id", ULIDType(), server_default=sa.text("generate_ulid()"), nullable=False),
-        sa.Column("entity_id", sa.String(), nullable=False),
-        sa.Column("entity_type", sa.String(), nullable=False),
+        sa.Column("entity_id", sa.String(length=100), nullable=False),
+        sa.Column("entity_type", sa.String(length=100), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column(
             "payload", sa.JSON().with_variant(postgresql.JSONB(astext_type=sa.Text()), "postgresql"), nullable=False

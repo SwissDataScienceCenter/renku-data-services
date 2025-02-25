@@ -37,10 +37,10 @@ class SearchUpdatesORM(BaseORM):
     )
     """Artificial identifier with stable order."""
 
-    entity_id: Mapped[str] = mapped_column("entity_id", String(), unique=True, index=True)
+    entity_id: Mapped[str] = mapped_column("entity_id", String(100), unique=True, index=True)
     """The id of the entity (user, project, etc)."""
 
-    entity_type: Mapped[str] = mapped_column("entity_type", String(), nullable=False)
+    entity_type: Mapped[str] = mapped_column("entity_type", String(100), nullable=False)
     """The entity type as a string."""
 
     created_at: Mapped[datetime] = mapped_column("created_at", DateTime(timezone=True), nullable=False)
