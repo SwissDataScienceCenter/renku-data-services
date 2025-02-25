@@ -8,7 +8,7 @@ info:
 servers:
   - url: /api/data
 paths:
-  /message_queue/reprovision:
+  /search/reprovision:
     post:
       summary: Start a new reprovisioning
       description: Only a single reprovisioning is active at any time
@@ -24,7 +24,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - message_queue
+        - search
     get:
       summary: Return status of reprovisioning
       responses:
@@ -43,7 +43,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - message_queue
+        - search
     delete:
       summary: Stop an active reprovisioning
       responses:
@@ -52,7 +52,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
       tags:
-        - message_queue
+        - search
 
 components:
   schemas:

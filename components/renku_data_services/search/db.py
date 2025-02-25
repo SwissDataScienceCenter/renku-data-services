@@ -3,6 +3,7 @@
 import json
 from collections.abc import Callable
 from datetime import datetime
+from textwrap import dedent
 from typing import Any, cast
 
 from sqlalchemy import delete, select, text, update
@@ -48,7 +49,10 @@ def _project_to_entity_doc(p: Project) -> ProjectDoc:
 
 
 class SearchUpdatesRepo:
-    """Db operations for the search updates table."""
+    """Db operations for the search updates table.
+
+    NOTE: This does not apply any authentication or authorization to calls.
+    """
 
     def __init__(self, session_maker: Callable[..., AsyncSession]) -> None:
         self.session_maker = session_maker
@@ -96,7 +100,8 @@ class SearchUpdatesRepo:
         params = self.__make_params(entity, started)
         async with self.session_maker() as session, session.begin():
             result = await session.execute(
-                text("""
+                text(
+                    dedent("""\
                   WITH new_user AS (
                     INSERT INTO events.search_updates
                       (entity_id, entity_type, created_at, payload)
@@ -107,7 +112,8 @@ class SearchUpdatesRepo:
                     RETURNING id
                   ) SELECT * from new_user UNION
                     SELECT id FROM events.search_updates WHERE entity_id = :entity_id AND entity_type = :entity_type
-                """),
+                """)
+                ),
                 params,
             )
             await session.commit()
@@ -125,7 +131,8 @@ class SearchUpdatesRepo:
         params = self.__make_params(entity, started)
         async with self.session_maker() as session, session.begin():
             result = await session.execute(
-                text("""
+                text(
+                    dedent("""
                   WITH new_entity AS (
                     INSERT INTO events.search_updates
                       (entity_id, entity_type, created_at, payload)
@@ -135,7 +142,8 @@ class SearchUpdatesRepo:
                     RETURNING id
                   ) SELECT * from new_entity UNION
                     SELECT id FROM events.search_updates WHERE entity_id = :entity_id AND entity_type = :entity_type
-                """),
+                """)
+                ),
                 params,
             )
             await session.commit()
@@ -166,7 +174,6 @@ class SearchUpdatesRepo:
             for r in records:
                 r.state = RecordState.Locked
                 session.add(r)
-            await session.commit()
 
             return list(records)
 
@@ -175,7 +182,8 @@ class SearchUpdatesRepo:
         async with self.session_maker() as session, session.begin():
             stmt = (
                 update(SearchUpdatesORM)
-                .where(SearchUpdatesORM.state == RecordState.Locked and SearchUpdatesORM.id.in_(ids))
+                .where(SearchUpdatesORM.state == RecordState.Locked)
+                .where(SearchUpdatesORM.id.in_(ids))
                 .values(state=state)
             )
             await session.execute(stmt)
@@ -183,8 +191,10 @@ class SearchUpdatesRepo:
     async def mark_processed(self, ids: list[ULID]) -> None:
         """Remove processed rows."""
         async with self.session_maker() as session, session.begin():
-            stmt = delete(SearchUpdatesORM).where(
-                SearchUpdatesORM.state == RecordState.Locked and SearchUpdatesORM.id.in_(ids)
+            stmt = (
+                delete(SearchUpdatesORM)
+                .where(SearchUpdatesORM.state == RecordState.Locked)
+                .where(SearchUpdatesORM.id.in_(ids))
             )
             await session.execute(stmt)
 
@@ -200,5 +210,4 @@ class SearchUpdatesRepo:
         """Resets all locked rows to open."""
         async with self.session_maker() as session, session.begin():
             stmt = update(SearchUpdatesORM).where(SearchUpdatesORM.state == RecordState.Locked).values(state=None)
-            print(stmt)
             await session.execute(stmt)

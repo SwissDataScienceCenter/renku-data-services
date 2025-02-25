@@ -84,7 +84,7 @@ def send_pending_events(app_name: str) -> None:
 
 
 def update_search(app_name: str) -> None:
-    """Send pending messages in case sending in a handler failed."""
+    """Update the SOLR with data from the search staging table."""
     app = Sanic(app_name)
     setup_app_metrics(app)
 
