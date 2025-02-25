@@ -543,6 +543,7 @@ class Config:
                 session_maker=self.db.async_session_maker,
                 authz=self.authz,
                 project_repo=self.project_repo,
+                group_repo=self.group_repo,
             )
         return self._data_connector_repo
 

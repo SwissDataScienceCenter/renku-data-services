@@ -1,7 +1,10 @@
 """Exceptions for the server."""
 
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Optional
+
+from ulid import ULID
 
 
 @dataclass
@@ -169,3 +172,10 @@ class CannotStartBuildError(ProgrammingError):
 
     code: int = 1512
     message: str = "An error occurred creating an image build." ""
+
+
+def missing_or_unauthorized(resource_type: str | StrEnum, id: str | int | ULID) -> MissingResourceError:
+    """Generate a missing resource error with an ambiguous message."""
+    return MissingResourceError(
+        message=f"The {resource_type} with ID {id} does not exist or you do not have permissions to access it",
+    )

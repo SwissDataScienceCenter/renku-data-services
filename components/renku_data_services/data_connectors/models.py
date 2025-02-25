@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 from ulid import ULID
 
 from renku_data_services.authz.models import Visibility
-from renku_data_services.base_models.core import EntityPath
+from renku_data_services.base_models.core import EntityPath, Slug
 from renku_data_services.namespace.models import NamespacePath
 from renku_data_services.project.models import Project
 from renku_data_services.utils.etag import compute_etag_from_timestamp
@@ -101,7 +101,13 @@ class DataConnectorPatch:
     description: str | None
     keywords: list[str] | None
     storage: CloudStorageCorePatch | None
-    project_slug: str | None
+
+    @property
+    def namespace_path(self) -> list[Slug] | None:
+        """Represent the namespace as a list of slugs."""
+        if not self.namespace:
+            return None
+        return [Slug(i) for i in self.namespace.split("/")]
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

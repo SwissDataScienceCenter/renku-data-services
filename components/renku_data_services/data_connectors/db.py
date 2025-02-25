@@ -19,6 +19,7 @@ from renku_data_services.base_models.core import Slug
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors import orm as schemas
 from renku_data_services.namespace import orm as ns_schemas
+from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.models import Project
 from renku_data_services.project.orm import ProjectORM
@@ -37,10 +38,12 @@ class DataConnectorRepository:
         session_maker: Callable[..., AsyncSession],
         authz: Authz,
         project_repo: ProjectRepository,
+        group_repo: GroupRepository,
     ) -> None:
         self.session_maker = session_maker
         self.authz = authz
         self.project_repo = project_repo
+        self.group_repo = group_repo
 
     async def get_data_connectors(
         self, user: base_models.APIUser, pagination: PaginationRequest, namespace: str | None = None
@@ -316,14 +319,11 @@ class DataConnectorRepository:
             raise errors.MissingResourceError(message=not_found_msg)
         old_data_connector = data_connector.dump()
 
-        if old_data_connector.project and old_data_connector.project.slug != patch.project_slug:
-            raise NotImplementedError("Moving the data connector to another project or namespace is not supported")
-
         required_scope = Scope.WRITE
         if patch.visibility is not None and patch.visibility != old_data_connector.visibility:
             # NOTE: changing the visibility requires the user to be owner which means they should have DELETE permission
             required_scope = Scope.DELETE
-        if patch.namespace is not None and patch.namespace != old_data_connector.namespace.last.slug:
+        if patch.namespace is not None and patch.namespace != old_data_connector.namespace.path:
             # NOTE: changing the namespace requires the user to be owner which means they should have DELETE permission # noqa E501
             required_scope = Scope.DELETE
         if patch.slug is not None and patch.slug != old_data_connector.slug:
@@ -348,38 +348,23 @@ class DataConnectorRepository:
                 else apispec.Visibility(patch.visibility.value)
             )
             data_connector.visibility = visibility_orm
-        if patch.namespace is not None and patch.namespace != old_data_connector.namespace.last.slug:
-            ns = await session.scalar(
-                select(ns_schemas.NamespaceORM).where(ns_schemas.NamespaceORM.slug == patch.namespace.lower())
-            )
-            if not ns:
-                raise errors.MissingResourceError(message=f"The namespace with slug {patch.namespace} does not exist.")
-            if not ns.group_id and not ns.user_id:
-                raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
-            resource_type, resource_id = (
-                (ResourceType.group, ns.group_id) if ns.group and ns.group_id else (ResourceType.user_namespace, ns.id)
-            )
-            has_permission = await self.authz.has_permission(user, resource_type, resource_id, Scope.WRITE)
-            if not has_permission:
-                raise errors.ForbiddenError(
-                    message=f"The data connector cannot be moved because you do not have sufficient permissions with the namespace {patch.namespace}."  # noqa: E501
+        if (patch.namespace is not None and patch.namespace != old_data_connector.namespace.path) or (
+            patch.slug is not None and patch.slug != old_data_connector.slug
+        ):
+            new_slugs = patch.namespace_path or [Slug(i.slug) for i in old_data_connector.namespace.to_list()]
+            new_path = await self.group_repo.get_namespace_by_path(user, new_slugs, session)
+            if new_path is None:
+                raise errors.MissingResourceError(
+                    message=f"The namespace {new_slugs} for the data connector could not be found."
                 )
-            data_connector.slug.namespace_id = ns.id
-        if patch.slug is not None and patch.slug != old_data_connector.slug:
-            namespace_id = data_connector.slug.namespace_id
-            existing_entity = await session.scalar(
-                select(ns_schemas.EntitySlugORM)
-                .where(ns_schemas.EntitySlugORM.slug == patch.slug)
-                .where(ns_schemas.EntitySlugORM.namespace_id == namespace_id)
+            await self.group_repo.change_dc_owner(
+                user,
+                old_data_connector.namespace,
+                new_path,
+                data_connector_id,
+                Slug(patch.slug) if patch.slug else None,
+                session,
             )
-            if existing_entity is not None:
-                raise errors.ConflictError(
-                    message=f"An entity with the slug '{data_connector.slug.namespace.slug}/{patch.slug}' already exists."  # noqa E501
-                )
-            session.add(
-                ns_schemas.EntitySlugOldORM(slug=old_data_connector.slug, latest_slug_id=data_connector.slug.id)
-            )
-            data_connector.slug.slug = patch.slug
         if patch.description is not None:
             data_connector.description = patch.description if patch.description else None
         if patch.keywords is not None:
