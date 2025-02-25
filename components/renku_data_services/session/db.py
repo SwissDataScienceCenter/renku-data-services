@@ -978,6 +978,9 @@ class SessionRepository:
         )
         build_timeout = self.builds_config.buildrun_build_timeout or constants.BUILD_RUN_DEFAULT_TIMEOUT
 
+        # TODO: Get this from the chart values
+        node_selector = {"renku.io/node-purpose": "image-build"}
+
         return models.ShipwrightBuildRunParams(
             name=build.k8s_name,
             git_repository=git_repository,
@@ -988,6 +991,7 @@ class SessionRepository:
             retention_after_failed=retention_after_failed,
             retention_after_succeeded=retention_after_succeeded,
             build_timeout=build_timeout,
+            node_selector=node_selector,
         )
 
     async def _get_environment_authorization(

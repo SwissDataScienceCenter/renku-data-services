@@ -241,6 +241,10 @@ class ShipwrightBuildRunParams:
     retention_after_succeeded: timedelta | None = None
     build_timeout: timedelta | None = None
 
+    # node selector
+    node_selector: dict[str, str] | None = None
+    # tolerations: list[Toleration] | None = None
+
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class ShipwrightBuildStatusUpdateContent:

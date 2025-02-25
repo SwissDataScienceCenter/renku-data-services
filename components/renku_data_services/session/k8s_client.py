@@ -301,6 +301,8 @@ class ShipwrightClient:
                     )
                 ),
                 retention=retention,
+                nodeSelector=params.node_selector,
+                # tolerations=???
             ),
         )
         await self.create_build_run(build_run)
