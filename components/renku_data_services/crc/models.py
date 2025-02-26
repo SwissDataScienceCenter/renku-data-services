@@ -251,3 +251,17 @@ class ResourcePool:
             idle_threshold=data.get("idle_threshold"),
             hibernation_threshold=data.get("hibernation_threshold"),
         )
+
+    def get_resource_class(self, resource_class_id: int) -> ResourceClass | None:
+        """Find a specific resource class in the resource pool by the resource class id."""
+        for rc in self.classes:
+            if rc.id == resource_class_id:
+                return rc
+        return None
+
+    def get_default_resource_class(self) -> ResourceClass | None:
+        """Find the default resource class in the pool."""
+        for rc in self.classes:
+            if rc.default:
+                return rc
+        return None
