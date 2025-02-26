@@ -119,8 +119,6 @@ class NotebooksConfig:
             amalthea_v2_config = _AmaltheaV2Config(cache_url="http://not.specified")
             git_config = _GitConfig("http://not.specified", "registry.not.specified")
         else:
-            # FIXME: LSA: DO WE NEED TO PASS THE CONFIG FILE FOR THE CLUSTER HERE TO BOTH K8sCoreClient(),
-            #  K8sSchedulingClient()?
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
             rp_repo = ResourcePoolRepository(db_config.async_session_maker, quota_repo)
             crc_validator = CRCValidator(rp_repo)

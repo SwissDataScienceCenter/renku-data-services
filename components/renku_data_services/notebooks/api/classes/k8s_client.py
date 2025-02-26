@@ -17,6 +17,7 @@ from kr8s import NotFoundError, ServerError
 from kr8s.asyncio.objects import APIObject, Pod, Secret, StatefulSet
 from kubernetes.client import V1Secret
 
+from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.crc.models import ResourcePool
 from renku_data_services.errors import errors
@@ -644,7 +645,7 @@ class _MultipleK8sClient(Generic[_SessionType, _Kr8sType]):
         self._clients: dict[str, _SingleK8sClient[_SessionType, _Kr8sType]] = dict(
             [
                 (
-                    name,
+                    name.removesuffix(".yaml"),
                     _SingleK8sClient(
                         server_type,
                         kr8s_type,
@@ -682,31 +683,31 @@ class _MultipleK8sClient(Generic[_SessionType, _Kr8sType]):
         # TODO: LSA Does not break current code, but bad, as it may be different based on the cluster
         return self._clients[DEFAULT_K8S_CLUSTER].namespace
 
-    async def client_by_class_id(self, class_id: str) -> _SingleK8sClient[_SessionType, _Kr8sType] | None:
+    async def client_by_class_id(
+        self, class_id: str, api_user: APIUser
+    ) -> _SingleK8sClient[_SessionType, _Kr8sType] | None:
         # **NOTE**: This assumes class_ids are unique over all the clusters.
         try:
             _id = int(class_id)
         except ValueError:
             return None
 
-        await self.update_resource_mappings()
+        await self.update_resource_mappings(api_user)
         _, client = self._class_id2client.get(_id, (DEFAULT_K8S_CLUSTER, None))
         return client
 
-    async def cluster_name_by_class_id(self, class_id: int | None) -> str:
+    async def cluster_name_by_class_id(self, class_id: int | None, api_user: APIUser) -> str:
         cluster_name = DEFAULT_K8S_CLUSTER
         if class_id is not None:
-            await self.update_resource_mappings()
+            await self.update_resource_mappings(api_user)
             cluster_name, _ = self._class_id2client.get(class_id, (DEFAULT_K8S_CLUSTER, None))
 
         return cluster_name
 
-    async def update_resource_mappings(self) -> None:
+    async def update_resource_mappings(self, api_user: APIUser) -> None:
         """Update the mapping used to lookup cluster connection by resource pool."""
 
-        resource_pools: list[
-            ResourcePool
-        ] = []  # await self._rp_repo.get_resource_pools() # FIXME: LSA: I need somehow a APIUser here?!?!
+        resource_pools: list[ResourcePool] = await self._rp_repo.get_resource_pools(api_user)
 
         # Ensure we always have at least the default cluster
         cluster_map = {DEFAULT_K8S_CLUSTER: self._clients[DEFAULT_K8S_CLUSTER]}
@@ -734,11 +735,11 @@ class _MultipleK8sClient(Generic[_SessionType, _Kr8sType]):
         # Don't blame me, blame python's list comprehension syntax
         return [s for c in self._clients.values() for s in await c.list_sessions(safe_username)]
 
-    async def create_session(self, manifest: _SessionType, safe_username: str) -> _SessionType:
+    async def create_session(self, manifest: _SessionType, safe_username: str, api_user: APIUser) -> _SessionType:
         class_id = manifest.metadata.annotations["renku.io/resource_class_id"]
         server_name = manifest.metadata.name
 
-        client = await self.client_by_class_id(class_id)
+        client = await self.client_by_class_id(class_id, api_user)
         if client is None:
             raise CannotStartServerError(
                 message=f"Cannot start the session {server_name}, "

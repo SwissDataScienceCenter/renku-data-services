@@ -587,7 +587,7 @@ async def launch_notebook(
 ) -> tuple[UserServerManifest, int]:
     """Starts a server using the old operator."""
 
-    cluster_name = await config.k8s_client.cluster_name_by_class_id(launch_request.resource_class_id)
+    cluster_name = await config.k8s_client.cluster_name_by_class_id(launch_request.resource_class_id, user)
 
     if isinstance(user, AnonymousAPIUser):
         safe_username = escapism.escape(user.id, escape_char="-").lower()
