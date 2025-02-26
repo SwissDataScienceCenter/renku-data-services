@@ -4,7 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from renku_data_services.session.cr_shipwright_buildrun import Build, Git, ParamValue, Strategy
+from renku_data_services.session.cr_shipwright_buildrun import Build, Git, ParamValue, Strategy, Toleration
 from renku_data_services.session.cr_shipwright_buildrun import Model as _BuildRun
 from renku_data_services.session.cr_shipwright_buildrun import Output as BuildOutput
 from renku_data_services.session.cr_shipwright_buildrun import Retention1 as Retention

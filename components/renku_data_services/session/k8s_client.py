@@ -298,11 +298,11 @@ class ShipwrightClient:
                             pushSecret=params.push_secret_name,
                         ),
                         timeout=f"{params.build_timeout.total_seconds()}s" if params.build_timeout else None,
+                        nodeSelector=params.node_selector,
+                        tolerations=[],
                     )
                 ),
                 retention=retention,
-                nodeSelector=params.node_selector,
-                # tolerations=???
             ),
         )
         await self.create_build_run(build_run)
