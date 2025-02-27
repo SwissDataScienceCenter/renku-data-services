@@ -73,7 +73,7 @@ async def _update_search(app: Sanic) -> None:
 
 
 def send_pending_events(app_name: str) -> None:
-    """Send pending messages in case sending in a handler failed."""
+    """Send pending messages to redis."""
     app = Sanic(app_name)
     setup_app_metrics(app)
 
