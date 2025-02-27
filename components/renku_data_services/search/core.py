@@ -88,6 +88,8 @@ async def update_solr(search_updates_repo: SearchUpdatesRepo, solr_client: SolrC
             else:
                 counter = counter + len(entries)
                 await search_updates_repo.mark_processed(ids)
+
+            await solr_client.delete("deleted:true")
         except Exception as e:
             logger.error(f"Error while updating solr with entities {ids}", exc_info=e)
             try:

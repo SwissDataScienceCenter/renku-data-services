@@ -10,6 +10,7 @@ from renku_data_services.errors import errors
 from renku_data_services.namespace.models import DeletedGroup, Group
 from renku_data_services.project.models import DeletedProject, Project, ProjectUpdate
 from renku_data_services.search.db import SearchUpdatesRepo
+from renku_data_services.search.models import DeleteDoc
 from renku_data_services.users.models import DeletedUser, UserInfo, UserInfoUpdate
 
 
@@ -52,7 +53,8 @@ def update_search_document(
                 await self.search_updates_repo.upsert(p.new)
 
             case DeletedProject() as p:
-                pass  # todo: oops, forgot that case 😅
+                record = DeleteDoc.project(p.id)
+                await self.search_updates_repo.upsert(record)
 
             case UserInfo() as u:
                 await self.search_updates_repo.upsert(u)
@@ -61,13 +63,15 @@ def update_search_document(
                 await self.search_updates_repo.upsert(u.new)
 
             case DeletedUser() as u:
-                pass  # todo: oops, forgot that case 😅
+                record = DeleteDoc.user(u.id)
+                await self.search_updates_repo.upsert(record)
 
             case Group() as g:
                 await self.search_updates_repo.upsert(g)
 
             case DeletedGroup() as g:
-                pass  # todo: oops, forgot that case 😅
+                record = DeleteDoc.group(g.id)
+                await self.search_updates_repo.upsert(record)
 
             case list():
                 match result:

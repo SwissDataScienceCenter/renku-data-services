@@ -341,6 +341,8 @@ async def test_result_is_sorted_by_creation_date(create_project, sanic_client, u
 
 @pytest.mark.asyncio
 async def test_delete_project(create_project, sanic_client, user_headers, app_config) -> None:
+    await app_config.search_updates_repo.clear_all()
+
     # Create some projects
     await create_project("Project 1")
     await create_project("Project 2")
@@ -362,6 +364,13 @@ async def test_delete_project(create_project, sanic_client, user_headers, app_co
         b64decode(project_removed_event.payload["payload"]), avro_schema_v2.ProjectRemoved
     )
     assert removed_event.id == project_id
+
+    # Check search updates
+    search_updates = await app_config.search_updates_repo.select_next(20)
+    assert len(search_updates) == 5
+    assert len(set([e.entity_id for e in search_updates])) == 5
+    deleted_project = next(x for x in search_updates if x.entity_id == project["id"])
+    assert deleted_project.payload == {"id": project["id"], "deleted": True}
 
     # Get all projects
     _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
@@ -394,6 +403,7 @@ async def test_patch_project(create_project, get_project, sanic_client, user_hea
 
     assert response.status_code == 200, response.text
 
+    # Check search updates
     search_updates = await app_config.search_updates_repo.select_next(20)
     assert len(search_updates) == 3
     assert len(set([e.entity_id for e in search_updates])) == 3
@@ -1164,6 +1174,7 @@ async def test_project_slug_case(
 
 @pytest.mark.asyncio
 async def test_project_copy_basics(sanic_client, app_config, user_headers, regular_user, create_project) -> None:
+    await app_config.search_updates_repo.clear_all()
     await create_project("Project 1")
     project = await create_project(
         "Project 2",
@@ -1195,6 +1206,15 @@ async def test_project_copy_basics(sanic_client, app_config, user_headers, regul
     assert copy_project["visibility"] == project["visibility"]
     assert copy_project["keywords"] == ["tag 1", "tag 2"]
     assert copy_project["repositories"] == project["repositories"]
+
+    # Check search updates
+    search_updates = await app_config.search_updates_repo.select_next(20)
+    assert len(search_updates) == 4
+    assert len(set([e.entity_type for e in search_updates])) == 1
+    assert search_updates[0].entity_type == "Project"
+    search_doc = next(x for x in search_updates if x.entity_id == copy_project["id"])
+    assert search_doc.payload["slug"] == "project-slug"
+    assert search_doc.payload["name"] == "Renku Native Project"
 
     events = await app_config.event_repo.get_pending_events()
     assert len(events) == 2

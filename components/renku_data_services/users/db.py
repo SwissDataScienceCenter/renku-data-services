@@ -209,7 +209,6 @@ class UsersSync:
         self.authz = authz
         self.search_updates_repo = user_repo.search_updates_repo
 
-
     async def _get_user(self, id: str) -> UserInfo | None:
         """Get a specific user."""
         async with self.session_maker() as session, session.begin():

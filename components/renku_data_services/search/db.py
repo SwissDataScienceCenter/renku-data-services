@@ -13,6 +13,7 @@ from ulid import ULID
 from renku_data_services.base_models.core import Slug
 from renku_data_services.namespace.models import Group
 from renku_data_services.project.models import Project
+from renku_data_services.search.models import DeleteDoc, Entity
 from renku_data_services.search.orm import RecordState, SearchUpdatesORM
 from renku_data_services.solr.entity_documents import Group as GroupDoc
 from renku_data_services.solr.entity_documents import Project as ProjectDoc
@@ -62,7 +63,7 @@ class SearchUpdatesRepo:
         async with self.session_maker() as session:
             return await session.get(SearchUpdatesORM, id)
 
-    def __make_params(self, entity: UserInfo | Group | Project, started: datetime) -> dict[str, Any]:
+    def __make_params(self, entity: Entity, started: datetime) -> dict[str, Any]:
         match entity:
             case Group() as g:
                 dg = _group_to_entity_doc(g)
@@ -90,8 +91,15 @@ class SearchUpdatesRepo:
                     "created_at": started,
                     "payload": json.dumps(dp.to_dict()),
                 }
+            case DeleteDoc() as d:
+                return {
+                    "entity_id": d.doc_id,
+                    "entity_type": d.entity_type,
+                    "created_at": started,
+                    "payload": json.dumps({"id": d.doc_id, "deleted": True}),
+                }
 
-    async def upsert(self, entity: UserInfo | Group | Project, started_at: datetime | None = None) -> ULID:
+    async def upsert(self, entity: Entity, started_at: datetime | None = None) -> ULID:
         """Add entity documents to the staging table.
 
         If a user already exists, it is updated.
@@ -122,7 +130,7 @@ class SearchUpdatesRepo:
                 raise Exception(f"Inserting {entity} did not result in returning an id.")
             return cast(ULID, ULID.from_str(el.id))  # huh? mypy wants this cast
 
-    async def insert(self, entity: Group | UserInfo | Project, started_at: datetime | None) -> ULID:
+    async def insert(self, entity: Entity, started_at: datetime | None) -> ULID:
         """Insert a entity document into the staging table.
 
         Do nothing if it already exists.
