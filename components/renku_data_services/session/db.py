@@ -976,6 +976,7 @@ class SessionRepository:
             self.builds_config.buildrun_retention_after_succeeded
             or constants.BUILD_RUN_DEFAULT_RETENTION_AFTER_SUCCEEDED
         )
+        build_timeout = self.builds_config.buildrun_build_timeout or constants.BUILD_RUN_BUILD_TIMEOUT
 
         return models.ShipwrightBuildRunParams(
             name=build.k8s_name,
@@ -986,6 +987,7 @@ class SessionRepository:
             push_secret_name=push_secret_name,
             retention_after_failed=retention_after_failed,
             retention_after_succeeded=retention_after_succeeded,
+            build_timeout=build_timeout,
         )
 
     async def _get_environment_authorization(
