@@ -19,7 +19,6 @@ from kubernetes.client import V1Secret
 
 from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ResourcePoolRepository
-from renku_data_services.crc.models import ResourcePool
 from renku_data_services.errors import errors
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
@@ -664,15 +663,23 @@ class _MultipleK8sClient(Generic[_SessionType, _Kr8sType]):
             server_type, kr8s_type, kr8s.api(), cache_url, username_label, skip_cache_if_unavailable
         )
 
-        # maps resource classes ids to k8s client
-        self._class_id2client: dict[int, tuple[str, _SingleK8sClient[_SessionType, _Kr8sType]]] = {}
-
         # maps session/server name to k8s client
         self._session2client: dict[str, _SingleK8sClient[_SessionType, _Kr8sType]] = {}
         self.sanitize = self._clients[DEFAULT_K8S_CLUSTER].sanitize
 
-    def _client_by_session(self, session_name: str) -> _SingleK8sClient[_SessionType, _Kr8sType] | None:
-        return self._session2client.get(session_name)
+    async def _client_by_session(
+        self, session_name: str, safe_username: str
+    ) -> _SingleK8sClient[_SessionType, _Kr8sType] | None:
+        # Try in our cache, if not there look it up in K8s and update our cache
+        client = self._session2client.get(session_name, None)
+        if client is None:
+            for c in self._clients.values():
+                if session_name in await c.list_sessions(safe_username):
+                    self._session2client[session_name] = c
+                    client = c
+                    break
+
+        return client
 
     @property
     def kube_conf_root_dir(self) -> str:
@@ -683,53 +690,22 @@ class _MultipleK8sClient(Generic[_SessionType, _Kr8sType]):
         # TODO: LSA Does not break current code, but bad, as it may be different based on the cluster
         return self._clients[DEFAULT_K8S_CLUSTER].namespace
 
-    async def client_by_class_id(
-        self, class_id: str, api_user: APIUser
-    ) -> _SingleK8sClient[_SessionType, _Kr8sType] | None:
+    async def client_by_class_id(self, class_id: str, api_user: APIUser) -> _SingleK8sClient[_SessionType, _Kr8sType]:
         # **NOTE**: This assumes class_ids are unique over all the clusters.
-        try:
-            _id = int(class_id)
-        except ValueError:
-            return None
-
-        await self.update_resource_mappings(api_user)
-        _, client = self._class_id2client.get(_id, (DEFAULT_K8S_CLUSTER, None))
-        return client
+        _id = int(class_id)
+        name = await self.cluster_name_by_class_id(_id, api_user)
+        return self._clients[name]
 
     async def cluster_name_by_class_id(self, class_id: int | None, api_user: APIUser) -> str:
-        cluster_name = DEFAULT_K8S_CLUSTER
+        # If the config_name is not set or not found, fall back on the default cluster.
+        name = DEFAULT_K8S_CLUSTER
+
         if class_id is not None:
-            await self.update_resource_mappings(api_user)
-            cluster_name, _ = self._class_id2client.get(class_id, (DEFAULT_K8S_CLUSTER, None))
+            rp = await self._rp_repo.get_resource_pool_from_class(api_user, class_id)
+            if rp.cluster is not None:
+                name = rp.cluster.config_name
 
-        return cluster_name
-
-    async def update_resource_mappings(self, api_user: APIUser) -> None:
-        """Update the mapping used to lookup cluster connection by resource pool."""
-
-        resource_pools: list[ResourcePool] = await self._rp_repo.get_resource_pools(api_user)
-
-        # Ensure we always have at least the default cluster
-        cluster_map = {DEFAULT_K8S_CLUSTER: self._clients[DEFAULT_K8S_CLUSTER]}
-        classes_map = {}
-
-        # We usually have the resource class id, and from that we need to map it to the cluster client which is
-        # referenced by the resource pool the class belongs to.
-        # As the resource classes do not have a backlink to their parent resource pools, we need to build ourselves the
-        # mapping:
-        for pool in resource_pools:
-            cluster_name = DEFAULT_K8S_CLUSTER
-            if pool.cluster is not None:
-                cluster_name = pool.cluster.config_name
-
-            # If there is no cluster connection configured, fall back to the default one
-            cluster_map[pool.name] = self._clients.get(cluster_name, self._clients[DEFAULT_K8S_CLUSTER])
-
-            for c in pool.classes:
-                if c.id is not None:
-                    classes_map[c.id] = (pool.name, cluster_map[pool.name])
-
-        self._class_id2client = classes_map
+        return name
 
     async def list_sessions(self, safe_username: str) -> list[_SessionType]:
         # Don't blame me, blame python's list comprehension syntax
@@ -740,11 +716,6 @@ class _MultipleK8sClient(Generic[_SessionType, _Kr8sType]):
         server_name = manifest.metadata.name
 
         client = await self.client_by_class_id(class_id, api_user)
-        if client is None:
-            raise CannotStartServerError(
-                message=f"Cannot start the session {server_name}, "
-                f"kubernetes connection not found for resource class {class_id}"
-            )
 
         session = await client.create_session(manifest, safe_username)
         self._session2client[server_name] = client
@@ -752,7 +723,7 @@ class _MultipleK8sClient(Generic[_SessionType, _Kr8sType]):
         return session
 
     async def get_session(self, name: str, safe_username: str) -> _SessionType | None:
-        client = self._client_by_session(name)
+        client = await self._client_by_session(name, safe_username)
         if client is not None:
             return await client.get_session(name, safe_username)
 
@@ -761,7 +732,7 @@ class _MultipleK8sClient(Generic[_SessionType, _Kr8sType]):
     async def get_session_logs(
         self, server_name: str, safe_username: str, max_log_lines: Optional[int] = None
     ) -> dict[str, str]:
-        client = self._client_by_session(server_name)
+        client = await self._client_by_session(server_name, safe_username)
         if client is not None:
             return await client.get_session_logs(server_name, safe_username, max_log_lines)
 
@@ -772,7 +743,7 @@ class _MultipleK8sClient(Generic[_SessionType, _Kr8sType]):
     async def patch_session(
         self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> _SessionType:
-        client = self._client_by_session(server_name)
+        client = await self._client_by_session(server_name, safe_username)
         if client is not None:
             return await client.patch_session(server_name, safe_username, patch)
 
@@ -790,16 +761,18 @@ class _MultipleK8sClient(Generic[_SessionType, _Kr8sType]):
     async def patch_session_tokens(
         self, server_name: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken
     ) -> None:
-        client = self._client_by_session(server_name)
-        if client is not None:
-            await client.patch_session_tokens(server_name, renku_tokens, gitlab_token)
+        # TODO: Brute force this for now, not pretty
+        for c in self._clients.values():
+            await c.patch_session_tokens(server_name, renku_tokens, gitlab_token)
 
     async def patch_statefulset(
         self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> StatefulSet | None:
-        client = self._client_by_session(server_name)
-        if client is not None:
-            return await client.patch_statefulset(server_name, patch)
+        # TODO: Brute force this for now, not pretty
+        for c in self._clients.values():
+            r = await c.patch_statefulset(server_name, patch)
+            if r is not None:
+                return r
 
         # If the stateful set is missing, we ignore the operation
         return None
