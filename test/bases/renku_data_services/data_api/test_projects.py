@@ -263,7 +263,7 @@ async def test_get_all_projects_with_pagination(create_project, sanic_client, us
     assert response.headers["per-page"] == "4"
     assert response.headers["total"] == "9"
     assert response.headers["total-pages"] == "3"
-    assert response.json == snapshot(exclude=props("id", "creation_date"))
+    assert response.json == snapshot(exclude=props("id", "creation_date", "updated_at", "etag"))
 
 
 @pytest.mark.asyncio

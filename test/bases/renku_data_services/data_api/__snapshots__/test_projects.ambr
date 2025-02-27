@@ -2,11 +2,15 @@
 # name: test_get_all_projects_with_pagination
   list([
     dict({
-      'created_by': dict({
-      }),
+      'created_by': 'user',
+      'is_template': False,
+      'keywords': list([
+      ]),
       'name': 'Project 1',
+      'namespace': 'user.doe',
       'repositories': list([
       ]),
+      'secrets_mount_directory': '/secrets',
       'slug': 'project-1',
       'visibility': 'private',
     }),
