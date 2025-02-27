@@ -241,7 +241,6 @@ class ShipwrightBuildRunParams:
     retention_after_failed: timedelta | None = None
     retention_after_succeeded: timedelta | None = None
     build_timeout: timedelta | None = None
-
     node_selector: dict[str, str] | None = None
     tolerations: list[crs.Toleration] | None = None
 

@@ -154,7 +154,6 @@ class BuildsConfig:
     buildrun_retention_after_failed: timedelta | None = None
     buildrun_retention_after_succeeded: timedelta | None = None
     buildrun_build_timeout: timedelta | None = None
-
     node_selector: dict[str, str] | None = None
     tolerations: list[session_crs.Toleration] | None = None
 
