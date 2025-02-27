@@ -97,9 +97,9 @@ class MigrateResult:
     requires_reindex: bool
 
     @classmethod
-    def empty(cls) -> "MigrateResult":
+    def empty(cls, version: int | None = None) -> "MigrateResult":
         """Create an empty MigrateResult."""
-        return MigrateResult(None, None, 0, 0, False)
+        return MigrateResult(version, version, 0, 0, False)
 
 
 class VersionDoc(BaseModel):
@@ -181,6 +181,9 @@ class SchemaMigrator:
                         return MigrateResult.empty()
                     case UpsertSuccess():
                         try:
+                            initial_doc = await self.__current_version0(client)
+                            if initial_doc is None:
+                                raise Exception("No inital migration document found after inserting it.")
                             return await self.__doMigrate(client, migrations, initial_doc)
                         finally:
                             last_doc = await self.__current_version0(client)
@@ -198,7 +201,7 @@ class SchemaMigrator:
         remain = [e for e in migrations if e.version > initialDoc.current_schema_version_l]
         logging.info(f"There are {len(remain)} migrations to run")
         if remain == []:
-            return MigrateResult.empty()
+            return MigrateResult.empty(version=initialDoc.current_schema_version_l)
 
         remain.sort(key=lambda m: m.version)
         schema = await client.get_schema()
@@ -230,6 +233,12 @@ class SchemaMigrator:
     async def __upsert_version(self, client: DefaultSolrClient, current: VersionDoc, next: int) -> VersionDoc:
         logging.info(f"core {self.__config.core}: set schema migration version to {next}")
         next_doc = current.model_copy(update={"current_schema_version_l": next})
-        await client.upsert([next_doc])
+        update_result = await client.upsert([next_doc])
+        match update_result:
+            case "VersionConflict":
+                raise Exception("VersionConflict when updating migration tracking document!")
+            case _:
+                pass
+
         result = await client.get(self.__docId)
         return VersionDoc.model_validate(result.response.docs[0])
