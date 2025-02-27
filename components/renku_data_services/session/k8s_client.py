@@ -299,7 +299,7 @@ class ShipwrightClient:
                         ),
                         timeout=f"{params.build_timeout.total_seconds()}s" if params.build_timeout else None,
                         nodeSelector=params.node_selector,
-                        tolerations=[],
+                        tolerations=params.tolerations,
                     )
                 ),
                 retention=retention,

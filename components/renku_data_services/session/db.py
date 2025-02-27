@@ -19,7 +19,7 @@ from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import RESET
 from renku_data_services.crc.db import ResourcePoolRepository
-from renku_data_services.session import constants, crs, models
+from renku_data_services.session import constants, models
 from renku_data_services.session import orm as schemas
 from renku_data_services.session.k8s_client import ShipwrightClient
 
@@ -978,12 +978,6 @@ class SessionRepository:
         )
         build_timeout = self.builds_config.buildrun_build_timeout or constants.BUILD_RUN_DEFAULT_TIMEOUT
 
-        # TODO: Get this from the chart values
-        node_selector = {"renku.io/node-purpose": "image-build"}
-        tolerations: list[crs.Toleration] = [
-            crs.Toleration(key="renku.io/dedicated", operator="Equal", effect="NoSchedule", value="image-build")
-        ]
-
         return models.ShipwrightBuildRunParams(
             name=build.k8s_name,
             git_repository=git_repository,
@@ -994,8 +988,8 @@ class SessionRepository:
             retention_after_failed=retention_after_failed,
             retention_after_succeeded=retention_after_succeeded,
             build_timeout=build_timeout,
-            node_selector=node_selector,
-            tolerations=tolerations,
+            node_selector=self.builds_config.node_selector,
+            tolerations=self.builds_config.tolerations,
         )
 
     async def _get_environment_authorization(

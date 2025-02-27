@@ -22,6 +22,8 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.types import PublicKeyTypes
 from jwt import PyJWKClient
+from pydantic import ValidationError as PydanticValidationError
+from sanic.log import logger
 from yaml import safe_load
 
 import renku_data_services.base_models as base_models
@@ -65,6 +67,7 @@ from renku_data_services.platform.db import PlatformRepository
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository, ProjectSessionSecretRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsRepo
+from renku_data_services.session import crs as session_crs
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
 from renku_data_services.storage.db import StorageRepository
@@ -152,6 +155,9 @@ class BuildsConfig:
     buildrun_retention_after_succeeded: timedelta | None = None
     buildrun_build_timeout: timedelta | None = None
 
+    node_selector: dict[str, str] | None = None
+    tolerations: list[session_crs.Toleration] | None = None
+
     @classmethod
     def from_env(cls, prefix: str = "", namespace: str = "") -> "BuildsConfig":
         """Create a config from environment variables."""
@@ -191,6 +197,26 @@ class BuildsConfig:
                 cache_url=cache_url,
             )
 
+        node_selector: dict[str, str] | None = None
+        node_selector_str = os.environ.get(f"{prefix}BUILD_NODE_SELECTOR")
+        if node_selector_str:
+            try:
+                node_selector = session_crs.NodeSelector.model_validate_json(node_selector_str).root
+            except PydanticValidationError:
+                logger.error(
+                    f"Could not validate {prefix}BUILD_NODE_SELECTOR. Will not use node selector for image builds."
+                )
+
+        tolerations: list[session_crs.Toleration] | None = None
+        tolerations_str = os.environ.get(f"{prefix}BUILD_NODE_TOLERATIONS")
+        if tolerations_str:
+            try:
+                tolerations = session_crs.Tolerations.model_validate_json(tolerations_str).root
+            except PydanticValidationError:
+                logger.error(
+                    f"Could not validate {prefix}BUILD_NODE_TOLERATIONS. Will not use tolerations for image builds."
+                )
+
         return cls(
             enabled=enabled or False,
             build_output_image_prefix=build_output_image_prefix or None,
@@ -201,6 +227,8 @@ class BuildsConfig:
             buildrun_retention_after_failed=buildrun_retention_after_failed,
             buildrun_retention_after_succeeded=buildrun_retention_after_succeeded,
             buildrun_build_timeout=buildrun_build_timeout,
+            node_selector=node_selector,
+            tolerations=tolerations,
         )
 
 
