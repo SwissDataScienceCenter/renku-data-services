@@ -29,6 +29,7 @@ import renku_data_services.crc
 import renku_data_services.data_connectors
 import renku_data_services.platform
 import renku_data_services.repositories
+import renku_data_services.search
 import renku_data_services.storage
 import renku_data_services.users
 from renku_data_services import errors
@@ -216,6 +217,7 @@ class Config:
             renku_data_services.platform.__file__,
             renku_data_services.message_queue.__file__,
             renku_data_services.data_connectors.__file__,
+            renku_data_services.search.__file__,
         ]
 
         api_specs = []
