@@ -856,7 +856,7 @@ class SessionRepository:
         build_model = build.dump()
 
         if self.shipwright_client is not None:
-            await self.shipwright_client.cancel_image_build(buildrun_name=build_model.k8s_name)
+            await self.shipwright_client.cancel_build_run(name=build_model.k8s_name)
         else:
             logger.error("Shipwright client is None")
 
