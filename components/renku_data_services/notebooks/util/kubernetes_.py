@@ -65,8 +65,6 @@ def renku_2_make_server_name(
     safe_username = safe_username.lower()
     safe_username = re.sub(r"[^a-z0-9-]", "-", safe_username)
     prefix = _make_server_name_prefix(safe_username)
-    # /run/secrets/kcubeconfigs/<names>
-
     server_string_for_hashing = f"{user.id}-{project_id}-{launcher_id}-{cluster_name}"
     server_hash = md5(server_string_for_hashing.encode(), usedforsecurity=False).hexdigest().lower()
     # NOTE: A K8s object name can only contain lowercase alphanumeric characters, hyphens, or dots.
