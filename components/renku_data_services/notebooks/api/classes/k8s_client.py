@@ -532,7 +532,7 @@ class _SingleK8sClient(Generic[_SessionType, _Kr8sType]):
 
         self.sanitize = self._k8s_client.sanitize
 
-    async def list_sessions(self, safe_username: str) -> list[_SessionType]:
+    async def list_servers(self, safe_username: str) -> list[_SessionType]:
         """Get a list of servers that belong to a user."""
         sessions: list[_SessionType] = await self._k8s_client.list_sessions(safe_username=safe_username)
         return [
@@ -543,7 +543,7 @@ class _SingleK8sClient(Generic[_SessionType, _Kr8sType]):
             and session.metadata.labels.get(self.username_label) == safe_username
         ]
 
-    async def get_session(self, name: str, safe_username: str) -> _SessionType | None:
+    async def get_server(self, name: str, safe_username: str) -> _SessionType | None:
         """Attempt to get a specific server by name from the cache.
 
         If the request to the cache fails, fallback to the k8s API.
@@ -560,12 +560,12 @@ class _SingleK8sClient(Generic[_SessionType, _Kr8sType]):
             return None
         return server
 
-    async def get_session_logs(
+    async def get_server_logs(
         self, server_name: str, safe_username: str, max_log_lines: Optional[int] = None
     ) -> dict[str, str]:
         """Get the logs from the server."""
         # NOTE: this get_server ensures the user has access to the server without it you could read someone elses logs
-        server = await self.get_session(server_name, safe_username)
+        server = await self.get_server(server_name, safe_username)
         if not server:
             raise errors.MissingResourceError(
                 message=f"Cannot find server {server_name} for user {safe_username} to retrieve logs."
@@ -573,39 +573,37 @@ class _SingleK8sClient(Generic[_SessionType, _Kr8sType]):
         pod_name = f"{server_name}-0"
         return await self._k8s_client.get_pod_logs(pod_name, max_log_lines)
 
-    async def create_session(self, manifest: _SessionType, safe_username: str) -> _SessionType:
+    async def create_server(self, manifest: _SessionType, safe_username: str) -> _SessionType:
         """Create a server."""
         server_name = manifest.metadata.name
-        server = await self.get_session(server_name, safe_username)
+        server = await self.get_server(server_name, safe_username)
         if server:
             # NOTE: server already exists
             return server
         manifest.metadata.labels[self.username_label] = safe_username
         return await self._k8s_client.create_server(manifest)
 
-    async def patch_session(
+    async def patch_server(
         self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> _SessionType:
         """Patch a server."""
-        server = await self.get_session(server_name, safe_username)
+        server = await self.get_server(server_name, safe_username)
         if not server:
             raise errors.MissingResourceError(
                 message=f"Cannot find server {server_name} for user {safe_username} in order to patch it."
             )
         return await self._k8s_client.patch_server(server_name=server_name, patch=patch)
 
-    async def delete_session(self, server_name: str, safe_username: str) -> None:
+    async def delete_server(self, server_name: str, safe_username: str) -> None:
         """Delete the server."""
-        server = await self.get_session(server_name, safe_username)
+        server = await self.get_server(server_name, safe_username)
         if not server:
             raise errors.MissingResourceError(
                 message=f"Cannot find server {server_name} for user {safe_username} in order to delete it."
             )
         return await self._k8s_client.delete_server(server_name)
 
-    async def patch_session_tokens(
-        self, server_name: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken
-    ) -> None:
+    async def patch_server_tokens(self, server_name: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken) -> None:
         """Patch the Renku and Gitlab access tokens used in a session."""
         await self._k8s_client.patch_statefulset_tokens(server_name, renku_tokens)
         await self._k8s_client.patch_image_pull_secret(server_name, gitlab_token)
@@ -674,7 +672,7 @@ class _MultipleK8sClient(Generic[_SessionType, _Kr8sType]):
         client = self._session2client.get(session_name, None)
         if client is None:
             for c in self._clients.values():
-                if session_name in await c.list_sessions(safe_username):
+                if session_name in await c.list_servers(safe_username):
                     self._session2client[session_name] = c
                     client = c
                     break
@@ -707,11 +705,11 @@ class _MultipleK8sClient(Generic[_SessionType, _Kr8sType]):
 
         return name
 
-    async def list_sessions(self, safe_username: str) -> list[_SessionType]:
+    async def list_servers(self, safe_username: str) -> list[_SessionType]:
         # Don't blame me, blame python's list comprehension syntax
-        return [s for c in self._clients.values() for s in await c.list_sessions(safe_username)]
+        return [s for c in self._clients.values() for s in await c.list_servers(safe_username)]
 
-    async def create_session(
+    async def create_server(
         self, manifest: _SessionType, api_user: AnonymousAPIUser | AuthenticatedAPIUser
     ) -> _SessionType:
         class_id = manifest.metadata.annotations["renku.io/resource_class_id"]
@@ -719,53 +717,51 @@ class _MultipleK8sClient(Generic[_SessionType, _Kr8sType]):
 
         client = await self.client_by_class_id(class_id, api_user)
 
-        session = await client.create_session(manifest, safe_username)
+        session = await client.create_server(manifest, api_user.id)
         self._session2client[server_name] = client
 
         return session
 
-    async def get_session(self, name: str, safe_username: str) -> _SessionType | None:
+    async def get_server(self, name: str, safe_username: str) -> _SessionType | None:
         client = await self._client_by_session(name, safe_username)
         if client is not None:
-            return await client.get_session(name, safe_username)
+            return await client.get_server(name, safe_username)
 
         return None
 
-    async def get_session_logs(
+    async def get_server_logs(
         self, server_name: str, safe_username: str, max_log_lines: Optional[int] = None
     ) -> dict[str, str]:
         client = await self._client_by_session(server_name, safe_username)
         if client is not None:
-            return await client.get_session_logs(server_name, safe_username, max_log_lines)
+            return await client.get_server_logs(server_name, safe_username, max_log_lines)
 
         raise errors.MissingResourceError(
             message=f"Cannot find server {server_name} for user {safe_username} to retrieve logs."
         )
 
-    async def patch_session(
+    async def patch_server(
         self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> _SessionType:
         client = await self._client_by_session(server_name, safe_username)
         if client is not None:
-            return await client.patch_session(server_name, safe_username, patch)
+            return await client.patch_server(server_name, safe_username, patch)
 
         raise errors.MissingResourceError(
             message=f"Cannot find cluster connection to server {server_name}"
             f" for user {safe_username} in order to patch it."
         )
 
-    async def delete_session(self, server_name: str, safe_username: str) -> None:
+    async def delete_server(self, server_name: str, safe_username: str) -> None:
         # Retrieve and remove from the mapping to the k8s client for this session
         client = self._session2client.pop(server_name, None)
         if client is not None:
-            await client.delete_session(server_name, safe_username)
+            await client.delete_server(server_name, safe_username)
 
-    async def patch_session_tokens(
-        self, server_name: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken
-    ) -> None:
+    async def patch_server_tokens(self, server_name: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken) -> None:
         # TODO: Brute force this for now, not pretty
         for c in self._clients.values():
-            await c.patch_session_tokens(server_name, renku_tokens, gitlab_token)
+            await c.patch_server_tokens(server_name, renku_tokens, gitlab_token)
 
     async def patch_statefulset(
         self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]]

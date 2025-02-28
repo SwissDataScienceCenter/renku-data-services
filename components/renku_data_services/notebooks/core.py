@@ -76,7 +76,7 @@ async def user_servers(
     """Returns a filtered list of servers for the given user."""
 
     servers = [
-        UserServerManifest(s, config.sessions.default_image) for s in await config.k8s_client.list_sessions(user.id)
+        UserServerManifest(s, config.sessions.default_image) for s in await config.k8s_client.list_servers(user.id)
     ]
     filtered_servers = {}
     ann_prefix = config.session_get_endpoint_annotations.renku_annotation_prefix
@@ -91,7 +91,7 @@ async def user_server(
 ) -> UserServerManifest:
     """Returns the requested server for the user."""
 
-    server = await config.k8s_client.get_session(server_name, user.id)
+    server = await config.k8s_client.get_server(server_name, user.id)
     if server is None:
         raise errors.MissingResourceError(message=f"The server {server_name} does not exist.")
     return UserServerManifest(server, config.sessions.default_image)
@@ -109,7 +109,7 @@ async def patch_server(
     if not config.sessions.storage.pvs_enabled:
         raise intermittent.PVDisabledError()
 
-    server = await config.k8s_client.get_session(server_name, user.id)
+    server = await config.k8s_client.get_server(server_name, user.id)
     if server is None:
         raise errors.MissingResourceError(message=f"The server with name {server_name} cannot be found")
     if server.spec is None:
@@ -161,7 +161,7 @@ async def patch_server(
                     "path": "/metadata/labels/renku.io~1quota",
                 }
             )
-        new_server = await config.k8s_client.patch_session(
+        new_server = await config.k8s_client.patch_server(
             server_name=server_name, safe_username=user.id, patch=js_patch
         )
         ss_patch: list[dict[str, Any]] = [
@@ -221,7 +221,7 @@ async def patch_server(
             },
         }
 
-        new_server = await config.k8s_client.patch_session(server_name=server_name, safe_username=user.id, patch=patch)
+        new_server = await config.k8s_client.patch_server(server_name=server_name, safe_username=user.id, patch=patch)
     elif state == PatchServerStatusEnum.Running:
         # NOTE: We clear hibernation annotations in Amalthea to avoid flickering in the UI (showing
         # the repository as dirty when resuming a session for a short period of time).
@@ -243,8 +243,8 @@ async def patch_server(
                 floor(user.access_token_expires_at.timestamp()) if user.access_token_expires_at is not None else -1
             ),
         )
-        await config.k8s_client.patch_session_tokens(server_name, renku_tokens, gitlab_token)
-        new_server = await config.k8s_client.patch_session(server_name=server_name, safe_username=user.id, patch=patch)
+        await config.k8s_client.patch_server_tokens(server_name, renku_tokens, gitlab_token)
+        new_server = await config.k8s_client.patch_server(server_name=server_name, safe_username=user.id, patch=patch)
 
     return UserServerManifest(new_server, config.sessions.default_image)
 
@@ -252,7 +252,7 @@ async def patch_server(
 async def stop_server(config: NotebooksConfig, user: AnonymousAPIUser | AuthenticatedAPIUser, server_name: str) -> None:
     """Stops / deletes the requested server."""
 
-    await config.k8s_client.delete_session(server_name, safe_username=user.id)
+    await config.k8s_client.delete_server(server_name, safe_username=user.id)
 
 
 def server_options(config: NotebooksConfig) -> dict:
@@ -271,7 +271,7 @@ async def server_logs(
 ) -> dict:
     """Returns the logs of the given server."""
 
-    return await config.k8s_client.get_session_logs(
+    return await config.k8s_client.get_server_logs(
         server_name=server_name,
         safe_username=user.id,
         max_log_lines=max_lines,
@@ -334,7 +334,7 @@ async def launch_notebook_helper(
 ) -> tuple[UserServerManifest, int]:
     """Helper function to launch a Jupyter server."""
 
-    server = await nb_config.k8s_client.get_session(server_name, user.id)
+    server = await nb_config.k8s_client.get_server(server_name, user.id)
 
     if server:
         return UserServerManifest(server, nb_config.sessions.default_image, nb_config.sessions.storage.pvs_enabled), 200
@@ -534,7 +534,7 @@ async def launch_notebook_helper(
 
     async def create_secret(payload: dict[str, Any], type_message: str) -> None:
         async def _on_error(server_name: str, error_msg: str) -> None:
-            await nb_config.k8s_client.delete_session(server_name, safe_username=user.id)
+            await nb_config.k8s_client.delete_server(server_name, safe_username=user.id)
             raise RuntimeError(error_msg)
 
         try:
