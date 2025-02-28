@@ -373,8 +373,6 @@ class ShipwrightClient:
     async def cancel_image_build(self, buildrun_name: str) -> None:
         """Cancel a build by deleting the corresponding BuildRun from Shipwright."""
         await self.cancel_build_run(name=buildrun_name)
-        # # TODO: use proper cancellation, see: https://shipwright.io/docs/build/buildrun/#canceling-a-buildrun
-        # await self.delete_build_run(name=buildrun_name)
 
     async def get_image_build_logs(self, buildrun_name: str, max_log_lines: int | None = None) -> dict[str, str]:
         """Get the logs from a Shipwright BuildRun."""
