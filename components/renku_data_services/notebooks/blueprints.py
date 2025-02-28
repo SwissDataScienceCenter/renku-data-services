@@ -5,6 +5,7 @@ from pathlib import PurePosixPath
 from typing import cast
 from urllib.parse import urlparse
 
+from renku_data_services.notebooks.api.amalthea_patches.jupyter_server import image_pull_secret
 from sanic import Request, empty, exceptions, json
 from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
@@ -46,6 +47,7 @@ from renku_data_services.notebooks.crs import (
     Culling,
     ExtraVolume,
     ExtraVolumeMount,
+    ImagePullSecret,
     Ingress,
     InitContainer,
     Metadata,
@@ -246,6 +248,7 @@ class NotebooksNewBP(CustomBlueprint):
         async def _handler(
             request: Request,
             user: AuthenticatedAPIUser | AnonymousAPIUser,
+            # Andrea: this contains the oauth token for gitlab you need to put into the secret
             internal_gitlab_user: APIUser,
             body: apispec.SessionPostRequest,
         ) -> JSONResponse:
@@ -366,10 +369,16 @@ class NotebooksNewBP(CustomBlueprint):
                 auth_secret = await get_auth_secret_anonymous(self.nb_config, server_name, request)
             if auth_secret.volume:
                 extra_volumes.append(auth_secret.volume)
+            # Andrea: check if the image is private and is in the gitlab registry and if the user can see the image
+            # if the image is private and you can see it then add the secret to the "secrets_to_create" dict below
+            # And you need to reference the image pull secret in the AmaltheaSessionV1Alpha1 spec below
+            # and you need to set the "adopt" flag to true
             secrets_to_create.append(auth_secret)
             manifest = AmaltheaSessionV1Alpha1(
                 metadata=Metadata(name=server_name, annotations=annotations),
                 spec=AmaltheaSessionSpec(
+                    # Andrea: update this with the secret name
+                    imagePullSecrets=[ImagePullSecret(name="the-name-of-the-secret", adopt=True)],
                     codeRepositories=[],
                     hibernated=False,
                     reconcileStrategy=ReconcileStrategy.whenFailedOrHibernated,

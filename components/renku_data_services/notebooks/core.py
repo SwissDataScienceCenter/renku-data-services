@@ -346,6 +346,7 @@ async def launch_notebook_helper(
     using_default_image = False
     if image:
         # A specific image was requested
+        # Andrea: reuse this code to check if the image needs an image pull secret
         parsed_image = Image.from_path(image)
         image_repo = parsed_image.repo_api()
         image_exists_publicly = await image_repo.image_exists(parsed_image)
@@ -410,14 +411,13 @@ async def launch_notebook_helper(
             requested_server_options = server_options
         else:
             raise errors.ProgrammingError(
-                message="Got an unexpected type of server options when " f"launching sessions: {type(server_options)}"
+                message=f"Got an unexpected type of server options when launching sessions: {type(server_options)}"
             )
         # The old style API was used, try to find a matching class from the CRC service
         parsed_server_options = await nb_config.crc_validator.find_acceptable_class(user, requested_server_options)
         if parsed_server_options is None:
             raise user_errors.UserInputError(
-                message="Cannot find suitable server options based on your request and "
-                "the available resource classes.",
+                message="Cannot find suitable server options based on your request and the available resource classes.",
                 detail="You are receiving this error because you are using the old API for "
                 "selecting resources. Updating to the new API which includes specifying only "
                 "a specific resource class ID and storage is preferred and more convenient.",

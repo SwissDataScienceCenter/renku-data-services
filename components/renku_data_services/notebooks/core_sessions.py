@@ -439,6 +439,10 @@ async def patch_session(
     if extra_containers:
         patch.spec.extraContainers = extra_containers
 
+    # Andrea:
+    # If the image is private - check if the image pull secret exists
+    # And patch in the new gitlab token
+
     patch_serialized = patch.to_rfc7386()
     if len(patch_serialized) == 0:
         return session

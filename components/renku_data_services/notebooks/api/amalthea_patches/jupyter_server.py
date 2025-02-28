@@ -125,6 +125,7 @@ def image_pull_secret(server: "UserServer", access_token: str | None) -> list[di
         }
         registry_secret = json.dumps(registry_secret)
         registry_secret = base64.b64encode(registry_secret.encode()).decode()
+        # Andrea: copy this into a separate function to create the image pull secret spec
         patches.append(
             {
                 "type": "application/json-patch+json",
