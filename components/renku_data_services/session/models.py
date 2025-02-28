@@ -9,6 +9,7 @@ from ulid import ULID
 
 from renku_data_services import errors
 from renku_data_services.base_models.core import ResetType
+from renku_data_services.session import crs
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -240,6 +241,8 @@ class ShipwrightBuildRunParams:
     retention_after_failed: timedelta | None = None
     retention_after_succeeded: timedelta | None = None
     build_timeout: timedelta | None = None
+    node_selector: dict[str, str] | None = None
+    tolerations: list[crs.Toleration] | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
