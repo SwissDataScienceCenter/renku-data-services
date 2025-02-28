@@ -93,10 +93,10 @@ class SearchUpdatesRepo:
                 }
             case DeleteDoc() as d:
                 return {
-                    "entity_id": d.doc_id,
+                    "entity_id": d.id,
                     "entity_type": d.entity_type,
                     "created_at": started,
-                    "payload": json.dumps({"id": d.doc_id, "deleted": True}),
+                    "payload": json.dumps(d.to_dict()),
                 }
 
     async def upsert(self, entity: Entity, started_at: datetime | None = None) -> ULID:
