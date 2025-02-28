@@ -8,6 +8,37 @@ info:
 servers:
   - url: /api/data
 paths:
+  /search/query:
+    get:
+      summary: Run a search query.
+      responses:
+        "200":
+          description: Search results according to the query.
+          headers:
+            x-page:
+              required: true
+              schema:
+                type: integer
+                format: int32
+            x-per-page:
+              required: true
+              schema:
+                type: integer
+                format: int32
+            x-total:
+              required: true
+              schema:
+                type: integer
+                format: int64
+            x-total-pages:
+              required: true
+              schema:
+                type: integer
+                format: int32
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResult"
   /search/reprovision:
     post:
       summary: Start a new reprovisioning
@@ -56,6 +87,237 @@ paths:
 
 components:
   schemas:
+    FacetData:
+      title: FacetData
+      examples:
+        - entityType:
+            Project: 15
+            User: 3
+      type: object
+      required:
+        - entityType
+      properties:
+        entityType:
+          $ref: '#/components/schemas/Map_EntityType_Int'
+    Group:
+      title: Group
+      examples:
+        - type: Group
+          id: 2CAF4C73F50D4514A041C9EDDB025A36
+          name: SDSC
+          namespace: SDSC
+          description: SDSC group
+          score: 1.1
+      type: object
+      required:
+        - id
+        - name
+        - namespace
+        - type
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        namespace:
+          type: string
+        description:
+          type: string
+        score:
+          type: number
+          format: double
+        type:
+          type: string
+          const: Group
+    Map_EntityType_Int:
+      title: Map_EntityType_Int
+      type: object
+      additionalProperties:
+        type: integer
+        format: int32
+    PageDef:
+      title: PageDef
+      type: object
+      required:
+        - limit
+        - offset
+      properties:
+        limit:
+          type: integer
+          format: int32
+        offset:
+          type: integer
+          format: int32
+    PageWithTotals:
+      title: PageWithTotals
+      type: object
+      required:
+        - page
+        - totalResult
+        - totalPages
+      properties:
+        page:
+          $ref: '#/components/schemas/PageDef'
+        totalResult:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+          format: int32
+        prevPage:
+          type: integer
+          format: int32
+        nextPage:
+          type: integer
+          format: int32
+    Project:
+      title: Project
+      examples:
+        - type: Project
+          id: 01HRA7AZ2Q234CDQWGA052F8MK
+          name: renku
+          slug: renku
+          namespace:
+            type: Group
+            id: 2CAF4C73F50D4514A041C9EDDB025A36
+            name: SDSC
+            namespace: SDSC
+            description: SDSC group
+            score: 1.1
+          repositories:
+            - https://github.com/renku
+          visibility: public
+          description: Renku project
+          createdBy:
+            type: User
+            id: 1CAF4C73F50D4514A041C9EDDB025A36
+            namespace: renku/renku
+            firstName: Albert
+            lastName: Einstein
+            score: 2.1
+          creationDate: '2025-03-06T15:05:42.058323392Z'
+          keywords:
+            - data
+            - science
+          score: 1
+      type: object
+      required:
+        - id
+        - name
+        - slug
+        - visibility
+        - creationDate
+        - type
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        namespace:
+          $ref: '#/components/schemas/UserOrGroup'
+        repositories:
+          type: array
+          items:
+            type: string
+        visibility:
+          $ref: '#/components/schemas/Visibility'
+        description:
+          type: string
+        createdBy:
+          $ref: '#/components/schemas/User'
+        creationDate:
+          type: string
+          format: date-time
+        keywords:
+          type: array
+          items:
+            type: string
+        score:
+          type: number
+          format: double
+        type:
+          type: string
+          const: Project
+    SearchEntity:
+      title: SearchEntity
+      oneOf:
+        - $ref: '#/components/schemas/Group'
+        - $ref: '#/components/schemas/Project'
+        - $ref: '#/components/schemas/User'
+      discriminator:
+        propertyName: type
+        mapping:
+          Group: '#/components/schemas/Group'
+          Project: '#/components/schemas/Project'
+          User: '#/components/schemas/User'
+    SearchResult:
+      title: SearchResult
+      type: object
+      required:
+        - facets
+        - pagingInfo
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchEntity'
+        facets:
+          $ref: '#/components/schemas/FacetData'
+        pagingInfo:
+          $ref: '#/components/schemas/PageWithTotals'
+    User:
+      title: User
+      examples:
+        - type: User
+          id: 1CAF4C73F50D4514A041C9EDDB025A36
+          namespace: renku/renku
+          firstName: Albert
+          lastName: Einstein
+          score: 2.1
+      type: object
+      required:
+        - id
+        - type
+      properties:
+        id:
+          type: string
+        namespace:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        score:
+          type: number
+          format: double
+        type:
+          type: string
+          const: User
+    UserOrGroup:
+      title: UserOrGroup
+      examples:
+        - type: Group
+          id: 2CAF4C73F50D4514A041C9EDDB025A36
+          name: SDSC
+          namespace: SDSC
+          description: SDSC group
+          score: 1.1
+      oneOf:
+        - $ref: '#/components/schemas/Group'
+        - $ref: '#/components/schemas/User'
+      discriminator:
+        propertyName: type
+        mapping:
+          Group: '#/components/schemas/Group'
+          User: '#/components/schemas/User'
+    Visibility:
+      title: Visibility
+      type: string
+      enum:
+        - private
+        - public
     Reprovisioning:
       description: A reprovisioning
       type: object
