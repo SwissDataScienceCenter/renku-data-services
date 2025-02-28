@@ -17,7 +17,7 @@ from kr8s import NotFoundError, ServerError
 from kr8s.asyncio.objects import APIObject, Pod, Secret, StatefulSet
 from kubernetes.client import V1Secret
 
-from renku_data_services.base_models import APIUser
+from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.errors import errors
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
@@ -711,7 +711,9 @@ class _MultipleK8sClient(Generic[_SessionType, _Kr8sType]):
         # Don't blame me, blame python's list comprehension syntax
         return [s for c in self._clients.values() for s in await c.list_sessions(safe_username)]
 
-    async def create_session(self, manifest: _SessionType, safe_username: str, api_user: APIUser) -> _SessionType:
+    async def create_session(
+        self, manifest: _SessionType, api_user: AnonymousAPIUser | AuthenticatedAPIUser
+    ) -> _SessionType:
         class_id = manifest.metadata.annotations["renku.io/resource_class_id"]
         server_name = manifest.metadata.name
 
