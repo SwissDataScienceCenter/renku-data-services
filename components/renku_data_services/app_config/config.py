@@ -308,6 +308,7 @@ class Config:
                 message_queue=self.message_queue,
                 event_repo=self.event_repo,
                 group_repo=self.group_repo,
+                search_updates_repo=self.search_updates_repo,
             )
         return self._project_repo
 
@@ -344,6 +345,7 @@ class Config:
                 event_repo=self.event_repo,
                 group_authz=self.authz,
                 message_queue=self.message_queue,
+                search_updates_repo=self.search_updates_repo,
             )
         return self._group_repo
 
@@ -375,6 +377,7 @@ class Config:
                 message_queue=self.message_queue,
                 event_repo=self.event_repo,
                 group_repo=self.group_repo,
+                search_updates_repo=self.search_updates_repo,
                 encryption_key=self.encryption_key,
                 authz=self.authz,
             )

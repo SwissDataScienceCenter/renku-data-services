@@ -6,12 +6,24 @@ from ulid import ULID
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.namespace.models import Namespace, NamespaceKind
 from renku_data_services.search.db import SearchUpdatesRepo
+from renku_data_services.search.models import DeleteDoc
 from renku_data_services.solr.entity_documents import User as UserDoc
 from renku_data_services.users.models import UserInfo
 
 user_namespace = Namespace(
     id=ULID(), slug="test/user", kind=NamespaceKind.user, created_by="userid_2", underlying_resource_id=ULID()
 )
+
+
+async def test_delete_doc(app_config_instance):
+    run_migrations_for_app("common")
+    repo = SearchUpdatesRepo(app_config_instance.db.async_session_maker)
+    doc = DeleteDoc.user("user1234")
+    orm_id = await repo.upsert(doc)
+    db_doc = await repo.find_by_id(orm_id)
+    assert db_doc is not None
+    assert db_doc.entity_type == "User"
+    assert db_doc.payload == {"id": "user1234", "deleted": True}
 
 
 @pytest.mark.asyncio

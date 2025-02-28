@@ -60,6 +60,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
     }
 
     await app_config.event_repo.delete_all_events()
+    await app_config.search_updates_repo.clear_all()
 
     _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
 
@@ -83,6 +84,11 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
 
     events = await app_config.event_repo.get_pending_events()
     assert len(events) == 2
+    search_updates = await app_config.search_updates_repo.select_next(10)
+    assert len(search_updates) == 1
+    for e in search_updates:
+        assert e.entity_type == "Project"
+
     project_created_event = next((e for e in events if e.get_message_type() == "project.created"), None)
     assert project_created_event
     created_event = deserialize_binary(
@@ -337,6 +343,8 @@ async def test_result_is_sorted_by_creation_date(create_project, sanic_client, u
 
 @pytest.mark.asyncio
 async def test_delete_project(create_project, sanic_client, user_headers, app_config) -> None:
+    await app_config.search_updates_repo.clear_all()
+
     # Create some projects
     await create_project("Project 1")
     await create_project("Project 2")
@@ -359,6 +367,13 @@ async def test_delete_project(create_project, sanic_client, user_headers, app_co
     )
     assert removed_event.id == project_id
 
+    # Check search updates
+    search_updates = await app_config.search_updates_repo.select_next(20)
+    assert len(search_updates) == 5
+    assert len(set([e.entity_id for e in search_updates])) == 5
+    deleted_project = next(x for x in search_updates if x.entity_id == project["id"])
+    assert deleted_project.payload == {"id": project["id"], "deleted": True}
+
     # Get all projects
     _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
 
@@ -368,6 +383,7 @@ async def test_delete_project(create_project, sanic_client, user_headers, app_co
 
 @pytest.mark.asyncio
 async def test_patch_project(create_project, get_project, sanic_client, user_headers, app_config) -> None:
+    await app_config.search_updates_repo.clear_all()
     # Create some projects
     await create_project("Project 1")
     project = await create_project("Project 2", repositories=["http://renkulab.io/repository-0"], keywords=["keyword"])
@@ -388,6 +404,11 @@ async def test_patch_project(create_project, get_project, sanic_client, user_hea
     _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=headers, json=patch)
 
     assert response.status_code == 200, response.text
+
+    # Check search updates
+    search_updates = await app_config.search_updates_repo.select_next(20)
+    assert len(search_updates) == 3
+    assert len(set([e.entity_id for e in search_updates])) == 3
 
     events = await app_config.event_repo.get_pending_events()
     assert len(events) == 11
@@ -1155,6 +1176,7 @@ async def test_project_slug_case(
 
 @pytest.mark.asyncio
 async def test_project_copy_basics(sanic_client, app_config, user_headers, regular_user, create_project) -> None:
+    await app_config.search_updates_repo.clear_all()
     await create_project("Project 1")
     project = await create_project(
         "Project 2",
@@ -1186,6 +1208,15 @@ async def test_project_copy_basics(sanic_client, app_config, user_headers, regul
     assert copy_project["visibility"] == project["visibility"]
     assert copy_project["keywords"] == ["tag 1", "tag 2"]
     assert copy_project["repositories"] == project["repositories"]
+
+    # Check search updates
+    search_updates = await app_config.search_updates_repo.select_next(20)
+    assert len(search_updates) == 4
+    assert len(set([e.entity_type for e in search_updates])) == 1
+    assert search_updates[0].entity_type == "Project"
+    search_doc = next(x for x in search_updates if x.entity_id == copy_project["id"])
+    assert search_doc.payload["slug"] == "project-slug"
+    assert search_doc.payload["name"] == "Renku Native Project"
 
     events = await app_config.event_repo.get_pending_events()
     assert len(events) == 2

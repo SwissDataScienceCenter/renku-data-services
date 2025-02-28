@@ -9,6 +9,7 @@ from renku_data_services.message_queue.models import Reprovisioning
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.search.db import SearchUpdatesRepo
+from renku_data_services.search.models import DeleteDoc
 from renku_data_services.solr.solr_client import (
     DefaultSolrClient,
     RawDocument,
@@ -88,6 +89,16 @@ async def update_solr(search_updates_repo: SearchUpdatesRepo, solr_client: SolrC
             else:
                 counter = counter + len(entries)
                 await search_updates_repo.mark_processed(ids)
+
+            try:
+                # In the above upsert, documents could get
+                # "soft-deleted". This would finally remove them. As
+                # the success of this is not production critical,
+                # errors are only logged
+                await solr_client.delete(DeleteDoc.solr_query())
+            except Exception as de:
+                logger.error("Error when removing soft-deleted documents", exc_info=de)
+
         except Exception as e:
             logger.error(f"Error while updating solr with entities {ids}", exc_info=e)
             try:

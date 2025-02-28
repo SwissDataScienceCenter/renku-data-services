@@ -27,6 +27,8 @@ from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import dispatch_message
 from renku_data_services.namespace import models
 from renku_data_services.namespace import orm as schemas
+from renku_data_services.search.db import SearchUpdatesRepo
+from renku_data_services.search.decorators import update_search_document
 from renku_data_services.users import models as user_models
 from renku_data_services.users import orm as user_schemas
 from renku_data_services.utils.core import with_db_transaction
@@ -41,15 +43,18 @@ class GroupRepository:
         event_repo: EventRepository,
         group_authz: Authz,
         message_queue: IMessageQueue,
+        search_updates_repo: SearchUpdatesRepo,
     ) -> None:
         self.session_maker = session_maker
         self.authz: Authz = group_authz
         self.event_repo: EventRepository = event_repo
         self.message_queue: IMessageQueue = message_queue
+        self.search_updates_repo = search_updates_repo
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.insert_many, ResourceType.user_namespace)
     @dispatch_message(events.InsertUserNamespace)
+    @update_search_document
     async def generate_user_namespaces(self, *, session: AsyncSession | None = None) -> list[user_models.UserInfo]:
         """Generate user namespaces if the user table has data and the namespaces table is empty."""
         if not session:
@@ -173,6 +178,7 @@ class GroupRepository:
 
     @with_db_transaction
     @dispatch_message(GroupUpdated)
+    @update_search_document
     async def update_group(
         self, user: base_models.APIUser, slug: Slug, patch: models.GroupPatch, *, session: AsyncSession | None = None
     ) -> models.Group:
@@ -239,6 +245,7 @@ class GroupRepository:
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.delete, ResourceType.group)
     @dispatch_message(GroupRemoved)
+    @update_search_document
     async def delete_group(
         self, user: base_models.APIUser, slug: Slug, *, session: AsyncSession | None = None
     ) -> models.DeletedGroup | None:
@@ -280,6 +287,7 @@ class GroupRepository:
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.create, ResourceType.group)
     @dispatch_message(GroupAdded)
+    @update_search_document
     async def insert_group(
         self,
         user: base_models.APIUser,
