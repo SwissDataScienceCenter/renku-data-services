@@ -1,4 +1,4 @@
-"""Message queue implementation for redis streams."""
+"""Decorators to support search integration."""
 
 import functools
 from collections.abc import Awaitable, Callable
