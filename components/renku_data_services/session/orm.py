@@ -233,6 +233,8 @@ class BuildORM(BaseORM):
         "result_repository_git_commit_sha", String(100), default=None
     )
 
+    error_reason: Mapped[str | None] = mapped_column("error_reason", String(500), default=None)
+
     def dump(self) -> models.Build:
         """Create a build object from the ORM object."""
         result = self._dump_result()
@@ -242,6 +244,7 @@ class BuildORM(BaseORM):
             created_at=self.created_at,
             status=self.status,
             result=result,
+            error_reason=self.error_reason,
         )
 
     def _dump_result(self) -> models.BuildResult | None:

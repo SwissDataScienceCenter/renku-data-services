@@ -856,7 +856,7 @@ class SessionRepository:
         build_model = build.dump()
 
         if self.shipwright_client is not None:
-            await self.shipwright_client.cancel_image_build(buildrun_name=build_model.k8s_name)
+            await self.shipwright_client.cancel_build_run(name=build_model.k8s_name)
         else:
             logger.error("Shipwright client is None")
 
@@ -927,6 +927,7 @@ class SessionRepository:
         if update is not None and update.status == models.BuildStatus.failed:
             build.status = models.BuildStatus.failed
             build.completed_at = update.completed_at
+            build.error_reason = update.error_reason
         elif update is not None and update.status == models.BuildStatus.succeeded and update.result is not None:
             build.status = models.BuildStatus.succeeded
             build.completed_at = update.completed_at

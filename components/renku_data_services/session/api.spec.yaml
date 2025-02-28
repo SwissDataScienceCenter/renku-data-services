@@ -824,6 +824,8 @@ components:
           $ref: "#/components/schemas/Ulid"
         created_at:
           $ref: "#/components/schemas/CreationDate"
+        error_reason:
+          $ref: "#/components/schemas/ErrorReason"
       required:
         - id
         - environment_id
@@ -905,6 +907,10 @@ components:
         - "failed"
         - "cancelled"
       example: "succeeded"
+    ErrorReason:
+      description: The reason why a container image build did not succeed, if available.
+      type: string
+      example: "StepOutOfMemory"
     ErrorResponse:
       type: object
       properties:
