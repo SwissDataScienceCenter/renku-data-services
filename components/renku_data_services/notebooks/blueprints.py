@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 from pathlib import PurePosixPath
-from typing import cast
 from urllib.parse import urlparse
 
 from sanic import Request, empty, exceptions, json
@@ -31,6 +30,7 @@ from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.notebooks.core_sessions import (
     get_auth_secret_anonymous,
     get_auth_secret_authenticated,
+    get_culling,
     get_data_sources,
     get_extra_containers,
     get_extra_init_containers,
@@ -43,7 +43,6 @@ from renku_data_services.notebooks.crs import (
     AmaltheaSessionV1Alpha1,
     Authentication,
     AuthenticationType,
-    Culling,
     ExtraVolume,
     ExtraVolumeMount,
     Ingress,
@@ -266,16 +265,21 @@ class NotebooksNewBP(CustomBlueprint):
             default_resource_class = await self.rp_repo.get_default_resource_class()
             if default_resource_class.id is None:
                 raise errors.ProgrammingError(message="The default resource class has to have an ID", quiet=True)
-            resource_class_id: int
             if body.resource_class_id is None:
-                resource_class = await self.rp_repo.get_default_resource_class()
-                # TODO: Add types for saved and unsaved resource class
-                resource_class_id = cast(int, resource_class.id)
+                resource_pool = await self.rp_repo.get_default_resource_pool()
+                resource_class = resource_pool.get_default_resource_class()
+                if not resource_class and len(resource_pool.classes) > 0:
+                    resource_class = resource_pool.classes[0]
+                if not resource_class or not resource_class.id:
+                    raise errors.ProgrammingError(message="There cannot find any resource classes in the default pool.")
             else:
-                resource_class = await self.rp_repo.get_resource_class(user, body.resource_class_id)
-                # TODO: Add types for saved and unsaved resource class
-                resource_class_id = body.resource_class_id
-            await self.nb_config.crc_validator.validate_class_storage(user, resource_class_id, body.disk_storage)
+                resource_pool = await self.rp_repo.get_resource_pool_from_class(user, body.resource_class_id)
+                resource_class = resource_pool.get_resource_class(body.resource_class_id)
+                if not resource_class or not resource_class.id:
+                    raise errors.MissingResourceError(
+                        message=f"The resource class with ID {body.resource_class_id} does not exist."
+                    )
+            await self.nb_config.crc_validator.validate_class_storage(user, resource_class.id, body.disk_storage)
             work_dir_fallback = PurePosixPath("/home/jovyan")
             work_dir = environment.working_directory or image_workdir or work_dir_fallback
             storage_mount_fallback = work_dir / "work"
@@ -413,13 +417,7 @@ class NotebooksNewBP(CustomBlueprint):
                     extraContainers=extra_containers,
                     initContainers=extra_init_containers,
                     extraVolumes=extra_volumes,
-                    culling=Culling(
-                        maxAge=f"{self.nb_config.sessions.culling.registered.max_age_seconds}s",
-                        maxFailedDuration=f"{self.nb_config.sessions.culling.registered.failed_seconds}s",
-                        maxHibernatedDuration=f"{self.nb_config.sessions.culling.registered.hibernated_seconds}s",
-                        maxIdleDuration=f"{self.nb_config.sessions.culling.registered.idle_seconds}s",
-                        maxStartingDuration=f"{self.nb_config.sessions.culling.registered.pending_seconds}s",
-                    ),
+                    culling=get_culling(resource_pool, self.nb_config),
                     authentication=Authentication(
                         enabled=True,
                         type=AuthenticationType.oauth2proxy

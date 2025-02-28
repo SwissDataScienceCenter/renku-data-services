@@ -15,7 +15,7 @@ from yaml import safe_dump
 
 from renku_data_services.base_models.core import AnonymousAPIUser, AuthenticatedAPIUser
 from renku_data_services.crc.db import ResourcePoolRepository
-from renku_data_services.crc.models import GpuKind, ResourceClass
+from renku_data_services.crc.models import GpuKind, ResourceClass, ResourcePool
 from renku_data_services.data_connectors.models import DataConnectorSecret, DataConnectorWithSecrets
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec
@@ -28,6 +28,7 @@ from renku_data_services.notebooks.crs import (
     AmaltheaSessionV1Alpha1Patch,
     AmaltheaSessionV1Alpha1SpecPatch,
     AmaltheaSessionV1Alpha1SpecSessionPatch,
+    Culling,
     DataSource,
     ExtraContainer,
     ExtraVolume,
@@ -361,6 +362,21 @@ async def repositories_from_session(
     return repositories_from_project(project, git_providers)
 
 
+def get_culling(resource_pool: ResourcePool, nb_config: NotebooksConfig) -> Culling:
+    """Create the culling specification for an AmaltheaSession."""
+    idle_threshold_seconds = resource_pool.idle_threshold or nb_config.sessions.culling.registered.idle_seconds
+    hibernation_threshold_seconds = (
+        resource_pool.hibernation_threshold or nb_config.sessions.culling.registered.hibernated_seconds
+    )
+    return Culling(
+        maxAge=f"{nb_config.sessions.culling.registered.max_age_seconds}s",
+        maxFailedDuration=f"{nb_config.sessions.culling.registered.failed_seconds}s",
+        maxHibernatedDuration=f"{hibernation_threshold_seconds}s",
+        maxIdleDuration=f"{idle_threshold_seconds}s",
+        maxStartingDuration=f"{nb_config.sessions.culling.registered.pending_seconds}s",
+    )
+
+
 async def patch_session(
     body: apispec.SessionPatchRequest,
     session_id: str,
@@ -402,13 +418,13 @@ async def patch_session(
 
     # Resource class
     if body.resource_class_id is not None:
-        rcs = await rp_repo.get_classes(user, id=body.resource_class_id)
-        if len(rcs) == 0:
+        rp = await rp_repo.get_resource_pool_from_class(user, body.resource_class_id)
+        rc = rp.get_resource_class(body.resource_class_id)
+        if not rc:
             raise errors.MissingResourceError(
                 message=f"The resource class you requested with ID {body.resource_class_id} does not exist",
                 quiet=True,
             )
-        rc = rcs[0]
         if not patch.spec.session:
             patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()
         patch.spec.session.resources = resources_from_resource_class(rc)
@@ -421,6 +437,7 @@ async def patch_session(
         # Priority class (if a quota is being used)
         if rc.quota:
             patch.spec.priorityClassName = rc.quota
+        patch.spec.culling = get_culling(rp, nb_config)
 
     # If the session is being hibernated we do not need to patch anything else that is
     # not specifically called for in the request body, we can refresh things when the user resumes.
