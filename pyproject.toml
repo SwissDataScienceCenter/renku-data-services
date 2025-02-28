@@ -92,7 +92,7 @@ pre-commit = "^4.0.1"
 sanic-testing = "^24.6.0"
 aiosqlite = "^0.20.0"
 types-pyyaml = "^6.0.12.20241230"
-schemathesis = "^3.39.6"
+schemathesis = "==3.39.7"
 pytest-asyncio = "^0.21.1"
 pytest-postgresql = "^6.1.1"
 types-urllib3 = "^1.26.25.14"
@@ -107,6 +107,7 @@ types-toml = "^0.10.8.20240310"
 types-aiofiles = "^24.1.0.20241221"
 pytest-mock = "^3.14.0"
 uvloop = "^0.21.0"
+syrupy = "^4.8.2"
 
 [build-system]
 requires = ["poetry-core"]
