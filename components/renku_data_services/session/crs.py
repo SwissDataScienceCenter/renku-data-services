@@ -2,9 +2,9 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, RootModel
 
-from renku_data_services.session.cr_shipwright_buildrun import Build, Git, ParamValue, Strategy
+from renku_data_services.session.cr_shipwright_buildrun import Build, Git, ParamValue, Strategy, Toleration
 from renku_data_services.session.cr_shipwright_buildrun import Model as _BuildRun
 from renku_data_services.session.cr_shipwright_buildrun import Output as BuildOutput
 from renku_data_services.session.cr_shipwright_buildrun import Retention1 as Retention
@@ -51,3 +51,15 @@ class TaskRun(_TaskRunBase):
     """Tekton TaskRun."""
 
     metadata: Metadata
+
+
+class NodeSelector(RootModel[dict[str, str] | None]):
+    """A k8s node selector."""
+
+    root: dict[str, str] | None = None
+
+
+class Tolerations(RootModel[list[Toleration] | None]):
+    """A list of k8s tolerations."""
+
+    root: list[Toleration] | None = None

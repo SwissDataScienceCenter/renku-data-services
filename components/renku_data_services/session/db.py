@@ -988,6 +988,8 @@ class SessionRepository:
             retention_after_failed=retention_after_failed,
             retention_after_succeeded=retention_after_succeeded,
             build_timeout=build_timeout,
+            node_selector=self.builds_config.node_selector,
+            tolerations=self.builds_config.tolerations,
         )
 
     async def _get_environment_authorization(
