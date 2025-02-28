@@ -123,6 +123,7 @@ exclude = [
   ".devcontainer/",
   "components/renku_data_services/notebooks/cr_amalthea_session.py",
   "components/renku_data_services/notebooks/cr_jupyter_server.py",
+  "components/renku_data_services/session/cr_shipwright_buildrun.py",
 ]
 
 [tool.ruff.format]
@@ -163,6 +164,7 @@ ignore = [
 "*/versions/*" = ["D", "E", "W"]
 "apispec.py" = ["D", "E", "W", "I", "UP"]
 "components/renku_data_services/notebooks/crs.py" = ["F401"]
+"components/renku_data_services/session/crs.py" = ["F401"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["renku_data_services", "test"]

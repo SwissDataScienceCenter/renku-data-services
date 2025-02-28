@@ -161,3 +161,11 @@ class SecretCreationError(BaseError):
     code: int = 1511
     message: str = "An error occurred creating secrets."
     status_code: int = 500
+
+
+@dataclass
+class CannotStartBuildError(ProgrammingError):
+    """Raised when an image build couldn't be started."""
+
+    code: int = 1512
+    message: str = "An error occurred creating an image build." ""

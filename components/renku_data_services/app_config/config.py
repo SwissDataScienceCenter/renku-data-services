@@ -13,6 +13,7 @@ import functools
 import os
 import secrets
 from dataclasses import dataclass, field
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, Optional
 
@@ -21,6 +22,8 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.types import PublicKeyTypes
 from jwt import PyJWKClient
+from pydantic import ValidationError as PydanticValidationError
+from sanic.log import logger
 from yaml import safe_load
 
 import renku_data_services.base_models as base_models
@@ -64,7 +67,9 @@ from renku_data_services.platform.db import PlatformRepository
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository, ProjectSessionSecretRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsRepo
+from renku_data_services.session import crs as session_crs
 from renku_data_services.session.db import SessionRepository
+from renku_data_services.session.k8s_client import ShipwrightClient
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.config import UserPreferencesConfig
 from renku_data_services.users.db import UserPreferencesRepository
@@ -136,6 +141,97 @@ class TrustedProxiesConfig:
 
 
 @dataclass
+class BuildsConfig:
+    """Configuration for container image builds."""
+
+    shipwright_client: ShipwrightClient | None
+
+    enabled: bool = False
+    build_output_image_prefix: str | None = None
+    vscodium_python_run_image: str | None = None
+    build_strategy_name: str | None = None
+    push_secret_name: str | None = None
+    buildrun_retention_after_failed: timedelta | None = None
+    buildrun_retention_after_succeeded: timedelta | None = None
+    buildrun_build_timeout: timedelta | None = None
+    node_selector: dict[str, str] | None = None
+    tolerations: list[session_crs.Toleration] | None = None
+
+    @classmethod
+    def from_env(cls, prefix: str = "", namespace: str = "") -> "BuildsConfig":
+        """Create a config from environment variables."""
+        enabled = os.environ.get(f"{prefix}IMAGE_BUILDERS_ENABLED", "false").lower() == "true"
+        build_output_image_prefix = os.environ.get(f"{prefix}BUILD_OUTPUT_IMAGE_PREFIX")
+        vscodium_python_run_image = os.environ.get(f"{prefix}BUILD_VSCODIUM_PYTHON_RUN_IMAGE")
+        build_strategy_name = os.environ.get(f"{prefix}BUILD_STRATEGY_NAME")
+        push_secret_name = os.environ.get(f"{prefix}BUILD_PUSH_SECRET_NAME")
+        buildrun_retention_after_failed_seconds = int(
+            os.environ.get(f"{prefix}BUILD_RUN_RETENTION_AFTER_FAILED_SECONDS") or "0"
+        )
+        buildrun_retention_after_failed = (
+            timedelta(seconds=buildrun_retention_after_failed_seconds)
+            if buildrun_retention_after_failed_seconds > 0
+            else None
+        )
+        buildrun_retention_after_succeeded_seconds = int(
+            os.environ.get(f"{prefix}BUILD_RUN_RETENTION_AFTER_SUCCEEDED_SECONDS") or "0"
+        )
+        buildrun_retention_after_succeeded = (
+            timedelta(seconds=buildrun_retention_after_succeeded_seconds)
+            if buildrun_retention_after_succeeded_seconds > 0
+            else None
+        )
+        buildrun_build_timeout_seconds = int(os.environ.get(f"{prefix}BUILD_RUN_BUILD_TIMEOUT") or "0")
+        buildrun_build_timeout = (
+            timedelta(seconds=buildrun_build_timeout_seconds) if buildrun_build_timeout_seconds > 0 else None
+        )
+
+        if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
+            shipwright_client = None
+        else:
+            # TODO: is there a reason to use a different cache URL here?
+            cache_url = os.environ["NB_AMALTHEA_V2__CACHE_URL"]
+            shipwright_client = ShipwrightClient(
+                namespace=namespace,
+                cache_url=cache_url,
+            )
+
+        node_selector: dict[str, str] | None = None
+        node_selector_str = os.environ.get(f"{prefix}BUILD_NODE_SELECTOR")
+        if node_selector_str:
+            try:
+                node_selector = session_crs.NodeSelector.model_validate_json(node_selector_str).root
+            except PydanticValidationError:
+                logger.error(
+                    f"Could not validate {prefix}BUILD_NODE_SELECTOR. Will not use node selector for image builds."
+                )
+
+        tolerations: list[session_crs.Toleration] | None = None
+        tolerations_str = os.environ.get(f"{prefix}BUILD_NODE_TOLERATIONS")
+        if tolerations_str:
+            try:
+                tolerations = session_crs.Tolerations.model_validate_json(tolerations_str).root
+            except PydanticValidationError:
+                logger.error(
+                    f"Could not validate {prefix}BUILD_NODE_TOLERATIONS. Will not use tolerations for image builds."
+                )
+
+        return cls(
+            enabled=enabled or False,
+            build_output_image_prefix=build_output_image_prefix or None,
+            vscodium_python_run_image=vscodium_python_run_image or None,
+            build_strategy_name=build_strategy_name or None,
+            push_secret_name=push_secret_name or None,
+            shipwright_client=shipwright_client,
+            buildrun_retention_after_failed=buildrun_retention_after_failed,
+            buildrun_retention_after_succeeded=buildrun_retention_after_succeeded,
+            buildrun_build_timeout=buildrun_build_timeout,
+            node_selector=node_selector,
+            tolerations=tolerations,
+        )
+
+
+@dataclass
 class Config:
     """Configuration for the Data service."""
 
@@ -153,6 +249,7 @@ class Config:
     message_queue: IMessageQueue
     gitlab_url: str | None
     nb_config: NotebooksConfig
+    builds_config: BuildsConfig
 
     secrets_service_public_key: rsa.RSAPublicKey
     """The public key of the secrets service, used to encrypt user secrets that only it can decrypt."""
@@ -339,7 +436,11 @@ class Config:
         """The DB adapter for sessions."""
         if not self._session_repo:
             self._session_repo = SessionRepository(
-                session_maker=self.db.async_session_maker, project_authz=self.authz, resource_pools=self.rp_repo
+                session_maker=self.db.async_session_maker,
+                project_authz=self.authz,
+                resource_pools=self.rp_repo,
+                shipwright_client=self.builds_config.shipwright_client,
+                builds_config=self.builds_config,
             )
         return self._session_repo
 
@@ -539,6 +640,7 @@ class Config:
         trusted_proxies = TrustedProxiesConfig.from_env(prefix)
         message_queue = RedisQueue(redis)
         nb_config = NotebooksConfig.from_env(db)
+        builds_config = BuildsConfig.from_env(prefix, k8s_namespace)
 
         return cls(
             version=version,
@@ -560,4 +662,5 @@ class Config:
             secrets_service_public_key=secrets_service_public_key,
             gitlab_url=gitlab_url,
             nb_config=nb_config,
+            builds_config=builds_config,
         )
