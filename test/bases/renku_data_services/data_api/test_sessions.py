@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 from pytest import FixtureRequest
 from sanic_testing.testing import SanicASGITestClient, TestingResponse
+from syrupy.filters import props
 
 from renku_data_services.app_config.config import Config
 from renku_data_services.crc.apispec import ResourcePool
@@ -41,7 +42,7 @@ def launch_session(
 
 @pytest.mark.asyncio
 async def test_get_all_session_environments(
-    sanic_client: SanicASGITestClient, unauthorized_headers, create_session_environment
+    sanic_client: SanicASGITestClient, unauthorized_headers, create_session_environment, snapshot
 ) -> None:
     await create_session_environment("Environment 1")
     await create_session_environment("Environment 2")
@@ -73,6 +74,7 @@ async def test_get_all_session_environments(
         "Python/Jupyter",  # environments added by bootstrap migration
         "Rstudio",
     }
+    assert environments == snapshot(exclude=props("id", "creation_date"))
 
 
 @pytest.mark.asyncio
@@ -308,6 +310,7 @@ async def test_get_all_session_launchers(
     user_headers,
     create_project,
     create_session_launcher,
+    snapshot,
 ) -> None:
     project_1 = await create_project("Project 1")
     project_2 = await create_project("Project 2")
@@ -321,11 +324,13 @@ async def test_get_all_session_launchers(
     assert res.status_code == 200, res.text
     assert res.json is not None
     launchers = res.json
+    launchers = sorted(launchers, key=lambda e: e["name"])
     assert {launcher["name"] for launcher in launchers} == {
         "Launcher 1",
         "Launcher 2",
         "Launcher 3",
     }
+    assert launchers == snapshot(exclude=props("id", "creation_date", "project_id"))
 
 
 @pytest.mark.asyncio
