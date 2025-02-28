@@ -105,6 +105,12 @@ class _ShipwrightClientBase:
             logger.exception(f"Cannot delete build {name} because of {e}")
         return None
 
+    async def cancel_build_run(self, name: str) -> BuildRun:
+        """Cancel a Shipwright BuildRun."""
+        build = await ShipwrightBuildRunV1Beta1Kr8s.get(name=name, namespace=self.namespace)
+        await build.patch({"spec": {"state": "BuildRunCanceled"}})
+        return BuildRun.model_validate(build.to_dict())
+
     async def get_task_run(self, name: str) -> TaskRun | None:
         """Get a Tekton TaskRun."""
         try:
@@ -260,6 +266,10 @@ class ShipwrightClient:
         """Delete a Shipwright BuildRun."""
         return await self.base_client.delete_build_run(name)
 
+    async def cancel_build_run(self, name: str) -> BuildRun:
+        """Cancel a Shipwright BuildRun."""
+        return await self.base_client.cancel_build_run(name)
+
     async def get_task_run(self, name: str) -> TaskRun | None:
         """Get a Tekton TaskRun."""
         try:
@@ -356,13 +366,9 @@ class ShipwrightClient:
                 update=models.ShipwrightBuildStatusUpdateContent(
                     status=models.BuildStatus.failed,
                     completed_at=completion_time,
+                    error_reason=condition.reason if condition is not None else None,
                 )
             )
-
-    async def cancel_image_build(self, buildrun_name: str) -> None:
-        """Cancel a build by deleting the corresponding BuildRun from Shipwright."""
-        # TODO: use proper cancellation, see: https://shipwright.io/docs/build/buildrun/#canceling-a-buildrun
-        await self.delete_build_run(name=buildrun_name)
 
     async def get_image_build_logs(self, buildrun_name: str, max_log_lines: int | None = None) -> dict[str, str]:
         """Get the logs from a Shipwright BuildRun."""
