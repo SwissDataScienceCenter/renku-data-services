@@ -30,6 +30,7 @@ def upgrade() -> None:
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("result_repository_url", sa.String(length=500), nullable=True),
         sa.Column("result_repository_git_commit_sha", sa.String(length=100), nullable=True),
+        sa.Column("error_reason", sa.String(length=500), nullable=True),
         sa.ForeignKeyConstraint(["environment_id"], ["sessions.environments.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         schema="sessions",

@@ -206,6 +206,7 @@ class Build:
     created_at: datetime
     status: BuildStatus
     result: BuildResult | None = None
+    error_reason: str | None = None
 
     @property
     def k8s_name(self) -> str:
@@ -252,6 +253,7 @@ class ShipwrightBuildStatusUpdateContent:
     status: BuildStatus
     result: BuildResult | None = None
     completed_at: datetime | None = None
+    error_reason: str | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
