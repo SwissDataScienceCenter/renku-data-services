@@ -298,6 +298,8 @@ class ShipwrightClient:
                             pushSecret=params.push_secret_name,
                         ),
                         timeout=f"{params.build_timeout.total_seconds()}s" if params.build_timeout else None,
+                        nodeSelector=params.node_selector,
+                        tolerations=params.tolerations,
                     )
                 ),
                 retention=retention,
