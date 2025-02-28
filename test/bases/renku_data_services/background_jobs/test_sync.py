@@ -50,6 +50,7 @@ from renku_data_services.namespace.models import Namespace, NamespaceKind
 from renku_data_services.namespace.orm import NamespaceORM
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.models import UnsavedProject
+from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.storage.models import UnsavedCloudStorage
 from renku_data_services.storage.orm import CloudStorageORM
 from renku_data_services.users.db import UserRepo, UsersSync
@@ -69,11 +70,13 @@ def get_app_configs(db_instance: DBConfig, authz_instance: AuthzConfig):
         redis = RedisConfig.fake()
         message_queue = RedisQueue(redis)
         event_repo = EventRepository(db_instance.async_session_maker, message_queue=message_queue)
+        search_updates_repo = SearchUpdatesRepo(db_instance.async_session_maker)
         group_repo = GroupRepository(
             session_maker=db_instance.async_session_maker,
             event_repo=event_repo,
             group_authz=Authz(authz_instance),
             message_queue=message_queue,
+            search_updates_repo=search_updates_repo,
         )
         project_repo = ProjectRepository(
             session_maker=db_instance.async_session_maker,
@@ -81,6 +84,7 @@ def get_app_configs(db_instance: DBConfig, authz_instance: AuthzConfig):
             event_repo=event_repo,
             group_repo=group_repo,
             authz=Authz(authz_instance),
+            search_updates_repo=search_updates_repo,
         )
         data_connector_repo = DataConnectorRepository(
             session_maker=db_instance.async_session_maker,
@@ -104,6 +108,7 @@ def get_app_configs(db_instance: DBConfig, authz_instance: AuthzConfig):
             group_repo=group_repo,
             encryption_key=secrets.token_bytes(32),
             authz=Authz(authz_instance),
+            search_updates_repo=search_updates_repo,
         )
         users_sync = UsersSync(
             db_instance.async_session_maker,

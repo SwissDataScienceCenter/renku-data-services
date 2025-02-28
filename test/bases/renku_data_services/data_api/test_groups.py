@@ -23,6 +23,7 @@ from test.bases.renku_data_services.data_api.utils import merge_headers
 async def test_group_creation_basic(
     sanic_client: SanicASGITestClient, user_headers: dict[str, str], app_config: Config
 ) -> None:
+    await app_config.search_updates_repo.clear_all()
     payload = {
         "name": "Group1",
         "slug": "group-1",
@@ -38,6 +39,13 @@ async def test_group_creation_basic(
     assert group["description"] == payload["description"]
     assert group["created_by"] == "user"
     datetime.fromisoformat(group["creation_date"])
+
+    search_updates = await app_config.search_updates_repo.select_next(20)
+    assert len(search_updates) == 1
+    assert search_updates[0].payload["id"] == group["id"]
+    assert search_updates[0].payload["name"] == group["name"]
+    assert search_updates[0].payload["description"] == group["description"]
+    assert search_updates[0].payload["namespace"] == group["slug"]
 
     events = await app_config.event_repo.get_pending_events()
 
@@ -147,6 +155,7 @@ async def test_group_patch_delete(
         "slug": "group-2",
         "description": "Group 2 Description",
     }
+    await app_config.search_updates_repo.clear_all()
 
     _, response = await sanic_client.patch("/api/data/groups/group-1", headers=user_headers, json=new_payload)
     assert response.status_code == 200, response.text
@@ -154,6 +163,12 @@ async def test_group_patch_delete(
     assert group["name"] == new_payload["name"]
     assert group["slug"] == new_payload["slug"]
     assert group["description"] == new_payload["description"]
+
+    search_updates = await app_config.search_updates_repo.select_next(20)
+    assert len(search_updates) == 1
+    assert search_updates[0].payload["namespace"] == group["slug"]
+    for k in ["id", "name", "description"]:
+        assert search_updates[0].payload[k] == group[k]
 
     events = await app_config.event_repo.get_pending_events()
 
@@ -165,12 +180,18 @@ async def test_group_patch_delete(
     assert group_event.description == group["description"]
     assert group_event.namespace == group["slug"]
 
+    await app_config.search_updates_repo.clear_all()
     new_payload = {"slug": "group-other"}
     _, response = await sanic_client.patch("/api/data/groups/group-1", headers=user_headers, json=new_payload)
     assert response.status_code == 409  # The latest slug must be used to patch it is now group-2
 
     _, response = await sanic_client.delete("/api/data/groups/group-2", headers=user_headers)
     assert response.status_code == 204
+
+    search_updates = await app_config.search_updates_repo.select_next(20)
+    assert len(search_updates) == 1
+    assert search_updates[0].payload["id"] == group["id"]
+    assert search_updates[0].payload["deleted"]
 
     events = await app_config.event_repo.get_pending_events()
 
@@ -201,6 +222,9 @@ async def test_group_members(
     assert len(members) == 1
     assert members[0]["id"] == "user"
     assert members[0]["role"] == "owner"
+
+    await app_config.search_updates_repo.clear_all()
+
     new_members = [{"id": "member-1", "role": "viewer"}]
     _, response = await sanic_client.patch("/api/data/groups/group-1/members", headers=user_headers, json=new_members)
     assert response.status_code == 200
@@ -211,6 +235,9 @@ async def test_group_members(
     member_1 = next(filter(lambda x: x["id"] == "member-1", members), None)
     assert member_1 is not None
     assert member_1["role"] == "viewer"
+
+    search_updates = await app_config.search_updates_repo.select_next(20)
+    assert len(search_updates) == 0
 
     events = await app_config.event_repo.get_pending_events()
 
@@ -243,6 +270,9 @@ async def test_removing_single_group_owner_not_allowed(
     assert response.status_code == 200, response.text
     res_json = response.json
     assert len(res_json) == 1
+
+    await app_config.search_updates_repo.clear_all()
+
     # Add a member
     new_members = [{"id": "member-1", "role": "editor"}]
     _, response = await sanic_client.patch("/api/data/groups/group-1/members", headers=user_headers, json=new_members)
@@ -268,6 +298,9 @@ async def test_removing_single_group_owner_not_allowed(
     assert group_event.groupId == group["id"]
     assert group_event.role.value == "OWNER"
 
+    search_updates = await app_config.search_updates_repo.select_next(20)
+    assert len(search_updates) == 0
+
     # Removing the original owner now works
     _, response = await sanic_client.delete("/api/data/groups/group-1/members/user", headers=user_headers)
     assert response.status_code == 204
@@ -279,6 +312,9 @@ async def test_removing_single_group_owner_not_allowed(
     group_event = deserialize_binary(b64decode(group_events[0].payload["payload"]), GroupMemberRemoved)
     assert group_event.userId == "user"
     assert group_event.groupId == group["id"]
+
+    search_updates = await app_config.search_updates_repo.select_next(20)
+    assert len(search_updates) == 0
 
     # Check that only one member remains
     _, response = await sanic_client.get("/api/data/groups/group-1/members", headers=member_1_headers)
