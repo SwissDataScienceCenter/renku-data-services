@@ -24,5 +24,5 @@ BUILD_RUN_DEFAULT_RETENTION_AFTER_FAILED: Final[timedelta] = timedelta(minutes=5
 BUILD_RUN_DEFAULT_RETENTION_AFTER_SUCCEEDED: Final[timedelta] = timedelta(minutes=5)
 """The default retention TTL for BuildRuns when in succeeded state."""
 
-BUILD_RUN_BUILD_TIMEOUT: Final[timedelta] = timedelta(hours=1)
+BUILD_RUN_DEFAULT_TIMEOUT: Final[timedelta] = timedelta(hours=1)
 """The default timeout for build after which they get cancelled."""

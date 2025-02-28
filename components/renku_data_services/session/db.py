@@ -976,7 +976,7 @@ class SessionRepository:
             self.builds_config.buildrun_retention_after_succeeded
             or constants.BUILD_RUN_DEFAULT_RETENTION_AFTER_SUCCEEDED
         )
-        build_timeout = self.builds_config.buildrun_build_timeout or constants.BUILD_RUN_BUILD_TIMEOUT
+        build_timeout = self.builds_config.buildrun_build_timeout or constants.BUILD_RUN_DEFAULT_TIMEOUT
 
         return models.ShipwrightBuildRunParams(
             name=build.k8s_name,
