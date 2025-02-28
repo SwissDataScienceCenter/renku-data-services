@@ -105,6 +105,10 @@
         python312
         basedpyright
         rclone
+        (writeShellScriptBin "pyfix" ''
+          poetry run ruff check --fix
+          poetry run ruff format
+        '')
       ];
     in {
       formatter = pkgs.alejandra;
