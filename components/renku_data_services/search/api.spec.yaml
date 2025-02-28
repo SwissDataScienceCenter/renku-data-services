@@ -8,6 +8,37 @@ info:
 servers:
   - url: /api/data
 paths:
+  /search/query:
+    get:
+      summary: Run a search query.
+      responses:
+        "200":
+          description: Search results according to the query.
+          headers:
+            x-page:
+              required: true
+              schema:
+                type: integer
+                format: int32
+            x-per-page:
+              required: true
+              schema:
+                type: integer
+                format: int32
+            x-total:
+              required: true
+              schema:
+                type: integer
+                format: int64
+            x-total-pages:
+              required: true
+              schema:
+                type: integer
+                format: int32
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResult"
   /search/reprovision:
     post:
       summary: Start a new reprovisioning
@@ -56,6 +87,171 @@ paths:
 
 components:
   schemas:
+    SearchResult:
+      description: Results to a search.
+      type: object
+      properties:
+
+    PageWithTotals:
+      type: object
+      properties:
+        page:
+          $ref: "#/components/schemas/PageDef"
+        totalResult:
+          type: "integer"
+          format: "int64"
+        totalPages:
+          type: "integer"
+          format: "int32"
+        prevPage:
+          type: "integer"
+          format: "int32"
+        nextPage:
+          type: "integer"
+          format: "int32"
+      required:
+        - page
+        - totalResult
+        - totalPages
+    MapEntityTypeCount:
+      type: object
+      additionalProperties:
+        type: "integer"
+        format: "int32"
+    PageDef:
+      type: object
+      properties:
+        limit:
+          type: "integer"
+          format: "int32"
+        offset:
+          type: "integer"
+          format: "int32"
+      required:
+        - limit
+        - offset
+    FacetData:
+      type: object
+      properties:
+        entityType:
+          $ref: "#/components/schemas/MapentityTypeCount"
+      required:
+        - entityType
+    Group:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        namespace:
+          type: string
+        description:
+          type: string
+        score:
+          type: "number"
+          format: "double"
+        type:
+          type: "string"
+          const: "Group"
+      required:
+        - id
+        - name
+        - namespace
+        - type
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        namespace:
+          type: string
+        repositories:
+          type: array
+          items:
+            type: string
+        visibility:
+          $ref: "#/components/schemas/Visibility"
+        description:
+          type: string
+        createdBy:
+          $ref: "#/components/schemas/User"
+        creationDate:
+          type: string
+          format: date-time
+        keywords:
+          type: array
+          items:
+            type: string
+        score:
+          type: number
+          format: double
+        type:
+          type: string
+          const: "Project"
+      required:
+        - id
+        - name
+        - slug
+        - visibility
+        - creationDate
+        - type
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        namespace:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        score:
+          type: number
+          format: double
+        type:
+          type: string
+          const: "User"
+    UserOrGroup:
+      oneOf:
+        - $ref: "#/components/schemas/Group"
+        - $ref: "#/components/schemas/User"
+      discriminator:
+        propertyName: "type"
+        mapping:
+          Group: "#/components/schemas/Group"
+          User: "#/components/schemas/User"
+    Visibility:
+      enum:
+        - "private"
+        - "public"
+    SearchEntity:
+      oneOf:
+        - $ref: "#/components/schemas/Group"
+        - $ref: "#/components/schemas/Project"
+        - $ref: "#/components/schemas/User"
+      discriminator:
+        propertyName: "type"
+        mapping:
+          Group: "#/components/schemas/Group"
+          User: "#/components/schemas/User"
+          Project: "#/components/schemas/Project"
+    SearchResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchEntity"
+        facets:
+          $ref: "#/components/schemas/FacetData"
+        pagingInfo:
+          $ref: "#/components/schemas/PageWithTotals"
     Reprovisioning:
       description: A reprovisioning
       type: object
