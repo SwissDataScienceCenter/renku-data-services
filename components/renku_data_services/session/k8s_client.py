@@ -297,6 +297,7 @@ class ShipwrightClient:
                             image=params.output_image,
                             pushSecret=params.push_secret_name,
                         ),
+                        timeout=f"{params.build_timeout.total_seconds()}s" if params.build_timeout else None,
                     )
                 ),
                 retention=retention,
