@@ -63,14 +63,21 @@
         AUTHZ_DB_KEY = "dev";
         AUTHZ_DB_NO_TLS_CONNECTION = "true";
         AUTHZ_DB_GRPC_PORT = "50051";
-        ALEMBIC_CONFIG = "./components/renku_data_services/migrations/alembic.ini";
-        NB_SERVER_OPTIONS__DEFAULTS_PATH = "server_defaults.json";
-        NB_SERVER_OPTIONS__UI_CHOICES_PATH = "server_options.json";
 
         LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
         POETRY_VIRTUALENVS_PREFER_ACTIVE_PYTHON = "true";
         POETRY_VIRTUALENVS_OPTIONS_SYSTEM_SITE_PACKAGES = "true";
         POETRY_INSTALLER_NO_BINARY = "ruff";
+        ZED_ENDPOINT = "localhost:50051";
+        ZED_TOKEN = "dev";
+
+        shellHook = ''
+          export FLAKE_ROOT="$(git rev-parse --show-toplevel)"
+          export PATH="$FLAKE_ROOT/.venv/bin:$PATH"
+          export ALEMBIC_CONFIG="$FLAKE_ROOT/components/renku_data_services/migrations/alembic.ini"
+          export NB_SERVER_OPTIONS__DEFAULTS_PATH="$FLAKE_ROOT/server_defaults.json"
+          export NB_SERVER_OPTIONS__UI_CHOICES_PATH="$FLAKE_ROOT/server_options.json"
+        '';
       };
 
       commonPackages = with pkgs; [
@@ -86,7 +93,7 @@
         ruff-lsp
         poetry
         python312
-        pyright
+        basedpyright
         rclone
       ];
     in {

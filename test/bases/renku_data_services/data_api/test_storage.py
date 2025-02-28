@@ -5,6 +5,7 @@ import pytest
 import pytest_asyncio
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
+from syrupy.filters import props
 
 from renku_data_services.app_config import Config
 from renku_data_services.authn.dummy import DummyAuthenticator
@@ -257,6 +258,7 @@ async def test_storage_creation(
     expected_status_code: int,
     expected_storage_type: str,
     admin_headers: dict[str, str],
+    snapshot,
 ) -> None:
     storage_test_client, _ = storage_test_client
     _, res = await storage_test_client.post(
@@ -271,6 +273,7 @@ async def test_storage_creation(
         assert res.json["storage"]["storage_type"] == expected_storage_type
         assert res.json["storage"]["name"] == payload["name"]
         assert res.json["storage"]["target_path"] == payload["target_path"]
+        assert res.json == snapshot(exclude=props("storage_id"))
 
 
 @pytest.mark.asyncio
@@ -591,7 +594,7 @@ async def test_storage_validate_error_sensitive(storage_test_client) -> None:
 
 
 @pytest.mark.asyncio
-async def test_storage_schema_patches(storage_test_client) -> None:
+async def test_storage_schema_patches(storage_test_client, snapshot) -> None:
     storage_test_client, _ = storage_test_client
     _, res = await storage_test_client.get("/api/data/storage_schema")
     assert res.status_code == 200
@@ -632,3 +635,4 @@ async def test_storage_schema_patches(storage_test_client) -> None:
     # check custom webdav storage is added
     assert any(s["prefix"] == "polybox" for s in schema)
     assert any(s["prefix"] == "switchDrive" for s in schema)
+    assert schema == snapshot

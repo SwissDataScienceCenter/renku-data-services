@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import pytest
 from sanic_testing.testing import SanicASGITestClient
+from syrupy.filters import props
 
 from renku_data_services.base_models import APIUser
 from test.bases.renku_data_services.data_api.utils import create_user_preferences
@@ -45,7 +46,7 @@ def api_user() -> APIUser:
 
 @pytest.mark.asyncio
 async def test_get_user_preferences(
-    sanic_client: SanicASGITestClient, valid_add_pinned_project_payload: dict[str, Any], api_user: APIUser
+    sanic_client: SanicASGITestClient, valid_add_pinned_project_payload: dict[str, Any], api_user: APIUser, snapshot
 ) -> None:
     _, res = await create_user_preferences(sanic_client, valid_add_pinned_project_payload, api_user)
     assert res.status_code == 200
@@ -62,6 +63,7 @@ async def test_get_user_preferences(
     assert len(res.json["pinned_projects"].get("project_slugs")) == 1
     project_slugs = res.json["pinned_projects"]["project_slugs"]
     assert project_slugs[0] == "user.1/first-project"
+    assert res.json == snapshot(exclude=props("user_id"))
 
 
 @pytest.mark.asyncio

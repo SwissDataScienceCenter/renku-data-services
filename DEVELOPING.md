@@ -114,6 +114,13 @@ You can run style checks using `make style_checks`.
 To run the test test suite, use `make tests` (you likely need to run in the devcontainer for this to work, as it needs
 some surrounding services to run).
 
+We use [Syrupy](https://github.com/syrupy-project/syrupy) for snapshotting data in tests.
+
+To update the snapshotted data, run the following command in the devcontainer:
+```bash
+$ poetry run pytest -m "not schemathesis" -n auto --snapshot-update
+```
+
 ## Migrations
 
 We use Alembic for migrations and we have a single version table for all schemas. This version table

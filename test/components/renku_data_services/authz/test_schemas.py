@@ -300,6 +300,49 @@ def v2_schema() -> SpiceDBSchema:
     )
 
 
+@pytest.fixture
+def v5_schema() -> SpiceDBSchema:
+    return SpiceDBSchema(
+        schemas._v5,
+        relationships=[
+            "project:p1#owner@user:u1",
+            "project:p1#public_viewer@user:*",
+            "project:p1#public_viewer@anonymous_user:*",
+            "project:p2#owner@user:u1",
+            "project:p3#editor@user:u2",
+            "project:p4#project_namespace@group:g1",
+            "group:g1#editor@user:u1",
+            "project:p5#viewer@user:u3",
+            "project:p6#owner@user:u4",
+            "project:p6#public_viewer@user:*",
+            "project:p6#public_viewer@anonymous_user:*",
+        ],
+        assertions={
+            "assertTrue": [
+                "project:p2#non_public_read@user:u1",
+                "project:p3#non_public_read@user:u2",
+                "project:p4#non_public_read@user:u1",
+                "project:p5#non_public_read@user:u3",
+            ],
+            "assertFalse": [
+                "project:p1#non_public_read@user:u1",
+                "project:p1#non_public_read@user:u2",
+                "project:p1#non_public_read@user:u3",
+                "project:p2#non_public_read@user:u2",
+                "project:p2#non_public_read@user:u3",
+                "project:p3#non_public_read@user:u1",
+                "project:p3#non_public_read@user:u3",
+                "project:p4#non_public_read@user:u2",
+                "project:p4#non_public_read@user:u3",
+                "project:p5#non_public_read@user:u1",
+                "project:p5#non_public_read@user:u2",
+                "project:p6#non_public_read@user:u4",
+            ],
+        },
+        validation={},
+    )
+
+
 def test_v1_schema(tmp_path: Path, v1_schema: SpiceDBSchema) -> None:
     validation_file = tmp_path / "validate.yaml"
     v1_schema.to_yaml(validation_file)
@@ -309,4 +352,10 @@ def test_v1_schema(tmp_path: Path, v1_schema: SpiceDBSchema) -> None:
 def test_v2_schema(tmp_path: Path, v2_schema: SpiceDBSchema) -> None:
     validation_file = tmp_path / "validate.yaml"
     v2_schema.to_yaml(validation_file)
+    check_call(["zed", "validate", validation_file.as_uri()])
+
+
+def test_v5_schema(tmp_path: Path, v5_schema: SpiceDBSchema) -> None:
+    validation_file = tmp_path / "validate.yaml"
+    v5_schema.to_yaml(validation_file)
     check_call(["zed", "validate", validation_file.as_uri()])
