@@ -239,6 +239,7 @@ class ShipwrightBuildRunParams:
     push_secret_name: str
     retention_after_failed: timedelta | None = None
     retention_after_succeeded: timedelta | None = None
+    build_timeout: timedelta | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

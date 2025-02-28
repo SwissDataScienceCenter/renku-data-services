@@ -150,6 +150,7 @@ class BuildsConfig:
     push_secret_name: str | None = None
     buildrun_retention_after_failed: timedelta | None = None
     buildrun_retention_after_succeeded: timedelta | None = None
+    buildrun_build_timeout: timedelta | None = None
 
     @classmethod
     def from_env(cls, prefix: str = "", namespace: str = "") -> "BuildsConfig":
@@ -175,6 +176,10 @@ class BuildsConfig:
             if buildrun_retention_after_succeeded_seconds > 0
             else None
         )
+        buildrun_build_timeout_seconds = int(os.environ.get(f"{prefix}BUILD_RUN_BUILD_TIMEOUT") or "0")
+        buildrun_build_timeout = (
+            timedelta(seconds=buildrun_build_timeout_seconds) if buildrun_build_timeout_seconds > 0 else None
+        )
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
             shipwright_client = None
@@ -195,6 +200,7 @@ class BuildsConfig:
             shipwright_client=shipwright_client,
             buildrun_retention_after_failed=buildrun_retention_after_failed,
             buildrun_retention_after_succeeded=buildrun_retention_after_succeeded,
+            buildrun_build_timeout=buildrun_build_timeout,
         )
 
 
