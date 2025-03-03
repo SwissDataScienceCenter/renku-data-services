@@ -1,0 +1,111 @@
+openapi: 3.0.2
+info:
+  title: Renku Data Services API
+  description: |
+    This service is the main backend for Renku. It provides information about users, projects,
+    cloud storage, access to compute resources and many other things.
+  version: v1
+servers:
+  - url: /api/data
+paths:
+  /search/reprovision:
+    post:
+      summary: Start a new reprovisioning
+      description: Only a single reprovisioning is active at any time
+      responses:
+        "201":
+          description: The reprovisioning is/will be started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reprovisioning"
+        "409":
+          description: A reprovisioning is already started
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - search
+    get:
+      summary: Return status of reprovisioning
+      responses:
+        "200":
+          description: Status of reprovisioning if there's one in progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReprovisioningStatus"
+        "404":
+          description: There's no active reprovisioning
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - search
+    delete:
+      summary: Stop an active reprovisioning
+      responses:
+        "204":
+          description: The reprovisioning was stopped or there was no one in progress
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - search
+
+components:
+  schemas:
+    Reprovisioning:
+      description: A reprovisioning
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        start_date:
+          description: The date and time the reprovisioning was started (in UTC and ISO-8601 format)
+          type: string
+          format: date-time
+          example: "2023-11-01T17:32:28Z"
+      required:
+        - id
+        - start_date
+    ReprovisioningStatus:
+      description: Status of a reprovisioning
+      allOf:
+      - $ref: "#/components/schemas/Reprovisioning"
+    Ulid:
+      description: ULID identifier
+      type: string
+      minLength: 26
+      maxLength: 26
+      pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$" # This is case-insensitive
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: integer
+              minimum: 0
+              exclusiveMinimum: true
+              example: 1404
+            detail:
+              type: string
+              example: A more detailed optional message showing what the problem was
+            message:
+              type: string
+              example: Something went wrong - please try again later
+          required:
+            - code
+            - message
+      required:
+        - error
+  responses:
+    Error:
+      description: The schema for all 4xx and 5xx responses
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"

@@ -17,6 +17,7 @@ from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project.db import ProjectRepository
+from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.users.db import UserRepo, UsersSync
 from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
 
@@ -57,17 +58,20 @@ class SyncConfig:
 
         authz_config = AuthzConfig.from_env()
         event_repo = EventRepository(session_maker=session_maker, message_queue=message_queue)
+        search_updates_repo = SearchUpdatesRepo(session_maker=session_maker)
         group_repo = GroupRepository(
             session_maker,
             event_repo=event_repo,
             group_authz=Authz(authz_config),
             message_queue=message_queue,
+            search_updates_repo=search_updates_repo,
         )
         project_repo = ProjectRepository(
             session_maker=session_maker,
             message_queue=message_queue,
             event_repo=event_repo,
             group_repo=group_repo,
+            search_updates_repo=search_updates_repo,
             authz=Authz(authz_config),
         )
         data_connector_repo = DataConnectorRepository(
@@ -90,6 +94,7 @@ class SyncConfig:
             message_queue=message_queue,
             event_repo=event_repo,
             group_repo=group_repo,
+            search_updates_repo=search_updates_repo,
             encryption_key=None,
             authz=Authz(authz_config),
         )

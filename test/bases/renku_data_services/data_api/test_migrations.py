@@ -1,4 +1,6 @@
 import base64
+import random
+import string
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -12,10 +14,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import bindparam
 from ulid import ULID
 
+from renku_data_services import errors
 from renku_data_services.app_config.config import Config
+from renku_data_services.base_models.core import Slug
 from renku_data_services.message_queue.avro_models.io.renku.events import v2
 from renku_data_services.message_queue.models import deserialize_binary
 from renku_data_services.migrations.core import downgrade_migrations_for_app, get_alembic_config, run_migrations_for_app
+from renku_data_services.namespace import orm as ns_schemas
+from renku_data_services.users import orm as user_schemas
 from renku_data_services.users.models import UserInfo
 
 
@@ -113,13 +119,13 @@ async def test_migration_to_f34b87ddd954(
 async def test_migration_to_1ef98b967767_and_086eb60b42c8(app_config_instance: Config, admin_user: UserInfo) -> None:
     """Tests the migration of the session launchers."""
     run_migrations_for_app("common", "b8cbd62e85b9")
-    await app_config_instance.kc_user_repo.initialize(app_config_instance.kc_api)
-    await app_config_instance.group_repo.generate_user_namespaces()
+
     global_env_id = str(ULID())
     custom_launcher_id = str(ULID())
     global_launcher_id = str(ULID())
     project_id = str(ULID())
     async with app_config_instance.db.async_session_maker() as session, session.begin():
+        await _generate_user_namespaces(session)
         await session.execute(
             sa.text(
                 "INSERT INTO "
@@ -326,9 +332,9 @@ async def test_migration_to_75c83dd9d619(app_config_instance: Config, admin_user
         return None
 
     run_migrations_for_app("common", "450ae3930996")
-    await app_config_instance.kc_user_repo.initialize(app_config_instance.kc_api)
-    await app_config_instance.group_repo.generate_user_namespaces()
+
     async with app_config_instance.db.async_session_maker() as session, session.begin():
+        await _generate_user_namespaces(session)
         # Create template project
         project_id = str(ULID())
         await insert_project(
@@ -514,3 +520,60 @@ async def test_migration_to_75c83dd9d619(app_config_instance: Config, admin_user
     assert env1_row[0] != orphan_env_row[0]
     assert env1_row[1] != orphan_env_row[1]
     assert env1_row[2] == orphan_env_row[2]
+
+
+async def _generate_user_namespaces(session: AsyncSession) -> list[UserInfo]:
+    """Generate user namespaces if the user table has data and the namespaces table is empty.
+
+    NOTE: This is copied from GroupRepository to retain the version compatible with db at a fixed point."""
+
+    async def _create_user_namespace_slug(
+        session: AsyncSession, user_slug: str, retry_enumerate: int = 0, retry_random: bool = False
+    ) -> str:
+        """Create a valid namespace slug for a user."""
+        nss = await session.scalars(
+            sa.select(ns_schemas.NamespaceORM.slug).where(ns_schemas.NamespaceORM.slug.startswith(user_slug))
+        )
+        nslist = nss.all()
+        if user_slug not in nslist:
+            return user_slug
+        if retry_enumerate:
+            for inc in range(1, retry_enumerate + 1):
+                slug = f"{user_slug}-{inc}"
+                if slug not in nslist:
+                    return slug
+        if retry_random:
+            suffix = "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(8)])  # nosec B311
+            slug = f"{user_slug}-{suffix}"
+            if slug not in nslist:
+                return slug
+
+        raise errors.ValidationError(message=f"Cannot create generate a unique namespace slug for the user {user_slug}")
+
+    async def _insert_user_namespace(
+        session: AsyncSession, user_id: str, user_slug: str, retry_enumerate: int = 0, retry_random: bool = False
+    ) -> ns_schemas.NamespaceORM:
+        """Insert a new namespace for the user and optionally retry different variations to avoid collisions."""
+        namespace = await _create_user_namespace_slug(session, user_slug, retry_enumerate, retry_random)
+        slug = Slug.from_name(namespace)
+        ns = ns_schemas.NamespaceORM(slug.value, user_id=user_id)
+        session.add(ns)
+        await session.flush()
+        await session.refresh(ns)
+        return ns
+
+    # NOTE: lock to make sure another instance of the data service cannot insert/update but can read
+    output: list[UserInfo] = []
+    await session.execute(sa.text("LOCK TABLE common.namespaces IN EXCLUSIVE MODE"))
+    at_least_one_namespace = (await session.execute(sa.select(ns_schemas.NamespaceORM).limit(1))).one_or_none()
+    if at_least_one_namespace:
+        return []
+
+    res = await session.scalars(sa.select(user_schemas.UserORM))
+    for user in res:
+        slug = Slug.from_user(user.email, user.first_name, user.last_name, user.keycloak_id)
+        ns = await _insert_user_namespace(session, user.keycloak_id, slug.value, retry_enumerate=10, retry_random=True)
+        user.namespace = ns
+        output.append(user.dump())
+
+    return output

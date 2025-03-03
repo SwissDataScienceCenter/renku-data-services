@@ -29,6 +29,7 @@ import renku_data_services.crc
 import renku_data_services.data_connectors
 import renku_data_services.platform
 import renku_data_services.repositories
+import renku_data_services.search
 import renku_data_services.storage
 import renku_data_services.users
 from renku_data_services import errors
@@ -63,8 +64,10 @@ from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.platform.db import PlatformRepository
 from renku_data_services.project.db import ProjectMemberRepository, ProjectRepository, ProjectSessionSecretRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
+from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsRepo
 from renku_data_services.session.db import SessionRepository
+from renku_data_services.solr.solr_client import SolrClientConfig
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.config import UserPreferencesConfig
 from renku_data_services.users.db import UserPreferencesRepository
@@ -160,6 +163,7 @@ class Config:
     """The encryption key to encrypt user keys at rest in the database."""
 
     authz_config: AuthzConfig = field(default_factory=lambda: AuthzConfig.from_env())
+    solr_config: SolrClientConfig = field(default_factory=lambda: SolrClientConfig.from_env())
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     version: str = "0.0.1"
     app_name: str = "renku_data_services"
@@ -175,6 +179,7 @@ class Config:
     _group_repo: GroupRepository | None = field(default=None, repr=False, init=False)
     _event_repo: EventRepository | None = field(default=None, repr=False, init=False)
     _reprovisioning_repo: ReprovisioningRepository | None = field(default=None, repr=False, init=False)
+    _search_updates_repo: SearchUpdatesRepo | None = field(default=None, repr=False, init=False)
     _session_repo: SessionRepository | None = field(default=None, repr=False, init=False)
     _user_preferences_repo: UserPreferencesRepository | None = field(default=None, repr=False, init=False)
     _kc_user_repo: KcUserRepo | None = field(default=None, repr=False, init=False)
@@ -212,6 +217,7 @@ class Config:
             renku_data_services.platform.__file__,
             renku_data_services.message_queue.__file__,
             renku_data_services.data_connectors.__file__,
+            renku_data_services.search.__file__,
         ]
 
         api_specs = []
@@ -286,6 +292,13 @@ class Config:
         return self._reprovisioning_repo
 
     @property
+    def search_updates_repo(self) -> SearchUpdatesRepo:
+        """The DB adapter to the search_updates table."""
+        if not self._search_updates_repo:
+            self._search_updates_repo = SearchUpdatesRepo(session_maker=self.db.async_session_maker)
+        return self._search_updates_repo
+
+    @property
     def project_repo(self) -> ProjectRepository:
         """The DB adapter for Renku native projects."""
         if not self._project_repo:
@@ -295,6 +308,7 @@ class Config:
                 message_queue=self.message_queue,
                 event_repo=self.event_repo,
                 group_repo=self.group_repo,
+                search_updates_repo=self.search_updates_repo,
             )
         return self._project_repo
 
@@ -331,6 +345,7 @@ class Config:
                 event_repo=self.event_repo,
                 group_authz=self.authz,
                 message_queue=self.message_queue,
+                search_updates_repo=self.search_updates_repo,
             )
         return self._group_repo
 
@@ -362,6 +377,7 @@ class Config:
                 message_queue=self.message_queue,
                 event_repo=self.event_repo,
                 group_repo=self.group_repo,
+                search_updates_repo=self.search_updates_repo,
                 encryption_key=self.encryption_key,
                 authz=self.authz,
             )
@@ -461,6 +477,7 @@ class Config:
         max_pinned_projects = int(os.environ.get(f"{prefix}MAX_PINNED_PROJECTS", "10"))
         user_preferences_config = UserPreferencesConfig(max_pinned_projects=max_pinned_projects)
         db = DBConfig.from_env(prefix)
+        solr_config = SolrClientConfig.from_env(prefix)
         kc_api: IKeycloakAPI
         secrets_service_public_key: PublicKeyTypes
         gitlab_url: str | None
@@ -553,6 +570,7 @@ class Config:
             server_options_file=server_options_file,
             user_preferences_config=user_preferences_config,
             db=db,
+            solr_config=solr_config,
             redis=redis,
             kc_api=kc_api,
             message_queue=message_queue,
