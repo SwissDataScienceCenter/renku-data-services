@@ -71,8 +71,8 @@ from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsRepo
 from renku_data_services.session import crs as session_crs
 from renku_data_services.session.db import SessionRepository
-from renku_data_services.solr.solr_client import SolrClientConfig
 from renku_data_services.session.k8s_client import ShipwrightClient
+from renku_data_services.solr.solr_client import SolrClientConfig
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.config import UserPreferencesConfig
 from renku_data_services.users.db import UserPreferencesRepository
