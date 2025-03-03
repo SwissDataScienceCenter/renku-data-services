@@ -1,12 +1,16 @@
 """Business logic for sessions."""
 
 from pathlib import PurePosixPath
+from typing import TYPE_CHECKING
 
 from ulid import ULID
 
 from renku_data_services import errors
 from renku_data_services.base_models.core import RESET, ResetType
 from renku_data_services.session import apispec, models
+
+if TYPE_CHECKING:
+    from renku_data_services.app_config.config import BuildsConfig
 
 
 def validate_unsaved_environment(
@@ -33,8 +37,13 @@ def validate_unsaved_environment(
 
 def validate_unsaved_build_parameters(
     environment: apispec.BuildParameters | apispec.BuildParametersPatch,
+    builds_config: "BuildsConfig",
 ) -> models.UnsavedBuildParameters:
     """Validate an unsaved build parameters object."""
+    if not builds_config.enabled:
+        raise errors.ValidationError(
+            message="Image builds are not enabled, the field 'environment_image_source' cannot be set to 'build'."
+        )
     if environment.builder_variant is None:
         raise errors.ValidationError(message="The field 'builder_variant' is required")
     if environment.frontend_variant is None:
@@ -136,7 +145,9 @@ def validate_environment_patch_in_launcher(patch: apispec.EnvironmentPatchInLaun
     return environment_patch
 
 
-def validate_unsaved_session_launcher(launcher: apispec.SessionLauncherPost) -> models.UnsavedSessionLauncher:
+def validate_unsaved_session_launcher(
+    launcher: apispec.SessionLauncherPost, builds_config: "BuildsConfig"
+) -> models.UnsavedSessionLauncher:
     """Validate an unsaved session launcher."""
     return models.UnsavedSessionLauncher(
         project_id=ULID.from_str(launcher.project_id),
@@ -147,14 +158,14 @@ def validate_unsaved_session_launcher(launcher: apispec.SessionLauncherPost) -> 
         # NOTE: When you create an environment with a launcher the environment can only be custom
         environment=launcher.environment.id
         if isinstance(launcher.environment, apispec.EnvironmentIdOnlyPost)
-        else validate_unsaved_build_parameters(launcher.environment)
+        else validate_unsaved_build_parameters(launcher.environment, builds_config=builds_config)
         if isinstance(launcher.environment, apispec.BuildParametersPost)
         else validate_unsaved_environment(launcher.environment, models.EnvironmentKind.CUSTOM),
     )
 
 
 def validate_session_launcher_patch(
-    patch: apispec.SessionLauncherPatch, current_launcher: models.SessionLauncher
+    patch: apispec.SessionLauncherPatch, current_launcher: models.SessionLauncher, builds_config: "BuildsConfig"
 ) -> models.SessionLauncherPatch:
     """Validate the update to a session launcher."""
     data_dict = patch.model_dump(exclude_unset=True, mode="json")
@@ -195,7 +206,9 @@ def validate_session_launcher_patch(
                     validated_build_parameters = apispec.BuildParameters.model_validate(
                         data_dict.get("environment", {}).get("build_parameters", {})
                     )
-                    environment = validate_unsaved_build_parameters(validated_build_parameters)
+                    environment = validate_unsaved_build_parameters(
+                        validated_build_parameters, builds_config=builds_config
+                    )
             case models.EnvironmentKind.GLOBAL, None:
                 # Trying to patch a global environment with a custom environment patch.
                 raise errors.ValidationError(
@@ -237,7 +250,9 @@ def validate_session_launcher_patch(
                                 "There are errors in the following fields, environment.build_parameters: Must be set"
                             )
                         )
-                    environment = validate_unsaved_build_parameters(patch.environment.build_parameters)
+                    environment = validate_unsaved_build_parameters(
+                        patch.environment.build_parameters, builds_config=builds_config
+                    )
                 elif current == "build" and new == "image":
                     validated_env = apispec.EnvironmentPostInLauncherHelper.model_validate(data_dict["environment"])
                     environment = models.UnsavedEnvironment(

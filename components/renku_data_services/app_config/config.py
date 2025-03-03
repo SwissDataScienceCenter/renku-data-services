@@ -191,6 +191,9 @@ class BuildsConfig:
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
             shipwright_client = None
+            enabled = True  # Enable image builds when running tests
+        elif not enabled:
+            shipwright_client = None
         else:
             # TODO: is there a reason to use a different cache URL here?
             cache_url = os.environ["NB_AMALTHEA_V2__CACHE_URL"]
