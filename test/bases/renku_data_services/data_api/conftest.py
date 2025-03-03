@@ -306,6 +306,7 @@ async def create_session_environment(sanic_client: SanicASGITestClient, admin_he
         payload.update({"name": name})
         payload["description"] = payload.get("description") or "A session environment."
         payload["container_image"] = payload.get("container_image") or "some_image:some_tag"
+        payload["environment_image_source"] = payload.get("environment_image_source") or "image"
 
         _, res = await sanic_client.post("/api/data/environments", headers=admin_headers, json=payload)
 
@@ -327,6 +328,7 @@ async def create_session_launcher(sanic_client: SanicASGITestClient, user_header
                 "environment_kind": "CUSTOM",
                 "name": "Test",
                 "container_image": "some_image:some_tag",
+                "environment_image_source": "image",
             }
 
         _, res = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)

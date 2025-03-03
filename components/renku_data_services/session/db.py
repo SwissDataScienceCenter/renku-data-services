@@ -6,7 +6,9 @@ from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, nullcontext
 from datetime import UTC, datetime
 from pathlib import PurePosixPath
+from typing import TYPE_CHECKING
 
+from sanic.log import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
@@ -17,19 +19,30 @@ from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import RESET
 from renku_data_services.crc.db import ResourcePoolRepository
-from renku_data_services.session import models
+from renku_data_services.session import constants, models
 from renku_data_services.session import orm as schemas
+from renku_data_services.session.k8s_client import ShipwrightClient
+
+if TYPE_CHECKING:
+    from renku_data_services.app_config.config import BuildsConfig
 
 
 class SessionRepository:
     """Repository for sessions."""
 
     def __init__(
-        self, session_maker: Callable[..., AsyncSession], project_authz: Authz, resource_pools: ResourcePoolRepository
+        self,
+        session_maker: Callable[..., AsyncSession],
+        project_authz: Authz,
+        resource_pools: ResourcePoolRepository,
+        shipwright_client: ShipwrightClient | None,
+        builds_config: BuildsConfig,
     ) -> None:
         self.session_maker = session_maker
         self.project_authz: Authz = project_authz
         self.resource_pools: ResourcePoolRepository = resource_pools
+        self.shipwright_client = shipwright_client
+        self.builds_config = builds_config
 
     async def get_environments(self, include_archived: bool = False) -> list[models.Environment]:
         """Get all global session environments from the database."""
@@ -80,6 +93,7 @@ class SessionRepository:
             uid=new_environment.uid,
             gid=new_environment.gid,
             environment_kind=new_environment.environment_kind,
+            environment_image_source=new_environment.environment_image_source,
             command=new_environment.command,
             args=new_environment.args,
             creation_date=datetime.now(UTC).replace(microsecond=0),
@@ -115,10 +129,51 @@ class SessionRepository:
             args=environment.args,
             creation_date=datetime.now(UTC).replace(microsecond=0),
             is_archived=environment.is_archived,
+            environment_image_source=environment.environment_image_source,
         )
 
         session.add(new_environment)
         return new_environment
+
+    def __insert_build_parameters_environment(
+        self,
+        user: base_models.APIUser,
+        session: AsyncSession,
+        launcher: schemas.SessionLauncherORM,
+        new_build_parameters_environment: models.UnsavedBuildParameters,
+    ) -> schemas.EnvironmentORM:
+        if user.id is None:
+            raise errors.UnauthorizedError(
+                message="You have to be authenticated to insert an environment in the DB.", quiet=True
+            )
+        build_parameters_orm = schemas.BuildParametersORM(
+            builder_variant=new_build_parameters_environment.builder_variant,
+            frontend_variant=new_build_parameters_environment.frontend_variant,
+            repository=new_build_parameters_environment.repository,
+        )
+        session.add(build_parameters_orm)
+
+        environment_orm = schemas.EnvironmentORM(
+            name=launcher.name,
+            created_by_id=user.id,
+            description=f"Generated environment for {launcher.name}",
+            container_image="image:unknown-at-the-moment",  # TODO: This should come from the build
+            default_url="/lab",  # TODO: This should come from the build
+            port=8888,  # TODO: This should come from the build
+            working_directory=None,  # TODO: This should come from the build
+            mount_directory=None,  # TODO: This should come from the build
+            uid=1000,  # TODO: This should come from the build
+            gid=1000,  # TODO: This should come from the build
+            environment_kind=models.EnvironmentKind.CUSTOM,
+            command=None,  # TODO: This should come from the build
+            args=None,  # TODO: This should come from the build
+            creation_date=datetime.now(UTC).replace(microsecond=0),
+            environment_image_source=models.EnvironmentImageSource.build,
+            build_parameters_id=build_parameters_orm.id,
+            build_parameters=build_parameters_orm,
+        )
+        session.add(environment_orm)
+        return environment_orm
 
     async def insert_environment(
         self, user: base_models.APIUser, environment: models.UnsavedEnvironment
@@ -176,6 +231,53 @@ class SessionRepository:
 
         if update.is_archived is not None:
             environment.is_archived = update.is_archived
+
+    async def __update_environment_build_parameters(
+        self,
+        environment: schemas.EnvironmentORM,
+        update: models.EnvironmentPatch,
+        session: AsyncSession,
+        launcher: schemas.SessionLauncherORM,
+    ) -> None:
+        if not update.build_parameters:
+            return
+
+        build_parameters = update.build_parameters
+
+        if build_parameters.repository is not None:
+            environment.build_parameters.repository = build_parameters.repository
+        if build_parameters.builder_variant is not None:
+            environment.build_parameters.builder_variant = build_parameters.builder_variant
+        if build_parameters.frontend_variant is not None:
+            environment.build_parameters.frontend_variant = build_parameters.frontend_variant
+
+        build_parameters_orm = environment.build_parameters
+        created_by_id = environment.created_by_id
+
+        environment.build_parameters_id = None
+        await session.delete(environment)
+
+        environment_orm = schemas.EnvironmentORM(
+            name=launcher.name,
+            created_by_id=created_by_id,
+            description=f"Generated environment for {launcher.name}",
+            container_image="image:unknown-at-the-moment",  # TODO: This should come from the build
+            default_url="/lab",  # TODO: This should come from the build
+            port=8888,  # TODO: This should come from the build
+            working_directory=None,  # TODO: This should come from the build
+            mount_directory=None,  # TODO: This should come from the build
+            uid=1000,  # TODO: This should come from the build
+            gid=1000,  # TODO: This should come from the build
+            environment_kind=models.EnvironmentKind.CUSTOM,
+            command=None,  # TODO: This should come from the build
+            args=None,  # TODO: This should come from the build
+            creation_date=datetime.now(UTC).replace(microsecond=0),
+            environment_image_source=models.EnvironmentImageSource.build,
+            build_parameters_id=build_parameters_orm.id,
+            build_parameters=build_parameters_orm,
+        )
+        session.add(environment_orm)
+        launcher.environment = environment_orm
 
     async def update_environment(
         self, user: base_models.APIUser, environment_id: ULID, patch: models.EnvironmentPatch
@@ -310,6 +412,35 @@ class SessionRepository:
                     command=launcher.environment.command,
                     args=launcher.environment.args,
                     creation_date=datetime.now(UTC).replace(microsecond=0),
+                    environment_image_source=models.EnvironmentImageSource.image,
+                )
+                session.add(environment_orm)
+            elif isinstance(launcher.environment, models.UnsavedBuildParameters):
+                build_parameters_orm = schemas.BuildParametersORM(
+                    builder_variant=launcher.environment.builder_variant,
+                    frontend_variant=launcher.environment.frontend_variant,
+                    repository=launcher.environment.repository,
+                )
+                session.add(build_parameters_orm)
+
+                environment_orm = schemas.EnvironmentORM(
+                    name=launcher.name,
+                    created_by_id=user.id,
+                    description=f"Generated environment for {launcher.name}",
+                    container_image="image:unknown-at-the-moment",  # TODO: This should come from the build
+                    default_url="/lab",  # TODO: This should come from the build
+                    port=8888,  # TODO: This should come from the build
+                    working_directory=None,  # TODO: This should come from the build
+                    mount_directory=None,  # TODO: This should come from the build
+                    uid=1000,  # TODO: This should come from the build
+                    gid=1000,  # TODO: This should come from the build
+                    environment_kind=models.EnvironmentKind.CUSTOM,
+                    command=None,  # TODO: This should come from the build
+                    args=None,  # TODO: This should come from the build
+                    creation_date=datetime.now(UTC).replace(microsecond=0),
+                    environment_image_source=models.EnvironmentImageSource.build,
+                    build_parameters_id=build_parameters_orm.id,
+                    build_parameters=build_parameters_orm,
                 )
                 session.add(environment_orm)
             else:
@@ -491,13 +622,13 @@ class SessionRepository:
         user: base_models.APIUser,
         launcher: schemas.SessionLauncherORM,
         session: AsyncSession,
-        update: models.EnvironmentPatch | models.UnsavedEnvironment | str,
+        update: models.EnvironmentPatch | models.UnsavedEnvironment | models.UnsavedBuildParameters | str,
     ) -> None:
         current_env_kind = launcher.environment.environment_kind
         match update, current_env_kind:
             case str() as env_id, _:
                 # The environment in the launcher is set via ID, the new ID has to refer
-                # to an environment that is GLOBAL.
+                # to an environment that is global.
                 old_environment = launcher.environment
                 new_environment_id = ULID.from_str(env_id)
                 res_env = await session.scalars(
@@ -524,12 +655,22 @@ class SessionRepository:
                     await session.delete(old_environment)
             case models.EnvironmentPatch(), models.EnvironmentKind.CUSTOM:
                 # Custom environment being updated
-                self.__update_environment(launcher.environment, update)
-            case models.UnsavedEnvironment() as new_custom_environment, models.EnvironmentKind.GLOBAL if (
+                if launcher.environment.environment_image_source == models.EnvironmentImageSource.build:
+                    await self.__update_environment_build_parameters(launcher.environment, update, session, launcher)
+                else:
+                    self.__update_environment(launcher.environment, update)
+            case models.UnsavedEnvironment() as new_custom_environment, _ if (
                 new_custom_environment.environment_kind == models.EnvironmentKind.CUSTOM
             ):
                 # Global environment replaced by a custom one
                 new_env = self.__insert_environment(user, session, new_custom_environment)
+                launcher.environment = new_env
+                await session.flush()
+            case models.UnsavedBuildParameters() as new_custom_build_parameters_environment, _:
+                # Global environment replaced by a custom one which will be built
+                new_env = self.__insert_build_parameters_environment(
+                    user, session, launcher, new_custom_build_parameters_environment
+                )
                 launcher.environment = new_env
                 await session.flush()
             case _:
@@ -563,3 +704,305 @@ class SessionRepository:
             await session.delete(launcher)
             if launcher.environment.environment_kind == models.EnvironmentKind.CUSTOM:
                 await session.delete(launcher.environment)
+
+    async def get_build(self, user: base_models.APIUser, build_id: ULID) -> models.Build:
+        """Get a specific build."""
+
+        async with self.session_maker() as session, session.begin():
+            stmt = select(schemas.BuildORM).where(schemas.BuildORM.id == build_id)
+            result = await session.scalars(stmt)
+            build = result.one_or_none()
+
+            not_found_message = f"Build with id '{build_id}' does not exist or you do not have access to it."
+            if build is None:
+                raise errors.MissingResourceError(message=not_found_message)
+
+            authorized = await self._get_environment_authorization(
+                session=session, user=user, environment=build.environment, scope=Scope.READ
+            )
+            if not authorized:
+                raise errors.MissingResourceError(message=not_found_message)
+
+            # Check and refresh the status of in-progress builds
+            await self._refresh_build(build=build, session=session)
+
+            return build.dump()
+
+    async def get_environment_builds(self, user: base_models.APIUser, environment_id: ULID) -> list[models.Build]:
+        """Get all builds from a session environment."""
+
+        async with self.session_maker() as session, session.begin():
+            environment = await session.scalar(
+                select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == environment_id)
+            )
+
+            not_found_message = (
+                f"Session environment with id '{environment_id}' does not exist or you do not have access to it."
+            )
+            if environment is None:
+                raise errors.MissingResourceError(message=not_found_message)
+
+            authorized = await self._get_environment_authorization(
+                session=session, user=user, environment=environment, scope=Scope.READ
+            )
+            if not authorized:
+                raise errors.MissingResourceError(message=not_found_message)
+
+            stmt = (
+                select(schemas.BuildORM)
+                .where(schemas.BuildORM.environment_id == environment_id)
+                .order_by(schemas.BuildORM.id.desc())
+            )
+            result = await session.scalars(stmt)
+            builds = result.all()
+
+            # Check and refresh the status of in-progress builds
+            for build in builds:
+                await self._refresh_build(build=build, session=session)
+
+            return [build.dump() for build in builds]
+
+    async def start_build(self, user: base_models.APIUser, build: models.UnsavedBuild) -> models.Build:
+        """Insert a new build."""
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session, session.begin():
+            environment = await session.scalar(
+                select(schemas.EnvironmentORM).where(schemas.EnvironmentORM.id == build.environment_id)
+            )
+
+            not_found_message = (
+                f"Session environment with id '{build.environment_id}' does not exist or you do not have access to it."
+            )
+            if environment is None:
+                raise errors.MissingResourceError(message=not_found_message)
+
+            authorized = await self._get_environment_authorization(
+                session=session, user=user, environment=environment, scope=Scope.READ
+            )
+            if not authorized:
+                raise errors.MissingResourceError(message=not_found_message)
+
+            build_parameters = environment.build_parameters.dump()
+
+            # We check if there is any in-progress build
+            in_progress_builds = await session.stream_scalars(
+                select(schemas.BuildORM)
+                .where(schemas.BuildORM.environment_id == build.environment_id)
+                .where(schemas.BuildORM.status == models.BuildStatus.in_progress)
+                .order_by(schemas.BuildORM.id.desc())
+            )
+            async for item in in_progress_builds:
+                await self._refresh_build(build=item, session=session)
+                if item.status == models.BuildStatus.in_progress:
+                    raise errors.ConflictError(
+                        message=f"Session environment with id '{build.environment_id}' already has a build in progress."
+                    )
+
+            build_orm = schemas.BuildORM(
+                environment_id=build.environment_id,
+                status=models.BuildStatus.in_progress,
+            )
+            session.add(build_orm)
+            await session.flush()
+            await session.refresh(build_orm)
+
+        result = build_orm.dump()
+
+        if self.shipwright_client is not None:
+            params = self._get_buildrun_params(build=result, build_parameters=build_parameters)
+            await self.shipwright_client.create_image_build(params=params)
+        else:
+            logger.error("Shipwright client is None")
+
+        return result
+
+    async def update_build(self, user: base_models.APIUser, build_id: ULID, patch: models.BuildPatch) -> models.Build:
+        """Update a build entry."""
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session, session.begin():
+            stmt = select(schemas.BuildORM).where(schemas.BuildORM.id == build_id)
+            result = await session.scalars(stmt)
+            build = result.one_or_none()
+
+            not_found_message = f"Build with id '{build_id}' does not exist or you do not have access to it."
+            if build is None:
+                raise errors.MissingResourceError(message=not_found_message)
+
+            authorized = await self._get_environment_authorization(
+                session=session, user=user, environment=build.environment, scope=Scope.WRITE
+            )
+            if not authorized:
+                raise errors.MissingResourceError(message=not_found_message)
+
+            # Check and refresh the status of in-progress builds
+            await self._refresh_build(build=build, session=session)
+
+            if build.status == models.BuildStatus.succeeded or build.status == models.BuildStatus.failed:
+                raise errors.ValidationError(
+                    message=f"Cannot update build with id '{build_id}': the build has status {build.status}."
+                )
+
+            # Only accept build cancellations
+            if patch.status == models.BuildStatus.cancelled:
+                build.status = patch.status
+
+            await session.flush()
+            await session.refresh(build)
+
+        build_model = build.dump()
+
+        if self.shipwright_client is not None:
+            await self.shipwright_client.cancel_build_run(name=build_model.k8s_name)
+        else:
+            logger.error("Shipwright client is None")
+
+        return build_model
+
+    async def get_build_logs(
+        self, user: base_models.APIUser, build_id: ULID, max_log_lines: int | None = None
+    ) -> dict[str, str]:
+        """Get the logs of a build by querying Shipwright."""
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session, session.begin():
+            stmt = select(schemas.BuildORM).where(schemas.BuildORM.id == build_id)
+            result = await session.scalars(stmt)
+            build = result.one_or_none()
+
+            if build is None:
+                raise errors.MissingResourceError(
+                    message=f"Build with id '{build_id}' does not exist or you do not have access to it."
+                )
+
+            if build.environment.environment_kind == models.EnvironmentKind.GLOBAL:
+                authorized = True
+            else:
+                launcher = await session.scalar(
+                    select(schemas.SessionLauncherORM).where(
+                        schemas.SessionLauncherORM.environment_id == build.environment_id
+                    )
+                )
+                if launcher is None:
+                    authorized = False
+                else:
+                    authorized = await self.project_authz.has_permission(
+                        user, ResourceType.project, launcher.project_id, Scope.WRITE
+                    )
+            if not authorized:
+                raise errors.MissingResourceError(
+                    message=f"Build with id '{build_id}' does not exist or you do not have access to it."
+                )
+
+        build_model = build.dump()
+
+        if self.shipwright_client is None:
+            raise errors.MissingResourceError(message=f"Build with id '{build_id}' does not have logs.")
+
+        return await self.shipwright_client.get_image_build_logs(
+            buildrun_name=build_model.k8s_name, max_log_lines=max_log_lines
+        )
+
+    async def _refresh_build(self, build: schemas.BuildORM, session: AsyncSession) -> None:
+        """Refresh the status of a build by querying Shipwright."""
+        if build.status != models.BuildStatus.in_progress:
+            return
+
+        # Note: We can't get an update about the build if there is no client for Shipwright.
+        if self.shipwright_client is None:
+            logger.error("Shipwright client is None")
+            return
+
+        # TODO: consider how we can parallelize calls to `shipwright_client` for refreshes.
+        status_update = await self.shipwright_client.update_image_build_status(buildrun_name=build.dump().k8s_name)
+
+        if status_update.update is None:
+            return
+
+        update = status_update.update
+        if update is not None and update.status == models.BuildStatus.failed:
+            build.status = models.BuildStatus.failed
+            build.completed_at = update.completed_at
+            build.error_reason = update.error_reason
+        elif update is not None and update.status == models.BuildStatus.succeeded and update.result is not None:
+            build.status = models.BuildStatus.succeeded
+            build.completed_at = update.completed_at
+            build.result_image = update.result.image
+            build.result_repository_url = update.result.repository_url
+            build.result_repository_git_commit_sha = update.result.repository_git_commit_sha
+            # Also update the session environment here
+            # TODO: move this to its own method where build parameters determine args
+            environment = build.environment
+            environment.container_image = build.result_image
+            environment.default_url = "/"
+            environment.port = 8888
+            environment.mount_directory = PurePosixPath("/home/ubuntu/work")
+            environment.working_directory = PurePosixPath("/home/ubuntu/work")
+            environment.uid = 1000
+            environment.gid = 1000
+            environment.command = ["bash"]
+            environment.args = ["/entrypoint.sh"]
+
+        await session.flush()
+        await session.refresh(build)
+
+    def _get_buildrun_params(
+        self, build: models.Build, build_parameters: models.BuildParameters
+    ) -> models.ShipwrightBuildRunParams:
+        """Derive the Shipwright BuildRun params from a Build instance and a BuildParameters instance."""
+        git_repository = build_parameters.repository
+
+        # TODO: define the run image from `build_parameters`
+        run_image = self.builds_config.vscodium_python_run_image or constants.BUILD_VSCODIUM_PYTHON_DEFAULT_RUN_IMAGE
+
+        output_image_prefix = (
+            self.builds_config.build_output_image_prefix or constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
+        )
+        output_image_name = constants.BUILD_OUTPUT_IMAGE_NAME
+        output_image_tag = build.k8s_name
+        output_image = f"{output_image_prefix}{output_image_name}:{output_image_tag}"
+
+        # TODO: define the build strategy from `build_parameters`
+        build_strategy_name = self.builds_config.build_strategy_name or constants.BUILD_DEFAULT_BUILD_STRATEGY_NAME
+        push_secret_name = self.builds_config.push_secret_name or constants.BUILD_DEFAULT_PUSH_SECRET_NAME
+
+        retention_after_failed = (
+            self.builds_config.buildrun_retention_after_failed or constants.BUILD_RUN_DEFAULT_RETENTION_AFTER_FAILED
+        )
+        retention_after_succeeded = (
+            self.builds_config.buildrun_retention_after_succeeded
+            or constants.BUILD_RUN_DEFAULT_RETENTION_AFTER_SUCCEEDED
+        )
+        build_timeout = self.builds_config.buildrun_build_timeout or constants.BUILD_RUN_DEFAULT_TIMEOUT
+
+        return models.ShipwrightBuildRunParams(
+            name=build.k8s_name,
+            git_repository=git_repository,
+            run_image=run_image,
+            output_image=output_image,
+            build_strategy_name=build_strategy_name,
+            push_secret_name=push_secret_name,
+            retention_after_failed=retention_after_failed,
+            retention_after_succeeded=retention_after_succeeded,
+            build_timeout=build_timeout,
+            node_selector=self.builds_config.node_selector,
+            tolerations=self.builds_config.tolerations,
+        )
+
+    async def _get_environment_authorization(
+        self, session: AsyncSession, user: base_models.APIUser, environment: schemas.EnvironmentORM, scope: Scope
+    ) -> bool:
+        """Checks whether the provided user has a specific permission on a session environment."""
+        if environment.environment_kind == models.EnvironmentKind.GLOBAL:
+            return scope == Scope.READ or user.is_admin
+
+        launcher = await session.scalar(
+            select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.environment_id == environment.id)
+        )
+        if launcher:
+            authorized = await self.project_authz.has_permission(user, ResourceType.project, launcher.project_id, scope)
+        return authorized

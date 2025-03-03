@@ -13,6 +13,16 @@ CODEGEN_PARAMS := \
     --set-default-enum-member \
     --use-one-literal-as-default \
     --use-default
+CR_CODEGEN_PARAMS := \
+	--input-file-type jsonschema \
+	--output-model-type pydantic_v2.BaseModel \
+	--use-double-quotes \
+	--target-python-version 3.12 \
+	--collapse-root-models \
+	--field-constraints \
+	--strict-nullable \
+	--allow-extra-fields \
+	--use-default-kwarg
 
 .PHONY: all
 all: help
@@ -142,8 +152,7 @@ help:  ## Display this help.
 
 .PHONY: k3d_cluster
 k3d_cluster:  ## Creates a k3d cluster for testing
-	k3d cluster delete
-	k3d cluster create --agents 1 --k3s-arg --disable=metrics-server@server:0
+	./setup-k3d-cluster.sh --reset --deploy-shipwright
 
 .PHONY: install_amaltheas
 install_amaltheas:  ## Installs both version of amalthea in the. NOTE: It uses the currently active k8s context.
@@ -155,8 +164,12 @@ install_amaltheas:  ## Installs both version of amalthea in the. NOTE: It uses t
 # TODO: Add the version variables from the top of the file here when the charts are fully published
 .PHONY: amalthea_schema
 amalthea_schema:  ## Updates generates pydantic classes from CRDs
-	curl https://raw.githubusercontent.com/SwissDataScienceCenter/amalthea/main/config/crd/bases/amalthea.dev_amaltheasessions.yaml | yq '.spec.versions[0].schema.openAPIV3Schema' | poetry run datamodel-codegen --input-file-type jsonschema --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/notebooks/cr_amalthea_session.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.notebooks.cr_base.BaseCRD --allow-extra-fields --use-default-kwarg
-	curl https://raw.githubusercontent.com/SwissDataScienceCenter/amalthea/main/controller/crds/jupyter_server.yaml | yq '.spec.versions[0].schema.openAPIV3Schema' | poetry run datamodel-codegen --input-file-type jsonschema --output-model-type pydantic_v2.BaseModel --output components/renku_data_services/notebooks/cr_jupyter_server.py --use-double-quotes --target-python-version 3.12 --collapse-root-models --field-constraints --strict-nullable --base-class renku_data_services.notebooks.cr_base.BaseCRD --allow-extra-fields --use-default-kwarg
+	curl https://raw.githubusercontent.com/SwissDataScienceCenter/amalthea/main/config/crd/bases/amalthea.dev_amaltheasessions.yaml | yq '.spec.versions[0].schema.openAPIV3Schema' | poetry run datamodel-codegen --output components/renku_data_services/notebooks/cr_amalthea_session.py --base-class renku_data_services.notebooks.cr_base.BaseCRD ${CR_CODEGEN_PARAMS}
+	curl https://raw.githubusercontent.com/SwissDataScienceCenter/amalthea/main/controller/crds/jupyter_server.yaml | yq '.spec.versions[0].schema.openAPIV3Schema' | poetry run datamodel-codegen --output components/renku_data_services/notebooks/cr_jupyter_server.py --base-class renku_data_services.notebooks.cr_base.BaseCRD ${CR_CODEGEN_PARAMS}
+
+.PHONY: shipwright_schema
+shipwright_schema:  ## Updates the Shipwright pydantic classes
+	curl https://raw.githubusercontent.com/shipwright-io/build/refs/heads/main/deploy/crds/shipwright.io_buildruns.yaml | yq '.spec.versions[] | select(.name == "v1beta1") | .schema.openAPIV3Schema' | poetry run datamodel-codegen --output components/renku_data_services/session/cr_shipwright_buildrun.py --base-class renku_data_services.session.cr_base.BaseCRD ${CR_CODEGEN_PARAMS}
 
 # Pattern rules
 
@@ -167,3 +180,17 @@ amalthea_schema:  ## Updates generates pydantic classes from CRDs
 # newer than the requirements these steps won't be re-triggered.
 # Ignore the return value when there are more differences.
 	( git diff --exit-code -I "^#   timestamp\: " $@ >/dev/null && git checkout $@ ) || true
+
+# Devcontainer
+
+.PHONY: devcontainer_up
+devcontainer_up:
+	devcontainer up --workspace-folder .
+
+.PHONY: devcontainer_rebuild
+devcontainer_rebuild:
+	devcontainer up --remove-existing-container --workspace-folder .
+
+.PHONY: devcontainer_exec
+devcontainer_exec: devcontainer_up
+	devcontainer exec --container-id renku-data-services_devcontainer-data_service-1 -- bash
