@@ -12,7 +12,7 @@ spec:
       description: |
         The process to execute at launch time
         https://buildpacks.io/docs/for-buildpack-authors/how-to/write-buildpacks/specify-launch-processes/
-      default: "web"
+      default: "bash"
     - default: docker.io/renku/renkulab-vscode:latest
       description: The image to use as a frontend.
       name: run-image
