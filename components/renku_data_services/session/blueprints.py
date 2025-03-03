@@ -126,7 +126,7 @@ class SessionLaunchersBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.SessionLauncherPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.SessionLauncherPost) -> JSONResponse:
-            new_launcher = validate_unsaved_session_launcher(body)
+            new_launcher = validate_unsaved_session_launcher(body, builds_config=self.session_repo.builds_config)
             launcher = await self.session_repo.insert_launcher(user=user, launcher=new_launcher)
             return validated_json(apispec.SessionLauncher, launcher, status=201)
 
@@ -153,7 +153,9 @@ class SessionLaunchersBP(CustomBlueprint):
                         message="There are errors in the following fields, id: Input should be a valid string"
                     )
 
-                launcher_patch = validate_session_launcher_patch(body, current_launcher)
+                launcher_patch = validate_session_launcher_patch(
+                    body, current_launcher, builds_config=self.session_repo.builds_config
+                )
                 launcher = await self.session_repo.update_launcher(
                     user=user, launcher_id=launcher_id, patch=launcher_patch, session=session
                 )
