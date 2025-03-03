@@ -211,3 +211,6 @@ class ProjectMigrationsORM(BaseORM):
 
     project: Mapped[ProjectORM] = relationship(init=False, repr=False, lazy="selectin")
     """Relationship to the new project."""
+
+    launcher_id: Mapped[Optional[ULID]] = mapped_column(ULIDType, nullable=True, default=None)
+    """Stores the launcher ID without enforcing a foreign key."""

@@ -945,6 +945,7 @@ class ProjectMigrationRepository:
                 message=f"Failed to create a project for migration from v1 (project_v1_id={project_v1_id})."
             )
 
+        result_launcher = None
         if session_launcher is not None:
             unsaved_session_launcher = session_apispec.SessionLauncherPost(
                 project_id=str(created_project.id),
@@ -970,9 +971,13 @@ class ProjectMigrationRepository:
             )
 
             new_launcher = validate_unsaved_session_launcher(unsaved_session_launcher)
-            await self.session_repo.insert_launcher(user=user, launcher=new_launcher)
+            result_launcher = await self.session_repo.insert_launcher(user=user, launcher=new_launcher)
 
-        migration_orm = schemas.ProjectMigrationsORM(project_id=created_project.id, project_v1_id=project_v1_id)
+        migration_orm = schemas.ProjectMigrationsORM(
+            project_id=created_project.id,
+            project_v1_id=project_v1_id,
+            launcher_id=result_launcher.id if result_launcher else None,
+        )
 
         if migration_orm.project_id is None:
             raise errors.ValidationError(message="Project ID cannot be None for the migration entry.")
@@ -983,7 +988,7 @@ class ProjectMigrationRepository:
 
         return created_project
 
-    async def get_migration_by_project_id(self, user: base_models.APIUser, v1_id: int) -> models.Project:
+    async def get_migration_by_v1_id(self, user: base_models.APIUser, v1_id: int) -> models.Project:
         """Retrieve all migration records for a given project v1 ID."""
         if user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
@@ -991,14 +996,14 @@ class ProjectMigrationRepository:
         async with self.session_maker() as session:
             stmt = select(schemas.ProjectMigrationsORM).where(schemas.ProjectMigrationsORM.project_v1_id == v1_id)
             result = await session.execute(stmt)
-            project_ids = [row[0] for row in result.fetchall()]
+            project_ids = result.scalars().first()
 
             if not project_ids:
                 raise errors.MissingResourceError(message=f"Migration for project v1 with id '{v1_id}' does not exist.")
 
             # NOTE: Show only those projects that user has access to
             allowed_projects = await self.authz.resources_with_direct_membership(user, ResourceType.project)
-            project_id_list = [str(row.project_id) for row in project_ids]
+            project_id_list = [project_ids.project_id]
             stmt = select(schemas.ProjectORM)
             stmt = stmt.where(schemas.ProjectORM.id.in_(project_id_list))
             stmt = stmt.where(schemas.ProjectORM.id.in_(allowed_projects))
@@ -1011,3 +1016,32 @@ class ProjectMigrationRepository:
                 )
 
             return project_orm.dump()
+
+    async def get_migration_by_project_id(
+        self, user: base_models.APIUser, project_id: ULID
+    ) -> models.ProjectMigrationInfo | None:
+        """Retrieve migration info for a given project v2 ID."""
+
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session:
+            stmt_project = select(schemas.ProjectORM.id).where(schemas.ProjectORM.id == project_id)
+            res_project = await session.scalar(stmt_project)
+            if not res_project:
+                raise errors.MissingResourceError(
+                    message=f"Project with ID {project_id} does not exist or you do not have access to it."
+                )
+
+            stmt = select(schemas.ProjectMigrationsORM).where(schemas.ProjectMigrationsORM.project_id == project_id)
+            result = await session.execute(stmt)
+            project_migration_orm = result.scalars().first()
+
+            if project_migration_orm:
+                return models.ProjectMigrationInfo(
+                    project_id=project_id,
+                    v1_id=project_migration_orm.project_v1_id,
+                    launcher_id=project_migration_orm.launcher_id,
+                )
+
+            return None

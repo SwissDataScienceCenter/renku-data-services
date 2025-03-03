@@ -1757,7 +1757,12 @@ async def test_migrate_v1_project(
             "repositories": ["http://old-repository.com"],
             "visibility": "private",
             "keywords": ["old", "project"],
-        }
+        },
+        "session_launcher": {
+            "name": "My Renku Session :)",
+            "container_image": "renku/renkulab-py:3.10-0.18.1",
+            "default_url": "/lab",
+        },
     }
 
     await app_config.event_repo.delete_all_events()
@@ -1801,3 +1806,10 @@ async def test_migrate_v1_project(
     assert migrated_project["visibility"] == "private"
     assert migrated_project["keywords"] == ["old", "project"]
     assert migrated_project["repositories"] == ["http://old-repository.com"]
+    project_id = migrated_project["id"]
+
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/migration_info", headers=user_headers)
+    assert response.status_code == 200, response.text
+    migrated_project = response.json
+    assert migrated_project["v1_id"] == v1_id
+    assert migrated_project["project_id"] == project_id

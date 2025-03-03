@@ -307,6 +307,32 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - projects
+  /projects/{project_id}/migration_info:
+    get:
+      summary: Check if a v2 project is a project migrated from v1
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/Ulid"
+      responses:
+        "200":
+          description: Project exists in v2 and is a migrated project from v1
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectMigrationInfo"
+        "404":
+          description: No corresponding project migrated from v1
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - projects
   /projects/{project_id}/members:
     get:
       summary: Get all members of a project
@@ -1081,6 +1107,20 @@ components:
             description: A flag to filter projects where the user is a direct member.
             type: boolean
             default: false
+    ProjectMigrationInfo:
+      description: Information if a project is a migrated project
+      type: object
+      properties:
+        project_id:
+          $ref: "#/components/schemas/Ulid"
+        v1_id:
+          description: The id of the project in v1
+          type: integer
+        launcher_id:
+          $ref: "#/components/schemas/Ulid"
+      required:
+        - v1_id
+        - project_id
     ProjectPermissions:
       description: The set of permissions on a project
       type: object
