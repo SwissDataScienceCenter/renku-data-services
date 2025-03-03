@@ -130,11 +130,15 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         session_repo=config.session_repo,
         authenticator=config.authenticator,
     )
-    builds = BuildsBP(
-        name="builds",
-        url_prefix=url_prefix,
-        session_repo=config.session_repo,
-        authenticator=config.authenticator,
+    builds = (
+        BuildsBP(
+            name="builds",
+            url_prefix=url_prefix,
+            session_repo=config.session_repo,
+            authenticator=config.authenticator,
+        )
+        if config.builds_config.enabled
+        else None
     )
     oauth2_clients = OAuth2ClientsBP(
         name="oauth2_clients",
@@ -238,7 +242,6 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
             group.blueprint(),
             session_environments.blueprint(),
             session_launchers.blueprint(),
-            builds.blueprint(),
             oauth2_clients.blueprint(),
             oauth2_connections.blueprint(),
             repositories.blueprint(),
@@ -250,6 +253,8 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
             data_connectors.blueprint(),
         ]
     )
+    if builds is not None:
+        app.blueprint(builds.blueprint())
 
     app.error_handler = CustomErrorHandler(apispec)
     app.config.OAS = False
