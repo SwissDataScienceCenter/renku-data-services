@@ -151,7 +151,9 @@ class SchemaMigrator:
     async def __current_version0(self, client: DefaultSolrClient) -> VersionDoc | None:
         """Return the current schema version document."""
         resp = await client.get_raw(self.__docId)
-        docs = resp.raise_for_status().json()["response"]["docs"]
+        if resp.status_code != 200:
+            return None
+        docs = resp.json()["response"]["docs"]
         if docs == []:
             return None
         else:
