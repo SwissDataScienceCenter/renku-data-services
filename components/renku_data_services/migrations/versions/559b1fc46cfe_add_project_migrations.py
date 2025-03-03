@@ -1,8 +1,8 @@
 """add project migrations
 
-Revision ID: 6e4dfb1ca90f
-Revises: d71f0f795d30
-Create Date: 2025-02-11 10:05:25.003625
+Revision ID: 559b1fc46cfe
+Revises: 239854e7ea77
+Create Date: 2025-03-03 13:58:07.450665
 
 """
 
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision = "6e4dfb1ca90f"
-down_revision = "d71f0f795d30"
+revision = "559b1fc46cfe"
+down_revision = "239854e7ea77"
 branch_labels = None
 depends_on = None
 
@@ -23,6 +23,7 @@ def upgrade() -> None:
         sa.Column("id", sa.String(length=26), nullable=False),
         sa.Column("project_v1_id", sa.Integer(), nullable=False),
         sa.Column("project_id", sa.String(length=26), nullable=False),
+        sa.Column("launcher_id", sa.String(length=26), nullable=True),
         sa.ForeignKeyConstraint(["project_id"], ["projects.projects.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("project_v1_id"),

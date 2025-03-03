@@ -178,3 +178,12 @@ class ProjectMigration:
     def etag(self) -> str:
         """Entity tag value for this project migration object."""
         return compute_etag_from_fields(self.migrated_at, self.project_v1_id)
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectMigrationInfo:
+    """Model representing a migration from an old project version."""
+
+    project_id: ULID
+    v1_id: int | None
+    launcher_id: ULID | None

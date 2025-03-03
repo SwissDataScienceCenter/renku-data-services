@@ -86,12 +86,12 @@ class ProjectsBP(CustomBlueprint):
         return "/projects", ["POST"], _post
 
     def get_migration(self) -> BlueprintFactoryResponse:
-        """List all project migrations by project v1 id."""
+        """Get project migration by project v1 id."""
 
         @authenticate(self.authenticator)
         @only_authenticated
         async def _get_migration(_: Request, user: base_models.APIUser, v1_id: int) -> JSONResponse:
-            project = await self.project_migration_repo.get_migration_by_project_id(user, v1_id)
+            project = await self.project_migration_repo.get_migration_by_v1_id(user, v1_id)
             project_dump = self._dump_project(project)
             return validated_json(apispec.Project, project_dump)
 
@@ -114,6 +114,28 @@ class ProjectsBP(CustomBlueprint):
             return validated_json(apispec.Project, self._dump_project(result), status=201)
 
         return "/renku_v1_projects/<v1_id:int>/migrations", ["POST"], _post_migration
+
+    def get_project_migration_info(self) -> BlueprintFactoryResponse:
+        """Get project migration by project v2 id."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _get_project_migration_info(
+            _: Request, user: base_models.APIUser, project_id: ULID
+        ) -> JSONResponse | HTTPResponse:
+            migration_info = await self.project_migration_repo.get_migration_by_project_id(user, project_id)
+
+            if migration_info and isinstance(migration_info, project_models.ProjectMigrationInfo):
+                dump_migration_info = dict(
+                    project_id=migration_info.project_id,
+                    v1_id=migration_info.v1_id,
+                    launcher_id=migration_info.launcher_id,
+                )
+                return validated_json(apispec.ProjectMigrationInfo, dump_migration_info)
+
+            return HTTPResponse(status=404)
+
+        return "/projects/<project_id:ulid>/migration_info", ["GET"], _get_project_migration_info
 
     def copy(self) -> BlueprintFactoryResponse:
         """Create a new project by copying it from a template project."""
