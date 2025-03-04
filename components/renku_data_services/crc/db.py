@@ -183,6 +183,43 @@ class ResourcePoolRepository(_Base):
                 output.append(rp.dump(quota))
             return output
 
+    async def get_resource_pool_from_class(
+        self, api_user: base_models.APIUser, resource_class_id: int
+    ) -> models.ResourcePool:
+        """Get the resource pool the class belongs to."""
+        async with self.session_maker() as session:
+            stmt = (
+                select(schemas.ResourcePoolORM)
+                .where(schemas.ResourcePoolORM.classes.any(schemas.ResourceClassORM.id == resource_class_id))
+                .options(selectinload(schemas.ResourcePoolORM.classes))
+            )
+            # NOTE: The line below ensures that the right users can access the right resources, do not remove.
+            stmt = _resource_pool_access_control(api_user, stmt)
+            res = await session.execute(stmt)
+            orm = res.scalar()
+            if orm is None:
+                raise errors.MissingResourceError(
+                    message=f"Could not find the resource pool where a class with ID {resource_class_id} exists."
+                )
+            quota = self.quotas_repo.get_quota(orm.quota) if orm.quota else None
+            return orm.dump(quota)
+
+    async def get_default_resource_pool(self) -> models.ResourcePool:
+        """Get the default resource pool."""
+        async with self.session_maker() as session:
+            stmt = (
+                select(schemas.ResourcePoolORM)
+                .where(schemas.ResourcePoolORM.default == true())
+                .options(selectinload(schemas.ResourcePoolORM.classes))
+            )
+            res = await session.scalar(stmt)
+            if res is None:
+                raise errors.ProgrammingError(
+                    message="Could not find the default resource pool, but this has to exist."
+                )
+            quota = self.quotas_repo.get_quota(res.quota) if res.quota else None
+            return res.dump(quota)
+
     async def get_default_resource_class(self) -> models.ResourceClass:
         """Get the default resource class in the default resource pool."""
         async with self.session_maker() as session:

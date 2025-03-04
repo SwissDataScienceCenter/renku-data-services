@@ -289,6 +289,7 @@ class AmaltheaSessionV1Alpha1SpecPatch(BaseCRD):
     tolerations: list[Toleration] | None = None
     affinity: Affinity | None = None
     session: AmaltheaSessionV1Alpha1SpecSessionPatch | None = None
+    culling: Culling | None = None
 
 
 class AmaltheaSessionV1Alpha1Patch(BaseCRD):
