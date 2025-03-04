@@ -171,6 +171,7 @@ class Config:
     default_resource_pool: models.ResourcePool = default_resource_pool
     server_options_file: Optional[str] = None
     server_defaults_file: Optional[str] = None
+    search_enabled: bool = False
     async_oauth2_client_class: type[AsyncOAuth2Client] = AsyncOAuth2Client
     _user_repo: UserRepository | None = field(default=None, repr=False, init=False)
     _rp_repo: ResourcePoolRepository | None = field(default=None, repr=False, init=False)
@@ -478,6 +479,7 @@ class Config:
         user_preferences_config = UserPreferencesConfig(max_pinned_projects=max_pinned_projects)
         db = DBConfig.from_env(prefix)
         solr_config = SolrClientConfig.from_env(prefix)
+        search_enabled = os.environ.get(f"{prefix}SEARCH_ENABLED", "false").lower() == "true"
         kc_api: IKeycloakAPI
         secrets_service_public_key: PublicKeyTypes
         gitlab_url: str | None
@@ -571,6 +573,7 @@ class Config:
             user_preferences_config=user_preferences_config,
             db=db,
             solr_config=solr_config,
+            search_enabled=search_enabled,
             redis=redis,
             kc_api=kc_api,
             message_queue=message_queue,
