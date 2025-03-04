@@ -30,11 +30,6 @@
             enable = true;
             openapi-spec = "http://localhost:8000/api/data/spec.json";
           };
-          services.dev-solr = {
-            enable = true;
-            cores = ["renku-search-dev"];
-            heap = 1024;
-          };
         };
       in {
         rdsdev-vm = devshell-tools.lib.mkVm {
@@ -73,11 +68,8 @@
         POETRY_VIRTUALENVS_PREFER_ACTIVE_PYTHON = "true";
         POETRY_VIRTUALENVS_OPTIONS_SYSTEM_SITE_PACKAGES = "true";
         POETRY_INSTALLER_NO_BINARY = "ruff";
-
         ZED_ENDPOINT = "localhost:50051";
         ZED_TOKEN = "dev";
-
-        SOLR_BIN_PATH = "${devshellToolsPkgs.solr}/bin/solr";
 
         shellHook = ''
           export FLAKE_ROOT="$(git rev-parse --show-toplevel)"
@@ -89,12 +81,10 @@
       };
 
       commonPackages = with pkgs; [
-        devcontainer
         redis
         postgresql
         jq
         devshellToolsPkgs.openapi-docs
-        devshellToolsPkgs.solr
         spicedb
         cargo
         rustc
@@ -105,10 +95,6 @@
         python312
         basedpyright
         rclone
-        (writeShellScriptBin "pyfix" ''
-          poetry run ruff check --fix
-          poetry run ruff format
-        '')
       ];
     in {
       formatter = pkgs.alejandra;
@@ -127,8 +113,6 @@
             DB_HOST = "localhost";
             DB_PORT = "15432";
             AUTHZ_DB_HOST = "localhost";
-            SOLR_URL = "http://localhost:18983";
-            SOLR_CORE = "renku-search-dev";
           });
 
         cnt = let
@@ -151,8 +135,6 @@
               DB_HOST = "rsdevcnt";
               DB_PORT = "5432";
               AUTHZ_DB_HOST = "localhost";
-              SOLR_URL = "http://rsdevcnt:8983";
-              SOLR_CORE = "renku-search-dev";
             }
           );
       };
