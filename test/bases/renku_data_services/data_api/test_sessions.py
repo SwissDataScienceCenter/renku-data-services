@@ -1044,40 +1044,6 @@ async def test_starting_session_anonymous(
 
 
 @pytest.mark.asyncio
-async def test_post_build(sanic_client: SanicASGITestClient, user_headers, create_project) -> None:
-    project = await create_project("Some project")
-    payload = {
-        "name": "Launcher 1",
-        "project_id": project["id"],
-        "description": "A session launcher.",
-        "environment": {
-            "repository": "https://github.com/some/repo",
-            "builder_variant": "python",
-            "frontend_variant": "vscodium",
-            "environment_image_source": "build",
-        },
-    }
-    _, response = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
-    assert response.status_code == 201, response.text
-    launcher = response.json
-    environment_id = launcher["environment"]["id"]
-
-    _, response = await sanic_client.post(
-        f"/api/data/environments/{environment_id}/builds",
-        headers=user_headers,
-    )
-
-    assert response.status_code == 201, response.text
-    assert response.json is not None
-    build = response.json
-    assert build.get("id") is not None
-    assert build.get("environment_id") == environment_id
-    assert build.get("created_at") is not None
-    assert build.get("status") == "in_progress"
-    assert build.get("result") is None
-
-
-@pytest.mark.asyncio
 async def test_get_build(sanic_client: SanicASGITestClient, user_headers, create_project) -> None:
     project = await create_project("Some project")
     payload = {
@@ -1096,12 +1062,12 @@ async def test_get_build(sanic_client: SanicASGITestClient, user_headers, create
     launcher = response.json
     environment_id = launcher["environment"]["id"]
 
-    _, response = await sanic_client.post(
+    _, response = await sanic_client.get(
         f"/api/data/environments/{environment_id}/builds",
         headers=user_headers,
     )
-    assert response.status_code == 201, response.text
-    build = response.json
+    assert response.status_code == 200, response.text
+    build = response.json[0]
     build_id = build["id"]
 
     _, response = await sanic_client.get(
@@ -1137,12 +1103,12 @@ async def test_get_environment_builds(sanic_client: SanicASGITestClient, user_he
     launcher = response.json
     environment_id = launcher["environment"]["id"]
 
-    _, response = await sanic_client.post(
+    _, response = await sanic_client.get(
         f"/api/data/environments/{environment_id}/builds",
         headers=user_headers,
     )
-    assert response.status_code == 201, response.text
-    build1 = response.json
+    assert response.status_code == 200, response.text
+    build1 = response.json[0]
     # Note: cancel this build so that we can post the next one
     _, response = await sanic_client.patch(
         f"/api/data/builds/{build1['id']}",
@@ -1189,12 +1155,12 @@ async def test_patch_build(sanic_client: SanicASGITestClient, user_headers, crea
     launcher = response.json
     environment_id = launcher["environment"]["id"]
 
-    _, response = await sanic_client.post(
+    _, response = await sanic_client.get(
         f"/api/data/environments/{environment_id}/builds",
         headers=user_headers,
     )
-    assert response.status_code == 201, response.text
-    build = response.json
+    assert response.status_code == 200, response.text
+    build = response.json[0]
     build_id = build["id"]
 
     payload = {"status": "cancelled"}
