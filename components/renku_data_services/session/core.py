@@ -1,7 +1,7 @@
 """Business logic for sessions."""
 
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from ulid import ULID
 
@@ -247,12 +247,11 @@ def validate_session_launcher_patch(
                     )
 
                 if current == "image" and new == "build":
-                    assert patch.environment.build_parameters is not None  # Make mypy happy in the following statement
+                    # NOTE: We've checked that patch.environment.build_parameters is not None in the previous if block.
+                    build_parameters = cast(apispec.BuildParametersPost, patch.environment.build_parameters)
                     # NOTE: The environment type is changed to be built, so, all required fields should be passed (as in
                     # a POST request). No need to get values from the current env, since they will be set by the build.
-                    environment = validate_unsaved_build_parameters(
-                        patch.environment.build_parameters, builds_config=builds_config
-                    )
+                    environment = validate_unsaved_build_parameters(build_parameters, builds_config=builds_config)
                 elif current == "build" and new == "image":
                     environment = data_dict["environment"]
                     assert isinstance(environment, dict)

@@ -128,11 +128,6 @@ class SessionLaunchersBP(CustomBlueprint):
         async def _post(_: Request, user: base_models.APIUser, body: apispec.SessionLauncherPost) -> JSONResponse:
             new_launcher = validate_unsaved_session_launcher(body, builds_config=self.session_repo.builds_config)
             launcher = await self.session_repo.insert_launcher(user=user, launcher=new_launcher)
-
-            if isinstance(new_launcher.environment, models.UnsavedBuildParameters):
-                new_build = validate_unsaved_build(environment_id=launcher.environment.id)
-                await self.session_repo.start_build(user=user, build=new_build)
-
             return validated_json(apispec.SessionLauncher, launcher, status=201)
 
         return "/session_launchers", ["POST"], _post

@@ -1044,6 +1044,54 @@ async def test_starting_session_anonymous(
 
 
 @pytest.mark.asyncio
+async def test_rebuild(sanic_client: SanicASGITestClient, user_headers, create_project) -> None:
+    project = await create_project("Some project")
+    payload = {
+        "name": "Launcher 1",
+        "project_id": project["id"],
+        "description": "A session launcher.",
+        "environment": {
+            "repository": "https://github.com/some/repo",
+            "builder_variant": "python",
+            "frontend_variant": "vscodium",
+            "environment_image_source": "build",
+        },
+    }
+    _, response = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    launcher = response.json
+    environment_id = launcher["environment"]["id"]
+
+    # Trying to rebuild fails since a build is already in progress when session launcher is created
+    _, response = await sanic_client.post(f"/api/data/environments/{environment_id}/builds", headers=user_headers)
+
+    assert response.status_code == 409, response.text
+    assert "already has a build in progress." in response.text
+
+    # Cancel the build
+    _, response = await sanic_client.get(f"/api/data/environments/{environment_id}/builds", headers=user_headers)
+    assert response.status_code == 200, response.text
+    build = response.json[0]
+
+    _, response = await sanic_client.patch(
+        f"/api/data/builds/{build['id']}", json={"status": "cancelled"}, headers=user_headers
+    )
+    assert response.status_code == 200, response.text
+
+    # Rebuild
+    _, response = await sanic_client.post(f"/api/data/environments/{environment_id}/builds", headers=user_headers)
+
+    assert response.status_code == 201, response.text
+    assert response.json is not None
+    build = response.json
+    assert build.get("id") is not None
+    assert build.get("environment_id") == environment_id
+    assert build.get("created_at") is not None
+    assert build.get("status") == "in_progress"
+    assert build.get("result") is None
+
+
+@pytest.mark.asyncio
 async def test_get_build(sanic_client: SanicASGITestClient, user_headers, create_project) -> None:
     project = await create_project("Some project")
     payload = {
