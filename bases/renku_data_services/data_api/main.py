@@ -172,10 +172,14 @@ def create_app() -> Sanic:
 
     @app.main_process_start
     async def do_solr_migrations(_: Sanic) -> None:
-        logger.info(f"Running SOLR migrations at: {config.solr_config}")
-        migrator = SchemaMigrator(config.solr_config)
-        result = await migrator.migrate(entity_schema.all_migrations)
-        logger.info(f"SOLR migration done: {result}")
+        config = Config.from_env()
+        if config.search_enabled:
+            logger.info(f"Running SOLR migrations at: {config.solr_config}")
+            migrator = SchemaMigrator(config.solr_config)
+            result = await migrator.migrate(entity_schema.all_migrations)
+            logger.info(f"SOLR migration done: {result}")
+        else:
+            logger.info("Not running SOLR migrations, search_enabled is not set or false")
 
     @app.before_server_start
     async def setup_rclone_validator(app: Sanic) -> None:
@@ -185,9 +189,13 @@ def create_app() -> Sanic:
     @app.main_process_ready
     async def ready(app: Sanic) -> None:
         """Application ready event handler."""
+        config = Config.from_env()
         logger.info("starting events background job.")
         app.manager.manage("SendEvents", send_pending_events, {"app_name": config.app_name}, transient=True)
-        app.manager.manage("UpdateSearch", update_search, {"app_name": config.app_name}, transient=True)
+        if config.search_enabled:
+            app.manager.manage("UpdateSearch", update_search, {"app_name": config.app_name}, transient=True)
+        else:
+            logger.info("Not running search update loop, search_enabled is not set or false")
 
     return app
 
