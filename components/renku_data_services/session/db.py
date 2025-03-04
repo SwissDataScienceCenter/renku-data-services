@@ -354,6 +354,8 @@ class SessionRepository:
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
 
+        start_build = False
+
         async with self.session_maker() as session, session.begin():
             res = await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
             project = res.one_or_none()
@@ -412,6 +414,8 @@ class SessionRepository:
                     build_parameters=build_parameters_orm,
                 )
                 session.add(environment_orm)
+
+                start_build = True
             else:
                 environment_id = ULID.from_str(launcher.environment)
                 res_env = await session.scalars(
@@ -463,7 +467,12 @@ class SessionRepository:
             session.add(launcher_orm)
             await session.flush()
             await session.refresh(launcher_orm)
-            return launcher_orm.dump()
+
+        if start_build:
+            build = models.UnsavedBuild(environment_id=environment_id)
+            await self.start_build(user, build)
+
+        return launcher_orm.dump()
 
     async def copy_launcher(
         self, user: base_models.APIUser, project_id: ULID, launcher: models.SessionLauncher
