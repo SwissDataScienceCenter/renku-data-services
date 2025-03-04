@@ -1346,6 +1346,94 @@ async def test_project_copy_creates_new_custom_environment_instance(
 
 
 @pytest.mark.asyncio
+async def test_project_copy_creates_new_build_and_environment_instances(
+    sanic_client,
+    user_headers,
+    regular_user,
+    create_project,
+    create_session_launcher,
+    create_project_copy,
+    create_resource_pool,
+) -> None:
+    project = await create_project("Project")
+    project_id = project["id"]
+    resource_pool = await create_resource_pool(admin=True)
+    launcher = await create_session_launcher(
+        "Launcher",
+        project_id,
+        environment={
+            "repository": "https://github.com/some/repo",
+            "builder_variant": "python",
+            "frontend_variant": "vscodium",
+            "environment_image_source": "build",
+        },
+        resource_class_id=resource_pool["classes"][0]["id"],
+        disk_storage=42,
+    )
+
+    await asyncio.sleep(1)
+
+    copy_project = await create_project_copy(project_id, regular_user.namespace.slug, "Copy Project")
+    copy_project_id = copy_project["id"]
+    _, response = await sanic_client.get(
+        f"/api/data/projects/{copy_project_id}/session_launchers", headers=user_headers
+    )
+
+    assert response.status_code == 200, response.text
+    copied_launcher = response.json[0]
+    # NOTE: Check that a new launcher is created
+    assert copied_launcher["id"] != launcher["id"]
+    assert copied_launcher["project_id"] == copy_project_id
+    assert copied_launcher["name"] == launcher["name"]
+    assert copied_launcher["description"] == launcher["description"]
+    assert copied_launcher["resource_class_id"] == launcher["resource_class_id"]
+    assert copied_launcher["disk_storage"] == launcher["disk_storage"]
+    assert copied_launcher["creation_date"] != launcher["creation_date"]
+    # NOTE: Check that a new environment is created
+    environment = copied_launcher["environment"]
+    assert environment["id"] != launcher["environment"]["id"]
+    assert environment["name"] == launcher["environment"]["name"]
+    assert environment["creation_date"] != launcher["environment"]["creation_date"]
+    assert environment["description"] == launcher["environment"]["description"]
+    assert environment["container_image"] == launcher["environment"]["container_image"]
+    assert environment["default_url"] == launcher["environment"]["default_url"]
+    assert environment["uid"] == launcher["environment"]["uid"]
+    assert environment["gid"] == launcher["environment"]["gid"]
+    assert environment.get("working_directory") == launcher["environment"].get("working_directory")
+    assert environment.get("mount_directory") == launcher["environment"].get("mount_directory")
+    assert environment["port"] == launcher["environment"]["port"]
+    assert environment.get("command") == launcher["environment"].get("command")
+    assert environment.get("args") == launcher["environment"].get("args")
+    assert environment["is_archived"] == launcher["environment"]["is_archived"]
+    # NOTE: Check that build parameters are copied
+    build_parameters = environment["build_parameters"]
+    assert build_parameters["repository"] == launcher["environment"]["build_parameters"]["repository"]
+    assert build_parameters["builder_variant"] == launcher["environment"]["build_parameters"]["builder_variant"]
+    assert build_parameters["frontend_variant"] == launcher["environment"]["build_parameters"]["frontend_variant"]
+
+    # Patch the build parameters to make sure that it doesn't change the original builder parameter
+    patch_payload = {"environment": {"build_parameters": {"repository": "new_repo"}}}
+    _, response = await sanic_client.patch(
+        f"/api/data/session_launchers/{copied_launcher['id']}", headers=user_headers, json=patch_payload
+    )
+    assert response.status_code == 200, response.text
+
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/session_launchers", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    original_build_parameters = response.json[0]["environment"]["build_parameters"]
+    assert original_build_parameters["repository"] == "https://github.com/some/repo"
+
+    _, response = await sanic_client.get(
+        f"/api/data/projects/{copy_project_id}/session_launchers", headers=user_headers
+    )
+
+    assert response.status_code == 200, response.text
+    copy_build_parameters = response.json[0]["environment"]["build_parameters"]
+    assert copy_build_parameters["repository"] == "new_repo"
+
+
+@pytest.mark.asyncio
 async def test_project_copy_includes_data_connector_links(
     sanic_client,
     user_headers,

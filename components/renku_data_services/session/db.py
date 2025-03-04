@@ -132,6 +132,19 @@ class SessionRepository:
             environment_image_source=environment.environment_image_source,
         )
 
+        if environment.environment_image_source == models.EnvironmentImageSource.build:
+            if not environment.build_parameters:
+                raise errors.ProgrammingError(message="Environment has no build parameters.")
+            new_build_parameters = schemas.BuildParametersORM(
+                builder_variant=environment.build_parameters.builder_variant,
+                frontend_variant=environment.build_parameters.frontend_variant,
+                repository=environment.build_parameters.repository,
+            )
+            session.add(new_build_parameters)
+
+            new_environment.build_parameters_id = new_build_parameters.id
+            new_environment.build_parameters = new_build_parameters
+
         session.add(new_environment)
         return new_environment
 
