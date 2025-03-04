@@ -193,3 +193,24 @@ class SessionSecretORM(BaseORM):
             secret_slot=self.secret_slot.dump(),
             secret_id=self.secret_id,
         )
+
+
+class ProjectMigrationsORM(BaseORM):
+    """Tracks project migrations from an old project (project_v1_id) to a new project (project_id)."""
+
+    __tablename__ = "project_migrations"
+    __table_args__ = (UniqueConstraint("project_v1_id", name="uq_project_v1_id"),)
+
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
+
+    project_v1_id: Mapped[int] = mapped_column("project_v1_id", Integer, nullable=False, unique=True)
+    """The old project being migrated. Must be unique."""
+
+    project_id: Mapped[ULID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    """The new project of the migration of the v1."""
+
+    project: Mapped[ProjectORM] = relationship(init=False, repr=False, lazy="selectin")
+    """Relationship to the new project."""
+
+    launcher_id: Mapped[Optional[ULID]] = mapped_column(ULIDType, nullable=True, default=None)
+    """Stores the launcher ID without enforcing a foreign key."""
