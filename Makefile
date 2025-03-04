@@ -34,8 +34,7 @@ API_SPECS := \
     components/renku_data_services/notebooks/apispec.py \
     components/renku_data_services/platform/apispec.py \
     components/renku_data_services/message_queue/apispec.py \
-    components/renku_data_services/data_connectors/apispec.py \
-    components/renku_data_services/search/apispec.py
+    components/renku_data_services/data_connectors/apispec.py
 
 components/renku_data_services/crc/apispec.py: components/renku_data_services/crc/api.spec.yaml
 components/renku_data_services/storage/apispec.py: components/renku_data_services/storage/api.spec.yaml
@@ -50,7 +49,6 @@ components/renku_data_services/notebooks/apispec.py: components/renku_data_servi
 components/renku_data_services/platform/apispec.py: components/renku_data_services/platform/api.spec.yaml
 components/renku_data_services/message_queue/apispec.py: components/renku_data_services/message_queue/api.spec.yaml
 components/renku_data_services/data_connectors/apispec.py: components/renku_data_services/data_connectors/api.spec.yaml
-components/renku_data_services/search/apispec.py: components/renku_data_services/search/api.spec.yaml
 
 schemas: ${API_SPECS}  ## Generate pydantic classes from apispec yaml files
 	@echo "generated classes based on ApiSpec"

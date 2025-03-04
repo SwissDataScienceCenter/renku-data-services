@@ -15,7 +15,6 @@ from sentry_sdk.integrations.asyncio import AsyncioIntegration
 from sentry_sdk.integrations.grpc import GRPCIntegration
 from sentry_sdk.integrations.sanic import SanicIntegration, _context_enter, _context_exit, _set_transaction
 
-import renku_data_services.search.core as search_core
 from renku_data_services.app_config import Config
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.data_api.app import register_all_handlers
@@ -27,9 +26,6 @@ from renku_data_services.errors.errors import (
     ValidationError,
 )
 from renku_data_services.migrations.core import run_migrations_for_app
-from renku_data_services.solr import entity_schema
-from renku_data_services.solr.solr_client import DefaultSolrClient
-from renku_data_services.solr.solr_migrate import SchemaMigrator
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.utils.middleware import validate_null_byte
 
@@ -54,26 +50,8 @@ async def _send_messages(app: Sanic) -> None:
             raise
 
 
-async def _update_search(app: Sanic) -> None:
-    config = Config.from_env()
-    while True:
-        try:
-            async with DefaultSolrClient(config.solr_config) as client:
-                await search_core.update_solr(config.search_updates_repo, client, 20)
-            # we need to collect metrics for this background process separately from the task we add to the
-            # server processes
-            await collect_system_metrics(app, "update_search_worker")
-            await asyncio.sleep(1)
-        except (asyncio.CancelledError, KeyboardInterrupt) as e:
-            logger.warning(f"Exiting: {e}")
-            return
-        except Exception as e:
-            logger.warning(f"Background task failed: {e}")
-            raise
-
-
 def send_pending_events(app_name: str) -> None:
-    """Send pending messages to redis."""
+    """Send pending messages in case sending in a handler failed."""
     app = Sanic(app_name)
     setup_app_metrics(app)
 
@@ -81,17 +59,6 @@ def send_pending_events(app_name: str) -> None:
 
     asyncio.set_event_loop(uvloop.new_event_loop())
     asyncio.run(_send_messages(app))
-
-
-def update_search(app_name: str) -> None:
-    """Update the SOLR with data from the search staging table."""
-    app = Sanic(app_name)
-    setup_app_metrics(app)
-
-    logger.info("Running update search loop.")
-
-    asyncio.set_event_loop(uvloop.new_event_loop())
-    asyncio.run(_update_search(app))
 
 
 def create_app() -> Sanic:
@@ -170,13 +137,6 @@ def create_app() -> Sanic:
         run_migrations_for_app("common")
         await config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
 
-    @app.main_process_start
-    async def do_solr_migrations(_: Sanic) -> None:
-        logger.info(f"Running SOLR migrations at: {config.solr_config}")
-        migrator = SchemaMigrator(config.solr_config)
-        result = await migrator.migrate(entity_schema.all_migrations)
-        logger.info(f"SOLR migration done: {result}")
-
     @app.before_server_start
     async def setup_rclone_validator(app: Sanic) -> None:
         validator = RCloneValidator()
@@ -187,7 +147,6 @@ def create_app() -> Sanic:
         """Application ready event handler."""
         logger.info("starting events background job.")
         app.manager.manage("SendEvents", send_pending_events, {"app_name": config.app_name}, transient=True)
-        app.manager.manage("UpdateSearch", update_search, {"app_name": config.app_name}, transient=True)
 
     return app
 

@@ -34,8 +34,6 @@ from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project import apispec as project_apispec
 from renku_data_services.project import constants, models
 from renku_data_services.project import orm as schemas
-from renku_data_services.search.db import SearchUpdatesRepo
-from renku_data_services.search.decorators import update_search_document
 from renku_data_services.secrets import orm as secrets_schemas
 from renku_data_services.secrets.core import encrypt_user_secret
 from renku_data_services.secrets.models import SecretKind
@@ -54,14 +52,12 @@ class ProjectRepository:
         message_queue: IMessageQueue,
         event_repo: EventRepository,
         group_repo: GroupRepository,
-        search_updates_repo: SearchUpdatesRepo,
         authz: Authz,
     ) -> None:
         self.session_maker = session_maker
         self.message_queue: IMessageQueue = message_queue
         self.event_repo: EventRepository = event_repo
         self.group_repo: GroupRepository = group_repo
-        self.search_updates_repo: SearchUpdatesRepo = search_updates_repo
         self.authz = authz
 
     async def get_projects(
@@ -221,7 +217,6 @@ class ProjectRepository:
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.create, ResourceType.project)
-    @update_search_document
     @dispatch_message(avro_schema_v2.ProjectCreated)
     async def insert_project(
         self,
@@ -294,7 +289,6 @@ class ProjectRepository:
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.update, ResourceType.project)
     @dispatch_message(avro_schema_v2.ProjectUpdated)
-    @update_search_document
     async def update_project(
         self,
         user: base_models.APIUser,
@@ -408,7 +402,6 @@ class ProjectRepository:
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.delete, ResourceType.project)
     @dispatch_message(avro_schema_v2.ProjectRemoved)
-    @update_search_document
     async def delete_project(
         self, user: base_models.APIUser, project_id: ULID, *, session: AsyncSession | None = None
     ) -> models.DeletedProject | None:
