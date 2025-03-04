@@ -768,6 +768,10 @@ async def test_patch_session_launcher_environment_with_build_parameters(
     )
 
     assert res.status_code == 200, res.text
+
+    _, res = await sanic_client.get(f"/api/data/session_launchers/{launcher_id}", headers=user_headers)
+
+    assert res.status_code == 200, res.text
     assert res.json is not None
     assert res.json.get("name") == "Launcher 1"
     assert res.json.get("project_id") == project["id"]
