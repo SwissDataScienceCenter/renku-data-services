@@ -784,6 +784,15 @@ class SessionRepository:
             if not authorized:
                 raise errors.MissingResourceError(message=not_found_message)
 
+            if environment.environment_kind == models.EnvironmentKind.GLOBAL:
+                launcher_orm = None
+            else:
+                launcher_orm = await session.scalar(
+                    select(schemas.SessionLauncherORM).where(
+                        schemas.SessionLauncherORM.environment_id == build.environment_id
+                    )
+                )
+
             build_parameters = environment.build_parameters.dump()
 
             # We check if there is any in-progress build
@@ -809,9 +818,12 @@ class SessionRepository:
             await session.refresh(build_orm)
 
         result = build_orm.dump()
+        launcher = launcher_orm.dump() if launcher_orm is not None else None
 
         if self.shipwright_client is not None:
-            params = self._get_buildrun_params(build=result, build_parameters=build_parameters)
+            params = self._get_buildrun_params(
+                user=user, build=result, build_parameters=build_parameters, launcher=launcher
+            )
             await self.shipwright_client.create_image_build(params=params)
         else:
             logger.error("Shipwright client is None")
@@ -951,9 +963,16 @@ class SessionRepository:
         await session.refresh(build)
 
     def _get_buildrun_params(
-        self, build: models.Build, build_parameters: models.BuildParameters
+        self,
+        user: base_models.APIUser,
+        build: models.Build,
+        build_parameters: models.BuildParameters,
+        launcher: models.SessionLauncher | None,
     ) -> models.ShipwrightBuildRunParams:
         """Derive the Shipwright BuildRun params from a Build instance and a BuildParameters instance."""
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
         git_repository = build_parameters.repository
 
         # TODO: define the run image from `build_parameters`
@@ -979,6 +998,17 @@ class SessionRepository:
         )
         build_timeout = self.builds_config.buildrun_build_timeout or constants.BUILD_RUN_DEFAULT_TIMEOUT
 
+        labels: dict[str, str] = {
+            "renku.io/safe-username": user.id,
+        }
+        annotations: dict[str, str] = {
+            "renku.io/build_id": str(build.id),
+            "renku.io/environment_id": str(build.environment_id),
+        }
+        if launcher:
+            annotations["renku.io/launcher_id"] = str(launcher.id)
+            annotations["renku.io/project_id"] = str(launcher.project_id)
+
         return models.ShipwrightBuildRunParams(
             name=build.k8s_name,
             git_repository=git_repository,
@@ -991,6 +1021,7 @@ class SessionRepository:
             build_timeout=build_timeout,
             node_selector=self.builds_config.node_selector,
             tolerations=self.builds_config.tolerations,
+            labels=labels,
         )
 
     async def _get_environment_authorization(
@@ -1003,6 +1034,7 @@ class SessionRepository:
         launcher = await session.scalar(
             select(schemas.SessionLauncherORM).where(schemas.SessionLauncherORM.environment_id == environment.id)
         )
+        authorized = False
         if launcher:
             authorized = await self.project_authz.has_permission(user, ResourceType.project, launcher.project_id, scope)
         return authorized
