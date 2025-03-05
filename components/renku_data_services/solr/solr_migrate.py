@@ -8,10 +8,12 @@ import pydantic
 from pydantic import AliasChoices, BaseModel
 
 from renku_data_services.solr.solr_client import (
+    DefaultSolrAdminClient,
     DefaultSolrClient,
     DocVersion,
     DocVersions,
     SolrClientConfig,
+    SolrClientCreateCoreException,
     UpsertSuccess,
 )
 from renku_data_services.solr.solr_schema import (
@@ -28,6 +30,8 @@ from renku_data_services.solr.solr_schema import (
     SchemaCommand,
     SchemaCommandList,
 )
+
+logger = logging.Logger(__name__)
 
 
 def _is_applied(schema: CoreSchema, cmd: SchemaCommand) -> bool:
@@ -132,12 +136,35 @@ class MigrationState(BaseModel):
     skipped_migrations: int
 
 
+class SolrMigrateException(Exception):
+    """Base exception for migration errors."""
+
+    def __init(self, message: str) -> None:
+        super().__init__(message)
+
+
 class SchemaMigrator:
     """Allows to inspect the current schema version and run schema migrations against a solr core."""
 
     def __init__(self, cfg: SolrClientConfig) -> None:
         self.__config = cfg
         self.__docId: str = "VERSION_ID_EB779C6B-1D96-47CB-B304-BECF15E4A607"
+
+    async def ensure_core(self) -> None:
+        """Ensures an existing core.
+
+        If no core is found, one is created using the admin api.
+        """
+        async with DefaultSolrAdminClient(self.__config) as client:
+            status = await client.status(None)
+            if status is None:
+                try:
+                    logger.warning(f"Solr core {self.__config.core} not found. Attempt to create it.")
+                    await client.create(None)
+                except SolrClientCreateCoreException as info:
+                    logger.error(f"Error creating core {self.__config.core}, assume it already exists", exc_info=info)
+            else:
+                logger.info(f"Solr core {self.__config.core} already exists.")
 
     async def current_version(self) -> int | None:
         """Return the current schema version."""
@@ -151,11 +178,14 @@ class SchemaMigrator:
     async def __current_version0(self, client: DefaultSolrClient) -> VersionDoc | None:
         """Return the current schema version document."""
         resp = await client.get_raw(self.__docId)
-        docs = resp.raise_for_status().json()["response"]["docs"]
-        if docs == []:
-            return None
+        if not resp.is_success:
+            raise SolrMigrateException(f"Unexpected return from solr: {resp.status_code} ({resp.text})")
         else:
-            return VersionDoc.model_validate(docs[0])
+            docs = resp.json()["response"]["docs"]
+            if docs == []:
+                return None
+            else:
+                return VersionDoc.model_validate(docs[0])
 
     async def migrate(self, migrations: list[SchemaMigration]) -> MigrateResult:
         """Run all given migrations, skipping those that have been done before."""
@@ -183,7 +213,7 @@ class SchemaMigrator:
                         try:
                             initial_doc = await self.__current_version0(client)
                             if initial_doc is None:
-                                raise Exception("No inital migration document found after inserting it.")
+                                raise SolrMigrateException("No inital migration document found after inserting it.")
                             return await self.__doMigrate(client, migrations, initial_doc)
                         finally:
                             last_doc = await self.__current_version0(client)
@@ -225,7 +255,9 @@ class SchemaMigrator:
             return state.model_copy(update={"skippedMigrations": state.skipped_migrations + 1, "doc": v})
         else:
             r = await client.modify_schema(SchemaCommandList(cmds.commands))
-            r.raise_for_status()
+            if not r.is_success:
+                raise SolrMigrateException(f"Schema modification failed {r.status_code}/{r.text}")
+
             schema = await client.get_schema()
             doc = await self.__upsert_version(client, state.doc, m.version)
             return MigrationState(solr_schema=schema, doc=doc, skipped_migrations=state.skipped_migrations)
@@ -236,7 +268,7 @@ class SchemaMigrator:
         update_result = await client.upsert([next_doc])
         match update_result:
             case "VersionConflict":
-                raise Exception("VersionConflict when updating migration tracking document!")
+                raise SolrMigrateException("VersionConflict when updating migration tracking document!")
             case _:
                 pass
 

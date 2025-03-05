@@ -350,7 +350,7 @@ class DefaultSolrClient(SolrClient):
     async def get(self, id: str) -> QueryResponse:
         """Get a document by id, returning a `QueryResponse`."""
         resp = await self.get_raw(id)
-        if resp.status_code != 200:
+        if not resp.is_success:
             raise SolrClientGetByIdException(id, resp)
         else:
             return QueryResponse.model_validate(resp.json())
@@ -358,7 +358,7 @@ class DefaultSolrClient(SolrClient):
     async def query(self, query: SolrQuery) -> QueryResponse:
         """Query documents, returning a `QueryResponse`."""
         resp = await self.query_raw(query)
-        if resp.status_code != 200:
+        if not resp.is_success:
             raise SolrClientQueryException(query, resp)
         else:
             return QueryResponse.model_validate(resp.raise_for_status().json())
@@ -426,11 +426,11 @@ class SolrAdminClient(AbstractAsyncContextManager, ABC):
     """
 
     @abstractmethod
-    async def status(self) -> dict[str, Any] | None:
+    async def status(self, core_name: str | None) -> dict[str, Any] | None:
         """Return the status of the connected core."""
         ...
 
-    async def create(self, core_name: str) -> None:
+    async def create(self, core_name: str | None) -> None:
         """Create a core."""
         ...
 
@@ -461,25 +461,27 @@ class DefaultSolrAdminClient(SolrAdminClient):
     ) -> None:
         return await self.delegate.__aexit__(exc_type, exc, tb)
 
-    async def status(self) -> dict[str, Any] | None:
+    async def status(self, core_name: str | None) -> dict[str, Any] | None:
         """Return the status of the connected core."""
-        resp = await self.delegate.get(f"/{self.config.core}")
-        if resp.status_code != 200:
+        core = core_name or self.config.core
+        resp = await self.delegate.get(f"/{core}")
+        if not resp.is_success:
             raise SolrClientStatusException(self.config, resp)
         else:
             data = resp.raise_for_status().json()["status"][self.config.core]
             # if the core doesn't exist, solr returns 200 with an empty body
             return data if data.get("name") == self.config.core else None
 
-    async def create(self, core_name: str) -> None:
+    async def create(self, core_name: str | None) -> None:
         """Create a core."""
-        data = {"create": {"name": core_name, "configSet": "_default"}}
+        core = core_name or self.config.core
+        data = {"create": {"name": core, "configSet": "_default"}}
         resp = await self.delegate.post(
             "",
             content=json.dumps(data).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
-        if resp.status_code != 200:
-            raise SolrClientCreateCoreException(core_name, resp)
+        if not resp.is_success:
+            raise SolrClientCreateCoreException(core, resp)
         else:
             return None
