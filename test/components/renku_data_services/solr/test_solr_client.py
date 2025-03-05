@@ -11,6 +11,7 @@ from renku_data_services.solr.solr_client import (
     DefaultSolrClient,
     DocVersions,
     SolrClientConfig,
+    SolrClientCreateCoreException,
     SolrQuery,
     SortDirection,
     UpsertResponse,
@@ -112,14 +113,14 @@ async def test_insert_and_query_group(solr_search):
 async def test_status_for_non_existing_core(solr_config):
     cfg = SolrClientConfig(base_url=solr_config.base_url, core="blahh-blah", user=solr_config.user)
     async with DefaultSolrAdminClient(cfg) as client:
-        status = await client.status()
+        status = await client.status(None)
         assert status is None
 
 
 @pytest.mark.asyncio
 async def test_status_for_existing_core(solr_config):
     async with DefaultSolrAdminClient(solr_config) as client:
-        status = await client.status()
+        status = await client.status(None)
         print(status)
         assert status is not None
         assert status["name"] == solr_config.core
@@ -138,7 +139,7 @@ async def test_create_new_core(solr_config):
 
     next_cfg = SolrClientConfig(base_url=solr_config.base_url, core=random_name, user=solr_config.user)
     async with DefaultSolrAdminClient(next_cfg) as client:
-        res = await client.status()
+        res = await client.status(None)
         assert res is not None
 
     async with DefaultSolrClient(next_cfg) as client:
@@ -151,3 +152,13 @@ async def test_create_new_core(solr_config):
             )
         )
         assert resp.status_code == 200
+
+
+async def test_create_same_core_twice(solr_config):
+    random_name = "".join(random.choices(string.ascii_lowercase + string.digits, k=9))
+    async with DefaultSolrAdminClient(solr_config) as client:
+        res = await client.create(random_name)
+        assert res is None
+
+        with pytest.raises(SolrClientCreateCoreException):
+            await client.create(random_name)
