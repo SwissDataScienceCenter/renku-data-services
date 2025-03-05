@@ -1354,6 +1354,7 @@ async def test_project_copy_creates_new_build_and_environment_instances(
     create_session_launcher,
     create_project_copy,
     create_resource_pool,
+    snapshot,
 ) -> None:
     project = await create_project("Project")
     project_id = project["id"]
@@ -1383,33 +1384,17 @@ async def test_project_copy_creates_new_build_and_environment_instances(
     copied_launcher = response.json[0]
     # NOTE: Check that a new launcher is created
     assert copied_launcher["id"] != launcher["id"]
-    assert copied_launcher["project_id"] == copy_project_id
-    assert copied_launcher["name"] == launcher["name"]
-    assert copied_launcher["description"] == launcher["description"]
-    assert copied_launcher["resource_class_id"] == launcher["resource_class_id"]
-    assert copied_launcher["disk_storage"] == launcher["disk_storage"]
     assert copied_launcher["creation_date"] != launcher["creation_date"]
+    assert copied_launcher["project_id"] == copy_project_id
+    assert copied_launcher == snapshot(exclude=props("id", "creation_date", "environment", "project_id"))
     # NOTE: Check that a new environment is created
     environment = copied_launcher["environment"]
     assert environment["id"] != launcher["environment"]["id"]
-    assert environment["name"] == launcher["environment"]["name"]
     assert environment["creation_date"] != launcher["environment"]["creation_date"]
-    assert environment["description"] == launcher["environment"]["description"]
-    assert environment["container_image"] == launcher["environment"]["container_image"]
-    assert environment["default_url"] == launcher["environment"]["default_url"]
-    assert environment["uid"] == launcher["environment"]["uid"]
-    assert environment["gid"] == launcher["environment"]["gid"]
-    assert environment.get("working_directory") == launcher["environment"].get("working_directory")
-    assert environment.get("mount_directory") == launcher["environment"].get("mount_directory")
-    assert environment["port"] == launcher["environment"]["port"]
-    assert environment.get("command") == launcher["environment"].get("command")
-    assert environment.get("args") == launcher["environment"].get("args")
-    assert environment["is_archived"] == launcher["environment"]["is_archived"]
+    assert environment == snapshot(exclude=props("id", "creation_date"))
     # NOTE: Check that build parameters are copied
     build_parameters = environment["build_parameters"]
-    assert build_parameters["repository"] == launcher["environment"]["build_parameters"]["repository"]
-    assert build_parameters["builder_variant"] == launcher["environment"]["build_parameters"]["builder_variant"]
-    assert build_parameters["frontend_variant"] == launcher["environment"]["build_parameters"]["frontend_variant"]
+    assert build_parameters == snapshot
 
     # Patch the build parameters to make sure that it doesn't change the original builder parameter
     patch_payload = {"environment": {"build_parameters": {"repository": "new_repo"}}}
