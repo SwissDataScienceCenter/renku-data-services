@@ -11,7 +11,12 @@ from renku_data_services.solr.entity_documents import User as UserDoc
 from renku_data_services.users.models import UserInfo
 
 user_namespace = Namespace(
-    id=ULID(), slug="test/user", kind=NamespaceKind.user, created_by="userid_2", underlying_resource_id=ULID()
+    id=ULID(),
+    slug="test/user",
+    kind=NamespaceKind.user,
+    created_by="userid_2",
+    underlying_resource_id=ULID(),
+    path=["test", "user"],
 )
 
 
