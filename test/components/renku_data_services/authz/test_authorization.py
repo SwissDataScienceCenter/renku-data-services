@@ -332,6 +332,7 @@ async def test_listing_non_public_projects(app_config_instance: Config, bootstra
         kind=NamespaceKind.user,
         created_by=str(regular_user1.id),
         underlying_resource_id=ULID(),
+        path=["ns-121"],
     )
     assert regular_user1.id
     assert regular_user2.id
