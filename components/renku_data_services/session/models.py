@@ -244,6 +244,8 @@ class ShipwrightBuildRunParams:
     build_timeout: timedelta | None = None
     node_selector: dict[str, str] | None = None
     tolerations: list[crs.Toleration] | None = None
+    labels: dict[str, str] | None = None
+    annotations: dict[str, str] | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
