@@ -176,6 +176,7 @@ def create_app() -> Sanic:
         if config.search_enabled:
             logger.info(f"Running SOLR migrations at: {config.solr_config}")
             migrator = SchemaMigrator(config.solr_config)
+            await migrator.ensure_core()
             result = await migrator.migrate(entity_schema.all_migrations)
             logger.info(f"SOLR migration done: {result}")
         else:
