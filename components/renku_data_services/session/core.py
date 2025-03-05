@@ -1,7 +1,7 @@
 """Business logic for sessions."""
 
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from ulid import ULID
 
@@ -170,7 +170,7 @@ def validate_session_launcher_patch(
     """Validate the update to a session launcher."""
     data_dict = patch.model_dump(exclude_unset=True, mode="json")
     environment: str | models.EnvironmentPatch | models.UnsavedEnvironment | models.UnsavedBuildParameters | None = None
-    if isinstance(patch.environment, apispec.EnvironmentPatchInLauncher):
+    if isinstance(patch.environment, apispec.EnvironmentPatchInLauncher):  # The patch is for a custom environment
         match current_launcher.environment.environment_kind, patch.environment.environment_kind:
             case models.EnvironmentKind.GLOBAL, apispec.EnvironmentKind.CUSTOM:
                 # This means that the global environment is being swapped for a custom one,
@@ -195,7 +195,7 @@ def validate_session_launcher_patch(
                         else None,
                         uid=validated_env.uid,
                         gid=validated_env.gid,
-                        environment_kind=models.EnvironmentKind(validated_env.environment_kind.value),
+                        environment_kind=models.EnvironmentKind.CUSTOM,
                         args=validated_env.args,
                         command=validated_env.command,
                         environment_image_source=models.EnvironmentImageSource.image,
@@ -218,7 +218,8 @@ def validate_session_launcher_patch(
                     )
                 )
             case _, apispec.EnvironmentKind.GLOBAL:
-                # This means that the custom environment is being swapped for a global one, but the patch is not valid.
+                # This means that the custom environment is being swapped for a global one, but the patch is for a
+                # custom environment.
                 raise errors.ValidationError(
                     message="There are errors in the following fields, environment.id: Input should be a valid string"
                 )
@@ -238,23 +239,25 @@ def validate_session_launcher_patch(
                         message="There are errors in the following fields, environment.build_parameters: Must be null"
                     )
                 elif (
+                    # TODO: Add a test for new == None/"build" and current == "build"
                     new == "build" or (new is None and current == "build")
                 ) and patch.environment.build_parameters is None:
                     raise errors.ValidationError(
                         message="There are errors in the following fields, environment.build_parameters: Must be set"
                     )
+
                 if current == "image" and new == "build":
-                    if not patch.environment.build_parameters:
-                        raise errors.ValidationError(
-                            message=(
-                                "There are errors in the following fields, environment.build_parameters: Must be set"
-                            )
-                        )
-                    environment = validate_unsaved_build_parameters(
-                        patch.environment.build_parameters, builds_config=builds_config
-                    )
+                    # NOTE: We've checked that patch.environment.build_parameters is not None in the previous if block.
+                    build_parameters = cast(apispec.BuildParametersPost, patch.environment.build_parameters)
+                    # NOTE: The environment type is changed to be built, so, all required fields should be passed (as in
+                    # a POST request). No need to get values from the current env, since they will be set by the build.
+                    environment = validate_unsaved_build_parameters(build_parameters, builds_config=builds_config)
                 elif current == "build" and new == "image":
-                    validated_env = apispec.EnvironmentPostInLauncherHelper.model_validate(data_dict["environment"])
+                    environment = data_dict["environment"]
+                    assert isinstance(environment, dict)
+                    if environment.get("name") is None:  # type: ignore
+                        environment["name"] = current_launcher.environment.name
+                    validated_env = apispec.EnvironmentPostInLauncherHelper.model_validate(environment)
                     environment = models.UnsavedEnvironment(
                         name=validated_env.name,
                         description=validated_env.description,
@@ -269,7 +272,7 @@ def validate_session_launcher_patch(
                         else None,
                         uid=validated_env.uid,
                         gid=validated_env.gid,
-                        environment_kind=models.EnvironmentKind(validated_env.environment_kind.value),
+                        environment_kind=models.EnvironmentKind.CUSTOM,
                         args=validated_env.args,
                         command=validated_env.command,
                         environment_image_source=models.EnvironmentImageSource.image,
