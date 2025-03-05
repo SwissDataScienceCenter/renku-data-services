@@ -1,16 +1,22 @@
+import random
+import string
+
 import pytest
 
 from renku_data_services.base_models.core import Slug
 from renku_data_services.solr.entity_documents import Group, Project, User
-from renku_data_services.solr.entity_schema import Fields
+from renku_data_services.solr.entity_schema import Fields, FieldTypes
 from renku_data_services.solr.solr_client import (
+    DefaultSolrAdminClient,
     DefaultSolrClient,
     DocVersions,
+    SolrClientConfig,
     SolrQuery,
     SortDirection,
     UpsertResponse,
     UpsertSuccess,
 )
+from renku_data_services.solr.solr_schema import AddCommand, Field, SchemaCommandList
 from test.components.renku_data_services.solr import test_entity_documents
 
 
@@ -100,3 +106,48 @@ async def test_insert_and_query_group(solr_search):
         sg = Group.from_dict(qr.response.docs[0])
         assert sg.score is not None and sg.score > 0
         assert sg.reset_solr_fields() == g
+
+
+@pytest.mark.asyncio
+async def test_status_for_non_existing_core(solr_config):
+    cfg = SolrClientConfig(base_url=solr_config.base_url, core="blahh-blah", user=solr_config.user)
+    async with DefaultSolrAdminClient(cfg) as client:
+        status = await client.status()
+        assert status is None
+
+
+@pytest.mark.asyncio
+async def test_status_for_existing_core(solr_config):
+    async with DefaultSolrAdminClient(solr_config) as client:
+        status = await client.status()
+        print(status)
+        assert status is not None
+        assert status["name"] == solr_config.core
+        assert status["schema"] == "managed-schema.xml"
+        assert "dataDir" in status
+        assert "config" in status
+        assert "index" in status
+        assert "userData" in status["index"]
+
+
+async def test_create_new_core(solr_config):
+    random_name = "".join(random.choices(string.ascii_lowercase + string.digits, k=9))
+    async with DefaultSolrAdminClient(solr_config) as client:
+        res = await client.create(random_name)
+        assert res is None
+
+    next_cfg = SolrClientConfig(base_url=solr_config.base_url, core=random_name, user=solr_config.user)
+    async with DefaultSolrAdminClient(next_cfg) as client:
+        res = await client.status()
+        assert res is not None
+
+    async with DefaultSolrClient(next_cfg) as client:
+        resp = await client.modify_schema(
+            SchemaCommandList(
+                [
+                    AddCommand(FieldTypes.string),
+                    AddCommand(Field.of(Fields.kind, FieldTypes.string)),
+                ]
+            )
+        )
+        assert resp.status_code == 200
