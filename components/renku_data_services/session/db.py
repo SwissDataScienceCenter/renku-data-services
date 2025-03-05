@@ -1022,6 +1022,7 @@ class SessionRepository:
             node_selector=self.builds_config.node_selector,
             tolerations=self.builds_config.tolerations,
             labels=labels,
+            annotations=annotations,
         )
 
     async def _get_environment_authorization(
