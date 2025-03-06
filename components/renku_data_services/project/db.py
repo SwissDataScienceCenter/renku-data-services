@@ -81,7 +81,7 @@ class ProjectRepository:
             stmt = select(schemas.ProjectORM)
             stmt = stmt.where(schemas.ProjectORM.id.in_(project_ids))
             if namespace:
-                stmt = _filter_by_namespace_slug(stmt, namespace)
+                stmt = _filter_projects_by_namespace_slug(stmt, namespace)
 
             stmt = stmt.order_by(coalesce(schemas.ProjectORM.updated_at, schemas.ProjectORM.creation_date).desc())
 
@@ -91,7 +91,7 @@ class ProjectRepository:
                 select(func.count()).select_from(schemas.ProjectORM).where(schemas.ProjectORM.id.in_(project_ids))
             )
             if namespace:
-                stmt_count = _filter_by_namespace_slug(stmt_count, namespace)
+                stmt_count = _filter_projects_by_namespace_slug(stmt_count, namespace)
             results = await session.scalars(stmt), await session.scalar(stmt_count)
             projects_orm = results[0].all()
             total_elements = results[1] or 0
@@ -157,7 +157,7 @@ class ProjectRepository:
         """Get one project from the database."""
         async with self.session_maker() as session:
             stmt = select(schemas.ProjectORM)
-            stmt = _filter_by_namespace_slug(stmt, namespace)
+            stmt = _filter_projects_by_namespace_slug(stmt, namespace)
             stmt = stmt.where(schemas.ProjectORM.slug.has(ns_schemas.EntitySlugORM.slug == slug.value))
             if with_documentation:
                 stmt = stmt.options(undefer(schemas.ProjectORM.documentation))
@@ -261,6 +261,8 @@ class ProjectRepository:
             select(ns_schemas.EntitySlugORM)
             .where(ns_schemas.EntitySlugORM.namespace_id == ns.id)
             .where(ns_schemas.EntitySlugORM.slug == slug)
+            .where(ns_schemas.EntitySlugORM.data_connector_id.is_(None))
+            .where(ns_schemas.EntitySlugORM.project_id.is_not(None)),
         )
         if existing_slug is not None:
             raise errors.ConflictError(message=f"An entity with the slug '{ns.slug}/{slug}' already exists.")
@@ -288,7 +290,6 @@ class ProjectRepository:
         session.add(project_slug)
         await session.flush()
         await session.refresh(project_orm)
-
         return project_orm.dump()
 
     @with_db_transaction
@@ -464,12 +465,14 @@ _P = ParamSpec("_P")
 _T = TypeVar("_T")
 
 
-def _filter_by_namespace_slug(statement: Select[tuple[_T]], namespace: str) -> Select[tuple[_T]]:
+def _filter_projects_by_namespace_slug(statement: Select[tuple[_T]], namespace: str) -> Select[tuple[_T]]:
     """Filters a select query on projects to a given namespace."""
-    return (
-        statement.where(ns_schemas.NamespaceORM.slug == namespace.lower())
-        .where(ns_schemas.EntitySlugORM.namespace_id == ns_schemas.NamespaceORM.id)
-        .where(schemas.ProjectORM.id == ns_schemas.EntitySlugORM.project_id)
+    return statement.where(
+        schemas.ProjectORM.slug.has(
+            ns_schemas.EntitySlugORM.namespace.has(
+                ns_schemas.NamespaceORM.slug == namespace.lower(),
+            )
+        )
     )
 
 
