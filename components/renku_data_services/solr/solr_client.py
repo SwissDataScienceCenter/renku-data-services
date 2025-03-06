@@ -462,7 +462,7 @@ class DefaultSolrAdminClient(SolrAdminClient):
         return await self.delegate.__aexit__(exc_type, exc, tb)
 
     async def status(self, core_name: str | None) -> dict[str, Any] | None:
-        """Return the status of the connected core."""
+        """Return the status of the connected core or the one given by `core_name`."""
         core = core_name or self.config.core
         resp = await self.delegate.get(f"/{core}")
         if not resp.is_success:
@@ -473,7 +473,7 @@ class DefaultSolrAdminClient(SolrAdminClient):
             return data if data.get("name") == self.config.core else None
 
     async def create(self, core_name: str | None) -> None:
-        """Create a core."""
+        """Create a core with the given `core_name` or the name provided in the config object."""
         core = core_name or self.config.core
         data = {"create": {"name": core, "configSet": "_default"}}
         resp = await self.delegate.post(
