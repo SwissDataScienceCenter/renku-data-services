@@ -11,6 +11,14 @@ paths:
   /search/query:
     get:
       summary: Run a search query.
+      parameters:
+        - in: query
+          description: query parameters
+          name: params
+          style: form
+          explode: true
+          schema:
+            $ref: "#/components/schemas/SearchQuery"
       responses:
         "200":
           description: Search results according to the query.
@@ -87,6 +95,30 @@ paths:
 
 components:
   schemas:
+    SearchQuery:
+      description: Query params for the search request
+      allOf:
+      - $ref: "#/components/schemas/PaginationRequest"
+      - properties:
+          q:
+            description: The search query.
+            type: string
+            default: ""
+    PaginationRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        page:
+          description: Result's page number starting from 1
+          type: integer
+          minimum: 1
+          default: 1
+        per_page:
+          description: The number of results per page
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 25
     FacetData:
       title: FacetData
       examples:
