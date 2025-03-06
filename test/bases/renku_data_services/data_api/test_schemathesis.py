@@ -1,11 +1,14 @@
 import math
+import urllib.parse
 from datetime import timedelta
 
+import httpx
 import pytest
 import pytest_asyncio
 import schemathesis
 from hypothesis import HealthCheck, settings
 from sanic_testing.testing import SanicASGITestClient
+from schemathesis.checks import ALL_CHECKS
 from schemathesis.hooks import HookContext
 from schemathesis.specs.openapi.schemas import BaseOpenAPISchema
 
@@ -61,6 +64,18 @@ def filter_headers(context: HookContext, headers: dict[str, str] | None) -> bool
 # and this crashes the server when it tries to validate the query.
 @schemathesis.hook
 def filter_query(context: HookContext, query: dict[str, str] | None) -> bool:
+    op = context.operation
+    if op is None:
+        return True
+    if query:
+        client = httpx.Client()
+        req = client.build_request(op.method, op.full_path, params=query)
+        parsed_query = urllib.parse.parse_qs(req.url.query)
+        original_keys = set(query.keys())
+        parsed_keys = set(k.decode() for k in parsed_query)
+        if original_keys != parsed_keys:
+            # urlparse would filter data in query and data tested would not match test case
+            return False
     return query is None or ("" not in query and "" not in query.values())
 
 
@@ -100,6 +115,13 @@ async def test_api_schemathesis(
     req_kwargs = case.as_requests_kwargs(headers=admin_headers)
     _, res = await sanic_client.request(**req_kwargs)
     res.request.uri = str(res.url)
+
     if all(slow[0] != case.path or slow[1] != case.method for slow in ALLOWED_SLOW_ENDPOINTS):
         requests_statistics.append(res.elapsed)
-    case.validate_response(res)
+
+    checks = ALL_CHECKS
+    if req_kwargs.get("method") == "DELETE" and res.status_code == 204:
+        # schemathesis does not currently allow accepting status 204 for negative data, so we ignore that check
+        checks = tuple(c for c in checks if c.__name__ != "negative_data_rejection")
+
+    case.validate_response(res, checks=checks)
