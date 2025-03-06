@@ -88,9 +88,12 @@ def create_oauth2_connection(oauth2_test_client: SanicASGITestClient, user_heade
 
 @pytest.mark.asyncio
 async def test_get_repository_without_connection(
-    oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_provider
+    mocker, oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_provider
 ):
     """Test getting internal Gitlab repository."""
+    http_client = mocker.patch("renku_data_services.repositories.db.HttpClient")
+    http_client.return_value = DummyAsyncOAuth2Client()
+
     await create_oauth2_provider("provider_1")
     repository_url = "https://example.org/username/my_repo.git"
 
