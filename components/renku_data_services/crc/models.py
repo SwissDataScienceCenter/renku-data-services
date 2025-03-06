@@ -173,6 +173,15 @@ class Quota(ResourcesCompareMixin):
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
+class KubeClusterSettings:
+    """K8s Cluster settings."""
+
+    config_name: str
+    node_affinities: list[str]
+    tolerations: list[str]
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
 class ResourcePool:
     """Resource pool model."""
 
@@ -184,6 +193,7 @@ class ResourcePool:
     hibernation_threshold: Optional[int] = None
     default: bool = False
     public: bool = False
+    cluster: Optional[KubeClusterSettings] = None
 
     def __post_init__(self) -> None:
         """Validate the resource pool after initialization."""
