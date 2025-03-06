@@ -3,6 +3,7 @@
 import logging
 from datetime import datetime
 
+import renku_data_services.search.apispec as apispec
 from renku_data_services.base_models import APIUser
 from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.message_queue.models import Reprovisioning
@@ -16,6 +17,7 @@ from renku_data_services.solr.solr_client import (
     SolrClient,
     SolrClientConfig,
     SolrDocument,
+    SolrQuery,
 )
 from renku_data_services.users.db import UserRepo
 
@@ -108,3 +110,14 @@ async def update_solr(search_updates_repo: SearchUpdatesRepo, solr_client: SolrC
 
     if counter > 0:
         logger.info(f"Updated {counter} entries in SOLR")
+
+
+async def query(solr_config: SolrClientConfig, query: SolrQuery, user: APIUser) -> apispec.SearchResult:
+    """Run the given user query against solr and return the result."""
+
+    print(f"==== {query} ===")
+    return apispec.SearchResult(
+        items=[],
+        facets=apispec.FacetData(entityType={}),
+        pagingInfo=apispec.PageWithTotals(page=apispec.PageDef(limit=10, offset=0), totalPages=1, totalResult=0),
+    )
