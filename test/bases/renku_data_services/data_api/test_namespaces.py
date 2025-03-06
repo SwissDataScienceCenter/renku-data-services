@@ -55,6 +55,43 @@ async def test_list_namespaces_pagination(sanic_client, user_headers) -> None:
     assert response.headers.get("total") == "7"
     assert response.headers.get("total-pages") == "4"
 
+    _, response = await sanic_client.get("/api/data/namespaces?per_page=1&page=3", headers=user_headers)
+    assert response.status_code == 200, response.text
+    res_json = response.json
+    assert len(res_json) == 1
+    user_ns = res_json[0]
+    assert user_ns["slug"] == "group-2"
+    assert response.headers.get("page") == "3"
+    assert response.headers.get("per-page") == "1"
+    assert response.headers.get("total") == "7"
+    assert response.headers.get("total-pages") == "7"
+
+    _, response = await sanic_client.get("/api/data/namespaces?per_page=5&page=1", headers=user_headers)
+    assert response.status_code == 200, response.text
+    res_json = response.json
+    assert len(res_json) == 5
+    user_ns = res_json[0]
+    assert user_ns["slug"] == "user.doe"
+    user_ns = res_json[4]
+    assert user_ns["slug"] == "group-4"
+    assert response.headers.get("page") == "1"
+    assert response.headers.get("per-page") == "5"
+    assert response.headers.get("total") == "7"
+    assert response.headers.get("total-pages") == "2"
+
+    _, response = await sanic_client.get("/api/data/namespaces?per_page=5&page=2", headers=user_headers)
+    assert response.status_code == 200, response.text
+    res_json = response.json
+    assert len(res_json) == 2
+    user_ns = res_json[0]
+    assert user_ns["slug"] == "group-5"
+    user_ns = res_json[1]
+    assert user_ns["slug"] == "group-6"
+    assert response.headers.get("page") == "2"
+    assert response.headers.get("per-page") == "5"
+    assert response.headers.get("total") == "7"
+    assert response.headers.get("total-pages") == "2"
+
 
 @pytest.mark.asyncio
 async def test_list_namespaces_all_groups_are_public(sanic_client, user_headers, member_1_headers) -> None:
@@ -285,7 +322,7 @@ async def test_entity_slug_uniqueness(sanic_client, user_headers) -> None:
 
 
 @pytest.mark.asyncio
-async def test_creating_dc_in_project(sanic_client, user_headers) -> None:
+async def test_listing_project_namespaces(sanic_client, user_headers) -> None:
     # Create a group i.e. /test1
     payload = {
         "name": "test1",
@@ -295,61 +332,43 @@ async def test_creating_dc_in_project(sanic_client, user_headers) -> None:
     _, response = await sanic_client.post("/api/data/groups", headers=user_headers, json=payload)
     assert response.status_code == 201, response.text
 
-    # Create a project in the group /test1/prj1
+    # Create a project in the group /test1/test1
     payload = {
-        "name": "prj1",
+        "name": "proj1",
         "namespace": "test1",
-        "slug": "prj1",
+        "slug": "proj1",
     }
     _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
     assert response.status_code == 201, response.text
-    project_id = response.json["id"]
 
-    # Ensure there is only one project
-    _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
-    assert response.status_code == 200, response.text
-    assert len(response.json) == 1
-
-    # Create a data connector in the project /test1/proj1/dc1
+    # Create a new project in the same group with the same name as the data connector /test1/test2
     payload = {
-        "name": "dc1",
-        "namespace": "test1/prj1",
-        "slug": "dc1",
-        "storage": {
-            "configuration": {"type": "s3", "endpoint": "http://s3.aws.com"},
-            "source_path": "giab",
-            "target_path": "giab",
-        },
+        "name": "proj2",
+        "namespace": "test1",
+        "slug": "proj2",
     }
-    _, response = await sanic_client.post("/api/data/data_connectors", headers=user_headers, json=payload)
+    _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
     assert response.status_code == 201, response.text
-    dc_id = response.json["id"]
 
-    # Ensure there is only one project
-    _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
+    # If not defined by default you get only user and group namespaces
+    _, response = await sanic_client.get("/api/data/namespaces", headers=user_headers)
     assert response.status_code == 200, response.text
-    assert len(response.json) == 1
+    assert len(response.json) == 2
 
-    # Ensure that you can list the data connector
-    _, response = await sanic_client.get(f"/api/data/data_connectors/{dc_id}", headers=user_headers)
-    assert response.status_code == 200, response.text
-
-    # Link the data connector to the project
-    payload = {"project_id": project_id}
-    _, response = await sanic_client.post(
-        f"/api/data/data_connectors/{dc_id}/project_links", headers=user_headers, json=payload
+    # If requested then you should get all
+    _, response = await sanic_client.get(
+        "/api/data/namespaces", headers=user_headers, params={"kinds": ["group", "user", "project"]}
     )
-    assert response.status_code == 201, response.text
-
-    # Ensure that you can see the data connector link
-    _, response = await sanic_client.get(f"/api/data/data_connectors/{dc_id}/project_links", headers=user_headers)
     assert response.status_code == 200, response.text
-    assert len(response.json) == 1
-    dc_link = response.json[0]
-    assert dc_link["project_id"] == project_id
-    assert dc_link["data_connector_id"] == dc_id
+    assert len(response.json) == 4
 
-    # Ensure that you can list data connectors
-    _, response = await sanic_client.get("/api/data/data_connectors", headers=user_headers)
+    # If requested only projects then you should get only projects
+    _, response = await sanic_client.get("/api/data/namespaces", headers=user_headers, params={"kinds": ["project"]})
     assert response.status_code == 200, response.text
-    assert len(response.json) == 1
+    assert len(response.json) == 2
+    assert response.json[0]["name"] == "proj1"
+    assert response.json[0]["namespace_kind"] == "project"
+    assert response.json[0]["path"] == ["test1", "proj1"]
+    assert response.json[1]["name"] == "proj2"
+    assert response.json[1]["namespace_kind"] == "project"
+    assert response.json[1]["path"] == ["test1", "proj2"]

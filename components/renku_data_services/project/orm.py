@@ -106,6 +106,7 @@ class ProjectORM(BaseORM):
             latest_slug=self.slug.slug,
             name=self.name,
             creation_date=self.creation_date,
+            path=[self.slug.namespace.slug, self.slug.slug],
         )
 
 
