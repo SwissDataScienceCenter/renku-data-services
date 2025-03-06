@@ -139,7 +139,7 @@ jobs:
         with:
           e2e-target: ${{ matrix.tests }}
           renku-reference: ${{ env.RENKU_REFERENCE }}
-          renku-release: renku-ci-ui-${{ github.event.number }}
+          renku-release: renku-ci-ds-${{ github.event.number }}
           test-user-password: ${{ secrets.RENKU_BOT_DEV_PASSWORD }}
 
   cypress-acceptance-tests:
@@ -165,7 +165,7 @@ jobs:
         with:
           e2e-target: ${{ matrix.tests }}
           renku-reference: ${{ env.RENKU_REFERENCE }}
-          renku-release: renku-ci-ui-${{ github.event.number }}
+          renku-release: renku-ci-ds-${{ github.event.number }}
           test-user-password: ${{ secrets.RENKU_BOT_DEV_PASSWORD }}
 
   cleanup:
