@@ -34,9 +34,11 @@ from renku_data_services.notebooks.core_sessions import (
     get_data_sources,
     get_extra_containers,
     get_extra_init_containers,
+    get_private_gitlab_pull_secret,
     patch_session,
     request_dc_secret_creation,
     request_session_secret_creation,
+    requires_image_pull_secret,
 )
 from renku_data_services.notebooks.crs import (
     AmaltheaSessionSpec,
@@ -45,6 +47,7 @@ from renku_data_services.notebooks.crs import (
     AuthenticationType,
     ExtraVolume,
     ExtraVolumeMount,
+    ImagePullSecret,
     Ingress,
     InitContainer,
     Metadata,
@@ -370,10 +373,27 @@ class NotebooksNewBP(CustomBlueprint):
                 auth_secret = await get_auth_secret_anonymous(self.nb_config, server_name, request)
             if auth_secret.volume:
                 extra_volumes.append(auth_secret.volume)
+            # TODO: check if the image is private and is in the gitlab registry and if the user can see the image
+            # if the image is private and you can see it then add the secret to the "secrets_to_create" dict below
+            # And you need to reference the image pull secret in the AmaltheaSessionV1Alpha1 spec below
+            # and you need to set the "adopt" flag to true
+            image_pull_secret_name = None
+            if isinstance(user, AuthenticatedAPIUser) and internal_gitlab_user.access_token is not None:
+                needs_pull_secret = await requires_image_pull_secret(self.nb_config, image, internal_gitlab_user)
+                if needs_pull_secret:
+                    image_pull_secret_name = f"{server_name}-image-secret"
+                    gitlab_private_secret = await get_private_gitlab_pull_secret(
+                        self.nb_config, user, image_pull_secret_name, internal_gitlab_user.access_token
+                    )
+                    secrets_to_create.append(gitlab_private_secret)
+
             secrets_to_create.append(auth_secret)
             manifest = AmaltheaSessionV1Alpha1(
                 metadata=Metadata(name=server_name, annotations=annotations),
                 spec=AmaltheaSessionSpec(
+                    imagePullSecrets=[ImagePullSecret(name=image_pull_secret_name, adopt=True)]
+                    if image_pull_secret_name
+                    else [],
                     codeRepositories=[],
                     hibernated=False,
                     reconcileStrategy=ReconcileStrategy.whenFailedOrHibernated,
