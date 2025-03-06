@@ -121,8 +121,16 @@ class NotebooksConfig:
             git_provider_helper = DummyGitProviderHelper()
             amalthea_config = _AmaltheaConfig(cache_url="http://not.specified")
             git_config = _GitConfig("http://not.specified", "registry.not.specified")
-            k8s_client = DummyK8sClient()
-            k8s_v2_client = DummyK8sClient()
+            k8s_client = DummyK8sClient(
+                server_type=JupyterServerV1Alpha1,
+                kr8s_type=JupyterServerV1Alpha1Kr8s,
+                username_label="renku.io/userId",
+            )
+            k8s_v2_client = DummyK8sClient(
+                server_type=AmaltheaSessionV1Alpha1,
+                kr8s_type=AmaltheaSessionV1Alpha1Kr8s,
+                username_label="renku.io/safe-username",
+            )
         else:
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
             rp_repo = ResourcePoolRepository(db_config.async_session_maker, quota_repo)
