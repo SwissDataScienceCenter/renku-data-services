@@ -1,7 +1,7 @@
 """add project migrations
 
 Revision ID: 559b1fc46cfe
-Revises: 239854e7ea77
+Revises: 64edf7ac0de0
 Create Date: 2025-03-03 13:58:07.450665
 
 """
