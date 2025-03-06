@@ -46,7 +46,6 @@ async def git_clone_container_v2(
 
     prefix = "GIT_CLONE_"
     env = [
-        {"name": f"{prefix}WORKSPACE_MOUNT_PATH", "value": workspace_mount_path.as_posix()},
         {
             "name": f"{prefix}MOUNT_PATH",
             "value": work_dir.as_posix(),
@@ -168,10 +167,6 @@ async def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
 
     prefix = "GIT_CLONE_"
     env = [
-        {
-            "name": f"{prefix}WORKSPACE_MOUNT_PATH",
-            "value": server.workspace_mount_path.as_posix(),
-        },
         {
             "name": f"{prefix}MOUNT_PATH",
             "value": server.work_dir.as_posix(),
