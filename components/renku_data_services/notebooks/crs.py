@@ -20,6 +20,7 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     ExtraContainer,
     ExtraVolume,
     ExtraVolumeMount,
+    ImagePullSecret,
     Ingress,
     InitContainer,
     MatchExpression,
