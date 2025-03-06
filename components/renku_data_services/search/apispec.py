@@ -49,11 +49,11 @@ class Visibility(Enum):
 
 
 class Error(BaseAPISpec):
-    code: int = Field(..., example=1404, gt=0)
+    code: int = Field(examples=[1404], gt=0)
     detail: Optional[str] = Field(
-        None, example="A more detailed optional message showing what the problem was"
+        None, examples=["A more detailed optional message showing what the problem was"]
     )
-    message: str = Field(..., example="Something went wrong - please try again later")
+    message: str = Field(examples=["Something went wrong - please try again later"])
 
 
 class ErrorResponse(BaseAPISpec):
@@ -110,7 +110,7 @@ class Reprovisioning(BaseAPISpec):
     start_date: datetime = Field(
         ...,
         description="The date and time the reprovisioning was started (in UTC and ISO-8601 format)",
-        example="2023-11-01T17:32:28Z",
+        examples=["2023-11-01T17:32:28Z"],
     )
 
 
