@@ -418,11 +418,10 @@ async def requires_image_pull_secret(nb_config: NotebooksConfig, image: str, int
     if image_exists_publicly:
         return False
 
-    image_exists_privately = False
     if parsed_image.hostname == nb_config.git.registry and internal_gitlab_user.access_token:
         image_repo = image_repo.with_oauth2_token(internal_gitlab_user.access_token)
         image_exists_privately = await image_repo.image_exists(parsed_image)
-        if not image_exists_privately:
+        if image_exists_privately:
             return True
     # No pull secret needed if the image is private and the user cannot access it
     return False

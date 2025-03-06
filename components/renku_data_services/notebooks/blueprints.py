@@ -382,10 +382,10 @@ class NotebooksNewBP(CustomBlueprint):
                 needs_pull_secret = await requires_image_pull_secret(self.nb_config, image, internal_gitlab_user)
                 if needs_pull_secret:
                     image_pull_secret_name = f"{server_name}-image-secret"
-                    gitlab_private_secret = await get_private_gitlab_pull_secret(
+                    image_secret = await get_private_gitlab_pull_secret(
                         self.nb_config, user, image_pull_secret_name, internal_gitlab_user.access_token
                     )
-                    secrets_to_create.append(gitlab_private_secret)
+                    secrets_to_create.append(image_secret)
 
             secrets_to_create.append(auth_secret)
             manifest = AmaltheaSessionV1Alpha1(
