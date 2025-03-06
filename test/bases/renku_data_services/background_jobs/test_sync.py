@@ -48,8 +48,6 @@ from renku_data_services.namespace.orm import NamespaceORM
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.models import UnsavedProject
 from renku_data_services.search.db import SearchUpdatesRepo
-from renku_data_services.storage.models import UnsavedCloudStorage
-from renku_data_services.storage.orm import CloudStorageORM
 from renku_data_services.users.db import UserRepo, UsersSync
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import KeycloakAdminEvent, UnsavedUserInfo, UserInfo, UserInfoFieldUpdate

@@ -18,7 +18,6 @@ user_namespace = Namespace(
     kind=NamespaceKind.user,
     created_by="userid_2",
     underlying_resource_id=ULID(),
-    path=["test", "user"],
 )
 
 
