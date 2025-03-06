@@ -109,9 +109,9 @@ class SolrQuery(BaseModel, frozen=True):
         return ",".join(list(map(lambda t: f"{t[0]} {t[1].value}", sort)))
 
     @classmethod
-    def query_all_fields(cls, qstr: str) -> "SolrQuery":
+    def query_all_fields(cls, qstr: str, limit: int = 50, offset: int = 0) -> "SolrQuery":
         """Create a query with defaults returning all fields of a document."""
-        return SolrQuery(query=qstr, fields=["*", "score"])
+        return SolrQuery(query=qstr, fields=["*", "score"], limit=limit, offset=offset)
 
 
 @final
