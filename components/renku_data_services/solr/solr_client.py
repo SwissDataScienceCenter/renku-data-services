@@ -43,24 +43,20 @@ class SolrClientConfig:
     @classmethod
     def from_env(cls, prefix: str = "") -> "SolrClientConfig":
         """Create a configuration from environment variables."""
-        enabled = os.environ.get(f"{prefix}SEARCH_ENABLED", "false") == "true"
-        if enabled:
-            url = os.environ[f"{prefix}SOLR_URL"]
-            core = os.environ.get(f"{prefix}SOLR_CORE", "renku-search")
-            username = os.environ.get(f"{prefix}SOLR_USER")
-            password = os.environ.get(f"{prefix}SOLR_PASSWORD")
+        url = os.environ[f"{prefix}SOLR_URL"]
+        core = os.environ.get(f"{prefix}SOLR_CORE", "renku-search")
+        username = os.environ.get(f"{prefix}SOLR_USER")
+        password = os.environ.get(f"{prefix}SOLR_PASSWORD")
 
-            tstr = os.environ.get(f"{prefix}SOLR_REQUEST_TIMEOUT", "600")
-            try:
-                timeout = int(tstr) if tstr is not None else 600
-            except ValueError:
-                logging.warning(f"SOLR_REQUEST_TIMEOUT is not an integer: {tstr}")
-                timeout = 600
+        tstr = os.environ.get(f"{prefix}SOLR_REQUEST_TIMEOUT", "600")
+        try:
+            timeout = int(tstr) if tstr is not None else 600
+        except ValueError:
+            logging.warning(f"SOLR_REQUEST_TIMEOUT is not an integer: {tstr}")
+            timeout = 600
 
-            user = SolrUser(username=username, password=str(password)) if username is not None else None
-            return cls(url, core, user, timeout)
-        else:
-            return cls("", "")
+        user = SolrUser(username=username, password=str(password)) if username is not None else None
+        return cls(url, core, user, timeout)
 
     def __str__(self) -> str:
         return (
