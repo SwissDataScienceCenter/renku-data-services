@@ -1,11 +1,15 @@
 """AST for a user search query."""
 
 from abc import ABC, abstractmethod
+import calendar
 from collections.abc import Callable
 from dataclasses import dataclass
 from dataclasses import field as data_field
+from datetime import date, datetime, time, tzinfo
 from enum import StrEnum
+from typing import Self
 
+from renku_data_services.authz.models import Visibility
 from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.solr_client import SortDirection
 
@@ -21,6 +25,11 @@ class Nel[A]:
     def of(cls, el: A, *args: A) -> "Nel[A]":
         """Constructor using varargs."""
         return Nel(value=el, more_values=list(args))
+
+    @classmethod
+    def unsafe_from_list(cls, els: list[A]) -> "Nel[A]":
+        """Creates a non-empty list from a list, failing if the argument is empty."""
+        return Nel(els[0], els[1:])
 
     def to_list(self) -> list[A]:
         """Convert to a list."""
@@ -64,6 +73,97 @@ class Comparison(StrEnum):
     is_equal = ":"
     is_lower_than = "<"
     is_greater_than = ">"
+
+
+@dataclass
+class PartialDate:
+    """A date where month and day may be omitted."""
+
+    year: int
+    month: int | None = data_field(default=None)
+    dayOfMonth: int | None = data_field(default=None)
+
+    def render(self) -> str:
+        """Return the string representation."""
+        res = f"{self.year}"
+        if self.month is not None:
+            res += f"-{self.month:02}"
+        if self.dayOfMonth is not None:
+            res += f"-{self.dayOfMonth:02}"
+        return res
+
+    def is_exact(self) -> bool:
+        return self.month is not None and self.dayOfMonth is not None
+
+    def max(self) -> date:
+        """Set missing parts to the maximum value."""
+        m = self.month or 12
+        (_, dom) = calendar.monthrange(self.year, m)
+        return date(self.year, m, self.dayOfMonth or dom)
+
+    def min(self) -> date:
+        return date(
+            self.year,
+            self.month or 1,
+            self.dayOfMonth or 1,
+        )
+
+
+@dataclass
+class PartialTime:
+    """A time where minutes and seconds are optional."""
+
+    hour: int
+    minute: int | None = data_field(default=None)
+    second: int | None = data_field(default=None)
+
+    def render(self) -> str:
+        res = f"{self.hour:02}"
+        if self.minute is not None:
+            res += f":{self.minute:02}"
+        if self.second is not None:
+            res += f":{self.second:02}"
+        return res
+
+    def max(self) -> time:
+        return time(self.hour, self.minute or 59, self.second or 59)
+
+    def min(self) -> time:
+        return time(self.hour, self.minute or 0, self.second or 0)
+
+
+@dataclass
+class PartialDateTime:
+    """A date time, where minor fields are optional."""
+
+    date: PartialDate
+    time: PartialTime | None = data_field(default=None)
+    zone: tzinfo | None = data_field(default=None)
+
+    def render(self) -> str:
+        res = self.date.render()
+        if self.time is not None:
+            res += f"T{self.time.render()}"
+        if self.zone is not None:
+            res += f""
+        return res
+
+    def datetime_max(self, default_zone: tzinfo) -> datetime:
+        d = self.date.max()
+        t = (self.time or PartialTime(23, 59, 59)).max()
+        return datetime(
+            d.year, d.month, d.day, t.hour, t.minute, t.second, t.microsecond, self.zone or default_zone, fold=t.fold
+        )
+
+    def datetime_min(self, default_zone: tzinfo) -> datetime:
+        d = self.date.min()
+        t = (self.time or PartialTime(0)).min()
+        return datetime(
+            d.year, d.month, d.day, t.hour, t.minute, t.second, t.microsecond, self.zone or default_zone, fold=t.fold
+        )
+
+    def with_zone(self, zone: tzinfo) -> Self:
+        return type(self)(self.date, self.time, zone)
 
 
 class FieldComparison(ABC):
@@ -124,7 +224,107 @@ class IdIs(FieldComparison):
         return self.values.mk_string(",", Helper.quote)
 
 
-type FieldTerm = TypeIs | IdIs
+@dataclass
+class NameIs(FieldComparison):
+    """Compare the name against a list of values."""
+
+    values: Nel[str]
+
+    @property
+    def field(self) -> Field:
+        """The field name."""
+        return Field.fname
+
+    @property
+    def cmp(self) -> Comparison:
+        """The comparison operation."""
+        return Comparison.is_equal
+
+    def _render_value(self) -> str:
+        return self.values.mk_string(",", Helper.quote)
+
+
+@dataclass
+class SlugIs(FieldComparison):
+    """Compare the slug against a list of values."""
+
+    values: Nel[str]
+
+    @property
+    def field(self) -> Field:
+        """The field name."""
+        return Field.slug
+
+    @property
+    def cmp(self) -> Comparison:
+        """The comparison operation."""
+        return Comparison.is_equal
+
+    def _render_value(self) -> str:
+        return self.values.mk_string(",", Helper.quote)
+
+
+@dataclass
+class KeywordIs(FieldComparison):
+    """Compare the keyword against a list of values."""
+
+    values: Nel[str]
+
+    @property
+    def field(self) -> Field:
+        """The field name."""
+        return Field.keyword
+
+    @property
+    def cmp(self) -> Comparison:
+        """The comparison operation."""
+        return Comparison.is_equal
+
+    def _render_value(self) -> str:
+        return self.values.mk_string(",", Helper.quote)
+
+
+@dataclass
+class NamespaceIs(FieldComparison):
+    """Compare the keyword against a list of values."""
+
+    values: Nel[str]
+
+    @property
+    def field(self) -> Field:
+        """The field name."""
+        return Field.namespace
+
+    @property
+    def cmp(self) -> Comparison:
+        """The comparison operation."""
+        return Comparison.is_equal
+
+    def _render_value(self) -> str:
+        return self.values.mk_string(",", Helper.quote)
+
+
+@dataclass
+class VisibilityIs(FieldComparison):
+    """Compare the visiblity against a list of values."""
+
+    values: Nel[Visibility]
+
+    @property
+    def field(self) -> Field:
+        """The field name."""
+        return Field.visibility
+
+    @property
+    def cmp(self) -> Comparison:
+        """The comparison operation."""
+        return Comparison.is_equal
+
+    def _render_value(self) -> str:
+        return self.values.mk_string(",")
+
+
+type FieldTerm = TypeIs | IdIs | NameIs | SlugIs | VisibilityIs
 
 
 @dataclass
@@ -158,16 +358,11 @@ class OrderBy:
 class Order:
     """A query part for defining how to order results."""
 
-    field: OrderBy
-    more_fields: list[OrderBy] = data_field(default_factory=list)
+    fields: Nel[OrderBy]
 
     def render(self) -> str:
         """Renders the string version of this query part."""
-        if self.more_fields == []:
-            return self.field.render()
-        else:
-            rest = ",".join([x.render() for x in self.more_fields])
-            return f"{self.field.render()},{rest}"
+        return self.fields.mk_string(",", lambda e: e.render())
 
 
 type Segment = FieldTerm | Text | Order
