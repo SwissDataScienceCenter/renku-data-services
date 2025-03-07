@@ -167,12 +167,12 @@ async def get_auth_secret_anonymous(nb_config: NotebooksConfig, server_name: str
     return ExtraSecret(secret)
 
 
-async def get_private_gitlab_pull_secret(
-    nb_config: NotebooksConfig, user: AuthenticatedAPIUser, secret_name: str, access_token: str
+def get_gitlab_image_pull_secret(
+    nb_config: NotebooksConfig, user: AuthenticatedAPIUser, image_pull_secret_name: str, access_token: str
 ) -> ExtraSecret:
     """Create a Kubernetes secret for private GitLab registry authentication."""
 
-    namespace = nb_config.k8s.renku_namespace
+    preferred_namespace = nb_config.k8s_client.preferred_namespace
 
     registry_secret = {
         "auths": {
@@ -183,11 +183,12 @@ async def get_private_gitlab_pull_secret(
             }
         }
     }
-    registry_secret_encoded = base64.b64encode(json.dumps(registry_secret).encode()).decode()
+    registry_secret = json.dumps(registry_secret)
+    registry_secret = base64.b64encode(registry_secret.encode()).decode()
 
-    secret_data = {".dockerconfigjson": registry_secret_encoded}
+    secret_data = {".dockerconfigjson": registry_secret}
     secret = V1Secret(
-        metadata=V1ObjectMeta(name=secret_name, namespace=namespace),
+        metadata=V1ObjectMeta(name=image_pull_secret_name, namespace=preferred_namespace),
         string_data=secret_data,
         type="kubernetes.io/dockerconfigjson",
     )
