@@ -359,7 +359,7 @@ class NotebooksNewBP(CustomBlueprint):
                 "cpu": str(round(resource_class.cpu * 1000)) + "m",
                 "memory": f"{resource_class.memory}Gi",
             }
-            limits: dict[str, str | int] = {}
+            limits: dict[str, str | int] = {"memory": f"{resource_class.memory}Gi"}
             if resource_class.gpu > 0:
                 gpu_name = GpuKind.NVIDIA.value + "/gpu"
                 requests[gpu_name] = resource_class.gpu
