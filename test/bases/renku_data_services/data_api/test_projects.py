@@ -226,6 +226,25 @@ async def test_project_creation_with_conflicting_slug(sanic_client, user_headers
 
 
 @pytest.mark.asyncio
+async def test_project_creation_with_duplicate_repositories(sanic_client, user_headers, regular_user) -> None:
+    namespace = regular_user.namespace.slug
+    payload = {
+        "name": "My Project",
+        "namespace": namespace,
+        "repositories": [
+            "https://github.com/SwissDataScienceCenter/renku-data-services.git",
+            "https://github.com/SwissDataScienceCenter/renku-data-services.git",
+        ],
+    }
+
+    _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
+
+    assert response.status_code == 201, response.text
+    project = response.json
+    assert project["repositories"] == ["https://github.com/SwissDataScienceCenter/renku-data-services.git"]
+
+
+@pytest.mark.asyncio
 async def test_get_a_project(create_project, get_project) -> None:
     # Create some projects
     await create_project("Project 1")
