@@ -190,7 +190,14 @@ def _validate_repositories(repositories: list[str] | None) -> list[str] | None:
     """Validate a list of git repositories."""
     if repositories is None:
         return None
-    return [_validate_repository(repo) for repo in repositories]
+    seen: set[str] = set()
+    without_duplicates: list[str] = []
+    for repo in repositories:
+        repo = _validate_repository(repo)
+        if repo not in seen:
+            without_duplicates.append(repo)
+            seen.add(repo)
+    return without_duplicates
 
 
 def _validate_repository(repository: str) -> str:
