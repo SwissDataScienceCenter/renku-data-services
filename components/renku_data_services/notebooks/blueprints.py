@@ -34,7 +34,7 @@ from renku_data_services.notebooks.core_sessions import (
     get_data_sources,
     get_extra_containers,
     get_extra_init_containers,
-    get_private_gitlab_pull_secret,
+    get_gitlab_image_pull_secret,
     patch_session,
     request_dc_secret_creation,
     request_session_secret_creation,
@@ -380,12 +380,14 @@ class NotebooksNewBP(CustomBlueprint):
             image_pull_secret_name = None
             if isinstance(user, AuthenticatedAPIUser) and internal_gitlab_user.access_token is not None:
                 needs_pull_secret = await requires_image_pull_secret(self.nb_config, image, internal_gitlab_user)
+
                 if needs_pull_secret:
                     image_pull_secret_name = f"{server_name}-image-secret"
-                    image_secret = await get_private_gitlab_pull_secret(
+                    image_secret = get_gitlab_image_pull_secret(
                         self.nb_config, user, image_pull_secret_name, internal_gitlab_user.access_token
                     )
-                    secrets_to_create.append(image_secret)
+                    if image_secret:
+                        secrets_to_create.append(image_secret)
 
             secrets_to_create.append(auth_secret)
             manifest = AmaltheaSessionV1Alpha1(
