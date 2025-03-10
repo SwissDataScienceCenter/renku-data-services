@@ -111,7 +111,7 @@ class K8sClientProto[_SessionType, _Kr8sType](ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def get_server_logs(
+    async def get_session_logs(
         self, server_name: str, safe_username: str, max_log_lines: Optional[int] = None
     ) -> dict[str, str]:
         """Retrieve the logs for the given user session."""
@@ -635,7 +635,7 @@ class _SingleK8sClient(Generic[_SessionType, _Kr8sType]):
             return None
         return server
 
-    async def get_server_logs(
+    async def get_session_logs(
         self, server_name: str, safe_username: str, max_log_lines: Optional[int] = None
     ) -> dict[str, str]:
         """Get the logs from the server."""
@@ -868,13 +868,13 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
 
         return None
 
-    async def get_server_logs(
+    async def get_session_logs(
         self, server_name: str, safe_username: str, max_log_lines: Optional[int] = None
     ) -> dict[str, str]:
         """Retrieve the logs for the given user session."""
         client = await self._client_by_session(server_name, safe_username)
         if client is not None:
-            return await client.get_server_logs(server_name, safe_username, max_log_lines)
+            return await client.get_session_logs(server_name, safe_username, max_log_lines)
 
         raise errors.MissingResourceError(
             message=f"Cannot find server {server_name} for user {safe_username} to retrieve logs."
@@ -985,7 +985,7 @@ class DummyK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
                 return s
         return None
 
-    async def get_server_logs(
+    async def get_session_logs(
         self, server_name: str, safe_username: str, max_log_lines: Optional[int] = None
     ) -> dict[str, str]:
         """Retrieve the logs for the given user session."""
