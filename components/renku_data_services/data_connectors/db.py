@@ -312,7 +312,13 @@ class DataConnectorRepository:
         if not session:
             raise errors.ProgrammingError(message="A database session is required.")
         result = await session.scalars(
-            select(schemas.DataConnectorORM).where(schemas.DataConnectorORM.id == data_connector_id)
+            select(schemas.DataConnectorORM)
+            .where(schemas.DataConnectorORM.id == data_connector_id)
+            .options(
+                joinedload(schemas.DataConnectorORM.slug)
+                .joinedload(ns_schemas.EntitySlugORM.project)
+                .selectinload(ProjectORM.slug)
+            )
         )
         data_connector = result.one_or_none()
         if data_connector is None:

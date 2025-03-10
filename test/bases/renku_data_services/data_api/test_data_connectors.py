@@ -606,7 +606,7 @@ async def test_patch_data_connector_with_invalid_namespace(
         f"/api/data/data_connectors/{data_connector_id}", headers=headers, json=patch
     )
 
-    assert response.status_code == 403, response.text
+    assert response.status_code == 404, response.text
     assert "you do not have sufficient permissions" in response.json["error"]["message"]
 
 

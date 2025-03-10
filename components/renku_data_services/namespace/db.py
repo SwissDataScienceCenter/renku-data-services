@@ -14,7 +14,7 @@ from sqlalchemy import Integer as sa_int
 from sqlalchemy import Select, delete, func, select, text
 from sqlalchemy import cast as sa_cast
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy.sql.functions import count as sa_count
 from ulid import ULID
@@ -419,10 +419,14 @@ class GroupRepository:
         self, user: base_models.APIUser, slug: Slug, session: AsyncSession | None = None
     ) -> models.Namespace | None:
         """Get the namespace identified by a given slug."""
-        if not session:
+        session_ctx: AsyncSession | nullcontext = nullcontext()
+        transaction: AsyncSessionTransaction | nullcontext = nullcontext()
+        if session is None:
             session = self.session_maker()
-        transaction = nullcontext() if session.in_transaction() else session.begin()
-        async with session, transaction:
+            session_ctx = session
+            transaction = session.begin()
+
+        async with session_ctx, transaction:
             ns = await session.scalar(
                 select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == slug.value.lower())
             )
@@ -465,10 +469,11 @@ class GroupRepository:
         )
 
         session_ctx: AsyncSession | nullcontext = nullcontext()
+        transaction: AsyncSessionTransaction | nullcontext = nullcontext()
         if session is None:
             session = self.session_maker()
             session_ctx = session
-        transaction = nullcontext() if session.in_transaction() else session.begin()
+            transaction = session.begin()
 
         match slugs:
             case [usr_or_grp_slug]:
@@ -582,10 +587,11 @@ class GroupRepository:
                 )
 
         session_ctx: AsyncSession | nullcontext = nullcontext()
+        transaction: AsyncSessionTransaction | nullcontext = nullcontext()
         if session is None:
             session = self.session_maker()
             session_ctx = session
-        transaction = nullcontext() if session.in_transaction() else session.begin()
+            transaction = session.begin()
 
         async with session_ctx, transaction:
             required_scope = Scope.WRITE if new == old else Scope.DELETE
