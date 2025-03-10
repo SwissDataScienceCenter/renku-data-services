@@ -76,7 +76,7 @@ async def user_servers(
     """Returns a filtered list of servers for the given user."""
 
     servers = [
-        UserServerManifest(s, config.sessions.default_image) for s in await config.k8s_client.list_servers(user.id)
+        UserServerManifest(s, config.sessions.default_image) for s in await config.k8s_client.list_sessions(user.id)
     ]
     filtered_servers = {}
     ann_prefix = config.session_get_endpoint_annotations.renku_annotation_prefix

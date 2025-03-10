@@ -460,7 +460,7 @@ class NotebooksNewBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _handler(_: Request, user: AuthenticatedAPIUser | AnonymousAPIUser) -> HTTPResponse:
-            sessions = await self.nb_config.k8s_v2_client.list_servers(user.id)
+            sessions = await self.nb_config.k8s_v2_client.list_sessions(user.id)
             output: list[dict] = []
             for session in sessions:
                 output.append(session.as_apispec().model_dump(exclude_none=True, mode="json"))
