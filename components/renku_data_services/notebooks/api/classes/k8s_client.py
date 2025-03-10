@@ -118,7 +118,7 @@ class K8sClientProto[_SessionType, _Kr8sType](ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def patch_server(
+    async def patch_session(
         self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> _SessionType:
         """Patch the user session."""
@@ -239,7 +239,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
             raise CannotStartServerError(message=f"Cannot start the session {server_name}")
         return server
 
-    async def patch_server(self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]]) -> _SessionType:
+    async def patch_session(self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]]) -> _SessionType:
         """Patch the server."""
         server = await self._kr8s_type(
             api=self._api, namespace=self.namespace(), resource=dict(metadata=dict(name=server_name))
@@ -658,7 +658,7 @@ class _SingleK8sClient(Generic[_SessionType, _Kr8sType]):
         manifest.metadata.labels[self.username_label] = safe_username
         return await self._k8s_client.create_session(manifest)
 
-    async def patch_server(
+    async def patch_session(
         self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> _SessionType:
         """Patch a server."""
@@ -667,7 +667,7 @@ class _SingleK8sClient(Generic[_SessionType, _Kr8sType]):
             raise errors.MissingResourceError(
                 message=f"Cannot find server {server_name} for user {safe_username} in order to patch it."
             )
-        return await self._k8s_client.patch_server(server_name=server_name, patch=patch)
+        return await self._k8s_client.patch_session(server_name=server_name, patch=patch)
 
     async def delete_server(self, server_name: str, safe_username: str) -> None:
         """Delete the server."""
@@ -880,13 +880,13 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
             message=f"Cannot find server {server_name} for user {safe_username} to retrieve logs."
         )
 
-    async def patch_server(
+    async def patch_session(
         self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> _SessionType:
         """Patch the user session."""
         client = await self._client_by_session(server_name, safe_username)
         if client is not None:
-            return await client.patch_server(server_name, safe_username, patch)
+            return await client.patch_session(server_name, safe_username, patch)
 
         raise errors.MissingResourceError(
             message=f"Cannot find cluster connection to server {server_name}"
@@ -1000,7 +1000,7 @@ class DummyK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
             message=f"Cannot find server {server_name} for user {safe_username} to retrieve logs."
         )
 
-    async def patch_server(
+    async def patch_session(
         self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> _SessionType:
         """Pretend to Patch the user session."""
