@@ -99,7 +99,7 @@ class K8sClientProto[_SessionType, _Kr8sType](ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def create_server(
+    async def create_session(
         self, manifest: _SessionType, api_user: AnonymousAPIUser | AuthenticatedAPIUser
     ) -> _SessionType:
         """Launch a user session."""
@@ -209,7 +209,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
             return None
         return secret
 
-    async def create_server(self, manifest: _SessionType) -> _SessionType:
+    async def create_session(self, manifest: _SessionType) -> _SessionType:
         """Create a jupyter server in the cluster."""
 
         # NOTE: You have to exclude none when using model dump below because otherwise we get
@@ -648,7 +648,7 @@ class _SingleK8sClient(Generic[_SessionType, _Kr8sType]):
         pod_name = f"{server_name}-0"
         return await self._k8s_client.get_pod_logs(pod_name, max_log_lines)
 
-    async def create_server(self, manifest: _SessionType, safe_username: str) -> _SessionType:
+    async def create_session(self, manifest: _SessionType, safe_username: str) -> _SessionType:
         """Create a server."""
         server_name = manifest.metadata.name
         server = await self.get_server(server_name, safe_username)
@@ -656,7 +656,7 @@ class _SingleK8sClient(Generic[_SessionType, _Kr8sType]):
             # NOTE: server already exists
             return server
         manifest.metadata.labels[self.username_label] = safe_username
-        return await self._k8s_client.create_server(manifest)
+        return await self._k8s_client.create_session(manifest)
 
     async def patch_server(
         self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
@@ -846,7 +846,7 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
 
         return servers
 
-    async def create_server(
+    async def create_session(
         self, manifest: _SessionType, api_user: AnonymousAPIUser | AuthenticatedAPIUser
     ) -> _SessionType:
         """Launch a user session."""
@@ -855,7 +855,7 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
 
         client = await self._client_by_class_id(class_id, api_user)
 
-        session = await client.create_server(manifest, api_user.id)
+        session = await client.create_session(manifest, api_user.id)
         self._session2client[server_name] = client
 
         return session
@@ -968,7 +968,7 @@ class DummyK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
         """List all the user sessions visible from the safe_username."""
         return [s for s in self._servers if safe_username in s.metadata.labels.values()]
 
-    async def create_server(
+    async def create_session(
         self, manifest: _SessionType, api_user: AnonymousAPIUser | AuthenticatedAPIUser
     ) -> _SessionType:
         """Launch a user session."""

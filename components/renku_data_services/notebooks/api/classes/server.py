@@ -161,7 +161,7 @@ class UserServer(ABC):
             )
         session_manifest = await self._get_session_manifest()
         manifest = JupyterServerV1Alpha1.model_validate(session_manifest)
-        return await self._k8s_client.create_server(manifest, self.user)
+        return await self._k8s_client.create_session(manifest, self.user)
 
     @staticmethod
     def _check_environment_variables_overrides(patches_list: list[dict[str, Any]]) -> None:
