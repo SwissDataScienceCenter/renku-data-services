@@ -94,7 +94,7 @@ class K8sClientProto[_SessionType, _Kr8sType](ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def list_servers(self, safe_username: str) -> list[_SessionType]:
+    async def list_sessions(self, safe_username: str) -> list[_SessionType]:
         """List all the user sessions visible from the safe_username."""
         raise NotImplementedError()
 
@@ -310,7 +310,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
             return None
         return self._server_type.model_validate(server.to_dict())
 
-    async def list_servers(self, safe_username: str) -> list[_SessionType]:
+    async def list_sessions(self, safe_username: str) -> list[_SessionType]:
         """Get a list of k8s jupyterserver objects for a specific user."""
 
         label_selector = f"{self._username_label}={safe_username}"
@@ -506,7 +506,7 @@ class _ServerCache(Generic[_SessionType]):
         if server_type == AmaltheaSessionV1Alpha1:
             self.url_path_name = "sessions"
 
-    async def list_servers(self, safe_username: str) -> list[_SessionType]:
+    async def list_sessions(self, safe_username: str) -> list[_SessionType]:
         """List the jupyter servers."""
         url = urljoin(self.url, f"/users/{safe_username}/{self.url_path_name}")
         try:
@@ -566,17 +566,17 @@ class _CachedK8sClient[_SessionType, _Kr8sType](_BaseK8sClient):
         self._username_label = username_label
         self._skip_cache_if_unavailable = skip_cache_if_unavailable
 
-    async def list_servers(self, safe_username: str) -> list[_SessionType]:
+    async def list_sessions(self, safe_username: str) -> list[_SessionType]:
         """Get a list of servers that belong to a user.
 
         Attempt to use the cache first but if the cache fails then use the k8s API.
         """
         try:
-            return await self._cache.list_servers(safe_username)
+            return await self._cache.list_sessions(safe_username)
         except CacheError:
             if self._skip_cache_if_unavailable:
-                logger.warning(f"Skipping the cache to list servers for user: {safe_username}")
-                return await super().list_servers(safe_username)
+                logger.warning(f"Skipping the cache to list sessions for user: {safe_username}")
+                return await super().list_sessions(safe_username)
             else:
                 raise
 
@@ -614,9 +614,9 @@ class _SingleK8sClient(Generic[_SessionType, _Kr8sType]):
         if not self.username_label:
             raise ProgrammingError("username_label has to be provided to K8sClient")
 
-    async def list_servers(self, safe_username: str) -> list[_SessionType]:
+    async def list_sessions(self, safe_username: str) -> list[_SessionType]:
         """Get a list of servers that belong to a user."""
-        return await self._k8s_client.list_servers(safe_username=safe_username)
+        return await self._k8s_client.list_sessions(safe_username=safe_username)
 
     async def get_server(self, name: str, safe_username: str) -> _SessionType | None:
         """Attempt to get a specific server by name from the cache.
@@ -798,7 +798,7 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
         client: _SingleK8sClient[_SessionType, _Kr8sType] | None = self._session2client.get(session_name, None)
         if client is None:
             for c in self._clients.values():
-                if session_name in await c.list_servers(safe_username):
+                if session_name in await c.list_sessions(safe_username):
                     self._session2client[session_name] = c
                     client = c
                     break
@@ -837,11 +837,11 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
 
         return name
 
-    async def list_servers(self, safe_username: str) -> list[_SessionType]:
+    async def list_sessions(self, safe_username: str) -> list[_SessionType]:
         """List all the user sessions visible from the safe_username."""
         servers = []
         for c in self._clients.values():
-            for s in await c.list_servers(safe_username):
+            for s in await c.list_sessions(safe_username):
                 servers.append(s)
 
         return servers
@@ -964,7 +964,7 @@ class DummyK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
         """Retrieve the cluster name given the resource class id."""
         return "a-cluster"
 
-    async def list_servers(self, safe_username: str) -> list[_SessionType]:
+    async def list_sessions(self, safe_username: str) -> list[_SessionType]:
         """List all the user sessions visible from the safe_username."""
         return [s for s in self._servers if safe_username in s.metadata.labels.values()]
 
