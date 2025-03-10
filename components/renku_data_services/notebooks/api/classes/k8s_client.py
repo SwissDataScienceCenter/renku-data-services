@@ -854,6 +854,18 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
         client = self._session2client.pop(server_name, None)
         if client is not None:
             await client.delete_server(server_name, safe_username)
+        else:
+            found = False
+            for c in self._clients.values():
+                with suppress(errors.MissingResourceError):
+                    await c.delete_server(server_name, safe_username)
+                    found = True
+                    break
+            if not found:
+                # If we did not find at all the session raise an exception
+                raise errors.MissingResourceError(
+                    message=f"Cannot find server {server_name} for user {safe_username} in order to delete it."
+                )
 
     async def patch_server_tokens(
         self, server_name: str, safe_username: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken
