@@ -84,6 +84,8 @@ aiofiles = "^24.1.0"
 # Detected incompatible Protobuf Gencode/Runtime versions when loading authzed/api/v1/core.proto: gencode 5.28.2 runtime 5.27.3.
 protobuf = "^5.29.3"
 poetry = "^2.1.1"
+python-box = ">=7.0.1"
+expiringdict = "^1.2.2"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.8.3"
@@ -262,6 +264,7 @@ module = [
   "urllib3.*",
   "escapism.*",
   "kr8s.*",
+  "expiringdict.*",
 ]
 ignore_missing_imports = true
 

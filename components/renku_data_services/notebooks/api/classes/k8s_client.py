@@ -2,18 +2,20 @@
 
 import asyncio
 import base64
+import glob
 import json
 import logging
 import os
 from abc import ABC, abstractmethod
 from contextlib import suppress
-from typing import Any, Generic, Optional, TypeVar, cast
+from typing import Any, Final, Generic, Optional, TypeVar, cast
 from urllib.parse import urljoin
 
 import httpx
 import kr8s
 import kubernetes
 from box.box import Box
+from expiringdict import ExpiringDict
 from kr8s import NotFoundError, ServerError
 from kr8s.asyncio.objects import APIObject, Pod, Secret, StatefulSet
 from kubernetes.client import V1Secret
@@ -68,7 +70,7 @@ _Kr8sType = TypeVar("_Kr8sType", JupyterServerV1Alpha1Kr8s, AmaltheaSessionV1Alp
 
 _sanitizer = kubernetes.client.ApiClient().sanitize_for_serialization
 
-DEFAULT_K8S_CLUSTER = "default_k8s_cluster"
+DEFAULT_K8S_CLUSTER: Final[str] = "default_k8s_cluster"
 
 
 class K8sClientProto[_SessionType, _Kr8sType](ABC):
@@ -303,20 +305,18 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
             return None
         return self._server_type.model_validate(server.to_dict())
 
-    async def list_sessions(self, safe_username: str) -> list[_SessionType]:
+    async def list_servers(self, safe_username: str) -> list[_SessionType]:
         """Get a list of k8s jupyterserver objects for a specific user."""
 
-        # NOTE: we use the selector if for network efficiency, we do not guarantee the sessions are limited to
-        # the ones belonging to safe_username
         label_selector = f"{self._username_label}={safe_username}"
         try:
             # We cannot use kr8s.APIObject.list as it ignores the api object argument and instead instantiate a default
             # one, so let's do this by hand (Mostly a copy-pasta of the aforementioned function, adapted to use the
             # correct api object).
-            resources = await self._api.async_get(kind=APIObject, api=self._api, label_selector=label_selector)
+            resources = await self._api.async_get(kind=self._kr8s_type, api=self._api, label_selector=label_selector)
             if not isinstance(resources, list):
                 resources = [resources]
-            servers = [resource for resource in resources if isinstance(resource, APIObject)]
+            servers = [resource for resource in resources if isinstance(resource, self._kr8s_type)]
 
         except ServerError as err:
             if err.response is None or err.response.status_code not in [400, 404]:
@@ -501,7 +501,7 @@ class _ServerCache(Generic[_SessionType]):
         if server_type == AmaltheaSessionV1Alpha1:
             self.url_path_name = "sessions"
 
-    async def list_sessions(self, safe_username: str) -> list[_SessionType]:
+    async def list_servers(self, safe_username: str) -> list[_SessionType]:
         """List the jupyter servers."""
         url = urljoin(self.url, f"/users/{safe_username}/{self.url_path_name}")
         try:
@@ -561,17 +561,17 @@ class _CachedK8sClient[_SessionType, _Kr8sType](_BaseK8sClient):
         self._username_label = username_label
         self._skip_cache_if_unavailable = skip_cache_if_unavailable
 
-    async def list_sessions(self, safe_username: str) -> list[_SessionType]:
+    async def list_servers(self, safe_username: str) -> list[_SessionType]:
         """Get a list of servers that belong to a user.
 
         Attempt to use the cache first but if the cache fails then use the k8s API.
         """
         try:
-            return await self._cache.list_sessions(safe_username)
+            return await self._cache.list_servers(safe_username)
         except JSCacheError:
             if self._skip_cache_if_unavailable:
                 logging.warning(f"Skipping the cache to list servers for user: {safe_username}")
-                return await super().list_sessions(safe_username)
+                return await super().list_servers(safe_username)
             else:
                 raise
 
@@ -611,14 +611,7 @@ class _SingleK8sClient(Generic[_SessionType, _Kr8sType]):
 
     async def list_servers(self, safe_username: str) -> list[_SessionType]:
         """Get a list of servers that belong to a user."""
-        sessions: list[_SessionType] = await self._k8s_client.list_sessions(safe_username=safe_username)
-        return [
-            session
-            for session in sessions
-            if session.metadata is not None
-            and session.metadata.labels is not None
-            and session.metadata.labels.get(self.username_label) == safe_username
-        ]
+        return await self._k8s_client.list_servers(safe_username=safe_username)
 
     async def get_server(self, name: str, safe_username: str) -> _SessionType | None:
         """Attempt to get a specific server by name from the cache.
@@ -729,11 +722,11 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
         )
 
         if os.path.exists(self._kube_conf_root_dir):
-            for f in os.scandir(self.kube_conf_root_dir):
-                self._clients[f.name.removesuffix(".yaml")] = _SingleK8sClient(
+            for filename in glob.glob(pathname="*.yaml", root_dir=self.kube_conf_root_dir):
+                self._clients[filename.removesuffix(".yaml")] = _SingleK8sClient(
                     server_type,
                     kr8s_type,
-                    kr8s.api(kubeconfig=f"{self.kube_conf_root_dir}/{f.name}"),
+                    kr8s.api(kubeconfig=f"{self.kube_conf_root_dir}/{filename}"),
                     cache_url,
                     username_label,
                     skip_cache_if_unavailable,
@@ -742,13 +735,15 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
             logging.warning(f"Cannot open directory '{self._kube_conf_root_dir}', ignoring kube configs...")
 
         # maps session/server name to k8s client
-        self._session2client: dict[str, _SingleK8sClient[_SessionType, _Kr8sType]] = {}
+        self._session2client: ExpiringDict[str, _SingleK8sClient[_SessionType, _Kr8sType]] = ExpiringDict(
+            max_len=10_000, max_age_seconds=1 * 24 * 3600
+        )
 
     async def _client_by_session(
         self, session_name: str, safe_username: str
     ) -> _SingleK8sClient[_SessionType, _Kr8sType] | None:
         # Try in our cache, if not there look it up in K8s and update our cache
-        client = self._session2client.get(session_name, None)
+        client: _SingleK8sClient[_SessionType, _Kr8sType] | None = self._session2client.get(session_name, None)
         if client is None:
             for c in self._clients.values():
                 if session_name in await c.list_servers(safe_username):

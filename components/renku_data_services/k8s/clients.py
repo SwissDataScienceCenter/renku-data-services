@@ -4,7 +4,7 @@ import multiprocessing.synchronize
 from copy import deepcopy
 from multiprocessing import Lock
 from multiprocessing.synchronize import Lock as LockType
-from typing import Any, Optional
+from typing import Any
 from uuid import uuid4
 
 from kubernetes import client
@@ -16,7 +16,7 @@ from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface, K8
 class K8sCoreClient(K8sCoreClientInterface):  # pragma:nocover
     """Real k8s core API client that exposes the required functions."""
 
-    def __init__(self, config_file: Optional[str] = None) -> None:
+    def __init__(self, config_file: str | None = None) -> None:
         api = new_client_from_config(config_file=config_file)
         self.client = client.CoreV1Api(api_client=api)
 
@@ -56,7 +56,7 @@ class K8sCoreClient(K8sCoreClientInterface):  # pragma:nocover
 class K8sSchedulingClient(K8sSchedudlingClientInterface):  # pragma:nocover
     """Real k8s scheduling API client that exposes the required functions."""
 
-    def __init__(self, config_file: Optional[str] = None) -> None:
+    def __init__(self, config_file: str | None = None) -> None:
         api = new_client_from_config(config_file=config_file)
         self.client = client.SchedulingV1Api(api_client=api)
 
