@@ -510,7 +510,7 @@ class _ServerCache(Generic[_SessionType]):
         try:
             res = await self.client.get(url, timeout=10)
         except httpx.RequestError as err:
-            logger.warning(f"Jupyter session cache at {url} cannot be reached: {err}",
+            logger.warning(f"Jupyter session cache at {url} cannot be reached: {err}")
             raise JSCacheError("The jupyter session cache is not available")
         if res.status_code != 200:
             logger.warning(
