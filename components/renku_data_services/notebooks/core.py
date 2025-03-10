@@ -252,7 +252,7 @@ async def patch_server(
 async def stop_server(config: NotebooksConfig, user: AnonymousAPIUser | AuthenticatedAPIUser, server_name: str) -> None:
     """Stops / deletes the requested server."""
 
-    await config.k8s_client.delete_server(server_name, safe_username=user.id)
+    await config.k8s_client.delete_session(server_name, safe_username=user.id)
 
 
 def server_options(config: NotebooksConfig) -> dict:
@@ -536,7 +536,7 @@ async def launch_notebook_helper(
 
     async def create_secret(payload: dict[str, Any], type_message: str) -> None:
         async def _on_error(server_name: str, error_msg: str) -> None:
-            await nb_config.k8s_client.delete_server(server_name, safe_username=user.id)
+            await nb_config.k8s_client.delete_session(server_name, safe_username=user.id)
             raise RuntimeError(error_msg)
 
         try:

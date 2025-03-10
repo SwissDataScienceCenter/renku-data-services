@@ -90,7 +90,7 @@ async def _create_session(sanic_client: SanicASGITestClient, server_exists: bool
         return "unknown_server"
 
 
-async def _delete_server(
+async def _delete_session(
     sanic_client: SanicASGITestClient, server_exists: bool, server_name: str, authenticated_user_headers
 ) -> None:
     if server_exists:
@@ -215,7 +215,7 @@ class TestNotebooks:
 
         assert res.status_code == expected_status_code, res.text
 
-        await _delete_server(sanic_client, server_exists, server_name, authenticated_user_headers)
+        await _delete_session(sanic_client, server_exists, server_name, authenticated_user_headers)
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("server_exists,expected_status_code", [(False, 404), (True, 204)])
@@ -257,7 +257,7 @@ class TestNotebooks:
 
         assert res.status_code == expected_status_code, res.text
 
-        await _delete_server(sanic_client, server_exists, server_name, authenticated_user_headers)
+        await _delete_session(sanic_client, server_exists, server_name, authenticated_user_headers)
 
     @pytest.mark.asyncio
     async def test_start_server(self, sanic_client: SanicASGITestClient, authenticated_user_headers, fake_gitlab):
