@@ -130,7 +130,7 @@ class K8sClientProto[_SessionType, _Kr8sType](ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def patch_server_tokens(
+    async def patch_session_tokens(
         self, server_name: str, safe_username: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken
     ) -> None:
         """Patch user authentication tokens in a user session."""
@@ -678,7 +678,9 @@ class _SingleK8sClient(Generic[_SessionType, _Kr8sType]):
             )
         return await self._k8s_client.delete_server(server_name)
 
-    async def patch_server_tokens(self, server_name: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken) -> None:
+    async def patch_session_tokens(
+        self, server_name: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken
+    ) -> None:
         """Patch the Renku and Gitlab access tokens used in a session."""
         await self._k8s_client.patch_statefulset_tokens(server_name, renku_tokens)
         await self._k8s_client.patch_image_pull_secret(server_name, gitlab_token)
@@ -912,13 +914,13 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
                     message=f"Cannot find server {server_name} for user {safe_username} in order to delete it."
                 )
 
-    async def patch_server_tokens(
+    async def patch_session_tokens(
         self, server_name: str, safe_username: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken
     ) -> None:
         """Patch user authentication tokens in a user session."""
         client = self._session2client.get(server_name, safe_username)
         if client is not None:
-            await client.patch_server_tokens(server_name, renku_tokens, gitlab_token)
+            await client.patch_session_tokens(server_name, renku_tokens, gitlab_token)
 
     async def patch_statefulset(
         self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
@@ -1021,7 +1023,7 @@ class DummyK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
                 message=f"Cannot find server {server_name} for user {safe_username} in order to delete it."
             )
 
-    async def patch_server_tokens(
+    async def patch_session_tokens(
         self, server_name: str, safe_username: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken
     ) -> None:
         """Patch user authentication tokens in a user session."""

@@ -243,7 +243,7 @@ async def patch_server(
                 floor(user.access_token_expires_at.timestamp()) if user.access_token_expires_at is not None else -1
             ),
         )
-        await config.k8s_client.patch_server_tokens(server_name, user.id, renku_tokens, gitlab_token)
+        await config.k8s_client.patch_session_tokens(server_name, user.id, renku_tokens, gitlab_token)
         new_server = await config.k8s_client.patch_session(server_name=server_name, safe_username=user.id, patch=patch)
 
     return UserServerManifest(new_server, config.sessions.default_image)
