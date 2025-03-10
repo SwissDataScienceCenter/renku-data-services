@@ -172,7 +172,6 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
 
         self._username_label = username_label
 
-    @property
     def namespace(self) -> str:
         return self._api.namespace
 
@@ -213,7 +212,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
         # namespace=null which seems to break the kr8s client or simply k8s does not translate
         # namespace = null to the default namespace.
         js = await self._kr8s_type(
-            api=self._api, namespace=self.namespace, resource=manifest.model_dump(exclude_none=True, mode="json")
+            api=self._api, namespace=self.namespace(), resource=manifest.model_dump(exclude_none=True, mode="json")
         )
         server_name = manifest.metadata.name
         try:
@@ -239,7 +238,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
     async def patch_server(self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]]) -> _SessionType:
         """Patch the server."""
         server = await self._kr8s_type(
-            api=self._api, namespace=self.namespace, resource=dict(metadata=dict(name=server_name))
+            api=self._api, namespace=self.namespace(), resource=dict(metadata=dict(name=server_name))
         )
         patch_type: str | None = None  # rfc7386 patch
         if isinstance(patch, list):
@@ -256,7 +255,9 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
         self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> StatefulSet | None:
         """Patch a statefulset."""
-        sts = await StatefulSet(api=self._api, namespace=self.namespace, resource=dict(metadata=dict(name=server_name)))
+        sts = await StatefulSet(
+            api=self._api, namespace=self.namespace(), resource=dict(metadata=dict(name=server_name))
+        )
         patch_type: str | None = None  # rfc7386 patch
         if isinstance(patch, list):
             patch_type = "json"  # rfc6902 patch
@@ -274,7 +275,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
     async def delete_server(self, server_name: str) -> None:
         """Delete the server."""
         server = await self._kr8s_type(
-            api=self._api, namespace=self.namespace, resource=dict(metadata=dict(name=server_name))
+            api=self._api, namespace=self.namespace(), resource=dict(metadata=dict(name=server_name))
         )
         try:
             await server.delete(propagation_policy="Foreground")
@@ -466,7 +467,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
     async def create_secret(self, secret: V1Secret) -> V1Secret:
         """Create a new secret."""
 
-        new_secret = await Secret(api=self._api, namespace=self.namespace, resource=_sanitizer(secret))
+        new_secret = await Secret(api=self._api, namespace=self.namespace(), resource=_sanitizer(secret))
         await new_secret.create()
         return V1Secret(metadata=new_secret.metadata, data=new_secret.data, type=new_secret.raw.get("type"))
 
@@ -678,10 +679,9 @@ class _SingleK8sClient(Generic[_SessionType, _Kr8sType]):
         await self._k8s_client.patch_statefulset_tokens(server_name, renku_tokens)
         await self._k8s_client.patch_image_pull_secret(server_name, gitlab_token)
 
-    @property
     def namespace(self) -> str:
         """Get the preferred namespace for creating jupyter servers."""
-        return self._k8s_client.namespace
+        return self._k8s_client.namespace()
 
     async def patch_statefulset(
         self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]]
@@ -771,7 +771,7 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
     def namespace(self) -> str:
         """Current namespace of the main cluster."""
         # TODO: LSA Does not break current code, but bad, as it may be different based on the cluster
-        return self._clients[DEFAULT_K8S_CLUSTER].namespace
+        return self._clients[DEFAULT_K8S_CLUSTER].namespace()
 
     async def cluster_name_by_class_id(self, class_id: int | None, api_user: APIUser) -> str:
         """Retrieve the cluster name given the resource class id."""
