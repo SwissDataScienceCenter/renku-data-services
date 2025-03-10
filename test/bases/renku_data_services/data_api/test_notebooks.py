@@ -75,7 +75,7 @@ def fake_gitlab(mocker, fake_gitlab_projects):
     return gitlab
 
 
-async def _create_server(sanic_client: SanicASGITestClient, server_exists: bool, authenticated_user_headers) -> str:
+async def _create_session(sanic_client: SanicASGITestClient, server_exists: bool, authenticated_user_headers) -> str:
     if server_exists:
         data = {
             "branch": "main",
@@ -209,7 +209,7 @@ class TestNotebooks:
     ):
         """Validate that the logs endpoint answers correctly"""
 
-        server_name = await _create_server(sanic_client, server_exists, authenticated_user_headers)
+        server_name = await _create_session(sanic_client, server_exists, authenticated_user_headers)
 
         _, res = await sanic_client.get(f"/api/data/notebooks/logs/{server_name}", headers=authenticated_user_headers)
 
@@ -227,7 +227,7 @@ class TestNotebooks:
         authenticated_user_headers,
         fake_gitlab,
     ):
-        server_name = await _create_server(sanic_client, server_exists, authenticated_user_headers)
+        server_name = await _create_session(sanic_client, server_exists, authenticated_user_headers)
 
         _, res = await sanic_client.delete(
             f"/api/data/notebooks/servers/{server_name}", headers=authenticated_user_headers
@@ -249,7 +249,7 @@ class TestNotebooks:
         authenticated_user_headers,
         fake_gitlab,
     ):
-        server_name = await _create_server(sanic_client, server_exists, authenticated_user_headers)
+        server_name = await _create_session(sanic_client, server_exists, authenticated_user_headers)
 
         _, res = await sanic_client.patch(
             f"/api/data/notebooks/servers/{server_name}", json=patch, headers=authenticated_user_headers

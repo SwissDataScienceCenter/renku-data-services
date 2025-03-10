@@ -458,7 +458,7 @@ class NotebooksNewBP(CustomBlueprint):
             for s in secrets_to_create:
                 await self.nb_config.k8s_v2_client.create_secret(s.secret)
             try:
-                manifest = await self.nb_config.k8s_v2_client.create_server(manifest, user)
+                manifest = await self.nb_config.k8s_v2_client.create_session(manifest, user)
             except Exception:
                 for s in secrets_to_create:
                     await self.nb_config.k8s_v2_client.delete_secret(s.secret.metadata.name)
