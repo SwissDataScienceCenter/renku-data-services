@@ -161,7 +161,7 @@ async def patch_server(
                     "path": "/metadata/labels/renku.io~1quota",
                 }
             )
-        new_server = await config.k8s_client.patch_server(
+        new_server = await config.k8s_client.patch_session(
             server_name=server_name, safe_username=user.id, patch=js_patch
         )
         ss_patch: list[dict[str, Any]] = [
@@ -221,7 +221,7 @@ async def patch_server(
             },
         }
 
-        new_server = await config.k8s_client.patch_server(server_name=server_name, safe_username=user.id, patch=patch)
+        new_server = await config.k8s_client.patch_session(server_name=server_name, safe_username=user.id, patch=patch)
     elif state == PatchServerStatusEnum.Running:
         # NOTE: We clear hibernation annotations in Amalthea to avoid flickering in the UI (showing
         # the repository as dirty when resuming a session for a short period of time).
@@ -244,7 +244,7 @@ async def patch_server(
             ),
         )
         await config.k8s_client.patch_server_tokens(server_name, user.id, renku_tokens, gitlab_token)
-        new_server = await config.k8s_client.patch_server(server_name=server_name, safe_username=user.id, patch=patch)
+        new_server = await config.k8s_client.patch_session(server_name=server_name, safe_username=user.id, patch=patch)
 
     return UserServerManifest(new_server, config.sessions.default_image)
 
