@@ -256,7 +256,7 @@ class NotebooksNewBP(CustomBlueprint):
             server_name = renku_2_make_server_name(
                 user=user, project_id=str(launcher.project_id), launcher_id=body.launcher_id, cluster_name=cluster_name
             )
-            existing_session = await self.nb_config.k8s_v2_client.get_server(server_name, user.id)
+            existing_session = await self.nb_config.k8s_v2_client.get_session(server_name, user.id)
             if existing_session is not None and existing_session.spec is not None:
                 return json(existing_session.as_apispec().model_dump(exclude_none=True, mode="json"))
             environment = launcher.environment
@@ -473,7 +473,7 @@ class NotebooksNewBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _handler(_: Request, user: AuthenticatedAPIUser | AnonymousAPIUser, session_id: str) -> HTTPResponse:
-            session = await self.nb_config.k8s_v2_client.get_server(session_id, user.id)
+            session = await self.nb_config.k8s_v2_client.get_session(session_id, user.id)
             if session is None:
                 raise errors.ValidationError(message=f"The session with ID {session_id} does not exist.", quiet=True)
             return json(session.as_apispec().model_dump(exclude_none=True, mode="json"))
