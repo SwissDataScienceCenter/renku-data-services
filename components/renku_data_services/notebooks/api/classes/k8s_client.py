@@ -106,7 +106,7 @@ class K8sClientProto[_SessionType, _Kr8sType](ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def get_server(self, name: str, safe_username: str) -> _SessionType | None:
+    async def get_session(self, name: str, safe_username: str) -> _SessionType | None:
         """Lookup a user session by name."""
         raise NotImplementedError()
 
@@ -234,7 +234,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
         # not made it into the cache. With this we wait for the cache to catch up
         # before we send the response from the POST request out. Exponential backoff
         # is used to avoid overwhelming the cache.
-        server = await retry_with_exponential_backoff_async(lambda x: x is None)(self.get_server)(server_name)
+        server = await retry_with_exponential_backoff_async(lambda x: x is None)(self.get_session)(server_name)
         if server is None:
             raise CannotStartServerError(message=f"Cannot start the session {server_name}")
         return server
@@ -288,7 +288,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
             raise DeleteServerError()
         return None
 
-    async def get_server(self, name: str, num_retries: int = 0) -> _SessionType | None:
+    async def get_session(self, name: str, num_retries: int = 0) -> _SessionType | None:
         """Get a specific JupyterServer object."""
         try:
             server = await self._kr8s_type.get(api=self._api, name=name)
@@ -303,7 +303,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
                 )
                 if isinstance(retry_after_sec, str) and retry_after_sec.isnumeric() and num_retries < 3:
                     await asyncio.sleep(int(retry_after_sec))
-                    return await self.get_server(name, num_retries=num_retries + 1)
+                    return await self.get_session(name, num_retries=num_retries + 1)
             if err.response is None or err.response.status_code not in [400, 404]:
                 logger.exception(f"Cannot get server {name} because of {err}")
                 raise IntermittentError(f"Cannot get server {name} from the k8s API.")
@@ -524,7 +524,7 @@ class _ServerCache(Generic[_SessionType]):
 
         return [self.server_type.model_validate(server) for server in res.json()]
 
-    async def get_server(self, name: str) -> _SessionType | None:
+    async def get_session(self, name: str) -> _SessionType | None:
         """Get a specific jupyter server."""
         url = urljoin(self.url, f"/{self.url_path_name}/{name}")
         try:
@@ -580,16 +580,16 @@ class _CachedK8sClient[_SessionType, _Kr8sType](_BaseK8sClient):
             else:
                 raise
 
-    async def get_server(self, name: str, num_retries: int = 0) -> _SessionType | None:
+    async def get_session(self, name: str, num_retries: int = 0) -> _SessionType | None:
         """Get a specific server by name.
 
         Attempt to use the cache first but if the cache fails then use the k8s API.
         """
         try:
-            return await self._cache.get_server(name)
+            return await self._cache.get_session(name)
         except CacheError:
             if self._skip_cache_if_unavailable:
-                return await super().get_server(name, num_retries)
+                return await super().get_session(name, num_retries)
             else:
                 raise
 
@@ -618,12 +618,12 @@ class _SingleK8sClient(Generic[_SessionType, _Kr8sType]):
         """Get a list of servers that belong to a user."""
         return await self._k8s_client.list_sessions(safe_username=safe_username)
 
-    async def get_server(self, name: str, safe_username: str) -> _SessionType | None:
+    async def get_session(self, name: str, safe_username: str) -> _SessionType | None:
         """Attempt to get a specific server by name from the cache.
 
         If the request to the cache fails, fallback to the k8s API.
         """
-        server: _SessionType | None = await self._k8s_client.get_server(name)
+        server: _SessionType | None = await self._k8s_client.get_session(name)
 
         # NOTE: only the user that the server belongs to can read it, without the line
         # below anyone can request and read any one else's server
@@ -640,7 +640,7 @@ class _SingleK8sClient(Generic[_SessionType, _Kr8sType]):
     ) -> dict[str, str]:
         """Get the logs from the server."""
         # NOTE: this get_server ensures the user has access to the server without it you could read someone elses logs
-        server = await self.get_server(server_name, safe_username)
+        server = await self.get_session(server_name, safe_username)
         if not server:
             raise errors.MissingResourceError(
                 message=f"Cannot find server {server_name} for user {safe_username} to retrieve logs."
@@ -651,7 +651,7 @@ class _SingleK8sClient(Generic[_SessionType, _Kr8sType]):
     async def create_session(self, manifest: _SessionType, safe_username: str) -> _SessionType:
         """Create a server."""
         server_name = manifest.metadata.name
-        server = await self.get_server(server_name, safe_username)
+        server = await self.get_session(server_name, safe_username)
         if server:
             # NOTE: server already exists
             return server
@@ -662,7 +662,7 @@ class _SingleK8sClient(Generic[_SessionType, _Kr8sType]):
         self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> _SessionType:
         """Patch a server."""
-        server = await self.get_server(server_name, safe_username)
+        server = await self.get_session(server_name, safe_username)
         if not server:
             raise errors.MissingResourceError(
                 message=f"Cannot find server {server_name} for user {safe_username} in order to patch it."
@@ -671,7 +671,7 @@ class _SingleK8sClient(Generic[_SessionType, _Kr8sType]):
 
     async def delete_server(self, server_name: str, safe_username: str) -> None:
         """Delete the server."""
-        server = await self.get_server(server_name, safe_username)
+        server = await self.get_session(server_name, safe_username)
         if not server:
             raise errors.MissingResourceError(
                 message=f"Cannot find server {server_name} for user {safe_username} in order to delete it."
@@ -860,11 +860,11 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
 
         return session
 
-    async def get_server(self, name: str, safe_username: str) -> _SessionType | None:
+    async def get_session(self, name: str, safe_username: str) -> _SessionType | None:
         """Lookup a user session by name."""
         client = await self._client_by_session(name, safe_username)
         if client is not None:
-            return await client.get_server(name, safe_username)
+            return await client.get_session(name, safe_username)
 
         return None
 
@@ -978,7 +978,7 @@ class DummyK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
         self._servers.append(manifest)
         return manifest
 
-    async def get_server(self, name: str, safe_username: str) -> _SessionType | None:
+    async def get_session(self, name: str, safe_username: str) -> _SessionType | None:
         """Lookup a user session by name."""
         for s in self._servers:
             if s.metadata.name == name:
@@ -989,7 +989,7 @@ class DummyK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
         self, server_name: str, safe_username: str, max_log_lines: Optional[int] = None
     ) -> dict[str, str]:
         """Retrieve the logs for the given user session."""
-        server = await self.get_server(server_name, safe_username)
+        server = await self.get_session(server_name, safe_username)
         if server is not None:
             return {
                 "container-0": "fake log lines\n fake log lines",
@@ -1004,7 +1004,7 @@ class DummyK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
         self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> _SessionType:
         """Pretend to Patch the user session."""
-        server = await self.get_server(server_name, safe_username)
+        server = await self.get_session(server_name, safe_username)
         if not server:
             raise errors.MissingResourceError(
                 message=f"Cannot find server {server_name} for user {safe_username} in order to patch it."
@@ -1013,7 +1013,7 @@ class DummyK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
 
     async def delete_server(self, server_name: str, safe_username: str) -> None:
         """Delete the provided user session."""
-        server = await self.get_server(server_name, safe_username)
+        server = await self.get_session(server_name, safe_username)
         if server is not None:
             self._servers.remove(server)
         else:

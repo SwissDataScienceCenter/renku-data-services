@@ -91,7 +91,7 @@ async def user_server(
 ) -> UserServerManifest:
     """Returns the requested server for the user."""
 
-    server = await config.k8s_client.get_server(server_name, user.id)
+    server = await config.k8s_client.get_session(server_name, user.id)
     if server is None:
         raise errors.MissingResourceError(message=f"The server {server_name} does not exist.")
     return UserServerManifest(server, config.sessions.default_image)
@@ -109,7 +109,7 @@ async def patch_server(
     if not config.sessions.storage.pvs_enabled:
         raise intermittent.PVDisabledError()
 
-    server = await config.k8s_client.get_server(server_name, user.id)
+    server = await config.k8s_client.get_session(server_name, user.id)
     if server is None:
         raise errors.MissingResourceError(message=f"The server with name {server_name} cannot be found")
     if server.spec is None:
@@ -335,7 +335,7 @@ async def launch_notebook_helper(
 ) -> tuple[UserServerManifest, int]:
     """Helper function to launch a Jupyter server."""
 
-    server = await nb_config.k8s_client.get_server(server_name, user.id)
+    server = await nb_config.k8s_client.get_session(server_name, user.id)
 
     if server:
         return UserServerManifest(server, nb_config.sessions.default_image, nb_config.sessions.storage.pvs_enabled), 200
