@@ -171,7 +171,7 @@ async def patch_server(
                 "value": parsed_server_options.priority_class,
             }
         ]
-        await config.k8s_client.patch_statefulset(server_name=server_name, patch=ss_patch)
+        await config.k8s_client.patch_statefulset(server_name=server_name, safe_username=user.id, patch=ss_patch)
 
     if state == PatchServerStatusEnum.Hibernated:
         # NOTE: Do nothing if server is already hibernated
@@ -243,7 +243,7 @@ async def patch_server(
                 floor(user.access_token_expires_at.timestamp()) if user.access_token_expires_at is not None else -1
             ),
         )
-        await config.k8s_client.patch_server_tokens(server_name, renku_tokens, gitlab_token)
+        await config.k8s_client.patch_server_tokens(server_name, user.id, renku_tokens, gitlab_token)
         new_server = await config.k8s_client.patch_server(server_name=server_name, safe_username=user.id, patch=patch)
 
     return UserServerManifest(new_server, config.sessions.default_image)

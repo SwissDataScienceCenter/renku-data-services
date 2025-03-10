@@ -128,13 +128,15 @@ class K8sClientProto[_SessionType, _Kr8sType](ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def patch_server_tokens(self, server_name: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken) -> None:
+    async def patch_server_tokens(
+        self, server_name: str, safe_username: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken
+    ) -> None:
         """Patch user authentication tokens in a user session."""
         raise NotImplementedError()
 
     @abstractmethod
     async def patch_statefulset(
-        self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]]
+        self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> StatefulSet | None:
         """Patch a user session."""
         raise NotImplementedError()
@@ -577,7 +579,7 @@ class _CachedK8sClient[_SessionType, _Kr8sType](_BaseK8sClient):
                 raise
 
     async def get_server(self, name: str, num_retries: int = 0) -> _SessionType | None:
-        """Get a list a server.
+        """Get a specific server by name.
 
         Attempt to use the cache first but if the cache fails then use the k8s API.
         """
@@ -723,14 +725,19 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
 
         if os.path.exists(self._kube_conf_root_dir):
             for filename in glob.glob(pathname="*.yaml", root_dir=self.kube_conf_root_dir):
-                self._clients[filename.removesuffix(".yaml")] = _SingleK8sClient(
-                    server_type,
-                    kr8s_type,
-                    kr8s.api(kubeconfig=f"{self.kube_conf_root_dir}/{filename}"),
-                    cache_url,
-                    username_label,
-                    skip_cache_if_unavailable,
-                )
+                try:
+                    self._clients[filename.removesuffix(".yaml")] = _SingleK8sClient(
+                        server_type,
+                        kr8s_type,
+                        kr8s.api(kubeconfig=f"{self.kube_conf_root_dir}/{filename}"),
+                        cache_url,
+                        username_label,
+                        skip_cache_if_unavailable,
+                    )
+                except Exception as e:
+                    logging.warning(
+                        f"Failed while loading '{self.kube_conf_root_dir}/{filename}', ignoring kube config. Error: {e}"
+                    )
         else:
             logging.warning(f"Cannot open directory '{self._kube_conf_root_dir}', ignoring kube configs...")
 
@@ -787,8 +794,12 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
 
     async def list_servers(self, safe_username: str) -> list[_SessionType]:
         """List all the user sessions visible from the safe_username."""
-        # Don't blame me, blame python's list comprehension syntax
-        return [s for c in self._clients.values() for s in await c.list_servers(safe_username)]
+        servers = []
+        for c in self._clients.values():
+            for s in await c.list_servers(safe_username):
+                servers.append(s)
+
+        return servers
 
     async def create_server(
         self, manifest: _SessionType, api_user: AnonymousAPIUser | AuthenticatedAPIUser
@@ -844,24 +855,25 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
         if client is not None:
             await client.delete_server(server_name, safe_username)
 
-    async def patch_server_tokens(self, server_name: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken) -> None:
+    async def patch_server_tokens(
+        self, server_name: str, safe_username: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken
+    ) -> None:
         """Patch user authentication tokens in a user session."""
-        # TODO: Brute force this for now, not pretty
-        for c in self._clients.values():
-            await c.patch_server_tokens(server_name, renku_tokens, gitlab_token)
+        client = self._session2client.get(server_name, safe_username)
+        if client is not None:
+            await client.patch_server_tokens(server_name, renku_tokens, gitlab_token)
 
     async def patch_statefulset(
-        self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]]
+        self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> StatefulSet | None:
         """Patch a user session."""
-        # TODO: Brute force this for now, not pretty
-        for c in self._clients.values():
-            r = await c.patch_statefulset(server_name, patch)
-            if r is not None:
-                return r
+        result = None
 
-        # If the stateful set is missing, we ignore the operation
-        return None
+        client = self._session2client.get(server_name, safe_username)
+        if client is not None:
+            result = await client.patch_statefulset(server_name, patch)
+
+        return result
 
     async def create_secret(self, secret: V1Secret) -> V1Secret:
         """Create a kubernetes secret."""
@@ -919,12 +931,14 @@ class DummyK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
         """Delete the provided user session."""
         raise NotImplementedError()
 
-    async def patch_server_tokens(self, server_name: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken) -> None:
+    async def patch_server_tokens(
+        self, server_name: str, safe_username: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken
+    ) -> None:
         """Patch user authentication tokens in a user session."""
         raise NotImplementedError()
 
     async def patch_statefulset(
-        self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]]
+        self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> StatefulSet | None:
         """Patch a user session."""
         raise NotImplementedError()
