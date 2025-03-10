@@ -517,7 +517,7 @@ class NotebooksNewBP(CustomBlueprint):
             session_id: str,
             query: apispec.SessionsSessionIdLogsGetParametersQuery,
         ) -> HTTPResponse:
-            logs = await self.nb_config.k8s_v2_client.get_server_logs(session_id, user.id, query.max_lines)
+            logs = await self.nb_config.k8s_v2_client.get_session_logs(session_id, user.id, query.max_lines)
             return json(apispec.SessionLogsResponse.model_validate(logs).model_dump(exclude_none=True))
 
         return "/sessions/<session_id>/logs", ["GET"], _handler

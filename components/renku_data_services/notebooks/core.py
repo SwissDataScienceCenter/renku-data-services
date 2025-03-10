@@ -271,7 +271,7 @@ async def server_logs(
 ) -> dict:
     """Returns the logs of the given server."""
 
-    return await config.k8s_client.get_server_logs(
+    return await config.k8s_client.get_session_logs(
         server_name=server_name,
         safe_username=user.id,
         max_log_lines=max_lines,
