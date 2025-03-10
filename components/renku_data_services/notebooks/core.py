@@ -162,7 +162,7 @@ async def patch_server(
                 }
             )
         new_server = await config.k8s_client.patch_session(
-            server_name=server_name, safe_username=user.id, patch=js_patch
+            session_name=server_name, safe_username=user.id, patch=js_patch
         )
         ss_patch: list[dict[str, Any]] = [
             {
@@ -171,7 +171,7 @@ async def patch_server(
                 "value": parsed_server_options.priority_class,
             }
         ]
-        await config.k8s_client.patch_statefulset(server_name=server_name, safe_username=user.id, patch=ss_patch)
+        await config.k8s_client.patch_statefulset(session_name=server_name, safe_username=user.id, patch=ss_patch)
 
     if state == PatchServerStatusEnum.Hibernated:
         # NOTE: Do nothing if server is already hibernated
@@ -221,7 +221,7 @@ async def patch_server(
             },
         }
 
-        new_server = await config.k8s_client.patch_session(server_name=server_name, safe_username=user.id, patch=patch)
+        new_server = await config.k8s_client.patch_session(session_name=server_name, safe_username=user.id, patch=patch)
     elif state == PatchServerStatusEnum.Running:
         # NOTE: We clear hibernation annotations in Amalthea to avoid flickering in the UI (showing
         # the repository as dirty when resuming a session for a short period of time).
@@ -244,7 +244,7 @@ async def patch_server(
             ),
         )
         await config.k8s_client.patch_session_tokens(server_name, user.id, renku_tokens, gitlab_token)
-        new_server = await config.k8s_client.patch_session(server_name=server_name, safe_username=user.id, patch=patch)
+        new_server = await config.k8s_client.patch_session(session_name=server_name, safe_username=user.id, patch=patch)
 
     return UserServerManifest(new_server, config.sessions.default_image)
 
@@ -272,7 +272,7 @@ async def server_logs(
     """Returns the logs of the given server."""
 
     return await config.k8s_client.get_session_logs(
-        server_name=server_name,
+        session_name=server_name,
         safe_username=user.id,
         max_log_lines=max_lines,
     )
