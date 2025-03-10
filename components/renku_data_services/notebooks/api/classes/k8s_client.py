@@ -125,7 +125,7 @@ class K8sClientProto[_SessionType, _Kr8sType](ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def delete_server(self, server_name: str, safe_username: str) -> None:
+    async def delete_session(self, server_name: str, safe_username: str) -> None:
         """Delete the provided user session."""
         raise NotImplementedError()
 
@@ -276,7 +276,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
             raise
         return cast(StatefulSet, sts)
 
-    async def delete_server(self, server_name: str) -> None:
+    async def delete_session(self, server_name: str) -> None:
         """Delete the server."""
         server = await self._kr8s_type(
             api=self._api, namespace=self.namespace(), resource=dict(metadata=dict(name=server_name))
@@ -669,14 +669,14 @@ class _SingleK8sClient(Generic[_SessionType, _Kr8sType]):
             )
         return await self._k8s_client.patch_session(server_name=server_name, patch=patch)
 
-    async def delete_server(self, server_name: str, safe_username: str) -> None:
+    async def delete_session(self, server_name: str, safe_username: str) -> None:
         """Delete the server."""
         server = await self.get_session(server_name, safe_username)
         if not server:
             raise errors.MissingResourceError(
                 message=f"Cannot find server {server_name} for user {safe_username} in order to delete it."
             )
-        return await self._k8s_client.delete_server(server_name)
+        return await self._k8s_client.delete_session(server_name)
 
     async def patch_session_tokens(
         self, server_name: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken
@@ -895,17 +895,17 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
             f" for user {safe_username} in order to patch it."
         )
 
-    async def delete_server(self, server_name: str, safe_username: str) -> None:
+    async def delete_session(self, server_name: str, safe_username: str) -> None:
         """Delete the provided user session."""
         # Retrieve and remove from the mapping to the k8s client for this session
         client = self._session2client.pop(server_name, None)
         if client is not None:
-            await client.delete_server(server_name, safe_username)
+            await client.delete_session(server_name, safe_username)
         else:
             found = False
             for c in self._clients.values():
                 with suppress(errors.MissingResourceError):
-                    await c.delete_server(server_name, safe_username)
+                    await c.delete_session(server_name, safe_username)
                     found = True
                     break
             if not found:
@@ -1013,7 +1013,7 @@ class DummyK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
             )
         return server
 
-    async def delete_server(self, server_name: str, safe_username: str) -> None:
+    async def delete_session(self, server_name: str, safe_username: str) -> None:
         """Delete the provided user session."""
         server = await self.get_session(server_name, safe_username)
         if server is not None:
