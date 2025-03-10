@@ -8,7 +8,7 @@ from typing import Any
 from uuid import uuid4
 
 from kubernetes import client
-from kubernetes.config import new_client_from_config
+from kubernetes.config import new_client_from_config, ConfigException
 
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface, K8sSchedudlingClientInterface
 
@@ -17,7 +17,11 @@ class K8sCoreClient(K8sCoreClientInterface):  # pragma:nocover
     """Real k8s core API client that exposes the required functions."""
 
     def __init__(self, config_file: str | None = None) -> None:
-        api = new_client_from_config(config_file=config_file)
+        try:
+            api = new_client_from_config(config_file=config_file)
+        except ConfigException:
+            api = None
+
         self.client = client.CoreV1Api(api_client=api)
 
     def read_namespaced_resource_quota(self, name: str, namespace: str, **kwargs: dict) -> Any:
@@ -57,7 +61,11 @@ class K8sSchedulingClient(K8sSchedudlingClientInterface):  # pragma:nocover
     """Real k8s scheduling API client that exposes the required functions."""
 
     def __init__(self, config_file: str | None = None) -> None:
-        api = new_client_from_config(config_file=config_file)
+        try:
+            api = new_client_from_config(config_file=config_file)
+        except ConfigException:
+            api = None
+
         self.client = client.SchedulingV1Api(api_client=api)
 
     def create_priority_class(self, body: Any, **kwargs: Any) -> Any:
