@@ -9,8 +9,6 @@ from sqlalchemy.orm import sessionmaker
 
 from renku_data_services.authz.authz import Authz
 from renku_data_services.authz.config import AuthzConfig
-from renku_data_services.data_connectors.db import DataConnectorProjectLinkRepository, DataConnectorRepository
-from renku_data_services.data_connectors.migration_utils import DataConnectorMigrationTool
 from renku_data_services.errors import errors
 from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.message_queue.db import EventRepository
@@ -32,7 +30,6 @@ class SyncConfig:
     group_repo: GroupRepository
     event_repo: EventRepository
     project_repo: ProjectRepository
-    data_connector_migration_tool: DataConnectorMigrationTool
     session_maker: Callable[..., AsyncSession]
 
     @classmethod
@@ -74,22 +71,6 @@ class SyncConfig:
             search_updates_repo=search_updates_repo,
             authz=Authz(authz_config),
         )
-        data_connector_repo = DataConnectorRepository(
-            session_maker=session_maker,
-            authz=Authz(authz_config),
-            project_repo=project_repo,
-        )
-        data_connector_project_link_repo = DataConnectorProjectLinkRepository(
-            session_maker=session_maker,
-            authz=Authz(authz_config),
-        )
-        data_connector_migration_tool = DataConnectorMigrationTool(
-            session_maker=session_maker,
-            data_connector_repo=data_connector_repo,
-            data_connector_project_link_repo=data_connector_project_link_repo,
-            project_repo=project_repo,
-            authz=Authz(authz_config),
-        )
         user_repo = UserRepo(
             session_maker=session_maker,
             message_queue=message_queue,
@@ -119,6 +100,5 @@ class SyncConfig:
             group_repo,
             event_repo,
             project_repo,
-            data_connector_migration_tool,
             session_maker,
         )

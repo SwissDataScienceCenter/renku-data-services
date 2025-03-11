@@ -22,7 +22,8 @@ from authzed.api.v1 import (
 )
 from ulid import ULID
 
-from renku_data_services.authz.authz import ResourceType, _AuthzConverter, _Relation
+from renku_data_services.authz.authz import _AuthzConverter, _Relation
+from renku_data_services.base_models.core import ResourceType
 from renku_data_services.errors import errors
 
 

@@ -10,7 +10,7 @@ from renku_data_services.errors import errors
 from renku_data_services.namespace.apispec import GroupRole
 
 if TYPE_CHECKING:
-    from renku_data_services.authz.authz import ResourceType
+    from renku_data_services.base_models.core import ResourceType
 
 
 class Role(Enum):

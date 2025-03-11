@@ -606,7 +606,7 @@ async def test_patch_data_connector_with_invalid_namespace(
         f"/api/data/data_connectors/{data_connector_id}", headers=headers, json=patch
     )
 
-    assert response.status_code == 403, response.text
+    assert response.status_code == 404, response.text
     assert "you do not have sufficient permissions" in response.json["error"]["message"]
 
 
@@ -1661,3 +1661,57 @@ async def test_number_of_inaccessible_data_connector_links_in_project(
     assert response.json["count"] == 1
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}/data_connector_links", headers=user_headers)
     assert len(response.json) == 1
+
+
+@pytest.mark.asyncio
+async def test_move_data_connector_in_project(
+    sanic_client,
+    member_1_user: UserInfo,
+    member_1_headers,
+    regular_user: UserInfo,
+    user_headers,
+) -> None:
+    # Create a public project
+    payload = {
+        "name": "prj1",
+        "namespace": member_1_user.namespace.slug,
+        "slug": "prj1",
+        "visibility": "public",
+    }
+    _, response = await sanic_client.post("/api/data/projects", headers=member_1_headers, json=payload)
+    assert response.status_code == 201, response.text
+    project_id = response.json["id"]
+
+    # Create a private data connector in the project
+    storage_config = {
+        "configuration": {"type": "s3", "endpoint": "http://s3.aws.com"},
+        "source_path": "giab",
+        "target_path": "giab",
+    }
+    payload = {
+        "name": "dc1",
+        "namespace": member_1_user.namespace.slug,
+        "slug": "dc1",
+        "storage": storage_config,
+        "visibility": "private",
+    }
+    _, response = await sanic_client.post("/api/data/data_connectors", headers=member_1_headers, json=payload)
+    assert response.status_code == 201, response.text
+    assert response.json["namespace"] == member_1_user.namespace.slug
+    dc_id = response.json["id"]
+    dc_etag = response.json["etag"]
+
+    # Link the data connector to the project
+    payload = {"project_id": project_id}
+    _, response = await sanic_client.post(
+        f"/api/data/data_connectors/{dc_id}/project_links", headers=member_1_headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+
+    # Move the data connector to the project
+    new_dc_namespace = f"{member_1_user.namespace.slug}/prj1"
+    payload = {"namespace": new_dc_namespace}
+    headers = merge_headers(member_1_headers, {"If-Match": dc_etag})
+    _, response = await sanic_client.patch(f"/api/data/data_connectors/{dc_id}", headers=headers, json=payload)
+    assert response.status_code == 200, response.text
+    assert response.json["namespace"] == new_dc_namespace

@@ -118,23 +118,6 @@ def validate_data_connector_patch(
     validator: RCloneValidator,
 ) -> models.DataConnectorPatch:
     """Validate the update to a data connector."""
-    # NOTE: The apispec must have a regex that will validate that namespace contains
-    # either 1 or 2 slugs, i.e. at least a namespace and optionally a project
-    path = EntityPath.from_string(patch.namespace) if patch.namespace else None
-    if path is None:
-        namespace = None
-        project = None
-    elif len(path) == 1:
-        namespace = path[0].value
-        project = None
-    elif len(path) == 2:
-        namespace = path[0].value
-        project = path[1].value
-    else:
-        raise errors.ValidationError(
-            message="Trying to create a data connector with more than 2 slugs in its namespace"
-        )
-
     keywords = [kw.root for kw in patch.keywords] if patch.keywords is not None else None
     storage = (
         validate_storage_patch(data_connector.storage, patch.storage, validator=validator)
@@ -144,13 +127,12 @@ def validate_data_connector_patch(
 
     return models.DataConnectorPatch(
         name=patch.name,
-        namespace=namespace,
+        namespace=patch.namespace,
         slug=patch.slug,
         visibility=Visibility(patch.visibility.value) if patch.visibility is not None else None,
         description=patch.description,
         keywords=keywords,
         storage=storage,
-        project_slug=project,
     )
 
 

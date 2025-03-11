@@ -28,14 +28,11 @@ from renku_data_services.background_jobs.core import (
     bootstrap_user_namespaces,
     fix_mismatched_project_namespace_ids,
     migrate_groups_make_all_public,
-    migrate_storages_v2_to_data_connectors,
     migrate_user_namespaces_make_all_public,
 )
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models import APIUser
 from renku_data_services.base_models.core import Slug
-from renku_data_services.data_connectors.db import DataConnectorProjectLinkRepository, DataConnectorRepository
-from renku_data_services.data_connectors.migration_utils import DataConnectorMigrationTool
 from renku_data_services.db_config import DBConfig
 from renku_data_services.errors import errors
 from renku_data_services.message_queue.config import RedisConfig
@@ -51,8 +48,6 @@ from renku_data_services.namespace.orm import NamespaceORM
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.models import UnsavedProject
 from renku_data_services.search.db import SearchUpdatesRepo
-from renku_data_services.storage.models import UnsavedCloudStorage
-from renku_data_services.storage.orm import CloudStorageORM
 from renku_data_services.users.db import UserRepo, UsersSync
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import KeycloakAdminEvent, UnsavedUserInfo, UserInfo, UserInfoFieldUpdate
@@ -86,22 +81,6 @@ def get_app_configs(db_instance: DBConfig, authz_instance: AuthzConfig):
             authz=Authz(authz_instance),
             search_updates_repo=search_updates_repo,
         )
-        data_connector_repo = DataConnectorRepository(
-            session_maker=db_instance.async_session_maker,
-            authz=Authz(authz_instance),
-            project_repo=project_repo,
-        )
-        data_connector_project_link_repo = DataConnectorProjectLinkRepository(
-            session_maker=db_instance.async_session_maker,
-            authz=Authz(authz_instance),
-        )
-        data_connector_migration_tool = DataConnectorMigrationTool(
-            session_maker=db_instance.async_session_maker,
-            data_connector_repo=data_connector_repo,
-            data_connector_project_link_repo=data_connector_project_link_repo,
-            project_repo=project_repo,
-            authz=Authz(authz_instance),
-        )
         user_repo = UserRepo(
             db_instance.async_session_maker,
             message_queue=message_queue,
@@ -126,7 +105,6 @@ def get_app_configs(db_instance: DBConfig, authz_instance: AuthzConfig):
             group_repo=group_repo,
             event_repo=event_repo,
             project_repo=project_repo,
-            data_connector_migration_tool=data_connector_migration_tool,
             session_maker=db_instance.async_session_maker,
         )
         run_migrations_for_app("common")
@@ -250,7 +228,6 @@ async def test_total_users_sync(
             kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
             created_by="user-1-id",
-            path=["user-1"],
         ),
     )
     user2 = UserInfo(
@@ -264,7 +241,6 @@ async def test_total_users_sync(
             kind=NamespaceKind.user,
             underlying_resource_id="user-2-id",
             created_by="user-2-id",
-            path=["user-2"],
         ),
     )
     assert admin_user.id
@@ -279,7 +255,6 @@ async def test_total_users_sync(
             kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
             created_by=admin_user.id,
-            path=["admin"],
         ),
     )
     user_roles = {admin_user.id: get_kc_roles(["renku-admin"])}
@@ -312,13 +287,13 @@ async def test_total_users_sync(
     )
     assert len(nss) == 1
     assert user1.email
-    assert nss[0].slug == user1.email.split("@")[0]
+    assert nss[0].last.slug == user1.email.split("@")[0]
     nss, _ = await sync_config.syncer.group_repo.get_namespaces(
         user=APIUser(id=user2.id), pagination=PaginationRequest(1, 100)
     )
     assert len(nss) == 1
     assert user2.email
-    assert nss[0].slug == user2.email.split("@")[0]
+    assert nss[0].last.slug == user2.email.split("@")[0]
 
 
 @pytest.mark.asyncio
@@ -335,7 +310,6 @@ async def test_user_events_update(get_app_configs, admin_user: APIUser) -> None:
             created_by="user-1-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["john.doe"],
         ),
     )
     assert admin_user.id
@@ -350,7 +324,6 @@ async def test_user_events_update(get_app_configs, admin_user: APIUser) -> None:
             created_by=admin_user.id,
             kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin-user"],
         ),
     )
     kc_api.users = get_kc_users([user1])
@@ -377,7 +350,6 @@ async def test_user_events_update(get_app_configs, admin_user: APIUser) -> None:
             created_by="user-2-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-2-id",
-            path=["jane.doe"],
         ),
     )
     user1_update = UserInfoFieldUpdate("user-1-id", datetime.utcnow(), "first_name", "Johnathan")
@@ -398,7 +370,7 @@ async def test_user_events_update(get_app_configs, admin_user: APIUser) -> None:
     )
     assert len(nss) == 1
     assert user2.email
-    assert nss[0].slug == user2.email.split("@")[0]
+    assert nss[0].last.slug == user2.email.split("@")[0]
 
 
 @pytest.mark.asyncio
@@ -415,7 +387,6 @@ async def test_admin_events(get_app_configs, admin_user: APIUser) -> None:
             created_by="user-1-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["john.doe"],
         ),
     )
     user2 = UserInfo(
@@ -429,7 +400,6 @@ async def test_admin_events(get_app_configs, admin_user: APIUser) -> None:
             created_by="user-2-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-2-id",
-            path=["jane.doe"],
         ),
     )
     assert admin_user.id
@@ -444,7 +414,6 @@ async def test_admin_events(get_app_configs, admin_user: APIUser) -> None:
             created_by=admin_user.id,
             kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin-user"],
         ),
     )
     kc_api.users = get_kc_users([user1, user2, admin_user_info])
@@ -462,7 +431,7 @@ async def test_admin_events(get_app_configs, admin_user: APIUser) -> None:
     )
     assert len(nss) == 1
     assert user2.email
-    assert nss[0].slug == user2.email.split("@")[0]
+    assert nss[0].last.slug == user2.email.split("@")[0]
     db_users = await user_repo.get_users(admin_user)
     assert set(u.id for u in kc_users) == set(u.id for u in db_users)
     # Add admin events
@@ -495,7 +464,6 @@ async def test_events_update_error(get_app_configs, admin_user: APIUser) -> None
             created_by="user-1-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["john.doe"],
         ),
     )
     user2 = UserInfo(
@@ -509,7 +477,6 @@ async def test_events_update_error(get_app_configs, admin_user: APIUser) -> None
             created_by="user-2-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-2-id",
-            path=["jane.doe"],
         ),
     )
     assert admin_user.id
@@ -524,7 +491,6 @@ async def test_events_update_error(get_app_configs, admin_user: APIUser) -> None
             created_by=admin_user.id,
             kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin-user"],
         ),
     )
     kc_api.users = get_kc_users([user1, user2])
@@ -580,7 +546,6 @@ async def test_removing_non_existent_user(get_app_configs, admin_user: APIUser) 
             created_by="user-1-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["john.doe"],
         ),
     )
     non_existent_user = UserInfo(
@@ -594,7 +559,6 @@ async def test_removing_non_existent_user(get_app_configs, admin_user: APIUser) 
             created_by="noone",
             kind=NamespaceKind.user,
             underlying_resource_id="non-existent-id",
-            path=["not.exist"],
         ),
     )
     assert admin_user.id
@@ -609,7 +573,6 @@ async def test_removing_non_existent_user(get_app_configs, admin_user: APIUser) 
             created_by=admin_user.id,
             kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin-user"],
         ),
     )
     kc_api.users = get_kc_users([user1, admin_user_info])
@@ -649,7 +612,6 @@ async def test_avoiding_namespace_slug_duplicates(
                 created_by=f"user-{i}-id",
                 kind=NamespaceKind.user,
                 underlying_resource_id=f"user-{i}-id",
-                path=["john.doe"],
             ),
         )
         for i in range(1, num_users + 1)
@@ -666,7 +628,6 @@ async def test_avoiding_namespace_slug_duplicates(
             created_by=admin_user.id,
             kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin"],
         ),
     )
     kc_api.users = get_kc_users(users + [admin_user_info])
@@ -682,11 +643,11 @@ async def test_avoiding_namespace_slug_duplicates(
         ns = nss[0]
         assert user.email
         prefix = user.email.split("@")[0]
-        if re.match(rf"^{re.escape(prefix)}-[a-z0-9]{{8}}$", ns.slug):
+        if re.match(rf"^{re.escape(prefix)}-[a-z0-9]{{8}}$", ns.last.slug):
             random_count += 1
-        elif re.match(rf"^{re.escape(prefix)}-[1-5]$", ns.slug):
+        elif re.match(rf"^{re.escape(prefix)}-[1-5]$", ns.last.slug):
             enumerated_count += 1
-        elif ns.slug == prefix:
+        elif ns.last.slug == prefix:
             original_count += 1
     assert original_count == 1
     assert enumerated_count == 5
@@ -707,7 +668,6 @@ async def test_authz_admin_sync(get_app_configs, admin_user: APIUser) -> None:
             created_by="user-1-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["john.doe"],
         ),
     )
     assert admin_user.id
@@ -722,7 +682,6 @@ async def test_authz_admin_sync(get_app_configs, admin_user: APIUser) -> None:
             created_by=admin_user.id,
             kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin-user"],
         ),
     )
     kc_api.users = get_kc_users([user1, admin_user_info])
@@ -778,7 +737,6 @@ async def test_bootstraping_user_namespaces(get_app_configs, admin_user: APIUser
             created_by="user-1-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["john.doe"],
         ),
     )
     user2 = UserInfo(
@@ -792,7 +750,6 @@ async def test_bootstraping_user_namespaces(get_app_configs, admin_user: APIUser
             created_by="user-2-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-2-id",
-            path=["jane.doe"],
         ),
     )
     assert admin_user.id
@@ -835,7 +792,6 @@ async def test_fixing_project_group_namespace_relations(
             created_by=admin_user.id,
             kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin-user"],
         ),
     )
     user1 = UserInfo(
@@ -849,7 +805,6 @@ async def test_fixing_project_group_namespace_relations(
             created_by="user-1-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["john.doe"],
         ),
     )
     user2 = UserInfo(
@@ -863,7 +818,6 @@ async def test_fixing_project_group_namespace_relations(
             created_by="user-2-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-2-id",
-            path=["jane.doe"],
         ),
     )
     user1_api = APIUser(is_admin=False, id=user1.id, access_token="access_token")
@@ -929,7 +883,6 @@ async def test_migrate_groups_make_all_public(
             created_by=admin_user.id,
             kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin-user"],
         ),
     )
     user = UserInfo(
@@ -943,7 +896,6 @@ async def test_migrate_groups_make_all_public(
             created_by="user-1-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["john.doe"],
         ),
     )
     user_api = APIUser(is_admin=False, id=user.id, access_token="access_token")
@@ -993,7 +945,6 @@ async def test_migrate_user_namespaces_make_all_public(
             created_by=admin_user.id,
             kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin-user"],
         ),
     )
     user = UserInfo(
@@ -1007,7 +958,6 @@ async def test_migrate_user_namespaces_make_all_public(
             created_by="user-1-id",
             kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["john.doe"],
         ),
     )
     anon_user_api = APIUser(is_admin=False)
@@ -1036,85 +986,3 @@ async def test_migrate_user_namespaces_make_all_public(
     assert ns.slug == "john.doe"
     assert ns.kind.value == "user"
     assert ns.created_by == user.id
-
-
-@pytest.mark.asyncio
-async def test_migrate_storages_v2(get_app_configs: Callable[..., tuple[SyncConfig, UserRepo]], admin_user: APIUser):
-    admin_user_info = UserInfo(
-        id=admin_user.id,
-        first_name=admin_user.first_name,
-        last_name=admin_user.last_name,
-        email=admin_user.email,
-        namespace=Namespace(
-            id=ULID(),
-            slug="admin-user",
-            created_by=admin_user.id,
-            kind=NamespaceKind.user,
-            underlying_resource_id=admin_user.id,
-            path=["admin-user"],
-        ),
-    )
-    user = UserInfo(
-        id="user-1-id",
-        first_name="Jane",
-        last_name="Doe",
-        email="jane.doe@gmail.com",
-        namespace=Namespace(
-            id=ULID(),
-            slug="jane.doe",
-            created_by="user-1-id",
-            kind=NamespaceKind.user,
-            underlying_resource_id="user-1-id",
-            path=["jane.doe"],
-        ),
-    )
-    user_api = APIUser(is_admin=False, id=user.id, access_token="access_token")
-    user_roles = {admin_user.id: get_kc_roles(["renku-admin"])}
-    kc_api = DummyKeycloakAPI(users=get_kc_users([admin_user_info, user]), user_roles=user_roles)
-    sync_config, _ = get_app_configs(kc_api)
-    # Sync users
-    await sync_config.syncer.users_sync(kc_api)
-
-    # Create a project and a storage_v2 attached to it
-    project_payload = UnsavedProject(
-        name="project-1", slug="project-1", namespace=user.namespace.slug, created_by=user.id, visibility="private"
-    )
-    project = await sync_config.project_repo.insert_project(user_api, project_payload)
-    unsaved_storage = UnsavedCloudStorage.from_url(
-        storage_url="s3://my-bucket",
-        name="storage-1",
-        readonly=True,
-        project_id=str(project.id),
-        target_path="my_data",
-    )
-    storage_orm = CloudStorageORM.load(unsaved_storage)
-    async with sync_config.session_maker() as session, session.begin():
-        session.add(storage_orm)
-    storage_v2 = storage_orm.dump()
-
-    await migrate_storages_v2_to_data_connectors(sync_config)
-
-    # After the migration, there is a new data connector
-    data_connector_repo = sync_config.data_connector_migration_tool.data_connector_repo
-    data_connectors, data_connectors_count = await data_connector_repo.get_data_connectors(
-        user=user_api,
-        pagination=PaginationRequest(1, 100),
-    )
-    assert data_connectors is not None
-    assert data_connectors_count == 1
-    data_connector = data_connectors[0]
-    assert data_connector.name == storage_v2.name
-    assert data_connector.storage.storage_type == storage_v2.storage_type
-    assert data_connector.storage.readonly == storage_v2.readonly
-    assert data_connector.storage.source_path == storage_v2.source_path
-    assert data_connector.storage.target_path == storage_v2.target_path
-    assert data_connector.created_by == user.id
-
-    data_connector_project_link_repo = sync_config.data_connector_migration_tool.data_connector_project_link_repo
-    links = await data_connector_project_link_repo.get_links_to(user=user_api, project_id=project.id)
-    assert links is not None
-    assert len(links) == 1
-    link = links[0]
-    assert link.project_id == project.id
-    assert link.data_connector_id == data_connector.id
-    assert link.created_by == user.id
