@@ -2,7 +2,19 @@
 
 from ulid import ULID
 
-from renku_data_services.search.user_query import Helper, IdIs, Nel, Order, OrderBy, PartialDate, PartialDateTime, PartialTime, SortableField, TypeIs
+from components.renku_data_services.search.user_query import DateTimeCalc, RelativeDate
+from renku_data_services.search.user_query import (
+    Helper,
+    IdIs,
+    Nel,
+    Order,
+    OrderBy,
+    PartialDate,
+    PartialDateTime,
+    PartialTime,
+    SortableField,
+    TypeIs,
+)
 from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.solr_client import SortDirection
 
@@ -77,6 +89,7 @@ def test_partial_time_render() -> None:
     assert PartialTime(12, 30).render() == "12:30"
     assert PartialTime(12, 30, 15).render() == "12:30:15"
 
+
 def test_partial_time_min_max() -> None:
     assert str(PartialTime(12).max()) == "12:59:59"
     assert str(PartialTime(12).min()) == "12:00:00"
@@ -85,6 +98,29 @@ def test_partial_time_min_max() -> None:
     assert str(PartialTime(12, 30, 15).max()) == "12:30:15"
     assert str(PartialTime(12, 30, 15).min()) == "12:30:15"
 
+
 def test_partial_datetime_render() -> None:
     assert PartialDateTime(PartialDate(2022)).render() == "2022"
     assert PartialDateTime(PartialDate(2022), PartialTime(8)).render() == "2022T08"
+
+
+def test_relative_date() -> None:
+    assert RelativeDate.today.render() == "today"
+    assert RelativeDate.yesterday.render() == "yesterday"
+
+
+def test_datetime_calc() -> None:
+    d = DateTimeCalc(PartialDateTime(PartialDate(2022)), 5, False)
+    assert d.render() == "2022+5d"
+
+    d = DateTimeCalc(PartialDateTime(PartialDate(2022), PartialTime(8)), 5, False)
+    assert d.render() == "2022T08+5d"
+
+    d = DateTimeCalc(PartialDateTime(PartialDate(2022, 5)), -5, False)
+    assert d.render() == "2022-05-5d"
+
+    d = DateTimeCalc(RelativeDate.today, -7, False)
+    assert d.render() == "today-7d"
+
+    d = DateTimeCalc(RelativeDate.yesterday, 7, False)
+    assert d.render() == "yesterday+7d"
