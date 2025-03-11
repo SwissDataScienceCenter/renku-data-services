@@ -1,14 +1,27 @@
 """Tests for the query parser."""
 
-from parsy import ParseError
+import datetime
+
 import pytest
-from renku_data_services.search.user_query import Comparison, Nel, OrderBy, SortableField, TypeIs
-from renku_data_services.search.user_query_parser import ParsePrimitives
+from parsy import ParseError
+
+from renku_data_services.search.user_query import (
+    Comparison,
+    DateTimeCalc,
+    Nel,
+    OrderBy,
+    PartialDate,
+    PartialDateTime,
+    PartialTime,
+    RelativeDate,
+    SortableField,
+    TypeIs,
+)
+from renku_data_services.search.user_query_parser import _DateTimeParser, _ParsePrimitives
 from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.solr_client import SortDirection
 
-
-pp = ParsePrimitives()
+pp = _ParsePrimitives()
 
 
 def test_sortable_field() -> None:
@@ -94,6 +107,7 @@ def test_type_is() -> None:
     assert pp.type_is.parse("type:Project,Group") == TypeIs(Nel.of(EntityType.project, EntityType.group))
     assert pp.type_is.parse("type:Project, Group") == TypeIs(Nel.of(EntityType.project, EntityType.group))
 
+
 def test_string_basic() -> None:
     assert pp.string_basic.parse("abcde") == "abcde"
     assert pp.string_basic.parse("project_one") == "project_one"
@@ -105,11 +119,13 @@ def test_string_basic() -> None:
     with pytest.raises(ParseError):
         pp.string_basic.parse('a"b"')
 
+
 def test_string_quoted() -> None:
     assert pp.string_quoted.parse('"abc"') == "abc"
     assert pp.string_quoted.parse('"a b c"') == "a b c"
     assert pp.string_quoted.parse('"a,b,c"') == "a,b,c"
     assert pp.string_quoted.parse('"a and \\"b\\" and c"') == 'a and "b" and c'
+
 
 def test_string_value() -> None:
     assert pp.string_value.parse("abc") == "abc"
@@ -117,6 +133,159 @@ def test_string_value() -> None:
     assert pp.string_value.parse('"a,b,c"') == "a,b,c"
     assert pp.string_value.parse('"a and \\"b\\" and c"') == 'a and "b" and c'
 
+
 def test_string_values() -> None:
     assert pp.string_values.parse("a,b") == Nel.of("a", "b")
     assert pp.string_values.parse('a,"b c",d') == Nel.of("a", "b c", "d")
+
+
+dp = _DateTimeParser()
+
+
+def test_year() -> None:
+    assert dp.year.parse("2022") == 2022
+    assert dp.year.parse("1955") == 1955
+
+    with pytest.raises(ParseError):
+        dp.year.parse("098")
+
+    with pytest.raises(ParseError):
+        dp.year.parse("abc")
+
+    with pytest.raises(ParseError):
+        dp.year.parse("80")
+
+    with pytest.raises(ParseError):
+        dp.year.parse("8")
+
+
+def test_month() -> None:
+    assert dp.month.parse("1") == 1
+    assert dp.month.parse("01") == 1
+    assert dp.month.parse("12") == 12
+    assert dp.month.parse("8") == 8
+
+    with pytest.raises(ParseError):
+        dp.month.parse("0")
+    with pytest.raises(ParseError):
+        dp.month.parse("-1")
+    with pytest.raises(ParseError):
+        dp.month.parse("15")
+    with pytest.raises(ParseError):
+        dp.month.parse("13")
+
+
+def test_day() -> None:
+    assert dp.dom.parse("1") == 1
+    assert dp.dom.parse("01") == 1
+    assert dp.dom.parse("12") == 12
+    assert dp.dom.parse("8") == 8
+    assert dp.dom.parse("31") == 31
+
+    with pytest.raises(ParseError):
+        dp.dom.parse("0")
+    with pytest.raises(ParseError):
+        dp.dom.parse("-1")
+    with pytest.raises(ParseError):
+        dp.dom.parse("32")
+
+
+def test_hour() -> None:
+    assert dp.hour.parse("1") == 1
+    assert dp.hour.parse("01") == 1
+    assert dp.hour.parse("0") == 0
+    assert dp.hour.parse("8") == 8
+    assert dp.hour.parse("23") == 23
+
+    with pytest.raises(ParseError):
+        dp.hour.parse("24")
+    with pytest.raises(ParseError):
+        dp.hour.parse("-1")
+    with pytest.raises(ParseError):
+        dp.hour.parse("abc")
+
+
+def test_minsec() -> None:
+    assert dp.minsec.parse("1") == 1
+    assert dp.minsec.parse("01") == 1
+    assert dp.minsec.parse("0") == 0
+    assert dp.minsec.parse("00") == 0
+    assert dp.minsec.parse("8") == 8
+    assert dp.minsec.parse("59") == 59
+
+    with pytest.raises(ParseError):
+        dp.minsec.parse("60")
+    with pytest.raises(ParseError):
+        dp.minsec.parse("-1")
+    with pytest.raises(ParseError):
+        dp.minsec.parse("abc")
+
+
+def test_partial_date() -> None:
+    assert dp.partial_date.parse("2022") == PartialDate(2022)
+    assert dp.partial_date.parse("2024-05") == PartialDate(2024, 5, None)
+
+    with pytest.raises(ParseError):
+        dp.partial_date.parse("2020-05-01T08:00")
+    with pytest.raises(ParseError):
+        dp.partial_date.parse("-05-01")
+    with pytest.raises(ParseError):
+        dp.partial_date.parse("05-01")
+    with pytest.raises(ParseError):
+        dp.partial_date.parse("2023-15-01")
+
+
+def test_partial_time() -> None:
+    assert dp.partial_time.parse("08:10") == PartialTime(8, 10, None)
+    assert dp.partial_time.parse("08") == PartialTime(8)
+    assert dp.partial_time.parse("8") == PartialTime(8)
+    assert dp.partial_time.parse("8:5") == PartialTime(8, 5, None)
+    assert dp.partial_time.parse("08:55:10") == PartialTime(8, 55, 10)
+
+    with pytest.raises(ParseError):
+        dp.partial_time.parse("2020-05-01T08:00")
+    with pytest.raises(ParseError):
+        dp.partial_time.parse("56:56")
+    with pytest.raises(ParseError):
+        dp.partial_time.parse("000:15")
+
+
+def test_parital_datetime() -> None:
+    assert dp.partial_datetime.parse("2022") == PartialDateTime(PartialDate(2022))
+    assert dp.partial_datetime.parse("2024-05") == PartialDateTime(PartialDate(2024, 5, None))
+    assert dp.partial_datetime.parse("2024-05T8") == PartialDateTime(PartialDate(2024, 5), PartialTime(8))
+    assert dp.partial_datetime.parse("2025-03-01T12Z") == PartialDateTime(
+        PartialDate(2025, 3, 1), PartialTime(12), datetime.UTC
+    )
+
+
+def test_relative_date() -> None:
+    assert dp.relative_date.parse("today") == RelativeDate.today
+    assert dp.relative_date.parse("yesterday") == RelativeDate.yesterday
+
+
+def test_datetime_calc() -> None:
+    assert dp.datetime_calc.parse("2022-05+10d") == DateTimeCalc(PartialDateTime(PartialDate(2022, 5)), 10, False)
+    assert dp.datetime_calc.parse("today-5d") == DateTimeCalc(RelativeDate.today, -5, False)
+    assert dp.datetime_calc.parse("yesterday/8D") == DateTimeCalc(RelativeDate.yesterday, 8, True)
+
+    with pytest.raises(ParseError):
+        dp.datetime_calc.parse("today+-10d")
+    with pytest.raises(ParseError):
+        dp.datetime_calc.parse("today/-10d")
+
+
+def test_datetime_ref() -> None:
+    assert dp.datetime_ref.parse("2022-05+10d") == DateTimeCalc(PartialDateTime(PartialDate(2022, 5)), 10, False)
+    assert dp.datetime_ref.parse("today-5d") == DateTimeCalc(RelativeDate.today, -5, False)
+    assert dp.datetime_ref.parse("yesterday/8D") == DateTimeCalc(RelativeDate.yesterday, 8, True)
+
+    assert dp.datetime_ref.parse("today") == RelativeDate.today
+    assert dp.datetime_ref.parse("yesterday") == RelativeDate.yesterday
+
+    assert dp.datetime_ref.parse("2022") == PartialDateTime(PartialDate(2022))
+    assert dp.datetime_ref.parse("2024-05") == PartialDateTime(PartialDate(2024, 5, None))
+    assert dp.datetime_ref.parse("2024-05T8") == PartialDateTime(PartialDate(2024, 5), PartialTime(8))
+    assert dp.datetime_ref.parse("2025-03-01T12Z") == PartialDateTime(
+        PartialDate(2025, 3, 1), PartialTime(12), datetime.UTC
+    )
