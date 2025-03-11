@@ -8,12 +8,13 @@ import logging
 import os
 from abc import ABC, abstractmethod
 from contextlib import suppress
-from typing import Any, Final, Generic, Optional, TypeVar, cast
+from typing import Any, Final, Generic, Optional, TypeVar, Union, cast
 from urllib.parse import urljoin
 
 import httpx
 import kr8s
 import kubernetes
+import yaml
 from box.box import Box
 from expiringdict import ExpiringDict
 from kr8s import NotFoundError, ServerError
@@ -697,6 +698,82 @@ class _SingleK8sClient(Generic[_SessionType, _Kr8sType]):
         await self._k8s_client.delete_secret(name)
 
 
+class _KubeConfig:
+    def __init__(
+        self,
+        kubeconfig: str | None = None,
+        current_context: str | None = None,
+        ns: str | None = None,
+        user: str | None = None,
+        cluster_name: str | None = None,
+        cluster: Any = None,
+        server: str | None = None,
+        tls: str | None = None,
+    ) -> None:
+        self._kubeconfig = kubeconfig
+        self._ns = ns
+        self._user = user
+        self._cluster_name = cluster_name
+        self._cluster = cluster
+        self._server = server
+        self._tls = tls
+        self._current_context = current_context
+
+    def api(self) -> Union[kr8s.Api, kr8s._AsyncApi]:
+        return kr8s.api(
+            url=self._server,
+            kubeconfig=self._kubeconfig,
+            serviceaccount=self._user,
+            namespace=self._ns,
+            context=self._current_context,
+        )
+
+
+class _KubeConfigEnv(_KubeConfig):
+    def __init__(self) -> None:
+        super().__init__()
+        self._ns = os.environ.get("K8S_NAMESPACE", "default")
+
+
+class _KubeConfigYaml(_KubeConfig):
+    def __init__(self, kubeconfig: str) -> None:
+        super().__init__(kubeconfig=kubeconfig)
+
+        with open(kubeconfig) as stream:
+            self._conf = yaml.safe_load(stream)
+
+        self._current_context = self._get_current_context()
+        if self._current_context is not None:
+            self._ns = self._current_context.get("namespace", None)
+            self._user = self._current_context.get("user", None)
+            self._cluster_name = self._current_context.get("cluster", None)
+            self._cluster = self._get_cluster()
+
+        if self._cluster is not None:
+            self._server = self._cluster.get("server", None)
+            self._tls = self._cluster.get("certificate-authority-data", None)
+
+    def _get_current_context(self) -> Any | None:
+        contexts = self._conf.get("contexts", [])
+        current_context = self._conf.get("current-context", None)
+        if current_context is not None:
+            for e in contexts:
+                name = e.get("name", None)
+                if name is not None and name == current_context:
+                    return e.get("context", None)
+
+        return None
+
+    def _get_cluster(self) -> Any | None:
+        if self._current_context is not None and self._cluster_name is not None:
+            clusters = self._conf.get("clusters", [])
+            for cluster in clusters:
+                name = cluster.get("name", None)
+                if name is not None and name == self._cluster_name:
+                    return cluster
+        return None
+
+
 class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
     """Multiple Kubernetes cluster client wrapper."""
 
@@ -717,7 +794,7 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
         self._clients[DEFAULT_K8S_CLUSTER] = _SingleK8sClient(
             server_type,
             kr8s_type,
-            kr8s.api(),
+            _KubeConfigEnv().api(),
             cache_url,
             username_label,
             skip_cache_if_unavailable,
@@ -729,7 +806,7 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
                     self._clients[filename.removesuffix(".yaml")] = _SingleK8sClient(
                         server_type,
                         kr8s_type,
-                        kr8s.api(kubeconfig=f"{self.kube_conf_root_dir}/{filename}"),
+                        _KubeConfigYaml(kubeconfig=f"{self.kube_conf_root_dir}/{filename}").api(),
                         cache_url,
                         username_label,
                         skip_cache_if_unavailable,
