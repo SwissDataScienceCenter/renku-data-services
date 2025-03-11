@@ -4,7 +4,6 @@ import asyncio
 import base64
 import glob
 import json
-import logging
 import os
 from abc import ABC, abstractmethod
 from contextlib import suppress
@@ -20,6 +19,7 @@ from expiringdict import ExpiringDict
 from kr8s import NotFoundError, ServerError
 from kr8s.asyncio.objects import APIObject, Pod, Secret, StatefulSet
 from kubernetes.client import V1Secret
+from sanic.log import logger
 
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser
 from renku_data_services.crc.db import ResourcePoolRepository
@@ -221,7 +221,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
         try:
             await js.create()
         except ServerError as e:
-            logging.exception(f"Cannot start server {server_name} because of {e}")
+            logger.exception(f"Cannot start server {server_name} because of {e}")
             raise CannotStartServerError(
                 message=f"Cannot start the session {server_name}",
             )
@@ -249,7 +249,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
         try:
             await server.patch(patch, type=patch_type)
         except ServerError as e:
-            logging.exception(f"Cannot patch server {server_name} because of {e}")
+            logger.exception(f"Cannot patch server {server_name} because of {e}")
             raise PatchServerError()
 
         return self._server_type.model_validate(server.to_dict())
@@ -283,7 +283,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
         try:
             await server.delete(propagation_policy="Foreground")
         except ServerError as e:
-            logging.exception(f"Cannot delete server {server_name} because of {e}")
+            logger.exception(f"Cannot delete server {server_name} because of {e}")
             raise DeleteServerError()
         return None
 
@@ -296,7 +296,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
         except ServerError as err:
             if err.response is not None and err.response.status_code == 429:
                 retry_after_sec = err.response.headers.get("Retry-After")
-                logging.warning(
+                logger.warning(
                     "Received 429 status code from k8s when getting server "
                     f"will wait for {retry_after_sec} seconds and retry"
                 )
@@ -304,7 +304,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
                     await asyncio.sleep(int(retry_after_sec))
                     return await self.get_server(name, num_retries=num_retries + 1)
             if err.response is None or err.response.status_code not in [400, 404]:
-                logging.exception(f"Cannot get server {name} because of {err}")
+                logger.exception(f"Cannot get server {name} because of {err}")
                 raise IntermittentError(f"Cannot get server {name} from the k8s API.")
             return None
         return self._server_type.model_validate(server.to_dict())
@@ -324,7 +324,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
 
         except ServerError as err:
             if err.response is None or err.response.status_code not in [400, 404]:
-                logging.exception(f"Cannot list servers because of {err}")
+                logger.exception(f"Cannot list servers because of {err}")
                 raise IntermittentError(f"Cannot list servers from the k8s API with selector {label_selector}.")
             return []
         output: list[_SessionType] = [self._server_type.model_validate(server.to_dict()) for server in servers]
@@ -511,10 +511,10 @@ class _ServerCache(Generic[_SessionType]):
         try:
             res = await self.client.get(url, timeout=10)
         except httpx.RequestError as err:
-            logging.warning(f"Jupyter server cache at {url} cannot be reached: {err}")
+            logger.warning(f"Jupyter server cache at {url} cannot be reached: {err}")
             raise JSCacheError("The jupyter server cache is not available")
         if res.status_code != 200:
-            logging.warning(
+            logger.warning(
                 f"Listing servers at {url} from "
                 f"jupyter server cache failed with status code: {res.status_code} "
                 f"and body: {res.text}"
@@ -529,10 +529,10 @@ class _ServerCache(Generic[_SessionType]):
         try:
             res = await self.client.get(url, timeout=10)
         except httpx.RequestError as err:
-            logging.warning(f"Jupyter server cache at {url} cannot be reached: {err}")
+            logger.warning(f"Jupyter server cache at {url} cannot be reached: {err}")
             raise JSCacheError("The jupyter server cache is not available")
         if res.status_code != 200:
-            logging.warning(
+            logger.warning(
                 f"Reading server at {url} from "
                 f"jupyter server cache failed with status code: {res.status_code} "
                 f"and body: {res.text}"
@@ -574,7 +574,7 @@ class _CachedK8sClient[_SessionType, _Kr8sType](_BaseK8sClient):
             return await self._cache.list_servers(safe_username)
         except JSCacheError:
             if self._skip_cache_if_unavailable:
-                logging.warning(f"Skipping the cache to list servers for user: {safe_username}")
+                logger.warning(f"Skipping the cache to list servers for user: {safe_username}")
                 return await super().list_servers(safe_username)
             else:
                 raise
@@ -777,12 +777,13 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
                         username_label,
                         skip_cache_if_unavailable,
                     )
+                    logger.info(f"Successfully loaded Kubernetes config: '{self.kube_conf_root_dir}/{filename}'")
                 except Exception as e:
-                    logging.warning(
+                    logger.warning(
                         f"Failed while loading '{self.kube_conf_root_dir}/{filename}', ignoring kube config. Error: {e}"
                     )
         else:
-            logging.warning(f"Cannot open directory '{self._kube_conf_root_dir}', ignoring kube configs...")
+            logger.warning(f"Cannot open directory '{self._kube_conf_root_dir}', ignoring kube configs...")
 
         # maps session/server name to k8s client
         self._session2client: ExpiringDict[str, _SingleK8sClient[_SessionType, _Kr8sType]] = ExpiringDict(
