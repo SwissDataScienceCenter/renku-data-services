@@ -245,6 +245,23 @@ async def test_project_creation_with_duplicate_repositories(sanic_client, user_h
 
 
 @pytest.mark.asyncio
+async def test_project_creation_with_invalid_repository(sanic_client, user_headers, regular_user) -> None:
+    namespace = regular_user.namespace.slug
+    payload = {
+        "name": "My Project",
+        "namespace": namespace,
+        "repositories": [
+            "git@github.com:SwissDataScienceCenter/renku-data-services.git",
+        ],
+    }
+
+    _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
+
+    assert response.status_code == 422, response.text
+    assert "is not a valid HTTP or HTTPS URL" in response.json["error"]["message"]
+
+
+@pytest.mark.asyncio
 async def test_get_a_project(create_project, get_project) -> None:
     # Create some projects
     await create_project("Project 1")
