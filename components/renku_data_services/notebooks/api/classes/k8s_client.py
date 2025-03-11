@@ -760,7 +760,7 @@ class _KubeConfigYaml(_KubeConfig):
             for context in contexts:
                 name = context.get("name", None)
                 if name is not None and name == current_context:
-                    return context
+                    return context.get("context", None)
 
         return None
 
