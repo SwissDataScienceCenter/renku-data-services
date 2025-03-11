@@ -547,7 +547,7 @@ class _ServerCache(Generic[_SessionType]):
 
 
 class _CachedK8sClient[_SessionType, _Kr8sType](_BaseK8sClient):
-    """Cached K8s client. NB: Not everything is cached at the moment."""
+    """Cached K8s client. NB: only the overloaded methods are going through the cache."""
 
     def __init__(
         self,
