@@ -205,7 +205,7 @@ def _validate_repository(repository: str) -> str:
     stripped = repository.strip()
     parsed = urlparse(stripped)
     if parsed.scheme != "http" and parsed.scheme != "https":
-        raise errors.ValidationError(message=f"The repository URL {repository} is not a valid HTTP or HTTPS URL.")
+        raise errors.ValidationError(message=f'The repository URL "{repository}" is not a valid HTTP or HTTPS URL.')
     return stripped
 
 
