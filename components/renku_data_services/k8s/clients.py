@@ -8,7 +8,7 @@ from typing import Any
 from uuid import uuid4
 
 from kubernetes import client
-from kubernetes.config import new_client_from_config, ConfigException
+from kubernetes.config import ConfigException, new_client_from_config
 
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface, K8sSchedudlingClientInterface
 
