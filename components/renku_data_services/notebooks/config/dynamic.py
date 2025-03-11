@@ -206,7 +206,7 @@ class _CustomCaCertsConfig:
     def from_env(cls) -> Self:
         return cls(
             image=os.environ.get("NB_SESSIONS__CA_CERTS__IMAGE", "renku/certificates:0.0.2"),
-            path=os.environ.get("NB_SESSIONS__CA_CERTS__PATH", "/auth/realms/Renku/.well-known/openid-configuration"),
+            path=os.environ.get("NB_SESSIONS__CA_CERTS__PATH", "/usr/local/share/ca-certificates"),
             secrets=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__CA_CERTS__SECRETS", "[]"))),
         )
 
