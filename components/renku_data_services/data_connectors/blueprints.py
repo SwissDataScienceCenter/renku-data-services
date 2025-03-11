@@ -115,7 +115,10 @@ class DataConnectorsBP(CustomBlueprint):
         return "/data_connectors/<data_connector_id:ulid>", ["GET"], _get_one
 
     def get_one_by_slug(self) -> BlueprintFactoryResponse:
-        """Get a specific data connector by namespace/entity slug."""
+        """Get a specific data connector by namespace/entity slug.
+
+        This will not find or return data connectors owned by projects.
+        """
 
         @authenticate(self.authenticator)
         @extract_if_none_match
