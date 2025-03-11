@@ -180,14 +180,24 @@ def test_segment() -> None:
 
 def test_query() -> None:
     assert pp.query.parse("") == Query([])
-    assert pp.query.parse("created>today-7d some text sort:score-asc") == Query(
+
+    q = Query(
         [
             Created(Comparison.is_greater_than, Nel(DateTimeCalc(RelativeDate.today, -7, False))),
             Text("some"),
+            SlugIs(Nel("bad slug")),
             Text("text"),
             Order(Nel(OrderBy(SortableField.score, SortDirection.asc))),
         ]
     )
+    qstr = 'created>today-7d some slug:"bad slug" text sort:score-asc'
+    assert pp.query.parse(qstr) == q
+    assert q.render() == qstr
+
+    # TODO any random string must parse successfully
+    # rlen = random.randint(0, 50)
+    # rstr = "".join(random.choices(string.printable, k=rlen))
+    # pp.query.parse(rstr)
 
 
 def test_string_basic() -> None:
