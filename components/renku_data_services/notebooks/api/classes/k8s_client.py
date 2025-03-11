@@ -757,10 +757,10 @@ class _KubeConfigYaml(_KubeConfig):
         contexts = self._conf.get("contexts", [])
         current_context = self._conf.get("current-context", None)
         if current_context is not None:
-            for e in contexts:
-                name = e.get("name", None)
+            for context in contexts:
+                name = context.get("name", None)
                 if name is not None and name == current_context:
-                    return e.get("context", None)
+                    return context
 
         return None
 
