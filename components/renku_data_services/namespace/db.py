@@ -586,6 +586,34 @@ class GroupRepository:
                     message=f"The owner already has a data connector with slug {slug}, please try a different one"
                 )
 
+        async def _upsert_old_dc_slug(session: AsyncSession, old_dc_slug: schemas.EntitySlugORM) -> None:
+            stmt = select(schemas.EntitySlugOldORM).where(schemas.EntitySlugOldORM.slug == old_dc_slug.slug)
+            if old_dc_slug.project_id is not None:
+                stmt.where(schemas.EntitySlugOldORM.project_id == old_dc_slug.project_id)
+            else:
+                stmt.where(schemas.EntitySlugOldORM.project_id.is_(None))
+            if old_dc_slug.data_connector_id is not None:
+                stmt.where(schemas.EntitySlugOldORM.data_connector_id == old_dc_slug.data_connector_id)
+            else:
+                stmt.where(schemas.EntitySlugOldORM.data_connector_id.is_(None))
+            existing_old_slug = await session.scalar(stmt)
+
+            if not existing_old_slug:
+                session.add(
+                    schemas.EntitySlugOldORM(
+                        slug=old_dc_slug.slug,
+                        latest_slug_id=old_dc_slug.id,
+                        project_id=old_dc_slug.project_id,
+                        data_connector_id=old_dc_slug.data_connector_id,
+                    )
+                )
+                return
+
+            existing_old_slug.slug = old_dc_slug.slug
+            existing_old_slug.latest_slug_id = old_dc_slug.id
+            existing_old_slug.project_id = old_dc_slug.project_id
+            existing_old_slug.data_connector_id = old_dc_slug.data_connector_id
+
         session_ctx: AsyncSession | nullcontext = nullcontext()
         transaction: AsyncSessionTransaction | nullcontext = nullcontext()
         if session is None:
@@ -606,7 +634,7 @@ class GroupRepository:
                 if not new_slug:
                     return
                 await _check_dc_slug_not_taken(session, new[0].id, None if len(new) < 2 else new[1].id, new_slug.value)
-                # TODO: populate EntitySlugOldORM
+                await _upsert_old_dc_slug(session, old_dc_slug)
                 old_dc_slug.slug = new_slug.value
                 return
 
@@ -619,7 +647,7 @@ class GroupRepository:
                     await _check_dc_slug_not_taken(
                         session, ns_new.id, None, old_dc_slug.slug if not new_slug else new_slug.value
                     )
-                    # TODO: populate EntitySlugOldORM
+                    await _upsert_old_dc_slug(session, old_dc_slug)
                     old_dc_slug.namespace_id = ns_new.id
                     if new_slug and old_dc_slug.slug != new_slug.value:
                         old_dc_slug.slug = new_slug.value
@@ -631,7 +659,7 @@ class GroupRepository:
                     await _check_dc_slug_not_taken(
                         session, ns_new.id, prj_new.id, old_dc_slug.slug if not new_slug else new_slug.value
                     )
-                    # TODO: populate EntitySlugOldORM
+                    await _upsert_old_dc_slug(session, old_dc_slug)
                     old_dc_slug.project_id = prj_new.id
                     old_dc_slug.namespace_id = ns_new.id
                     if new_slug and old_dc_slug.slug != new_slug.value:
@@ -643,7 +671,7 @@ class GroupRepository:
                     await _check_dc_slug_not_taken(
                         session, ns_new.id, None, old_dc_slug.slug if not new_slug else new_slug.value
                     )
-                    # TODO: populate EntitySlugOldORM
+                    await _upsert_old_dc_slug(session, old_dc_slug)
                     old_dc_slug.project_id = None
                     old_dc_slug.namespace_id = ns_new.id
                     if new_slug and old_dc_slug.slug != new_slug.value:
@@ -655,7 +683,7 @@ class GroupRepository:
                     await _check_dc_slug_not_taken(
                         session, ns_new.id, prj_new.id, old_dc_slug.slug if not new_slug else new_slug.value
                     )
-                    # TODO: populate EntitySlugOldORM
+                    await _upsert_old_dc_slug(session, old_dc_slug)
                     old_dc_slug.project_id = prj_new.id
                     old_dc_slug.namespace_id = ns_new.id
                     if new_slug and old_dc_slug.slug != new_slug.value:
