@@ -166,12 +166,10 @@ class UnsavedProjectMigration:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class ProjectMigration:
+class ProjectMigration(UnsavedProjectMigration):
     """Model representing a migration from an old project version."""
 
     id: ULID
-    project_id: ULID
-    project_v1_id: int
     migrated_at: datetime = field(default_factory=lambda: datetime.now(UTC).replace(microsecond=0))
 
     @property

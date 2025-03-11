@@ -948,17 +948,17 @@ class ProjectMigrationRepository:
         result_launcher = None
         if session_launcher is not None:
             unsaved_session_launcher = session_apispec.SessionLauncherPost(
-                project_id=str(created_project.id),
                 name=session_launcher.name,
+                project_id=str(created_project.id),
                 description=None,
                 resource_class_id=session_launcher.resource_class_id,
                 disk_storage=session_launcher.disk_storage,
-                environment=session_apispec.EnvironmentPostInLauncher(
+                environment=session_apispec.EnvironmentPostInLauncherHelper(
+                    environment_kind=session_apispec.EnvironmentKind.CUSTOM,
                     name=session_launcher.name,
+                    description=None,
                     container_image=session_launcher.container_image,
                     default_url=session_launcher.default_url,
-                    environment_kind=session_apispec.EnvironmentKind.CUSTOM,
-                    description=None,
                     uid=session_launcher.uid,
                     gid=session_launcher.gid,
                     working_directory=session_launcher.working_directory,
@@ -967,10 +967,13 @@ class ProjectMigrationRepository:
                     command=session_launcher.command,
                     args=session_launcher.args,
                     is_archived=False,
+                    environment_image_source=session_apispec.EnvironmentImageSourceImage.image,
                 ),
             )
 
-            new_launcher = validate_unsaved_session_launcher(unsaved_session_launcher)
+            new_launcher = validate_unsaved_session_launcher(
+                unsaved_session_launcher, builds_config=self.session_repo.builds_config
+            )
             result_launcher = await self.session_repo.insert_launcher(user=user, launcher=new_launcher)
 
         migration_orm = schemas.ProjectMigrationsORM(
@@ -1012,7 +1015,7 @@ class ProjectMigrationRepository:
 
             if project_orm is None:
                 raise errors.MissingResourceError(
-                    message="Project migrated does not exist or you dont have permissions to open it."
+                    message="Project migrated does not exist or you don't have permissions to open it."
                 )
 
             return project_orm.dump()
@@ -1025,8 +1028,11 @@ class ProjectMigrationRepository:
         if user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
+        project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.WRITE)
+
         async with self.session_maker() as session:
             stmt_project = select(schemas.ProjectORM.id).where(schemas.ProjectORM.id == project_id)
+            stmt_project = stmt_project.where(schemas.ProjectORM.id.in_(project_ids))
             res_project = await session.scalar(stmt_project)
             if not res_project:
                 raise errors.MissingResourceError(

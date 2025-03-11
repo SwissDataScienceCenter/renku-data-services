@@ -181,7 +181,7 @@ paths:
         - in: path
           name: v1_id
           required: true
-          description: The ID of the project in Renku v1
+          description: The ID of the Gitlab repository that represents the project in Renku v1
           schema:
             type: integer
       requestBody:
