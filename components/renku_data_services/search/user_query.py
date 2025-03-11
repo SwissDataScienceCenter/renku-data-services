@@ -1,7 +1,7 @@
 """AST for a user search query."""
 
-from abc import ABC, abstractmethod
 import calendar
+from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 from dataclasses import field as data_field
@@ -48,7 +48,7 @@ class Helper:
         """Wraps input in quotes if necessary."""
         for c in input:
             if c == "," or c == '"' or c.isspace():
-                return f'"{input.replace('"', '\"')}"'
+                return f'"{input.replace('"', '"')}"'
         return input
 
 
@@ -93,6 +93,7 @@ class PartialDate:
         return res
 
     def is_exact(self) -> bool:
+        """Return whether all optional parts are set."""
         return self.month is not None and self.dayOfMonth is not None
 
     def max(self) -> date:
@@ -102,6 +103,7 @@ class PartialDate:
         return date(self.year, m, self.dayOfMonth or dom)
 
     def min(self) -> date:
+        """Set missing parts to the lowest value."""
         return date(
             self.year,
             self.month or 1,
@@ -118,6 +120,7 @@ class PartialTime:
     second: int | None = data_field(default=None)
 
     def render(self) -> str:
+        """Renders the string representation."""
         res = f"{self.hour:02}"
         if self.minute is not None:
             res += f":{self.minute:02}"
@@ -126,9 +129,11 @@ class PartialTime:
         return res
 
     def max(self) -> time:
+        """Set missing parts to the highest value."""
         return time(self.hour, self.minute or 59, self.second or 59)
 
     def min(self) -> time:
+        """Set missing parts to the lowest value."""
         return time(self.hour, self.minute or 0, self.second or 0)
 
 
@@ -141,14 +146,16 @@ class PartialDateTime:
     zone: tzinfo | None = data_field(default=None)
 
     def render(self) -> str:
+        """Renders the string representation."""
         res = self.date.render()
         if self.time is not None:
             res += f"T{self.time.render()}"
         if self.zone is not None:
-            res += f""
+            res += ""
         return res
 
     def datetime_max(self, default_zone: tzinfo) -> datetime:
+        """Set missing parts to the highest value."""
         d = self.date.max()
         t = (self.time or PartialTime(23, 59, 59)).max()
         return datetime(
@@ -156,6 +163,7 @@ class PartialDateTime:
         )
 
     def datetime_min(self, default_zone: tzinfo) -> datetime:
+        """Set missing parts to the lowest value."""
         d = self.date.min()
         t = (self.time or PartialTime(0)).min()
         return datetime(
@@ -163,7 +171,42 @@ class PartialDateTime:
         )
 
     def with_zone(self, zone: tzinfo) -> Self:
+        """Return a copy with the given zone set."""
         return type(self)(self.date, self.time, zone)
+
+
+class RelativeDate(StrEnum):
+    """A date relative to a reference date."""
+
+    today = "today"
+    yesterday = "yesterday"
+
+    def render(self) -> str:
+        """Renders the string representation."""
+        return self.name
+
+
+@dataclass
+class DateTimeCalc:
+    """A date specification using calculation from a reference date."""
+
+    ref: PartialDateTime | RelativeDate
+    amount_days: int
+    is_range: bool
+
+    def render(self) -> str:
+        """Renders the string representation."""
+        period = self.amount_days.__abs__()
+        sep = "+"
+        if self.is_range:
+            sep = "/"
+        if self.amount_days < 0:
+            sep = "-"
+
+        return f"{self.ref.render()}{sep}{period}d"
+
+
+type DateTimeRef = PartialDateTime | RelativeDate | DateTimeCalc
 
 
 class FieldComparison(ABC):
@@ -171,16 +214,21 @@ class FieldComparison(ABC):
 
     @property
     @abstractmethod
-    def field(self) -> Field: ...
+    def field(self) -> Field:
+        """The field to compare."""
+        ...
 
     @property
     @abstractmethod
-    def cmp(self) -> Comparison: ...
+    def cmp(self) -> Comparison:
+        """The comparision to use."""
+        ...
 
     @abstractmethod
     def _render_value(self) -> str: ...
 
     def render(self) -> str:
+        """Renders the string representation."""
         return f"{self.field.value}{self.cmp.value}{self._render_value()}"
 
 
@@ -324,7 +372,45 @@ class VisibilityIs(FieldComparison):
         return self.values.mk_string(",")
 
 
-type FieldTerm = TypeIs | IdIs | NameIs | SlugIs | VisibilityIs
+@dataclass
+class CreatedByIs(FieldComparison):
+    """Compare the keyword against a list of values."""
+
+    values: Nel[str]
+
+    @property
+    def field(self) -> Field:
+        """The field name."""
+        return Field.created_by
+
+    @property
+    def cmp(self) -> Comparison:
+        """The comparison operation."""
+        return Comparison.is_equal
+
+    def _render_value(self) -> str:
+        return self.values.mk_string(",", Helper.quote)
+
+
+@dataclass
+class Created(FieldComparison):
+    """Compare the created timestamp."""
+
+    values: Nel[DateTimeRef]
+    cmp_op: Comparison
+
+    @property
+    def field(self) -> Field:
+        """The field name."""
+        return Field.created
+
+    @property
+    def cmp(self) -> Comparison:
+        """The comparison operation."""
+        return self.cmp_op
+
+
+type FieldTerm = TypeIs | IdIs | NameIs | SlugIs | VisibilityIs | KeywordIs | NamespaceIs | CreatedByIs | Created
 
 
 @dataclass
