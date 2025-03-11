@@ -144,7 +144,7 @@ class K8sClientProto[_SessionType, _Kr8sType](ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def create_secret(self, secret: V1Secret) -> V1Secret:
+    async def create_secret(self, secret: V1Secret) -> None:
         """Create a kubernetes secret."""
         raise NotImplementedError()
 
@@ -468,12 +468,11 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
             return
         await sts.patch(patches, type="json")
 
-    async def create_secret(self, secret: V1Secret) -> V1Secret:
+    async def create_secret(self, secret: V1Secret) -> None:
         """Create a new secret."""
 
         new_secret = await Secret(api=self._api, namespace=self.namespace(), resource=_sanitizer(secret))
         await new_secret.create()
-        return V1Secret(metadata=new_secret.metadata, data=new_secret.data, type=new_secret.raw.get("type"))
 
     async def delete_secret(self, name: str) -> None:
         """Delete a secret."""
@@ -481,7 +480,6 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
         if secret is not None:
             with suppress(NotFoundError):
                 await secret.delete()
-        return None
 
     async def patch_secret(self, name: str, patch: dict[str, Any] | list[dict[str, Any]]) -> None:
         """Patch a secret."""
@@ -695,8 +693,8 @@ class _SingleK8sClient(Generic[_SessionType, _Kr8sType]):
     ) -> StatefulSet | None:
         return await self._k8s_client.patch_statefulset(session_name, patch)
 
-    async def create_secret(self, secret: V1Secret) -> V1Secret:
-        return await self._k8s_client.create_secret(secret)
+    async def create_secret(self, secret: V1Secret) -> None:
+        await self._k8s_client.create_secret(secret)
 
     async def delete_secret(self, name: str) -> None:
         await self._k8s_client.delete_secret(name)
@@ -935,10 +933,10 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
 
         return result
 
-    async def create_secret(self, secret: V1Secret) -> V1Secret:
+    async def create_secret(self, secret: V1Secret) -> None:
         """Create a kubernetes secret."""
         # TODO: LSA Does not break current code, but bad, as it may be different based on the cluster
-        return await self._clients[DEFAULT_K8S_CLUSTER].create_secret(secret)
+        await self._clients[DEFAULT_K8S_CLUSTER].create_secret(secret)
 
     async def delete_secret(self, name: str) -> None:
         """Delete a kubernetes secret."""
@@ -1036,7 +1034,7 @@ class DummyK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
         """Patch a user session."""
         raise NotImplementedError()
 
-    async def create_secret(self, secret: V1Secret) -> V1Secret:
+    async def create_secret(self, secret: V1Secret) -> None:
         """Create a kubernetes secret."""
         raise NotImplementedError()
 
