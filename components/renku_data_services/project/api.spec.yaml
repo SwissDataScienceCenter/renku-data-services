@@ -861,13 +861,13 @@ components:
       items:
         type: string
       description: The command that will be run i.e. will overwrite the image Dockerfile ENTRYPOINT, equivalent to command in Kubernetes
-      minLength: 1
+      minItems: 1
     EnvironmentArgs:
       type: array
       items:
         type: string
       description: The arguments that will follow the command, i.e. will overwrite the image Dockerfile CMD, equivalent to args in Kubernetes
-      minLength: 1
+      minItems: 1
     EnvironmentPort:
       type: integer
       minimum: 0

@@ -1,7 +1,7 @@
 """add project migrations
 
 Revision ID: 559b1fc46cfe
-Revises: 64edf7ac0de0
+Revises: 71ef5efe740f
 Create Date: 2025-03-03 13:58:07.450665
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "559b1fc46cfe"
-down_revision = "64edf7ac0de0"
+down_revision = "71ef5efe740f"
 branch_labels = None
 depends_on = None
 
