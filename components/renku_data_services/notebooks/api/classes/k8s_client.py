@@ -702,29 +702,18 @@ class _KubeConfig:
     def __init__(
         self,
         kubeconfig: str | None = None,
-        current_context: str | None = None,
+        current_context_name: str | None = None,
         ns: str | None = None,
-        user: str | None = None,
-        cluster_name: str | None = None,
-        cluster: Any = None,
-        server: str | None = None,
-        tls: str | None = None,
     ) -> None:
         self._kubeconfig = kubeconfig
         self._ns = ns
-        self._user = user
-        self._cluster_name = cluster_name
-        self._cluster = cluster
-        self._server = server
-        self._tls = tls
-        self._current_context = current_context
+        self._current_context_name = current_context_name
 
     def api(self) -> Union[kr8s.Api, kr8s._AsyncApi]:
         return kr8s.api(
-            url=self._server,
             kubeconfig=self._kubeconfig,
-            serviceaccount=self._user,
             namespace=self._ns,
+            context=self._current_context_name,
         )
 
 
@@ -741,36 +730,14 @@ class _KubeConfigYaml(_KubeConfig):
         with open(kubeconfig) as stream:
             self._conf = yaml.safe_load(stream)
 
-        self._current_context = self._get_current_context()
-        if self._current_context is not None:
-            self._ns = self._current_context.get("namespace", None)
-            self._user = self._current_context.get("user", None)
-            self._cluster_name = self._current_context.get("cluster", None)
-            self._cluster = self._get_cluster()
-
-        if self._cluster is not None:
-            self._server = self._cluster.get("server", None)
-            self._tls = self._cluster.get("certificate-authority-data", None)
-
-    def _get_current_context(self) -> Any | None:
-        contexts = self._conf.get("contexts", [])
-        current_context = self._conf.get("current-context", None)
-        if current_context is not None:
-            for context in contexts:
+        self._current_context_name = self._conf.get("current-context", None)
+        if self._current_context_name is not None:
+            for context in self._conf.get("contexts", []):
                 name = context.get("name", None)
-                if name is not None and name == current_context:
-                    return context.get("context", None)
-
-        return None
-
-    def _get_cluster(self) -> Any | None:
-        if self._current_context is not None and self._cluster_name is not None:
-            clusters = self._conf.get("clusters", [])
-            for cluster in clusters:
-                name = cluster.get("name", None)
-                if name is not None and name == self._cluster_name:
-                    return cluster
-        return None
+                inner = context.get("context", None)
+                if inner is not None and name is not None and name == self._current_context_name:
+                    self._ns = inner.get("namespace", None)
+                    break
 
 
 class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
