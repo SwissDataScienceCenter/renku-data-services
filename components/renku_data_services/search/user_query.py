@@ -422,6 +422,10 @@ class Text:
 
     value: str
 
+    def render(self) -> str:
+        """Return the value."""
+        return self.value
+
 
 class SortableField(StrEnum):
     """A field supported for sorting."""
@@ -451,7 +455,7 @@ class Order:
 
     def render(self) -> str:
         """Renders the string version of this query part."""
-        return self.fields.mk_string(",", lambda e: e.render())
+        return f"sort:{self.fields.mk_string(",", lambda e: e.render())}"
 
 
 type Segment = FieldTerm | Text | Order
@@ -465,3 +469,7 @@ class Query:
     """
 
     segments: list[Segment]
+
+    def render(self) -> str:
+        """Return the string representation of this query."""
+        return " ".join([e.render() for e in self.segments])
