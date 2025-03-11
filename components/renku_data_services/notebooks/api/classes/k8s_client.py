@@ -725,7 +725,6 @@ class _KubeConfig:
             kubeconfig=self._kubeconfig,
             serviceaccount=self._user,
             namespace=self._ns,
-            context=self._current_context,
         )
 
 
