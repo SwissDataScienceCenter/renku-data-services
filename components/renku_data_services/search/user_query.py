@@ -60,7 +60,7 @@ class Field(StrEnum):
     slug = "slug"
     visibility = "visibility"
     created = "created"
-    created_by = "createdBy"
+    created_by = "createdby"
     type = "type"
     role = "role"
     keyword = "keyword"
@@ -396,8 +396,8 @@ class CreatedByIs(FieldComparison):
 class Created(FieldComparison):
     """Compare the created timestamp."""
 
-    values: Nel[DateTimeRef]
     cmp_op: Comparison
+    values: Nel[DateTimeRef]
 
     @property
     def field(self) -> Field:
@@ -408,6 +408,9 @@ class Created(FieldComparison):
     def cmp(self) -> Comparison:
         """The comparison operation."""
         return self.cmp_op
+
+    def _render_value(self) -> str:
+        return self.values.mk_string(",", lambda e: e.render())
 
 
 type FieldTerm = TypeIs | IdIs | NameIs | SlugIs | VisibilityIs | KeywordIs | NamespaceIs | CreatedByIs | Created

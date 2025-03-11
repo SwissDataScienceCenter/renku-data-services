@@ -5,17 +5,29 @@ import datetime
 import pytest
 from parsy import ParseError
 
+from renku_data_services.authz.models import Visibility
 from renku_data_services.search.user_query import (
     Comparison,
+    Created,
+    CreatedByIs,
     DateTimeCalc,
+    IdIs,
+    KeywordIs,
+    NameIs,
+    NamespaceIs,
     Nel,
+    Order,
     OrderBy,
     PartialDate,
     PartialDateTime,
     PartialTime,
+    Query,
     RelativeDate,
+    SlugIs,
     SortableField,
+    Text,
     TypeIs,
+    VisibilityIs,
 )
 from renku_data_services.search.user_query_parser import _DateTimeParser, _ParsePrimitives
 from renku_data_services.solr.entity_documents import EntityType
@@ -46,7 +58,7 @@ def test_sort_direction() -> None:
 def test_order_by() -> None:
     for sf in SortableField._member_map_.values():
         for dir in SortDirection._member_map_.values():
-            value = OrderBy(sf, dir)
+            value = OrderBy(sf, dir)  # type: ignore
             assert pp.ordered_by.parse(value.render()) == value
     with pytest.raises(ParseError):
         pp.ordered_by.parse("")
@@ -58,6 +70,13 @@ def test_order_by() -> None:
         pp.ordered_by.parse("name-abc")
     with pytest.raises(ParseError):
         pp.ordered_by.parse("name - desc")
+
+
+def test_sort_term() -> None:
+    assert pp.sort_term.parse("sort:name-desc") == Order(Nel(OrderBy(SortableField.fname, SortDirection.desc)))
+    assert pp.sort_term.parse("sort:score-asc,name-desc") == Order(
+        Nel.of(OrderBy(SortableField.score, SortDirection.asc), OrderBy(SortableField.fname, SortDirection.desc))
+    )
 
 
 def test_entity_type() -> None:
@@ -106,6 +125,69 @@ def test_type_is() -> None:
     assert pp.type_is.parse("type:Project") == TypeIs(Nel(EntityType.project))
     assert pp.type_is.parse("type:Project,Group") == TypeIs(Nel.of(EntityType.project, EntityType.group))
     assert pp.type_is.parse("type:Project, Group") == TypeIs(Nel.of(EntityType.project, EntityType.group))
+
+
+def test_visibilty_is() -> None:
+    assert pp.visibility_is.parse("visibility:public") == VisibilityIs(Nel.of(Visibility.PUBLIC))
+    assert pp.visibility_is.parse("visibility:private") == VisibilityIs(Nel.of(Visibility.PRIVATE))
+    assert pp.visibility_is.parse("visibility:Public") == VisibilityIs(Nel.of(Visibility.PUBLIC))
+    assert pp.visibility_is.parse("visibility:Private") == VisibilityIs(Nel.of(Visibility.PRIVATE))
+
+
+def test_created() -> None:
+    assert pp.created.parse("created<today") == Created(Comparison.is_lower_than, Nel.of(RelativeDate.today))
+    assert pp.created.parse("created>today") == Created(Comparison.is_greater_than, Nel.of(RelativeDate.today))
+    assert pp.created.parse("created:today") == Created(Comparison.is_equal, Nel.of(RelativeDate.today))
+    assert pp.created.parse("created>today-7d") == Created(
+        Comparison.is_greater_than, Nel.of(DateTimeCalc(RelativeDate.today, -7, False))
+    )
+
+
+def test_field_term() -> None:
+    assert pp.field_term.parse("created<today") == Created(Comparison.is_lower_than, Nel.of(RelativeDate.today))
+    assert pp.field_term.parse("visibility:public") == VisibilityIs(Nel.of(Visibility.PUBLIC))
+    assert pp.field_term.parse("type:Project") == TypeIs(Nel(EntityType.project))
+    assert pp.field_term.parse("name:test") == NameIs(Nel("test"))
+    assert pp.field_term.parse("slug:test") == SlugIs(Nel("test"))
+    assert pp.field_term.parse("id:test") == IdIs(Nel("test"))
+    assert pp.field_term.parse("keyword:test") == KeywordIs(Nel("test"))
+    assert pp.field_term.parse("namespace:test") == NamespaceIs(Nel("test"))
+    assert pp.field_term.parse("createdBy:test") == CreatedByIs(Nel("test"))
+
+
+def test_free_text() -> None:
+    assert pp.free_text.parse("just") == Text("just")
+
+    with pytest.raises(ParseError):
+        pp.free_text.parse("")
+
+
+def test_segment() -> None:
+    assert pp.segment.parse("abcdefg") == Text("abcdefg")
+    assert pp.segment.parse("created<today") == Created(Comparison.is_lower_than, Nel.of(RelativeDate.today))
+    assert pp.segment.parse("created>today-7d") == Created(
+        Comparison.is_greater_than, Nel(DateTimeCalc(RelativeDate.today, -7, False))
+    )
+    assert pp.segment.parse("visibility:public") == VisibilityIs(Nel.of(Visibility.PUBLIC))
+    assert pp.segment.parse("type:Project") == TypeIs(Nel(EntityType.project))
+    assert pp.segment.parse("name:test") == NameIs(Nel("test"))
+    assert pp.segment.parse("slug:test") == SlugIs(Nel("test"))
+    assert pp.segment.parse("id:test") == IdIs(Nel("test"))
+    assert pp.segment.parse("keyword:test") == KeywordIs(Nel("test"))
+    assert pp.segment.parse("namespace:test") == NamespaceIs(Nel("test"))
+    assert pp.segment.parse("createdBy:test") == CreatedByIs(Nel("test"))
+
+
+def test_query() -> None:
+    assert pp.query.parse("") == Query([])
+    assert pp.query.parse("created>today-7d some text sort:score-asc") == Query(
+        [
+            Created(Comparison.is_greater_than, Nel(DateTimeCalc(RelativeDate.today, -7, False))),
+            Text("some"),
+            Text("text"),
+            Order(Nel(OrderBy(SortableField.score, SortDirection.asc))),
+        ]
+    )
 
 
 def test_string_basic() -> None:
