@@ -9,7 +9,7 @@ from datetime import date, datetime, time, tzinfo
 from enum import StrEnum
 from typing import Self
 
-from renku_data_services.authz.models import Visibility
+from renku_data_services.authz.models import Role, Visibility
 from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.solr_client import SortDirection
 
@@ -31,6 +31,25 @@ class Nel[A]:
         """Creates a non-empty list from a list, failing if the argument is empty."""
         return Nel(els[0], els[1:])
 
+    @classmethod
+    def from_list(cls, els: list[A]) -> "Nel[A] | None":
+        """Creates a non-empty list from a list."""
+        if els == []:
+            return None
+        else:
+            return cls.unsafe_from_list(els)
+
+    def append(self, other: Self) -> Self:
+        """Append other to this list."""
+        return self.append_list(other.to_list())
+
+    def append_list(self, other: list[A]) -> Self:
+        """Append other to this list."""
+        if other == []:
+            return self
+        else:
+            return type(self)(self.value, self.more_values + other)
+
     def to_list(self) -> list[A]:
         """Convert to a list."""
         return [self.value] + self.more_values
@@ -44,10 +63,15 @@ class Helper:
     """Internal helper functions."""
 
     @classmethod
+    def is_valid_char(cls, c: str) -> bool:
+        """Test for a character that doesn't require quoting."""
+        return not c.isspace() and c != '"' and c != "\\" and c != ","
+
+    @classmethod
     def quote(cls, input: str) -> str:
         """Wraps input in quotes if necessary."""
         for c in input:
-            if c == "," or c == '"' or c.isspace():
+            if not Helper.is_valid_char(c):
                 return f'"{input.replace('"', '"')}"'
         return input
 
@@ -413,7 +437,24 @@ class Created(FieldComparison):
         return self.values.mk_string(",", lambda e: e.render())
 
 
-type FieldTerm = TypeIs | IdIs | NameIs | SlugIs | VisibilityIs | KeywordIs | NamespaceIs | CreatedByIs | Created
+@dataclass
+class RoleIs(FieldComparison):
+    """Compare a role."""
+
+    values: Nel[Role]
+
+    @property
+    def field(self) -> Field:
+        """The field name."""
+        return Field.role
+
+    @property
+    def cmp(self) -> Comparison:
+        """The comparison operation."""
+        return Comparison.is_equal
+
+    def _render_value(self) -> str:
+        return self.values.mk_string(",")
 
 
 @dataclass
@@ -442,6 +483,11 @@ class OrderBy:
     field: SortableField
     direction: SortDirection
 
+    @classmethod
+    def from_tuple(cls, t: tuple[SortableField, SortDirection]) -> "OrderBy":
+        """Create an OrderBy value from a tuple."""
+        return OrderBy(t[0], t[1])
+
     def render(self) -> str:
         """Renders the string representation."""
         return f"{self.field.value}-{self.direction.value}"
@@ -457,8 +503,97 @@ class Order:
         """Renders the string version of this query part."""
         return f"sort:{self.fields.mk_string(",", lambda e: e.render())}"
 
+    def append(self, other: Self) -> Self:
+        """Append the field list of `other` to this."""
+        return type(self)(self.fields.append(other.fields))
+
+
+type FieldTerm = (
+    TypeIs | IdIs | NameIs | SlugIs | VisibilityIs | KeywordIs | NamespaceIs | CreatedByIs | Created | RoleIs
+)
+
 
 type Segment = FieldTerm | Text | Order
+
+
+class Segments:
+    """Helpers for creating segments."""
+
+    @classmethod
+    def text(cls, text: str) -> Segment:
+        """Return a free text query segment."""
+        return Text(text)
+
+    @classmethod
+    def sort_by(cls, s: tuple[SortableField, SortDirection], *args: tuple[SortableField, SortDirection]) -> Segment:
+        """Return a sort query segment."""
+        rest = list(map(OrderBy.from_tuple, args))
+        return Order(Nel(OrderBy.from_tuple(s), rest))
+
+    @classmethod
+    def type_is(cls, et: EntityType, *args: EntityType) -> Segment:
+        """Return type-is query segment."""
+        return TypeIs(Nel(et, list(args)))
+
+    @classmethod
+    def id_is(cls, id: str, *args: str) -> Segment:
+        """Return id-is query segment."""
+        return IdIs(Nel(id, list(args)))
+
+    @classmethod
+    def name_is(cls, name: str, *args: str) -> Segment:
+        """Return name-is query segment."""
+        return NameIs(Nel(name, list(args)))
+
+    @classmethod
+    def slug_is(cls, slug: str, *args: str) -> Segment:
+        """Return slug-is query segment."""
+        return SlugIs(Nel(slug, list(args)))
+
+    @classmethod
+    def visibility_is(cls, vis: Visibility, *args: Visibility) -> Segment:
+        """Return visibility-is query segment."""
+        return VisibilityIs(Nel(vis, list(args)))
+
+    @classmethod
+    def keyword_is(cls, kw: str, *args: str) -> Segment:
+        """Return keyword-is query segment."""
+        return KeywordIs(Nel(kw, list(args)))
+
+    @classmethod
+    def namespace_is(cls, ns: str, *args: str) -> Segment:
+        """Return namespace-is query segment."""
+        return NamespaceIs(Nel(ns, list(args)))
+
+    @classmethod
+    def created_by_is(cls, id: str, *args: str) -> Segment:
+        """Return created_by-is query segment."""
+        return CreatedByIs(Nel(id, list(args)))
+
+    @classmethod
+    def created(cls, cmp: Comparison, date: DateTimeRef, *args: DateTimeRef) -> Segment:
+        """Return created query segment."""
+        return Created(cmp, Nel(date, list(args)))
+
+    @classmethod
+    def created_is(cls, date: DateTimeRef, *args: DateTimeRef) -> Segment:
+        """Return created-is query segment."""
+        return cls.created(Comparison.is_equal, date, args)
+
+    @classmethod
+    def created_is_lt(cls, date: DateTimeRef, *args: DateTimeRef) -> Segment:
+        """Return created-< query segment."""
+        return cls.created(Comparison.is_lower_than, date, args)
+
+    @classmethod
+    def created_is_gt(cls, date: DateTimeRef, *args: DateTimeRef) -> Segment:
+        """Return created-> query segment."""
+        return cls.created(Comparison.is_greater_than, date, args)
+
+    @classmethod
+    def role_is(cls, role: Role, *args: Role) -> Segment:
+        """Return role-is query segment."""
+        return RoleIs(Nel(role, list(args)))
 
 
 @dataclass
@@ -470,6 +605,26 @@ class Query:
 
     segments: list[Segment]
 
+    @classmethod
+    def of(cls, *args: Segment) -> "Query":
+        """Constructor using varargs."""
+        return Query(list(args))
+
     def render(self) -> str:
         """Return the string representation of this query."""
         return " ".join([e.render() for e in self.segments])
+
+    def extract_order(self) -> tuple[list[FieldTerm | Text], Order | None]:
+        """Extracts all sort segments into a single OrderBy value."""
+        segs: list[FieldTerm | Text] = []
+        orders: list[OrderBy] = []
+        for s in self.segments:
+            match s:
+                case Order() as o:
+                    orders.extend(o.fields.to_list())
+
+                case f:
+                    segs.append(f)
+
+        sort = Nel.from_list(orders)
+        return (segs, Order(sort) if sort is not None else None)
