@@ -15,7 +15,7 @@ from renku_data_services import base_models, errors
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.authz.models import CheckPermissionItem, Scope
 from renku_data_services.base_api.pagination import PaginationRequest
-from renku_data_services.base_models.core import Slug
+from renku_data_services.base_models.core import ProjectPath, Slug
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors import orm as schemas
 from renku_data_services.namespace import orm as ns_schemas
@@ -200,7 +200,9 @@ class DataConnectorRepository:
         if not session:
             raise errors.ProgrammingError(message="A database session is required.")
         ns = await session.scalar(
-            select(ns_schemas.NamespaceORM).where(ns_schemas.NamespaceORM.slug == data_connector.namespace.lower())
+            select(ns_schemas.NamespaceORM).where(
+                ns_schemas.NamespaceORM.slug == data_connector.namespace.first.value.lower()
+            )
         )
         if not ns:
             raise errors.MissingResourceError(
@@ -213,13 +215,13 @@ class DataConnectorRepository:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
         project: Project | None = None
-        if data_connector.project_slug:
+        if isinstance(data_connector.namespace, ProjectPath):
             error_msg = (
-                f"The project with slug {data_connector.project_slug} does not exist or you do not have access to it."
+                f"The project with slug {data_connector.namespace} does not exist or you do not have access to it."
             )
             project_slug = await session.scalar(
                 select(ns_schemas.EntitySlugORM)
-                .where(ns_schemas.EntitySlugORM.slug == data_connector.project_slug)
+                .where(ns_schemas.EntitySlugORM.slug == data_connector.namespace.second.value.lower())
                 .where(ns_schemas.EntitySlugORM.project_id.is_not(None))
                 .where(ns_schemas.EntitySlugORM.data_connector_id.is_(None))
             )
@@ -238,8 +240,8 @@ class DataConnectorRepository:
         has_permission = await self.authz.has_permission(user, resource_type, resource_id, Scope.WRITE)
         if not has_permission:
             error_msg = f"The data connector cannot be created because you do not have sufficient permissions with the namespace {data_connector.namespace}"  # noqa: E501
-            if data_connector.project_slug:
-                error_msg = f"The data connector cannot be created because you do not have sufficient permissions with the project {data_connector.namespace}/{data_connector.project_slug}"  # noqa: E501
+            if isinstance(data_connector.namespace, ProjectPath):
+                error_msg = f"The data connector cannot be created because you do not have sufficient permissions with the project {data_connector.namespace}"  # noqa: E501
             raise errors.ForbiddenError(message=error_msg)
 
         slug = data_connector.slug or base_models.Slug.from_name(data_connector.name).value
@@ -313,15 +315,20 @@ class DataConnectorRepository:
         if data_connector is None:
             raise errors.MissingResourceError(message=not_found_msg)
         old_data_connector = data_connector.dump()
+        old_data_connector_parent = old_data_connector.path.parent()
 
-        if old_data_connector.project and old_data_connector.project.slug != patch.project_slug:
+        if (
+            isinstance(old_data_connector_parent, ProjectPath)
+            and patch.namespace
+            and old_data_connector_parent != patch.namespace
+        ):
             raise NotImplementedError("Moving a data connector to another project or namespace is not supported")
 
         required_scope = Scope.WRITE
         if patch.visibility is not None and patch.visibility != old_data_connector.visibility:
             # NOTE: changing the visibility requires the user to be owner which means they should have DELETE permission
             required_scope = Scope.DELETE
-        if patch.namespace is not None and patch.namespace != old_data_connector.namespace.slug:
+        if patch.namespace is not None and patch.namespace != old_data_connector_parent:
             # NOTE: changing the namespace requires the user to be owner which means they should have DELETE permission # noqa E501
             required_scope = Scope.DELETE
         if patch.slug is not None and patch.slug != old_data_connector.slug:
@@ -346,9 +353,11 @@ class DataConnectorRepository:
                 else apispec.Visibility(patch.visibility.value)
             )
             data_connector.visibility = visibility_orm
-        if patch.namespace is not None and patch.namespace != old_data_connector.namespace.slug:
+        if patch.namespace is not None and patch.namespace != old_data_connector_parent:
             ns = await session.scalar(
-                select(ns_schemas.NamespaceORM).where(ns_schemas.NamespaceORM.slug == patch.namespace.lower())
+                select(ns_schemas.NamespaceORM).where(
+                    ns_schemas.NamespaceORM.slug == patch.namespace.first.value.lower()
+                )
             )
             if not ns:
                 raise errors.MissingResourceError(message=f"The namespace with slug {patch.namespace} does not exist.")

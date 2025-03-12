@@ -7,7 +7,13 @@ from typing import TYPE_CHECKING, Any
 from ulid import ULID
 
 from renku_data_services.authz.models import Visibility
-from renku_data_services.base_models.core import EntityPath
+from renku_data_services.base_models.core import (
+    DataConnectorInProjectPath,
+    DataConnectorPath,
+    DataConnectorSlug,
+    NamespacePath,
+    ProjectPath,
+)
 from renku_data_services.namespace.models import Namespace
 from renku_data_services.project.models import Project
 from renku_data_services.utils.etag import compute_etag_from_timestamp
@@ -57,26 +63,23 @@ class DataConnector(BaseDataConnector):
         return compute_etag_from_timestamp(self.updated_at)
 
     @property
-    def path(self) -> EntityPath:
+    def path(self) -> DataConnectorPath | DataConnectorInProjectPath:
         """The full path (i.e. sequence of slugs) for the data connector including group or user and/or project."""
         if self.project:
-            return EntityPath.join(self.namespace.slug, self.project.slug, self.slug)
-        return EntityPath.join(self.namespace.slug, self.slug)
+            return DataConnectorInProjectPath.from_strings(self.namespace.slug, self.project.slug, self.slug)
+        return DataConnectorPath.from_strings(self.namespace.slug, self.slug)
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedDataConnector(BaseDataConnector):
     """A data connector that hasn't been stored in the database."""
 
-    namespace: str
-    project_slug: str | None = None
+    namespace: NamespacePath | ProjectPath
 
     @property
-    def path(self) -> EntityPath:
+    def path(self) -> DataConnectorPath | DataConnectorInProjectPath:
         """The full path (i.e. sequence of slugs) for the data connector including group or user and/or project."""
-        if self.project_slug:
-            return EntityPath.join(self.namespace, self.project_slug, self.slug)
-        return EntityPath.join(self.namespace, self.slug)
+        return self.namespace / DataConnectorSlug(self.slug)
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -102,13 +105,12 @@ class DataConnectorPatch:
     """Model for changes requested on a data connector."""
 
     name: str | None
-    namespace: str | None
+    namespace: NamespacePath | ProjectPath | None
     slug: str | None
     visibility: Visibility | None
     description: str | None
     keywords: list[str] | None
     storage: CloudStorageCorePatch | None
-    project_slug: str | None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

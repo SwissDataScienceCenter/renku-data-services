@@ -5,7 +5,10 @@ from typing import Any
 
 from renku_data_services import base_models, errors
 from renku_data_services.authz.models import Visibility
-from renku_data_services.base_models.core import EntityPath
+from renku_data_services.base_models.core import (
+    NamespacePath,
+    ProjectPath,
+)
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.storage import models as storage_models
 from renku_data_services.storage.rclone import RCloneValidator
@@ -61,24 +64,20 @@ def validate_unsaved_data_connector(
     keywords = [kw.root for kw in body.keywords] if body.keywords is not None else []
     storage = validate_unsaved_storage(body.storage, validator=validator)
 
-    path = EntityPath.from_string(body.namespace)
-    # NOTE: The apispec must have a regex that will validate that namespace contains
-    # either 1 or 2 slugs, i.e. at least a namespace and optionally a project
-    if len(path) == 1:
-        namespace = path[0].value
-        project = None
-    elif len(path) == 2:
-        namespace = path[0].value
-        project = path[1].value
+    slugs = body.namespace.split("/")
+    path: NamespacePath | ProjectPath
+    if len(slugs) == 1:
+        path = NamespacePath.from_strings(*slugs)
+    elif len(slugs) == 2:
+        path = ProjectPath.from_strings(*slugs)
     else:
         raise errors.ValidationError(
-            message="Trying to create a data connector with more than 2 slugs in its namespace"
+            message=f"Got an unexpected number of slugs in the namespace for a data connector {slugs}"
         )
 
     return models.UnsavedDataConnector(
         name=body.name,
-        namespace=namespace,
-        project_slug=project,
+        namespace=path,
         slug=body.slug or base_models.Slug.from_name(body.name).value,
         visibility=Visibility(body.visibility.value),
         created_by="",
@@ -118,21 +117,17 @@ def validate_data_connector_patch(
     validator: RCloneValidator,
 ) -> models.DataConnectorPatch:
     """Validate the update to a data connector."""
-    # NOTE: The apispec must have a regex that will validate that namespace contains
-    # either 1 or 2 slugs, i.e. at least a namespace and optionally a project
-    path = EntityPath.from_string(patch.namespace) if patch.namespace else None
-    if path is None:
-        namespace = None
-        project = None
-    elif len(path) == 1:
-        namespace = path[0].value
-        project = None
-    elif len(path) == 2:
-        namespace = path[0].value
-        project = path[1].value
+    slugs = patch.namespace.split("/") if patch.namespace else []
+    path: NamespacePath | ProjectPath | None
+    if len(slugs) == 0:
+        path = None
+    elif len(slugs) == 1:
+        path = NamespacePath.from_strings(*slugs)
+    elif len(slugs) == 2:
+        path = ProjectPath.from_strings(*slugs)
     else:
         raise errors.ValidationError(
-            message="Trying to create a data connector with more than 2 slugs in its namespace"
+            message="Trying to create a data connector with more than invalid number of slugs in its namespace"
         )
 
     keywords = [kw.root for kw in patch.keywords] if patch.keywords is not None else None
@@ -144,13 +139,12 @@ def validate_data_connector_patch(
 
     return models.DataConnectorPatch(
         name=patch.name,
-        namespace=namespace,
+        namespace=path,
         slug=patch.slug,
         visibility=Visibility(patch.visibility.value) if patch.visibility is not None else None,
         description=patch.description,
         keywords=keywords,
         storage=storage,
-        project_slug=project,
     )
 
 
