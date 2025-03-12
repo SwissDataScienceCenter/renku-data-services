@@ -46,6 +46,7 @@ def upgrade() -> None:
         referent_schema="resource_pools",
     )
     # ### end Alembic commands ###
+    op.execute("INSERT INTO resource_pools.clusters(id, name) VALUES ('01JP5DTDJYG4VF70TXRF8TXW96', 'lionel-sambuc');")
 
 
 def downgrade() -> None:
