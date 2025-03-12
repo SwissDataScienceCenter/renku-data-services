@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 from dataclasses import field as data_field
-from datetime import date, datetime, time, tzinfo
+from datetime import date, datetime, time, timedelta, tzinfo
 from enum import StrEnum
 from typing import Self
 
@@ -57,6 +57,12 @@ class Nel[A]:
     def mk_string(self, sep: str, f: Callable[[A], str] = str) -> str:
         """Create a str from all elements mapped over f."""
         return sep.join([f(x) for x in self.to_list()])
+
+    def map[B](self, f: Callable[[A], B]) -> "Nel[B]":
+        """Maps `f` over this list."""
+        head = f(self.value)
+        rest = [f(x) for x in self.more_values]
+        return Nel(head, rest)
 
 
 class Helper:
@@ -182,21 +188,26 @@ class PartialDateTime:
         """Set missing parts to the highest value."""
         d = self.date.max()
         t = (self.time or PartialTime(23, 59, 59)).max()
-        return datetime(
-            d.year, d.month, d.day, t.hour, t.minute, t.second, t.microsecond, self.zone or default_zone, fold=t.fold
-        )
+        return datetime(d.year, d.month, d.day, t.hour, t.minute, t.second, 0, self.zone or default_zone, fold=t.fold)
 
     def datetime_min(self, default_zone: tzinfo) -> datetime:
         """Set missing parts to the lowest value."""
         d = self.date.min()
         t = (self.time or PartialTime(0)).min()
-        return datetime(
-            d.year, d.month, d.day, t.hour, t.minute, t.second, t.microsecond, self.zone or default_zone, fold=t.fold
-        )
+        return datetime(d.year, d.month, d.day, t.hour, t.minute, t.second, 0, self.zone or default_zone, fold=t.fold)
 
     def with_zone(self, zone: tzinfo) -> Self:
         """Return a copy with the given zone set."""
         return type(self)(self.date, self.time, zone)
+
+    def resolve(self, ref: datetime, zone: tzinfo) -> tuple[datetime, datetime | None]:
+        """Resolve this partial date using the given reference."""
+        min = self.datetime_min(zone)
+        max = self.datetime_max(zone)
+        if min != max:
+            return (min, max)
+        else:
+            return (min, None)
 
 
 class RelativeDate(StrEnum):
@@ -208,6 +219,14 @@ class RelativeDate(StrEnum):
     def render(self) -> str:
         """Renders the string representation."""
         return self.name
+
+    def resolve(self, ref: datetime, zone: tzinfo) -> tuple[datetime, datetime | None]:
+        """Resolve this relative date using the given reference."""
+        match self:
+            case RelativeDate.today:
+                return (ref, None)
+            case RelativeDate.yesterday:
+                return (ref - timedelta(days=1), None)
 
 
 @dataclass
@@ -228,6 +247,14 @@ class DateTimeCalc:
             sep = "-"
 
         return f"{self.ref.render()}{sep}{period}d"
+
+    def resolve(self, ref: datetime, zone: tzinfo) -> tuple[datetime, datetime | None]:
+        """Resolve this date calculation using the given reference."""
+        ts = self.ref.resolve(ref, zone)[0]
+        if self.is_range:
+            return (ts - timedelta(days=self.amount_days), ts + timedelta(days=self.amount_days))
+        else:
+            return (ts + timedelta(days=self.amount_days), None)
 
 
 type DateTimeRef = PartialDateTime | RelativeDate | DateTimeCalc
@@ -578,17 +605,17 @@ class Segments:
     @classmethod
     def created_is(cls, date: DateTimeRef, *args: DateTimeRef) -> Segment:
         """Return created-is query segment."""
-        return cls.created(Comparison.is_equal, date, args)
+        return cls.created(Comparison.is_equal, date, *args)
 
     @classmethod
     def created_is_lt(cls, date: DateTimeRef, *args: DateTimeRef) -> Segment:
         """Return created-< query segment."""
-        return cls.created(Comparison.is_lower_than, date, args)
+        return cls.created(Comparison.is_lower_than, date, *args)
 
     @classmethod
     def created_is_gt(cls, date: DateTimeRef, *args: DateTimeRef) -> Segment:
         """Return created-> query segment."""
-        return cls.created(Comparison.is_greater_than, date, args)
+        return cls.created(Comparison.is_greater_than, date, *args)
 
     @classmethod
     def role_is(cls, role: Role, *args: Role) -> Segment:
