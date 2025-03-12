@@ -83,6 +83,60 @@ class SortDirection(StrEnum):
 
 
 @final
+class SubQuery(BaseModel, frozen=True):
+    """Represents a solr sub query."""
+
+    query: str
+    filter: str
+    limit: int
+    offset: int = 0
+    fields: list[str | FieldName] = Field(default_factory=list)
+    sort: list[tuple[FieldName, SortDirection]] = Field(default_factory=list)
+
+    def with_sort(self, s: list[tuple[FieldName, SortDirection]]) -> Self:
+        """Return a copy with a new sort definition."""
+        return self.model_copy(update={"sort": s})
+
+    def with_fields(self, fn: FieldName, *args: FieldName) -> Self:
+        """Return a copy with a new field list."""
+        fs = [fn] + list(args)
+        return self.model_copy(update={"fields": fs})
+
+    def with_filter(self, q: str) -> Self:
+        """Return a copy with a new filter query."""
+        return self.model_copy(update={"filter": q})
+
+    def with_query(self, q: str) -> Self:
+        """Return a copy with a new query."""
+        return self.model_copy(update={"query": q})
+
+    def to_params(self, field: FieldName) -> dict[str, str]:
+        """Return a dictionary intended to be added to the main query params."""
+
+        def key(s: str) -> str:
+            return f"{field}.{s}"
+
+        result = {key("q"): self.query}
+        if self.filter != "":
+            result.update({key("fq"): self.filter})
+
+        if self.limit > 0:
+            result.update({key("limit"): str(self.limit)})
+
+        if self.offset > 0:
+            result.update({key("offset"): str(self.offset)})
+
+        if self.fields != []:
+            result.update({key("fl"): ",".join(self.fields)})
+
+        if self.sort != []:
+            solr_sort = ",".join(list(map(lambda t: f"{t[0]} {t[1].value}", self.sort)))
+            result.update({key("sort"): solr_sort})
+
+        return result
+
+
+@final
 class SolrQuery(BaseModel, frozen=True):
     """A query to solr using the JSON request api.
 
@@ -104,6 +158,12 @@ class SolrQuery(BaseModel, frozen=True):
     def with_sort(self, s: list[tuple[FieldName, SortDirection]]) -> Self:
         """Return a copy of this with an updated sort."""
         return self.model_copy(update={"sort": s})
+
+    def add_sub_query(self, field: FieldName, sq: SubQuery) -> Self:
+        """Add the sub query to this query."""
+        np = self.params | sq.to_params(field)
+        fs = self.fields + [FieldName(f"{field}:[subquery]")]
+        return self.model_copy(update={"params": np, "fields": fs})
 
     @field_serializer("sort", when_used="always")
     def __serialize_sort(self, sort: list[tuple[FieldName, SortDirection]]) -> str:
