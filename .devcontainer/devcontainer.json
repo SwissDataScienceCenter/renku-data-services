@@ -33,7 +33,7 @@
         "version": "21",
         "jdkDistro": "open"
     },
-    "./solr": {}
+    // "./solr": {}
 	},
 	"overrideFeatureInstallOrder": [
 		"ghcr.io/devcontainers-extra/features/poetry",
