@@ -264,19 +264,22 @@ class ActivityPubBP(CustomBlueprint):
     def host_meta(self) -> BlueprintFactoryResponse:
         """Host metadata endpoint."""
 
-        async def _host_meta(request: Request) -> HTTPResponse:
-            host_meta_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
-<XRD xmlns="http://docs.oasis-open.org/ns/xri/xrd-1.0">
-  <Link rel="lrdd" template="{self.config.base_url}/ap/webfinger?resource={{uri}}"/>
-</XRD>"""
+        async def _host_meta_handler(request: Request) -> HTTPResponse:
+            # Create the XML response
+            template = self.config.base_url + "/ap/webfinger?resource={uri}"
+            xml_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
+            xml_content += '<XRD xmlns="http://docs.oasis-open.org/ns/xri/xrd-1.0">\n'
+            xml_content += f'  <Link rel="lrdd" template="{template}"/>\n'
+            xml_content += '</XRD>'
 
+            # Return the response
             return text(
-                host_meta_xml,
+                xml_content,
                 status=200,
                 headers={"Content-Type": "application/xrd+xml"},
             )
 
-        return "/ap/.well-known/host-meta", ["GET"], _host_meta
+        return "/ap/.well-known/host-meta", ["GET"], _host_meta_handler
 
     def nodeinfo(self) -> BlueprintFactoryResponse:
         """NodeInfo endpoint."""

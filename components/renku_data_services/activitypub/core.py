@@ -5,6 +5,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional, Union
 import urllib.parse
+import dataclasses
 
 import httpx
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -227,7 +228,7 @@ class ActivityPubService:
 
             if response.status_code >= 400:
                 logger.error(f"Failed to deliver activity to {inbox_url}: {response.status_code} {response.text}")
-                raise errors.ExternalServiceError(
+                raise errors.ProgrammingError(
                     message=f"Failed to deliver activity to {inbox_url}: {response.status_code}"
                 )
 
@@ -288,23 +289,22 @@ class ActivityPubService:
             "Accept": "application/activity+json",
         }
 
-    def _to_dict(self, obj: Any) -> Dict[str, Any]:
+    def _to_dict(self, obj: Any) -> Any:
         """Convert an object to a dictionary."""
         if isinstance(obj, dict):
             return {k: self._to_dict(v) for k, v in obj.items()}
         elif isinstance(obj, list):
             return [self._to_dict(item) for item in obj]
-        elif hasattr(obj, "__dataclass_fields__"):
-            # It's a dataclass
+        elif dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+            # Convert dataclass instance to dict
             result = {}
-            for field_name in obj.__dataclass_fields__:
-                value = getattr(obj, field_name)
-                if value is not None:  # Skip None values
+            for field_name, field_value in dataclasses.asdict(obj).items():
+                if field_value is not None:  # Skip None values
                     if field_name == "context":
                         # Special case for @context
-                        result["@context"] = self._to_dict(value)
+                        result["@context"] = field_value
                     else:
-                        result[field_name] = self._to_dict(value)
+                        result[field_name] = field_value
             return result
         elif isinstance(obj, datetime):
             return obj.isoformat()
