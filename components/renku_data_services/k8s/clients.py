@@ -7,8 +7,9 @@ from multiprocessing.synchronize import Lock as LockType
 from typing import Any
 from uuid import uuid4
 
-from kubernetes import client
-from kubernetes.config import ConfigException, new_client_from_config
+from kubernetes import client, config
+from kubernetes.config.config_exception import ConfigException
+from kubernetes.config.incluster_config import SERVICE_CERT_FILENAME, SERVICE_TOKEN_FILENAME, InClusterConfigLoader
 
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface, K8sSchedudlingClientInterface
 
@@ -16,13 +17,15 @@ from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface, K8
 class K8sCoreClient(K8sCoreClientInterface):  # pragma:nocover
     """Real k8s core API client that exposes the required functions."""
 
-    def __init__(self, config_file: str | None = None) -> None:
+    def __init__(self) -> None:
         try:
-            api = new_client_from_config(config_file=config_file)
+            InClusterConfigLoader(
+                token_filename=SERVICE_TOKEN_FILENAME,
+                cert_filename=SERVICE_CERT_FILENAME,
+            ).load_and_set()
         except ConfigException:
-            api = None
-
-        self.client = client.CoreV1Api(api_client=api)
+            config.load_config()
+        self.client = client.CoreV1Api()
 
     def read_namespaced_resource_quota(self, name: str, namespace: str, **kwargs: dict) -> Any:
         """Get a resource quota."""
@@ -60,13 +63,15 @@ class K8sCoreClient(K8sCoreClientInterface):  # pragma:nocover
 class K8sSchedulingClient(K8sSchedudlingClientInterface):  # pragma:nocover
     """Real k8s scheduling API client that exposes the required functions."""
 
-    def __init__(self, config_file: str | None = None) -> None:
+    def __init__(self) -> None:
         try:
-            api = new_client_from_config(config_file=config_file)
+            InClusterConfigLoader(
+                token_filename=SERVICE_TOKEN_FILENAME,
+                cert_filename=SERVICE_CERT_FILENAME,
+            ).load_and_set()
         except ConfigException:
-            api = None
-
-        self.client = client.SchedulingV1Api(api_client=api)
+            config.load_config()
+        self.client = client.SchedulingV1Api()
 
     def create_priority_class(self, body: Any, **kwargs: Any) -> Any:
         """Create a priority class."""
