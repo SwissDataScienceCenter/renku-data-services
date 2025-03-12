@@ -868,7 +868,7 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
         if class_id is not None:
             rp = await self._rp_repo.get_resource_pool_from_class(api_user, class_id)
             if rp.cluster is not None:
-                name = rp.cluster.config_name
+                name = rp.cluster.name
 
         return name
 
