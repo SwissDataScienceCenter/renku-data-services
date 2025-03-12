@@ -204,7 +204,7 @@ def _validate_repository(repository: str) -> str:
     """Validate a git repository."""
     stripped = repository.strip()
     parsed = urlparse(stripped)
-    if parsed.scheme != "http" and parsed.scheme != "https":
+    if parsed.scheme not in ["http", "https"]:
         raise errors.ValidationError(message=f'The repository URL "{repository}" is not a valid HTTP or HTTPS URL.')
     return stripped
 
