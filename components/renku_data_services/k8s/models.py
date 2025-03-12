@@ -59,7 +59,7 @@ class K8sObjectMeta:
             user_id=self.user_id,
         )
 
-    def to_list_filter(self) -> K8sObjectFilter:
+    def to_filter(self) -> K8sObjectFilter:
         """Convert the metadata to a filter used when listing resources."""
         return K8sObjectFilter(
             kind=self.kind,

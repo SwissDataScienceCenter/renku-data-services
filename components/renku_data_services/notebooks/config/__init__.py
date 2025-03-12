@@ -52,30 +52,6 @@ from renku_data_services.notebooks.constants import (
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
 
 
-def kr8s_async_api(
-    url: Optional[str] = None,
-    kubeconfig: Optional[str] = None,
-    serviceaccount: Optional[str] = None,
-    namespace: Optional[str] = None,
-    context: Optional[str] = None,
-) -> kr8s.asyncio.Api:
-    """Create an async api client from sync code.
-
-    Kr8s cannot return an AsyncAPI instance from sync code, and we can't easily make all our config code async,
-    so this method is a direct copy of the kr8s sync client code, just that it returns an async client.
-    """
-    ret = kr8s._async_utils.run_sync(kr8s.asyncio.api)(
-        url=url,
-        kubeconfig=kubeconfig,
-        serviceaccount=serviceaccount,
-        namespace=namespace,
-        context=context,
-        _asyncio=True,  # This is the only line that is different from kr8s code
-    )
-    assert isinstance(ret, kr8s.asyncio.Api)
-    return ret
-
-
 class CRCValidatorProto(Protocol):
     """Compute resource control validator."""
 
@@ -197,7 +173,7 @@ class NotebooksConfig:
             )
             # NOTE: we need to get an async client as a sync client can't be used in an async way
             # But all the config code is not async, so we need to drop into the running loop, if there is one
-            kr8s_api = kr8s_async_api()
+            kr8s_api = _KubeConfigEnv().api()
 
         k8s_config = _K8sConfig.from_env()
         k8s_db_cache = K8sDbCache(db_config.async_session_maker)
@@ -253,23 +229,50 @@ class _KubeConfig:
         kubeconfig: str | None = None,
         current_context_name: str | None = None,
         ns: str | None = None,
+        sc: str | None = None,
+        url: str | None = None,
     ) -> None:
         self._kubeconfig = kubeconfig
         self._ns = ns
         self._current_context_name = current_context_name
+        self._sc = sc
+        self._url = url
 
-    def api(self) -> Union[kr8s.Api, kr8s._AsyncApi]:
+    def _sync_api(self) -> Union[kr8s.Api, kr8s._AsyncApi]:
         return kr8s.api(
             kubeconfig=self._kubeconfig,
             namespace=self._ns,
             context=self._current_context_name,
         )
 
+    def _async_api(self) -> kr8s.asyncio.Api:
+        """Create an async api client from sync code.
+
+        Kr8s cannot return an AsyncAPI instance from sync code, and we can't easily make all our config code async,
+        so this method is a direct copy of the kr8s sync client code, just that it returns an async client.
+        """
+        ret = kr8s._async_utils.run_sync(kr8s.asyncio.api)(
+            url=self._url,
+            kubeconfig=self._kubeconfig,
+            serviceaccount=self._sc,
+            namespace=self._ns,
+            context=self._current_context_name,
+            _asyncio=True,  # This is the only line that is different from kr8s code
+        )
+        assert isinstance(ret, kr8s.asyncio.Api)
+        return ret
+
+    def api(self, _async: bool = True) -> Union[kr8s.Api, kr8s._AsyncApi]:
+        # Instantiate the Kr8s Api object based on the configuration
+        if _async:
+            return self._async_api()
+        else:
+            return self._sync_api()
+
 
 class _KubeConfigEnv(_KubeConfig):
     def __init__(self) -> None:
-        super().__init__()
-        self._ns = os.environ.get("K8S_NAMESPACE", "default")
+        super().__init__(ns=os.environ.get("K8S_NAMESPACE", "default"))
 
 
 class _KubeConfigYaml(_KubeConfig):
