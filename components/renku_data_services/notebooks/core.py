@@ -346,6 +346,7 @@ async def launch_notebook_helper(
     using_default_image = False
     if image:
         # A specific image was requested
+        # TODO: reuse this code to check if the image needs an image pull secret
         parsed_image = Image.from_path(image)
         image_repo = parsed_image.repo_api()
         image_exists_publicly = await image_repo.image_exists(parsed_image)
