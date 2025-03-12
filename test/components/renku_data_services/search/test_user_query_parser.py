@@ -24,13 +24,14 @@ from renku_data_services.search.user_query import (
     Query,
     RelativeDate,
     RoleIs,
+    Segments,
     SlugIs,
     SortableField,
     Text,
     TypeIs,
     VisibilityIs,
 )
-from renku_data_services.search.user_query_parser import _DateTimeParser, _ParsePrimitives
+from renku_data_services.search.user_query_parser import QueryParser, _DateTimeParser, _ParsePrimitives
 from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.solr_client import SortDirection
 
@@ -207,6 +208,17 @@ def test_query() -> None:
     )
     qstr = 'created>today-7d some slug:"bad slug" text sort:score-asc'
     assert pp.query.parse(qstr) == q
+    assert q.render() == qstr
+
+    q = Query(
+        [
+            Segments.name_is("al"),
+            Segments.text("hello world hello"),
+            Segments.sort_by((SortableField.score, SortDirection.desc)),
+        ]
+    )
+    qstr = "name:al hello world hello sort:score-desc"
+    assert QueryParser.parse(qstr) == q
     assert q.render() == qstr
 
     # TODO any random string must parse successfully

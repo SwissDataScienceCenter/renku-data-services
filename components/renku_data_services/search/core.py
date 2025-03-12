@@ -1,7 +1,7 @@
 """Business logic for searching."""
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 
 import renku_data_services.search.apispec as apispec
 from renku_data_services.base_models import APIUser
@@ -9,8 +9,19 @@ from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.message_queue.models import Reprovisioning
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project.db import ProjectRepository
+from renku_data_services.search import converters
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.models import DeleteDoc
+from renku_data_services.search.solr_user_query import (
+    AdminRole,
+    Context,
+    QueryInterpreter,
+    SearchRole,
+    SolrUserQuery,
+    UserRole,
+)
+from renku_data_services.search.user_query import Query
+from renku_data_services.solr.entity_documents import EntityDocReader, Group, Project, User
 from renku_data_services.solr.solr_client import (
     DefaultSolrClient,
     RawDocument,
@@ -112,12 +123,41 @@ async def update_solr(search_updates_repo: SearchUpdatesRepo, solr_client: SolrC
         logger.info(f"Updated {counter} entries in SOLR")
 
 
-async def query(solr_config: SolrClientConfig, query: SolrQuery, user: APIUser) -> apispec.SearchResult:
+async def _renku_query(ctx: Context, uq: SolrUserQuery, limit: int, offset: int) -> SolrQuery:
+    return SolrQuery.query_all_fields(uq.query_str(), limit, offset).with_sort(uq.sort)
+
+
+async def query(
+    solr_config: SolrClientConfig, query: Query, user: APIUser, limit: int, offset: int
+) -> apispec.SearchResult:
     """Run the given user query against solr and return the result."""
 
-    print(f"==== {query} ===")
-    return apispec.SearchResult(
-        items=[],
-        facets=apispec.FacetData(entityType={}),
-        pagingInfo=apispec.PageWithTotals(page=apispec.PageDef(limit=10, offset=0), totalPages=1, totalResult=0),
-    )
+    logger.info(f"User search query: {query.render()}")
+    role: SearchRole | None = None
+    if user.is_authenticated:
+        role = UserRole(user.id or "")
+    if user.is_admin:
+        role = AdminRole(user.id or "")
+
+    ctx = Context(datetime.now(), UTC, role)
+    suq = QueryInterpreter.default().run(ctx, query)
+    solr_query = await _renku_query(ctx, suq, limit, offset)
+    logger.info(f"Solr query: {solr_query.to_dict()}")
+
+    async with DefaultSolrClient(solr_config) as client:
+        results = await client.query(solr_query)
+        total_pages = int(results.response.num_found / limit)
+        if results.response.num_found % limit != 0:
+            total_pages += 1
+
+        solr_docs: list[Group | Project | User] = results.response.read_to(EntityDocReader.from_dict)
+        docs = list(map(converters.from_entity, solr_docs))
+        return apispec.SearchResult(
+            items=docs,
+            facets=apispec.FacetData(entityType={}),
+            pagingInfo=apispec.PageWithTotals(
+                page=apispec.PageDef(limit=limit, offset=offset),
+                totalPages=int(total_pages),
+                totalResult=results.response.num_found,
+            ),
+        )
