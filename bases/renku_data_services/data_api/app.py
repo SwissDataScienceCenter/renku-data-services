@@ -4,6 +4,10 @@ from sanic import Sanic
 from ulid import ULID
 
 from renku_data_services import errors
+from renku_data_services.activitypub.blueprints import ActivityPubBP
+from renku_data_services.activitypub.core import ActivityPubService
+from renku_data_services.activitypub.db import ActivityPubRepository
+from renku_data_services.activitypub.models import ActivityPubConfig
 from renku_data_services.app_config import Config
 from renku_data_services.base_api.error_handler import CustomErrorHandler
 from renku_data_services.base_api.misc import MiscBP
@@ -225,6 +229,35 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         data_connector_secret_repo=config.data_connector_secret_repo,
         authenticator=config.authenticator,
     )
+
+    # ActivityPub configuration
+    activitypub_config = ActivityPubConfig(
+        domain=config.domain,
+        base_url=config.base_url,
+        admin_email=config.admin_email,
+    )
+
+    # ActivityPub repository and service
+    activitypub_repo = ActivityPubRepository(
+        session_maker=config.db.async_session_maker,
+        project_repo=config.project_repo,
+        config=activitypub_config,
+    )
+
+    activitypub_service = ActivityPubService(
+        activitypub_repo=activitypub_repo,
+        project_repo=config.project_repo,
+        config=activitypub_config,
+    )
+
+    # ActivityPub blueprint
+    activitypub = ActivityPubBP(
+        name="activitypub",
+        url_prefix=url_prefix,
+        activitypub_service=activitypub_service,
+        authenticator=config.authenticator,
+        config=activitypub_config,
+    )
     app.blueprint(
         [
             resource_pools.blueprint(),
@@ -252,6 +285,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
             message_queue.blueprint(),
             search.blueprint(),
             data_connectors.blueprint(),
+            activitypub.blueprint(),
         ]
     )
     if builds is not None:
