@@ -1,5 +1,7 @@
 """Tests for user query."""
 
+from datetime import UTC, datetime, timedelta
+
 from ulid import ULID
 
 from components.renku_data_services.search.user_query import DateTimeCalc, RelativeDate
@@ -19,6 +21,8 @@ from renku_data_services.search.user_query import (
 )
 from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.solr_client import SortDirection
+
+ref_date: datetime = datetime(2024, 2, 27, 15, 34, 55, tzinfo=UTC)
 
 
 def test_render_order_by() -> None:
@@ -152,6 +156,34 @@ def test_datetime_calc() -> None:
 
     d = DateTimeCalc(RelativeDate.yesterday, 7, False)
     assert d.render() == "yesterday+7d"
+
+
+def test_resolve_relative_date() -> None:
+    assert RelativeDate.today.resolve(ref_date, UTC) == (ref_date, None)
+    assert RelativeDate.yesterday.resolve(ref_date, UTC) == (ref_date - timedelta(days=1), None)
+
+
+def test_resolve_partial_date() -> None:
+    pd = PartialDateTime(PartialDate(2023, 5))
+    assert pd.resolve(ref_date, UTC) == (pd.datetime_min(UTC), pd.datetime_max(UTC))
+
+    pd = PartialDateTime(PartialDate(2023, 5, 1), PartialTime(15, 22, 15))
+    assert pd.resolve(ref_date, UTC) == (pd.datetime_max(UTC), None)
+
+
+def test_resolve_date_calc() -> None:
+    pd = PartialDateTime(PartialDate(2023, 5))
+    calc = DateTimeCalc(pd, 5, False)
+    assert calc.resolve(ref_date, UTC) == (pd.datetime_min(UTC) + timedelta(days=5), None)
+
+    calc = DateTimeCalc(pd, -5, False)
+    assert calc.resolve(ref_date, UTC) == (pd.datetime_min(UTC) - timedelta(days=5), None)
+
+    calc = DateTimeCalc(pd, 5, True)
+    assert calc.resolve(ref_date, UTC) == (
+        pd.datetime_min(UTC) - timedelta(days=5),
+        pd.datetime_min(UTC) + timedelta(days=5),
+    )
 
 
 def test_query_extract_order() -> None:
