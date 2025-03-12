@@ -155,3 +155,23 @@ class Project(EntityDoc, frozen=True):
     def from_dict(cls, d: dict[str, Any]) -> "Project":
         """Create a Project from a dictionary."""
         return Project.model_validate(d)
+
+
+class EntityDocReader:
+    """Reads dicts into one of the entity document classes."""
+
+    @classmethod
+    def from_dict(cls, doc: dict[str, Any]) -> User | Project | Group | None:
+        """Reads dicts into one of the entity document classes."""
+        dt = doc.get("_type")
+        if dt is None:
+            return None
+        else:
+            discriminator = EntityType[dt.lower()]
+            match discriminator:
+                case EntityType.project:
+                    return Project.from_dict(doc)
+                case EntityType.user:
+                    return User.from_dict(doc)
+                case EntityType.group:
+                    return Group.from_dict(doc)

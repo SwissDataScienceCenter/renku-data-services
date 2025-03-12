@@ -16,7 +16,8 @@ from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.search.apispec import SearchQuery
 from renku_data_services.search.db import SearchUpdatesRepo
-from renku_data_services.solr.solr_client import SolrClientConfig, SolrQuery
+from renku_data_services.search.user_query_parser import QueryParser
+from renku_data_services.solr.solr_client import SolrClientConfig
 from renku_data_services.users.db import UserRepo
 
 
@@ -88,11 +89,10 @@ class SearchBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @validate_query(query=SearchQuery)
         async def _query(_: Request, user: base_models.APIUser, query: SearchQuery) -> HTTPResponse | JSONResponse:
-            query_str = query.q
             per_page = query.per_page
             offset = (query.page - 1) * per_page
-            solr_query = SolrQuery.query_all_fields(qstr=query_str, limit=per_page, offset=offset)
-            result = await core.query(self.solr_config, solr_query, user)
-            return json(result.model_dump(by_alias=True, exclude_defaults=True))
+            uq = QueryParser.parse(query.q)
+            result = await core.query(self.solr_config, uq, user, per_page, offset)
+            return json(result.model_dump(by_alias=True, exclude_defaults=True, mode="json"))
 
         return "/search/query", ["GET"], _query

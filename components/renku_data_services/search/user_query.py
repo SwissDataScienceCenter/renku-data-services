@@ -494,6 +494,15 @@ class Text:
         """Return the value."""
         return self.value
 
+    def append(self, next: Self) -> Self:
+        """Appends a text to this one."""
+        if self.value == "":
+            return next
+        elif next.value == "":
+            return self
+        else:
+            return type(self)(self.value + " " + next.value)
+
 
 class SortableField(StrEnum):
     """A field supported for sorting."""
