@@ -1,5 +1,6 @@
 """Model for creating solr lucene queries."""
 
+import re
 from datetime import datetime
 from typing import NewType
 
@@ -48,7 +49,7 @@ def from_visibility(v: Visibility) -> SolrToken:
 
 def from_entity_type(et: EntityType) -> SolrToken:
     """Create a solr query value for an entity type."""
-    return SolrToken(et.value.lower())
+    return SolrToken(et.value.capitalize())
 
 
 def from_datetime(dt: datetime) -> SolrToken:
@@ -122,3 +123,10 @@ def all_entity_types() -> SolrToken:
 def public_only() -> SolrToken:
     """Search only public entities."""
     return field_is(Fields.visibility, from_visibility(Visibility.PUBLIC))
+
+
+def content_all(text: str) -> SolrToken:
+    """Search the content_all field with fuzzy searching each term."""
+    terms: list[SolrToken] = list(map(lambda s: SolrToken(__escape_query(s) + "~"), re.split("\\s+", text)))
+    terms_str = "(" + " ".join(terms) + ")"
+    return SolrToken(f"{Fields.content_all}:{terms_str}")
