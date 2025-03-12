@@ -5,7 +5,7 @@ import datetime
 import pytest
 from parsy import ParseError
 
-from renku_data_services.authz.models import Visibility
+from renku_data_services.authz.models import Role, Visibility
 from renku_data_services.search.user_query import (
     Comparison,
     Created,
@@ -23,6 +23,7 @@ from renku_data_services.search.user_query import (
     PartialTime,
     Query,
     RelativeDate,
+    RoleIs,
     SlugIs,
     SortableField,
     Text,
@@ -143,6 +144,13 @@ def test_created() -> None:
     )
 
 
+def test_role_is() -> None:
+    assert pp.role_is.parse("role:owner") == RoleIs(Nel(Role.OWNER))
+    assert pp.role_is.parse("role:viewer") == RoleIs(Nel(Role.VIEWER))
+    assert pp.role_is.parse("role:editor") == RoleIs(Nel(Role.EDITOR))
+    assert pp.role_is.parse("role:viewer,editor") == RoleIs(Nel.of(Role.VIEWER, Role.EDITOR))
+
+
 def test_field_term() -> None:
     assert pp.field_term.parse("created<today") == Created(Comparison.is_lower_than, Nel.of(RelativeDate.today))
     assert pp.field_term.parse("visibility:public") == VisibilityIs(Nel.of(Visibility.PUBLIC))
@@ -153,6 +161,8 @@ def test_field_term() -> None:
     assert pp.field_term.parse("keyword:test") == KeywordIs(Nel("test"))
     assert pp.field_term.parse("namespace:test") == NamespaceIs(Nel("test"))
     assert pp.field_term.parse("createdBy:test") == CreatedByIs(Nel("test"))
+    assert pp.field_term.parse("role:owner") == RoleIs(Nel(Role.OWNER))
+    assert pp.field_term.parse("role:viewer") == RoleIs(Nel(Role.VIEWER))
 
 
 def test_free_text() -> None:
@@ -160,6 +170,9 @@ def test_free_text() -> None:
 
     with pytest.raises(ParseError):
         pp.free_text.parse("")
+
+    with pytest.raises(ParseError):
+        pp.free_text.parse('"hello world"')
 
 
 def test_segment() -> None:
@@ -176,6 +189,8 @@ def test_segment() -> None:
     assert pp.segment.parse("keyword:test") == KeywordIs(Nel("test"))
     assert pp.segment.parse("namespace:test") == NamespaceIs(Nel("test"))
     assert pp.segment.parse("createdBy:test") == CreatedByIs(Nel("test"))
+
+    assert pp.segment.parse("name:") == Text("name:")
 
 
 def test_query() -> None:
