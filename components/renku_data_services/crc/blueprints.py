@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass
 
 from sanic import HTTPResponse, Request, empty, json
 from sanic_ext import validate
+from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
@@ -13,7 +14,8 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_api.misc import validate_body_root_model, validate_db_ids, validate_query
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.crc import apispec, models
-from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
+from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository, UserRepository
+from renku_data_services.crc.models import SavedCluster, UnsavedCluster
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.models import UserInfo
@@ -566,3 +568,101 @@ class UserResourcePoolsBP(CustomBlueprint):
             rps,
             status=201 if post else 200,
         )
+
+
+@dataclass(kw_only=True)
+class ClustersBP(CustomBlueprint):
+    """Handlers for dealing with the cluster definitions."""
+
+    repo: ClusterRepository
+    authenticator: base_models.Authenticator
+
+    def get_all(self) -> BlueprintFactoryResponse:
+        """Get the cluster descriptions."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        async def _handler(_request: Request, user: base_models.APIUser) -> HTTPResponse:
+            clusters = await self.repo.select_all(user)
+
+            return validated_json(apispec.ClustersWithId, clusters)
+
+        return "/clusters", ["GET"], _handler
+
+    def post(self) -> BlueprintFactoryResponse:
+        """Get the cluster descriptions."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate(json=apispec.Cluster)
+        async def _handler(_request: Request, user: base_models.APIUser, body: apispec.Cluster) -> HTTPResponse:
+            cluster = UnsavedCluster(name=body.name, config_name=body.config_name)
+            cluster = await self.repo.insert(user, cluster)
+
+            return validated_json(apispec.ClusterWithId, cluster, status=201)
+
+        return "/clusters", ["POST"], _handler
+
+    def get(self) -> BlueprintFactoryResponse:
+        """Get the cluster descriptions."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        async def _handler(_request: Request, user: base_models.APIUser, cluster_id: ULID) -> HTTPResponse:
+            cluster = await self.repo.select(user, cluster_id)
+
+            return validated_json(apispec.ClusterWithId, cluster, status=200)
+
+        return "/clusters/<cluster_id>", ["GET"], _handler
+
+    def put(self) -> BlueprintFactoryResponse:
+        """Update the cluster descriptions."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate(json=apispec.Cluster)
+        async def _handler(
+            _request: Request, user: base_models.APIUser, cluster_id: ULID, body: apispec.Cluster
+        ) -> HTTPResponse:
+            # We allow the cluster_id to be modified. The operation might fail if the new id already exists in the DB.
+            cluster = SavedCluster(id=cluster_id, name=body.name, config_name=body.config_name)
+            cluster = await self.repo.update(user, cluster, cluster_id)
+
+            return validated_json(apispec.ClusterWithId, cluster, status=201)
+
+        return "/clusters/<cluster_id>", ["PUT"], _handler
+
+    def patch(self) -> BlueprintFactoryResponse:
+        """Patch the cluster descriptions."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate(json=apispec.ClusterPatch)
+        async def _handler(
+            _request: Request, user: base_models.APIUser, cluster_id: ULID, body: apispec.ClusterPatch
+        ) -> HTTPResponse:
+            # We allow the cluster_id to be modified. The operation might fail if the new id already exists in the DB.
+            old = await self.repo.select(user, cluster_id)
+
+            id = ULID.from_str(body.id) if body.id is not None else cluster_id
+            name = body.name if body.name is not None else old.name
+            config_name = body.config_name if body.config_name is not None else old.config_name
+            cluster = SavedCluster(id=id, name=name, config_name=config_name)
+
+            cluster = await self.repo.update(user, cluster, cluster_id)
+
+            return validated_json(apispec.ClusterWithId, cluster, status=201)
+
+        return "/clusters/<cluster_id>", ["PATCH"], _handler
+
+    def delete(self) -> BlueprintFactoryResponse:
+        """Remove the cluster description."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        async def _handler(_request: Request, user: base_models.APIUser, cluster_id: ULID) -> HTTPResponse:
+            await self.repo.delete(user, cluster_id)
+
+            return HTTPResponse(status=204)
+
+        return "/clusters/<cluster_id>", ["DELETE"], _handler
