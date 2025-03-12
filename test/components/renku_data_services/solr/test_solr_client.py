@@ -14,10 +14,11 @@ from renku_data_services.solr.solr_client import (
     SolrClientCreateCoreException,
     SolrQuery,
     SortDirection,
+    SubQuery,
     UpsertResponse,
     UpsertSuccess,
 )
-from renku_data_services.solr.solr_schema import AddCommand, Field, SchemaCommandList
+from renku_data_services.solr.solr_schema import AddCommand, Field, SchemaCommandList, FieldName
 from test.components.renku_data_services.solr import test_entity_documents
 
 
@@ -131,6 +132,7 @@ async def test_status_for_existing_core(solr_config):
         assert "userData" in status["index"]
 
 
+@pytest.mark.asyncio
 async def test_create_new_core(solr_config):
     random_name = "".join(random.choices(string.ascii_lowercase + string.digits, k=9))
     async with DefaultSolrAdminClient(solr_config) as client:
@@ -154,6 +156,7 @@ async def test_create_new_core(solr_config):
         assert resp.status_code == 200
 
 
+@pytest.mark.asyncio
 async def test_create_same_core_twice(solr_config):
     random_name = "".join(random.choices(string.ascii_lowercase + string.digits, k=9))
     async with DefaultSolrAdminClient(solr_config) as client:
@@ -162,3 +165,28 @@ async def test_create_same_core_twice(solr_config):
 
         with pytest.raises(SolrClientCreateCoreException):
             await client.create(random_name)
+
+@pytest.mark.asyncio
+async def test_sub_query(solr_search):
+    async with DefaultSolrClient(solr_search) as client:
+        u1 = test_entity_documents.user_tadej_pogacar
+        u2 = test_entity_documents.user_jan_ullrich
+        p = test_entity_documents.project_ai_stuff
+        r1 = await client.upsert([u1, u2, p])
+        assert_upsert_result(r1)
+
+        creator_details = FieldName("creatorDetails")
+
+        query = SolrQuery.query_all_fields("_type:Project").add_sub_query(
+            creator_details,
+            SubQuery(query="{!terms f=id v=$row.createdBy}", filter="{!terms f=_kind v=fullentity}", limit=1),
+        )
+
+        r2 = await client.query(query)
+        assert len(r2.response.docs) == 1
+        details = r2.response.docs[0][creator_details]
+        assert len(details["docs"]) == 1
+        user_doc = details["docs"][0]
+        user = User.model_validate(user_doc)
+        assert user.namespace == u2.namespace
+        assert user.id == u2.id
