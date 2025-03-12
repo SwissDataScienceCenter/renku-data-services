@@ -251,10 +251,7 @@ class EntityPath:
     @classmethod
     def from_string(cls, path: str) -> Self:
         """Create an entity path from a single string which may contain several slugs."""
-        res: list[Slug] = []
-        for slug in path.split("/"):
-            res.append(Slug(slug))
-        return cls(res)
+        return cls.join(path.split("/"))
 
     def __getitem__(self, ind: int) -> Slug:
         return self.slugs[ind]

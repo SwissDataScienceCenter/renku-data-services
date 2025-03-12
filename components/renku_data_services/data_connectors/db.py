@@ -315,7 +315,7 @@ class DataConnectorRepository:
         old_data_connector = data_connector.dump()
 
         if old_data_connector.project and old_data_connector.project.slug != patch.project_slug:
-            raise NotImplementedError("Moving the data connector to another project or namespace is not supported")
+            raise NotImplementedError("Moving a data connector to another project or namespace is not supported")
 
         required_scope = Scope.WRITE
         if patch.visibility is not None and patch.visibility != old_data_connector.visibility:
