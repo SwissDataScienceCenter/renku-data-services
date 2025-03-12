@@ -169,7 +169,7 @@ async def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
     env = [
         {
             "name": f"{prefix}MOUNT_PATH",
-            "value": server.work_dir.as_posix(),
+            "value": server.workspace_mount_path.as_posix(),
         },
         {
             "name": f"{prefix}LFS_AUTO_FETCH",
