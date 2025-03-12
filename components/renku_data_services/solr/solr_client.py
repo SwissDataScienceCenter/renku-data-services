@@ -4,6 +4,7 @@ import json
 import logging
 import os
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from enum import StrEnum
@@ -210,6 +211,16 @@ class ResponseBody(BaseModel):
         serialization_alias="numFoundExact", validation_alias=AliasChoices("numFoundExact", "num_found_exact")
     )
     docs: list[dict[str, Any]]
+
+    def read_to[A](self, f: Callable[[dict[str, Any]], A | None]) -> list[A]:
+        """Read the documents array using the given function."""
+        result = []
+        for doc in self.docs:
+            a = f(doc)
+            if a is not None:
+                result.append(a)
+
+        return result
 
 
 class QueryResponse(BaseModel):
