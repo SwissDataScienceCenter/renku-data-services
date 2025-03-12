@@ -6,7 +6,9 @@ from enum import StrEnum
 from typing import Any, Optional, Protocol
 from uuid import uuid4
 
-from renku_data_services.errors import ValidationError
+from ulid import ULID
+
+from renku_data_services.errors import ValidationError, errors
 
 
 class ResourcesProtocol(Protocol):
@@ -173,12 +175,41 @@ class Quota(ResourcesCompareMixin):
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class KubeClusterSettings:
+class Cluster:
     """K8s Cluster settings."""
 
+    name: str
     config_name: str
-    node_affinities: list[str]
-    tolerations: list[str]
+
+    @classmethod
+    def _check_keys(cls, keys: list[str], data: dict) -> None:
+        for key in keys:
+            if key not in data:
+                raise errors.ProgrammingError(
+                    message=f"Cannot build {cls.__name__} from dictionary: Missing field: '{key}'"
+                )
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Cluster":
+        """Instantiate a SavedCluster from the dictionary."""
+        cls._check_keys(["name", "config_name"], data)
+
+        if "id" in data:
+            return SavedCluster(**{**data})
+        else:
+            return UnsavedCluster(**{**data})
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedCluster(Cluster):
+    """Unsaved, memory-only K8s Cluster settings."""
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SavedCluster(Cluster):
+    """K8s Cluster settings from the DB."""
+
+    id: ULID
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -193,7 +224,8 @@ class ResourcePool:
     hibernation_threshold: Optional[int] = None
     default: bool = False
     public: bool = False
-    cluster: Optional[KubeClusterSettings] = None
+    cluster_id: Optional[ULID] = None
+    cluster: Optional[Cluster] = None
 
     def __post_init__(self) -> None:
         """Validate the resource pool after initialization."""
@@ -242,16 +274,23 @@ class ResourcePool:
     @classmethod
     def from_dict(cls, data: dict) -> "ResourcePool":
         """Create the model from a plain dictionary."""
+        cluster = None
         quota: Optional[Quota] = None
-        classes = []
+        classes: list[ResourceClass] = []
+
         if "quota" in data and isinstance(data["quota"], dict):
             quota = Quota.from_dict(data["quota"])
         elif "quota" in data and isinstance(data["quota"], Quota):
             quota = data["quota"]
+
         if "classes" in data and isinstance(data["classes"], set):
             classes = [ResourceClass.from_dict(c) if isinstance(c, dict) else c for c in list(data["classes"])]
         elif "classes" in data and isinstance(data["classes"], list):
             classes = [ResourceClass.from_dict(c) if isinstance(c, dict) else c for c in data["classes"]]
+
+        if "cluster" in data and isinstance(data["cluster"], Cluster):
+            cluster = Cluster.from_dict(data["cluster"]) if isinstance(data["cluster"], dict) else data["cluster"]
+
         return cls(
             name=data["name"],
             id=data.get("id"),
@@ -261,6 +300,8 @@ class ResourcePool:
             public=data.get("public", False),
             idle_threshold=data.get("idle_threshold"),
             hibernation_threshold=data.get("hibernation_threshold"),
+            cluster_id=data.get("cluster_id"),
+            cluster=cluster,
         )
 
     def get_resource_class(self, resource_class_id: int) -> ResourceClass | None:

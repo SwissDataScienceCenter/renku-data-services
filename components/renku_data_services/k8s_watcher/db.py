@@ -73,10 +73,11 @@ class K8sDbCache:
     async def get(self, meta: K8sObjectMeta) -> K8sObject | None:
         """Get a single object from the cache."""
         async with self.__session_maker() as session, session.begin():
-            obj = await self.__get(meta, session)
-            if not obj:
-                return None
-            return meta.with_manifest(obj.manifest)
+            obj_orm = await self.__get(meta, session)
+            if obj_orm is not None:
+                return meta.with_manifest(obj_orm.manifest)
+
+        return None
 
     async def list(self, _filter: K8sObjectFilter) -> AsyncIterable[K8sObject]:
         """List objects from the cache."""

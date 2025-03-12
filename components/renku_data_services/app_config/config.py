@@ -48,7 +48,7 @@ from renku_data_services.authz.authz import Authz
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.crc import models
-from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
+from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository, UserRepository
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
     DataConnectorSecretRepository,
@@ -299,6 +299,7 @@ class Config:
     _platform_repo: PlatformRepository | None = field(default=None, repr=False, init=False)
     _data_connector_repo: DataConnectorRepository | None = field(default=None, repr=False, init=False)
     _data_connector_secret_repo: DataConnectorSecretRepository | None = field(default=None, repr=False, init=False)
+    _cluster_repo: ClusterRepository | None = field(default=None, repr=False, init=False)
 
     @staticmethod
     @functools.cache
@@ -592,6 +593,14 @@ class Config:
                 authz=self.authz,
             )
         return self._data_connector_secret_repo
+
+    @property
+    def cluster_repo(self) -> ClusterRepository:
+        """The DB adapter for cluster descriptions."""
+        if not self._cluster_repo:
+            self._cluster_repo = ClusterRepository(session_maker=self.db.async_session_maker)
+
+        return self._cluster_repo
 
     @classmethod
     def from_env(cls, prefix: str = "") -> "Config":

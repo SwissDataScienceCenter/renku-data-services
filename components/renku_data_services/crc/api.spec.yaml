@@ -35,6 +35,142 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - classes
+  /clusters:
+    get:
+      summary: Get all the cluster descriptions
+      responses:
+        "200":
+          description: The cluster descriptions
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ClustersWithId"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - clusters
+    post:
+      summary: Create a new cluster description
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/Cluster"
+      responses:
+        "201":
+          description: The cluster descriptions was created
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ClusterWithId"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - clusters
+  /clusters/{cluster_id}:
+    get:
+      summary: Get a cluster description
+      parameters:
+        - in: path
+          name: cluster_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/Ulid"
+      responses:
+        "200":
+          description: The cluster description
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ClusterWithId"
+        "404":
+          description: The cluster description does not exist
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - clusters
+    put:
+      summary: Update an existing cluster description
+      parameters:
+        - in: path
+          name: cluster_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/Ulid"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/Cluster"
+      responses:
+        "200":
+          description: The cluster description
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ClusterWithId"
+        "404":
+          description: The cluster description does not exist
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - clusters
+    patch:
+      summary: Update specific fields of an existing cluster description
+      parameters:
+        - in: path
+          name: cluster_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/Ulid"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/ClusterPatch"
+      responses:
+        "200":
+          description: The cluster description
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ClusterWithId"
+        "404":
+          description: The cluster description does not exist
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - clusters
+    delete:
+      summary: Remove a cluster description
+      parameters:
+        - in: path
+          name: cluster_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/Ulid"
+      responses:
+        "204":
+          description: The cluster description was removed or did not exist in the first place
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - clusters
   /error:
     get:
       summary: Get a sample error response with status code 422
@@ -834,6 +970,40 @@ paths:
 
 components:
   schemas:
+    Cluster:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/Name"
+        config_name:
+          $ref: "#/components/schemas/Name"
+      required: [ "name", "config_name" ]
+    ClusterPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/Name"
+        config_name:
+          $ref: "#/components/schemas/Name"
+        id:
+          $ref: "#/components/schemas/Ulid"
+    ClusterWithId:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          $ref: "#/components/schemas/Name"
+        config_name:
+          $ref: "#/components/schemas/Name"
+        id:
+          $ref: "#/components/schemas/Ulid"
+      required: [ "name", "config_name", "id" ]
+    ClustersWithId:
+      type: array
+      items:
+        $ref: "#/components/schemas/ClusterWithId"
     ResourceClass:
       type: object
       additionalProperties: false
@@ -1068,6 +1238,8 @@ components:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
           $ref: "#/components/schemas/HibernationThreshold"
+        cluster_id:
+          $ref: "#/components/schemas/Ulid"
       required: ["classes", "name", "public", "default"]
       example:
         quota:
@@ -1110,6 +1282,8 @@ components:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
           $ref: "#/components/schemas/HibernationThreshold"
+        cluster_id:
+          $ref: "#/components/schemas/Ulid"
       example:
         quota:
           cpu: 50
@@ -1137,6 +1311,8 @@ components:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
           $ref: "#/components/schemas/HibernationThreshold"
+        cluster_id:
+          $ref: "#/components/schemas/Ulid"
       required: ["classes", "name", "public", "default"]
       example:
         quota:
@@ -1182,6 +1358,8 @@ components:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
           $ref: "#/components/schemas/HibernationThreshold"
+        cluster_id:
+          $ref: "#/components/schemas/Ulid"
       required: ["classes", "name", "id", "public", "default"]
       example:
         quota:
@@ -1228,6 +1406,8 @@ components:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
           $ref: "#/components/schemas/HibernationThreshold"
+        cluster_id:
+          $ref: "#/components/schemas/Ulid"
       required: ["classes", "name", "id", "public", "default"]
       example:
         quota:
@@ -1513,6 +1693,12 @@ components:
               example: "Something went wrong - please try again later"
           required: ["code", "message"]
       required: ["error"]
+    Ulid:
+      description: ULID identifier
+      type: string
+      minLength: 26
+      maxLength: 26
+      pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"  # This is case-insensitive
   responses:
     Error:
       description: The schema for all 4xx and 5xx responses
