@@ -6,6 +6,8 @@ from enum import StrEnum
 from typing import Any, Optional, Protocol
 from uuid import uuid4
 
+from ulid import ULID
+
 from renku_data_services.errors import ValidationError
 
 
@@ -173,12 +175,22 @@ class Quota(ResourcesCompareMixin):
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class KubeClusterSettings:
+class Cluster:
     """K8s Cluster settings."""
 
-    config_name: str
-    node_affinities: list[str]
-    tolerations: list[str]
+    name: str
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedCluster(Cluster):
+    """Unsaved, memory-only K8s Cluster settings."""
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SavedCluster(Cluster):
+    """K8s Cluster settings from the DB."""
+
+    id: ULID
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -193,7 +205,7 @@ class ResourcePool:
     hibernation_threshold: Optional[int] = None
     default: bool = False
     public: bool = False
-    cluster: Optional[KubeClusterSettings] = None
+    cluster: Optional[Cluster] = None
 
     def __post_init__(self) -> None:
         """Validate the resource pool after initialization."""

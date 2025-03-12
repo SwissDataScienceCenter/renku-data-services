@@ -1068,6 +1068,8 @@ components:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
           $ref: "#/components/schemas/HibernationThreshold"
+        cluster_id:
+          $ref: "#/components/schemas/Ulid"
       required: ["classes", "name", "public", "default"]
       example:
         quota:
@@ -1182,6 +1184,8 @@ components:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
           $ref: "#/components/schemas/HibernationThreshold"
+        cluster_id:
+          $ref: "#/components/schemas/Ulid"
       required: ["classes", "name", "id", "public", "default"]
       example:
         quota:
@@ -1228,6 +1232,8 @@ components:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
           $ref: "#/components/schemas/HibernationThreshold"
+        cluster_id:
+          $ref: "#/components/schemas/Ulid"
       required: ["classes", "name", "id", "public", "default"]
       example:
         quota:
@@ -1513,6 +1519,12 @@ components:
               example: "Something went wrong - please try again later"
           required: ["code", "message"]
       required: ["error"]
+    Ulid:
+      description: ULID identifier
+      type: string
+      minLength: 26
+      maxLength: 26
+      pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"  # This is case-insensitive
   responses:
     Error:
       description: The schema for all 4xx and 5xx responses
