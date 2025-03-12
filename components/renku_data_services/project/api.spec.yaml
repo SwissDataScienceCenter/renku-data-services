@@ -785,29 +785,6 @@ components:
             - $ref: "#/components/schemas/DefaultUrl"
             - default: /lab
           default: /lab
-        uid:
-          allOf:
-            - $ref: "#/components/schemas/EnvironmentUid"
-            - default: 1000
-          default: 1000
-        gid:
-          allOf:
-            - $ref: "#/components/schemas/EnvironmentGid"
-            - default: 1000
-          default: 1000
-        working_directory:
-          $ref: "#/components/schemas/EnvironmentWorkingDirectory"
-        mount_directory:
-          $ref: "#/components/schemas/EnvironmentMountDirectory"
-        port:
-          allOf:
-            - $ref: "#/components/schemas/EnvironmentPort"
-            - default: 8080
-          default: 8080
-        command:
-          $ref: "#/components/schemas/EnvironmentCommand"
-        args:
-          $ref: "#/components/schemas/EnvironmentArgs"
         resource_class_id:
           $ref: "#/components/schemas/ResourceClassId"
         disk_storage:
@@ -834,48 +811,6 @@ components:
       type: string
       maxLength: 200
       example: "/lab"
-    EnvironmentUid:
-      type: integer
-      minimum: 0
-      exclusiveMinimum: true
-      maximum: 65535
-      description: The user ID used to run the session
-    EnvironmentGid:
-      type: integer
-      minimum: 0
-      exclusiveMinimum: true
-      maximum: 65535
-      description: The group ID used to run the session
-    EnvironmentWorkingDirectory:
-      type: string
-      description: The location where the session will start, if left unset it will default to the session image working directory.
-      minLength: 1
-      example: "/home/jovyan/work"
-    EnvironmentMountDirectory:
-      type: string
-      description: The location where the persistent storage for the session will be mounted, usually it should be identical to or a parent of the working directory, if left unset will default to the working directory.
-      minLength: 1
-      example: "/home/jovyan/work"
-    EnvironmentCommand:
-      type: array
-      items:
-        type: string
-      description: The command that will be run i.e. will overwrite the image Dockerfile ENTRYPOINT, equivalent to command in Kubernetes
-      minItems: 1
-    EnvironmentArgs:
-      type: array
-      items:
-        type: string
-      description: The arguments that will follow the command, i.e. will overwrite the image Dockerfile CMD, equivalent to args in Kubernetes
-      minItems: 1
-    EnvironmentPort:
-      type: integer
-      minimum: 0
-      exclusiveMinimum: true
-      exclusiveMaximum: true
-      # NOTE: we reserve 65400 - 65535 for usage of Renku sidecars and services
-      maximum: 65400
-      description: The TCP port (on any container in the session) where user requests will be routed to from the ingress
     ResourceClassId:
       description: The identifier of a resource class
       type: integer
