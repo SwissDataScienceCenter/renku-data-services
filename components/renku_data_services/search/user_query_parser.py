@@ -1,6 +1,7 @@
 """Parser for the user query ast."""
 
 import datetime
+from typing import cast
 
 from parsy import (  # type: ignore
     Parser,
@@ -15,13 +16,15 @@ from parsy import (  # type: ignore
     test_char,
 )
 
-from renku_data_services.authz.models import Visibility
+from renku_data_services.authz.models import Role, Visibility
 from renku_data_services.search.user_query import (
     Comparison,
     Created,
     CreatedByIs,
     DateTimeCalc,
     Field,
+    FieldTerm,
+    Helper,
     IdIs,
     KeywordIs,
     NameIs,
@@ -34,6 +37,7 @@ from renku_data_services.search.user_query import (
     PartialTime,
     Query,
     RelativeDate,
+    RoleIs,
     SlugIs,
     SortableField,
     Text,
@@ -42,10 +46,6 @@ from renku_data_services.search.user_query import (
 )
 from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.solr_client import SortDirection
-
-
-def _valid_char(c: str) -> bool:
-    return ord(c) > 32 and c != '"' and c != "\\" and c != ","
 
 
 def _check_range(n: int, min: int, max: int, msg: str) -> Parser:
@@ -83,7 +83,7 @@ def _create_datetime_calc(ref: PartialDateTime | RelativeDate, sep: str, days: i
             raise
 
 
-def _make_field_term(field: str, values: Nel[str]) -> NameIs | SlugIs:
+def _make_field_term(field: str, values: Nel[str]) -> FieldTerm:
     f = Field(field.lower())
     match f:
         case Field.fname:
@@ -98,7 +98,6 @@ def _make_field_term(field: str, values: Nel[str]) -> NameIs | SlugIs:
             return NamespaceIs(values)
         case Field.created_by:
             return CreatedByIs(values)
-
         case _:
             raise Exception(f"invalid field name: {field}")
 
@@ -136,12 +135,12 @@ class _ParsePrimitives:
     whitespace: Parser = regex(r"\s*")
     comma: Parser = string(",") << whitespace
 
-    char_basic: Parser = test_char(func=_valid_char, description="simple string")
+    char_basic: Parser = test_char(func=Helper.is_valid_char, description="simple string")
     char_esc: Parser = string("\\") >> (string('"') | string("\\"))
     no_quote: Parser = test_char(lambda c: c != '"', description="no quote")
 
-    string_basic: Parser = char_basic.many().concat()
-    string_quoted: Parser = string('"') >> (char_esc | no_quote).many().concat() << string('"')
+    string_basic: Parser = char_basic.at_least(1).concat()
+    string_quoted: Parser = string('"') >> (char_esc | no_quote).at_least(1).concat() << string('"')
     string_value: Parser = string_quoted | string_basic
 
     string_values: Parser = string_value.sep_by(comma, min=1).map(Nel.unsafe_from_list)
@@ -150,6 +149,7 @@ class _ParsePrimitives:
     sort_direction: Parser = from_enum(SortDirection, lambda s: s.lower())
     entity_type: Parser = from_enum(EntityType, lambda s: s.lower())
     visibility: Parser = from_enum(Visibility, lambda s: s.lower())
+    role: Parser = from_enum(Role, lambda s: s.lower())
 
     is_equal: Parser = string(Comparison.is_equal.value).result(Comparison.is_equal)
     is_gt: Parser = string(Comparison.is_greater_than).result(Comparison.is_greater_than)
@@ -161,6 +161,7 @@ class _ParsePrimitives:
     ordered_by_nel: Parser = ordered_by.sep_by(comma, min=1).map(Nel.unsafe_from_list)
     entity_type_nel: Parser = entity_type.sep_by(comma, min=1).map(Nel.unsafe_from_list)
     visibility_nel: Parser = visibility.sep_by(comma, min=1).map(Nel.unsafe_from_list)
+    role_nel: Parser = role.sep_by(comma, min=1).map(Nel.unsafe_from_list)
     datetime_ref_nel: Parser = dp.datetime_ref.sep_by(comma, min=1).map(Nel.unsafe_from_list)
 
     sort_term: Parser = string("sort") >> is_equal >> ordered_by_nel.map(Order)
@@ -172,13 +173,23 @@ class _ParsePrimitives:
     created: Parser = string(Field.created.value, lambda s: s.lower()) >> seq(comparison, datetime_ref_nel).combine(
         Created
     )
+    role_is: Parser = string(Field.role.value, lambda s: s.lower()) >> is_equal >> role_nel.map(RoleIs)
     term_is: Parser = seq(from_enum(Field, lambda s: s.lower()) << is_equal, string_values).combine(_make_field_term)
 
-    field_term: Parser = type_is | visibility_is | created | term_is
+    field_term: Parser = type_is | visibility_is | role_is | created | term_is
     free_text: Parser = test_char(lambda c: not c.isspace(), "string without spaces").at_least(1).concat().map(Text)
 
     segment: Parser = field_term | sort_term | free_text
 
-    segments: Parser = (segment << whitespace).many()
-
     query: Parser = segment.sep_by(whitespace, min=0).map(Query)
+
+
+class QueryParser:
+    """Parsing user search queries."""
+
+    @classmethod
+    def parse(cls, input: str) -> Query:
+        """Parses a user search query into its ast."""
+        pp = _ParsePrimitives()
+        res = pp.query.parse(input.strip())
+        return cast(Query, res)

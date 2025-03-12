@@ -12,6 +12,8 @@ from renku_data_services.search.user_query import (
     PartialDate,
     PartialDateTime,
     PartialTime,
+    Query,
+    Segments,
     SortableField,
     TypeIs,
 )
@@ -19,14 +21,19 @@ from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.solr_client import SortDirection
 
 
+def test_render_order_by() -> None:
+    order = OrderBy(SortableField.fname, SortDirection.asc)
+    assert order.render() == "name-asc"
+
+
 def test_render_order() -> None:
     order = Order(Nel(OrderBy(SortableField.fname, SortDirection.asc)))
-    assert order.render() == "name-asc"
+    assert order.render() == "sort:name-asc"
 
     order = Order(
         Nel.of(OrderBy(SortableField.fname, SortDirection.asc), OrderBy(SortableField.score, SortDirection.desc)),
     )
-    assert order.render() == "name-asc,score-desc"
+    assert order.render() == "sort:name-asc,score-desc"
 
 
 def test_nel() -> None:
@@ -42,6 +49,22 @@ def test_nel() -> None:
 
     value = Nel.of(1, 2, 3, 4)
     assert value.to_list() == [1, 2, 3, 4]
+
+    value = Nel.of(1, 2).append(Nel.of(3, 4))
+    assert value.to_list() == [1, 2, 3, 4]
+
+    nel = Nel.of(1, 2)
+    value = nel.append_list([])
+    assert value is nel
+
+    value = nel.append_list([3, 4])
+    assert value.to_list() == [1, 2, 3, 4]
+
+    nel = Nel.from_list([])
+    assert nel is None
+
+    nel = Nel.from_list([1, 2, 3])
+    assert nel == Nel.of(1, 2, 3)
 
 
 def test_helper_quote() -> None:
@@ -66,6 +89,11 @@ def test_id_is() -> None:
     id = ULID()
     ft = IdIs(Nel.of(str(id)))
     assert ft.render() == f"id:{id}"
+
+
+def test_free_text() -> None:
+    assert Segments.text("abc").render() == "abc"
+    assert Segments.text("abc abc").render() == "abc abc"
 
 
 def test_partial_date_render() -> None:
@@ -124,3 +152,34 @@ def test_datetime_calc() -> None:
 
     d = DateTimeCalc(RelativeDate.yesterday, 7, False)
     assert d.render() == "yesterday+7d"
+
+
+def test_query_extract_order() -> None:
+    q = Query.of(Segments.name_is("test"), Segments.text("some"), Segments.keyword_is("datascience"))
+    assert q.extract_order() == (
+        [Segments.name_is("test"), Segments.text("some"), Segments.keyword_is("datascience")],
+        None,
+    )
+
+    q = Query.of(
+        Segments.name_is("test"),
+        Segments.text("some"),
+        Segments.keyword_is("datascience"),
+        Segments.sort_by((SortableField.score, SortDirection.asc)),
+    )
+    assert q.extract_order() == (
+        [Segments.name_is("test"), Segments.text("some"), Segments.keyword_is("datascience")],
+        Segments.sort_by((SortableField.score, SortDirection.asc)),
+    )
+
+    q = Query.of(
+        Segments.name_is("test"),
+        Segments.sort_by((SortableField.fname, SortDirection.desc)),
+        Segments.text("some"),
+        Segments.keyword_is("datascience"),
+        Segments.sort_by((SortableField.score, SortDirection.asc)),
+    )
+    assert q.extract_order() == (
+        [Segments.name_is("test"), Segments.text("some"), Segments.keyword_is("datascience")],
+        Segments.sort_by((SortableField.fname, SortDirection.desc), (SortableField.score, SortDirection.asc)),
+    )
