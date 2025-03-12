@@ -38,6 +38,7 @@ from renku_data_services.search.user_query import (
     Query,
     RelativeDate,
     RoleIs,
+    Segment,
     SlugIs,
     SortableField,
     Text,
@@ -188,8 +189,31 @@ class QueryParser:
     """Parsing user search queries."""
 
     @classmethod
+    def __collapse_text(cls, q: Query) -> Query:
+        """Collapses consecutive free text segments.
+
+        It is a bit hard to parse them directly as every term is separated by whitespace.
+        """
+        result: list[Segment] = []
+        current: Text | None = None
+        for s in q.segments:
+            match s:
+                case Text() as t:
+                    current = t if current is None else current.append(t)
+                case _:
+                    if current is not None:
+                        result.append(current)
+                        current = None
+                    result.append(s)
+
+        if current is not None:
+            result.append(current)
+
+        return Query(result)
+
+    @classmethod
     def parse(cls, input: str) -> Query:
         """Parses a user search query into its ast."""
         pp = _ParsePrimitives()
         res = pp.query.parse(input.strip())
-        return cast(Query, res)
+        return cls.__collapse_text(cast(Query, res))

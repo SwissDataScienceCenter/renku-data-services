@@ -41,6 +41,13 @@ class SolrUserQuery:
         """Creates a new query appending `next` to this."""
         return type(self)(SolrToken(f"{self.query} AND {next.query}"), self.sort + next.sort)
 
+    def query_str(self) -> str:
+        """Return the solr query string."""
+        if self.query == "":
+            return st.all_entity_types()
+        else:
+            return self.query
+
 
 @dataclass
 class AdminRole:
@@ -76,11 +83,24 @@ class QueryInterpreter(ABC):
         """Convert a user query into a search query."""
         ...
 
+    @classmethod
+    def default(cls) -> "QueryInterpreter":
+        """Return the default query interpreter."""
+        return LuceneQueryInterpreter()
+
 
 class LuceneQueryInterpreter(QueryInterpreter):
     """Convert a user search query into solrs standard query.
 
     See https://solr.apache.org/guide/solr/latest/query-guide/standard-query-parser.html
+
+    This class takes care of converting a user supplied query into
+    something that solr can use. It is not yet the final query,
+    constraints and other parts are added. This is only solr
+    translation for the user search query part.
+
+    Here the search query can be tweaked if necessary (fuzzy searching
+    etc).
     """
 
     def _to_solr_sort(self, ob: OrderBy) -> tuple[FieldName, SortDirection]:
@@ -137,7 +157,7 @@ class LuceneQueryInterpreter(QueryInterpreter):
                         return st.fold_or(tokens)
 
     def _from_text(self, text: Text) -> SolrToken:
-        return st.from_str(text.value)
+        return st.content_all(text.value)
 
     def _from_segment(self, ctx: Context, segment: FieldTerm | Text) -> SolrToken:
         match segment:
