@@ -978,3 +978,168 @@ async def test_delete_all_tolerations(
     )
     assert res.status_code == 200
     assert res.json == []
+
+
+resource_pool_payload = {
+    "name": "test-name",
+    "classes": [
+        {
+            "cpu": 1.0,
+            "memory": 10,
+            "gpu": 0,
+            "name": "test-class-name",
+            "max_storage": 100,
+            "default_storage": 1,
+            "default": True,
+            "node_affinities": [],
+            "tolerations": [],
+        }
+    ],
+    "quota": {"cpu": 100.0, "memory": 100, "gpu": 0},
+    "default": False,
+    "public": True,
+    "idle_threshold": 86400,
+    "hibernation_threshold": 99999,
+}
+
+resource_pool_payload_cluster_id = deepcopy(resource_pool_payload)
+resource_pool_payload_cluster_id["cluster_id"] = "replace-me"
+cluster_payload = {
+    "config_name": "a-filename-without-yaml-ext",
+    "name": "test-cluster-post",
+}
+
+
+async def _resource_pools_request(
+    sanic_client: SanicASGITestClient,
+    method: str,
+    admin_headers: dict[str, str],
+    expected_status_code: int,
+    auth: bool,
+    resource_pool_id: int | None,
+    payload: dict | None,
+) -> None:
+    base_url = "/api/data/resource_pools"
+
+    input_payload = deepcopy(payload)
+    check_payload = None
+    if resource_pool_id is None:
+        tmp = deepcopy(resource_pool_payload)
+        if "cluster_id" in input_payload and input_payload["cluster_id"] == "replace-me":
+            _, res = await sanic_client.post("/api/data/clusters/", headers=admin_headers, json=cluster_payload)
+            assert res.status_code == 201, res.text
+
+            input_payload["cluster_id"] = res.json["id"]
+            tmp["cluster_id"] = res.json["id"]
+
+        _, res = await sanic_client.post(base_url, headers=admin_headers, json=tmp)
+        assert res.status_code == 201, res.text
+        rp = res.json
+        resource_pool_id = rp["id"]
+
+        if method == "PUT" and "id" not in input_payload["quota"]:
+            input_payload["quota"]["id"] = rp["quota"]["id"]
+
+        for i, c in enumerate(input_payload["classes"]):
+            if "id" not in c:
+                c["id"] = rp["classes"][i]["id"]
+
+        check_payload = deepcopy(input_payload)
+
+        if "id" not in check_payload:
+            check_payload["id"] = resource_pool_id
+        if "id" not in check_payload["quota"]:
+            check_payload["quota"]["id"] = rp["quota"]["id"]
+
+    url = f"{base_url}/{resource_pool_id}"
+
+    if auth:
+        _, res = await sanic_client.request(url=url, method=method, headers=admin_headers, json=input_payload)
+    else:
+        _, res = await sanic_client.request(url=url, method=method, json=input_payload)
+
+    assert res.status_code == expected_status_code, res.text
+    if res.is_success and check_payload is not None:
+        assert res.json == check_payload, res.json
+
+
+put_patch_common_test_inputs = [
+    (401, False, -1, None),
+    (422, True, -1, None),
+    (401, False, 0, None),
+    (422, True, 0, None),
+    (401, False, -1, resource_pool_payload),
+    (422, True, -1, resource_pool_payload),
+    (401, False, 0, resource_pool_payload),
+    (422, True, 0, resource_pool_payload),
+    (401, False, 100, resource_pool_payload),
+    (422, True, 100, resource_pool_payload),
+    (401, False, None, resource_pool_payload),
+    (200, True, None, resource_pool_payload),
+    (200, True, None, resource_pool_payload_cluster_id),
+]
+
+
+@pytest.mark.parametrize("expected_status_code,auth,resource_pool_id,payload", put_patch_common_test_inputs)
+@pytest.mark.asyncio
+async def test_resource_pools_put(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    expected_status_code: int,
+    auth: bool,
+    resource_pool_id: int,
+    payload: dict | None,
+) -> None:
+    await _resource_pools_request(
+        sanic_client, "PUT", admin_headers, expected_status_code, auth, resource_pool_id, payload
+    )
+
+
+@pytest.mark.parametrize("expected_status_code,auth,resource_pool_id,payload", put_patch_common_test_inputs)
+@pytest.mark.asyncio
+async def test_resource_pools_patch(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    expected_status_code: int,
+    auth: bool,
+    resource_pool_id: int | None,
+    payload: dict | None,
+) -> None:
+    await _resource_pools_request(
+        sanic_client, "PATCH", admin_headers, expected_status_code, auth, resource_pool_id, payload
+    )
+
+
+@pytest.mark.parametrize(
+    "expected_status_code,auth,resource_pool_id",
+    [
+        (401, False, -1),
+        (422, True, -1),
+        (204, True, 0),
+        (204, True, 10),
+        (401, False, None),
+        (204, True, None),
+    ],
+)
+@pytest.mark.asyncio
+async def test_resource_pools_delete(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    expected_status_code: int,
+    auth: bool,
+    resource_pool_id: str | None,
+) -> None:
+    base_url = "/api/data/resource_pools"
+
+    if resource_pool_id is None:
+        _, res = await sanic_client.post(base_url, headers=admin_headers, json=resource_pool_payload)
+        assert res.status_code == 201, res.text
+        resource_pool_id = res.json["id"]
+
+    url = f"{base_url}/{resource_pool_id}"
+
+    if auth:
+        _, res = await sanic_client.delete(url, headers=admin_headers)
+    else:
+        _, res = await sanic_client.delete(url)
+    assert res.status_code == expected_status_code, res.text

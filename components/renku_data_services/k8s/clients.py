@@ -277,7 +277,7 @@ class K8sClusterClient:
         `[{ "op": "add", "path": "/a/b/c", "value": [ "foo" "bar" ] }]`.
         If the patch is a dictionary then it is considered to be a rfc7386 json merge patch.
         """
-        obj = await self.__get_api_object(meta.to_list_filter())
+        obj = await self.__get_api_object(meta.to_filter())
         if obj is None:
             raise errors.MissingResourceError(message=f"The k8s resource with metadata {meta} cannot be found.")
         patch_type = "json" if isinstance(patch, list) else None
@@ -289,7 +289,7 @@ class K8sClusterClient:
 
     async def delete(self, meta: K8sObjectMeta) -> None:
         """Delete a k8s object."""
-        obj = await self.__get_api_object(meta.to_list_filter())
+        obj = await self.__get_api_object(meta.to_filter())
         if obj is None:
             return
         with contextlib.suppress(kr8s.NotFoundError):
@@ -297,7 +297,7 @@ class K8sClusterClient:
 
     async def get(self, meta: K8sObjectMeta) -> K8sObject | None:
         """Get a specific k8s object, None is returned if the object does not exist."""
-        obj = await self.__get_api_object(meta.to_list_filter())
+        obj = await self.__get_api_object(meta.to_filter())
         if obj is None:
             return None
         return meta.with_manifest(obj.obj.to_dict())
