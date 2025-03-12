@@ -216,25 +216,19 @@ class EntityPath:
     def __repr__(self) -> str:
         return "/".join([slug.value for slug in self.slugs])
 
-    def __truediv__(self, other: Slug | str | Self) -> "EntityPath":
+    def __truediv__(self, other: Slug | str | "EntityPath") -> "EntityPath":
         """Create new entity path with an extra slug."""
-        slugs = [slug for slug in self.slugs]
-        if isinstance(other, Slug):
-            slugs.append(other)
-        elif isinstance(other, str):
-            slugs.append(Slug(other))
-        elif type(self) is type(other):
-            slugs.extend(other.slugs)
-        else:
-            raise errors.ValidationError(
-                message="A path can be constructed from an entity path and a slug,string or entity path, "
-                f"but the 'divisor' is of type {type(other)}"
-            )
-        return EntityPath(slugs)
+        if isinstance(other, EntityPath):
+            return EntityPath.join(*other.slugs)
+        if isinstance(other, (Slug, str)):
+            return EntityPath.join(other)
+        raise errors.ValidationError(message=f"Cannot join an entity path and {other} of type {type(other)}")
 
     @classmethod
     def join(cls, *slugs: Slug | str) -> Self:
         """Create an entity path from a list of slugs or strings."""
+        if len(slugs) == 0:
+            raise errors.ValidationError(message="Cannot create an entity path without slugs")
         res: list[Slug] = []
         for slug in slugs:
             if isinstance(slug, Slug):
