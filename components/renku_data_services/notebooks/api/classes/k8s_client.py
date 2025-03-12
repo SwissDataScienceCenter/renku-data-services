@@ -809,7 +809,9 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
         # **NOTE**: This assumes class_ids are unique over all the clusters.
         _id = int(class_id)
         name = await self.cluster_name_by_class_id(_id, api_user)
-        return self._clients[name]
+        client = self._clients[name]
+        logger.warning(f"_client_by_class_id {class_id} name {name} = {client._k8s_client._api._kubeconfig}")
+        return client
 
     @property
     def kube_conf_root_dir(self) -> str:
@@ -834,6 +836,11 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
             rp = await self._rp_repo.get_resource_pool_from_class(api_user, class_id)
             if rp.cluster is not None:
                 name = rp.cluster.name
+                logger.warning(f"cluster_name_by_class_id {class_id} = {name}")
+            else:
+                logger.warning(f"cluster_name_by_class_id {class_id} rp.cluster None rp {rp}")
+        else:
+            logger.warning(f"cluster_name_by_class_id {class_id} class_id None")
 
         return name
 
@@ -854,7 +861,9 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
         server_name = manifest.metadata.name
 
         client = await self._client_by_class_id(class_id, api_user)
-
+        logger.info(
+            f"create_server server_name {server_name} class_id {class_id}, client {client._k8s_client._api._kubeconfig}"
+        )
         session = await client.create_server(manifest, api_user.id)
         self._session2client[server_name] = client
 
