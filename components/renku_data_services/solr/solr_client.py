@@ -14,6 +14,7 @@ from urllib.parse import urljoin, urlparse, urlunparse
 from httpx import AsyncClient, BasicAuth, Response
 from pydantic import AliasChoices, BaseModel, Field, field_serializer
 
+from renku_data_services.errors.errors import BaseError
 from renku_data_services.solr.solr_schema import CoreSchema, FieldName, SchemaCommandList
 
 
@@ -66,11 +67,11 @@ class SolrClientConfig:
         )
 
 
-class SolrClientException(Exception, ABC):
+class SolrClientException(BaseError, ABC):
     """Base exception for solr client."""
 
     def __init__(self, message: str) -> None:
-        super().__init__(message)
+        super().__init__(message=message)
 
 
 class SortDirection(StrEnum):
@@ -422,10 +423,11 @@ class SolrAdminClient(AbstractAsyncContextManager, ABC):
     """
 
     @abstractmethod
-    async def status(self, core_name: str | None) -> dict[str, Any] | None:
+    async def core_status(self, core_name: str | None) -> dict[str, Any] | None:
         """Return the status of the connected core."""
         ...
 
+    @abstractmethod
     async def create(self, core_name: str | None) -> None:
         """Create a core."""
         ...
@@ -457,14 +459,14 @@ class DefaultSolrAdminClient(SolrAdminClient):
     ) -> None:
         return await self.delegate.__aexit__(exc_type, exc, tb)
 
-    async def status(self, core_name: str | None) -> dict[str, Any] | None:
+    async def core_status(self, core_name: str | None) -> dict[str, Any] | None:
         """Return the status of the connected core or the one given by `core_name`."""
         core = core_name or self.config.core
         resp = await self.delegate.get(f"/{core}")
         if not resp.is_success:
             raise SolrClientStatusException(self.config, resp)
         else:
-            data = resp.raise_for_status().json()["status"][self.config.core]
+            data = resp.json()["status"][self.config.core]
             # if the core doesn't exist, solr returns 200 with an empty body
             return data if data.get("name") == self.config.core else None
 
@@ -472,11 +474,7 @@ class DefaultSolrAdminClient(SolrAdminClient):
         """Create a core with the given `core_name` or the name provided in the config object."""
         core = core_name or self.config.core
         data = {"create": {"name": core, "configSet": "_default"}}
-        resp = await self.delegate.post(
-            "",
-            content=json.dumps(data).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-        )
+        resp = await self.delegate.post("", json=data)
         if not resp.is_success:
             raise SolrClientCreateCoreException(core, resp)
         else:
