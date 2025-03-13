@@ -10,6 +10,7 @@ from ulid import ULID
 
 from renku_data_services.authz.models import Visibility
 from renku_data_services.base_models.core import Slug
+from renku_data_services.solr.entity_schema import Fields
 from renku_data_services.solr.solr_client import DocVersion, DocVersions, ResponseBody
 
 
@@ -163,7 +164,7 @@ class EntityDocReader:
     @classmethod
     def from_dict(cls, doc: dict[str, Any]) -> User | Project | Group | None:
         """Reads dicts into one of the entity document classes."""
-        dt = doc.get("_type")
+        dt = doc.get(Fields.entity_type)
         if dt is None:
             return None
         else:
