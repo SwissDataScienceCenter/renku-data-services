@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import datetime
 import glob
 import json
 import os
@@ -808,7 +809,9 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
         # **NOTE**: This assumes class_ids are unique over all the clusters.
         _id = int(class_id)
         name = await self.cluster_name_by_class_id(_id, api_user)
-        return self._clients[name]
+        client = self._clients[name]
+        logger.warning(f"_client_by_class_id {class_id} name {name} = {client._k8s_client._api._kubeconfig}")
+        return client
 
     @property
     def kube_conf_root_dir(self) -> str:
@@ -832,7 +835,12 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
         if class_id is not None:
             rp = await self._rp_repo.get_resource_pool_from_class(api_user, class_id)
             if rp.cluster is not None:
-                name = rp.cluster.config_name
+                name = rp.cluster.name
+                logger.warning(f"cluster_name_by_class_id {class_id} = {name}")
+            else:
+                logger.warning(f"cluster_name_by_class_id {class_id} rp.cluster None rp {rp}")
+        else:
+            logger.warning(f"cluster_name_by_class_id {class_id} class_id None")
 
         return name
 
@@ -853,7 +861,9 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
         server_name = manifest.metadata.name
 
         client = await self._client_by_class_id(class_id, api_user)
-
+        logger.info(
+            f"create_server server_name {server_name} class_id {class_id}, client {client._k8s_client._api._kubeconfig}"
+        )
         session = await client.create_server(manifest, api_user.id)
         self._session2client[server_name] = client
 
@@ -945,47 +955,80 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
 class DummyK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
     """Dummy Kubernetes client wrapper for unit tests."""
 
+    def __init__(self, server_type: type[_SessionType], kr8s_type: type[_Kr8sType], username_label: str):
+        self._server_type: type[_SessionType] = server_type
+        self._kr8s_type: type[_Kr8sType] = kr8s_type
+        self._username_label = username_label
+        self._servers: list[_SessionType] = []
+
     def sanitize(self, obj: APIObject) -> Any:
         """Sanitize a JSON object."""
         raise NotImplementedError()
 
     def namespace(self) -> str:
         """Return the current kubernetes namespace."""
-        raise NotImplementedError()
+        return "a-name-space"
 
     async def cluster_name_by_class_id(self, class_id: int | None, api_user: APIUser) -> str:
         """Retrieve the cluster name given the resource class id."""
-        raise NotImplementedError()
+        return "a-cluster"
 
     async def list_servers(self, safe_username: str) -> list[_SessionType]:
         """List all the user sessions visible from the safe_username."""
-        raise NotImplementedError()
+        return [s for s in self._servers if safe_username in s.metadata.labels.values()]
 
     async def create_server(
         self, manifest: _SessionType, api_user: AnonymousAPIUser | AuthenticatedAPIUser
     ) -> _SessionType:
         """Launch a user session."""
-        raise NotImplementedError()
+        manifest.metadata.labels[self._username_label] = api_user.id
+        manifest.metadata.creationTimestamp = datetime.datetime.fromisoformat("2025-03-05T15:24:55.474Z")
+
+        self._servers.append(manifest)
+        return manifest
 
     async def get_server(self, name: str, safe_username: str) -> _SessionType | None:
         """Lookup a user session by name."""
-        raise NotImplementedError()
+        for s in self._servers:
+            if s.metadata.name == name:
+                return s
+        return None
 
     async def get_server_logs(
         self, server_name: str, safe_username: str, max_log_lines: Optional[int] = None
     ) -> dict[str, str]:
         """Retrieve the logs for the given user session."""
-        raise NotImplementedError()
+        server = await self.get_server(server_name, safe_username)
+        if server is not None:
+            return {
+                "container-0": "fake log lines\n fake log lines",
+                "container-1": "fake log lines 2 \n fake log lines 2",
+            }
+
+        raise errors.MissingResourceError(
+            message=f"Cannot find server {server_name} for user {safe_username} to retrieve logs."
+        )
 
     async def patch_server(
         self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> _SessionType:
-        """Patch the user session."""
-        raise NotImplementedError()
+        """Pretend to Patch the user session."""
+        server = await self.get_server(server_name, safe_username)
+        if not server:
+            raise errors.MissingResourceError(
+                message=f"Cannot find server {server_name} for user {safe_username} in order to patch it."
+            )
+        return server
 
     async def delete_server(self, server_name: str, safe_username: str) -> None:
         """Delete the provided user session."""
-        raise NotImplementedError()
+        server = await self.get_server(server_name, safe_username)
+        if server is not None:
+            self._servers.remove(server)
+        else:
+            raise errors.MissingResourceError(
+                message=f"Cannot find server {server_name} for user {safe_username} in order to delete it."
+            )
 
     async def patch_server_tokens(
         self, server_name: str, safe_username: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken

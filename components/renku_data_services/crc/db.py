@@ -391,6 +391,8 @@ class ResourcePoolRepository(_Base):
                 kwargs["idle_threshold"] = None
             if kwargs.get("hibernation_threshold") == 0:
                 kwargs["hibernation_threshold"] = None
+            if kwargs.get("cluster_id") == 0:
+                kwargs["cluster_id"] = None
             # NOTE: The .update method on the model validates the update to the resource pool
             old_rp_model = rp.dump(quota)
             new_rp_model = old_rp_model.update(**kwargs)
@@ -399,6 +401,9 @@ class ResourcePoolRepository(_Base):
             for key, val in kwargs.items():
                 match key:
                     case "name" | "public" | "default" | "idle_threshold" | "hibernation_threshold":
+                        setattr(rp, key, val)
+                    case "cluster_id":
+                        # FIXME: LSA CHECK IN DB IT EXISTS
                         setattr(rp, key, val)
                     case "quota":
                         if val is None:
