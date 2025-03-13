@@ -21,7 +21,6 @@ from renku_data_services.search.user_query import (
     PartialDate,
     PartialDateTime,
     PartialTime,
-    Query,
     RelativeDate,
     RoleIs,
     Segments,
@@ -29,6 +28,7 @@ from renku_data_services.search.user_query import (
     SortableField,
     Text,
     TypeIs,
+    UserQuery,
     VisibilityIs,
 )
 from renku_data_services.search.user_query_parser import QueryParser, _DateTimeParser, _ParsePrimitives
@@ -195,9 +195,9 @@ def test_segment() -> None:
 
 
 def test_query() -> None:
-    assert pp.query.parse("") == Query([])
+    assert pp.query.parse("") == UserQuery([])
 
-    q = Query(
+    q = UserQuery(
         [
             Created(Comparison.is_greater_than, Nel(DateTimeCalc(RelativeDate.today, -7, False))),
             Text("some"),
@@ -210,7 +210,7 @@ def test_query() -> None:
     assert pp.query.parse(qstr) == q
     assert q.render() == qstr
 
-    q = Query(
+    q = UserQuery(
         [
             Segments.name_is("al"),
             Segments.text("hello world hello"),

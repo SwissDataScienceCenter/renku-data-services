@@ -1,4 +1,6 @@
-"""A small abstraction for creating queries for solr."""
+"""Creating querios for solr given a parsed user search query."""
+
+from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -17,12 +19,12 @@ from renku_data_services.search.user_query import (
     NameIs,
     NamespaceIs,
     OrderBy,
-    Query,
     RoleIs,
     SlugIs,
     SortableField,
     Text,
     TypeIs,
+    UserQuery,
     VisibilityIs,
 )
 from renku_data_services.solr.entity_schema import Fields
@@ -32,19 +34,22 @@ from renku_data_services.solr.solr_schema import FieldName
 
 @dataclass
 class SolrUserQuery:
-    """A solr query with an optional sort definition."""
+    """A solr query with an optional sort definition.
+
+    This is the result of interpreting a user search query.
+    """
 
     query: SolrToken
     sort: list[tuple[FieldName, SortDirection]]
 
     def append(self, next: Self) -> Self:
         """Creates a new query appending `next` to this."""
-        return type(self)(SolrToken(f"{self.query} AND {next.query}"), self.sort + next.sort)
+        return type(self)(SolrToken(f"({self.query}) AND ({next.query})"), self.sort + next.sort)
 
     def query_str(self) -> str:
         """Return the solr query string."""
         if self.query == "":
-            return st.all_entity_types()
+            return st.all_entities()
         else:
             return self.query
 
@@ -79,12 +84,12 @@ class QueryInterpreter(ABC):
     """Interpreter for user search queries."""
 
     @abstractmethod
-    def run(self, ctx: Context, q: Query) -> SolrUserQuery:
+    def run(self, ctx: Context, q: UserQuery) -> SolrUserQuery:
         """Convert a user query into a search query."""
         ...
 
     @classmethod
-    def default(cls) -> "QueryInterpreter":
+    def default(cls) -> QueryInterpreter:
         """Return the default query interpreter."""
         return LuceneQueryInterpreter()
 
@@ -166,7 +171,7 @@ class LuceneQueryInterpreter(QueryInterpreter):
             case t:
                 return self._from_term(ctx, t)
 
-    def run(self, ctx: Context, q: Query) -> SolrUserQuery:
+    def run(self, ctx: Context, q: UserQuery) -> SolrUserQuery:
         """Convert a user query into a search query."""
         (terms, sort) = q.extract_order()
         sort = sort.fields.to_list() if sort is not None else []
