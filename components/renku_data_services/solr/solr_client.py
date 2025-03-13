@@ -1,5 +1,7 @@
 """This defines an interface to SOLR."""
 
+from __future__ import annotations
+
 import json
 import logging
 import os
@@ -13,7 +15,16 @@ from typing import Any, Literal, NewType, Optional, Protocol, Self, final
 from urllib.parse import urljoin, urlparse, urlunparse
 
 from httpx import AsyncClient, BasicAuth, Response
-from pydantic import AliasChoices, BaseModel, Field, field_serializer
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    Field,
+    ModelWrapValidatorHandler,
+    ValidationError,
+    field_serializer,
+    model_serializer,
+    model_validator,
+)
 
 from renku_data_services.errors.errors import BaseError
 from renku_data_services.solr.solr_schema import CoreSchema, FieldName, SchemaCommandList
@@ -43,7 +54,7 @@ class SolrClientConfig:
     timeout: int = 600
 
     @classmethod
-    def from_env(cls, prefix: str = "") -> "SolrClientConfig":
+    def from_env(cls, prefix: str = "") -> SolrClientConfig:
         """Create a configuration from environment variables."""
         url = os.environ[f"{prefix}SOLR_URL"]
         core = os.environ.get(f"{prefix}SOLR_CORE", "renku-search")
@@ -137,6 +148,178 @@ class SubQuery(BaseModel, frozen=True):
 
 
 @final
+class FacetAlgorithm(StrEnum):
+    """Available facet algorithms for solr."""
+
+    doc_values = "dv"
+    un_inverted_field = "uif"
+    doc_values_hash = "dvhash"
+    enum = "enum"
+    stream = "stream"
+    smart = "smart"
+
+
+@final
+class FacetRange(BaseModel, frozen=True):
+    """A range definition used within the FacetRange."""
+
+    start: int | Literal["*"] = Field(serialization_alias="from", validation_alias=AliasChoices("from", "start"))
+    to: int | Literal["*"]
+    inclusive_from: bool = True
+    inclusive_to: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the dict of this object."""
+        return self.model_dump(by_alias=True)
+
+
+@final
+class FacetTerms(BaseModel, frozen=True):
+    """The terms facet request.
+
+    See: https://solr.apache.org/guide/solr/latest/query-guide/json-facet-api.html#terms-facet
+    """
+
+    name: FieldName
+    field: FieldName
+    limit: int | None = None
+    min_count: int | None = Field(
+        serialization_alias="mincount", validation_alias=AliasChoices("mincount", "min_count"), default=None
+    )
+    method: FacetAlgorithm | None = None
+    missing: bool = False
+    num_buckets: bool = Field(
+        serialization_alias="numBuckets", validation_alias=AliasChoices("numBuckets", "num_buckets"), default=False
+    )
+    all_buckets: bool = Field(
+        serialization_alias="allBuckets", validation_alias=AliasChoices("allBuckets", "all_buckets"), default=False
+    )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the dict representation of this object."""
+        result = self.model_dump(by_alias=True, exclude_none=True)
+        result.update({"type": "terms"})
+        result.pop("name")
+        return {f"{self.name}": result}
+
+
+@final
+class FacetArbitraryRange(BaseModel, frozen=True):
+    """The range facet.
+
+    See: https://solr.apache.org/guide/solr/latest/query-guide/json-facet-api.html#range-facet
+    """
+
+    name: FieldName
+    field: FieldName
+    ranges: list[FacetRange]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the dict of this object."""
+        result = self.model_dump(by_alias=True, exclude_defaults=True)
+        result.update({"type": "range"})
+        result.pop("name")
+        return {f"{self.name}": result}
+
+
+@final
+class SolrFacets(BaseModel, frozen=True):
+    """A facet query part consisting of multiple facet requests."""
+
+    facets: list[FacetTerms | FacetArbitraryRange]
+
+    @model_serializer()
+    def to_dict(self) -> dict[str, Any]:
+        """Return the dict representation of this object."""
+        result = {}
+        [result := result | x.to_dict() for x in self.facets]
+        return result
+
+    def with_facet(self, f: FacetTerms | FacetArbitraryRange) -> SolrFacets:
+        """Return a copy with the given facet added."""
+        return SolrFacets(facets=self.facets + [f])
+
+    @classmethod
+    def of(cls, *args: FacetTerms | FacetArbitraryRange) -> SolrFacets:
+        """Contsructor accepting varags."""
+        return SolrFacets(facets=list(args))
+
+    @classmethod
+    def empty(cls) -> SolrFacets:
+        """Return an empty facets request."""
+        return SolrFacets(facets=[])
+
+
+@final
+class FacetCount(BaseModel, frozen=True):
+    """A facet count consists of the field and its determined count."""
+
+    field: FieldName = Field(serialization_alias="val", validation_alias=AliasChoices("val", "field"))
+    count: int
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the dict representation of this object."""
+        return self.model_dump(by_alias=True)
+
+
+@final
+class FacetBuckets(BaseModel, frozen=True):
+    """A list of bucket counts as part of a facet response."""
+
+    buckets: list[FacetCount]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the dict representation of this object."""
+        return self.model_dump(by_alias=True)
+
+    @classmethod
+    def of(cls, *args: FacetCount) -> Self:
+        """Constructor for varargs."""
+        return FacetBuckets(buckets=list(args))
+
+
+@final
+class SolrBucketFacetResponse(BaseModel, frozen=True):
+    """The response to 'bucket' facet requests, like terms and range.
+
+    See: https://solr.apache.org/guide/solr/latest/query-guide/json-facet-api.html#types-of-facets
+    """
+
+    count: int
+    buckets: dict[FieldName, FacetBuckets]
+
+    @model_serializer()
+    def to_dict(self) -> dict[str, Any]:
+        """Return the dict of this object."""
+        result: dict[str, Any] = {"count": self.count}
+        for key in self.buckets:
+            result.update({key: self.buckets[key].to_dict()})
+
+        return result
+
+    @model_validator(mode="wrap")  # type: ignore
+    @classmethod
+    def _validate(cls, data: Any, handler: ModelWrapValidatorHandler[Self]) -> Self:
+        try:
+            return handler(data)
+        except ValidationError:
+            if isinstance(data, dict):
+                count: int | None = data.get("count")
+                if count is not None:
+                    buckets: dict[FieldName, FacetBuckets] = {}
+                    for key in data:
+                        if key != "count":
+                            bb = FacetBuckets.model_validate(data[key])
+                            buckets.update({key: bb})
+
+                    return SolrBucketFacetResponse(count=count, buckets=buckets)
+                else:
+                    raise ValueError(f"No 'count' property in dict: {data}")
+            else:
+                raise ValueError(f"Expected a dict to, but got: {data}")
+
+
+@final
 class SolrQuery(BaseModel, frozen=True):
     """A query to solr using the JSON request api.
 
@@ -150,6 +333,7 @@ class SolrQuery(BaseModel, frozen=True):
     fields: list[str | FieldName] = Field(default_factory=list)
     sort: list[tuple[FieldName, SortDirection]] = Field(default_factory=list)
     params: dict[str, str] = Field(default_factory=dict)
+    facet: SolrFacets = Field(default_factory=SolrFacets.empty)
 
     def to_dict(self) -> dict[str, Any]:
         """Return the dict representation of this query."""
@@ -158,6 +342,15 @@ class SolrQuery(BaseModel, frozen=True):
     def with_sort(self, s: list[tuple[FieldName, SortDirection]]) -> Self:
         """Return a copy of this with an updated sort."""
         return self.model_copy(update={"sort": s})
+
+    def with_facets(self, fs: SolrFacets) -> Self:
+        """Return a copy with the given facet requests."""
+        return self.model_copy(update={"facet": fs})
+
+    def with_facet(self, f: FacetTerms | FacetArbitraryRange) -> Self:
+        """Return a copy with the given facet request added."""
+        nf = self.facet.with_facet(f)
+        return self.model_copy(update={"facet": nf})
 
     def add_sub_query(self, field: FieldName, sq: SubQuery) -> Self:
         """Add the sub query to this query."""
@@ -170,7 +363,7 @@ class SolrQuery(BaseModel, frozen=True):
         return ",".join(list(map(lambda t: f"{t[0]} {t[1].value}", sort)))
 
     @classmethod
-    def query_all_fields(cls, qstr: str, limit: int = 50, offset: int = 0) -> "SolrQuery":
+    def query_all_fields(cls, qstr: str, limit: int = 50, offset: int = 0) -> SolrQuery:
         """Create a query with defaults returning all fields of a document."""
         return SolrQuery(query=qstr, fields=["*", "score"], limit=limit, offset=offset)
 
@@ -294,6 +487,7 @@ class QueryResponse(BaseModel):
         validation_alias=AliasChoices("responseHeader", "response_header"),
         default_factory=lambda: ResponseHeader(status=200),
     )
+    facets: SolrBucketFacetResponse | None = None
     response: ResponseBody
 
 
