@@ -19,7 +19,7 @@ from renku_data_services.crc import models
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.notebooks.api.classes.auth import RenkuTokens
-from renku_data_services.notebooks.api.classes.k8s_client import NamespacedK8sClient
+from renku_data_services.notebooks.api.classes.k8s_client import _BaseK8sClient
 from renku_data_services.notebooks.util.kubernetes_ import find_env_var
 from test.components.renku_data_services.crc_models.hypothesis import quota_strat
 
@@ -171,7 +171,7 @@ def test_patch_statefulset_tokens() -> None:
         )
     )
     sanitized_sts = client.ApiClient().sanitize_for_serialization(sts)
-    patches = NamespacedK8sClient._get_statefulset_token_patches(StatefulSet(sanitized_sts), new_renku_tokens)
+    patches = _BaseK8sClient._get_statefulset_token_patches(StatefulSet(sanitized_sts), new_renku_tokens)
 
     # Order of patches should be git proxy access, git proxy refresh, git clone, secrets
     assert len(patches) == 4
