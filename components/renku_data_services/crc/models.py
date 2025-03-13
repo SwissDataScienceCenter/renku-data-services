@@ -205,6 +205,7 @@ class ResourcePool:
     hibernation_threshold: Optional[int] = None
     default: bool = False
     public: bool = False
+    cluster_id: Optional[ULID] = None
     cluster: Optional[Cluster] = None
 
     def __post_init__(self) -> None:
@@ -227,7 +228,7 @@ class ResourcePool:
 
         default_classes = []
         for cls in list(self.classes):
-            if self.quota and not self.quota.is_resource_class_compatible(cls):
+            if self.quota is not None and not self.quota.is_resource_class_compatible(cls):
                 raise ValidationError(
                     message=f"The resource class with name {cls.name} is not compatible with the quota."
                 )
@@ -255,6 +256,7 @@ class ResourcePool:
     def from_dict(cls, data: dict) -> "ResourcePool":
         """Create the model from a plain dictionary."""
         quota: Optional[Quota] = None
+        classes: list[ResourceClass]
         if "quota" in data and isinstance(data["quota"], dict):
             quota = Quota.from_dict(data["quota"])
         elif "quota" in data and isinstance(data["quota"], Quota):
@@ -272,6 +274,8 @@ class ResourcePool:
             public=data.get("public", False),
             idle_threshold=data.get("idle_threshold"),
             hibernation_threshold=data.get("hibernation_threshold"),
+            cluster_id=data.get("cluster_id"),
+            cluster=data.get("cluster"),
         )
 
     def get_resource_class(self, resource_class_id: int) -> ResourceClass | None:

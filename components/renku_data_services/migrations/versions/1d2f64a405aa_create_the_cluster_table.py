@@ -44,6 +44,7 @@ def upgrade() -> None:
         ["id"],
         source_schema="resource_pools",
         referent_schema="resource_pools",
+        ondelete="SET NULL",
     )
     # ### end Alembic commands ###
     op.execute("INSERT INTO resource_pools.clusters(id, name) VALUES ('01JP5DTDJYG4VF70TXRF8TXW96', 'lionel-sambuc');")

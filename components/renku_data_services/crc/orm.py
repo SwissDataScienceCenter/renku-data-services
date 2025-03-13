@@ -172,7 +172,9 @@ class ResourcePoolORM(BaseORM):
     default: Mapped[bool] = mapped_column(default=False, index=True)
     public: Mapped[bool] = mapped_column(default=False, index=True)
     id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
-    cluster_id: Mapped[Optional[int]] = mapped_column(ForeignKey(ClusterORM.id), default=None, index=True)
+    cluster_id: Mapped[Optional[ULID]] = mapped_column(
+        ForeignKey(ClusterORM.id, ondelete="SET NULL"), default=None, index=True
+    )
     cluster: Mapped[Optional[ClusterORM]] = relationship(viewonly=True, default=None, lazy="joined", init=False)
 
     @classmethod
@@ -189,6 +191,7 @@ class ResourcePoolORM(BaseORM):
             hibernation_threshold=resource_pool.hibernation_threshold,
             public=resource_pool.public,
             default=resource_pool.default,
+            cluster_id=resource_pool.cluster_id,
         )
 
     def dump(
@@ -217,6 +220,7 @@ class ResourcePoolORM(BaseORM):
             hibernation_threshold=self.hibernation_threshold,
             public=self.public,
             default=self.default,
+            cluster_id=self.cluster_id,
             cluster=cluster,
         )
 

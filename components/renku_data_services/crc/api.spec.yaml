@@ -1112,6 +1112,8 @@ components:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
           $ref: "#/components/schemas/HibernationThreshold"
+        cluster_id:
+          $ref: "#/components/schemas/Ulid"
       example:
         quota:
           cpu: 50
@@ -1139,6 +1141,8 @@ components:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
           $ref: "#/components/schemas/HibernationThreshold"
+        cluster_id:
+          $ref: "#/components/schemas/Ulid"
       required: ["classes", "name", "public", "default"]
       example:
         quota:
