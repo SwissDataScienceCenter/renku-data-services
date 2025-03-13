@@ -1,16 +1,23 @@
-"""Base motebooks svc configuration."""
+"""Base notebooks svc configuration."""
 
+import glob
 import os
 from dataclasses import dataclass, field
-from typing import Any, Optional, Protocol, Self
+from typing import Any, Optional, Protocol, Self, Union
 
 import kr8s
+import yaml
+from sanic.log import logger
 
 from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.crc.models import ResourceClass
 from renku_data_services.db_config.config import DBConfig
-from renku_data_services.k8s.clients import CachedK8sClient, K8sCoreClient, K8sSchedulingClient
+from renku_data_services.k8s.clients import (
+    K8sClusterClientsPool,
+    K8sCoreClient,
+    K8sSchedulingClient,
+)
 from renku_data_services.k8s.models import Cluster, ClusterId
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.k8s_watcher.db import K8sDbCache
@@ -20,9 +27,7 @@ from renku_data_services.notebooks.api.classes.data_service import (
     DummyGitProviderHelper,
     GitProviderHelper,
 )
-from renku_data_services.notebooks.api.classes.k8s_client import (
-    K8sClient,
-)
+from renku_data_services.notebooks.api.classes.k8s_client import DEFAULT_K8S_CLUSTER, NotebookK8sClient
 from renku_data_services.notebooks.api.classes.repository import GitProvider
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
 from renku_data_services.notebooks.config.dynamic import (
@@ -137,14 +142,14 @@ class NotebooksConfig:
     sentry: _SentryConfig
     git: _GitConfig
     k8s: _K8sConfig
-    k8s_cached_client: CachedK8sClient
+    k8s_db_cache: K8sDbCache
     _kr8s_api: kr8s.asyncio.Api
     cloud_storage: _CloudStorage
     user_secrets: _UserSecrets
     crc_validator: CRCValidatorProto
     git_provider_helper: GitProviderHelperProto
-    k8s_client: K8sClient[JupyterServerV1Alpha1]
-    k8s_v2_client: K8sClient[AmaltheaSessionV1Alpha1]
+    k8s_client: NotebookK8sClient[JupyterServerV1Alpha1]
+    k8s_v2_client: NotebookK8sClient[AmaltheaSessionV1Alpha1]
     current_resource_schema_version: int = 1
     anonymous_sessions_enabled: bool = False
     ssh_enabled: bool = False
@@ -170,7 +175,8 @@ class NotebooksConfig:
         crc_validator: CRCValidatorProto
         git_provider_helper: GitProviderHelperProto
         k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
-        quota_repo: QuotaRepository
+        quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
+        rp_repo = ResourcePoolRepository(db_config.async_session_maker, quota_repo)
         if dummy_stores:
             crc_validator = DummyCRCValidator()
             sessions_config = _SessionConfig._for_testing()
@@ -178,8 +184,6 @@ class NotebooksConfig:
             git_config = _GitConfig("http://not.specified", "registry.not.specified")
             kr8s_api = Kr8sApiStack()  # type: ignore[assignment]
         else:
-            quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
-            rp_repo = ResourcePoolRepository(db_config.async_session_maker, quota_repo)
             crc_validator = CRCValidator(rp_repo)
             sessions_config = _SessionConfig.from_env()
             git_config = _GitConfig.from_env()
@@ -191,31 +195,28 @@ class NotebooksConfig:
             kr8s_api = kr8s_async_api()
 
         k8s_config = _K8sConfig.from_env()
-        cluster_id = ClusterId("renkulab")
-        clusters = {cluster_id: Cluster(id=cluster_id, namespace=k8s_config.renku_namespace, api=kr8s_api)}
-        k8s_cached_client = CachedK8sClient(
-            clusters=clusters,
-            cache=K8sDbCache(db_config.async_session_maker),
+        k8s_db_cache = K8sDbCache(db_config.async_session_maker)
+        client = K8sClusterClientsPool(
+            clusters=_get_clusters("/secrets/kube_configs", namespace=k8s_config.renku_namespace, api=kr8s_api),
+            cache=k8s_db_cache,
             kinds_to_cache=[AMALTHEA_SESSION_KIND, JUPYTER_SESSION_KIND],
         )
-        k8s_client = K8sClient(
-            cached_client=k8s_cached_client,
-            username_label="renku.io/userId",
-            namespace=k8s_config.renku_namespace,
-            cluster=cluster_id,
+        k8s_client = NotebookK8sClient(
+            client=client,
+            rp_repo=rp_repo,
             server_type=JupyterServerV1Alpha1,
             server_kind=JUPYTER_SESSION_KIND,
             server_api_version=JUPYTER_SESSION_VERSION,
+            username_label="renku.io/userId",
         )
-        k8s_v2_client = K8sClient(
-            cached_client=k8s_cached_client,
+        k8s_v2_client = NotebookK8sClient(
+            client=client,
+            rp_repo=rp_repo,
             # NOTE: v2 sessions have no userId label, the safe-username label is the keycloak user ID
-            username_label="renku.io/safe-username",
-            namespace=k8s_config.renku_namespace,
-            cluster=cluster_id,
             server_type=AmaltheaSessionV1Alpha1,
             server_kind=AMALTHEA_SESSION_KIND,
             server_api_version=AMALTHEA_SESSION_VERSION,
+            username_label="renku.io/safe-username",
         )
         return cls(
             server_options=server_options,
@@ -236,6 +237,72 @@ class NotebooksConfig:
             git_provider_helper=git_provider_helper,
             k8s_client=k8s_client,
             k8s_v2_client=k8s_v2_client,
-            k8s_cached_client=k8s_cached_client,
+            k8s_db_cache=k8s_db_cache,
             _kr8s_api=kr8s_api,
         )
+
+
+class _KubeConfig:
+    def __init__(
+        self,
+        kubeconfig: str | None = None,
+        current_context_name: str | None = None,
+        ns: str | None = None,
+    ) -> None:
+        self._kubeconfig = kubeconfig
+        self._ns = ns
+        self._current_context_name = current_context_name
+
+    def api(self) -> Union[kr8s.Api, kr8s._AsyncApi]:
+        return kr8s.api(
+            kubeconfig=self._kubeconfig,
+            namespace=self._ns,
+            context=self._current_context_name,
+        )
+
+
+class _KubeConfigEnv(_KubeConfig):
+    def __init__(self) -> None:
+        super().__init__()
+        self._ns = os.environ.get("K8S_NAMESPACE", "default")
+
+
+class _KubeConfigYaml(_KubeConfig):
+    def __init__(self, kubeconfig: str) -> None:
+        super().__init__(kubeconfig=kubeconfig)
+
+        with open(kubeconfig) as stream:
+            self._conf = yaml.safe_load(stream)
+
+        self._current_context_name = self._conf.get("current-context", None)
+        if self._current_context_name is not None:
+            for context in self._conf.get("contexts", []):
+                name = context.get("name", None)
+                inner = context.get("context", None)
+                if inner is not None and name is not None and name == self._current_context_name:
+                    self._ns = inner.get("namespace", None)
+                    break
+
+
+def _get_clusters(kube_conf_root_dir: str, namespace: str, api: kr8s.asyncio.Api) -> list[Cluster]:
+    clusters = [Cluster(id=DEFAULT_K8S_CLUSTER, namespace=namespace, api=api)]
+
+    if os.path.exists(kube_conf_root_dir):
+        for filename in glob.glob(pathname="*.yaml", root_dir=kube_conf_root_dir):
+            try:
+                kube_config = _KubeConfigYaml(filename)
+                cluster = Cluster(
+                    id=ClusterId(filename.removesuffix(".yaml")),
+                    namespace=kube_config.api().namespace,
+                    api=kube_config.api(),
+                )
+                clusters.append(cluster)
+                logger.info(f"Successfully loaded Kubernetes config: '{kube_conf_root_dir}/{filename}'")
+            except Exception as e:
+                logger.warning(
+                    f"Failed while loading '{kube_conf_root_dir}/{filename}', ignoring kube config. Error: {e}"
+                )
+    else:
+        logger.warning(f"Cannot open directory '{kube_conf_root_dir}', ignoring kube configs...")
+
+    return clusters

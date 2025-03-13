@@ -11,7 +11,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.errors import errors
-from renku_data_services.k8s.models import K8sObject, K8sObjectMeta, ListFilter
+from renku_data_services.k8s.models import K8sObject, K8sObjectFilter, K8sObjectMeta
 from renku_data_services.k8s_watcher.orm import K8sObjectORM
 
 
@@ -21,13 +21,14 @@ class K8sDbCache:
     def __init__(self, session_maker: Callable[..., AsyncSession]) -> None:
         self.__session_maker = session_maker
 
-    async def __get(self, meta: K8sObjectMeta, session: AsyncSession) -> K8sObjectORM | None:
+    @staticmethod
+    async def __get(meta: K8sObjectMeta, session: AsyncSession) -> K8sObjectORM | None:
         stmt = (
             select(K8sObjectORM)
             .where(K8sObjectORM.name == meta.name)
             .where(K8sObjectORM.namespace == meta.namespace)
             .where(K8sObjectORM.cluster == meta.cluster)
-            .where(K8sObjectORM.kind == meta.singular)
+            .where(K8sObjectORM.kind == meta.kind)
             .where(K8sObjectORM.version == meta.version)
         )
         if meta.user_id is not None:
@@ -80,27 +81,27 @@ class K8sDbCache:
                 return None
             return meta.with_manifest(obj.manifest)
 
-    async def list(self, filter: ListFilter) -> AsyncIterable[K8sObject]:
+    async def list(self, _filter: K8sObjectFilter) -> AsyncIterable[K8sObject]:
         """List objects from the cache."""
         async with self.__session_maker() as session, session.begin():
             stmt = select(K8sObjectORM)
-            if filter.name:
-                stmt = stmt.where(K8sObjectORM.name == filter.name)
-            if filter.namespace:
-                stmt = stmt.where(K8sObjectORM.namespace == filter.namespace)
-            if filter.cluster:
-                stmt = stmt.where(K8sObjectORM.cluster == filter.cluster)
-            if filter.kind:
-                stmt = stmt.where(K8sObjectORM.kind == filter.kind.lower())
-            if filter.version:
-                stmt = stmt.where(K8sObjectORM.version == filter.version)
-            if filter.user_id:
-                stmt = stmt.where(K8sObjectORM.user_id == filter.user_id)
-            if filter.label_selector:
+            if _filter.name:
+                stmt = stmt.where(K8sObjectORM.name == _filter.name)
+            if _filter.namespace:
+                stmt = stmt.where(K8sObjectORM.namespace == _filter.namespace)
+            if _filter.cluster:
+                stmt = stmt.where(K8sObjectORM.cluster == _filter.cluster)
+            if _filter.kind:
+                stmt = stmt.where(K8sObjectORM.kind == _filter.kind.lower())
+            if _filter.version:
+                stmt = stmt.where(K8sObjectORM.version == _filter.version)
+            if _filter.user_id:
+                stmt = stmt.where(K8sObjectORM.user_id == _filter.user_id)
+            if _filter.label_selector:
                 stmt = stmt.where(
                     # K8sObjectORM.manifest.comparator.contains({"metadata": {"labels": filter.label_selector}})
                     sqlalchemy.text("manifest -> 'metadata' -> 'labels' @> :labels").bindparams(
-                        bindparam("labels", filter.label_selector, type_=JSONB)
+                        bindparam("labels", _filter.label_selector, type_=JSONB)
                     )
                 )
             async for res in await session.stream_scalars(stmt):
