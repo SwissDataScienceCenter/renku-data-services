@@ -99,16 +99,16 @@ class LuceneQueryInterpreter(QueryInterpreter):
 
     See https://solr.apache.org/guide/solr/latest/query-guide/standard-query-parser.html
 
-    This class takes care of converting a user supplied query into
-    something that solr can use. It is not yet the final query,
-    constraints and other parts are added. This is only solr
-    translation for the user search query part.
+    This class takes care of converting a user supplied query into the
+    corresponding solr query.
 
     Here the search query can be tweaked if necessary (fuzzy searching
     etc).
+
     """
 
-    def _to_solr_sort(self, ob: OrderBy) -> tuple[FieldName, SortDirection]:
+    @classmethod
+    def _to_solr_sort(cls, ob: OrderBy) -> tuple[FieldName, SortDirection]:
         match ob.field:
             case SortableField.fname:
                 return (Fields.name, ob.direction)
@@ -117,7 +117,8 @@ class LuceneQueryInterpreter(QueryInterpreter):
             case SortableField.created:
                 return (Fields.creation_date, ob.direction)
 
-    def _from_term(self, ctx: Context, term: FieldTerm) -> SolrToken:
+    @classmethod
+    def _from_term(cls, ctx: Context, term: FieldTerm) -> SolrToken:
         match term:
             case TypeIs() as t:
                 return st.field_is_any(Fields.entity_type, t.values.map(st.from_entity_type))
@@ -161,21 +162,23 @@ class LuceneQueryInterpreter(QueryInterpreter):
 
                         return st.fold_or(tokens)
 
-    def _from_text(self, text: Text) -> SolrToken:
+    @classmethod
+    def _from_text(cls, text: Text) -> SolrToken:
         return st.content_all(text.value)
 
-    def _from_segment(self, ctx: Context, segment: FieldTerm | Text) -> SolrToken:
+    @classmethod
+    def _from_segment(cls, ctx: Context, segment: FieldTerm | Text) -> SolrToken:
         match segment:
             case Text() as t:
-                return self._from_text(t)
+                return cls._from_text(t)
             case t:
-                return self._from_term(ctx, t)
+                return cls._from_term(ctx, t)
 
     def run(self, ctx: Context, q: UserQuery) -> SolrUserQuery:
         """Convert a user query into a search query."""
         (terms, sort) = q.extract_order()
         sort = sort.fields.to_list() if sort is not None else []
 
-        solr_sort = [self._to_solr_sort(e) for e in sort]
-        solr_token = [self._from_segment(ctx, e) for e in terms]
+        solr_sort = [LuceneQueryInterpreter._to_solr_sort(e) for e in sort]
+        solr_token = [LuceneQueryInterpreter._from_segment(ctx, e) for e in terms]
         return SolrUserQuery(st.fold_and(solr_token), solr_sort)
