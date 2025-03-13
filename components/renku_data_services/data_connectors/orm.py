@@ -9,6 +9,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_co
 from sqlalchemy.schema import Index, UniqueConstraint
 from ulid import ULID
 
+from renku_data_services import errors
 from renku_data_services.authz import models as authz_models
 from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
 from renku_data_services.data_connectors import models
@@ -89,11 +90,17 @@ class DataConnectorORM(BaseORM):
 
     def dump(self) -> models.DataConnector:
         """Create a data connector model from the DataConnectorORM."""
+        if self.slug.project is not None:
+            ns = self.slug.project.dump_as_namespace()
+        elif self.slug.namespace and self.slug.project is None:
+            ns = self.slug.namespace.dump()
+        else:
+            raise errors.ProgrammingError(message="Cannot determine the data connector namespace from the ORM object")
         return models.DataConnector(
             id=self.id,
             name=self.name,
             slug=self.slug.slug,
-            namespace=self.slug.namespace.dump(),
+            namespace=ns,
             visibility=self._dump_visibility(),
             created_by=self.created_by_id,
             creation_date=self.creation_date,

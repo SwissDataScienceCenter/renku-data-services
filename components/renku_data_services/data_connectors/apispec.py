@@ -328,11 +328,11 @@ class DataConnector(BaseAPISpec):
     )
     namespace: str = Field(
         ...,
-        description="A command-line/url friendly name for a namespace",
-        examples=["a-slug-example"],
-        max_length=99,
+        description="A command-line/url friendly name for a single slug or two slugs separated by /",
+        example="user1/project-1",
+        max_length=200,
         min_length=1,
-        pattern="^(?!.*\\.git$|.*\\.atom$|.*[\\-._][\\-._].*)[a-z0-9][a-z0-9\\-_.]*$",
+        pattern="^(?!.*\\.git$|.*\\.atom$|.*[\\-._][\\-._].*)[a-z0-9][a-z0-9\\-_.]*(?<!\\.git)(?<!\\.atom)(?:/[a-z0-9][a-z0-9\\-_.]*){0,1}$",
     )
     slug: str = Field(
         ...,
@@ -382,11 +382,11 @@ class DataConnectorPost(BaseAPISpec):
     )
     namespace: str = Field(
         ...,
-        description="A command-line/url friendly name for a namespace",
-        examples=["a-slug-example"],
-        max_length=99,
+        description="A command-line/url friendly name for a single slug or two slugs separated by /",
+        example="user1/project-1",
+        max_length=200,
         min_length=1,
-        pattern="^(?!.*\\.git$|.*\\.atom$|.*[\\-._][\\-._].*)[a-z0-9][a-z0-9\\-_.]*$",
+        pattern="^(?!.*\\.git$|.*\\.atom$|.*[\\-._][\\-._].*)[a-z0-9][a-z0-9\\-_.]*(?<!\\.git)(?<!\\.atom)(?:/[a-z0-9][a-z0-9\\-_.]*){0,1}$",
     )
     slug: Optional[str] = Field(
         None,
@@ -422,11 +422,11 @@ class DataConnectorPatch(BaseAPISpec):
     )
     namespace: Optional[str] = Field(
         None,
-        description="A command-line/url friendly name for a namespace",
-        examples=["a-slug-example"],
-        max_length=99,
+        description="A command-line/url friendly name for a single slug or two slugs separated by /",
+        example="user1/project-1",
+        max_length=200,
         min_length=1,
-        pattern="^(?!.*\\.git$|.*\\.atom$|.*[\\-._][\\-._].*)[a-z0-9][a-z0-9\\-_.]*$",
+        pattern="^(?!.*\\.git$|.*\\.atom$|.*[\\-._][\\-._].*)[a-z0-9][a-z0-9\\-_.]*(?<!\\.git)(?<!\\.atom)(?:/[a-z0-9][a-z0-9\\-_.]*){0,1}$",
     )
     slug: Optional[str] = Field(
         None,

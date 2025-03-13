@@ -154,7 +154,7 @@ class DataConnectorMigrationTool:
         )
         unsaved_data_connector = models.UnsavedDataConnector(
             name=storage.name,
-            namespace=project.namespace.slug,
+            namespace=project.path,
             slug=data_connector_slug,
             visibility=project.visibility,
             created_by="",

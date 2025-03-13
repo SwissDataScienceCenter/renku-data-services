@@ -9,6 +9,7 @@ from ulid import ULID
 
 from renku_data_services.authz.models import Visibility
 from renku_data_services.base_models import ResetType
+from renku_data_services.base_models.core import ProjectPath
 from renku_data_services.namespace.models import Namespace
 from renku_data_services.utils.etag import compute_etag_from_fields, compute_etag_from_timestamp
 
@@ -50,12 +51,22 @@ class Project(BaseProject):
         # NOTE: `slug` is the only field from `self.namespace` which is serialized in API responses.
         return compute_etag_from_fields(self.updated_at, self.namespace.slug)
 
+    @property
+    def path(self) -> ProjectPath:
+        """Get the entity slug path for the project."""
+        return ProjectPath.from_strings(self.namespace.slug, self.slug)
+
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedProject(BaseProject):
     """A project that hasn't been stored in the database."""
 
     namespace: str
+
+    @property
+    def path(self) -> ProjectPath:
+        """Get the entity slug path for the project."""
+        return ProjectPath.from_strings(self.namespace, self.slug)
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

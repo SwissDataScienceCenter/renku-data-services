@@ -7,7 +7,15 @@ from typing import TYPE_CHECKING, Any
 from ulid import ULID
 
 from renku_data_services.authz.models import Visibility
+from renku_data_services.base_models.core import (
+    DataConnectorInProjectPath,
+    DataConnectorPath,
+    DataConnectorSlug,
+    NamespacePath,
+    ProjectPath,
+)
 from renku_data_services.namespace.models import Namespace
+from renku_data_services.project.models import Project
 from renku_data_services.utils.etag import compute_etag_from_timestamp
 
 if TYPE_CHECKING:
@@ -47,18 +55,31 @@ class DataConnector(BaseDataConnector):
     id: ULID
     namespace: Namespace
     updated_at: datetime
+    project: Project | None = None
 
     @property
     def etag(self) -> str:
         """Entity tag value for this data connector object."""
         return compute_etag_from_timestamp(self.updated_at)
 
+    @property
+    def path(self) -> DataConnectorPath | DataConnectorInProjectPath:
+        """The full path (i.e. sequence of slugs) for the data connector including group or user and/or project."""
+        if self.project:
+            return DataConnectorInProjectPath.from_strings(self.namespace.slug, self.project.slug, self.slug)
+        return DataConnectorPath.from_strings(self.namespace.slug, self.slug)
+
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedDataConnector(BaseDataConnector):
     """A data connector that hasn't been stored in the database."""
 
-    namespace: str
+    namespace: NamespacePath | ProjectPath
+
+    @property
+    def path(self) -> DataConnectorPath | DataConnectorInProjectPath:
+        """The full path (i.e. sequence of slugs) for the data connector including group or user and/or project."""
+        return self.namespace / DataConnectorSlug(self.slug)
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -84,7 +105,7 @@ class DataConnectorPatch:
     """Model for changes requested on a data connector."""
 
     name: str | None
-    namespace: str | None
+    namespace: NamespacePath | ProjectPath | None
     slug: str | None
     visibility: Visibility | None
     description: str | None

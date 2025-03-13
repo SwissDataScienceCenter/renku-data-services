@@ -560,7 +560,9 @@ class Config:
         """The DB adapter for data connectors."""
         if not self._data_connector_repo:
             self._data_connector_repo = DataConnectorRepository(
-                session_maker=self.db.async_session_maker, authz=self.authz
+                session_maker=self.db.async_session_maker,
+                authz=self.authz,
+                project_repo=self.project_repo,
             )
         return self._data_connector_repo
 

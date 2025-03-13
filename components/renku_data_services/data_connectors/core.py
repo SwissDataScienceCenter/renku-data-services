@@ -5,6 +5,10 @@ from typing import Any
 
 from renku_data_services import base_models, errors
 from renku_data_services.authz.models import Visibility
+from renku_data_services.base_models.core import (
+    NamespacePath,
+    ProjectPath,
+)
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.storage import models as storage_models
 from renku_data_services.storage.rclone import RCloneValidator
@@ -60,9 +64,20 @@ def validate_unsaved_data_connector(
     keywords = [kw.root for kw in body.keywords] if body.keywords is not None else []
     storage = validate_unsaved_storage(body.storage, validator=validator)
 
+    slugs = body.namespace.split("/")
+    path: NamespacePath | ProjectPath
+    if len(slugs) == 1:
+        path = NamespacePath.from_strings(*slugs)
+    elif len(slugs) == 2:
+        path = ProjectPath.from_strings(*slugs)
+    else:
+        raise errors.ValidationError(
+            message=f"Got an unexpected number of slugs in the namespace for a data connector {slugs}"
+        )
+
     return models.UnsavedDataConnector(
         name=body.name,
-        namespace=body.namespace,
+        namespace=path,
         slug=body.slug or base_models.Slug.from_name(body.name).value,
         visibility=Visibility(body.visibility.value),
         created_by="",
@@ -102,6 +117,18 @@ def validate_data_connector_patch(
     validator: RCloneValidator,
 ) -> models.DataConnectorPatch:
     """Validate the update to a data connector."""
+    slugs = patch.namespace.split("/") if patch.namespace else []
+    path: NamespacePath | ProjectPath | None
+    if len(slugs) == 0:
+        path = None
+    elif len(slugs) == 1:
+        path = NamespacePath.from_strings(*slugs)
+    elif len(slugs) == 2:
+        path = ProjectPath.from_strings(*slugs)
+    else:
+        raise errors.ValidationError(
+            message="Trying to create a data connector with more than invalid number of slugs in its namespace"
+        )
 
     keywords = [kw.root for kw in patch.keywords] if patch.keywords is not None else None
     storage = (
@@ -112,7 +139,7 @@ def validate_data_connector_patch(
 
     return models.DataConnectorPatch(
         name=patch.name,
-        namespace=patch.namespace,
+        namespace=path,
         slug=patch.slug,
         visibility=Visibility(patch.visibility.value) if patch.visibility is not None else None,
         description=patch.description,

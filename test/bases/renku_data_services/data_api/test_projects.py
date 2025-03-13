@@ -131,8 +131,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
 
     # same as above, but using namespace/slug to retrieve the project
     _, response = await sanic_client.get(
-        f"/api/data/namespaces/{payload['namespace']
-                                }/projects/{payload['slug']}",
+        f"/api/data/namespaces/{payload['namespace']}/projects/{payload['slug']}",
         params={"with_documentation": True},
         headers=user_headers,
     )
@@ -833,7 +832,7 @@ async def test_get_projects_with_direct_membership(sanic_client, user_headers, m
     # Add member_1 to Project 2
     roles = [{"id": member_1_user.id, "role": "editor"}]
     _, response = await sanic_client.patch(
-        f"/api/data/projects/{project_2["id"]}/members", headers=user_headers, json=roles
+        f"/api/data/projects/{project_2['id']}/members", headers=user_headers, json=roles
     )
     assert response.status_code == 200, response.text
 
