@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 from pathlib import PurePosixPath
-from urllib.parse import urlparse
 
 from sanic import Request, empty, exceptions, json
 from sanic.response import HTTPResponse, JSONResponse
@@ -21,7 +20,6 @@ from renku_data_services.data_connectors.db import (
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec, core
 from renku_data_services.notebooks.api.amalthea_patches.init_containers import user_secrets_container
-from renku_data_services.notebooks.api.classes.repository import Repository
 from renku_data_services.notebooks.api.schemas.config_server_options import ServerOptionsEndpointResponse
 from renku_data_services.notebooks.api.schemas.logs import ServerLogs
 from renku_data_services.notebooks.config import NotebooksConfig
@@ -35,6 +33,7 @@ from renku_data_services.notebooks.core_sessions import (
     get_gitlab_image_pull_secret,
     get_launcher_env_variables,
     patch_session,
+    repositories_from_project,
     request_dc_secret_creation,
     request_session_secret_creation,
     requires_image_pull_secret,
@@ -252,10 +251,12 @@ class NotebooksNewBP(CustomBlueprint):
             body: apispec.SessionPostRequest,
         ) -> JSONResponse:
             # gitlab_client = NotebooksGitlabClient(self.nb_config.git.url, internal_gitlab_user.access_token)
+
             launcher = await self.session_repo.get_launcher(user, ULID.from_str(body.launcher_id))
             project = await self.project_repo.get_project(user=user, project_id=launcher.project_id)
+            cluster_name = await self.nb_config.k8s_client.cluster_name_by_class_id(launcher.resource_class_id, user)
             server_name = renku_2_make_server_name(
-                user=user, project_id=str(launcher.project_id), launcher_id=body.launcher_id
+                user=user, project_id=str(launcher.project_id), launcher_id=body.launcher_id, cluster_name=cluster_name
             )
             existing_session = await self.nb_config.k8s_v2_client.get_server(server_name, user.id)
             if existing_session is not None and existing_session.spec is not None:
@@ -293,14 +294,7 @@ class NotebooksNewBP(CustomBlueprint):
             )
             data_connectors_stream = self.data_connector_secret_repo.get_data_connectors_with_secrets(user, project.id)
             git_providers = await self.nb_config.git_provider_helper.get_providers(user=user)
-            repositories: list[Repository] = []
-            for repo in project.repositories:
-                found_provider_id: str | None = None
-                for provider in git_providers:
-                    if urlparse(provider.url).netloc == urlparse(repo).netloc:
-                        found_provider_id = provider.id
-                        break
-                repositories.append(Repository(url=repo, provider=found_provider_id))
+            repositories = repositories_from_project(project, git_providers)
 
             # User secrets
             extra_volume_mounts: list[ExtraVolumeMount] = []
@@ -455,7 +449,7 @@ class NotebooksNewBP(CustomBlueprint):
             for s in secrets_to_create:
                 await self.nb_config.k8s_v2_client.create_secret(s.secret)
             try:
-                manifest = await self.nb_config.k8s_v2_client.create_server(manifest, user.id)
+                manifest = await self.nb_config.k8s_v2_client.create_server(manifest, user)
             except Exception:
                 for s in secrets_to_create:
                     await self.nb_config.k8s_v2_client.delete_secret(s.secret.metadata.name)

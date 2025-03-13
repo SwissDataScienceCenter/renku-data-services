@@ -29,7 +29,7 @@ class ResourcesProtocol(Protocol):
 
     @property
     def max_storage(self) -> Optional[int]:
-        """Maximum allowable storeage in gigabytes."""
+        """Maximum allowable storage in gigabytes."""
         ...
 
 
@@ -166,10 +166,19 @@ class Quota(ResourcesCompareMixin):
         return rc <= self
 
     def generate_id(self) -> "Quota":
-        """Create a new quota with its ID set to a uuid."""
+        """Create a new quota with its ID set to an uuid."""
         if self.id is not None:
             return self
         return self.from_dict({**asdict(self), "id": str(uuid4())})
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class KubeClusterSettings:
+    """K8s Cluster settings."""
+
+    config_name: str
+    node_affinities: list[str]
+    tolerations: list[str]
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -184,6 +193,7 @@ class ResourcePool:
     hibernation_threshold: Optional[int] = None
     default: bool = False
     public: bool = False
+    cluster: Optional[KubeClusterSettings] = None
 
     def __post_init__(self) -> None:
         """Validate the resource pool after initialization."""
@@ -205,7 +215,7 @@ class ResourcePool:
 
         default_classes = []
         for cls in list(self.classes):
-            if self.quota and not self.quota.is_resource_class_compatible(cls):
+            if self.quota is not None and not self.quota.is_resource_class_compatible(cls):
                 raise ValidationError(
                     message=f"The resource class with name {cls.name} is not compatible with the quota."
                 )
@@ -219,7 +229,7 @@ class ResourcePool:
         for cls in list(self.classes):
             if not val.is_resource_class_compatible(cls):
                 raise ValidationError(
-                    message=f"The resource class with name {cls.name} is not compatiable with the quota."
+                    message=f"The resource class with name {cls.name} is not compatible with the quota."
                 )
         return self.from_dict({**asdict(self), "quota": val})
 
@@ -233,6 +243,7 @@ class ResourcePool:
     def from_dict(cls, data: dict) -> "ResourcePool":
         """Create the model from a plain dictionary."""
         quota: Optional[Quota] = None
+        classes = []
         if "quota" in data and isinstance(data["quota"], dict):
             quota = Quota.from_dict(data["quota"])
         elif "quota" in data and isinstance(data["quota"], Quota):
