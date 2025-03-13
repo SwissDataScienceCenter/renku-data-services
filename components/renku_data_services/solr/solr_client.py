@@ -113,6 +113,10 @@ class SubQuery(BaseModel, frozen=True):
         fs = [fn] + list(args)
         return self.model_copy(update={"fields": fs})
 
+    def with_all_fields(self) -> Self:
+        """Return a copy with fields set to ['*']."""
+        return self.model_copy(update={"fields": ["*"]})
+
     def with_filter(self, q: str) -> Self:
         """Return a copy with a new filter query."""
         return self.model_copy(update={"filter": q})
@@ -269,13 +273,25 @@ class FacetBuckets(BaseModel, frozen=True):
     buckets: list[FacetCount]
 
     def to_dict(self) -> dict[str, Any]:
-        """Return the dict representation of this object."""
+        """Return the dict representation of this object as returned by solr."""
         return self.model_dump(by_alias=True)
+
+    def to_simple_dict(self) -> dict[str, int]:
+        """Return the counts as a simple field-count dict."""
+        els = [{x.field: x.count} for x in self.buckets]
+        result = {}
+        [result := result | x for x in els]
+        return result
 
     @classmethod
     def of(cls, *args: FacetCount) -> Self:
         """Constructor for varargs."""
         return FacetBuckets(buckets=list(args))
+
+    @classmethod
+    def empty(cls) -> Self:
+        """Return an empty object."""
+        return FacetBuckets(buckets=[])
 
 
 @final
@@ -288,6 +304,11 @@ class SolrBucketFacetResponse(BaseModel, frozen=True):
     count: int
     buckets: dict[FieldName, FacetBuckets]
 
+    def get_counts(self, field: FieldName) -> FacetBuckets:
+        """Return the facet buckets associated to the given field."""
+        v = self.buckets.get(field)
+        return v if v is not None else FacetBuckets.empty()
+
     @model_serializer()
     def to_dict(self) -> dict[str, Any]:
         """Return the dict of this object."""
@@ -296,6 +317,11 @@ class SolrBucketFacetResponse(BaseModel, frozen=True):
             result.update({key: self.buckets[key].to_dict()})
 
         return result
+
+    @classmethod
+    def empty(cls) -> Self:
+        """Return an empty response."""
+        return SolrBucketFacetResponse(count=0, buckets={})
 
     @model_validator(mode="wrap")  # type: ignore
     @classmethod
@@ -357,6 +383,14 @@ class SolrQuery(BaseModel, frozen=True):
         np = self.params | sq.to_params(field)
         fs = self.fields + [FieldName(f"{field}:[subquery]")]
         return self.model_copy(update={"params": np, "fields": fs})
+
+    def add_filter(self, *args: str) -> Self:
+        """Return a copy with the given filter query added."""
+        if len(args) == 0:
+            return self
+        else:
+            fq = self.filter + list(args)
+            return self.model_copy(update={"filter": fq})
 
     @field_serializer("sort", when_used="always")
     def __serialize_sort(self, sort: list[tuple[FieldName, SortDirection]]) -> str:
@@ -487,7 +521,7 @@ class QueryResponse(BaseModel):
         validation_alias=AliasChoices("responseHeader", "response_header"),
         default_factory=lambda: ResponseHeader(status=200),
     )
-    facets: SolrBucketFacetResponse | None = None
+    facets: SolrBucketFacetResponse = Field(default_factory=SolrBucketFacetResponse.empty)
     response: ResponseBody
 
 

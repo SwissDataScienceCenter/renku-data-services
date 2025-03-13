@@ -130,3 +130,13 @@ def content_all(text: str) -> SolrToken:
     terms: list[SolrToken] = list(map(lambda s: SolrToken(__escape_query(s) + "~"), re.split("\\s+", text)))
     terms_str = "(" + " ".join(terms) + ")"
     return SolrToken(f"{Fields.content_all}:{terms_str}")
+
+
+def namespace_exists() -> SolrToken:
+    """Query part requiring an existing namespace field."""
+    return field_exists(Fields.namespace)
+
+
+def created_by_exists() -> SolrToken:
+    """Query part that requires an existing createdBy field for a project document."""
+    return SolrToken("(createdBy:[* TO *] OR (*:* AND -_type:Project))")

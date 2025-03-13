@@ -4,6 +4,7 @@ import logging
 from datetime import UTC, datetime
 
 import renku_data_services.search.apispec as apispec
+import renku_data_services.search.solr_token as st
 from renku_data_services.base_models import APIUser
 from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.message_queue.models import Reprovisioning
@@ -22,13 +23,16 @@ from renku_data_services.search.solr_user_query import (
 )
 from renku_data_services.search.user_query import Query
 from renku_data_services.solr.entity_documents import EntityDocReader, Group, Project, User
+from renku_data_services.solr.entity_schema import Fields
 from renku_data_services.solr.solr_client import (
     DefaultSolrClient,
+    FacetTerms,
     RawDocument,
     SolrClient,
     SolrClientConfig,
     SolrDocument,
     SolrQuery,
+    SubQuery,
 )
 from renku_data_services.users.db import UserRepo
 
@@ -124,7 +128,41 @@ async def update_solr(search_updates_repo: SearchUpdatesRepo, solr_client: SolrC
 
 
 async def _renku_query(ctx: Context, uq: SolrUserQuery, limit: int, offset: int) -> SolrQuery:
-    return SolrQuery.query_all_fields(uq.query_str(), limit, offset).with_sort(uq.sort)
+    """Create the final solr query from the transformed user query."""
+    role_constraint: list[str] = [st.public_only()]
+    match ctx.role:
+        case AdminRole():
+            role_constraint = []
+        case UserRole() as u:
+            # TODO: implement authz integration
+            logger.error(f"TODO - user confined search is not implemented! Return public only entities (user={u})")
+            pass
+
+    return (
+        SolrQuery.query_all_fields(uq.query_str(), limit, offset)
+        .with_sort(uq.sort)
+        .add_filter(
+            st.namespace_exists(),
+            st.created_by_exists(),
+            "{!join from=namespace to=namespace}(_type:User OR _type:Group)",
+        )
+        .add_filter(*role_constraint)
+        .with_facet(FacetTerms(name=Fields.entity_type, field=Fields.entity_type))
+        .add_sub_query(
+            Fields.creator_details,
+            SubQuery(
+                query="{!terms f=id v=$row.createdBy}", filter="{!terms f=_kind v=fullentity}", limit=1
+            ).with_all_fields(),
+        )
+        .add_sub_query(
+            Fields.namespace_details,
+            SubQuery(
+                query="{!terms f=namespace v=$row.namespace}",
+                filter="((_type:User OR _type:Group) AND _kind:fullentity)",
+                limit=1,
+            ).with_all_fields(),
+        )
+    )
 
 
 async def query(
@@ -151,10 +189,11 @@ async def query(
             total_pages += 1
 
         solr_docs: list[Group | Project | User] = results.response.read_to(EntityDocReader.from_dict)
+
         docs = list(map(converters.from_entity, solr_docs))
         return apispec.SearchResult(
             items=docs,
-            facets=apispec.FacetData(entityType={}),
+            facets=apispec.FacetData(entityType=results.facets.get_counts(Fields.entity_type).to_simple_dict()),
             pagingInfo=apispec.PageWithTotals(
                 page=apispec.PageDef(limit=limit, offset=offset),
                 totalPages=int(total_pages),

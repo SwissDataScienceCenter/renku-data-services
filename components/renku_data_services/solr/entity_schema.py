@@ -39,6 +39,10 @@ class Fields:
     # virtual score field
     score: Final[FieldName] = FieldName("score")
 
+    # sub query fields
+    creator_details: Final[FieldName] = FieldName("creatorDetails")
+    namespace_details: Final[FieldName] = FieldName("namespaceDetails")
+
 
 class Analyzers:
     """A collection of analyzers."""
