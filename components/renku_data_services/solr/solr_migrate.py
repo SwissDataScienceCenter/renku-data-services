@@ -156,7 +156,7 @@ class SchemaMigrator:
         If no core is found, one is created using the admin api.
         """
         async with DefaultSolrAdminClient(self.__config) as client:
-            status = await client.status(None)
+            status = await client.core_status(None)
             if status is None:
                 try:
                     logger.warning(f"Solr core {self.__config.core} not found. Attempt to create it.")
