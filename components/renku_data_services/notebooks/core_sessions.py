@@ -173,7 +173,7 @@ def get_gitlab_image_pull_secret(
 ) -> ExtraSecret:
     """Create a Kubernetes secret for private GitLab registry authentication."""
 
-    preferred_namespace = nb_config.k8s_client.preferred_namespace
+    namespace = nb_config.k8s_client.namespace
 
     registry_secret = {
         "auths": {
@@ -188,7 +188,7 @@ def get_gitlab_image_pull_secret(
 
     secret_data = {".dockerconfigjson": registry_secret}
     secret = V1Secret(
-        metadata=V1ObjectMeta(name=image_pull_secret_name, namespace=preferred_namespace),
+        metadata=V1ObjectMeta(name=image_pull_secret_name, namespace=namespace),
         string_data=secret_data,
         type="kubernetes.io/dockerconfigjson",
     )
@@ -255,7 +255,7 @@ async def get_data_sources(
         secret = ExtraSecret(
             cs.secret(
                 secret_name,
-                nb_config.k8s_client.preferred_namespace,
+                nb_config.k8s_client.namespace(),
                 user_secret_key=user_secret_key if secret_key_needed else None,
             )
         )
@@ -292,7 +292,7 @@ async def request_dc_secret_creation(
             continue
         request_data = {
             "name": f"{manifest.metadata.name}-ds-{s_id.lower()}-secrets",
-            "namespace": nb_config.k8s_v2_client.preferred_namespace,
+            "namespace": nb_config.k8s_v2_client.namespace(),
             "secret_ids": [str(secret.secret_id) for secret in secrets],
             "owner_references": [owner_reference],
             "key_mapping": {str(secret.secret_id): secret.name for secret in secrets},
@@ -333,7 +333,7 @@ async def request_session_secret_creation(
         key_mapping[secret_id].append(s.secret_slot.filename)
     request_data = {
         "name": f"{manifest.metadata.name}-secrets",
-        "namespace": nb_config.k8s_v2_client.preferred_namespace,
+        "namespace": nb_config.k8s_v2_client.namespace(),
         "secret_ids": [str(s.secret_id) for s in session_secrets],
         "owner_references": [owner_reference],
         "key_mapping": key_mapping,

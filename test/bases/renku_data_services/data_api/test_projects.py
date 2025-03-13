@@ -11,8 +11,8 @@ from sqlalchemy import select
 from syrupy.filters import props
 from ulid import ULID
 
-from components.renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
 from renku_data_services.app_config.config import Config
+from renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
 from renku_data_services.message_queue.avro_models.io.renku.events.v2.member_role import MemberRole
 from renku_data_services.message_queue.models import deserialize_binary
 from renku_data_services.users.models import UserInfo

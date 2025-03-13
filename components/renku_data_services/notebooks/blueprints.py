@@ -251,10 +251,12 @@ class NotebooksNewBP(CustomBlueprint):
             body: apispec.SessionPostRequest,
         ) -> JSONResponse:
             # gitlab_client = NotebooksGitlabClient(self.nb_config.git.url, internal_gitlab_user.access_token)
+
             launcher = await self.session_repo.get_launcher(user, ULID.from_str(body.launcher_id))
             project = await self.project_repo.get_project(user=user, project_id=launcher.project_id)
+            cluster_name = await self.nb_config.k8s_client.cluster_name_by_class_id(launcher.resource_class_id, user)
             server_name = renku_2_make_server_name(
-                user=user, project_id=str(launcher.project_id), launcher_id=body.launcher_id
+                user=user, project_id=str(launcher.project_id), launcher_id=body.launcher_id, cluster_name=cluster_name
             )
             existing_session = await self.nb_config.k8s_v2_client.get_server(server_name, user.id)
             if existing_session is not None and existing_session.spec is not None:
@@ -456,7 +458,7 @@ class NotebooksNewBP(CustomBlueprint):
             for s in secrets_to_create:
                 await self.nb_config.k8s_v2_client.create_secret(s.secret)
             try:
-                manifest = await self.nb_config.k8s_v2_client.create_server(manifest, user.id)
+                manifest = await self.nb_config.k8s_v2_client.create_server(manifest, user)
             except Exception:
                 for s in secrets_to_create:
                     await self.nb_config.k8s_v2_client.delete_secret(s.secret.metadata.name)

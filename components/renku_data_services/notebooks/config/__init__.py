@@ -18,10 +18,10 @@ from renku_data_services.notebooks.api.classes.data_service import (
 )
 from renku_data_services.notebooks.api.classes.k8s_client import (
     AmaltheaSessionV1Alpha1Kr8s,
+    DummyK8sClient,
     JupyterServerV1Alpha1Kr8s,
-    K8sClient,
-    NamespacedK8sClient,
-    ServerCache,
+    K8sClientProto,
+    MultipleK8sClient,
 )
 from renku_data_services.notebooks.api.classes.repository import GitProvider
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
@@ -86,8 +86,8 @@ class NotebooksConfig:
     user_secrets: _UserSecrets
     crc_validator: CRCValidatorProto
     git_provider_helper: GitProviderHelperProto
-    k8s_client: K8sClient[JupyterServerV1Alpha1, JupyterServerV1Alpha1Kr8s]
-    k8s_v2_client: K8sClient[AmaltheaSessionV1Alpha1, AmaltheaSessionV1Alpha1Kr8s]
+    k8s_client: K8sClientProto[JupyterServerV1Alpha1, JupyterServerV1Alpha1Kr8s]
+    k8s_v2_client: K8sClientProto[AmaltheaSessionV1Alpha1, AmaltheaSessionV1Alpha1Kr8s]
     current_resource_schema_version: int = 1
     anonymous_sessions_enabled: bool = False
     ssh_enabled: bool = False
@@ -113,13 +113,16 @@ class NotebooksConfig:
         git_provider_helper: GitProviderHelperProto
         k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
         quota_repo: QuotaRepository
+        k8s_client: K8sClientProto[JupyterServerV1Alpha1, JupyterServerV1Alpha1Kr8s]
+        k8s_v2_client: K8sClientProto[AmaltheaSessionV1Alpha1, AmaltheaSessionV1Alpha1Kr8s]
         if dummy_stores:
             crc_validator = DummyCRCValidator()
             sessions_config = _SessionConfig._for_testing()
             git_provider_helper = DummyGitProviderHelper()
             amalthea_config = _AmaltheaConfig(cache_url="http://not.specified")
-            amalthea_v2_config = _AmaltheaV2Config(cache_url="http://not.specified")
             git_config = _GitConfig("http://not.specified", "registry.not.specified")
+            k8s_client = DummyK8sClient()
+            k8s_v2_client = DummyK8sClient()
         else:
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
             rp_repo = ResourcePoolRepository(db_config.async_session_maker, quota_repo)
@@ -131,31 +134,29 @@ class NotebooksConfig:
             git_provider_helper = GitProviderHelper(
                 data_service_url, f"http://{sessions_config.ingress.host}", git_config.url
             )
+            k8s_client = MultipleK8sClient(
+                server_type=JupyterServerV1Alpha1,
+                kr8s_type=JupyterServerV1Alpha1Kr8s,
+                cache_url=amalthea_config.cache_url,
+                username_label="renku.io/userId",
+                # NOTE: if testing then we should skip the cache if unavailable because we don't deploy the cache in
+                # tests
+                skip_cache_if_unavailable=dummy_stores,
+                rp_repo=rp_repo,
+            )
+            k8s_v2_client = MultipleK8sClient(
+                server_type=AmaltheaSessionV1Alpha1,
+                kr8s_type=AmaltheaSessionV1Alpha1Kr8s,
+                cache_url=amalthea_v2_config.cache_url,
+                # NOTE: v2 sessions have no userId label, the safe-username label is the keycloak user ID
+                username_label="renku.io/safe-username",
+                # NOTE: if testing then we should skip the cache if unavailable because we don't deploy the cache in
+                # tests
+                skip_cache_if_unavailable=dummy_stores,
+                rp_repo=rp_repo,
+            )
 
         k8s_config = _K8sConfig.from_env()
-        renku_ns_client = NamespacedK8sClient(
-            k8s_config.renku_namespace, JupyterServerV1Alpha1, JupyterServerV1Alpha1Kr8s
-        )
-        js_cache = ServerCache(amalthea_config.cache_url, JupyterServerV1Alpha1)
-        k8s_client = K8sClient(
-            cache=js_cache,
-            renku_ns_client=renku_ns_client,
-            username_label="renku.io/userId",
-            # NOTE: if testing then we should skip the cache if unavailable because we dont deploy the cache in tests
-            skip_cache_if_unavailable=dummy_stores,
-        )
-        v2_cache = ServerCache(amalthea_v2_config.cache_url, AmaltheaSessionV1Alpha1)
-        renku_ns_v2_client = NamespacedK8sClient(
-            k8s_config.renku_namespace, AmaltheaSessionV1Alpha1, AmaltheaSessionV1Alpha1Kr8s
-        )
-        k8s_v2_client = K8sClient(
-            cache=v2_cache,
-            renku_ns_client=renku_ns_v2_client,
-            # NOTE: v2 sessions have no userId label, the safe-username label is the keycloak user ID
-            username_label="renku.io/safe-username",
-            # NOTE: if testing then we should skip the cache if unavailable because we dont deploy the cache in tests
-            skip_cache_if_unavailable=dummy_stores,
-        )
         return cls(
             server_options=server_options,
             sessions=sessions_config,
