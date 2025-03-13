@@ -115,9 +115,9 @@ def created_lt(dt: datetime) -> SolrToken:
     return field_is(Fields.creation_date, SolrToken(f"[* TO {from_datetime(dt)}]"))
 
 
-def all_entity_types() -> SolrToken:
+def all_entities() -> SolrToken:
     """Searches renku entity documents."""
-    return field_exists(Fields.entity_type)
+    return field_is(Fields.kind, SolrToken("fullentity"))
 
 
 def public_only() -> SolrToken:
