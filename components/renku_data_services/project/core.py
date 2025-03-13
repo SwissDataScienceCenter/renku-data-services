@@ -1,6 +1,7 @@
 """Business logic for projects."""
 
 from pathlib import PurePosixPath
+from urllib.parse import urlparse
 
 from ulid import ULID
 
@@ -18,12 +19,13 @@ def validate_unsaved_project(body: apispec.ProjectPost, created_by: str) -> mode
     keywords = [kw.root for kw in body.keywords] if body.keywords is not None else []
     visibility = Visibility.PRIVATE if body.visibility is None else Visibility(body.visibility.value)
     secrets_mount_directory = PurePosixPath(body.secrets_mount_directory) if body.secrets_mount_directory else None
+    repositories = _validate_repositories(body.repositories)
     return models.UnsavedProject(
         name=body.name,
         namespace=body.namespace,
         slug=body.slug or Slug.from_name(body.name).value,
         description=body.description,
-        repositories=body.repositories or [],
+        repositories=repositories or [],
         created_by=created_by,
         visibility=visibility,
         keywords=keywords,
@@ -43,12 +45,13 @@ def validate_project_patch(patch: apispec.ProjectPatch) -> models.ProjectPatch:
             secrets_mount_directory = PurePosixPath(patch.secrets_mount_directory)
         case _:
             secrets_mount_directory = None
+    repositories = _validate_repositories(patch.repositories)
     return models.ProjectPatch(
         name=patch.name,
         namespace=patch.namespace,
         slug=patch.slug,
         visibility=Visibility(patch.visibility.value) if patch.visibility is not None else None,
-        repositories=patch.repositories,
+        repositories=repositories,
         description=patch.description,
         keywords=keywords,
         documentation=patch.documentation,
@@ -76,13 +79,14 @@ async def copy_project(
 ) -> models.Project:
     """Create a copy of a given project."""
     template = await project_repo.get_project(user=user, project_id=project_id)
+    repositories_ = _validate_repositories(repositories)
 
     unsaved_project = models.UnsavedProject(
         name=name,
         namespace=namespace,
         slug=slug or Slug.from_name(name).value,
         description=description or template.description,
-        repositories=repositories or template.repositories,
+        repositories=repositories_ or template.repositories,
         created_by=user.id,  # type: ignore[arg-type]
         visibility=template.visibility if visibility is None else visibility,
         keywords=keywords or template.keywords,
@@ -180,6 +184,29 @@ def validate_session_secrets_patch(
                 )
             )
     return result
+
+
+def _validate_repositories(repositories: list[str] | None) -> list[str] | None:
+    """Validate a list of git repositories."""
+    if repositories is None:
+        return None
+    seen: set[str] = set()
+    without_duplicates: list[str] = []
+    for repo in repositories:
+        repo = _validate_repository(repo)
+        if repo not in seen:
+            without_duplicates.append(repo)
+            seen.add(repo)
+    return without_duplicates
+
+
+def _validate_repository(repository: str) -> str:
+    """Validate a git repository."""
+    stripped = repository.strip()
+    parsed = urlparse(stripped)
+    if parsed.scheme not in ["http", "https"]:
+        raise errors.ValidationError(message=f'The repository URL "{repository}" is not a valid HTTP or HTTPS URL.')
+    return stripped
 
 
 def _validate_session_launcher_secret_slot_filename(filename: str) -> None:
