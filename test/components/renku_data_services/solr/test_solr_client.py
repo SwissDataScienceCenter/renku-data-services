@@ -249,7 +249,7 @@ async def test_insert_and_query_user(solr_search):
 async def test_insert_and_query_group(solr_search):
     async with DefaultSolrClient(solr_search) as client:
         g = test_entity_documents.group_team
-        r1 = await client.upsert([g])
+        r1 = await client.upsert([g])  # type:ignore
         assert_upsert_result(r1)
 
         qr = await client.query(SolrQuery.query_all_fields("_type:Group"))
