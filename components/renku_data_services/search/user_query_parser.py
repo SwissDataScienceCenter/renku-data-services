@@ -35,7 +35,6 @@ from renku_data_services.search.user_query import (
     PartialDate,
     PartialDateTime,
     PartialTime,
-    Query,
     RelativeDate,
     RoleIs,
     Segment,
@@ -43,6 +42,7 @@ from renku_data_services.search.user_query import (
     SortableField,
     Text,
     TypeIs,
+    UserQuery,
     VisibilityIs,
 )
 from renku_data_services.solr.entity_documents import EntityType
@@ -182,14 +182,14 @@ class _ParsePrimitives:
 
     segment: Parser = field_term | sort_term | free_text
 
-    query: Parser = segment.sep_by(whitespace, min=0).map(Query)
+    query: Parser = segment.sep_by(whitespace, min=0).map(UserQuery)
 
 
 class QueryParser:
     """Parsing user search queries."""
 
     @classmethod
-    def __collapse_text(cls, q: Query) -> Query:
+    def __collapse_text(cls, q: UserQuery) -> UserQuery:
         """Collapses consecutive free text segments.
 
         It is a bit hard to parse them directly as every term is separated by whitespace.
@@ -209,11 +209,11 @@ class QueryParser:
         if current is not None:
             result.append(current)
 
-        return Query(result)
+        return UserQuery(result)
 
     @classmethod
-    def parse(cls, input: str) -> Query:
+    def parse(cls, input: str) -> UserQuery:
         """Parses a user search query into its ast."""
         pp = _ParsePrimitives()
         res = pp.query.parse(input.strip())
-        return cls.__collapse_text(cast(Query, res))
+        return cls.__collapse_text(cast(UserQuery, res))

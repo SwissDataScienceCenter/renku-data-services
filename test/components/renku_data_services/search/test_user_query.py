@@ -14,10 +14,10 @@ from renku_data_services.search.user_query import (
     PartialDate,
     PartialDateTime,
     PartialTime,
-    Query,
     Segments,
     SortableField,
     TypeIs,
+    UserQuery,
 )
 from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.solr_client import SortDirection
@@ -187,13 +187,13 @@ def test_resolve_date_calc() -> None:
 
 
 def test_query_extract_order() -> None:
-    q = Query.of(Segments.name_is("test"), Segments.text("some"), Segments.keyword_is("datascience"))
+    q = UserQuery.of(Segments.name_is("test"), Segments.text("some"), Segments.keyword_is("datascience"))
     assert q.extract_order() == (
         [Segments.name_is("test"), Segments.text("some"), Segments.keyword_is("datascience")],
         None,
     )
 
-    q = Query.of(
+    q = UserQuery.of(
         Segments.name_is("test"),
         Segments.text("some"),
         Segments.keyword_is("datascience"),
@@ -204,7 +204,7 @@ def test_query_extract_order() -> None:
         Segments.sort_by((SortableField.score, SortDirection.asc)),
     )
 
-    q = Query.of(
+    q = UserQuery.of(
         Segments.name_is("test"),
         Segments.sort_by((SortableField.fname, SortDirection.desc)),
         Segments.text("some"),

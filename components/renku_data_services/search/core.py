@@ -1,7 +1,8 @@
 """Business logic for searching."""
 
-import logging
 from datetime import UTC, datetime
+
+from sanic.log import logger
 
 import renku_data_services.search.apispec as apispec
 import renku_data_services.search.solr_token as st
@@ -21,7 +22,7 @@ from renku_data_services.search.solr_user_query import (
     SolrUserQuery,
     UserRole,
 )
-from renku_data_services.search.user_query import Query
+from renku_data_services.search.user_query import UserQuery
 from renku_data_services.solr.entity_documents import EntityDocReader, Group, Project, User
 from renku_data_services.solr.entity_schema import Fields
 from renku_data_services.solr.solr_client import (
@@ -35,8 +36,6 @@ from renku_data_services.solr.solr_client import (
     SubQuery,
 )
 from renku_data_services.users.db import UserRepo
-
-logger = logging.getLogger(__name__)
 
 
 async def reprovision(
@@ -166,7 +165,7 @@ async def _renku_query(ctx: Context, uq: SolrUserQuery, limit: int, offset: int)
 
 
 async def query(
-    solr_config: SolrClientConfig, query: Query, user: APIUser, limit: int, offset: int
+    solr_config: SolrClientConfig, query: UserQuery, user: APIUser, limit: int, offset: int
 ) -> apispec.SearchResult:
     """Run the given user query against solr and return the result."""
 

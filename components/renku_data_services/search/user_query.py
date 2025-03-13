@@ -1,5 +1,7 @@
 """AST for a user search query."""
 
+from __future__ import annotations
+
 import calendar
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -22,17 +24,17 @@ class Nel[A]:
     more_values: list[A] = data_field(default_factory=list)
 
     @classmethod
-    def of(cls, el: A, *args: A) -> "Nel[A]":
+    def of(cls, el: A, *args: A) -> Nel[A]:
         """Constructor using varargs."""
         return Nel(value=el, more_values=list(args))
 
     @classmethod
-    def unsafe_from_list(cls, els: list[A]) -> "Nel[A]":
+    def unsafe_from_list(cls, els: list[A]) -> Nel[A]:
         """Creates a non-empty list from a list, failing if the argument is empty."""
         return Nel(els[0], els[1:])
 
     @classmethod
-    def from_list(cls, els: list[A]) -> "Nel[A] | None":
+    def from_list(cls, els: list[A]) -> Nel[A] | None:
         """Creates a non-empty list from a list."""
         if els == []:
             return None
@@ -58,7 +60,7 @@ class Nel[A]:
         """Create a str from all elements mapped over f."""
         return sep.join([f(x) for x in self.to_list()])
 
-    def map[B](self, f: Callable[[A], B]) -> "Nel[B]":
+    def map[B](self, f: Callable[[A], B]) -> Nel[B]:
         """Maps `f` over this list."""
         head = f(self.value)
         rest = [f(x) for x in self.more_values]
@@ -520,7 +522,7 @@ class OrderBy:
     direction: SortDirection
 
     @classmethod
-    def from_tuple(cls, t: tuple[SortableField, SortDirection]) -> "OrderBy":
+    def from_tuple(cls, t: tuple[SortableField, SortDirection]) -> OrderBy:
         """Create an OrderBy value from a tuple."""
         return OrderBy(t[0], t[1])
 
@@ -633,7 +635,7 @@ class Segments:
 
 
 @dataclass
-class Query:
+class UserQuery:
     """A user search query.
 
     The list of segments can be empty for the empty query.
@@ -642,9 +644,9 @@ class Query:
     segments: list[Segment]
 
     @classmethod
-    def of(cls, *args: Segment) -> "Query":
+    def of(cls, *args: Segment) -> UserQuery:
         """Constructor using varargs."""
-        return Query(list(args))
+        return UserQuery(list(args))
 
     def render(self) -> str:
         """Return the string representation of this query."""

@@ -1,5 +1,7 @@
 """Defines the entity documents used with Solr."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -10,7 +12,6 @@ from pydantic import (
     BaseModel,
     BeforeValidator,
     Field,
-    SkipValidation,
     errors,
     field_serializer,
     field_validator,
@@ -31,6 +32,13 @@ def _str_to_slug(value: Any) -> Slug:
     raise errors.ValidationError(message="converting to slug in solr documents was not successful")
 
 
+def _str_to_visibility_public(value: Any) -> Literal[Visibility.PUBLIC]:
+    if isinstance(value, str) and value.lower() == "public":
+        return Visibility.PUBLIC
+    else:
+        raise ValueError(f"Expected visibility public, got: {value}")
+
+
 class EntityType(StrEnum):
     """The different type of entities available from search."""
 
@@ -46,7 +54,7 @@ class EntityDoc(BaseModel, ABC, frozen=True):
     version: DocVersion = Field(
         serialization_alias="_version_",
         validation_alias=AliasChoices("version", "_version_"),
-        default=DocVersions.not_exists(),
+        default_factory=DocVersions.not_exists,
     )
     score: float | None = None
 
@@ -74,7 +82,7 @@ class User(EntityDoc, frozen=True):
     id: str
     firstName: str | None = None
     lastName: str | None = None
-    visibility: Annotated[Literal[Visibility.PUBLIC], SkipValidation] = Visibility.PUBLIC
+    visibility: Annotated[Literal[Visibility.PUBLIC], BeforeValidator(_str_to_visibility_public)] = Visibility.PUBLIC
 
     @property
     def entity_type(self) -> EntityType:
@@ -86,7 +94,7 @@ class User(EntityDoc, frozen=True):
         return namespace.value
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "User":
+    def from_dict(cls, d: dict[str, Any]) -> User:
         """Create a User from a dictionary."""
         return User.model_validate(d)
 
@@ -97,7 +105,7 @@ class Group(EntityDoc, frozen=True):
     id: ULID
     name: str
     description: str | None = None
-    visibility: Annotated[Literal[Visibility.PUBLIC], SkipValidation] = Visibility.PUBLIC
+    visibility: Annotated[Literal[Visibility.PUBLIC], BeforeValidator(_str_to_visibility_public)] = Visibility.PUBLIC
 
     @property
     def entity_type(self) -> EntityType:
@@ -113,7 +121,7 @@ class Group(EntityDoc, frozen=True):
         return namespace.value
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Group":
+    def from_dict(cls, d: dict[str, Any]) -> Group:
         """Create a Group from a dictionary."""
         return Group.model_validate(d)
 
@@ -164,7 +172,7 @@ class Project(EntityDoc, frozen=True):
         return v.replace(tzinfo=UTC)
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Project":
+    def from_dict(cls, d: dict[str, Any]) -> Project:
         """Create a Project from a dictionary."""
         return Project.model_validate(d)
 
