@@ -687,11 +687,6 @@ class Authz:
                     if result.old.namespace.id != result.new.namespace.id:
                         user = _extract_user_from_args(*func_args, **func_kwargs)
                         authz_change.extend(await db_repo.authz._update_data_connector_namespace(user, result.new))
-                case AuthzOperation.create_link, ResourceType.data_connector if isinstance(
-                    result, DataConnectorToProjectLink
-                ):
-                    user = _extract_user_from_args(*func_args, **func_kwargs)
-                    authz_change = await db_repo.authz._add_data_connector_to_project_link(user, result)
                 case AuthzOperation.delete_link, ResourceType.data_connector if result is None:
                     # NOTE: This means that the link does not exist in the first place so nothing was deleted
                     pass
@@ -1570,25 +1565,41 @@ class Authz:
 
     def _add_data_connector(self, data_connector: DataConnector) -> _AuthzChange:
         """Create the new data connector and associated resources and relations in the DB."""
-        creator = SubjectReference(object=_AuthzConverter.user(data_connector.created_by))
         data_connector_res = _AuthzConverter.data_connector(data_connector.id)
-        creator_is_owner = Relationship(resource=data_connector_res, relation=_Relation.owner.value, subject=creator)
+        match data_connector.namespace.kind:
+            case NamespaceKind.project:
+                project_id = (
+                    ULID.from_str(data_connector.namespace.underlying_resource_id)
+                    if isinstance(data_connector.namespace.underlying_resource_id, str)
+                    else data_connector.namespace.underlying_resource_id
+                )
+                owned_by = _AuthzConverter.project(project_id)
+            case NamespaceKind.user:
+                owned_by = _AuthzConverter.user_namespace(data_connector.namespace.id)
+            case NamespaceKind.group:
+                group_id = (
+                    ULID.from_str(data_connector.namespace.underlying_resource_id)
+                    if isinstance(data_connector.namespace.underlying_resource_id, str)
+                    else data_connector.namespace.underlying_resource_id
+                )
+                owned_by = _AuthzConverter.group(group_id)
+            case _:
+                raise errors.ProgrammingError(
+                    message="Tried to match unexpected data connector namespace kind", quiet=True
+                )
+        owner = Relationship(
+            resource=data_connector_res,
+            relation=_Relation.data_connector_namespace,
+            subject=SubjectReference(object=owned_by),
+        )
         all_users = SubjectReference(object=_AuthzConverter.all_users())
         all_anon_users = SubjectReference(object=_AuthzConverter.anonymous_users())
-        data_connector_namespace = SubjectReference(
-            object=_AuthzConverter.user_namespace(data_connector.namespace.id)
-            if data_connector.namespace.kind == NamespaceKind.user
-            else _AuthzConverter.group(cast(ULID, data_connector.namespace.underlying_resource_id))
-        )
         data_connector_in_platform = Relationship(
             resource=data_connector_res,
             relation=_Relation.data_connector_platform,
             subject=SubjectReference(object=self._platform),
         )
-        data_connector_in_namespace = Relationship(
-            resource=data_connector_res, relation=_Relation.data_connector_namespace, subject=data_connector_namespace
-        )
-        relationships = [creator_is_owner, data_connector_in_platform, data_connector_in_namespace]
+        relationships = [owner, data_connector_in_platform]
         if data_connector.visibility == Visibility.PUBLIC:
             all_users_are_viewers = Relationship(
                 resource=data_connector_res,
@@ -1823,47 +1834,6 @@ class Authz:
             ]
         )
         return _AuthzChange(apply=apply_change, undo=undo_change)
-
-    async def _add_data_connector_to_project_link(
-        self, user: base_models.APIUser, link: DataConnectorToProjectLink
-    ) -> _AuthzChange:
-        """Links a data connector to a project."""
-        # NOTE: we manually check for permissions here since it is not trivially expressed through decorators
-        allowed_from = await self.has_permission(
-            user, ResourceType.data_connector, link.data_connector_id, Scope.ADD_LINK
-        )
-        if not allowed_from:
-            raise errors.MissingResourceError(
-                message=f"The user with ID {user.id} cannot perform operation {Scope.ADD_LINK} "
-                f"on {ResourceType.data_connector.value} "
-                f"with ID {link.data_connector_id} or the resource does not exist."
-            )
-        allowed_to = await self.has_permission(user, ResourceType.project, link.project_id, Scope.WRITE)
-        if not allowed_to:
-            raise errors.MissingResourceError(
-                message=f"The user with ID {user.id} cannot perform operation {Scope.WRITE} "
-                f"on {ResourceType.project.value} "
-                f"with ID {link.project_id} or the resource does not exist."
-            )
-
-        data_connector_res = _AuthzConverter.data_connector(link.data_connector_id)
-        project_subject = SubjectReference(object=_AuthzConverter.project(link.project_id))
-        relationship = Relationship(
-            resource=data_connector_res,
-            relation=_Relation.linked_to.value,
-            subject=project_subject,
-        )
-        apply = WriteRelationshipsRequest(
-            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=relationship)]
-        )
-        undo = WriteRelationshipsRequest(
-            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=relationship)]
-        )
-        change = _AuthzChange(
-            apply=apply,
-            undo=undo,
-        )
-        return change
 
     async def _remove_data_connector_to_project_link(
         self, user: base_models.APIUser, link: DataConnectorToProjectLink

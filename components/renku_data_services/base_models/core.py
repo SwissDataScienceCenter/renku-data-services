@@ -1,11 +1,13 @@
 """Base models shared by services."""
 
+from __future__ import annotations
+
 import re
 import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, StrEnum
-from typing import ClassVar, NewType, Optional, Protocol, Self, TypeVar
+from typing import ClassVar, Never, NewType, Optional, Protocol, Self, TypeVar, overload
 
 from sanic import Request
 
@@ -119,7 +121,7 @@ class GitlabAPIProtocol(Protocol):
 class UserStore(Protocol):
     """The interface through which Keycloak or a similar application can be accessed."""
 
-    async def get_user_by_id(self, id: str, access_token: str) -> Optional["User"]:
+    async def get_user_by_id(self, id: str, access_token: str) -> Optional[User]:
         """Get a user by their unique Keycloak user ID."""
         ...
 
@@ -133,7 +135,7 @@ class User:
     no_default_access: bool = False
 
     @classmethod
-    def from_dict(cls, data: dict) -> "User":
+    def from_dict(cls, data: dict) -> User:
         """Create the model from a plain dictionary."""
         return cls(**data)
 
@@ -163,7 +165,7 @@ class Slug:
         no_space = re.sub(r"\s+", "-", lower_case)
         normalized = unicodedata.normalize("NFKD", no_space).encode("ascii", "ignore").decode("utf-8")
         valid_chars_pattern = [r"\w", ".", "_", "-"]
-        no_invalid_characters = re.sub(f'[^{"".join(valid_chars_pattern)}]', "-", normalized)
+        no_invalid_characters = re.sub(f"[^{''.join(valid_chars_pattern)}]", "-", normalized)
         no_duplicates = re.sub(r"([._-])[._-]+", r"\1", no_invalid_characters)
         valid_start = re.sub(r"^[._-]", "", no_duplicates)
         valid_end = re.sub(r"[._-]$", "", valid_start)
@@ -192,7 +194,7 @@ class Slug:
         slug = slug[:80]
         return cls.from_name(slug)
 
-    def __true_div__(self, other: "Slug") -> str:
+    def __truediv__(self, other: Slug) -> str:
         """Joins two slugs into a path fraction without dashes at the beginning or end."""
         if type(self) is not type(other):
             raise errors.ValidationError(
@@ -205,6 +207,162 @@ class Slug:
 
     def __repr__(self) -> str:
         return self.value
+
+
+class NamespaceSlug(Slug):
+    """The slug for a group or user namespace."""
+
+
+class ProjectSlug(Slug):
+    """The slug for a project."""
+
+
+class DataConnectorSlug(Slug):
+    """The slug for a data connector."""
+
+
+class __NamespaceCommonMixin:
+    def __repr__(self) -> str:
+        return "/".join([i.value for i in self._to_list()])
+
+    def __getitem__(self, ind: int) -> Slug:
+        return self._to_list()[ind]
+
+    def __len__(self) -> int:
+        return len(self._to_list())
+
+    def _to_list(self) -> list[Slug]:
+        raise NotImplementedError
+
+
+@dataclass(frozen=True, eq=True, repr=False)
+class NamespacePath(__NamespaceCommonMixin):
+    """The slug that makes up the path to a user or group namespace in Renku."""
+
+    __match_args__ = ("first",)
+    first: NamespaceSlug
+
+    @overload
+    def __truediv__(self, other: ProjectSlug) -> ProjectPath: ...
+    @overload
+    def __truediv__(self, other: DataConnectorSlug) -> DataConnectorPath: ...
+
+    def __truediv__(self, other: ProjectSlug | DataConnectorSlug) -> ProjectPath | DataConnectorPath:
+        """Create new entity path with an extra slug."""
+        if isinstance(other, ProjectSlug):
+            return ProjectPath(self.first, other)
+        elif isinstance(other, DataConnectorSlug):
+            return DataConnectorPath(self.first, other)
+        else:
+            raise errors.ProgrammingError(message=f"A path for a namespace cannot be further joined with {other}")
+
+    def _to_list(self) -> list[Slug]:
+        return [self.first]
+
+    def parent(self) -> Never:
+        """The parent path."""
+        raise errors.ProgrammingError(message="A namespace path has no parent")
+
+    @classmethod
+    def from_strings(cls, *slugs: str) -> Self:
+        """Convert a string to a namespace path."""
+        if len(slugs) != 1:
+            raise errors.ValidationError(message=f"One slug string is needed to create a namespace path, got {slugs}.")
+        return cls(NamespaceSlug(slugs[0]))
+
+
+@dataclass(frozen=True, eq=True, repr=False)
+class ProjectPath(__NamespaceCommonMixin):
+    """The collection of slugs that makes up the path to a project in Renku."""
+
+    __match_args__ = ("first", "second")
+    first: NamespaceSlug
+    second: ProjectSlug
+
+    def __truediv__(self, other: DataConnectorSlug) -> DataConnectorInProjectPath:
+        """Create new entity path with an extra slug."""
+        if not isinstance(other, DataConnectorSlug):
+            raise errors.ValidationError(
+                message=f"A project path can only be joined with a data connector slug, but got {other}"
+            )
+        return DataConnectorInProjectPath(self.first, self.second, other)
+
+    def _to_list(self) -> list[Slug]:
+        return [self.first, self.second]
+
+    def parent(self) -> NamespacePath:
+        """The parent path."""
+        return NamespacePath(self.first)
+
+    @classmethod
+    def from_strings(cls, *slugs: str) -> Self:
+        """Convert strings to a project path."""
+        if len(slugs) != 2:
+            raise errors.ValidationError(message=f"Two slug strings are needed to create a project path, got {slugs}.")
+        return cls(NamespaceSlug(slugs[0]), ProjectSlug(slugs[1]))
+
+
+@dataclass(frozen=True, eq=True, repr=False)
+class DataConnectorPath(__NamespaceCommonMixin):
+    """The collection of slugs that makes up the path to a data connector in a user or group in Renku."""
+
+    __match_args__ = ("first", "second")
+    first: NamespaceSlug
+    second: DataConnectorSlug
+
+    def __truediv__(self, other: Never) -> Never:
+        """Create new entity path with an extra slug."""
+        raise errors.ProgrammingError(
+            message="A path for a data connector in a user or group cannot be further joined with more slugs"
+        )
+
+    def _to_list(self) -> list[Slug]:
+        return [self.first, self.second]
+
+    def parent(self) -> NamespacePath:
+        """The parent path."""
+        return NamespacePath(self.first)
+
+    @classmethod
+    def from_strings(cls, *slugs: str) -> Self:
+        """Convert strings to a data connector path."""
+        if len(slugs) != 2:
+            raise errors.ValidationError(
+                message=f"Two slug strings are needed to create a data connector path, got {slugs}."
+            )
+        return cls(NamespaceSlug(slugs[0]), DataConnectorSlug(slugs[1]))
+
+
+@dataclass(frozen=True, eq=True, repr=False)
+class DataConnectorInProjectPath(__NamespaceCommonMixin):
+    """The collection of slugs that makes up the path to a data connector in a projectj in Renku."""
+
+    __match_args__ = ("first", "second", "third")
+    first: NamespaceSlug
+    second: ProjectSlug
+    third: DataConnectorSlug
+
+    def __truediv__(self, other: Never) -> Never:
+        """Create new entity path with an extra slug."""
+        raise errors.ProgrammingError(
+            message="A path for a data connector in a project cannot be further joined with more slugs"
+        )
+
+    def _to_list(self) -> list[Slug]:
+        return [self.first, self.second, self.third]
+
+    def parent(self) -> ProjectPath:
+        """The parent path."""
+        return ProjectPath(self.first, self.second)
+
+    @classmethod
+    def from_strings(cls, *slugs: str) -> Self:
+        """Convert strings to a data connector path."""
+        if len(slugs) != 3:
+            raise errors.ValidationError(
+                message=f"Three slug strings are needed to create a data connector in project path, got {slugs}."
+            )
+        return cls(NamespaceSlug(slugs[0]), ProjectSlug(slugs[1]), DataConnectorSlug(slugs[2]))
 
 
 AnyAPIUser = TypeVar("AnyAPIUser", bound=APIUser, covariant=True)
