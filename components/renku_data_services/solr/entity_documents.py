@@ -3,9 +3,18 @@
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Annotated, Any, Self
+from typing import Annotated, Any, Literal, Self
 
-from pydantic import AliasChoices, BaseModel, BeforeValidator, Field, errors, field_serializer, field_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    BeforeValidator,
+    Field,
+    SkipValidation,
+    errors,
+    field_serializer,
+    field_validator,
+)
 from ulid import ULID
 
 from renku_data_services.authz.models import Visibility
@@ -49,7 +58,7 @@ class EntityDoc(BaseModel, ABC, frozen=True):
 
     def to_dict(self) -> dict[str, Any]:
         """Return the dict of this group."""
-        dict = self.model_dump(by_alias=True, exclude_defaults=True)
+        dict = self.model_dump(by_alias=True, exclude_none=True, mode="json")
         # note: _kind=fullentity is for being backwards compatible, it might not be needed in the future
         dict.update(_type=self.entity_type.value, _kind="fullentity")
         return dict
@@ -65,6 +74,7 @@ class User(EntityDoc, frozen=True):
     id: str
     firstName: str | None = None
     lastName: str | None = None
+    visibility: Annotated[Literal[Visibility.PUBLIC], SkipValidation] = Visibility.PUBLIC
 
     @property
     def entity_type(self) -> EntityType:
@@ -87,6 +97,7 @@ class Group(EntityDoc, frozen=True):
     id: ULID
     name: str
     description: str | None = None
+    visibility: Annotated[Literal[Visibility.PUBLIC], SkipValidation] = Visibility.PUBLIC
 
     @property
     def entity_type(self) -> EntityType:
