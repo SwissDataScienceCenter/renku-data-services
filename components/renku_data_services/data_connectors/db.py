@@ -508,9 +508,13 @@ class DataConnectorProjectLinkRepository:
                 message=f"Project with id '{project_id}' does not exist or you do not have access to it."
             )
 
+        allowed_dcs = await self.authz.resources_with_permission(user, user.id, ResourceType.data_connector, Scope.READ)
+
         async with self.session_maker() as session:
-            stmt = select(schemas.DataConnectorToProjectLinkORM).where(
-                schemas.DataConnectorToProjectLinkORM.project_id == project_id
+            stmt = (
+                select(schemas.DataConnectorToProjectLinkORM)
+                .where(schemas.DataConnectorToProjectLinkORM.project_id == project_id)
+                .where(schemas.DataConnectorToProjectLinkORM.data_connector_id.in_(allowed_dcs))
             )
             result = await session.scalars(stmt)
             links_orm = result.all()
@@ -595,6 +599,21 @@ class DataConnectorProjectLinkRepository:
         session: AsyncSession | None = None,
     ) -> models.DataConnectorToProjectLink:
         """Create a new link from a given data connector link to a project."""
+        allowed_to_read_dc = await self.authz.has_permission(
+            user, ResourceType.data_connector, link.data_connector_id, Scope.READ
+        )
+        allowed_to_write_project = await self.authz.has_permission(
+            user, ResourceType.project, link.project_id, Scope.WRITE
+        )
+        if not allowed_to_read_dc:
+            raise errors.MissingResourceError(
+                message=f"The data connector with ID {link.data_connector_id} does not exist "
+                "or you do not have access to it"
+            )
+        if not allowed_to_write_project:
+            raise errors.MissingResourceError(
+                message=f"The project with ID {link.project_id} does not exist or you do not have access to it"
+            )
         unsaved_link = models.UnsavedDataConnectorToProjectLink(
             data_connector_id=link.data_connector_id, project_id=project_id
         )
@@ -623,6 +642,14 @@ class DataConnectorProjectLinkRepository:
         ).one_or_none()
         if link_orm is None:
             return None
+
+        allowed_to_write_project = await self.authz.has_permission(
+            user, ResourceType.project, link_orm.project_id, Scope.WRITE
+        )
+        if not allowed_to_write_project:
+            raise errors.MissingResourceError(
+                message=f"The project with ID {link_orm.project_id} does not exist or you do not have access to it"
+            )
 
         link = link_orm.dump()
         await session.delete(link_orm)

@@ -430,7 +430,8 @@ def v6_schema() -> SpiceDBSchema:
                 "data_connector:dc2#delete@user:user1",
                 "data_connector:dc2#write@user:user1",
                 "data_connector:dc2#read@user:user1",
-                # user2 has no edit or write access to dc1
+                # user2 has no access to dc1 because the dc is not public
+                # and user2 has no access to the project that owns the dc
                 "data_connector:dc1#read@user:user2",
                 "data_connector:dc1#delete@user:user2",
                 "data_connector:dc1#write@user:user2",
