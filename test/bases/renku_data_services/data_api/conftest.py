@@ -14,9 +14,10 @@ from renku_data_services.app_config.config import Config
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.authz.authz import _AuthzConverter
 from renku_data_services.base_models import Slug
+from renku_data_services.base_models.core import NamespacePath
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.migrations.core import run_migrations_for_app
-from renku_data_services.namespace.models import Namespace, NamespaceKind
+from renku_data_services.namespace.models import UserNamespace
 from renku_data_services.secrets.config import Config as SecretsConfig
 from renku_data_services.secrets_storage_api.app import register_all_handlers as register_secrets_handlers
 from renku_data_services.storage.rclone import RCloneValidator
@@ -33,13 +34,11 @@ async def admin_user() -> UserInfo:
         first_name="Admin",
         last_name="Doe",
         email="admin.doe@gmail.com",
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="admin.doe",
-            kind=NamespaceKind.user,
             underlying_resource_id="admin",
             created_by="admin",
-            path=["admin.doe"],
+            path=NamespacePath.from_strings("admin.doe"),
         ),
     )
 
@@ -51,13 +50,11 @@ async def regular_user() -> UserInfo:
         first_name="User",
         last_name="Doe",
         email="user.doe@gmail.com",
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="user.doe",
-            kind=NamespaceKind.user,
             underlying_resource_id="user",
             created_by="user",
-            path=["user.doe"],
+            path=NamespacePath.from_strings("user.doe"),
         ),
     )
 
@@ -69,13 +66,11 @@ async def member_1_user() -> UserInfo:
         first_name="Member-1",
         last_name="Doe",
         email="member-1.doe@gmail.com",
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="member-1.doe",
-            kind=NamespaceKind.user,
             underlying_resource_id="member-1",
             created_by="member-1",
-            path=["member-1.doe"],
+            path=NamespacePath.from_strings("member-1.doe"),
         ),
     )
 
@@ -87,13 +82,11 @@ async def member_2_user() -> UserInfo:
         first_name="Member-2",
         last_name="Doe",
         email="member-2.doe@gmail.com",
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="member-2.doe",
-            kind=NamespaceKind.user,
             underlying_resource_id="member-2",
             created_by="member-2",
-            path=["member-2.doe"],
+            path=NamespacePath.from_strings("member-2.doe"),
         ),
     )
 
@@ -363,7 +356,7 @@ async def create_data_connector(sanic_client: SanicASGITestClient, regular_user:
             "name": name,
             "description": "A data connector",
             "visibility": "private",
-            "namespace": user.namespace.slug,
+            "namespace": user.namespace.path.serialize(),
             "storage": {
                 "configuration": {
                     "type": "s3",

@@ -40,7 +40,7 @@ class KCUsersBP(CustomBlueprint):
                 [
                     dict(
                         id=user.id,
-                        username=user.namespace.slug,
+                        username=user.namespace.path.first.value,
                         email=user.email,
                         first_name=user.first_name,
                         last_name=user.last_name,
@@ -66,7 +66,7 @@ class KCUsersBP(CustomBlueprint):
                 apispec.SelfUserInfo,
                 dict(
                     id=user_info.id,
-                    username=user_info.namespace.slug,
+                    username=user_info.namespace.path.first.value,
                     email=user_info.email,
                     first_name=user_info.first_name,
                     last_name=user_info.last_name,
@@ -101,7 +101,7 @@ class KCUsersBP(CustomBlueprint):
                 apispec.UserWithId,
                 dict(
                     id=user_info.id,
-                    username=user_info.namespace.slug,
+                    username=user_info.namespace.path.first.value,
                     email=user_info.email,
                     first_name=user_info.first_name,
                     last_name=user_info.last_name,

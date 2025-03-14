@@ -1,13 +1,14 @@
 """SQLAlchemy's schemas for the group database."""
 
 from datetime import datetime
-from typing import Optional, Self, cast
+from typing import Optional, Self
 
 from sqlalchemy import CheckConstraint, DateTime, Identity, Index, Integer, MetaData, String, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
 from ulid import ULID
 
+from renku_data_services.base_models.core import NamespacePath
 from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
 from renku_data_services.data_connectors.orm import DataConnectorORM
 from renku_data_services.errors import errors
@@ -93,18 +94,6 @@ class NamespaceORM(BaseORM):
         return self.group.creation_date if self.group else None
 
     @property
-    def underlying_resource_id(self) -> str | ULID:
-        """Return the id of the underlying resource."""
-        if self.group_id is not None:
-            return self.group_id
-        elif self.user_id is not None:
-            return self.user_id
-
-        raise errors.ProgrammingError(
-            message=f"Found a namespace {self.slug} that has no group or user associated with it."
-        )
-
-    @property
     def name(self) -> str | None:
         """Return the name of the underlying resource."""
         if self.group is not None:
@@ -119,20 +108,44 @@ class NamespaceORM(BaseORM):
             message=f"Found a namespace {self.slug} that has no group or user associated with it."
         )
 
-    def dump(self) -> models.Namespace:
+    def dump_group_namespace(self) -> models.GroupNamespace:
         """Create a namespace model from the ORM."""
-        kind = models.NamespaceKind.group if self.group else models.NamespaceKind.user
-        return models.Namespace(
+        if not self.group_id:
+            raise errors.ProgrammingError(
+                message="Expected a valid group_id when dumping NamespaceORM as group namespace."
+            )
+        return models.GroupNamespace(
             id=self.id,
-            slug=self.slug,
-            kind=kind,
             created_by=self.created_by,
             creation_date=self.creation_date,
-            underlying_resource_id=self.underlying_resource_id,
+            underlying_resource_id=self.group_id,
             latest_slug=self.slug,
             name=self.name,
-            path=[self.slug],
+            path=NamespacePath.from_strings(self.slug),
         )
+
+    def dump_user_namespace(self) -> models.UserNamespace:
+        """Create a namespace model from the ORM."""
+        if self.user_id is None:
+            raise errors.ProgrammingError(
+                message="Expected a user_id in the NamespaceORM when dumping the object, but got None."
+            )
+        return models.UserNamespace(
+            id=self.id,
+            created_by=self.created_by,
+            creation_date=self.creation_date,
+            underlying_resource_id=self.user_id,
+            latest_slug=self.slug,
+            name=self.name,
+            path=NamespacePath.from_strings(self.slug),
+        )
+
+    def dump(self) -> models.UserNamespace | models.GroupNamespace:
+        """Create a namespace model from the ORM."""
+        if self.group_id:
+            return self.dump_group_namespace()
+        else:
+            return self.dump_user_namespace()
 
     def dump_user(self) -> UserInfo:
         """Create a user with namespace from the ORM."""
@@ -143,7 +156,7 @@ class NamespaceORM(BaseORM):
             )
         # NOTE: calling `self.user.dump()` can cause sqlalchemy greenlet errors, as it tries to fetch the namespace
         # again from the db, even though the back_populates should take care of this and not require loading.
-        ns = self.dump()
+        ns = self.dump_user_namespace()
         user_info = UserInfo(
             id=self.user.keycloak_id,
             first_name=self.user.first_name,
@@ -154,15 +167,14 @@ class NamespaceORM(BaseORM):
         return user_info
 
     @classmethod
-    def load(cls, ns: models.Namespace) -> Self:
-        """Create an ORM object from the user object."""
-        match ns.kind:
-            case models.NamespaceKind.group:
-                return cls(slug=ns.slug, group_id=cast(ULID, ns.underlying_resource_id))
-            case models.NamespaceKind.user:
-                return cls(slug=ns.slug, user_id=cast(str, ns.underlying_resource_id))
+    def load_user(cls, ns: models.UserNamespace) -> Self:
+        """Create an ORM object from the user namespace object."""
+        return cls(slug=ns.path.first.value, user_id=ns.underlying_resource_id)
 
-        raise errors.ValidationError(message=f"Unknown namespace kind {ns.kind}")
+    @classmethod
+    def load_group(cls, ns: models.GroupNamespace) -> Self:
+        """Create an ORM object from the group namespace object."""
+        return cls(slug=ns.path.first.value, group_id=ns.underlying_resource_id)
 
 
 class NamespaceOldORM(BaseORM):
@@ -178,19 +190,17 @@ class NamespaceOldORM(BaseORM):
     )
     latest_slug: Mapped[NamespaceORM] = relationship(lazy="joined", init=False, viewonly=True, repr=False)
 
-    def dump(self) -> models.Namespace:
+    def dump(self) -> models.UserNamespace | models.GroupNamespace:
         """Create an namespace model from the ORM."""
         if self.latest_slug.group_id and self.latest_slug.group:
-            return models.Namespace(
+            return models.GroupNamespace(
                 id=self.id,
-                slug=self.slug,
                 latest_slug=self.slug,
                 created_by=self.latest_slug.created_by,
                 creation_date=self.created_at,
-                kind=models.NamespaceKind.group,
                 underlying_resource_id=self.latest_slug.group_id,
                 name=self.latest_slug.group.name,
-                path=[self.slug],
+                path=NamespacePath.from_strings(self.slug),
             )
 
         if not self.latest_slug.user or not self.latest_slug.user_id:
@@ -203,16 +213,14 @@ class NamespaceOldORM(BaseORM):
             if self.latest_slug.user.first_name and self.latest_slug.user.last_name
             else self.latest_slug.user.first_name or self.latest_slug.user.last_name
         )
-        return models.Namespace(
+        return models.UserNamespace(
             id=self.id,
-            slug=self.slug,
             latest_slug=self.latest_slug.slug,
             created_by=self.latest_slug.user_id,
             creation_date=self.created_at,
-            kind=models.NamespaceKind.user,
             underlying_resource_id=self.latest_slug.user_id,
             name=name,
-            path=[self.slug],
+            path=NamespacePath.from_strings(self.slug),
         )
 
 
@@ -281,6 +289,12 @@ class EntitySlugORM(BaseORM):
             data_connector_id=data_connector_id,
             namespace_id=namespace_id,
         )
+
+    def dump_namespace(self) -> models.UserNamespace | models.GroupNamespace | models.ProjectNamespace:
+        """Dump the entity slug as a namespace."""
+        if self.project:
+            return self.project.dump_as_namespace()
+        return self.namespace.dump()
 
 
 class EntitySlugOldORM(BaseORM):

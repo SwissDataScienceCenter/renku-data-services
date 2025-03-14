@@ -5,20 +5,19 @@ import sqlalchemy as sa
 from ulid import ULID
 
 import renku_data_services.search.core as core
+from renku_data_services.base_models.core import NamespacePath
 from renku_data_services.migrations.core import run_migrations_for_app
-from renku_data_services.namespace.models import Namespace, NamespaceKind
+from renku_data_services.namespace.models import UserNamespace
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.orm import RecordState, SearchUpdatesORM
 from renku_data_services.solr.solr_client import DefaultSolrClient, SolrClientConfig, SolrQuery
 from renku_data_services.users.models import UserInfo
 
-user_namespace = Namespace(
+user_namespace = UserNamespace(
     id=ULID(),
-    slug="test/user",
-    kind=NamespaceKind.user,
     created_by="userid_2",
-    underlying_resource_id=ULID(),
-    path=["test", "user"],
+    underlying_resource_id=str(ULID()),
+    path=NamespacePath.from_strings("user"),
 )
 
 

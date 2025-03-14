@@ -23,7 +23,7 @@ from renku_data_services.users.models import UserInfo
 
 def _user_to_entity_doc(user: UserInfo) -> UserDoc:
     return UserDoc(
-        namespace=Slug.from_name(user.namespace.slug),
+        namespace=user.namespace.path.first,
         id=user.id,
         firstName=user.first_name,
         lastName=user.last_name,
@@ -36,7 +36,7 @@ def _group_to_entity_doc(group: Group) -> GroupDoc:
 
 def _project_to_entity_doc(p: Project) -> ProjectDoc:
     return ProjectDoc(
-        namespace=Slug.from_name(p.namespace.slug),
+        namespace=p.namespace.path.first,
         id=p.id,
         name=p.name,
         slug=Slug.from_name(p.slug),

@@ -14,7 +14,7 @@ from renku_data_services.base_models.core import (
     NamespacePath,
     ProjectPath,
 )
-from renku_data_services.namespace.models import Namespace
+from renku_data_services.namespace.models import GroupNamespace, ProjectNamespace, UserNamespace
 from renku_data_services.project.models import Project
 from renku_data_services.utils.etag import compute_etag_from_timestamp
 
@@ -53,7 +53,7 @@ class DataConnector(BaseDataConnector):
     """Data connector model."""
 
     id: ULID
-    namespace: Namespace
+    namespace: UserNamespace | GroupNamespace | ProjectNamespace
     updated_at: datetime
     project: Project | None = None
 
@@ -65,9 +65,7 @@ class DataConnector(BaseDataConnector):
     @property
     def path(self) -> DataConnectorPath | DataConnectorInProjectPath:
         """The full path (i.e. sequence of slugs) for the data connector including group or user and/or project."""
-        if self.project:
-            return DataConnectorInProjectPath.from_strings(self.namespace.slug, self.project.slug, self.slug)
-        return DataConnectorPath.from_strings(self.namespace.slug, self.slug)
+        return self.namespace.path / DataConnectorSlug(self.slug)
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

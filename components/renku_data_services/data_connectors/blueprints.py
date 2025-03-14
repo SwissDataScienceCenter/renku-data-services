@@ -346,7 +346,7 @@ class DataConnectorsBP(CustomBlueprint):
         return dict(
             id=str(data_connector.id),
             name=data_connector.name,
-            namespace="/".join(data_connector.namespace.path),
+            namespace=data_connector.namespace.path.serialize(),
             slug=data_connector.slug,
             storage=storage,
             # secrets=,

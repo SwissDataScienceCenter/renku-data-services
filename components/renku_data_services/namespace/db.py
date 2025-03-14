@@ -398,8 +398,10 @@ class GroupRepository:
                         output.append(res.dump())
                     case ProjectORM():
                         output.append(res.dump_as_namespace())
-                    case _:
-                        raise errors.ProgrammingError()
+                    case x:
+                        raise errors.ProgrammingError(
+                            message=f"Got an unexpected type of object when listing namespaces {type(x)}"
+                        )
             return output, len(group_ids) + len(user_ids) + len(project_ids)
 
     async def _get_user_namespaces(self) -> AsyncGenerator[user_models.UserInfo, None]:
@@ -444,7 +446,7 @@ class GroupRepository:
                 )
             return ns.dump()
 
-    async def get_user_namespace(self, user_id: str) -> models.Namespace | None:
+    async def get_user_namespace(self, user_id: str) -> models.UserNamespace | None:
         """Get the namespace corresponding to a given user."""
         async with self.session_maker() as session, session.begin():
             ns = await session.scalar(select(schemas.NamespaceORM).where(schemas.NamespaceORM.user_id == user_id))
@@ -452,7 +454,7 @@ class GroupRepository:
                 return None
             if not ns.user or not ns.user_id:
                 raise errors.ProgrammingError(message="Found a namespace that has no user associated with it.")
-            return ns.dump()
+            return ns.dump_user_namespace()
 
     async def _create_user_namespace_slug(
         self, session: AsyncSession, user_slug: str, retry_enumerate: int = 0, retry_random: bool = False

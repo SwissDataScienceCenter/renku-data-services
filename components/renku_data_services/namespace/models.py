@@ -1,12 +1,14 @@
 """Group models."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from typing import Final
 
 from ulid import ULID
 
 from renku_data_services.authz.models import Role
+from renku_data_services.base_models.core import NamespacePath, ProjectPath
 
 
 @dataclass(kw_only=True)
@@ -63,19 +65,45 @@ class NamespaceKind(str, Enum):
     project = "project"  # For now only applicable to data connectors
 
 
-@dataclass
+@dataclass(frozen=True, kw_only=True)
 class Namespace:
     """A renku namespace."""
 
     id: ULID
-    slug: str
     kind: NamespaceKind
     created_by: str
-    path: list[str]
+    path: NamespacePath | ProjectPath
     underlying_resource_id: ULID | str  # The user, group or project ID depending on the Namespace kind
     latest_slug: str | None = None
     name: str | None = None
     creation_date: datetime | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class UserNamespace(Namespace):
+    """A renku user namespace."""
+
+    path: NamespacePath
+    underlying_resource_id: str  # This corresponds to the keycloak user ID - which is not a ULID
+    kind: Final[NamespaceKind] = field(default=NamespaceKind.user, init=False)
+
+
+@dataclass(frozen=True, kw_only=True)
+class GroupNamespace(Namespace):
+    """A renku group namespace."""
+
+    path: NamespacePath
+    underlying_resource_id: ULID
+    kind: Final[NamespaceKind] = field(default=NamespaceKind.group, init=False)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ProjectNamespace(Namespace):
+    """A renku project namespace."""
+
+    path: ProjectPath
+    underlying_resource_id: ULID
+    kind: Final[NamespaceKind] = field(default=NamespaceKind.project, init=False)
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -93,14 +121,6 @@ class GroupUpdate:
 
     old: Group
     new: Group
-
-
-@dataclass
-class NamespaceUpdate:
-    """Information about the update of a namespace."""
-
-    old: Namespace
-    new: Namespace
 
 
 @dataclass

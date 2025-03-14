@@ -223,16 +223,19 @@ class DataConnectorSlug(Slug):
 
 class __NamespaceCommonMixin:
     def __repr__(self) -> str:
-        return "/".join([i.value for i in self._to_list()])
+        return "/".join([i.value for i in self.to_list()])
 
     def __getitem__(self, ind: int) -> Slug:
-        return self._to_list()[ind]
+        return self.to_list()[ind]
 
     def __len__(self) -> int:
-        return len(self._to_list())
+        return len(self.to_list())
 
-    def _to_list(self) -> list[Slug]:
+    def to_list(self) -> list[Slug]:
         raise NotImplementedError
+
+    def serialize(self) -> str:
+        return "/".join([i.value for i in self.to_list()])
 
 
 @dataclass(frozen=True, eq=True, repr=False)
@@ -256,7 +259,8 @@ class NamespacePath(__NamespaceCommonMixin):
         else:
             raise errors.ProgrammingError(message=f"A path for a namespace cannot be further joined with {other}")
 
-    def _to_list(self) -> list[Slug]:
+    def to_list(self) -> list[Slug]:
+        """Convert to list of slugs."""
         return [self.first]
 
     def parent(self) -> Never:
@@ -287,7 +291,8 @@ class ProjectPath(__NamespaceCommonMixin):
             )
         return DataConnectorInProjectPath(self.first, self.second, other)
 
-    def _to_list(self) -> list[Slug]:
+    def to_list(self) -> list[Slug]:
+        """Convert to list of slugs."""
         return [self.first, self.second]
 
     def parent(self) -> NamespacePath:
@@ -316,7 +321,8 @@ class DataConnectorPath(__NamespaceCommonMixin):
             message="A path for a data connector in a user or group cannot be further joined with more slugs"
         )
 
-    def _to_list(self) -> list[Slug]:
+    def to_list(self) -> list[Slug]:
+        """Convert to list of slugs."""
         return [self.first, self.second]
 
     def parent(self) -> NamespacePath:
@@ -348,7 +354,8 @@ class DataConnectorInProjectPath(__NamespaceCommonMixin):
             message="A path for a data connector in a project cannot be further joined with more slugs"
         )
 
-    def _to_list(self) -> list[Slug]:
+    def to_list(self) -> list[Slug]:
+        """Convert to list of slugs."""
         return [self.first, self.second, self.third]
 
     def parent(self) -> ProjectPath:

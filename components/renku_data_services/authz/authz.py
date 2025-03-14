@@ -59,7 +59,6 @@ from renku_data_services.namespace.models import (
     GroupUpdate,
     Namespace,
     NamespaceKind,
-    NamespaceUpdate,
 )
 from renku_data_services.project.models import DeletedProject, Project, ProjectUpdate
 from renku_data_services.users.models import DeletedUser, UserInfo, UserInfoUpdate
@@ -699,7 +698,7 @@ class Authz:
                     resource_id: str | ULID | None = "unknown"
                     if isinstance(result, (Project, Namespace, Group, DataConnector)):
                         resource_id = result.id
-                    elif isinstance(result, (ProjectUpdate, NamespaceUpdate, GroupUpdate, DataConnectorUpdate)):
+                    elif isinstance(result, (ProjectUpdate, GroupUpdate, DataConnectorUpdate)):
                         resource_id = result.new.id
                     raise errors.ProgrammingError(
                         message=f"Encountered an unknown authorization operation {op} on resource {resource} "

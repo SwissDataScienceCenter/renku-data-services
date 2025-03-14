@@ -33,7 +33,7 @@ from renku_data_services.background_jobs.core import (
 )
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models import APIUser
-from renku_data_services.base_models.core import Slug
+from renku_data_services.base_models.core import NamespacePath, Slug
 from renku_data_services.data_connectors.db import DataConnectorProjectLinkRepository, DataConnectorRepository
 from renku_data_services.data_connectors.migration_utils import DataConnectorMigrationTool
 from renku_data_services.db_config import DBConfig
@@ -46,7 +46,7 @@ from renku_data_services.namespace.apispec import (
     GroupPostRequest,
 )
 from renku_data_services.namespace.db import GroupRepository
-from renku_data_services.namespace.models import Namespace, NamespaceKind
+from renku_data_services.namespace.models import UserNamespace
 from renku_data_services.namespace.orm import NamespaceORM
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.models import UnsavedProject
@@ -244,13 +244,11 @@ async def test_total_users_sync(
         first_name="John",
         last_name="Doe",
         email="john.doe@gmail.com",
-        namespace=Namespace(
+        namespace=UserNamespace(
             id="user-1-id",
-            slug="user-1",
-            kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
             created_by="user-1-id",
-            path=["user-1"],
+            path=NamespacePath.from_strings("user-1"),
         ),
     )
     user2 = UserInfo(
@@ -258,13 +256,11 @@ async def test_total_users_sync(
         first_name="Jane",
         last_name="Doe",
         email="jane.doe@gmail.com",
-        namespace=Namespace(
+        namespace=UserNamespace(
             id="user-2-id",
-            slug="user-2",
-            kind=NamespaceKind.user,
             underlying_resource_id="user-2-id",
             created_by="user-2-id",
-            path=["user-2"],
+            path=NamespacePath.from_strings("user-2"),
         ),
     )
     assert admin_user.id
@@ -273,13 +269,11 @@ async def test_total_users_sync(
         first_name=admin_user.first_name,
         last_name=admin_user.last_name,
         email=admin_user.email,
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=admin_user.id,
-            slug="admin",
-            kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
             created_by=admin_user.id,
-            path=["admin"],
+            path=NamespacePath.from_strings("admin"),
         ),
     )
     user_roles = {admin_user.id: get_kc_roles(["renku-admin"])}
@@ -312,13 +306,13 @@ async def test_total_users_sync(
     )
     assert len(nss) == 1
     assert user1.email
-    assert nss[0].slug == user1.email.split("@")[0]
+    assert nss[0].path.serialize() == user1.email.split("@")[0]
     nss, _ = await sync_config.syncer.group_repo.get_namespaces(
         user=APIUser(id=user2.id), pagination=PaginationRequest(1, 100)
     )
     assert len(nss) == 1
     assert user2.email
-    assert nss[0].slug == user2.email.split("@")[0]
+    assert nss[0].path.serialize() == user2.email.split("@")[0]
 
 
 @pytest.mark.asyncio
@@ -329,13 +323,11 @@ async def test_user_events_update(get_app_configs, admin_user: APIUser) -> None:
         first_name="John",
         last_name="Doe",
         email="john.doe@gmail.com",
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="john.doe",
             created_by="user-1-id",
-            kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["john.doe"],
+            path=NamespacePath.from_strings("john.doe"),
         ),
     )
     assert admin_user.id
@@ -344,13 +336,11 @@ async def test_user_events_update(get_app_configs, admin_user: APIUser) -> None:
         first_name=admin_user.first_name,
         last_name=admin_user.last_name,
         email=admin_user.email,
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="admin-user",
             created_by=admin_user.id,
-            kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin-user"],
+            path=NamespacePath.from_strings("admin-user"),
         ),
     )
     kc_api.users = get_kc_users([user1])
@@ -371,13 +361,11 @@ async def test_user_events_update(get_app_configs, admin_user: APIUser) -> None:
         first_name="Jane",
         last_name="Doe",
         email="jane.doe@gmail.com",
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="jane.doe",
             created_by="user-2-id",
-            kind=NamespaceKind.user,
             underlying_resource_id="user-2-id",
-            path=["jane.doe"],
+            path=NamespacePath.from_strings("jane.doe"),
         ),
     )
     user1_update = UserInfoFieldUpdate("user-1-id", datetime.utcnow(), "first_name", "Johnathan")
@@ -398,7 +386,7 @@ async def test_user_events_update(get_app_configs, admin_user: APIUser) -> None:
     )
     assert len(nss) == 1
     assert user2.email
-    assert nss[0].slug == user2.email.split("@")[0]
+    assert nss[0].path.serialize() == user2.email.split("@")[0]
 
 
 @pytest.mark.asyncio
@@ -409,13 +397,11 @@ async def test_admin_events(get_app_configs, admin_user: APIUser) -> None:
         first_name="John",
         last_name="Doe",
         email="john.doe@gmail.com",
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="john.doe",
             created_by="user-1-id",
-            kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["john.doe"],
+            path=NamespacePath.from_strings("john.doe"),
         ),
     )
     user2 = UserInfo(
@@ -423,13 +409,11 @@ async def test_admin_events(get_app_configs, admin_user: APIUser) -> None:
         first_name="Jane",
         last_name="Doe",
         email="jane.doe@gmail.com",
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="jane.doe",
             created_by="user-2-id",
-            kind=NamespaceKind.user,
             underlying_resource_id="user-2-id",
-            path=["jane.doe"],
+            path=NamespacePath.from_strings("jane.doe"),
         ),
     )
     assert admin_user.id
@@ -438,13 +422,11 @@ async def test_admin_events(get_app_configs, admin_user: APIUser) -> None:
         first_name=admin_user.first_name,
         last_name=admin_user.last_name,
         email=admin_user.email,
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="admin-user",
             created_by=admin_user.id,
-            kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin-user"],
+            path=NamespacePath.from_strings("admin-user"),
         ),
     )
     kc_api.users = get_kc_users([user1, user2, admin_user_info])
@@ -462,7 +444,7 @@ async def test_admin_events(get_app_configs, admin_user: APIUser) -> None:
     )
     assert len(nss) == 1
     assert user2.email
-    assert nss[0].slug == user2.email.split("@")[0]
+    assert nss[0].path.serialize() == user2.email.split("@")[0]
     db_users = await user_repo.get_users(admin_user)
     assert set(u.id for u in kc_users) == set(u.id for u in db_users)
     # Add admin events
@@ -489,13 +471,11 @@ async def test_events_update_error(get_app_configs, admin_user: APIUser) -> None
         first_name="John",
         last_name="Doe",
         email="john.doe@gmail.com",
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="john.doe",
             created_by="user-1-id",
-            kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["john.doe"],
+            path=NamespacePath.from_strings("john.doe"),
         ),
     )
     user2 = UserInfo(
@@ -503,13 +483,11 @@ async def test_events_update_error(get_app_configs, admin_user: APIUser) -> None
         first_name="Jane",
         last_name="Doe",
         email="jane.doe@gmail.com",
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="jane.doe",
             created_by="user-2-id",
-            kind=NamespaceKind.user,
             underlying_resource_id="user-2-id",
-            path=["jane.doe"],
+            path=NamespacePath.from_strings("jane.doe"),
         ),
     )
     assert admin_user.id
@@ -518,13 +496,11 @@ async def test_events_update_error(get_app_configs, admin_user: APIUser) -> None
         first_name=admin_user.first_name,
         last_name=admin_user.last_name,
         email=admin_user.email,
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="admin-user",
             created_by=admin_user.id,
-            kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin-user"],
+            path=NamespacePath.from_strings("admin-user"),
         ),
     )
     kc_api.users = get_kc_users([user1, user2])
@@ -574,13 +550,11 @@ async def test_removing_non_existent_user(get_app_configs, admin_user: APIUser) 
         first_name="John",
         last_name="Doe",
         email="john.doe@gmail.com",
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="john.doe",
             created_by="user-1-id",
-            kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["john.doe"],
+            path=NamespacePath.from_strings("john.doe"),
         ),
     )
     non_existent_user = UserInfo(
@@ -588,13 +562,11 @@ async def test_removing_non_existent_user(get_app_configs, admin_user: APIUser) 
         first_name="Not",
         last_name="Exist",
         email="not.exist@gmail.com",
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="not.exist",
             created_by="noone",
-            kind=NamespaceKind.user,
             underlying_resource_id="non-existent-id",
-            path=["not.exist"],
+            path=NamespacePath.from_strings("not.exist"),
         ),
     )
     assert admin_user.id
@@ -603,13 +575,11 @@ async def test_removing_non_existent_user(get_app_configs, admin_user: APIUser) 
         first_name=admin_user.first_name,
         last_name=admin_user.last_name,
         email=admin_user.email,
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="admin-user",
             created_by=admin_user.id,
-            kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin-user"],
+            path=NamespacePath.from_strings("admin-user"),
         ),
     )
     kc_api.users = get_kc_users([user1, admin_user_info])
@@ -643,13 +613,11 @@ async def test_avoiding_namespace_slug_duplicates(
             first_name="John",
             last_name="Doe",
             email="john.doe@gmail.com",
-            namespace=Namespace(
+            namespace=UserNamespace(
                 id=ULID(),
-                slug="john.doe",
                 created_by=f"user-{i}-id",
-                kind=NamespaceKind.user,
                 underlying_resource_id=f"user-{i}-id",
-                path=["john.doe"],
+                path=NamespacePath.from_strings("john.doe"),
             ),
         )
         for i in range(1, num_users + 1)
@@ -660,13 +628,11 @@ async def test_avoiding_namespace_slug_duplicates(
         first_name=admin_user.first_name,
         last_name=admin_user.last_name,
         email=admin_user.email,
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="admin",
             created_by=admin_user.id,
-            kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin"],
+            path=NamespacePath.from_strings("admin"),
         ),
     )
     kc_api.users = get_kc_users(users + [admin_user_info])
@@ -682,11 +648,11 @@ async def test_avoiding_namespace_slug_duplicates(
         ns = nss[0]
         assert user.email
         prefix = user.email.split("@")[0]
-        if re.match(rf"^{re.escape(prefix)}-[a-z0-9]{{8}}$", ns.slug):
+        if re.match(rf"^{re.escape(prefix)}-[a-z0-9]{{8}}$", ns.path.serialize()):
             random_count += 1
-        elif re.match(rf"^{re.escape(prefix)}-[1-5]$", ns.slug):
+        elif re.match(rf"^{re.escape(prefix)}-[1-5]$", ns.path.serialize()):
             enumerated_count += 1
-        elif ns.slug == prefix:
+        elif ns.path.serialize() == prefix:
             original_count += 1
     assert original_count == 1
     assert enumerated_count == 5
@@ -701,13 +667,11 @@ async def test_authz_admin_sync(get_app_configs, admin_user: APIUser) -> None:
         first_name="John",
         last_name="Doe",
         email="john.doe@gmail.com",
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="john.doe",
             created_by="user-1-id",
-            kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["john.doe"],
+            path=NamespacePath.from_strings("john.doe"),
         ),
     )
     assert admin_user.id
@@ -716,13 +680,11 @@ async def test_authz_admin_sync(get_app_configs, admin_user: APIUser) -> None:
         first_name=admin_user.first_name,
         last_name=admin_user.last_name,
         email=admin_user.email,
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="admin-user",
             created_by=admin_user.id,
-            kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin-user"],
+            path=NamespacePath.from_strings("admin-user"),
         ),
     )
     kc_api.users = get_kc_users([user1, admin_user_info])
@@ -772,13 +734,11 @@ async def test_bootstraping_user_namespaces(get_app_configs, admin_user: APIUser
         first_name="John",
         last_name="Doe",
         email="john.doe@gmail.com",
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="john.doe",
             created_by="user-1-id",
-            kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["john.doe"],
+            path=NamespacePath.from_strings("john.doe"),
         ),
     )
     user2 = UserInfo(
@@ -786,13 +746,11 @@ async def test_bootstraping_user_namespaces(get_app_configs, admin_user: APIUser
         first_name="Jane",
         last_name="Doe",
         email="jane.doe@gmail.com",
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="jane.doe",
             created_by="user-2-id",
-            kind=NamespaceKind.user,
             underlying_resource_id="user-2-id",
-            path=["jane.doe"],
+            path=NamespacePath.from_strings("jane.doe"),
         ),
     )
     assert admin_user.id
@@ -829,13 +787,11 @@ async def test_fixing_project_group_namespace_relations(
         first_name=admin_user.first_name,
         last_name=admin_user.last_name,
         email=admin_user.email,
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="admin-user",
             created_by=admin_user.id,
-            kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin-user"],
+            path=NamespacePath.from_strings("admin-user"),
         ),
     )
     user1 = UserInfo(
@@ -843,13 +799,11 @@ async def test_fixing_project_group_namespace_relations(
         first_name="John",
         last_name="Doe",
         email="john.doe@gmail.com",
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="john.doe",
             created_by="user-1-id",
-            kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["john.doe"],
+            path=NamespacePath.from_strings("john.doe"),
         ),
     )
     user2 = UserInfo(
@@ -857,13 +811,11 @@ async def test_fixing_project_group_namespace_relations(
         first_name="Jane",
         last_name="Doe",
         email="jane.doe@gmail.com",
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="jane.doe",
             created_by="user-2-id",
-            kind=NamespaceKind.user,
             underlying_resource_id="user-2-id",
-            path=["jane.doe"],
+            path=NamespacePath.from_strings("jane.doe"),
         ),
     )
     user1_api = APIUser(is_admin=False, id=user1.id, access_token="access_token")
@@ -923,13 +875,11 @@ async def test_migrate_groups_make_all_public(
         first_name=admin_user.first_name,
         last_name=admin_user.last_name,
         email=admin_user.email,
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="admin-user",
             created_by=admin_user.id,
-            kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin-user"],
+            path=NamespacePath.from_strings("admin-user"),
         ),
     )
     user = UserInfo(
@@ -937,13 +887,11 @@ async def test_migrate_groups_make_all_public(
         first_name="John",
         last_name="Doe",
         email="john.doe@gmail.com",
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="john.doe",
             created_by="user-1-id",
-            kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["john.doe"],
+            path=NamespacePath.from_strings("john.doe"),
         ),
     )
     user_api = APIUser(is_admin=False, id=user.id, access_token="access_token")
@@ -987,13 +935,11 @@ async def test_migrate_user_namespaces_make_all_public(
         first_name=admin_user.first_name,
         last_name=admin_user.last_name,
         email=admin_user.email,
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="admin-user",
             created_by=admin_user.id,
-            kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin-user"],
+            path=NamespacePath.from_strings("admin-user"),
         ),
     )
     user = UserInfo(
@@ -1001,13 +947,11 @@ async def test_migrate_user_namespaces_make_all_public(
         first_name="John",
         last_name="Doe",
         email="john.doe@gmail.com",
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="john.doe",
             created_by="user-1-id",
-            kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["john.doe"],
+            path=NamespacePath.from_strings("john.doe"),
         ),
     )
     anon_user_api = APIUser(is_admin=False)
@@ -1033,7 +977,7 @@ async def test_migrate_user_namespaces_make_all_public(
 
     # After the migration, the user namespace is public
     ns = await sync_config.group_repo.get_namespace_by_slug(user=anon_user_api, slug=Slug("john.doe"))
-    assert ns.slug == "john.doe"
+    assert ns.path.serialize() == "john.doe"
     assert ns.kind.value == "user"
     assert ns.created_by == user.id
 
@@ -1045,13 +989,11 @@ async def test_migrate_storages_v2(get_app_configs: Callable[..., tuple[SyncConf
         first_name=admin_user.first_name,
         last_name=admin_user.last_name,
         email=admin_user.email,
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="admin-user",
             created_by=admin_user.id,
-            kind=NamespaceKind.user,
             underlying_resource_id=admin_user.id,
-            path=["admin-user"],
+            path=NamespacePath.from_strings("admin.user"),
         ),
     )
     user = UserInfo(
@@ -1059,13 +1001,11 @@ async def test_migrate_storages_v2(get_app_configs: Callable[..., tuple[SyncConf
         first_name="Jane",
         last_name="Doe",
         email="jane.doe@gmail.com",
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="jane.doe",
             created_by="user-1-id",
-            kind=NamespaceKind.user,
             underlying_resource_id="user-1-id",
-            path=["jane.doe"],
+            path=NamespacePath.from_strings("jane.doe"),
         ),
     )
     user_api = APIUser(is_admin=False, id=user.id, access_token="access_token")
@@ -1077,7 +1017,11 @@ async def test_migrate_storages_v2(get_app_configs: Callable[..., tuple[SyncConf
 
     # Create a project and a storage_v2 attached to it
     project_payload = UnsavedProject(
-        name="project-1", slug="project-1", namespace=user.namespace.slug, created_by=user.id, visibility="private"
+        name="project-1",
+        slug="project-1",
+        namespace=user.namespace.path.serialize(),
+        created_by=user.id,
+        visibility="private",
     )
     project = await sync_config.project_repo.insert_project(user_api, project_payload)
     unsaved_storage = UnsavedCloudStorage.from_url(

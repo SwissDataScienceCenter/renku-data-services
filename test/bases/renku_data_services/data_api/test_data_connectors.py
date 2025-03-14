@@ -12,7 +12,7 @@ async def test_post_data_connector(sanic_client: SanicASGITestClient, regular_us
         "slug": "my-data-connector",
         "description": "A data connector",
         "visibility": "public",
-        "namespace": regular_user.namespace.slug,
+        "namespace": regular_user.namespace.path.serialize(),
         "storage": {
             "configuration": {
                 "type": "s3",
@@ -69,7 +69,7 @@ async def test_post_data_connector_with_s3_url(
         "slug": "my-data-connector",
         "description": "A data connector",
         "visibility": "public",
-        "namespace": regular_user.namespace.slug,
+        "namespace": regular_user.namespace.path.serialize(),
         "storage": {
             "storage_url": "s3://my-bucket",
             "target_path": "my/target",
@@ -106,7 +106,7 @@ async def test_post_data_connector_with_azure_url(
         "slug": "my-data-connector",
         "description": "A data connector",
         "visibility": "public",
-        "namespace": regular_user.namespace.slug,
+        "namespace": regular_user.namespace.path.serialize(),
         "storage": {
             "storage_url": "azure://mycontainer/myfolder",
             "target_path": "my/target",
@@ -163,7 +163,7 @@ async def test_post_data_connector_with_invalid_namespace(
     user_headers,
     member_1_user: UserInfo,
 ) -> None:
-    namespace = member_1_user.namespace.slug
+    namespace = member_1_user.namespace.path.serialize()
     _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}", headers=user_headers)
     assert response.status_code == 200, response.text
 
@@ -592,7 +592,7 @@ async def test_patch_data_connector_namespace(
 async def test_patch_data_connector_with_invalid_namespace(
     sanic_client: SanicASGITestClient, create_data_connector, user_headers, member_1_user: UserInfo
 ) -> None:
-    namespace = member_1_user.namespace.slug
+    namespace = member_1_user.namespace.path.serialize()
     _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}", headers=user_headers)
     assert response.status_code == 200, response.text
     data_connector = await create_data_connector("My data connector")
