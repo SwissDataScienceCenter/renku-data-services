@@ -42,7 +42,7 @@ class UserORM(BaseORM):
             first_name=self.first_name,
             last_name=self.last_name,
             email=self.email,
-            namespace=self.namespace.dump(),
+            namespace=self.namespace.dump_user_namespace(),
         )
 
     @classmethod
@@ -53,7 +53,7 @@ class UserORM(BaseORM):
             first_name=user.first_name,
             last_name=user.last_name,
             email=user.email,
-            namespace=NamespaceORM.load(user.namespace),
+            namespace=NamespaceORM.load_user(user.namespace),
         )
 
 

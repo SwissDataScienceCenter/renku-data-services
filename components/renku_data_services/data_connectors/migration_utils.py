@@ -101,7 +101,7 @@ class DataConnectorMigrationTool:
 
         if not isinstance(project.namespace.underlying_resource_id, ULID):
             raise errors.ProgrammingError(
-                message=f"Group namespace {project.namespace.slug} has an invalid underlying resource id {project.namespace.underlying_resource_id}."  # noqa E501
+                message=f"Group namespace {project.namespace} has an invalid underlying resource id {project.namespace.underlying_resource_id}."  # noqa E501
             )
 
         group_id = project.namespace.underlying_resource_id

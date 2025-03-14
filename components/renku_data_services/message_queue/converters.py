@@ -69,7 +69,7 @@ class _ProjectEventConverter:
                         v2.ProjectCreated(
                             id=project_id_str,
                             name=project.name,
-                            namespace=project.namespace.slug,
+                            namespace=project.namespace.path.first.value,
                             slug=project.slug,
                             repositories=project.repositories,
                             visibility=_ProjectEventConverter._convert_project_visibility(project.visibility),
@@ -96,7 +96,7 @@ class _ProjectEventConverter:
                         v2.ProjectUpdated(
                             id=project_id_str,
                             name=project.name,
-                            namespace=project.namespace.slug,
+                            namespace=project.namespace.path.first.value,
                             slug=project.slug,
                             repositories=project.repositories,
                             visibility=_ProjectEventConverter._convert_project_visibility(project.visibility),
@@ -127,7 +127,7 @@ class _UserEventConverter:
                             firstName=user.first_name,
                             lastName=user.last_name,
                             email=user.email,
-                            namespace=user.namespace.slug,
+                            namespace=user.namespace.path.first.value,
                         ),
                     )
                 ]
@@ -145,7 +145,7 @@ class _UserEventConverter:
                                 firstName=user.new.first_name,
                                 lastName=user.new.last_name,
                                 email=user.new.email,
-                                namespace=user.new.namespace.slug,
+                                namespace=user.new.namespace.path.first.value,
                             ),
                         )
                     ]
@@ -158,7 +158,7 @@ class _UserEventConverter:
                                 firstName=user.new.first_name,
                                 lastName=user.new.last_name,
                                 email=user.new.email,
-                                namespace=user.new.namespace.slug,
+                                namespace=user.new.namespace.path.first.value,
                             ),
                         )
                     ]

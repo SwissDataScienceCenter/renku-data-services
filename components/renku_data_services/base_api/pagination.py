@@ -3,10 +3,12 @@
 from collections.abc import Callable, Coroutine, Sequence
 from functools import wraps
 from math import ceil
-from typing import Any, Concatenate, NamedTuple, ParamSpec, cast
+from typing import Any, Concatenate, NamedTuple, ParamSpec, TypeVar, cast
 
 from sanic import Request, json
 from sanic.response import JSONResponse
+from sqlalchemy import Select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services import errors
 
@@ -94,3 +96,36 @@ def paginate(
         return json(items, headers=pagination.as_header())
 
     return decorated_function
+
+
+_T = TypeVar("_T")
+
+
+async def paginate_queries(
+    req: PaginationRequest, session: AsyncSession, stmts: list[tuple[Select[tuple[_T]], int]]
+) -> list[_T]:
+    """Paginate several different queries as if they were part of a single table."""
+    # NOTE: We ignore the possibility that a count for a statement is not accurate. I.e. the count
+    # says that the statement should return 10 items but the statement truly returns 8 or vice-versa.
+    # To fully account for edge cases of inaccuracry in the expected number of results
+    # we would have to run every query passed in - even though the offset is so high that we would only need
+    # to run 1 or 2 queries out of a large list.
+    output: list[_T] = []
+    max_offset = 0
+    stmt_offset = 0
+    offset_discount = 0
+    for stmt, stmt_cnt in stmts:
+        max_offset += stmt_cnt
+        if req.offset >= max_offset:
+            offset_discount += stmt_cnt
+            continue
+        stmt_offset = req.offset - offset_discount if req.offset > 0 else 0
+        res_scalar = await session.scalars(stmt.offset(stmt_offset).limit(req.per_page))
+        res = res_scalar.all()
+        num_required = req.per_page - len(output)
+        if num_required >= len(res):
+            output.extend(res)
+        else:
+            output.extend(res[:num_required])
+            return output
+    return output
