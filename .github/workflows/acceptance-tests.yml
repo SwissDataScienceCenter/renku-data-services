@@ -52,6 +52,10 @@ jobs:
       url: https://renku-ci-ds-${{ github.event.number }}.dev.renku.ch
     steps:
       - uses: actions/checkout@v4
+        with:
+          repository: SwissDataScienceCenter/renku
+          sparse-checkout: |
+            minimal-deployment
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -81,7 +85,7 @@ jobs:
           KUBECONFIG: ${{ github.workspace }}/renkubot-kube.config
           RENKU_RELEASE: renku-ci-ds-${{ github.event.number }}
           RENKU_VALUES_FILE: ${{ github.workspace }}/values.yaml
-          RENKU_VALUES: ${{ secrets.COMBINED_CHARTS_CI_RENKU_VALUES }}
+          RENKU_VALUES: minimal-deployment/minimal-deployment-values.yaml
           RENKUBOT_KUBECONFIG: ${{ secrets.RENKUBOT_DEV_KUBECONFIG }}
           RENKUBOT_RANCHER_BEARER_TOKEN: ${{ secrets.RENKUBOT_RANCHER_BEARER_TOKEN }}
           TEST_ARTIFACTS_PATH: "tests-artifacts-${{ github.sha }}"
