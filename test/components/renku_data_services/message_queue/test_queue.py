@@ -3,11 +3,12 @@
 import pytest
 
 from renku_data_services.authz.models import Visibility
+from renku_data_services.base_models.core import NamespacePath
 from renku_data_services.message_queue.avro_models.io.renku.events.v2.project_removed import ProjectRemoved
 from renku_data_services.message_queue.converters import QUEUE_NAME
 from renku_data_services.message_queue.redis_queue import dispatch_message
 from renku_data_services.migrations.core import run_migrations_for_app
-from renku_data_services.namespace.models import Namespace, NamespaceKind
+from renku_data_services.namespace.models import UserNamespace
 from renku_data_services.project.models import Project
 from renku_data_services.utils.core import with_db_transaction
 
@@ -29,12 +30,11 @@ async def test_queue_send(app_config_instance) -> None:
                 id="sample-id-1",
                 name="name",
                 slug="slug",
-                namespace=Namespace(
-                    "namespace",
-                    "namespace",
-                    NamespaceKind.user,
+                namespace=UserNamespace(
+                    id="namespace",
                     created_by="some-user",
                     underlying_resource_id="some-user",
+                    path=NamespacePath.from_strings("namespace"),
                 ),
                 visibility=Visibility.PRIVATE,
                 created_by="some-user",

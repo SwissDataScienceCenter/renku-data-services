@@ -300,7 +300,7 @@ class ProjectsBP(CustomBlueprint):
 
                 user_with_id = apispec.ProjectMemberResponse(
                     id=user_id,
-                    namespace=namespace_info.slug,
+                    namespace=namespace_info.path.first.value,
                     first_name=user_info.first_name,
                     last_name=user_info.last_name,
                     role=apispec.Role(member.role.value),
@@ -354,7 +354,7 @@ class ProjectsBP(CustomBlueprint):
         result = dict(
             id=project.id,
             name=project.name,
-            namespace=project.namespace.slug,
+            namespace=project.namespace.path.serialize(),
             slug=project.slug,
             creation_date=project.creation_date.isoformat(),
             created_by=project.created_by,

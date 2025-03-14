@@ -414,8 +414,6 @@ def v6_schema() -> SpiceDBSchema:
                 "data_connector:dc4#delete@user:user1",
                 "data_connector:dc4#write@user:user1",
                 "data_connector:dc4#read@user:user1",
-                # user2 can read dc1 because it is owned by a public project
-                "data_connector:dc1#read@user:user2",
                 # user2 has full access on dc2 because they own the group that owns the dc
                 "data_connector:dc2#delete@user:user2",
                 "data_connector:dc2#write@user:user2",
@@ -423,9 +421,7 @@ def v6_schema() -> SpiceDBSchema:
                 # user2 has read access on dc4 because the dc is public
                 "data_connector:dc4#read@user:user2",
                 # anonymous user checks
-                "data_connector:dc1#read@user:ANON",
                 "data_connector:dc4#read@user:ANON",
-                "data_connector:dc1#read@anonymous_user:ANON",
                 "data_connector:dc4#read@anonymous_user:ANON",
             ],
             "assertFalse": [
@@ -435,6 +431,7 @@ def v6_schema() -> SpiceDBSchema:
                 "data_connector:dc2#write@user:user1",
                 "data_connector:dc2#read@user:user1",
                 # user2 has no edit or write access to dc1
+                "data_connector:dc1#read@user:user2",
                 "data_connector:dc1#delete@user:user2",
                 "data_connector:dc1#write@user:user2",
                 # user2 has no access to dc3 because it is owned by user1 and is private
@@ -445,8 +442,10 @@ def v6_schema() -> SpiceDBSchema:
                 "data_connector:dc4#delete@user:user2",
                 "data_connector:dc4#write@user:user2",
                 # anonymous user checks
+                "data_connector:dc1#read@user:ANON",
                 "data_connector:dc2#read@user:ANON",
                 "data_connector:dc3#read@user:ANON",
+                "data_connector:dc1#read@anonymous_user:ANON",
                 "data_connector:dc2#read@anonymous_user:ANON",
                 "data_connector:dc3#read@anonymous_user:ANON",
             ],

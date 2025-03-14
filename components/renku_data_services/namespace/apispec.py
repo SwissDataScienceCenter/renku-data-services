@@ -12,6 +12,17 @@ from pydantic import ConfigDict, Field, RootModel
 from renku_data_services.namespace.apispec_base import BaseAPISpec
 
 
+class Slug(RootModel[str]):
+    root: str = Field(
+        ...,
+        description="A command-line/url friendly name for a namespace",
+        example="a-slug-example",
+        max_length=99,
+        min_length=1,
+        pattern="^(?!.*\\.git$|.*\\.atom$|.*[\\-._][\\-._].*)[a-z0-9][a-z0-9\\-_.]*$",
+    )
+
+
 class GroupRole(Enum):
     owner = "owner"
     editor = "editor"
@@ -21,6 +32,7 @@ class GroupRole(Enum):
 class NamespaceKind(Enum):
     group = "group"
     user = "user"
+    project = "project"
 
 
 class NamespaceResponse(BaseAPISpec):
@@ -59,6 +71,12 @@ class NamespaceResponse(BaseAPISpec):
         pattern="^[A-Za-z0-9-]+$",
     )
     namespace_kind: NamespaceKind
+    path: List[Slug] = Field(
+        ...,
+        description="A list of slugs that make up the path to a resource",
+        example=["group1", "project2"],
+        min_length=1,
+    )
 
 
 class GroupPermissions(BaseAPISpec):
@@ -66,16 +84,6 @@ class GroupPermissions(BaseAPISpec):
     delete: Optional[bool] = Field(None, description="The user can delete the group")
     change_membership: Optional[bool] = Field(
         None, description="The user can manage group members"
-    )
-
-
-class PaginationRequest(BaseAPISpec):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    page: int = Field(1, description="Result's page number starting from 1", ge=1)
-    per_page: int = Field(
-        20, description="The number of results per page", ge=1, le=100
     )
 
 
@@ -91,6 +99,31 @@ class Error(BaseAPISpec):
 
 class ErrorResponse(BaseAPISpec):
     error: Error
+
+
+class GroupsGetParametersQuery(BaseAPISpec):
+    page: Optional[int] = Field(
+        None, description="Result's page number starting from 1", ge=1
+    )
+    per_page: Optional[int] = Field(
+        None, description="The number of results per page", ge=1, le=100
+    )
+    direct_member: bool = False
+
+
+class NamespacesGetParametersQuery(BaseAPISpec):
+    page: Optional[int] = Field(
+        None, description="Result's page number starting from 1", ge=1
+    )
+    per_page: Optional[int] = Field(
+        None, description="The number of results per page", ge=1, le=100
+    )
+    minimum_role: Optional[GroupRole] = None
+    kinds: Optional[List[NamespaceKind]] = Field(
+        None,
+        description="Which namespace kinds to include in the response",
+        min_length=1,
+    )
 
 
 class GroupResponse(BaseAPISpec):
@@ -265,26 +298,6 @@ class GroupMemberPatchRequestList(RootModel[List[GroupMemberPatchRequest]]):
 
 class NamespaceResponseList(RootModel[List[NamespaceResponse]]):
     root: List[NamespaceResponse] = Field(..., description="A list of Renku namespaces")
-
-
-class NamespaceGetQuery(PaginationRequest):
-    minimum_role: Optional[GroupRole] = Field(
-        None, description="A minimum role to filter results by."
-    )
-
-
-class GroupsGetQuery(PaginationRequest):
-    direct_member: bool = Field(
-        False, description="A flag to filter groups where the user is a direct member."
-    )
-
-
-class GroupsGetParametersQuery(BaseAPISpec):
-    params: Optional[GroupsGetQuery] = None
-
-
-class NamespacesGetParametersQuery(BaseAPISpec):
-    params: Optional[NamespaceGetQuery] = None
 
 
 class GroupResponseList(RootModel[List[GroupResponse]]):

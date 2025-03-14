@@ -12,9 +12,10 @@ from renku_data_services.app_config import Config
 from renku_data_services.authz.authz import ResourceType, _AuthzConverter
 from renku_data_services.authz.models import Member, Role, Scope, Visibility
 from renku_data_services.base_models import APIUser
+from renku_data_services.base_models.core import NamespacePath
 from renku_data_services.errors import errors
 from renku_data_services.migrations.core import run_migrations_for_app
-from renku_data_services.namespace.models import Namespace, NamespaceKind
+from renku_data_services.namespace.models import UserNamespace
 from renku_data_services.project import constants as project_constants
 from renku_data_services.project.models import Project
 
@@ -53,12 +54,11 @@ async def test_adding_deleting_project(app_config_instance: Config, bootstrap_ad
         id=project_id,
         name=project_id,
         slug="slug",
-        namespace=Namespace(
-            "namespace",
-            "namespace",
-            NamespaceKind.user,
+        namespace=UserNamespace(
+            id="namespace",
             created_by=project_owner.id,
             underlying_resource_id=project_owner.id,
+            path=NamespacePath.from_strings("namespace"),
         ),
         visibility=Visibility.PUBLIC if public_project else Visibility.PRIVATE,
         created_by=project_owner.id,
@@ -106,12 +106,11 @@ async def test_granting_access(
         id=project_id,
         name=project_id,
         slug="slug",
-        namespace=Namespace(
-            "namespace",
-            "namespace",
-            NamespaceKind.user,
+        namespace=UserNamespace(
+            id="namespace",
             created_by=project_owner.id,
             underlying_resource_id=project_owner.id,
+            path=NamespacePath.from_strings("namespace"),
         ),
         visibility=Visibility.PUBLIC if public_project else Visibility.PRIVATE,
         created_by=project_owner.id,
@@ -151,12 +150,11 @@ async def test_listing_users_with_access(app_config_instance: Config, public_pro
         id=project1_id,
         name=str(project1_id),
         slug=str(project1_id),
-        namespace=Namespace(
-            project_owner.id,
-            project_owner.id,
-            NamespaceKind.user,
+        namespace=UserNamespace(
+            id=project_owner.id,
             created_by=project_owner.id,
             underlying_resource_id=project_owner.id,
+            path=[project_owner.id],
         ),
         visibility=Visibility.PUBLIC if public_project else Visibility.PRIVATE,
         created_by=project_owner.id,
@@ -166,12 +164,11 @@ async def test_listing_users_with_access(app_config_instance: Config, public_pro
         id=project2_id,
         name=str(project2_id),
         slug=str(project2_id),
-        namespace=Namespace(
-            regular_user2.id,
-            regular_user2.id,
-            NamespaceKind.user,
+        namespace=UserNamespace(
+            id=regular_user2.id,
             created_by=regular_user2.id,
             underlying_resource_id=regular_user2.id,
+            path=[regular_user2.id],
         ),
         visibility=Visibility.PRIVATE,
         created_by=regular_user2.id,
@@ -200,12 +197,11 @@ async def test_listing_projects_with_access(app_config_instance: Config, bootstr
     private_project_id2_str = str(private_project_id2)
 
     project_owner = regular_user1
-    namespace = Namespace(
-        project_owner.id,
-        project_owner.id,
-        NamespaceKind.user,
+    namespace = UserNamespace(
+        id=project_owner.id,
         created_by=project_owner.id,
         underlying_resource_id=project_owner.id,
+        path=[project_owner.id],
     )
     assert project_owner.id
     assert regular_user2.id
@@ -321,12 +317,11 @@ async def test_listing_non_public_projects(app_config_instance: Config, bootstra
     private_project_id1_str = str(private_project_id1)
     private_project_id2_str = str(private_project_id2)
 
-    namespace = Namespace(
+    namespace = UserNamespace(
         id=ULID(),
-        slug="ns-121",
-        kind=NamespaceKind.user,
         created_by=str(regular_user1.id),
-        underlying_resource_id=ULID(),
+        underlying_resource_id=str(ULID()),
+        path=NamespacePath.from_strings("ns-121"),
     )
     assert regular_user1.id
     assert regular_user2.id

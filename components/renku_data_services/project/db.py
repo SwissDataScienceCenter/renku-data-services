@@ -323,7 +323,7 @@ class ProjectRepository:
         if patch.visibility is not None and patch.visibility != old_project.visibility:
             # NOTE: changing the visibility requires the user to be owner which means they should have DELETE permission
             required_scope = Scope.DELETE
-        if patch.namespace is not None and patch.namespace != old_project.namespace.slug:
+        if patch.namespace is not None and patch.namespace != old_project.namespace.path.first.value:
             # NOTE: changing the namespace requires the user to be owner which means they should have DELETE permission
             required_scope = Scope.DELETE
         if patch.slug is not None and patch.slug != old_project.slug:
@@ -341,7 +341,7 @@ class ProjectRepository:
 
         if patch.name is not None:
             project.name = patch.name
-        if patch.namespace is not None and patch.namespace != old_project.namespace.slug:
+        if patch.namespace is not None and patch.namespace != old_project.namespace.path.first.value:
             ns = await session.scalar(
                 select(ns_schemas.NamespaceORM).where(ns_schemas.NamespaceORM.slug == patch.namespace.lower())
             )

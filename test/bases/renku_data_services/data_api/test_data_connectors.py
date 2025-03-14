@@ -12,7 +12,7 @@ async def test_post_data_connector(sanic_client: SanicASGITestClient, regular_us
         "slug": "my-data-connector",
         "description": "A data connector",
         "visibility": "public",
-        "namespace": regular_user.namespace.slug,
+        "namespace": regular_user.namespace.path.serialize(),
         "storage": {
             "configuration": {
                 "type": "s3",
@@ -69,7 +69,7 @@ async def test_post_data_connector_with_s3_url(
         "slug": "my-data-connector",
         "description": "A data connector",
         "visibility": "public",
-        "namespace": regular_user.namespace.slug,
+        "namespace": regular_user.namespace.path.serialize(),
         "storage": {
             "storage_url": "s3://my-bucket",
             "target_path": "my/target",
@@ -106,7 +106,7 @@ async def test_post_data_connector_with_azure_url(
         "slug": "my-data-connector",
         "description": "A data connector",
         "visibility": "public",
-        "namespace": regular_user.namespace.slug,
+        "namespace": regular_user.namespace.path.serialize(),
         "storage": {
             "storage_url": "azure://mycontainer/myfolder",
             "target_path": "my/target",
@@ -163,7 +163,7 @@ async def test_post_data_connector_with_invalid_namespace(
     user_headers,
     member_1_user: UserInfo,
 ) -> None:
-    namespace = member_1_user.namespace.slug
+    namespace = member_1_user.namespace.path.serialize()
     _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}", headers=user_headers)
     assert response.status_code == 200, response.text
 
@@ -592,7 +592,7 @@ async def test_patch_data_connector_namespace(
 async def test_patch_data_connector_with_invalid_namespace(
     sanic_client: SanicASGITestClient, create_data_connector, user_headers, member_1_user: UserInfo
 ) -> None:
-    namespace = member_1_user.namespace.slug
+    namespace = member_1_user.namespace.path.serialize()
     _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}", headers=user_headers)
     assert response.status_code == 200, response.text
     data_connector = await create_data_connector("My data connector")
@@ -1334,3 +1334,77 @@ async def test_get_data_connector_permissions_cascading_from_group(
     assert permissions.get("write") == expected_permissions["write"]
     assert permissions.get("delete") == expected_permissions["delete"]
     assert permissions.get("change_membership") == expected_permissions["change_membership"]
+
+
+@pytest.mark.asyncio
+async def test_creating_dc_in_project(sanic_client, user_headers) -> None:
+    # Create a group i.e. /test1
+    payload = {
+        "name": "test1",
+        "slug": "test1",
+        "description": "Group 1 Description",
+    }
+    _, response = await sanic_client.post("/api/data/groups", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    # Create a project in the group /test1/prj1
+    payload = {
+        "name": "prj1",
+        "namespace": "test1",
+        "slug": "prj1",
+    }
+    _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    project_id = response.json["id"]
+
+    # Ensure there is only one project
+    _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
+    assert response.status_code == 200, response.text
+    assert len(response.json) == 1
+
+    # Create a data connector in the project /test1/proj1/dc1
+    dc_namespace = "test1/prj1"
+    payload = {
+        "name": "dc1",
+        "namespace": "test1/prj1",
+        "slug": "dc1",
+        "storage": {
+            "configuration": {"type": "s3", "endpoint": "http://s3.aws.com"},
+            "source_path": "giab",
+            "target_path": "giab",
+        },
+    }
+    _, response = await sanic_client.post("/api/data/data_connectors", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    assert response.json["namespace"] == dc_namespace
+    dc_id = response.json["id"]
+
+    # Ensure there is only one project
+    _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
+    assert response.status_code == 200, response.text
+    assert len(response.json) == 1
+
+    # Ensure that you can list the data connector
+    _, response = await sanic_client.get(f"/api/data/data_connectors/{dc_id}", headers=user_headers)
+    assert response.status_code == 200, response.text
+
+    # Link the data connector to the project
+    payload = {"project_id": project_id}
+    _, response = await sanic_client.post(
+        f"/api/data/data_connectors/{dc_id}/project_links", headers=user_headers, json=payload
+    )
+    assert response.status_code == 201, response.text
+
+    # Ensure that you can see the data connector link
+    _, response = await sanic_client.get(f"/api/data/data_connectors/{dc_id}/project_links", headers=user_headers)
+    assert response.status_code == 200, response.text
+    assert len(response.json) == 1
+    dc_link = response.json[0]
+    assert dc_link["project_id"] == project_id
+    assert dc_link["data_connector_id"] == dc_id
+
+    # Ensure that you can list data connectors
+    _, response = await sanic_client.get("/api/data/data_connectors", headers=user_headers)
+    assert response.status_code == 200, response.text
+    assert len(response.json) == 1
+    assert response.json[0]["namespace"] == dc_namespace
