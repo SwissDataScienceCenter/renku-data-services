@@ -2,7 +2,7 @@
 
 import random
 import string
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Sequence
 from typing import TypeVar, cast
 
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -254,6 +254,8 @@ class DataConnectorRepository:
         )
         if project:
             existing_slug_stmt = existing_slug_stmt.where(ns_schemas.EntitySlugORM.project_id == project.id)
+        else:
+            existing_slug_stmt = existing_slug_stmt.where(ns_schemas.EntitySlugORM.project_id.is_(None))
         existing_slug = await session.scalar(existing_slug_stmt)
         if existing_slug is not None:
             raise errors.ConflictError(message=f"An entity with the slug '{data_connector.path}' already exists.")
@@ -519,6 +521,26 @@ class DataConnectorProjectLinkRepository:
             result = await session.scalars(stmt)
             links_orm = result.all()
             return [link.dump() for link in links_orm]
+
+    async def get_inaccessible_links_to_project(self, user: base_models.APIUser, project_id: ULID) -> Sequence[ULID]:
+        """Get data connector link IDs in a project that the user has no access to."""
+        authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
+
+        allowed_dcs = await self.authz.resources_with_permission(user, user.id, ResourceType.data_connector, Scope.READ)
+
+        async with self.session_maker() as session:
+            stmt = (
+                select(schemas.DataConnectorToProjectLinkORM.id)
+                .where(schemas.DataConnectorToProjectLinkORM.project_id == project_id)
+                .where(schemas.DataConnectorToProjectLinkORM.data_connector_id.not_in(allowed_dcs))
+            )
+            result = await session.scalars(stmt)
+            ulids = result.all()
+            return ulids
 
     @with_db_transaction
     async def insert_link(
