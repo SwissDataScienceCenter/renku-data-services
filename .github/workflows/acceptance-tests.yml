@@ -38,7 +38,6 @@ jobs:
       - id: deploy-comment
         uses: SwissDataScienceCenter/renku-actions/check-pr-description@v1.14.2
         with:
-          string: /deploy
           pr_ref: ${{ github.event.number }}
 
   deploy-pr:
@@ -128,7 +127,6 @@ jobs:
           - useSession
           - checkWorkflows
           - rstudioSession
-          - dashboardV2
     steps:
       - name: Extract Renku repository reference
         run: echo "RENKU_REFERENCE=`echo '${{ needs.check-deploy.outputs.renku }}' | cut -d'@' -f2`" >> $GITHUB_ENV
