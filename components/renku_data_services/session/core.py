@@ -1,7 +1,7 @@
 """Business logic for sessions."""
 
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Union, cast
 
 from ulid import ULID
 
@@ -149,6 +149,18 @@ def validate_unsaved_session_launcher(
     launcher: apispec.SessionLauncherPost, builds_config: "BuildsConfig"
 ) -> models.UnsavedSessionLauncher:
     """Validate an unsaved session launcher."""
+
+    environment: Union[str, models.UnsavedBuildParameters, models.UnsavedEnvironment]
+    if isinstance(launcher.environment, apispec.EnvironmentIdOnlyPost):
+        environment = launcher.environment.id
+    elif isinstance(launcher.environment, apispec.BuildParametersPost):
+        environment = validate_unsaved_build_parameters(launcher.environment, builds_config=builds_config)
+    elif isinstance(launcher.environment, apispec.EnvironmentPostInLauncherHelper):
+        environment_helper: apispec.EnvironmentPost = launcher.environment
+        environment = validate_unsaved_environment(environment_helper, models.EnvironmentKind.CUSTOM)
+    else:
+        raise errors.ValidationError(message=f"Unexpected environment type: {type(launcher.environment)}")
+
     return models.UnsavedSessionLauncher(
         project_id=ULID.from_str(launcher.project_id),
         name=launcher.name,
@@ -156,11 +168,7 @@ def validate_unsaved_session_launcher(
         resource_class_id=launcher.resource_class_id,
         disk_storage=launcher.disk_storage,
         # NOTE: When you create an environment with a launcher the environment can only be custom
-        environment=launcher.environment.id
-        if isinstance(launcher.environment, apispec.EnvironmentIdOnlyPost)
-        else validate_unsaved_build_parameters(launcher.environment, builds_config=builds_config)
-        if isinstance(launcher.environment, apispec.BuildParametersPost)
-        else validate_unsaved_environment(launcher.environment, models.EnvironmentKind.CUSTOM),
+        environment=environment,
     )
 
 

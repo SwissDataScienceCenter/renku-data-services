@@ -93,10 +93,7 @@ ALLOWED_SLOW_ENDPOINTS = [
 ]
 
 # TODO: RE-enable schemathesis when CI setup for notebooks / sessions is ready
-EXCLUDE_PATH_PREFIXES = [
-    "/sessions",
-    "/notebooks",
-]
+EXCLUDE_PATH_PREFIXES = ["/sessions", "/notebooks"]
 
 
 @pytest.mark.schemathesis
