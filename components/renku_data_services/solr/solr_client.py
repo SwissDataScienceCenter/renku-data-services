@@ -14,6 +14,7 @@ from urllib.parse import urljoin, urlparse, urlunparse
 from httpx import AsyncClient, BasicAuth, Response
 from pydantic import AliasChoices, BaseModel, Field, field_serializer
 
+from renku_data_services.errors.errors import BaseError
 from renku_data_services.solr.solr_schema import CoreSchema, FieldName, SchemaCommandList
 
 
@@ -43,24 +44,20 @@ class SolrClientConfig:
     @classmethod
     def from_env(cls, prefix: str = "") -> "SolrClientConfig":
         """Create a configuration from environment variables."""
-        enabled = os.environ.get(f"{prefix}SEARCH_ENABLED", "false") == "true"
-        if enabled:
-            url = os.environ[f"{prefix}SOLR_URL"]
-            core = os.environ.get(f"{prefix}SOLR_CORE", "renku-search")
-            username = os.environ.get(f"{prefix}SOLR_USER")
-            password = os.environ.get(f"{prefix}SOLR_PASSWORD")
+        url = os.environ[f"{prefix}SOLR_URL"]
+        core = os.environ.get(f"{prefix}SOLR_CORE", "renku-search")
+        username = os.environ.get(f"{prefix}SOLR_USER")
+        password = os.environ.get(f"{prefix}SOLR_PASSWORD")
 
-            tstr = os.environ.get(f"{prefix}SOLR_REQUEST_TIMEOUT", "600")
-            try:
-                timeout = int(tstr) if tstr is not None else 600
-            except ValueError:
-                logging.warning(f"SOLR_REQUEST_TIMEOUT is not an integer: {tstr}")
-                timeout = 600
+        tstr = os.environ.get(f"{prefix}SOLR_REQUEST_TIMEOUT", "600")
+        try:
+            timeout = int(tstr) if tstr is not None else 600
+        except ValueError:
+            logging.warning(f"SOLR_REQUEST_TIMEOUT is not an integer: {tstr}")
+            timeout = 600
 
-            user = SolrUser(username=username, password=str(password)) if username is not None else None
-            return cls(url, core, user, timeout)
-        else:
-            return cls("", "")
+        user = SolrUser(username=username, password=str(password)) if username is not None else None
+        return cls(url, core, user, timeout)
 
     def __str__(self) -> str:
         return (
@@ -68,6 +65,13 @@ class SolrClientConfig:
             f"core={self.core}, user={self.user}, "
             f"timeout={self.timeout})"
         )
+
+
+class SolrClientException(BaseError, ABC):
+    """Base exception for solr client."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message=message)
 
 
 class SortDirection(StrEnum):
@@ -222,6 +226,46 @@ class QueryResponse(BaseModel):
     response: ResponseBody
 
 
+class SolrClientGetByIdException(SolrClientException):
+    """Error when a lookup by document id failed."""
+
+    def __init__(self, id: str, resp: Response):
+        super().__init__(
+            f"Lookup solr document by id {id} failed with unexpected status {resp.status_code} ({resp.text})"
+        )
+
+
+class SolrClientQueryException(SolrClientException):
+    """Error when querying failed."""
+
+    def __init__(self, query: SolrQuery, resp: Response):
+        super().__init__(
+            f"Querying solr with '{query.to_dict()}' failed with unexpected status {resp.status_code} ({resp.text})"
+        )
+
+
+class SolrClientUpsertException(SolrClientException):
+    """Error when upserting."""
+
+    def __init__(self, docs: list[SolrDocument], resp: Response):
+        count = len(docs)
+        super().__init__(f"Inserting {count} documents failed with status {resp.status_code} ({resp.text})")
+
+
+class SolrClientStatusException(SolrClientException):
+    """Error when obtaining the status of the core."""
+
+    def __init__(self, cfg: SolrClientConfig, resp: Response):
+        super().__init__(f"Error getting the status of core {cfg.core}. {resp.status_code}/{resp.text}")
+
+
+class SolrClientCreateCoreException(SolrClientException):
+    """Error when creating a core."""
+
+    def __init__(self, core: str, resp: Response):
+        super().__init__(f"Error creating core '{core}': {resp.status_code}/{resp.text}")
+
+
 class SolrClient(AbstractAsyncContextManager, ABC):
     """A client to SOLR."""
 
@@ -303,12 +347,18 @@ class DefaultSolrClient(SolrClient):
     async def get(self, id: str) -> QueryResponse:
         """Get a document by id, returning a `QueryResponse`."""
         resp = await self.get_raw(id)
-        return QueryResponse.model_validate(resp.raise_for_status().json())
+        if not resp.is_success:
+            raise SolrClientGetByIdException(id, resp)
+        else:
+            return QueryResponse.model_validate(resp.json())
 
     async def query(self, query: SolrQuery) -> QueryResponse:
         """Query documents, returning a `QueryResponse`."""
         resp = await self.query_raw(query)
-        return QueryResponse.model_validate(resp.raise_for_status().json())
+        if not resp.is_success:
+            raise SolrClientQueryException(query, resp)
+        else:
+            return QueryResponse.model_validate(resp.raise_for_status().json())
 
     async def modify_schema(self, cmds: SchemaCommandList) -> Response:
         """Updates the schema with the given commands."""
@@ -343,7 +393,7 @@ class DefaultSolrClient(SolrClient):
             case 409:
                 return "VersionConflict"
             case _:
-                raise Exception(f"Unexpected return code: {res}")
+                raise SolrClientUpsertException(docs, res)
 
     async def get_schema(self) -> CoreSchema:
         """Return the current schema."""
@@ -364,3 +414,68 @@ class DefaultSolrClient(SolrClient):
     async def close(self) -> None:
         """Close this client and free resources."""
         return await self.delegate.aclose()
+
+
+class SolrAdminClient(AbstractAsyncContextManager, ABC):
+    """A client to the core admin api.
+
+    Url: https://solr.apache.org/guide/solr/latest/configuration-guide/coreadmin-api.html
+    """
+
+    @abstractmethod
+    async def core_status(self, core_name: str | None) -> dict[str, Any] | None:
+        """Return the status of the connected core."""
+        ...
+
+    @abstractmethod
+    async def create(self, core_name: str | None) -> None:
+        """Create a core."""
+        ...
+
+
+class DefaultSolrAdminClient(SolrAdminClient):
+    """A client to the core admin api.
+
+    Url: https://solr.apache.org/guide/solr/latest/configuration-guide/coreadmin-api.html
+    """
+
+    delegate: AsyncClient
+    config: SolrClientConfig
+
+    def __init__(self, cfg: SolrClientConfig):
+        self.config = cfg
+        url_parsed = list(urlparse(cfg.base_url))
+        url_parsed[2] = urljoin(url_parsed[2], "/api/cores")
+        burl = urlunparse(url_parsed)
+        bauth = BasicAuth(username=cfg.user.username, password=cfg.user.password) if cfg.user is not None else None
+        self.delegate = AsyncClient(auth=bauth, base_url=burl, timeout=cfg.timeout)
+
+    async def __aenter__(self) -> Self:
+        await self.delegate.__aenter__()
+        return self
+
+    async def __aexit__(
+        self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: TracebackType | None
+    ) -> None:
+        return await self.delegate.__aexit__(exc_type, exc, tb)
+
+    async def core_status(self, core_name: str | None) -> dict[str, Any] | None:
+        """Return the status of the connected core or the one given by `core_name`."""
+        core = core_name or self.config.core
+        resp = await self.delegate.get(f"/{core}")
+        if not resp.is_success:
+            raise SolrClientStatusException(self.config, resp)
+        else:
+            data = resp.json()["status"][self.config.core]
+            # if the core doesn't exist, solr returns 200 with an empty body
+            return data if data.get("name") == self.config.core else None
+
+    async def create(self, core_name: str | None) -> None:
+        """Create a core with the given `core_name` or the name provided in the config object."""
+        core = core_name or self.config.core
+        data = {"create": {"name": core, "configSet": "_default"}}
+        resp = await self.delegate.post("", json=data)
+        if not resp.is_success:
+            raise SolrClientCreateCoreException(core, resp)
+        else:
+            return None
