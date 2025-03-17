@@ -155,3 +155,33 @@ class SessionSecretPatchSecretValue:
 
     secret_slot_id: ULID
     value: str | None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedProjectMigration:
+    """Model representing a migration from an old project version that has not been persisted."""
+
+    project_id: ULID
+    project_v1_id: int
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectMigration(UnsavedProjectMigration):
+    """Model representing a migration from an old project version."""
+
+    id: ULID
+    migrated_at: datetime = field(default_factory=lambda: datetime.now(UTC).replace(microsecond=0))
+
+    @property
+    def etag(self) -> str:
+        """Entity tag value for this project migration object."""
+        return compute_etag_from_fields(self.migrated_at, self.project_v1_id)
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProjectMigrationInfo:
+    """Model representing a migration from an old project version."""
+
+    project_id: ULID
+    v1_id: int | None
+    launcher_id: ULID | None

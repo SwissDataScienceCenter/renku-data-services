@@ -105,6 +105,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         session_repo=config.session_repo,
         data_connector_to_project_link_repo=config.data_connector_to_project_link_repo,
         data_connector_repo=config.data_connector_repo,
+        project_migration_repo=config.project_migration_repo,
     )
     project_session_secrets = ProjectSessionSecretBP(
         name="project_session_secrets",
