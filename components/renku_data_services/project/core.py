@@ -78,7 +78,7 @@ async def copy_project(
     data_connector_repo: DataConnectorRepository,
 ) -> models.Project:
     """Create a copy of a given project."""
-    template = await project_repo.get_project(user=user, project_id=project_id)
+    template = await project_repo.get_project(user=user, project_id=project_id, with_documentation=True)
     repositories_ = _validate_repositories(repositories)
 
     unsaved_project = models.UnsavedProject(
@@ -92,6 +92,7 @@ async def copy_project(
         keywords=keywords or template.keywords,
         template_id=template.id,
         secrets_mount_directory=PurePosixPath(secrets_mount_directory) if secrets_mount_directory else None,
+        documentation=template.documentation,
     )
     project = await project_repo.insert_project(user, unsaved_project)
 
