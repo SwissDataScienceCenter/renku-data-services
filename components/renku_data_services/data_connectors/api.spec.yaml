@@ -310,6 +310,48 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - data_connectors
+  /projects/{project_id}/data_connector_links:
+    parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+        description: the ID of the project
+    get:
+      summary: Get all links from data connectors to a given project
+      responses:
+        "200":
+          description: List of data connector to project links
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataConnectorToProjectLinksList"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - projects
+  /projects/{project_id}/inaccessible_data_connector_links:
+    parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+        description: the ID of the project
+    get:
+      summary: Get the number of links that the user does not have access to in a project
+      responses:
+        "200":
+          description: List of data connector to project links
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InaccessibleDataConnectorLinks"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - projects
 components:
   schemas:
     DataConnectorsList:
@@ -768,6 +810,14 @@ components:
               example: "Something went wrong - please try again later"
           required: ["code", "message"]
       required: ["error"]
+    InaccessibleDataConnectorLinks:
+      description: Information about inaccessible data connector links
+      type: object
+      properties:
+        count: 
+          type: integer
+          minimum: 0
+          description: The number of data links the user does not have access to
 
   responses:
     Error:
