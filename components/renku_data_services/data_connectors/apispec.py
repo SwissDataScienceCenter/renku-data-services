@@ -128,6 +128,14 @@ class ErrorResponse(BaseAPISpec):
     error: Error
 
 
+class InaccessibleDataConnectorLinks(BaseAPISpec):
+    count: Optional[int] = Field(
+        None,
+        description="The number of data links the user does not have access to",
+        ge=0,
+    )
+
+
 class CloudStorageCore(BaseAPISpec):
     model_config = ConfigDict(
         extra="forbid",
