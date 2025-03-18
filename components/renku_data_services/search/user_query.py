@@ -226,9 +226,12 @@ class RelativeDate(StrEnum):
         """Resolve this relative date using the given reference."""
         match self:
             case RelativeDate.today:
-                return (ref, None)
+                ref_dt = ref
             case RelativeDate.yesterday:
-                return (ref - timedelta(days=1), None)
+                ref_dt = ref - timedelta(days=1)
+
+        pd = PartialDateTime(PartialDate(ref_dt.year, ref_dt.month, ref_dt.day))
+        return pd.resolve(ref, zone)
 
 
 @dataclass
@@ -252,11 +255,14 @@ class DateTimeCalc:
 
     def resolve(self, ref: datetime, zone: tzinfo) -> tuple[datetime, datetime | None]:
         """Resolve this date calculation using the given reference."""
-        ts = self.ref.resolve(ref, zone)[0]
+        (ts_min, ts_max_opt) = self.ref.resolve(ref, zone)
         if self.is_range:
-            return (ts - timedelta(days=self.amount_days), ts + timedelta(days=self.amount_days))
+            return (
+                ts_min - timedelta(days=self.amount_days),
+                (ts_max_opt or ts_min) + timedelta(days=self.amount_days),
+            )
         else:
-            return (ts + timedelta(days=self.amount_days), None)
+            return (ts_min + timedelta(days=self.amount_days), None)
 
 
 type DateTimeRef = PartialDateTime | RelativeDate | DateTimeCalc
@@ -464,6 +470,24 @@ class Created(FieldComparison):
 
     def _render_value(self) -> str:
         return self.values.mk_string(",", lambda e: e.render())
+
+    @classmethod
+    def eq(cls, value: DateTimeRef, *args: DateTimeRef) -> Created:
+        """Create an instance with `is_equal` comparison."""
+        nel = Nel(value, list(args))
+        return Created(Comparison.is_equal, nel)
+
+    @classmethod
+    def lt(cls, value: DateTimeRef, *args: DateTimeRef) -> Created:
+        """Create an instance with `is_lower_than` comparison."""
+        nel = Nel(value, list(args))
+        return Created(Comparison.is_lower_than, nel)
+
+    @classmethod
+    def gt(cls, value: DateTimeRef, *args: DateTimeRef) -> Created:
+        """Create an instance with `is_greater_than` comparison."""
+        nel = Nel(value, list(args))
+        return Created(Comparison.is_greater_than, nel)
 
 
 @dataclass

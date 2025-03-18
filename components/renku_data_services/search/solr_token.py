@@ -32,6 +32,11 @@ def __escape_query(input: str) -> str:
     return __escape(input, __defaultSpecialChars)
 
 
+def empty() -> SolrToken:
+    """Return the empty string."""
+    return SolrToken("")
+
+
 def all_query() -> SolrToken:
     """A solr query to return all documents."""
     return SolrToken("*:*")
