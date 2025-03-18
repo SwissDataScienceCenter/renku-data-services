@@ -286,6 +286,7 @@ class AmaltheaSessionV1Alpha1SpecPatch(BaseCRD):
     extraVolumes: list[ExtraVolume] | None = None
     hibernated: bool | None = None
     initContainers: list[InitContainer] | None = None
+    imagePullSecrets: list[ImagePullSecret] | None = None
     priorityClassName: str | None = None
     tolerations: list[Toleration] | None = None
     affinity: Affinity | None = None

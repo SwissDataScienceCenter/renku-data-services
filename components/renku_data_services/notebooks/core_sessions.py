@@ -36,6 +36,7 @@ from renku_data_services.notebooks.crs import (
     ExtraContainer,
     ExtraVolume,
     ExtraVolumeMount,
+    ImagePullSecret,
     InitContainer,
     Resources,
     SecretAsVolume,
@@ -432,6 +433,7 @@ async def patch_session(
     session_id: str,
     nb_config: NotebooksConfig,
     user: AnonymousAPIUser | AuthenticatedAPIUser,
+    internal_gitlab_user: APIUser,
     rp_repo: ResourcePoolRepository,
     project_repo: ProjectRepository,
 ) -> AmaltheaSessionV1Alpha1:
@@ -506,8 +508,27 @@ async def patch_session(
     if extra_containers:
         patch.spec.extraContainers = extra_containers
 
-    # TODO: If the image is private - check if the image pull secret exists
-    # And patch in the new gitlab token
+    if isinstance(user, AuthenticatedAPIUser) and internal_gitlab_user.access_token is not None:
+        image = session.spec.session.image
+        server_name = session.metadata.name
+        needs_pull_secret = await requires_image_pull_secret(nb_config, image, internal_gitlab_user)
+
+        if needs_pull_secret and session.spec.imagePullSecrets is not None:
+            image_pull_secret_name = f"{server_name}-image-secret"
+
+            # Always create a fresh secret to ensure we have the latest token
+            image_secret = get_gitlab_image_pull_secret(
+                nb_config, user, image_pull_secret_name, internal_gitlab_user.access_token
+            )
+            if image_secret:
+                updated_secrets = [
+                    secret
+                    for secret in (session.spec.imagePullSecrets or [])
+                    if not secret.name.endswith("-image-secret")
+                ]
+                updated_secrets.append(ImagePullSecret(name=image_pull_secret_name, adopt=True))
+                patch.spec.imagePullSecrets = updated_secrets
+
     patch_serialized = patch.to_rfc7386()
     if len(patch_serialized) == 0:
         return session

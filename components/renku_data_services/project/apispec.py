@@ -141,6 +141,7 @@ class Error(BaseAPISpec):
 class ErrorResponse(BaseAPISpec):
     error: Error
 
+
 class ProjectsProjectIdGetParametersQuery(BaseAPISpec):
     with_documentation: Optional[bool] = Field(
         None, description="Projects with or without possibly extensive documentation?"
