@@ -77,7 +77,11 @@ class Context:
 
     current_time: datetime
     zone: tzinfo
-    role: SearchRole | None
+    role: SearchRole | None = None
+
+    def with_role(self, role: SearchRole) -> Context:
+        """Return a copy wit the given role set."""
+        return Context(self.current_time, self.zone, role)
 
 
 class QueryInterpreter(ABC):
