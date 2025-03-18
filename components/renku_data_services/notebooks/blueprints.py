@@ -512,7 +512,7 @@ class NotebooksNewBP(CustomBlueprint):
     def patch(self) -> BlueprintFactoryResponse:
         """Patch a session."""
 
-        @authenticate(self.authenticator)
+        @authenticate_2(self.authenticator, self.internal_gitlab_authenticator)
         @validate(json=apispec.SessionPatchRequest)
         async def _handler(
             _: Request,
