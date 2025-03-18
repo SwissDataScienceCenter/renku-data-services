@@ -184,7 +184,6 @@ def get_gitlab_image_pull_secret(
         }
     }
     registry_secret = json.dumps(registry_secret)
-    registry_secret = base64.b64encode(registry_secret.encode()).decode()
 
     secret_data = {".dockerconfigjson": registry_secret}
     secret = V1Secret(
