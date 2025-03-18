@@ -576,6 +576,12 @@ class GroupRepository:
                 )
 
         async def _upsert_old_dc_slug(session: AsyncSession, old_dc_slug: schemas.EntitySlugORM) -> None:
+            """This function checks if an old entity slug exists and if so then it updates it.
+
+            If the old entity slug does not exists then it inserts one.
+            This is needed so that when a slug is renamed then the old slug still points to the new
+            and current entity.
+            """
             stmt = select(schemas.EntitySlugOldORM).where(schemas.EntitySlugOldORM.slug == old_dc_slug.slug)
             if old_dc_slug.project_id is not None:
                 stmt.where(schemas.EntitySlugOldORM.project_id == old_dc_slug.project_id)
@@ -622,7 +628,7 @@ class GroupRepository:
                     pass
                 case (new_path, old_path, old_slug, new_slug) if new_path == old_path and old_slug != new_slug:
                     await _check_dc_slug_not_taken(session, dc.namespace, new_slug)
-                    # TODO: populate EntitySlugOldORM
+                    await _upsert_old_dc_slug(session, dc_slug)
                     dc_slug.slug = new_slug.value
                 case (NamespacePath(), NamespacePath() as new_path, old_slug, new_slug):
                     new_usr_grp_ns = await self.get_namespace_by_path(user, new_path, session)
@@ -634,7 +640,7 @@ class GroupRepository:
                     await _check_ns_permissions(user, self.authz, dc.namespace, Scope.WRITE)
                     await _check_ns_permissions(user, self.authz, new_usr_grp_ns, Scope.WRITE)
                     await _check_dc_slug_not_taken(session, new_usr_grp_ns, new_slug)
-                    # TODO: populate EntitySlugOldORM
+                    await _upsert_old_dc_slug(session, dc_slug)
                     dc_slug.namespace_id = new_usr_grp_ns.id
                     if old_slug != new_slug:
                         dc_slug.slug = new_slug.value
@@ -648,7 +654,7 @@ class GroupRepository:
                     await _check_ns_permissions(user, self.authz, dc.namespace, Scope.WRITE)
                     await _check_ns_permissions(user, self.authz, new_proj_ns, Scope.WRITE)
                     await _check_dc_slug_not_taken(session, new_proj_ns, new_slug)
-                    # TODO: populate EntitySlugOldORM
+                    await _upsert_old_dc_slug(session, dc_slug)
                     dc_slug.project_id = new_proj_ns.underlying_resource_id
                     dc_slug.namespace_id = new_proj_ns.id
                     if old_slug != new_slug:
@@ -663,7 +669,7 @@ class GroupRepository:
                     await _check_ns_permissions(user, self.authz, dc.namespace, Scope.WRITE)
                     await _check_ns_permissions(user, self.authz, new_usr_grp_ns, Scope.WRITE)
                     await _check_dc_slug_not_taken(session, new_usr_grp_ns, new_slug)
-                    # TODO: populate EntitySlugOldORM
+                    await _upsert_old_dc_slug(session, dc_slug)
                     dc_slug.project_id = None
                     dc_slug.namespace_id = new_usr_grp_ns.id
                     if old_slug != new_slug:
@@ -678,7 +684,7 @@ class GroupRepository:
                     await _check_ns_permissions(user, self.authz, dc.namespace, Scope.WRITE)
                     await _check_ns_permissions(user, self.authz, new_proj_ns, Scope.WRITE)
                     await _check_dc_slug_not_taken(session, new_proj_ns, new_slug)
-                    # TODO: populate EntitySlugOldORM
+                    await _upsert_old_dc_slug(session, dc_slug)
                     dc_slug.project_id = new_proj_ns.underlying_resource_id
                     dc_slug.namespace_id = new_proj_ns.id
                     if old_slug != new_slug:

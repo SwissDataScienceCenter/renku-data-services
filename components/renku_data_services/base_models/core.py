@@ -194,80 +194,11 @@ class Slug:
         slug = slug[:80]
         return cls.from_name(slug)
 
-    def __truediv__(self, other: Slug) -> str:
-        """Joins two slugs into a path fraction without dashes at the beginning or end."""
-        if type(self) is not type(other):
-            raise errors.ValidationError(
-                message=f"A path can be constructed only from 2 slugs, but the 'divisor' is of type {type(other)}"
-            )
-        return self.value + "/" + other.value
-
     def __str__(self) -> str:
         return self.value
 
     def __repr__(self) -> str:
         return self.value
-
-    @classmethod
-    def from_path(cls, path: str) -> list[Self]:
-        """Decompose a path into a list of slugs."""
-        return [cls(slug) for slug in path.split("/")]
-
-
-@dataclass(frozen=True, eq=True)
-class EntityPath:
-    """The collection of slugs that makes up the path to an entity in Renku."""
-
-    slugs: list[Slug] = field(default_factory=list)
-
-    def __repr__(self) -> str:
-        return "/".join([slug.value for slug in self.slugs])
-
-    def __truediv__(self, other: Slug | str | Self) -> "EntityPath":
-        """Create new entity path with an extra slug."""
-        slugs = [slug for slug in self.slugs]
-        if isinstance(other, Slug):
-            slugs.append(other)
-        elif isinstance(other, str):
-            slugs.append(Slug(other))
-        elif type(self) is type(other):
-            slugs.extend(other.slugs)
-        else:
-            raise errors.ValidationError(
-                message="A path can be constructed from an entity path and a slug,string or entity path, "
-                f"but the 'divisor' is of type {type(other)}"
-            )
-        return EntityPath(slugs)
-
-    @classmethod
-    def join(cls, *slugs: Slug | str) -> Self:
-        """Create an entity path from a list of slugs or strings."""
-        res: list[Slug] = []
-        for slug in slugs:
-            if isinstance(slug, Slug):
-                res.append(slug)
-            elif isinstance(slug, str):
-                res.append(Slug(slug))
-            else:
-                raise errors.ValidationError(
-                    message="A path can be constructed from a list of slugs or strings, "
-                    f"but a value in the list is of type {type(slug)}"
-                )
-        return cls(res)
-
-    @classmethod
-    def from_string(cls, path: str) -> Self:
-        """Create an entity path from a single string which may contain several slugs."""
-        res: list[Slug] = []
-        for slug in path.split("/"):
-            res.append(Slug(slug))
-        return cls(res)
-
-    def __getitem__(self, ind: int) -> Slug:
-        return self.slugs[ind]
-
-    def __len__(self) -> int:
-        return len(self.slugs)
 
 
 class NamespaceSlug(Slug):

@@ -515,7 +515,7 @@ components:
         name:
           $ref: "#/components/schemas/NamespaceName"
         slug:
-          $ref: "#/components/schemas/OneOrTwoSlugs"
+          $ref: "#/components/schemas/Slug"
         creation_date:
           $ref: "#/components/schemas/CreationDate"
         created_by:
