@@ -129,7 +129,10 @@ class DataConnectorRepository:
     async def get_data_connector_by_slug(
         self, user: base_models.APIUser, namespace: str, slug: Slug
     ) -> models.DataConnector:
-        """Get one data connector from the database by slug."""
+        """Get one data connector from the database by slug.
+
+        This will not return or find data connectors owned by projects.
+        """
         not_found_msg = (
             f"Data connector with identifier '{namespace}/{slug.value}' does not exist or you do not have access to it."
         )

@@ -194,14 +194,6 @@ class Slug:
         slug = slug[:80]
         return cls.from_name(slug)
 
-    def __truediv__(self, other: Slug) -> str:
-        """Joins two slugs into a path fraction without dashes at the beginning or end."""
-        if type(self) is not type(other):
-            raise errors.ValidationError(
-                message=f"A path can be constructed only from 2 slugs, but the 'divisor' is of type {type(other)}"
-            )
-        return self.value + "/" + other.value
-
     def __str__(self) -> str:
         return self.value
 

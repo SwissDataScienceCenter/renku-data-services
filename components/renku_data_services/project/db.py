@@ -371,7 +371,11 @@ class ProjectRepository:
                 raise errors.ConflictError(
                     message=f"An entity with the slug '{project.slug.namespace.slug}/{patch.slug}' already exists."
                 )
-            session.add(ns_schemas.EntitySlugOldORM(slug=old_project.slug, latest_slug_id=project.slug.id))
+            session.add(
+                ns_schemas.EntitySlugOldORM(
+                    slug=old_project.slug, latest_slug_id=project.slug.id, project_id=project.id, data_connector_id=None
+                )
+            )
             project.slug.slug = patch.slug
             # Trigger update for ``updated_at`` column
             await session.execute(update(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id).values())
