@@ -99,7 +99,7 @@ class ProjectORM(BaseORM):
     def dump_as_namespace(self) -> ProjectNamespace:
         """Get the namespace representation of the project."""
         return ProjectNamespace(
-            id=self.id,
+            id=self.slug.namespace.id,
             created_by=self.created_by_id,
             underlying_resource_id=self.id,
             latest_slug=self.slug.slug,

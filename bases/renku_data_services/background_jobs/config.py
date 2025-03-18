@@ -78,6 +78,7 @@ class SyncConfig:
             session_maker=session_maker,
             authz=Authz(authz_config),
             project_repo=project_repo,
+            group_repo=group_repo,
         )
         data_connector_project_link_repo = DataConnectorProjectLinkRepository(
             session_maker=session_maker,

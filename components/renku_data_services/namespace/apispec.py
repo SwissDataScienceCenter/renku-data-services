@@ -12,17 +12,6 @@ from pydantic import ConfigDict, Field, RootModel
 from renku_data_services.namespace.apispec_base import BaseAPISpec
 
 
-class Slug(RootModel[str]):
-    root: str = Field(
-        ...,
-        description="A command-line/url friendly name for a namespace",
-        example="a-slug-example",
-        max_length=99,
-        min_length=1,
-        pattern="^(?!.*\\.git$|.*\\.atom$|.*[\\-._][\\-._].*)[a-z0-9][a-z0-9\\-_.]*$",
-    )
-
-
 class GroupRole(Enum):
     owner = "owner"
     editor = "editor"
@@ -71,11 +60,13 @@ class NamespaceResponse(BaseAPISpec):
         pattern="^[A-Za-z0-9-]+$",
     )
     namespace_kind: NamespaceKind
-    path: List[Slug] = Field(
+    path: str = Field(
         ...,
-        description="A list of slugs that make up the path to a resource",
-        example=["group1", "project2"],
+        description="A command-line/url friendly name for a single slug or two slugs separated by /",
+        example="user1/project-1",
+        max_length=200,
         min_length=1,
+        pattern="^(?!.*\\.git$|.*\\.atom$|.*[\\-._][\\-._].*)[a-z0-9][a-z0-9\\-_.]*(?<!\\.git)(?<!\\.atom)(?:/[a-z0-9][a-z0-9\\-_.]*){0,1}$",
     )
 
 

@@ -223,6 +223,10 @@ class NamespaceOldORM(BaseORM):
             path=NamespacePath.from_strings(self.slug),
         )
 
+    def dump_as_namespace_path(self) -> models.NamespacePath:
+        """Create a namespace path."""
+        return self.dump().path
+
 
 class EntitySlugORM(BaseORM):
     """Entity slugs.
@@ -293,8 +297,16 @@ class EntitySlugORM(BaseORM):
     def dump_namespace(self) -> models.UserNamespace | models.GroupNamespace | models.ProjectNamespace:
         """Dump the entity slug as a namespace."""
         if self.project:
-            return self.project.dump_as_namespace()
+            return self.dump_project_namespace()
         return self.namespace.dump()
+
+    def dump_project_namespace(self) -> models.ProjectNamespace:
+        """Dump the entity slug as a namespace."""
+        if not self.project:
+            raise errors.ProgrammingError(
+                message="Attempting to dump a namespace without a project as a project namespace"
+            )
+        return self.project.dump_as_namespace()
 
 
 class EntitySlugOldORM(BaseORM):

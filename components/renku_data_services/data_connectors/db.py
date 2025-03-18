@@ -15,10 +15,11 @@ from renku_data_services import base_models, errors
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.authz.models import CheckPermissionItem, Scope
 from renku_data_services.base_api.pagination import PaginationRequest
-from renku_data_services.base_models.core import ProjectPath, Slug
+from renku_data_services.base_models.core import DataConnectorSlug, ProjectPath, Slug
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors import orm as schemas
 from renku_data_services.namespace import orm as ns_schemas
+from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.models import Project
 from renku_data_services.project.orm import ProjectORM
@@ -37,10 +38,12 @@ class DataConnectorRepository:
         session_maker: Callable[..., AsyncSession],
         authz: Authz,
         project_repo: ProjectRepository,
+        group_repo: GroupRepository,
     ) -> None:
         self.session_maker = session_maker
         self.authz = authz
         self.project_repo = project_repo
+        self.group_repo = group_repo
 
     async def get_data_connectors(
         self, user: base_models.APIUser, pagination: PaginationRequest, namespace: str | None = None
@@ -311,20 +314,19 @@ class DataConnectorRepository:
         if not session:
             raise errors.ProgrammingError(message="A database session is required.")
         result = await session.scalars(
-            select(schemas.DataConnectorORM).where(schemas.DataConnectorORM.id == data_connector_id)
+            select(schemas.DataConnectorORM)
+            .where(schemas.DataConnectorORM.id == data_connector_id)
+            .options(
+                joinedload(schemas.DataConnectorORM.slug)
+                .joinedload(ns_schemas.EntitySlugORM.project)
+                .selectinload(ProjectORM.slug)
+            )
         )
         data_connector = result.one_or_none()
         if data_connector is None:
             raise errors.MissingResourceError(message=not_found_msg)
         old_data_connector = data_connector.dump()
         old_data_connector_parent = old_data_connector.path.parent()
-
-        if (
-            isinstance(old_data_connector_parent, ProjectPath)
-            and patch.namespace
-            and old_data_connector_parent != patch.namespace
-        ):
-            raise NotImplementedError("Moving a data connector to another project or namespace is not supported")
 
         required_scope = Scope.WRITE
         if patch.visibility is not None and patch.visibility != old_data_connector.visibility:
@@ -355,40 +357,27 @@ class DataConnectorRepository:
                 else apispec.Visibility(patch.visibility.value)
             )
             data_connector.visibility = visibility_orm
-        if patch.namespace is not None and patch.namespace != old_data_connector_parent:
-            ns = await session.scalar(
-                select(ns_schemas.NamespaceORM).where(
-                    ns_schemas.NamespaceORM.slug == patch.namespace.first.value.lower()
-                )
+        if (patch.namespace is not None and patch.namespace != old_data_connector.namespace.path) or (
+            patch.slug is not None and patch.slug != old_data_connector.slug
+        ):
+            match patch.namespace, patch.slug:
+                case (None, new_slug) if new_slug is not None:
+                    new_path = old_data_connector.path.parent() / DataConnectorSlug(new_slug)
+                case (new_ns, None) if new_ns is not None:
+                    new_path = new_ns / DataConnectorSlug(old_data_connector.slug)
+                case (new_ns, new_slug) if new_ns is not None and new_slug is not None:
+                    new_path = new_ns / DataConnectorSlug(new_slug)
+                case _:
+                    raise errors.ProgrammingError(
+                        message=f"Moving a data connector from {old_data_connector.path.serialize()} "
+                        f"to namespace: {patch.namespace} and slug: {patch.slug} is not supported."
+                    )
+            await self.group_repo.move_data_connector(
+                user,
+                old_data_connector,
+                new_path,
+                session,
             )
-            if not ns:
-                raise errors.MissingResourceError(message=f"The namespace with slug {patch.namespace} does not exist.")
-            if not ns.group_id and not ns.user_id:
-                raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
-            resource_type, resource_id = (
-                (ResourceType.group, ns.group_id) if ns.group and ns.group_id else (ResourceType.user_namespace, ns.id)
-            )
-            has_permission = await self.authz.has_permission(user, resource_type, resource_id, Scope.WRITE)
-            if not has_permission:
-                raise errors.ForbiddenError(
-                    message=f"The data connector cannot be moved because you do not have sufficient permissions with the namespace {patch.namespace}."  # noqa: E501
-                )
-            data_connector.slug.namespace_id = ns.id
-        if patch.slug is not None and patch.slug != old_data_connector.slug:
-            namespace_id = data_connector.slug.namespace_id
-            existing_entity = await session.scalar(
-                select(ns_schemas.EntitySlugORM)
-                .where(ns_schemas.EntitySlugORM.slug == patch.slug)
-                .where(ns_schemas.EntitySlugORM.namespace_id == namespace_id)
-            )
-            if existing_entity is not None:
-                raise errors.ConflictError(
-                    message=f"An entity with the slug '{data_connector.slug.namespace.slug}/{patch.slug}' already exists."  # noqa E501
-                )
-            session.add(
-                ns_schemas.EntitySlugOldORM(slug=old_data_connector.slug, latest_slug_id=data_connector.slug.id)
-            )
-            data_connector.slug.slug = patch.slug
         if patch.description is not None:
             data_connector.description = patch.description if patch.description else None
         if patch.keywords is not None:
