@@ -661,8 +661,7 @@ async def test_patch_data_connector_slug(
     data_connector = await create_data_connector("My data connector")
     data_connector_id = data_connector["id"]
     namespace = data_connector["namespace"]
-    # TODO: Uncomment in followup PR
-    # old_slug = data_connector["slug"]
+    old_slug = data_connector["slug"]
     await create_data_connector("Data connector 3")
 
     # Patch a data connector
@@ -694,16 +693,15 @@ async def test_patch_data_connector_slug(
     assert data_connector["namespace"] == namespace
     assert data_connector["slug"] == new_slug
 
-    # TODO: Enable remembering old slugs for data connectors in subsequent PR
     # Check that we can get the data connector with the old slug
-    # _, response = await sanic_client.get(
-    #     f"/api/data/namespaces/{namespace}/data_connectors/{old_slug}", headers=user_headers
-    # )
-    # assert response.status_code == 200, response.text
-    # assert response.json is not None
-    # assert response.json.get("id") == data_connector_id
-    # assert data_connector["namespace"] == namespace
-    # assert data_connector["slug"] == new_slug
+    _, response = await sanic_client.get(
+        f"/api/data/namespaces/{namespace}/data_connectors/{old_slug}", headers=user_headers
+    )
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == data_connector_id
+    assert data_connector["namespace"] == namespace
+    assert data_connector["slug"] == new_slug
 
 
 @pytest.mark.asyncio
