@@ -5,6 +5,7 @@ from pathlib import PurePosixPath
 from urllib.parse import urlparse
 
 from sanic import Request, empty, exceptions, json
+from sanic.log import logger
 from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
 from ulid import ULID
@@ -378,18 +379,35 @@ class NotebooksNewBP(CustomBlueprint):
             # And you need to reference the image pull secret in the AmaltheaSessionV1Alpha1 spec below
             # and you need to set the "adopt" flag to true
             image_pull_secret_name = None
+            logger.debug("Checking if the user is authenticated and has a GitLab access token.")
             if isinstance(user, AuthenticatedAPIUser) and internal_gitlab_user.access_token is not None:
+                logger.debug(f"User is authenticated. Checking if the image {image} requires a pull secret.")
+
                 needs_pull_secret = await requires_image_pull_secret(self.nb_config, image, internal_gitlab_user)
+                logger.debug(f"requires_image_pull_secret() result: {needs_pull_secret}")
 
                 if needs_pull_secret:
                     image_pull_secret_name = f"{server_name}-image-secret"
+                    logger.debug(
+                        f"Image requires pull secret, setting image_pull_secret_name to {image_pull_secret_name}"
+                    )
+
                     image_secret = get_gitlab_image_pull_secret(
                         self.nb_config, user, image_pull_secret_name, internal_gitlab_user.access_token
                     )
                     if image_secret:
+                        logger.debug(f"Image pull secret created successfully: {image_secret}")
                         secrets_to_create.append(image_secret)
+                    else:
+                        logger.warning("Failed to create image pull secret.")
+            else:
+                logger.warning(
+                    f"User is not authenticated or gitlab access token {internal_gitlab_user.access_token} is None."
+                )
 
+            logger.debug(f"Final secrets_to_create list: {secrets_to_create}")
             secrets_to_create.append(auth_secret)
+
             manifest = AmaltheaSessionV1Alpha1(
                 metadata=Metadata(name=server_name, annotations=annotations),
                 spec=AmaltheaSessionSpec(
