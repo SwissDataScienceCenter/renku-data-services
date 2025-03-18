@@ -267,6 +267,10 @@ class NamespacePath(__NamespaceCommonMixin):
         """The parent path."""
         raise errors.ProgrammingError(message="A namespace path has no parent")
 
+    def last(self) -> NamespaceSlug:
+        """Return the last slug in the path."""
+        return self.first
+
     @classmethod
     def from_strings(cls, *slugs: str) -> Self:
         """Convert a string to a namespace path."""
@@ -299,6 +303,10 @@ class ProjectPath(__NamespaceCommonMixin):
         """The parent path."""
         return NamespacePath(self.first)
 
+    def last(self) -> ProjectSlug:
+        """Return the last slug in the path."""
+        return self.second
+
     @classmethod
     def from_strings(cls, *slugs: str) -> Self:
         """Convert strings to a project path."""
@@ -328,6 +336,10 @@ class DataConnectorPath(__NamespaceCommonMixin):
     def parent(self) -> NamespacePath:
         """The parent path."""
         return NamespacePath(self.first)
+
+    def last(self) -> DataConnectorSlug:
+        """Return the last slug in the path."""
+        return self.second
 
     @classmethod
     def from_strings(cls, *slugs: str) -> Self:
@@ -362,6 +374,10 @@ class DataConnectorInProjectPath(__NamespaceCommonMixin):
         """The parent path."""
         return ProjectPath(self.first, self.second)
 
+    def last(self) -> DataConnectorSlug:
+        """Return the last slug in the path."""
+        return self.third
+
     @classmethod
     def from_strings(cls, *slugs: str) -> Self:
         """Convert strings to a data connector path."""
@@ -392,3 +408,15 @@ This type should have only one instance, defined in the same file as this type.
 
 RESET: ResetType = ResetType(object())
 """The single instance of the ResetType, can be compared to similar to None, i.e. `if value is RESET`"""
+
+
+class ResourceType(StrEnum):
+    """All possible resources stored in Authzed."""
+
+    project = "project"
+    user = "user"
+    anonymous_user = "anonymous_user"
+    platform = "platform"
+    group = "group"
+    user_namespace = "user_namespace"
+    data_connector = "data_connector"

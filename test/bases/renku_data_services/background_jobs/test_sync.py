@@ -89,6 +89,7 @@ def get_app_configs(db_instance: DBConfig, authz_instance: AuthzConfig):
         data_connector_repo = DataConnectorRepository(
             session_maker=db_instance.async_session_maker,
             authz=Authz(authz_instance),
+            group_repo=group_repo,
             project_repo=project_repo,
         )
         data_connector_project_link_repo = DataConnectorProjectLinkRepository(

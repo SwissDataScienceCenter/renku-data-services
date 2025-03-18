@@ -45,7 +45,7 @@ from renku_data_services.authz.models import (
     Scope,
     Visibility,
 )
-from renku_data_services.base_models.core import InternalServiceAdmin
+from renku_data_services.base_models.core import InternalServiceAdmin, ResourceType
 from renku_data_services.data_connectors.models import (
     DataConnector,
     DataConnectorToProjectLink,
@@ -152,18 +152,6 @@ class _Relation(StrEnum):
         raise errors.ProgrammingError(message=f"Cannot map relation {self} to any role")
 
 
-class ResourceType(StrEnum):
-    """All possible resources stored in Authzed."""
-
-    project = "project"
-    user = "user"
-    anonymous_user = "anonymous_user"
-    platform = "platform"
-    group = "group"
-    user_namespace = "user_namespace"
-    data_connector = "data_connector"
-
-
 class AuthzOperation(StrEnum):
     """The type of change that requires authorization database update."""
 
@@ -209,10 +197,12 @@ class _AuthzConverter:
 
     @staticmethod
     def group(id: ULID) -> ObjectReference:
+        """The id should be the id of the GroupORM object in the DB."""
         return ObjectReference(object_type=ResourceType.group, object_id=str(id))
 
     @staticmethod
     def user_namespace(id: ULID) -> ObjectReference:
+        """The id should be the id of the NamespaceORM object in the DB."""
         return ObjectReference(object_type=ResourceType.user_namespace, object_id=str(id))
 
     @staticmethod
@@ -683,7 +673,7 @@ class Authz:
                     if result.old.visibility != result.new.visibility:
                         user = _extract_user_from_args(*func_args, **func_kwargs)
                         authz_change.extend(await db_repo.authz._update_data_connector_visibility(user, result.new))
-                    if result.old.namespace.id != result.new.namespace.id:
+                    if result.old.namespace != result.new.namespace:
                         user = _extract_user_from_args(*func_args, **func_kwargs)
                         authz_change.extend(await db_repo.authz._update_data_connector_namespace(user, result.new))
                 case AuthzOperation.delete_link, ResourceType.data_connector if result is None:
@@ -1794,13 +1784,30 @@ class Authz:
                 message=f"The data connector with ID {data_connector.id} whose namespace is being updated "
                 "does not currently have a namespace."
             )
-        if current_namespace.relationship.subject.object.object_id == data_connector.namespace.id:
+        if current_namespace.relationship.subject.object.object_id == str(data_connector.namespace.id):
             return _AuthzChange()
-        new_namespace_sub = (
-            SubjectReference(object=_AuthzConverter.group(data_connector.namespace.id))
-            if data_connector.namespace.kind == NamespaceKind.group
-            else SubjectReference(object=_AuthzConverter.user_namespace(data_connector.namespace.id))
-        )
+        new_dc_ns = data_connector.namespace
+        match new_dc_ns.kind:
+            case NamespaceKind.user:
+                new_namespace_owner = _AuthzConverter.user_namespace(new_dc_ns.id)
+            case NamespaceKind.group:
+                new_namespace_owner = _AuthzConverter.group(
+                    ULID.from_str(new_dc_ns.underlying_resource_id)
+                    if isinstance(new_dc_ns.underlying_resource_id, str)
+                    else new_dc_ns.underlying_resource_id
+                )
+            case NamespaceKind.project:
+                new_namespace_owner = _AuthzConverter.project(
+                    ULID.from_str(new_dc_ns.underlying_resource_id)
+                    if isinstance(new_dc_ns.underlying_resource_id, str)
+                    else new_dc_ns.underlying_resource_id
+                )
+            case x:
+                raise errors.ProgrammingError(
+                    message=f"Received unknown namespace kind {x} when updating namespace of a data connector."
+                )
+
+        new_namespace_sub = SubjectReference(object=new_namespace_owner)
         old_namespace_sub = (
             SubjectReference(
                 object=_AuthzConverter.group(ULID.from_str(current_namespace.relationship.subject.object.object_id))
