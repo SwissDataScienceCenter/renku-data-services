@@ -264,6 +264,7 @@ class EntitySlugORM(BaseORM):
         ForeignKey(DataConnectorORM.id, ondelete="CASCADE", name="entity_slugs_data_connector_id_fk"),
         index=True,
         nullable=True,
+        unique=True,
     )
     data_connector: Mapped[DataConnectorORM | None] = relationship(init=False, repr=False, back_populates="slug")
     namespace_id: Mapped[ULID] = mapped_column(
