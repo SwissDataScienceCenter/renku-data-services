@@ -248,7 +248,10 @@ class EntitySlugORM(BaseORM):
             unique=True,
             postgresql_nulls_not_distinct=True,
         ),
-        # TODO: Add the constraint that at least 1 of project and data_connector has to be set
+        CheckConstraint(
+            "(project_id IS NOT NULL) OR (data_connector_id IS NOT NULL)",
+            name="one_or_both_project_id_or_group_id_are_set",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, init=False)
