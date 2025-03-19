@@ -384,8 +384,7 @@ class NotebooksNewBP(CustomBlueprint):
                     image_secret = get_gitlab_image_pull_secret(
                         self.nb_config, user, image_pull_secret_name, internal_gitlab_user.access_token
                     )
-                    if image_secret:
-                        secrets_to_create.append(image_secret)
+                    secrets_to_create.append(image_secret)
 
             secrets_to_create.append(auth_secret)
 
