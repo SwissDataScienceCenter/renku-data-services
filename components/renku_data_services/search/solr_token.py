@@ -90,8 +90,11 @@ def field_exists(field: FieldName) -> SolrToken:
 
 def field_is_any(field: FieldName, value: Nel[SolrToken]) -> SolrToken:
     """Search for any value in the given field."""
-    vs = fold_or(value.to_list())
-    return field_is(field, SolrToken(f"({vs})"))
+    if value.more_values == []:
+        return field_is(field, value.value)
+    else:
+        vs = fold_or(value.to_list())
+        return field_is(field, SolrToken(f"({vs})"))
 
 
 def fold_and(tokens: list[SolrToken]) -> SolrToken:
