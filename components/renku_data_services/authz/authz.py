@@ -600,121 +600,124 @@ class Authz:
     ]:
         """A decorator that updates the authorization database for different types of operations."""
 
-        def _extract_user_from_args(*args: _P.args, **kwargs: _P.kwargs) -> base_models.APIUser:
-            if len(args) == 0:
-                user_kwarg = kwargs.get("user")
-                requested_by_kwarg = kwargs.get("requested_by")
-                if isinstance(user_kwarg, base_models.APIUser) and isinstance(requested_by_kwarg, base_models.APIUser):
-                    raise errors.ProgrammingError(
-                        message="The decorator for authorization database changes found two APIUser parameters in the "
-                        "'user' and 'requested_by' keyword arguments but expected only one of them to be present."
-                    )
-                potential_user = user_kwarg if isinstance(user_kwarg, base_models.APIUser) else requested_by_kwarg
-            else:
-                potential_user = args[0]
-            if not isinstance(potential_user, base_models.APIUser):
-                raise errors.ProgrammingError(
-                    message="The decorator for authorization database changes could not find APIUser in the function "
-                    f"arguments, the type of the argument that was found is {type(potential_user)}."
-                )
-            return potential_user
-
-        async def _get_authz_change(
-            db_repo: _WithAuthz,
-            operation: AuthzOperation,
-            resource: ResourceType,
-            result: _AuthzChangeFuncResult,
-            *func_args: _P.args,
-            **func_kwargs: _P.kwargs,
-        ) -> _AuthzChange:
-            authz_change = _AuthzChange()
-            match operation, resource:
-                case AuthzOperation.create, ResourceType.project if isinstance(result, Project):
-                    authz_change = db_repo.authz._add_project(result)
-                case AuthzOperation.delete, ResourceType.project if isinstance(result, DeletedProject):
-                    user = _extract_user_from_args(*func_args, **func_kwargs)
-                    authz_change = await db_repo.authz._remove_project(user, result)
-                case AuthzOperation.delete, ResourceType.project if result is None:
-                    # NOTE: This means that the project does not exist in the first place so nothing was deleted
-                    pass
-                case AuthzOperation.update, ResourceType.project if isinstance(result, ProjectUpdate):
-                    authz_change = _AuthzChange()
-                    if result.old.visibility != result.new.visibility:
-                        user = _extract_user_from_args(*func_args, **func_kwargs)
-                        authz_change.extend(await db_repo.authz._update_project_visibility(user, result.new))
-                    if result.old.namespace.id != result.new.namespace.id:
-                        user = _extract_user_from_args(*func_args, **func_kwargs)
-                        authz_change.extend(await db_repo.authz._update_project_namespace(user, result.new))
-                case AuthzOperation.create, ResourceType.group if isinstance(result, Group):
-                    authz_change = db_repo.authz._add_group(result)
-                case AuthzOperation.delete, ResourceType.group if isinstance(result, DeletedGroup):
-                    user = _extract_user_from_args(*func_args, **func_kwargs)
-                    authz_change = await db_repo.authz._remove_group(user, result)
-                case AuthzOperation.delete, ResourceType.group if result is None:
-                    # NOTE: This means that the group does not exist in the first place so nothing was deleted
-                    pass
-                case AuthzOperation.update_or_insert, ResourceType.user if isinstance(result, UserInfoUpdate):
-                    if result.old is None:
-                        authz_change = db_repo.authz._add_user_namespace(result.new.namespace)
-                case AuthzOperation.delete, ResourceType.user if isinstance(result, DeletedUser):
-                    user = _extract_user_from_args(*func_args, **func_kwargs)
-                    authz_change = await db_repo.authz._remove_user_namespace(result.id)
-                    authz_change.extend(await db_repo.authz._remove_user(user, result))
-                case AuthzOperation.delete, ResourceType.user if result is None:
-                    # NOTE: This means that the user does not exist in the first place so nothing was deleted
-                    pass
-                case AuthzOperation.insert_many, ResourceType.user_namespace if isinstance(result, list):
-                    for res in result:
-                        if not isinstance(res, UserInfo):
-                            raise errors.ProgrammingError(
-                                message="Expected list of UserInfo when generating authorization "
-                                f"database updates for inserting namespaces but found {type(res)}"
-                            )
-                        authz_change.extend(db_repo.authz._add_user_namespace(res.namespace))
-                case AuthzOperation.create, ResourceType.data_connector if isinstance(result, DataConnector):
-                    authz_change = db_repo.authz._add_data_connector(result)
-                case AuthzOperation.delete, ResourceType.data_connector if result is None:
-                    # NOTE: This means that the data connector does not exist in the first place so nothing was deleted
-                    pass
-                case AuthzOperation.delete, ResourceType.data_connector if isinstance(result, DeletedDataConnector):
-                    user = _extract_user_from_args(*func_args, **func_kwargs)
-                    authz_change = await db_repo.authz._remove_data_connector(user, result)
-                case AuthzOperation.update, ResourceType.data_connector if isinstance(result, DataConnectorUpdate):
-                    authz_change = _AuthzChange()
-                    if result.old.visibility != result.new.visibility:
-                        user = _extract_user_from_args(*func_args, **func_kwargs)
-                        authz_change.extend(await db_repo.authz._update_data_connector_visibility(user, result.new))
-                    if result.old.namespace.id != result.new.namespace.id:
-                        user = _extract_user_from_args(*func_args, **func_kwargs)
-                        authz_change.extend(await db_repo.authz._update_data_connector_namespace(user, result.new))
-                case AuthzOperation.create_link, ResourceType.data_connector if isinstance(
-                    result, DataConnectorToProjectLink
-                ):
-                    user = _extract_user_from_args(*func_args, **func_kwargs)
-                    authz_change = await db_repo.authz._add_data_connector_to_project_link(user, result)
-                case AuthzOperation.delete_link, ResourceType.data_connector if result is None:
-                    # NOTE: This means that the link does not exist in the first place so nothing was deleted
-                    pass
-                case AuthzOperation.delete_link, ResourceType.data_connector if isinstance(
-                    result, DataConnectorToProjectLink
-                ):
-                    user = _extract_user_from_args(*func_args, **func_kwargs)
-                    authz_change = await db_repo.authz._remove_data_connector_to_project_link(user, result)
-                case _:
-                    resource_id: str | ULID | None = "unknown"
-                    if isinstance(result, (Project, Namespace, Group, DataConnector)):
-                        resource_id = result.id
-                    elif isinstance(result, (ProjectUpdate, NamespaceUpdate, GroupUpdate, DataConnectorUpdate)):
-                        resource_id = result.new.id
-                    raise errors.ProgrammingError(
-                        message=f"Encountered an unknown authorization operation {op} on resource {resource} "
-                        f"with ID {resource_id} when updating the authorization database",
-                    )
-            return authz_change
-
         def decorator(
             f: Callable[Concatenate[_WithAuthz, _P], Awaitable[_AuthzChangeFuncResult]],
         ) -> Callable[Concatenate[_WithAuthz, _P], Awaitable[_AuthzChangeFuncResult]]:
+            def _extract_user_from_args(*args: _P.args, **kwargs: _P.kwargs) -> base_models.APIUser:
+                if len(args) == 0:
+                    user_kwarg = kwargs.get("user")
+                    requested_by_kwarg = kwargs.get("requested_by")
+                    if isinstance(user_kwarg, base_models.APIUser) and isinstance(
+                        requested_by_kwarg, base_models.APIUser
+                    ):
+                        raise errors.ProgrammingError(
+                            message="The decorator for authorization database changes found two APIUser parameters in"
+                            " the 'user' and 'requested_by' keyword arguments but expected only one of them to be "
+                            "present."
+                        )
+                    potential_user = user_kwarg if isinstance(user_kwarg, base_models.APIUser) else requested_by_kwarg
+                else:
+                    potential_user = args[0]
+                if not isinstance(potential_user, base_models.APIUser):
+                    raise errors.ProgrammingError(
+                        message="The decorator for authorization database changes could not find APIUser in the "
+                        f"function arguments, the type of the argument that was found is {type(potential_user)}."
+                    )
+                return potential_user
+
+            async def _get_authz_change(
+                db_repo: _WithAuthz,
+                operation: AuthzOperation,
+                resource: ResourceType,
+                result: _AuthzChangeFuncResult,
+                *func_args: _P.args,
+                **func_kwargs: _P.kwargs,
+            ) -> _AuthzChange:
+                authz_change = _AuthzChange()
+                match operation, resource:
+                    case AuthzOperation.create, ResourceType.project if isinstance(result, Project):
+                        authz_change = db_repo.authz._add_project(result)
+                    case AuthzOperation.delete, ResourceType.project if isinstance(result, DeletedProject):
+                        user = _extract_user_from_args(*func_args, **func_kwargs)
+                        authz_change = await db_repo.authz._remove_project(user, result)
+                    case AuthzOperation.delete, ResourceType.project if result is None:
+                        # NOTE: This means that the project does not exist in the first place so nothing was deleted
+                        pass
+                    case AuthzOperation.update, ResourceType.project if isinstance(result, ProjectUpdate):
+                        authz_change = _AuthzChange()
+                        if result.old.visibility != result.new.visibility:
+                            user = _extract_user_from_args(*func_args, **func_kwargs)
+                            authz_change.extend(await db_repo.authz._update_project_visibility(user, result.new))
+                        if result.old.namespace.id != result.new.namespace.id:
+                            user = _extract_user_from_args(*func_args, **func_kwargs)
+                            authz_change.extend(await db_repo.authz._update_project_namespace(user, result.new))
+                    case AuthzOperation.create, ResourceType.group if isinstance(result, Group):
+                        authz_change = db_repo.authz._add_group(result)
+                    case AuthzOperation.delete, ResourceType.group if isinstance(result, DeletedGroup):
+                        user = _extract_user_from_args(*func_args, **func_kwargs)
+                        authz_change = await db_repo.authz._remove_group(user, result)
+                    case AuthzOperation.delete, ResourceType.group if result is None:
+                        # NOTE: This means that the group does not exist in the first place so nothing was deleted
+                        pass
+                    case AuthzOperation.update_or_insert, ResourceType.user if isinstance(result, UserInfoUpdate):
+                        if result.old is None:
+                            authz_change = db_repo.authz._add_user_namespace(result.new.namespace)
+                    case AuthzOperation.delete, ResourceType.user if isinstance(result, DeletedUser):
+                        user = _extract_user_from_args(*func_args, **func_kwargs)
+                        authz_change = await db_repo.authz._remove_user_namespace(result.id)
+                        authz_change.extend(await db_repo.authz._remove_user(user, result))
+                    case AuthzOperation.delete, ResourceType.user if result is None:
+                        # NOTE: This means that the user does not exist in the first place so nothing was deleted
+                        pass
+                    case AuthzOperation.insert_many, ResourceType.user_namespace if isinstance(result, list):
+                        for res in result:
+                            if not isinstance(res, UserInfo):
+                                raise errors.ProgrammingError(
+                                    message="Expected list of UserInfo when generating authorization "
+                                    f"database updates for inserting namespaces but found {type(res)}"
+                                )
+                            authz_change.extend(db_repo.authz._add_user_namespace(res.namespace))
+                    case AuthzOperation.create, ResourceType.data_connector if isinstance(result, DataConnector):
+                        authz_change = db_repo.authz._add_data_connector(result)
+                    case AuthzOperation.delete, ResourceType.data_connector if result is None:
+                        # NOTE: This means that the data connector does not exist so nothing was deleted
+                        pass
+                    case AuthzOperation.delete, ResourceType.data_connector if isinstance(result, DeletedDataConnector):
+                        user = _extract_user_from_args(*func_args, **func_kwargs)
+                        authz_change = await db_repo.authz._remove_data_connector(user, result)
+                    case AuthzOperation.update, ResourceType.data_connector if isinstance(result, DataConnectorUpdate):
+                        authz_change = _AuthzChange()
+                        if result.old.visibility != result.new.visibility:
+                            user = _extract_user_from_args(*func_args, **func_kwargs)
+                            authz_change.extend(await db_repo.authz._update_data_connector_visibility(user, result.new))
+                        if result.old.namespace.id != result.new.namespace.id:
+                            user = _extract_user_from_args(*func_args, **func_kwargs)
+                            authz_change.extend(await db_repo.authz._update_data_connector_namespace(user, result.new))
+                    case AuthzOperation.create_link, ResourceType.data_connector if isinstance(
+                        result, DataConnectorToProjectLink
+                    ):
+                        user = _extract_user_from_args(*func_args, **func_kwargs)
+                        authz_change = await db_repo.authz._add_data_connector_to_project_link(user, result)
+                    case AuthzOperation.delete_link, ResourceType.data_connector if result is None:
+                        # NOTE: This means that the link does not exist in the first place so nothing was deleted
+                        pass
+                    case AuthzOperation.delete_link, ResourceType.data_connector if isinstance(
+                        result, DataConnectorToProjectLink
+                    ):
+                        user = _extract_user_from_args(*func_args, **func_kwargs)
+                        authz_change = await db_repo.authz._remove_data_connector_to_project_link(user, result)
+                    case _:
+                        resource_id: str | ULID | None = "unknown"
+                        if isinstance(result, (Project, Namespace, Group, DataConnector)):
+                            resource_id = result.id
+                        elif isinstance(result, (ProjectUpdate, NamespaceUpdate, GroupUpdate, DataConnectorUpdate)):
+                            resource_id = result.new.id
+                        raise errors.ProgrammingError(
+                            message=f"Encountered an unknown authorization operation {op} on resource {resource} "
+                            f"with ID {resource_id} when updating the authorization database",
+                        )
+                return authz_change
+
             @wraps(f)
             async def decorated_function(
                 db_repo: _WithAuthz, *args: _P.args, **kwargs: _P.kwargs
