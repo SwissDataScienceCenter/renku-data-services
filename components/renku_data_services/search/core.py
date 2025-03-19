@@ -8,6 +8,7 @@ from sanic.log import logger
 
 import renku_data_services.search.apispec as apispec
 import renku_data_services.search.solr_token as st
+from renku_data_services.authz.models import Role
 from renku_data_services.base_models import APIUser
 from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.message_queue.models import Reprovisioning
@@ -150,6 +151,27 @@ async def _list_non_pubic_ids(authz_client: AuthzClient, user_id: str) -> list[s
                 result.append(o.resource_object_id)
 
     logger.debug(f"Found private ids for user '{user_id}': {result}")
+    return result
+
+
+# TODO
+async def _list_role_ids(authz_client: AuthzClient, user_id: str, role: Role) -> list[str]:
+    """Return all ids where the given user has the given role."""
+    relation_name = role.value
+    not_applicable_et: list[EntityType] = [EntityType.user]  # these types don't have the above relation
+    user_ref = SubjectReference(object=ObjectReference(object_type="user", object_id=user_id))
+    result: list[str] = []
+
+    for et in EntityType:
+        if et not in not_applicable_et:
+            req = LookupResourcesRequest(
+                resource_object_type=et.value.lower(), permission=relation_name, subject=user_ref
+            )
+            response = authz_client.LookupResources(req)
+            async for o in response:
+                result.append(o.resource_object_id)
+
+    logger.debug(f"Found ids for user '{user_id}' and role={role}: {result}")
     return result
 
 
