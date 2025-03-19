@@ -90,8 +90,8 @@ def field_exists(field: FieldName) -> SolrToken:
 
 def field_is_any(field: FieldName, value: Nel[SolrToken]) -> SolrToken:
     """Search for any value in the given field."""
-    rest = list(map(lambda v: field_is(field, v), value.to_list()))
-    return SolrToken(" OR ".join(rest))
+    vs = fold_or(value.to_list())
+    return field_is(field, SolrToken(f"({vs})"))
 
 
 def fold_and(tokens: list[SolrToken]) -> SolrToken:
@@ -107,6 +107,21 @@ def fold_or(tokens: list[SolrToken]) -> SolrToken:
 def id_is(id: str) -> SolrToken:
     """Create a solr query part for a given id."""
     return field_is(Fields.id, from_str(id))
+
+
+def id_in(ids: Nel[str]) -> SolrToken:
+    """Create a solr query part that matches any given id."""
+    return field_is_any(Fields.id, ids.map(from_str))
+
+
+def public_or_ids(allowed_ids: list[str]) -> SolrToken:
+    """Create a solr query part selecting public entities or ones with the given ids."""
+    id_nel: Nel[str] | None = Nel.from_list(allowed_ids)
+    match id_nel:
+        case Nel() as nl:
+            return SolrToken(f"({public_only()} OR {id_in(nl)})")
+        case _:
+            return public_only()
 
 
 def created_is(dt: datetime) -> SolrToken:
