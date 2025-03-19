@@ -48,8 +48,7 @@ class Project(BaseProject):
         """Entity tag value for this project object."""
         if self.updated_at is None:
             return None
-        # NOTE: `slug` is the only field from `self.namespace` which is serialized in API responses.
-        return compute_etag_from_fields(self.updated_at, self.namespace.path.first.value)
+        return compute_etag_from_fields(self.updated_at, self.path.serialize())
 
     @property
     def path(self) -> ProjectPath:
