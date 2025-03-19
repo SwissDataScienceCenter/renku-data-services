@@ -34,7 +34,7 @@ from renku_data_services.background_jobs.core import (
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models import APIUser
 from renku_data_services.base_models.core import NamespacePath, Slug
-from renku_data_services.data_connectors.db import DataConnectorProjectLinkRepository, DataConnectorRepository
+from renku_data_services.data_connectors.db import DataConnectorRepository
 from renku_data_services.data_connectors.migration_utils import DataConnectorMigrationTool
 from renku_data_services.db_config import DBConfig
 from renku_data_services.errors import errors
@@ -92,14 +92,9 @@ def get_app_configs(db_instance: DBConfig, authz_instance: AuthzConfig):
             group_repo=group_repo,
             project_repo=project_repo,
         )
-        data_connector_project_link_repo = DataConnectorProjectLinkRepository(
-            session_maker=db_instance.async_session_maker,
-            authz=Authz(authz_instance),
-        )
         data_connector_migration_tool = DataConnectorMigrationTool(
             session_maker=db_instance.async_session_maker,
             data_connector_repo=data_connector_repo,
-            data_connector_project_link_repo=data_connector_project_link_repo,
             project_repo=project_repo,
             authz=Authz(authz_instance),
         )

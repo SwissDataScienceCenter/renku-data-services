@@ -27,7 +27,6 @@ from renku_data_services.data_connectors.core import (
     validate_unsaved_data_connector,
 )
 from renku_data_services.data_connectors.db import (
-    DataConnectorProjectLinkRepository,
     DataConnectorRepository,
     DataConnectorSecretRepository,
 )
@@ -39,7 +38,6 @@ class DataConnectorsBP(CustomBlueprint):
     """Handlers for manipulating data connectors."""
 
     data_connector_repo: DataConnectorRepository
-    data_connector_to_project_link_repo: DataConnectorProjectLinkRepository
     data_connector_secret_repo: DataConnectorSecretRepository
     authenticator: base_models.Authenticator
 
@@ -212,9 +210,7 @@ class DataConnectorsBP(CustomBlueprint):
             user: base_models.APIUser,
             data_connector_id: ULID,
         ) -> JSONResponse:
-            links = await self.data_connector_to_project_link_repo.get_links_from(
-                user=user, data_connector_id=data_connector_id
-            )
+            links = await self.data_connector_repo.get_links_from(user=user, data_connector_id=data_connector_id)
             return validated_json(
                 apispec.DataConnectorToProjectLinksList,
                 [self._dump_data_connector_to_project_link(link) for link in links],
@@ -238,7 +234,7 @@ class DataConnectorsBP(CustomBlueprint):
                 data_connector_id=data_connector_id,
                 project_id=ULID.from_str(body.project_id),
             )
-            link = await self.data_connector_to_project_link_repo.insert_link(user=user, link=unsaved_link)
+            link = await self.data_connector_repo.insert_link(user=user, link=unsaved_link)
             return validated_json(
                 apispec.DataConnectorToProjectLink, self._dump_data_connector_to_project_link(link), status=201
             )
@@ -256,9 +252,7 @@ class DataConnectorsBP(CustomBlueprint):
             data_connector_id: ULID,
             link_id: ULID,
         ) -> HTTPResponse:
-            await self.data_connector_to_project_link_repo.delete_link(
-                user=user, data_connector_id=data_connector_id, link_id=link_id
-            )
+            await self.data_connector_repo.delete_link(user=user, data_connector_id=data_connector_id, link_id=link_id)
             return HTTPResponse(status=204)
 
         return (
@@ -276,7 +270,7 @@ class DataConnectorsBP(CustomBlueprint):
             user: base_models.APIUser,
             project_id: ULID,
         ) -> JSONResponse:
-            links = await self.data_connector_to_project_link_repo.get_links_to(user=user, project_id=project_id)
+            links = await self.data_connector_repo.get_links_to(user=user, project_id=project_id)
             return validated_json(
                 apispec.DataConnectorToProjectLinksList,
                 [self._dump_data_connector_to_project_link(link) for link in links],
@@ -293,7 +287,7 @@ class DataConnectorsBP(CustomBlueprint):
             user: base_models.APIUser,
             project_id: ULID,
         ) -> JSONResponse:
-            link_ids = await self.data_connector_to_project_link_repo.get_inaccessible_links_to_project(
+            link_ids = await self.data_connector_repo.get_inaccessible_links_to_project(
                 user=user, project_id=project_id
             )
             return validated_json(apispec.InaccessibleDataConnectorLinks, {"count": len(link_ids)})

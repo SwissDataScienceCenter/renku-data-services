@@ -458,18 +458,6 @@ class DataConnectorRepository:
                     permissions.change_membership = True
         return permissions
 
-
-class DataConnectorProjectLinkRepository:
-    """Repository for links from data connectors to projects."""
-
-    def __init__(
-        self,
-        session_maker: Callable[..., AsyncSession],
-        authz: Authz,
-    ) -> None:
-        self.session_maker = session_maker
-        self.authz = authz
-
     async def get_links_from(
         self, user: base_models.APIUser, data_connector_id: ULID
     ) -> list[models.DataConnectorToProjectLink]:

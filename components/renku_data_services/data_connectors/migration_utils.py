@@ -14,7 +14,7 @@ from renku_data_services.authz.authz import Authz, ResourceType, Role
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import Slug
 from renku_data_services.data_connectors import models
-from renku_data_services.data_connectors.db import DataConnectorProjectLinkRepository, DataConnectorRepository
+from renku_data_services.data_connectors.db import DataConnectorRepository
 from renku_data_services.namespace.models import NamespaceKind
 from renku_data_services.project import models as projects_models
 from renku_data_services.project import orm as projects_schemas
@@ -30,13 +30,11 @@ class DataConnectorMigrationTool:
         self,
         session_maker: Callable[..., AsyncSession],
         data_connector_repo: DataConnectorRepository,
-        data_connector_project_link_repo: DataConnectorProjectLinkRepository,
         project_repo: ProjectRepository,
         authz: Authz,
     ) -> None:
         self.session_maker = session_maker
         self.data_connector_repo = data_connector_repo
-        self.data_connector_project_link_repo = data_connector_project_link_repo
         self.project_repo = project_repo
         self.authz = authz
 
@@ -78,7 +76,7 @@ class DataConnectorMigrationTool:
             data_connector_id=data_connector.id,
             project_id=project_id,
         )
-        await self.data_connector_project_link_repo.insert_link(user=data_connector_owner, link=unsaved_link)
+        await self.data_connector_repo.insert_link(user=data_connector_owner, link=unsaved_link)
 
         # Remove the storage_v2 from the database
         await self._delete_storage_v2(requested_by=requested_by, storage_id=storage.storage_id)

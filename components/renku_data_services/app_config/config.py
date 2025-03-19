@@ -50,7 +50,6 @@ from renku_data_services.data_api.server_options import (
     generate_default_resource_pool,
 )
 from renku_data_services.data_connectors.db import (
-    DataConnectorProjectLinkRepository,
     DataConnectorRepository,
     DataConnectorSecretRepository,
 )
@@ -292,9 +291,6 @@ class Config:
     _git_repositories_repo: GitRepositoriesRepository | None = field(default=None, repr=False, init=False)
     _platform_repo: PlatformRepository | None = field(default=None, repr=False, init=False)
     _data_connector_repo: DataConnectorRepository | None = field(default=None, repr=False, init=False)
-    _data_connector_to_project_link_repo: DataConnectorProjectLinkRepository | None = field(
-        default=None, repr=False, init=False
-    )
     _data_connector_secret_repo: DataConnectorSecretRepository | None = field(default=None, repr=False, init=False)
 
     @staticmethod
@@ -546,15 +542,6 @@ class Config:
                 group_repo=self.group_repo,
             )
         return self._data_connector_repo
-
-    @property
-    def data_connector_to_project_link_repo(self) -> DataConnectorProjectLinkRepository:
-        """The DB adapter for data connector to project links."""
-        if not self._data_connector_to_project_link_repo:
-            self._data_connector_to_project_link_repo = DataConnectorProjectLinkRepository(
-                session_maker=self.db.async_session_maker, authz=self.authz
-            )
-        return self._data_connector_to_project_link_repo
 
     @property
     def data_connector_secret_repo(self) -> DataConnectorSecretRepository:
