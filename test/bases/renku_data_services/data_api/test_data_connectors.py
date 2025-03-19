@@ -1974,13 +1974,14 @@ async def test_move_data_connector(
     assert len(response.json) == 1
     assert response.json[0]["data_connector_id"] == dc_id
 
-    # There is no link to the data connector in the new project
+    # Moving the data connector to the new project creates a link to it automatically
     if isinstance(destination_path, ProjectPath):
         _, response = await sanic_client.get(
             f"/api/data/projects/{destination_id}/data_connector_links", headers=headers
         )
         assert response.status_code == 200, response.text
-        assert len(response.json) == 0
+        assert len(response.json) == 1
+        assert response.json[0]["data_connector_id"] == dc_id
 
     # Check that the number of namespaces is as expected
     _, response = await sanic_client.get(

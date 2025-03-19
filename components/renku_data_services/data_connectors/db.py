@@ -15,7 +15,7 @@ from renku_data_services import base_models, errors
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.authz.models import CheckPermissionItem, Scope
 from renku_data_services.base_api.pagination import PaginationRequest
-from renku_data_services.base_models.core import DataConnectorSlug, ProjectPath, Slug
+from renku_data_services.base_models.core import DataConnectorInProjectPath, DataConnectorSlug, ProjectPath, Slug
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors import orm as schemas
 from renku_data_services.namespace import orm as ns_schemas
@@ -382,6 +382,21 @@ class DataConnectorRepository:
                 new_path,
                 session,
             )
+            if isinstance(new_path, DataConnectorInProjectPath) and old_data_connector.path != new_path:
+                # Moving the data connector into a new project means that we should link it too
+                project = await self.project_repo.get_project_by_namespace_slug(
+                    user,
+                    namespace=new_path.first.value,
+                    slug=new_path.second,
+                )
+                link = models.UnsavedDataConnectorToProjectLink(
+                    data_connector_id=data_connector_id, project_id=project.id
+                )
+                await self.insert_link(
+                    user,
+                    link,
+                    session=session,
+                )
         if patch.description is not None:
             data_connector.description = patch.description if patch.description else None
         if patch.keywords is not None:
