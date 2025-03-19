@@ -59,10 +59,22 @@ def test_field_is_any() -> None:
     v = Nel.of(st.from_visibility(Visibility.PUBLIC), st.from_visibility(Visibility.PRIVATE))
     assert st.field_is_any(FieldName("visibility"), v) == "visibility:(public OR private)"
 
+    v = Nel.of(st.from_str("hello"))
+    assert st.field_is_any(FieldName("name"), v) == "name:hello"
+
 
 def test_id_is() -> None:
     assert st.id_is("id12") == "id:id12"
     assert st.id_is("id:121") == "id:id\\:121"
+
+
+def test_id_in() -> None:
+    assert st.id_in(Nel.of("1", "2", "thre e")) == "id:(1 OR 2 OR thre\\ e)"
+
+
+def test_public_or_ids() -> None:
+    assert st.public_or_ids(["one", "id2"]) == "(visibility:public OR id:(one OR id2))"
+    assert st.public_or_ids(["id1"]) == "(visibility:public OR id:id1)"
 
 
 def test_public_only() -> None:
