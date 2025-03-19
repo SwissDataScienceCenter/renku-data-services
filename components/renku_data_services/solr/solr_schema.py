@@ -1,5 +1,7 @@
 """Schema modification for solr."""
 
+from __future__ import annotations
+
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -153,42 +155,47 @@ class FieldType(SchemaModel, frozen=True):
         return self.model_copy(update={"indexAnalyzer": a})
 
     @classmethod
-    def id(cls, name: TypeName) -> "FieldType":
+    def id(cls, name: TypeName) -> FieldType:
         """Create a field that can be used as a document id."""
         return FieldType(name=name, clazz=FieldTypeClasses.type_str)
 
     @classmethod
-    def text(cls, name: TypeName) -> "FieldType":
+    def text(cls, name: TypeName) -> FieldType:
         """Create a text field type."""
         return FieldType(name=name, clazz=FieldTypeClasses.type_text)
 
     @classmethod
-    def str(cls, name: TypeName) -> "FieldType":
+    def str(cls, name: TypeName) -> FieldType:
         """Create a StrField field type."""
         return FieldType(name=name, clazz=FieldTypeClasses.type_str)
 
     @classmethod
-    def int(cls, name: TypeName) -> "FieldType":
+    def int(cls, name: TypeName) -> FieldType:
         """Create an IntPointField field type."""
         return FieldType(name=name, clazz=FieldTypeClasses.type_int)
 
     @classmethod
-    def long(cls, name: TypeName) -> "FieldType":
+    def long(cls, name: TypeName) -> FieldType:
         """Create a LongPointField field type."""
         return FieldType(name=name, clazz=FieldTypeClasses.type_long)
 
     @classmethod
-    def double(cls, name: TypeName) -> "FieldType":
+    def boolean(cls, name: TypeName) -> FieldType:
+        """Create a boolean field type."""
+        return FieldType(name=name, clazz=FieldTypeClasses.type_bool)
+
+    @classmethod
+    def double(cls, name: TypeName) -> FieldType:
         """Create a DoublePointField field type."""
         return FieldType(name=name, clazz=FieldTypeClasses.type_double)
 
     @classmethod
-    def date_time(cls, name: TypeName) -> "FieldType":
+    def date_time(cls, name: TypeName) -> FieldType:
         """Create a DateRange field type."""
         return FieldType(name=name, clazz=FieldTypeClasses.type_date_range)
 
     @classmethod
-    def date_time_point(cls, name: TypeName) -> "FieldType":
+    def date_time_point(cls, name: TypeName) -> FieldType:
         """Create a DatePoint field type."""
         return FieldType(name=name, clazz=FieldTypeClasses.type_date_point)
 
@@ -207,7 +214,7 @@ class Field(SchemaModel, frozen=True):
     docValues: bool = True
 
     @classmethod
-    def of(cls, name: FieldName, type: FieldType) -> "Field":
+    def of(cls, name: FieldName, type: FieldType) -> Field:
         """Alternative constructor given a `FieldType` instead of a `TypeName`."""
         return Field(name=name, type=type.name)
 
