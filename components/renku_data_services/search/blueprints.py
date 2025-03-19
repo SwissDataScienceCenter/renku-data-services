@@ -92,7 +92,7 @@ class SearchBP(CustomBlueprint):
             per_page = query.per_page
             offset = (query.page - 1) * per_page
             uq = QueryParser.parse(query.q)
-            result = await core.query(self.solr_config, uq, user, per_page, offset)
+            result = await core.query(self.authz.client, self.solr_config, uq, user, per_page, offset)
             return json(result.model_dump(by_alias=True, exclude_none=True, mode="json"))
 
         return "/search/query", ["GET"], _query
