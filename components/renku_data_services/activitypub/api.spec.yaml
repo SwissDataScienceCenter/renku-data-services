@@ -73,6 +73,37 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /ap/projects/{project_id}/followers/{follower_uri}:
+    delete:
+      summary: Remove a follower from a project
+      description: Removes a follower from a project's followers list
+      operationId: removeProjectFollower
+      tags:
+        - ActivityPub
+      parameters:
+        - name: project_id
+          in: path
+          description: ID of the project
+          required: true
+          schema:
+            type: string
+            format: ulid
+        - name: follower_uri
+          in: path
+          description: URI of the follower to remove
+          required: true
+          schema:
+            type: string
+            format: uri
+      responses:
+        '204':
+          description: Follower removed successfully
+        '404':
+          description: Project or follower not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /ap/projects/{project_id}/inbox:
     post:
       summary: Receive an ActivityPub activity for a project

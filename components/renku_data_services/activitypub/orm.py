@@ -55,6 +55,8 @@ class ActivityPubActorORM(BaseORM):
 
     # Relationships
     followers: Mapped[list["ActivityPubFollowerORM"]] = relationship(
+        "ActivityPubFollowerORM",
+        primaryjoin="ActivityPubActorORM.id == ActivityPubFollowerORM.actor_id",
         back_populates="actor",
         cascade="all, delete-orphan",
         lazy="selectin",
@@ -92,7 +94,7 @@ class ActivityPubFollowerORM(BaseORM):
         "id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False
     )
     actor_id: Mapped[ULID] = mapped_column(
-        "actor_id", ForeignKey(ActivityPubActorORM.id, ondelete="CASCADE"), nullable=False
+        "actor_id", ULIDType, ForeignKey(ActivityPubActorORM.id, ondelete="CASCADE"), nullable=False
     )
     follower_actor_uri: Mapped[str] = mapped_column("follower_actor_uri", String(2048), nullable=False)
     accepted: Mapped[bool] = mapped_column("accepted", Boolean, nullable=False, default=False)
@@ -105,6 +107,8 @@ class ActivityPubFollowerORM(BaseORM):
 
     # Relationships
     actor: Mapped[ActivityPubActorORM] = relationship(
+        ActivityPubActorORM,
+        primaryjoin="ActivityPubActorORM.id == ActivityPubFollowerORM.actor_id",
         back_populates="followers",
         lazy="selectin",
         repr=False,

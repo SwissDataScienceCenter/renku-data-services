@@ -2,6 +2,7 @@
 
 import json
 import logging
+import urllib.parse
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urlparse
@@ -66,6 +67,30 @@ class ActivityPubBP(CustomBlueprint):
 
         return "/ap/projects/<project_id:ulid>/followers", ["GET"], _get_project_followers
 
+    def remove_project_follower(self) -> BlueprintFactoryResponse:
+        """Remove a follower from a project."""
+
+        @authenticate(self.authenticator)
+        async def _remove_project_follower(
+            request: Request, user: base_models.APIUser, project_id: ULID, follower_uri: str
+        ) -> JSONResponse:
+            try:
+                # URL-decode the follower_uri
+                follower_uri = urllib.parse.unquote(follower_uri)
+
+                # Remove the follower
+                await self.activitypub_service.handle_unfollow(user=user, project_id=project_id, follower_actor_uri=follower_uri)
+
+                # Return a 204 No Content response
+                return JSONResponse(None, status=204)
+            except errors.MissingResourceError as e:
+                return JSONResponse(
+                    {"error": "not_found", "message": str(e)},
+                    status=404,
+                )
+
+        return "/ap/projects/<project_id:ulid>/followers/<follower_uri:path>", ["DELETE"], _remove_project_follower
+
     def project_inbox(self) -> BlueprintFactoryResponse:
         """Receive an ActivityPub activity for a project."""
 
@@ -90,13 +115,20 @@ class ActivityPubBP(CustomBlueprint):
                             status=400,
                         )
 
-                    # Handle the follow request
-                    # Note: We're using an admin user here because we need to access the project regardless of permissions
-                    admin_user = base_models.APIUser(id=None, is_admin=True)
-                    await self.activitypub_service.handle_follow(
-                        user=admin_user, project_id=project_id, follower_actor_uri=actor_uri
-                    )
-                    return HTTPResponse(status=200)
+                    try:
+                        # Handle the follow request
+                        # Note: We're using an admin user here because we need to access the project regardless of permissions
+                        admin_user = base_models.APIUser(id=None, is_admin=True)
+                        await self.activitypub_service.handle_follow(
+                            user=admin_user, project_id=project_id, follower_actor_uri=actor_uri
+                        )
+                        return HTTPResponse(status=200)
+                    except Exception as e:
+                        logger.exception(f"Error handling follow activity: {e}")
+                        return JSONResponse(
+                            {"error": "internal_error", "message": f"Error handling follow: {str(e)}"},
+                            status=500,
+                        )
                 elif activity_type == models.ActivityType.UNDO:
                     # Check if the object is a Follow activity
                     object_json = activity_json.get("object", {})
@@ -109,13 +141,20 @@ class ActivityPubBP(CustomBlueprint):
                                 status=400,
                             )
 
-                        # Handle the unfollow request
-                        # Note: We're using an admin user here because we need to access the project regardless of permissions
-                        admin_user = base_models.APIUser(id=None, is_admin=True)
-                        await self.activitypub_service.handle_unfollow(
-                            user=admin_user, project_id=project_id, follower_actor_uri=actor_uri
-                        )
-                        return HTTPResponse(status=200)
+                        try:
+                            # Handle the unfollow request
+                            # Note: We're using an admin user here because we need to access the project regardless of permissions
+                            admin_user = base_models.APIUser(id=None, is_admin=True)
+                            await self.activitypub_service.handle_unfollow(
+                                user=admin_user, project_id=project_id, follower_actor_uri=actor_uri
+                            )
+                            return HTTPResponse(status=200)
+                        except Exception as e:
+                            logger.exception(f"Error handling unfollow activity: {e}")
+                            return JSONResponse(
+                                {"error": "internal_error", "message": f"Error handling unfollow: {str(e)}"},
+                                status=500,
+                            )
 
                 # For other activity types, just acknowledge receipt
                 return HTTPResponse(status=200)
@@ -127,7 +166,7 @@ class ActivityPubBP(CustomBlueprint):
             except Exception as e:
                 logger.exception(f"Error handling activity: {e}")
                 return JSONResponse(
-                    {"error": "internal_error", "message": "An internal error occurred"},
+                    {"error": "internal_error", "message": f"An internal error occurred: {str(e)}"},
                     status=500,
                 )
 
