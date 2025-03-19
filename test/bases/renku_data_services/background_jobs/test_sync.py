@@ -1050,7 +1050,7 @@ async def test_migrate_storages_v2(get_app_configs: Callable[..., tuple[SyncConf
     assert data_connector.storage.target_path == storage_v2.target_path
     assert data_connector.created_by == user.id
 
-    data_connector_project_link_repo = sync_config.data_connector_migration_tool.data_connector_project_link_repo
+    data_connector_project_link_repo = sync_config.data_connector_migration_tool.data_connector_repo
     links = await data_connector_project_link_repo.get_links_to(user=user_api, project_id=project.id)
     assert links is not None
     assert len(links) == 1

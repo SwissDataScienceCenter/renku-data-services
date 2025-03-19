@@ -61,7 +61,7 @@ class DataConnectorRepository:
                 .options(
                     joinedload(schemas.DataConnectorORM.slug)
                     .joinedload(ns_schemas.EntitySlugORM.project)
-                    .selectinload(ProjectORM.slug)
+                    .joinedload(ProjectORM.slug)
                 )
             )
             if namespace:
@@ -99,7 +99,7 @@ class DataConnectorRepository:
                 .options(
                     joinedload(schemas.DataConnectorORM.slug)
                     .joinedload(ns_schemas.EntitySlugORM.project)
-                    .selectinload(ProjectORM.slug)
+                    .joinedload(ProjectORM.slug)
                 )
             )
             data_connector = result.one_or_none()
@@ -323,7 +323,7 @@ class DataConnectorRepository:
             .options(
                 joinedload(schemas.DataConnectorORM.slug)
                 .joinedload(ns_schemas.EntitySlugORM.project)
-                .selectinload(ProjectORM.slug)
+                .joinedload(ProjectORM.slug)
             )
         )
         data_connector = result.one_or_none()
@@ -729,7 +729,7 @@ class DataConnectorSecretRepository:
                 .options(
                     joinedload(schemas.DataConnectorORM.slug)
                     .joinedload(ns_schemas.EntitySlugORM.project)
-                    .selectinload(ProjectORM.slug)
+                    .joinedload(ProjectORM.slug)
                 )
             )
 
