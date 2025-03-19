@@ -1,7 +1,7 @@
 """Model for creating solr lucene queries."""
 
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import NewType
 
 from renku_data_services.authz.models import Visibility
@@ -58,14 +58,23 @@ def from_entity_type(et: EntityType) -> SolrToken:
 
 
 def from_datetime(dt: datetime) -> SolrToken:
-    """Convert the datetime into a solr query value."""
-    return SolrToken(__escape(dt.replace(microsecond=0).isoformat(), ":"))
+    """Convert the datetime into a solr query value.
+
+    Solr uses UTC formatted timestamps, preferring the `Z` suffix
+    indicating UTC timezone.
+
+    https://solr.apache.org/guide/solr/latest/indexing-guide/date-formatting-math.html
+    """
+    dt = dt.astimezone(UTC).replace(microsecond=0)
+    dt_str = dt.isoformat()
+    dt_str = dt_str.replace("+00:00", "Z")  # couldn't find a good way…
+    return SolrToken(__escape(dt_str, ":"))
 
 
 def from_date_range(min: datetime, max: datetime) -> SolrToken:
     """Convert a date range into a solr query value."""
-    start = __escape(min.replace(microsecond=0).isoformat(), ":")
-    end = __escape(max.replace(microsecond=0).isoformat(), ":")
+    start = from_datetime(min)
+    end = from_datetime(max)
     return SolrToken(f"[{start} TO {end}]")
 
 
