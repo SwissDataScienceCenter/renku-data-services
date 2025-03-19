@@ -3,6 +3,7 @@
 import random
 import string
 from collections.abc import AsyncIterator, Callable, Sequence
+from contextlib import suppress
 from typing import TypeVar, cast
 
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -392,11 +393,13 @@ class DataConnectorRepository:
                 link = models.UnsavedDataConnectorToProjectLink(
                     data_connector_id=data_connector_id, project_id=project.id
                 )
-                await self.insert_link(
-                    user,
-                    link,
-                    session=session,
-                )
+                with suppress(errors.ConflictError):
+                    # If there is a conflict error it means the link already exists so we ignore it
+                    await self.insert_link(
+                        user,
+                        link,
+                        session=session,
+                    )
         if patch.description is not None:
             data_connector.description = patch.description if patch.description else None
         if patch.keywords is not None:
