@@ -20,6 +20,7 @@ from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors import orm as schemas
 from renku_data_services.namespace import orm as ns_schemas
 from renku_data_services.namespace.db import GroupRepository
+from renku_data_services.namespace.models import ProjectNamespace
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.models import Project
 from renku_data_services.project.orm import ProjectORM
@@ -651,6 +652,13 @@ class DataConnectorRepository:
         if not allowed_to_write_project:
             raise errors.MissingResourceError(
                 message=f"The project with ID {link_orm.project_id} does not exist or you do not have access to it"
+            )
+
+        dc = await self.get_data_connector(user, data_connector_id)
+        if isinstance(dc.namespace, ProjectNamespace) and dc.namespace.underlying_resource_id == link_orm.project_id:
+            raise errors.ValidationError(
+                message="The data connector link to the owner project cannot be removed,"
+                " you have to first move the data connector elsewhere and then unlink it."
             )
 
         link = link_orm.dump()
