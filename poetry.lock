@@ -993,31 +993,34 @@ pydantic = ["pydantic[email] (>=2.4.2,<3.0.0)"]
 
 [[package]]
 name = "datamodel-code-generator"
-version = "0.24.2"
+version = "0.28.4"
 description = "Datamodel Code Generator"
 optional = false
-python-versions = ">=3.7,<4.0"
+python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "datamodel_code_generator-0.24.2-py3-none-any.whl", hash = "sha256:582c30466def12600d7165c5f624bb63a7e944eeaf8320f282518daf9ccb566c"},
-    {file = "datamodel_code_generator-0.24.2.tar.gz", hash = "sha256:d278c751038c8911efc82856ec549ac1e3e13134567387a4bb5ab7ddc6543162"},
+    {file = "datamodel_code_generator-0.28.4-py3-none-any.whl", hash = "sha256:16a58933e7c2de692c88e0061ba9a7e23009fe298a726cbba027574fff25c9ba"},
+    {file = "datamodel_code_generator-0.28.4.tar.gz", hash = "sha256:ae1056643cf3cdd298ef4b622085158ec7ef1722f6da1c20e7022c942f2e3ebb"},
 ]
 
 [package.dependencies]
-argcomplete = ">=1.10,<4.0"
+argcomplete = ">=2.10.1,<4"
 black = ">=19.10b0"
-genson = ">=1.2.1,<2.0"
-inflect = ">=4.1.0,<6.0"
-isort = ">=4.3.21,<6.0"
-jinja2 = ">=2.10.1,<4.0"
+genson = ">=1.2.1,<2"
+inflect = ">=4.1,<6"
+isort = ">=4.3.21,<7"
+jinja2 = ">=2.10.1,<4"
 packaging = "*"
-pydantic = {version = ">=1.10.0,<2.0.0 || >2.0.0,<2.0.1 || >2.0.1,<2.4.0 || >2.4.0,<3.0", extras = ["email"], markers = "python_version >= \"3.12\" and python_version < \"4.0\""}
+pydantic = ">=1.5"
 pyyaml = ">=6.0.1"
 
 [package.extras]
-debug = ["PySnooper (>=0.4.1,<2.0.0)"]
-http = ["httpx"]
-validation = ["openapi-spec-validator (>=0.2.8,<0.7.0)", "prance (>=0.18.2)"]
+all = ["graphql-core (>=3.2.3)", "httpx (>=0.24.1)", "openapi-spec-validator (>=0.2.8,<0.7)", "prance (>=0.18.2)", "pysnooper (>=0.4.1,<2)", "ruff (>=0.9.10)"]
+debug = ["pysnooper (>=0.4.1,<2)"]
+graphql = ["graphql-core (>=3.2.3)"]
+http = ["httpx (>=0.24.1)"]
+ruff = ["ruff (>=0.9.10)"]
+validation = ["openapi-spec-validator (>=0.2.8,<0.7)", "prance (>=0.18.2)"]
 
 [[package]]
 name = "debugpy"
@@ -3198,7 +3201,6 @@ files = [
 
 [package.dependencies]
 psycopg-binary = {version = "3.2.3", optional = true, markers = "implementation_name != \"pypy\" and extra == \"binary\""}
-typing-extensions = {version = ">=4.6", markers = "python_version < \"3.13\""}
 tzdata = {version = "*", markers = "sys_platform == \"win32\""}
 
 [package.extras]
@@ -4226,9 +4228,6 @@ files = [
     {file = "ruamel.yaml-0.18.6-py3-none-any.whl", hash = "sha256:57b53ba33def16c4f3d807c0ccbc00f8a6081827e81ba2491691b76882d0c636"},
     {file = "ruamel.yaml-0.18.6.tar.gz", hash = "sha256:8b27e6a217e786c6fbe5634d8f3f11bc63e0f80f6a5890f28863d9c45aac311b"},
 ]
-
-[package.dependencies]
-"ruamel.yaml.clib" = {version = ">=0.2.7", markers = "platform_python_implementation == \"CPython\" and python_version < \"3.13\""}
 
 [package.extras]
 docs = ["mercurial (>5.7)", "ryd"]
@@ -5627,5 +5626,5 @@ cffi = ["cffi (>=1.11)"]
 
 [metadata]
 lock-version = "2.1"
-python-versions = "^3.12"
-content-hash = "dd449bd5ce245be1bd2885b0d043890fbf711206b457b92326d83c2344e6925f"
+python-versions = "^3.13"
+content-hash = "330e0ef885800b8976f42637f4d679279e2dc5cde304e6eca9bbb4a2073c4443"
