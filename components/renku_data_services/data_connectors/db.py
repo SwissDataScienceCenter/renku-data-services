@@ -3,6 +3,7 @@
 import random
 import string
 from collections.abc import AsyncIterator, Callable, Sequence
+from contextlib import suppress
 from typing import TypeVar, cast
 
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -15,11 +16,12 @@ from renku_data_services import base_models, errors
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.authz.models import CheckPermissionItem, Scope
 from renku_data_services.base_api.pagination import PaginationRequest
-from renku_data_services.base_models.core import DataConnectorSlug, ProjectPath, Slug
+from renku_data_services.base_models.core import DataConnectorInProjectPath, DataConnectorSlug, ProjectPath, Slug
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors import orm as schemas
 from renku_data_services.namespace import orm as ns_schemas
 from renku_data_services.namespace.db import GroupRepository
+from renku_data_services.namespace.models import ProjectNamespace
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.models import Project
 from renku_data_services.project.orm import ProjectORM
@@ -60,7 +62,7 @@ class DataConnectorRepository:
                 .options(
                     joinedload(schemas.DataConnectorORM.slug)
                     .joinedload(ns_schemas.EntitySlugORM.project)
-                    .selectinload(ProjectORM.slug)
+                    .joinedload(ProjectORM.slug)
                 )
             )
             if namespace:
@@ -98,7 +100,7 @@ class DataConnectorRepository:
                 .options(
                     joinedload(schemas.DataConnectorORM.slug)
                     .joinedload(ns_schemas.EntitySlugORM.project)
-                    .selectinload(ProjectORM.slug)
+                    .joinedload(ProjectORM.slug)
                 )
             )
             data_connector = result.one_or_none()
@@ -322,7 +324,7 @@ class DataConnectorRepository:
             .options(
                 joinedload(schemas.DataConnectorORM.slug)
                 .joinedload(ns_schemas.EntitySlugORM.project)
-                .selectinload(ProjectORM.slug)
+                .joinedload(ProjectORM.slug)
             )
         )
         data_connector = result.one_or_none()
@@ -381,6 +383,23 @@ class DataConnectorRepository:
                 new_path,
                 session,
             )
+            if isinstance(new_path, DataConnectorInProjectPath) and old_data_connector.path != new_path:
+                # Moving the data connector into a new project means that we should link it too
+                project = await self.project_repo.get_project_by_namespace_slug(
+                    user,
+                    namespace=new_path.first.value,
+                    slug=new_path.second,
+                )
+                link = models.UnsavedDataConnectorToProjectLink(
+                    data_connector_id=data_connector_id, project_id=project.id
+                )
+                with suppress(errors.ConflictError):
+                    # If there is a conflict error it means the link already exists so we ignore it
+                    await self.insert_link(
+                        user,
+                        link,
+                        session=session,
+                    )
         if patch.description is not None:
             data_connector.description = patch.description if patch.description else None
         if patch.keywords is not None:
@@ -457,18 +476,6 @@ class DataConnectorRepository:
                 case Scope.CHANGE_MEMBERSHIP:
                     permissions.change_membership = True
         return permissions
-
-
-class DataConnectorProjectLinkRepository:
-    """Repository for links from data connectors to projects."""
-
-    def __init__(
-        self,
-        session_maker: Callable[..., AsyncSession],
-        authz: Authz,
-    ) -> None:
-        self.session_maker = session_maker
-        self.authz = authz
 
     async def get_links_from(
         self, user: base_models.APIUser, data_connector_id: ULID
@@ -665,6 +672,13 @@ class DataConnectorProjectLinkRepository:
                 message=f"The project with ID {link_orm.project_id} does not exist or you do not have access to it"
             )
 
+        dc = await self.get_data_connector(user, data_connector_id)
+        if isinstance(dc.namespace, ProjectNamespace) and dc.namespace.underlying_resource_id == link_orm.project_id:
+            raise errors.ValidationError(
+                message="The data connector link to the owner project cannot be removed,"
+                " you have to first move the data connector elsewhere and then unlink it."
+            )
+
         link = link_orm.dump()
         await session.delete(link_orm)
         return link
@@ -718,7 +732,7 @@ class DataConnectorSecretRepository:
                 .options(
                     joinedload(schemas.DataConnectorORM.slug)
                     .joinedload(ns_schemas.EntitySlugORM.project)
-                    .selectinload(ProjectORM.slug)
+                    .joinedload(ProjectORM.slug)
                 )
             )
 

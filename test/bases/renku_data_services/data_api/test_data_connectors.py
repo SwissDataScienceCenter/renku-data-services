@@ -1,8 +1,34 @@
+from dataclasses import dataclass
+from typing import Any, cast
+
 import pytest
+from httpx import Response
 from sanic_testing.testing import SanicASGITestClient
 
+from renku_data_services.authz.models import Visibility
+from renku_data_services.base_models.core import NamespacePath, ProjectPath
+from renku_data_services.namespace.models import NamespaceKind
 from renku_data_services.users.models import UserInfo
 from test.bases.renku_data_services.data_api.utils import merge_headers
+
+
+async def create_data_connector(
+    sanic_client: SanicASGITestClient, headers: dict[str, Any], namespace: str, slug: str, private: bool
+) -> Response:
+    storage_config = {
+        "configuration": {"type": "s3", "endpoint": "http://s3.aws.com"},
+        "source_path": "giab",
+        "target_path": "giab",
+    }
+    payload = {
+        "name": slug,
+        "namespace": namespace,
+        "slug": slug,
+        "storage": storage_config,
+        "visibility": "private" if private else "public",
+    }
+    _, response = await sanic_client.post("/api/data/data_connectors", headers=headers, json=payload)
+    return cast(Response, response)
 
 
 @pytest.mark.asyncio
@@ -1663,55 +1689,316 @@ async def test_number_of_inaccessible_data_connector_links_in_project(
     assert len(response.json) == 1
 
 
-@pytest.mark.asyncio
-async def test_move_data_connector_in_project(
-    sanic_client,
-    member_1_user: UserInfo,
-    member_1_headers,
-    regular_user: UserInfo,
-    user_headers,
-) -> None:
-    # Create a public project
-    payload = {
-        "name": "prj1",
-        "namespace": member_1_user.namespace.path.serialize(),
-        "slug": "prj1",
-        "visibility": "public",
-    }
-    _, response = await sanic_client.post("/api/data/projects", headers=member_1_headers, json=payload)
-    assert response.status_code == 201, response.text
-    project_id = response.json["id"]
+@dataclass
+class DataConnectorTestCase:
+    ns_kind: NamespaceKind
+    visibility: Visibility | None = None
 
-    # Create a private data connector in the project
-    storage_config = {
-        "configuration": {"type": "s3", "endpoint": "http://s3.aws.com"},
-        "source_path": "giab",
-        "target_path": "giab",
-    }
-    payload = {
-        "name": "dc1",
-        "namespace": member_1_user.namespace.path.serialize(),
-        "slug": "dc1",
-        "storage": storage_config,
-        "visibility": "private",
-    }
-    _, response = await sanic_client.post("/api/data/data_connectors", headers=member_1_headers, json=payload)
+    def __str__(self) -> str:
+        if self.visibility:
+            return f"<{self.ns_kind.value} {self.visibility.value}>"
+        else:
+            return f"<{self.ns_kind.value}>"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "origin,destination,dc_visibility",
+    [
+        # Moving from project namespace
+        (
+            DataConnectorTestCase(NamespaceKind.project, Visibility.PRIVATE),
+            DataConnectorTestCase(NamespaceKind.project, Visibility.PUBLIC),
+            Visibility.PRIVATE,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.project, Visibility.PUBLIC),
+            DataConnectorTestCase(NamespaceKind.project, Visibility.PRIVATE),
+            Visibility.PRIVATE,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.project, Visibility.PRIVATE),
+            DataConnectorTestCase(NamespaceKind.project, Visibility.PUBLIC),
+            Visibility.PUBLIC,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.project, Visibility.PUBLIC),
+            DataConnectorTestCase(NamespaceKind.project, Visibility.PRIVATE),
+            Visibility.PUBLIC,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.project, Visibility.PRIVATE),
+            DataConnectorTestCase(NamespaceKind.group),
+            Visibility.PRIVATE,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.project, Visibility.PUBLIC),
+            DataConnectorTestCase(NamespaceKind.group),
+            Visibility.PRIVATE,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.project, Visibility.PRIVATE),
+            DataConnectorTestCase(NamespaceKind.group),
+            Visibility.PUBLIC,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.project, Visibility.PUBLIC),
+            DataConnectorTestCase(NamespaceKind.group),
+            Visibility.PUBLIC,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.project, Visibility.PRIVATE),
+            DataConnectorTestCase(NamespaceKind.user),
+            Visibility.PRIVATE,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.project, Visibility.PUBLIC),
+            DataConnectorTestCase(NamespaceKind.user),
+            Visibility.PRIVATE,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.project, Visibility.PRIVATE),
+            DataConnectorTestCase(NamespaceKind.user),
+            Visibility.PUBLIC,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.project, Visibility.PUBLIC),
+            DataConnectorTestCase(NamespaceKind.user),
+            Visibility.PUBLIC,
+        ),
+        # Moving from user namespace
+        (
+            DataConnectorTestCase(NamespaceKind.user),
+            DataConnectorTestCase(NamespaceKind.project, Visibility.PRIVATE),
+            Visibility.PUBLIC,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.user),
+            DataConnectorTestCase(NamespaceKind.project, Visibility.PUBLIC),
+            Visibility.PUBLIC,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.user),
+            DataConnectorTestCase(NamespaceKind.project, Visibility.PRIVATE),
+            Visibility.PRIVATE,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.user),
+            DataConnectorTestCase(NamespaceKind.project, Visibility.PUBLIC),
+            Visibility.PRIVATE,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.user),
+            DataConnectorTestCase(NamespaceKind.group),
+            Visibility.PUBLIC,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.user),
+            DataConnectorTestCase(NamespaceKind.group),
+            Visibility.PUBLIC,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.user),
+            DataConnectorTestCase(NamespaceKind.group),
+            Visibility.PRIVATE,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.user),
+            DataConnectorTestCase(NamespaceKind.group),
+            Visibility.PRIVATE,
+        ),
+        # Moving from group namespace
+        (
+            DataConnectorTestCase(NamespaceKind.group),
+            DataConnectorTestCase(NamespaceKind.project, Visibility.PRIVATE),
+            Visibility.PUBLIC,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.group),
+            DataConnectorTestCase(NamespaceKind.project, Visibility.PUBLIC),
+            Visibility.PUBLIC,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.group),
+            DataConnectorTestCase(NamespaceKind.project, Visibility.PRIVATE),
+            Visibility.PRIVATE,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.group),
+            DataConnectorTestCase(NamespaceKind.project, Visibility.PUBLIC),
+            Visibility.PRIVATE,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.group),
+            DataConnectorTestCase(NamespaceKind.group),
+            Visibility.PRIVATE,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.group),
+            DataConnectorTestCase(NamespaceKind.group),
+            Visibility.PRIVATE,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.group),
+            DataConnectorTestCase(NamespaceKind.group),
+            Visibility.PUBLIC,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.group),
+            DataConnectorTestCase(NamespaceKind.group),
+            Visibility.PUBLIC,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.group),
+            DataConnectorTestCase(NamespaceKind.user),
+            Visibility.PRIVATE,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.group),
+            DataConnectorTestCase(NamespaceKind.user),
+            Visibility.PRIVATE,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.group),
+            DataConnectorTestCase(NamespaceKind.user),
+            Visibility.PUBLIC,
+        ),
+        (
+            DataConnectorTestCase(NamespaceKind.group),
+            DataConnectorTestCase(NamespaceKind.user),
+            Visibility.PUBLIC,
+        ),
+    ],
+    ids=lambda x: str(x),
+)
+async def test_move_data_connector(
+    sanic_client: SanicASGITestClient,
+    member_1_user: UserInfo,
+    member_1_headers: dict,
+    origin: DataConnectorTestCase,
+    destination: DataConnectorTestCase,
+    dc_visibility: Visibility,
+) -> None:
+    # Create origin namespace
+    linked_project_id: str | None = None
+    match origin.ns_kind:
+        case NamespaceKind.group:
+            payload = {
+                "name": "origin",
+                "slug": "origin",
+            }
+            _, response = await sanic_client.post("/api/data/groups", headers=member_1_headers, json=payload)
+            assert response.status_code == 201, response.text
+            origin_path = NamespacePath.from_strings(response.json["slug"])
+        case NamespaceKind.user:
+            origin_path = member_1_user.namespace.path
+        case NamespaceKind.project:
+            payload = {
+                "name": "origin",
+                "namespace": member_1_user.namespace.path.serialize(),
+                "slug": "origin",
+                "visibility": "public" if origin.visibility == Visibility.PUBLIC else "private",
+            }
+            _, response = await sanic_client.post("/api/data/projects", headers=member_1_headers, json=payload)
+            assert response.status_code == 201, response.text
+            origin_path = ProjectPath.from_strings(response.json["namespace"], response.json["slug"])
+            linked_project_id = response.json["id"]
+
+    # Create the destination namespace
+    match destination.ns_kind:
+        case NamespaceKind.group:
+            payload = {
+                "name": "destination",
+                "slug": "destination",
+            }
+            _, response = await sanic_client.post("/api/data/groups", headers=member_1_headers, json=payload)
+            assert response.status_code == 201, response.text
+            destination_path = NamespacePath.from_strings(response.json["slug"])
+            destination_id = response.json["id"]
+        case NamespaceKind.user:
+            destination_path = member_1_user.namespace.path
+            destination_id = response.json["id"]
+        case NamespaceKind.project:
+            payload = {
+                "name": "destination",
+                "namespace": member_1_user.namespace.path.serialize(),
+                "slug": "destination",
+                "visibility": "public" if origin.visibility == Visibility.PUBLIC else "private",
+            }
+            _, response = await sanic_client.post("/api/data/projects", headers=member_1_headers, json=payload)
+            assert response.status_code == 201, response.text
+            destination_path = ProjectPath.from_strings(response.json["namespace"], response.json["slug"])
+            destination_id = response.json["id"]
+
+    # Create the data connector
+    response = await create_data_connector(
+        sanic_client, member_1_headers, origin_path.serialize(), "dc1", private=dc_visibility == Visibility.PRIVATE
+    )
     assert response.status_code == 201, response.text
-    assert response.json["namespace"] == member_1_user.namespace.path.serialize()
+    assert response.json["namespace"] == origin_path.serialize()
     dc_id = response.json["id"]
     dc_etag = response.json["etag"]
 
-    # Link the data connector to the project
-    payload = {"project_id": project_id}
+    # Create a project to link the DC to if the origin is not project
+    if not isinstance(origin_path, ProjectPath):
+        payload = {
+            "name": "dc_link_project",
+            "namespace": member_1_user.namespace.path.serialize(),
+            "slug": "dc_link_project",
+            "visibility": "private",
+        }
+        _, response = await sanic_client.post("/api/data/projects", headers=member_1_headers, json=payload)
+        assert response.status_code == 201, response.text
+        linked_project_id = response.json["id"]
+
+    # Link the data connector a project
+    payload = {"project_id": linked_project_id}
     _, response = await sanic_client.post(
         f"/api/data/data_connectors/{dc_id}/project_links", headers=member_1_headers, json=payload
     )
     assert response.status_code == 201, response.text
 
-    # Move the data connector to the project
-    new_dc_namespace = f"{member_1_user.namespace.path.serialize()}/prj1"
-    payload = {"namespace": new_dc_namespace}
+    # Move the data connector
+    payload = {"namespace": destination_path.serialize()}
     headers = merge_headers(member_1_headers, {"If-Match": dc_etag})
     _, response = await sanic_client.patch(f"/api/data/data_connectors/{dc_id}", headers=headers, json=payload)
     assert response.status_code == 200, response.text
-    assert response.json["namespace"] == new_dc_namespace
+    assert response.json["namespace"] == destination_path.serialize()
+    assert response.json["visibility"] == dc_visibility.value
+
+    # Check the data connector link remains unchaged after moving
+    _, response = await sanic_client.get(
+        f"/api/data/projects/{linked_project_id}/data_connector_links", headers=headers
+    )
+    assert response.status_code == 200, response.text
+    assert len(response.json) == 1
+    assert response.json[0]["data_connector_id"] == dc_id
+
+    # Moving the data connector to the new project creates a link to it automatically
+    if isinstance(destination_path, ProjectPath):
+        _, response = await sanic_client.get(
+            f"/api/data/projects/{destination_id}/data_connector_links", headers=headers
+        )
+        assert response.status_code == 200, response.text
+        assert len(response.json) == 1
+        assert response.json[0]["data_connector_id"] == dc_id
+
+    # Check that the number of namespaces is as expected
+    _, response = await sanic_client.get(
+        "/api/data/namespaces", headers=headers, params=dict(kinds=["group", "user", "project"], minimum_role="owner")
+    )
+    assert response.status_code == 200, response.text
+    match origin.ns_kind, destination.ns_kind:
+        case NamespaceKind.group, NamespaceKind.project:
+            # The namespaces are the group, the project, the linked dc project and the user
+            expected_namespaces = 4
+        case NamespaceKind.group, NamespaceKind.group:
+            # The namespaces are the 2 groups, the linked dc project and the user
+            expected_namespaces = 4
+        case NamespaceKind.project, NamespaceKind.user:
+            # There is no new namespaces for linked project or for the destination user namespace
+            expected_namespaces = 2
+        case _:
+            # The user, the source and the destination namespace
+            expected_namespaces = 3
+    assert len(response.json) == expected_namespaces

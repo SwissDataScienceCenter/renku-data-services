@@ -511,7 +511,7 @@ class GroupRepository:
                         .where(schemas.EntitySlugORM.project_id.is_not(None))
                         .where(schemas.EntitySlugORM.slug == prj_slug.value)
                         .where(schemas.EntitySlugORM.data_connector_id.is_(None))
-                        .options(selectinload(schemas.EntitySlugORM.project).selectinload(ProjectORM.slug))
+                        .options(selectinload(schemas.EntitySlugORM.project).joinedload(ProjectORM.slug))
                     )
                     prj = await session.scalar(stmt)
                     if not prj or not prj.project_id:

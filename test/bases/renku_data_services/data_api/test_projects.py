@@ -226,7 +226,7 @@ async def test_project_creation_with_conflicting_slug(sanic_client, user_headers
 
 @pytest.mark.asyncio
 async def test_project_creation_with_duplicate_repositories(sanic_client, user_headers, regular_user) -> None:
-    namespace = regular_user.namespace.slug
+    namespace = regular_user.namespace.path.serialize()
     payload = {
         "name": "My Project",
         "namespace": namespace,
@@ -245,7 +245,7 @@ async def test_project_creation_with_duplicate_repositories(sanic_client, user_h
 
 @pytest.mark.asyncio
 async def test_project_creation_with_invalid_repository(sanic_client, user_headers, regular_user) -> None:
-    namespace = regular_user.namespace.slug
+    namespace = regular_user.namespace.path.serialize()
     payload = {
         "name": "My Project",
         "namespace": namespace,
@@ -1788,14 +1788,14 @@ async def test_migrate_v1_project(
     sanic_client,
     app_config,
     user_headers,
-    regular_user,
+    regular_user: UserInfo,
 ) -> None:
     v1_id = 1122
     v1_project = {
         "project": {
             "name": "New Migrated Project",
             "slug": "new-project-slug",
-            "namespace": regular_user.namespace.slug,
+            "namespace": regular_user.namespace.path.serialize(),
             "description": "Old project for migration",
             "repositories": ["http://old-repository.com"],
             "visibility": "private",
@@ -1819,7 +1819,7 @@ async def test_migrate_v1_project(
     assert migrated_project["name"] == "New Migrated Project"
     assert migrated_project["slug"] == "new-project-slug"
     assert migrated_project["created_by"] == "user"
-    assert migrated_project["namespace"] == regular_user.namespace.slug
+    assert migrated_project["namespace"] == regular_user.namespace.path.serialize()
     assert migrated_project["description"] == "Old project for migration"
     assert migrated_project["visibility"] == "private"
     assert migrated_project["keywords"] == ["old", "project"]
@@ -1832,7 +1832,7 @@ async def test_migrate_v1_project(
     assert migrated_project["name"] == "New Migrated Project"
     assert migrated_project["slug"] == "new-project-slug"
     assert migrated_project["created_by"] == "user"
-    assert migrated_project["namespace"] == regular_user.namespace.slug
+    assert migrated_project["namespace"] == regular_user.namespace.path.serialize()
     assert migrated_project["description"] == "Old project for migration"
     assert migrated_project["visibility"] == "private"
     assert migrated_project["keywords"] == ["old", "project"]
@@ -1844,7 +1844,7 @@ async def test_migrate_v1_project(
     assert migrated_project["name"] == "New Migrated Project"
     assert migrated_project["slug"] == "new-project-slug"
     assert migrated_project["created_by"] == "user"
-    assert migrated_project["namespace"] == regular_user.namespace.slug
+    assert migrated_project["namespace"] == regular_user.namespace.path.serialize()
     assert migrated_project["description"] == "Old project for migration"
     assert migrated_project["visibility"] == "private"
     assert migrated_project["keywords"] == ["old", "project"]

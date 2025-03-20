@@ -1,6 +1,6 @@
 """Migrate authz schema to v6
 
-Revision ID: 483af0d70cf4
+Revision ID: 559b1fc46cfe
 Revises: 71ef5efe740f
 Create Date: 2025-01-22 10:37:40.218992
 
@@ -13,7 +13,7 @@ from renku_data_services.authz.schemas import v6
 
 # revision identifiers, used by Alembic.
 revision = "483af0d70cf4"
-down_revision = "71ef5efe740f"
+down_revision = "559b1fc46cfe"
 branch_labels = None
 depends_on = None
 

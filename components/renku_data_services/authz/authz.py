@@ -599,21 +599,23 @@ class Authz:
                 if len(args) == 0:
                     user_kwarg = kwargs.get("user")
                     requested_by_kwarg = kwargs.get("requested_by")
-                    if isinstance(user_kwarg, base_models.APIUser) and isinstance(requested_by_kwarg, base_models.APIUser):
+                    if isinstance(user_kwarg, base_models.APIUser) and isinstance(
+                        requested_by_kwarg, base_models.APIUser
+                    ):
                         raise errors.ProgrammingError(
-                            message="The decorator for authorization database changes found two APIUser parameters in the "
-                            "'user' and 'requested_by' keyword arguments but expected only one of them to be present."
+                            message="The decorator for authorization database changes found two APIUser parameters in"
+                            " the 'user' and 'requested_by' keyword arguments but expected only one of them to be "
+                            "present."
                         )
                     potential_user = user_kwarg if isinstance(user_kwarg, base_models.APIUser) else requested_by_kwarg
                 else:
                     potential_user = args[0]
                 if not isinstance(potential_user, base_models.APIUser):
                     raise errors.ProgrammingError(
-                        message="The decorator for authorization database changes could not find APIUser in the function "
-                        f"arguments, the type of the argument that was found is {type(potential_user)}."
+                        message="The decorator for authorization database changes could not find APIUser in the "
+                        f"function arguments, the type of the argument that was found is {type(potential_user)}."
                     )
                 return potential_user
-
 
             async def _get_authz_change(
                 db_repo: _WithAuthz,
@@ -670,7 +672,7 @@ class Authz:
                     case AuthzOperation.create, ResourceType.data_connector if isinstance(result, DataConnector):
                         authz_change = db_repo.authz._add_data_connector(result)
                     case AuthzOperation.delete, ResourceType.data_connector if result is None:
-                        # NOTE: This means that the data connector does not exist in the first place so nothing was deleted
+                        # NOTE: This means that the dc does not exist in the first place so nothing was deleted
                         pass
                     case AuthzOperation.delete, ResourceType.data_connector if isinstance(result, DeletedDataConnector):
                         user = _extract_user_from_args(*func_args, **func_kwargs)
