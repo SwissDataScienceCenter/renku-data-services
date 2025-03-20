@@ -3,7 +3,6 @@
 from datetime import UTC, datetime
 
 from authzed.api.v1 import AsyncClient as AuthzClient
-from authzed.api.v1 import LookupResourcesRequest, ObjectReference, SubjectReference
 from sanic.log import logger
 
 import renku_data_services.search.apispec as apispec
@@ -14,19 +13,20 @@ from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.message_queue.models import Reprovisioning
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project.db import ProjectRepository
-from renku_data_services.search import converters
+from renku_data_services.search import authz, converters
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.models import DeleteDoc
 from renku_data_services.search.solr_user_query import (
     AdminRole,
+    AuthAccess,
     Context,
     QueryInterpreter,
     SearchRole,
     SolrUserQuery,
     UserRole,
 )
-from renku_data_services.search.user_query import UserQuery
-from renku_data_services.solr.entity_documents import EntityDocReader, EntityType, Group, Project, User
+from renku_data_services.search.user_query import Nel, UserQuery
+from renku_data_services.solr.entity_documents import EntityDocReader, Group, Project, User
 from renku_data_services.solr.entity_schema import Fields
 from renku_data_services.solr.solr_client import (
     DefaultSolrClient,
@@ -129,52 +129,6 @@ async def update_solr(search_updates_repo: SearchUpdatesRepo, solr_client: SolrC
         logger.info(f"Updated {counter} entries in SOLR")
 
 
-async def _list_non_pubic_ids(authz_client: AuthzClient, user_id: str) -> list[str]:
-    """Find all entity ids the user has read access to.
-
-    For keeping the payload and the subsequent query small, it should
-    return only private entities.
-    """
-
-    relation_name = "non_public_read"
-    not_applicable_et: list[EntityType] = [EntityType.user]  # these types don't have the above relation
-    user_ref = SubjectReference(object=ObjectReference(object_type="user", object_id=user_id))
-    result: list[str] = []
-
-    for et in EntityType:
-        if et not in not_applicable_et:
-            req = LookupResourcesRequest(
-                resource_object_type=et.value.lower(), permission=relation_name, subject=user_ref
-            )
-            response = authz_client.LookupResources(req)
-            async for o in response:
-                result.append(o.resource_object_id)
-
-    logger.debug(f"Found private ids for user '{user_id}': {result}")
-    return result
-
-
-# TODO
-async def _list_role_ids(authz_client: AuthzClient, user_id: str, role: Role) -> list[str]:
-    """Return all ids where the given user has the given role."""
-    relation_name = role.value
-    not_applicable_et: list[EntityType] = [EntityType.user]  # these types don't have the above relation
-    user_ref = SubjectReference(object=ObjectReference(object_type="user", object_id=user_id))
-    result: list[str] = []
-
-    for et in EntityType:
-        if et not in not_applicable_et:
-            req = LookupResourcesRequest(
-                resource_object_type=et.value.lower(), permission=relation_name, subject=user_ref
-            )
-            response = authz_client.LookupResources(req)
-            async for o in response:
-                result.append(o.resource_object_id)
-
-    logger.debug(f"Found ids for user '{user_id}' and role={role}: {result}")
-    return result
-
-
 async def _renku_query(
     authz_client: AuthzClient, ctx: Context, uq: SolrUserQuery, limit: int, offset: int
 ) -> SolrQuery:
@@ -184,7 +138,7 @@ async def _renku_query(
         case AdminRole():
             role_constraint = []
         case UserRole() as u:
-            ids = await _list_non_pubic_ids(authz_client, u.id)
+            ids = await authz.get_non_public_read(authz_client, u.id)
             role_constraint = [st.public_or_ids(ids)]
 
     return (
@@ -226,8 +180,12 @@ async def query(
     if user.is_admin:
         role = AdminRole(user.id or "")
 
-    ctx = Context(datetime.now(), UTC, role)
-    suq = QueryInterpreter.default().run(ctx, query)
+    class RoleAuthAccess(AuthAccess):
+        async def get_role_ids(self, user_id: str, roles: Nel[Role]) -> list[str]:
+            return await authz.get_role_ids(authz_client, user_id, roles)
+
+    ctx = Context(datetime.now(), UTC, role, RoleAuthAccess())
+    suq = await QueryInterpreter.default().run(ctx, query)
     solr_query = await _renku_query(authz_client, ctx, suq, limit, offset)
     logger.info(f"Solr query: {solr_query.to_dict()}")
 

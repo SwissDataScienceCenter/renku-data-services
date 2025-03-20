@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, tzinfo
 from typing import Self
 
 import renku_data_services.search.solr_token as st
+from renku_data_services.authz.models import Role
 from renku_data_services.search.solr_token import SolrToken
 from renku_data_services.search.user_query import (
     Comparison,
@@ -18,6 +19,7 @@ from renku_data_services.search.user_query import (
     KeywordIs,
     NameIs,
     NamespaceIs,
+    Nel,
     OrderBy,
     RoleIs,
     SlugIs,
@@ -71,24 +73,88 @@ class UserRole:
 type SearchRole = AdminRole | UserRole
 
 
+class AuthAccess:
+    """Access authorization information."""
+
+    @abstractmethod
+    async def get_role_ids(self, user_id: str, roles: Nel[Role]) -> list[str]:
+        """Return resource ids for which the given user has the given role."""
+        ...
+
+    @classmethod
+    def none(cls) -> AuthAccess:
+        """An implementation returning no access."""
+        return _NoAuthAccess()
+
+
+class _NoAuthAccess(AuthAccess):
+    async def get_role_ids(self, user_id: str, roles: Nel[Role]) -> list[str]:
+        return []
+
+
 @dataclass
 class Context:
     """Contextual information available at search time that can be used to create the query."""
 
     current_time: datetime
     zone: tzinfo
-    role: SearchRole | None = None
+    role: SearchRole | None
+    auth_access: AuthAccess = field(default_factory=AuthAccess.none)
 
     def with_role(self, role: SearchRole) -> Context:
         """Return a copy wit the given role set."""
-        return Context(self.current_time, self.zone, role)
+        return self if self.role == role else Context(self.current_time, self.zone, role)
+
+    def with_user_role(self, user_id: str) -> Context:
+        """Return a copy with the given user id as user role set."""
+        return self if self.role == UserRole(user_id) else Context(self.current_time, self.zone, UserRole(user_id))
+
+    def with_admin_role(self, user_id: str) -> Context:
+        """Return a copy with the given user id as admin role set."""
+        return self if self.role == AdminRole(user_id) else Context(self.current_time, self.zone, AdminRole(user_id))
+
+    def with_anonymous(self) -> Context:
+        """Return a copy with no search role set."""
+        return self if self.role is None else Context(self.current_time, self.zone, None)
+
+    def with_auth_access(self, aa: AuthAccess) -> Context:
+        """Return a copy with the given AuthAccess set."""
+        return Context(self.current_time, self.zone, self.role, aa)
+
+    async def get_ids_for_roles(self, roles: Nel[Role]) -> list[str] | None:
+        """Return a list of ids the user has one of the given roles.
+
+        Return None when anonymous.
+        """
+        match self.role:
+            case UserRole() as r:
+                return await self.auth_access.get_role_ids(r.id, roles)
+            case AdminRole() as r:
+                return await self.auth_access.get_role_ids(r.id, roles)
+            case _:
+                return None
+
+    @classmethod
+    def for_anonymous(cls, current_time: datetime, zone: tzinfo) -> Context:
+        """Creates a Context for interpreting a query as anonymous user."""
+        return Context(current_time, zone, None)
+
+    @classmethod
+    def for_admin(cls, current_time: datetime, zone: tzinfo, user_id: str) -> Context:
+        """Creates a Context for interpreting a query as an admin."""
+        return Context(current_time, zone, AdminRole(user_id))
+
+    @classmethod
+    def for_user(cls, current_time: datetime, zone: tzinfo, user_id: str) -> Context:
+        """Creates a Context for interpreting a query as a normal user."""
+        return Context(current_time, zone, UserRole(user_id))
 
 
 class QueryInterpreter(ABC):
     """Interpreter for user search queries."""
 
     @abstractmethod
-    def run(self, ctx: Context, q: UserQuery) -> SolrUserQuery:
+    async def run(self, ctx: Context, q: UserQuery) -> SolrUserQuery:
         """Convert a user query into a search query."""
         ...
 
@@ -122,7 +188,7 @@ class LuceneQueryInterpreter(QueryInterpreter):
                 return (Fields.creation_date, ob.direction)
 
     @classmethod
-    def _from_term(cls, ctx: Context, term: FieldTerm) -> SolrToken:
+    async def _from_term(cls, ctx: Context, term: FieldTerm) -> SolrToken:
         match term:
             case TypeIs() as t:
                 return st.field_is_any(Fields.entity_type, t.values.map(st.from_entity_type))
@@ -141,7 +207,15 @@ class LuceneQueryInterpreter(QueryInterpreter):
             case CreatedByIs() as t:
                 return st.field_is_any(Fields.created_by, t.values.map(st.from_str))
             case RoleIs() as t:
-                raise Exception("not implemented")
+                ids = await ctx.get_ids_for_roles(t.values)
+                if ids is None:
+                    return st.empty()
+                else:
+                    nel = Nel.from_list(ids)
+                    if nel is None:
+                        return st.id_not_exists()
+                    else:
+                        return st.id_in(nel)
             case Created() as t:
                 tokens: list[SolrToken] = []
                 match t.cmp:
@@ -171,18 +245,24 @@ class LuceneQueryInterpreter(QueryInterpreter):
         return st.content_all(text.value)
 
     @classmethod
-    def _from_segment(cls, ctx: Context, segment: FieldTerm | Text) -> SolrToken:
+    async def _from_segment(cls, ctx: Context, segment: FieldTerm | Text) -> SolrToken:
         match segment:
             case Text() as t:
                 return cls._from_text(t)
             case t:
-                return cls._from_term(ctx, t)
+                return await cls._from_term(ctx, t)
 
-    def run(self, ctx: Context, q: UserQuery) -> SolrUserQuery:
+    async def run(self, ctx: Context, q: UserQuery) -> SolrUserQuery:
         """Convert a user query into a search query."""
         (terms, sort) = q.extract_order()
         sort = sort.fields.to_list() if sort is not None else []
 
         solr_sort = [LuceneQueryInterpreter._to_solr_sort(e) for e in sort]
-        solr_token = [LuceneQueryInterpreter._from_segment(ctx, e) for e in terms]
+        solr_token = []
+        empty = st.empty()
+        for e in terms:
+            t = await LuceneQueryInterpreter._from_segment(ctx, e)
+            if t != empty:
+                solr_token.append(t)
+
         return SolrUserQuery(st.fold_and(solr_token), solr_sort)
