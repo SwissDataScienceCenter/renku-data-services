@@ -231,11 +231,10 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
     )
 
     # ActivityPub configuration
-    # Use the correct base URL for the local development environment
-    base_url = "http://localhost:8000"
+    # Use the base_url and domain from the config
     activitypub_config = ActivityPubConfig(
         domain=config.domain,
-        base_url=f"{base_url}{url_prefix}",  # Use the correct base URL with API prefix
+        base_url=config.base_url,  # Use the base_url from config
         admin_email=config.admin_email,
     )
 
