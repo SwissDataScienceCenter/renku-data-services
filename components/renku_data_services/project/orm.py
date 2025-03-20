@@ -54,7 +54,7 @@ class ProjectORM(BaseORM):
         viewonly=True,
         back_populates="project",
         # NOTE: If the data_connector ID is not null below then multiple joins are possible here
-        # since an entity slug for data connector owned by a project will and an entity slug for a project
+        # since an entity slug for data connector owned by a project and an entity slug for a project
         # will be in the same table.
         primaryjoin="and_(EntitySlugORM.project_id == ProjectORM.id, EntitySlugORM.data_connector_id.is_(None))",
     )

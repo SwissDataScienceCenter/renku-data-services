@@ -238,7 +238,7 @@ class GroupsBP(CustomBlueprint):
         return "/namespaces/<slug:renku_slug>", ["GET"], _get_namespace
 
     def get_namespace_second_level(self) -> BlueprintFactoryResponse:
-        """Get user or group namespace by slug."""
+        """Get project namespaces by slug (i.e. user1/projec2)."""
 
         @authenticate(self.authenticator)
         async def _get_namespace_second_level(
