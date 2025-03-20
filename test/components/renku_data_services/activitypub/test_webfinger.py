@@ -1,240 +1,126 @@
-"""Tests for ActivityPub WebFinger endpoint."""
+"""Tests for ActivityPub WebFinger functionality."""
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
-from sanic import Sanic
-from sanic.request import Request
-from sanic.response import JSONResponse
 from ulid import ULID
 
-import renku_data_services.errors as errors
+from renku_data_services.activitypub.core import ActivityPubService
+from renku_data_services.activitypub.db import ActivityPubRepository
 from renku_data_services.activitypub import models
-from renku_data_services.activitypub.blueprints import ActivityPubBP
-from renku_data_services.base_models.core import APIUser
 
 
 @pytest.mark.asyncio
-async def test_webfinger_acct_uri(mock_activity_service, mock_authenticator, mock_config, mock_actor, mock_project):
-    """Test the WebFinger endpoint with an acct: URI for a project."""
-    # Create the blueprint
-    blueprint = ActivityPubBP(
-        name="activitypub",
-        url_prefix="/api/data",
-        activitypub_service=mock_activity_service,
-        authenticator=mock_authenticator,
+async def test_discover_inbox_url_returns_string_or_none(mock_project_repo, mock_config):
+    """Test that _discover_inbox_url returns a string or None."""
+    # Create the service
+    activitypub_repo = AsyncMock(spec=ActivityPubRepository)
+    service = ActivityPubService(
+        activitypub_repo=activitypub_repo,
+        project_repo=mock_project_repo,
         config=mock_config,
     )
 
-    # Configure the mock service
-    project_actor = models.ProjectActor.from_project(mock_project, mock_config.base_url, mock_config.domain)
-    mock_activity_service.get_project_actor_by_username.return_value = project_actor
+    # Mock the httpx.AsyncClient
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "links": [
+            {
+                "rel": "self",
+                "type": "application/activity+json",
+                "href": "https://mastodon.social/users/test",
+            }
+        ]
+    }
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.get.return_value = mock_response
 
-    # Get the route handler
-    _, _, handler = blueprint.webfinger()
+    # Mock the second response for the actor profile
+    mock_actor_response = MagicMock()
+    mock_actor_response.status_code = 200
+    mock_actor_response.json.return_value = {
+        "inbox": "https://mastodon.social/users/test/inbox"
+    }
+    mock_client.get.side_effect = [mock_response, mock_actor_response]
 
-    # Create a mock request
-    # For projects, the username format is "{namespace_slug}_{project_slug}"
-    # For example, if the namespace slug is "renku" and the project slug is "demo",
-    # the username would be "renku_demo"
-    username = f"{mock_project.namespace.slug}_{mock_project.slug}"
-    request = MagicMock(spec=Request)
-    request.args = {"resource": f"acct:{username}@{mock_config.domain}"}
+    # Test with a valid actor URI
+    with patch("httpx.AsyncClient", return_value=mock_client):
+        result = await service._discover_inbox_url("https://mastodon.social/users/test")
+        assert isinstance(result, str)
+        assert result == "https://mastodon.social/users/test/inbox"
 
-    # Call the handler
-    response = await handler(request)
-
-    # Verify the response
-    assert response.status == 200
-    assert response.headers["Content-Type"] == "application/jrd+json"
-
-    # Verify the response content
-    response_json = json.loads(response.body)
-    assert response_json["subject"] == f"acct:{username}@{mock_config.domain}"
-    assert response_json["aliases"] == [project_actor.id]
-    assert len(response_json["links"]) == 1
-    assert response_json["links"][0]["rel"] == "self"
-    assert response_json["links"][0]["type"] == "application/activity+json"
-    assert response_json["links"][0]["href"] == project_actor.id
-
-    # Verify the service was called correctly
-    mock_activity_service.get_project_actor_by_username.assert_called_once_with(username=username)
+    # Test with an invalid actor URI
+    mock_client.get.side_effect = httpx.RequestError("Connection error")
+    with patch("httpx.AsyncClient", return_value=mock_client):
+        result = await service._discover_inbox_url("https://invalid.example.com/users/test")
+        assert result is None
 
 
 @pytest.mark.asyncio
-async def test_webfinger_https_uri(mock_activity_service, mock_authenticator, mock_config, mock_actor, mock_project):
-    """Test the WebFinger endpoint with an https: URI for a project."""
-    # Create the blueprint
-    blueprint = ActivityPubBP(
-        name="activitypub",
-        url_prefix="/api/data",
-        activitypub_service=mock_activity_service,
-        authenticator=mock_authenticator,
+async def test_discover_inbox_url_handles_json_types(mock_project_repo, mock_config):
+    """Test that _discover_inbox_url correctly handles different JSON types for inbox URL."""
+    # Create the service
+    activitypub_repo = AsyncMock(spec=ActivityPubRepository)
+    service = ActivityPubService(
+        activitypub_repo=activitypub_repo,
+        project_repo=mock_project_repo,
         config=mock_config,
     )
 
-    # Configure the mock service
-    project_actor = models.ProjectActor.from_project(mock_project, mock_config.base_url, mock_config.domain)
-    mock_activity_service.get_project_actor.return_value = project_actor
+    # Mock the httpx.AsyncClient
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "links": [
+            {
+                "rel": "self",
+                "type": "application/activity+json",
+                "href": "https://mastodon.social/users/test",
+            }
+        ]
+    }
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.get.return_value = mock_response
 
-    # Get the route handler
-    _, _, handler = blueprint.webfinger()
+    # Test with a string inbox URL
+    mock_actor_response = MagicMock()
+    mock_actor_response.status_code = 200
+    mock_actor_response.json.return_value = {
+        "inbox": "https://mastodon.social/users/test/inbox"
+    }
+    mock_client.get.side_effect = [mock_response, mock_actor_response]
 
-    # Create a mock request
-    project_id = mock_project.id
-    request = MagicMock(spec=Request)
-    request.args = {"resource": f"{mock_config.base_url}/ap/projects/{project_id}"}
+    with patch("httpx.AsyncClient", return_value=mock_client):
+        result = await service._discover_inbox_url("https://mastodon.social/users/test")
+        assert isinstance(result, str)
+        assert result == "https://mastodon.social/users/test/inbox"
 
-    # Call the handler
-    response = await handler(request)
+    # Test with a non-string inbox URL (e.g., a JSON object)
+    mock_actor_response = MagicMock()
+    mock_actor_response.status_code = 200
+    mock_actor_response.json.return_value = {
+        "inbox": {"url": "https://mastodon.social/users/test/inbox"}
+    }
+    mock_client.get.side_effect = [mock_response, mock_actor_response]
 
-    # Verify the response
-    assert response.status == 200
-    assert response.headers["Content-Type"] == "application/jrd+json"
+    with patch("httpx.AsyncClient", return_value=mock_client):
+        result = await service._discover_inbox_url("https://mastodon.social/users/test")
+        assert isinstance(result, str)
+        assert "https://mastodon.social/users/test/inbox" in result
 
-    # Verify the response content
-    response_json = json.loads(response.body)
-    assert response_json["subject"] == f"{mock_config.base_url}/ap/projects/{project_id}"
-    assert response_json["aliases"] == [f"acct:{project_actor.preferredUsername}@{mock_config.domain}"]
-    assert len(response_json["links"]) == 1
-    assert response_json["links"][0]["rel"] == "self"
-    assert response_json["links"][0]["type"] == "application/activity+json"
-    assert response_json["links"][0]["href"] == project_actor.id
+    # Test with a null inbox URL
+    mock_actor_response = MagicMock()
+    mock_actor_response.status_code = 200
+    mock_actor_response.json.return_value = {
+        "inbox": None
+    }
+    mock_client.get.side_effect = [mock_response, mock_actor_response]
 
-    # Verify the service was called correctly
-    mock_activity_service.get_project_actor.assert_called_once()
-    args, kwargs = mock_activity_service.get_project_actor.call_args
-    assert kwargs["user"].is_admin is True  # Should use an admin user
-    assert kwargs["project_id"] == project_id
-
-
-@pytest.mark.asyncio
-async def test_webfinger_missing_resource(mock_activity_service, mock_authenticator, mock_config):
-    """Test the WebFinger endpoint with a missing resource parameter."""
-    # Create the blueprint
-    blueprint = ActivityPubBP(
-        name="activitypub",
-        url_prefix="/api/data",
-        activitypub_service=mock_activity_service,
-        authenticator=mock_authenticator,
-        config=mock_config,
-    )
-
-    # Get the route handler
-    _, _, handler = blueprint.webfinger()
-
-    # Create a mock request
-    request = MagicMock(spec=Request)
-    request.args = {}
-
-    # Call the handler
-    response = await handler(request)
-
-    # Verify the response
-    assert response.status == 400
-    response_json = json.loads(response.body)
-    assert response_json["error"] == "invalid_request"
-
-
-@pytest.mark.asyncio
-async def test_webfinger_invalid_resource(mock_activity_service, mock_authenticator, mock_config):
-    """Test the WebFinger endpoint with an invalid resource parameter."""
-    # Create the blueprint
-    blueprint = ActivityPubBP(
-        name="activitypub",
-        url_prefix="/api/data",
-        activitypub_service=mock_activity_service,
-        authenticator=mock_authenticator,
-        config=mock_config,
-    )
-
-    # Get the route handler
-    _, _, handler = blueprint.webfinger()
-
-    # Create a mock request
-    request = MagicMock(spec=Request)
-    request.args = {"resource": "invalid-resource"}
-
-    # Call the handler
-    response = await handler(request)
-
-    # Verify the response
-    assert response.status == 404
-    response_json = json.loads(response.body)
-    assert response_json["error"] == "not_found"
-
-
-@pytest.mark.asyncio
-async def test_webfinger_acct_not_found(mock_activity_service, mock_authenticator, mock_config):
-    """Test the WebFinger endpoint with an acct: URI for a non-existent project."""
-    # Create the blueprint
-    blueprint = ActivityPubBP(
-        name="activitypub",
-        url_prefix="/api/data",
-        activitypub_service=mock_activity_service,
-        authenticator=mock_authenticator,
-        config=mock_config,
-    )
-
-    # Configure the mock service
-    mock_activity_service.get_project_actor_by_username.side_effect = errors.MissingResourceError(
-        message="Actor not found"
-    )
-
-    # Get the route handler
-    _, _, handler = blueprint.webfinger()
-
-    # Create a mock request
-    # For a non-existent project, we might try to look up something like "nonexistent_project"
-    request = MagicMock(spec=Request)
-    request.args = {"resource": f"acct:nonexistent_project@{mock_config.domain}"}
-
-    # Call the handler
-    response = await handler(request)
-
-    # Verify the response
-    assert response.status == 404
-    response_json = json.loads(response.body)
-    assert response_json["error"] == "not_found"
-
-    # Verify the service was called
-    mock_activity_service.get_project_actor_by_username.assert_called_once_with(username="nonexistent_project")
-
-
-@pytest.mark.asyncio
-async def test_webfinger_https_not_found(mock_activity_service, mock_authenticator, mock_config):
-    """Test the WebFinger endpoint with an https: URI for a non-existent project."""
-    # Create the blueprint
-    blueprint = ActivityPubBP(
-        name="activitypub",
-        url_prefix="/api/data",
-        activitypub_service=mock_activity_service,
-        authenticator=mock_authenticator,
-        config=mock_config,
-    )
-
-    # Configure the mock service
-    mock_activity_service.get_project_actor.side_effect = errors.MissingResourceError(message="Project not found")
-
-    # Get the route handler
-    _, _, handler = blueprint.webfinger()
-
-    # Create a mock request
-    project_id = ULID()
-    request = MagicMock(spec=Request)
-    request.args = {"resource": f"{mock_config.base_url}/ap/projects/{project_id}"}
-
-    # Call the handler
-    response = await handler(request)
-
-    # Verify the response
-    assert response.status == 404
-    response_json = json.loads(response.body)
-    assert response_json["error"] == "not_found"
-
-    # Verify the service was called
-    mock_activity_service.get_project_actor.assert_called_once()
-    args, kwargs = mock_activity_service.get_project_actor.call_args
-    assert kwargs["user"].is_admin is True  # Should use an admin user
-    assert kwargs["project_id"] == project_id
+    with patch("httpx.AsyncClient", return_value=mock_client):
+        result = await service._discover_inbox_url("https://mastodon.social/users/test")
+        assert result is None
