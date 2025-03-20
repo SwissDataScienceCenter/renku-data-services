@@ -513,7 +513,7 @@ async def patch_session(
         server_name = session.metadata.name
         needs_pull_secret = await requires_image_pull_secret(nb_config, image, internal_gitlab_user)
 
-        if needs_pull_secret and session.spec.imagePullSecrets is not None:
+        if needs_pull_secret:
             image_pull_secret_name = f"{server_name}-image-secret"
 
             # Always create a fresh secret to ensure we have the latest token
