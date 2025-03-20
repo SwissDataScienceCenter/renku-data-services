@@ -1568,6 +1568,18 @@ files = [
 ]
 
 [[package]]
+name = "parsy"
+version = "2.1"
+description = "Easy-to-use parser combinators, for parsing in pure Python"
+optional = false
+python-versions = ">=3.7"
+groups = ["main"]
+files = [
+    {file = "parsy-2.1-py3-none-any.whl", hash = "sha256:8f18e7b11985e7802e7e3ecbd8291c6ca243d29820b1186e4c84605db4efffa0"},
+    {file = "parsy-2.1.tar.gz", hash = "sha256:fd5dd18d7b0b61f8275ee88665f430a20c02cf5a82d88557f35330530186d7ac"},
+]
+
+[[package]]
 name = "pathspec"
 version = "0.12.1"
 description = "Utility library for gitignore style pattern matching of file paths."
@@ -3029,4 +3041,4 @@ h11 = ">=0.9.0,<1"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "a33ce04e1b2e65686c77e8ac0211d3cfeb033fa4ddf6c08d3856c7cfc8185494"
+content-hash = "362f3aeefb39dbc04c6ec9ee4385d175ddac716cb10f3c8f88bd36627f103911"
