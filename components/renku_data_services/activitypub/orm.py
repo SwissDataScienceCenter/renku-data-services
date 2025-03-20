@@ -55,12 +55,10 @@ class ActivityPubActorORM(BaseORM):
 
     # Relationships
     followers: Mapped[list["ActivityPubFollowerORM"]] = relationship(
-        "ActivityPubFollowerORM",
         primaryjoin="ActivityPubActorORM.id == ActivityPubFollowerORM.actor_id",
         back_populates="actor",
         cascade="all, delete-orphan",
         lazy="selectin",
-        repr=False,
         default_factory=list,
     )
 
@@ -107,11 +105,9 @@ class ActivityPubFollowerORM(BaseORM):
 
     # Relationships
     actor: Mapped[ActivityPubActorORM] = relationship(
-        ActivityPubActorORM,
         primaryjoin="ActivityPubActorORM.id == ActivityPubFollowerORM.actor_id",
         back_populates="followers",
         lazy="selectin",
-        repr=False,
         default=None,
     )
 

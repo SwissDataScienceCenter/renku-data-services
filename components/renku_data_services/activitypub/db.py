@@ -259,14 +259,14 @@ class ActivityPubRepository:
 
         # Create the follower using the ORM
         logger.info(f"Creating new follower record for {follower.follower_actor_uri}")
+
         follower_orm = orm.ActivityPubFollowerORM(
-            actor_id=actor_orm.id,
+            actor_id=follower.actor_id,
             follower_actor_uri=follower.follower_actor_uri,
             accepted=follower.accepted,
             actor=actor_orm
         )
 
-        await session.refresh(actor_orm)
         session.add(follower_orm)
         await session.flush()
         await session.refresh(follower_orm)

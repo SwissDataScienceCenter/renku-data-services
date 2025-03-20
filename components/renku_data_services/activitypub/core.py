@@ -501,7 +501,8 @@ class ActivityPubService:
                     return None
 
                 logger.info(f"Discovered inbox URL: {inbox_url}")
-                return inbox_url
+                # Ensure we're returning a string, not Any
+                return str(inbox_url) if inbox_url else None
 
         except Exception as e:
             logger.exception(f"Error discovering inbox URL: {e}")
