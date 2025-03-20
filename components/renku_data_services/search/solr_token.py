@@ -88,6 +88,11 @@ def field_exists(field: FieldName) -> SolrToken:
     return field_is(field, SolrToken("[* TO *]"))
 
 
+def field_not_exists(field: FieldName) -> SolrToken:
+    """Return a query part checking if a field does not exist."""
+    return SolrToken(f"-{field}:[* TO *]")
+
+
 def field_is_any(field: FieldName, value: Nel[SolrToken]) -> SolrToken:
     """Search for any value in the given field."""
     if value.more_values == []:
@@ -115,6 +120,11 @@ def id_is(id: str) -> SolrToken:
 def id_in(ids: Nel[str]) -> SolrToken:
     """Create a solr query part that matches any given id."""
     return field_is_any(Fields.id, ids.map(from_str))
+
+
+def id_not_exists() -> SolrToken:
+    """Create a solr query part matching documents without an id."""
+    return field_not_exists(Fields.id)
 
 
 def public_or_ids(allowed_ids: list[str]) -> SolrToken:
