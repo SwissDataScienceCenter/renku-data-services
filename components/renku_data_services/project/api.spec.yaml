@@ -148,6 +148,34 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - projects
+  /renku_v1_projects/migrations:
+    get:
+      summary: Return list of projects migrated from v1
+      parameters:
+        - in: query
+          description: query parameters
+          name: params
+          style: form
+          explode: true
+          schema:
+            $ref: "#/components/schemas/ProjectMigrationGetQuery"
+      responses:
+        "200":
+          description: List of project migrations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectMigrationList"
+        "404":
+          description: No exist project migration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - projects_migrations
   /renku_v1_projects/{v1_id}/migrations:
     get:
       summary: Check if a v1 project has been migrated to v2
@@ -1011,6 +1039,16 @@ components:
             description: A flag to filter projects where the user is a direct member.
             type: boolean
             default: false
+    ProjectMigrationGetQuery:
+      description: Query params for project migration get request
+      allOf:
+        - $ref: "#/components/schemas/PaginationRequest"
+    ProjectMigrationList:
+      description: A list of project migrations
+      type: array
+      items:
+        $ref: "#/components/schemas/ProjectMigrationInfo"
+      minItems: 0
     ProjectMigrationInfo:
       description: Information if a project is a migrated project
       type: object

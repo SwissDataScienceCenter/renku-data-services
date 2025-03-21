@@ -84,6 +84,29 @@ class ProjectsBP(CustomBlueprint):
 
         return "/projects", ["POST"], _post
 
+    def get_all_migrations(self) -> BlueprintFactoryResponse:
+        """List all project migrations."""
+
+        @authenticate(self.authenticator)
+        @validate_query(query=apispec.ProjectMigrationGetQuery)
+        @paginate
+        async def _get_all_migrations(
+            _: Request,
+            user: base_models.APIUser,
+            pagination: PaginationRequest,
+            query: apispec.ProjectMigrationGetQuery,
+        ) -> tuple[list[dict[str, Any]], int]:
+            project_migrations, total_num = await self.project_migration_repo.get_project_migrations(
+                user=user, pagination=pagination
+            )
+
+            return [
+                validate_and_dump(apispec.ProjectMigrationList, self._dump_project_migration(p))
+                for p in project_migrations
+            ], total_num
+
+        return "/renku_v1_projects/migrations", ["GET"], _get_all_migrations
+
     def get_migration(self) -> BlueprintFactoryResponse:
         """Get project migration by project v1 id."""
 
@@ -368,6 +391,16 @@ class ProjectsBP(CustomBlueprint):
         )
         if with_documentation:
             result = dict(result, documentation=project.documentation)
+        return result
+
+    @staticmethod
+    def _dump_project_migration(project_migration: project_models.ProjectMigrationInfo) -> dict[str, Any]:
+        """Dumps a project migration for API responses."""
+        result = dict(
+            project_id=project_migration.project_id,
+            v1_id=project_migration.v1_id,
+            launcher_id=project_migration.launcher_id,
+        )
         return result
 
 

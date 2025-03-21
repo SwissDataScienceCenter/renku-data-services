@@ -246,3 +246,9 @@ class ProjectMigrationsORM(BaseORM):
 
     launcher_id: Mapped[Optional[ULID]] = mapped_column(ULIDType, nullable=True, default=None)
     """Stores the launcher ID without enforcing a foreign key."""
+
+    def dump(self) -> models.ProjectMigrationInfo:
+        """Create a project model from the ProjectMigrationInfoORM."""
+        return models.ProjectMigrationInfo(
+            project_id=self.project_id, v1_id=self.project_v1_id, launcher_id=self.launcher_id
+        )

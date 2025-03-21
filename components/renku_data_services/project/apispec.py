@@ -249,6 +249,16 @@ class ProjectGetQuery(PaginationRequest):
     )
 
 
+class ProjectMigrationGetQuery(PaginationRequest):
+    pass
+
+
+class ProjectMigrationList(RootModel[List[ProjectMigrationInfo]]):
+    root: List[ProjectMigrationInfo] = Field(
+        ..., description="A list of project migrations", min_length=0
+    )
+
+
 class SessionSecretSlot(BaseAPISpec):
     model_config = ConfigDict(
         extra="forbid",
@@ -378,6 +388,10 @@ class SessionSecretPatchSecretValue(BaseAPISpec):
 
 class ProjectsGetParametersQuery(BaseAPISpec):
     params: Optional[ProjectGetQuery] = None
+
+
+class RenkuV1ProjectsMigrationsGetParametersQuery(BaseAPISpec):
+    params: Optional[ProjectMigrationGetQuery] = None
 
 
 class Project(BaseAPISpec):
