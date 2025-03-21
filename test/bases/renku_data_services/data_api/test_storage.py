@@ -597,7 +597,7 @@ async def test_storage_validate_error_sensitive(storage_test_client) -> None:
 async def test_storage_schema_patches(storage_test_client, snapshot) -> None:
     storage_test_client, _ = storage_test_client
     _, res = await storage_test_client.get("/api/data/storage_schema")
-    assert res.status_code == 200
+    assert res.status_code == 200, res.text
     schema = res.json
     assert not next((e for e in schema if e["prefix"] == "alias"), None)  # prohibited storage
     s3 = next(e for e in schema if e["prefix"] == "s3")
