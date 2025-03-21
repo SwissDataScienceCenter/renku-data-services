@@ -17003,5 +17003,59 @@
         "Aliases": null,
         "Hide": false,
         "MetadataInfo": null
+    },
+    {
+        "Name": "doi",
+        "Description": "DOI datasets",
+        "Prefix": "doi",
+        "Options": [
+            {
+                "Name": "doi",
+                "Help": "The DOI or the doi.org URL.",
+                "Provider": "",
+                "Default": "",
+                "Value": null,
+                "ShortOpt": "",
+                "Hide": 0,
+                "Required": true,
+                "IsPassword": false,
+                "NoPrefix": false,
+                "Advanced": false,
+                "Exclusive": false,
+                "Sensitive": false,
+                "DefaultStr": "",
+                "ValueStr": "",
+                "Type": "string"
+            },
+            {
+                "Name": "provider",
+                "Help": "DOI provider.",
+                "Provider": "",
+                "Default": "",
+                "Value": null,
+                "Examples": [
+                    {
+                        "Value": "Zenodo",
+                        "Help": "Zenodo",
+                        "Provider": ""
+                    }
+                ],
+                "ShortOpt": "",
+                "Hide": 0,
+                "Required": false,
+                "IsPassword": false,
+                "NoPrefix": false,
+                "Advanced": false,
+                "Exclusive": false,
+                "Sensitive": false,
+                "DefaultStr": "",
+                "ValueStr": "",
+                "Type": "string"
+            }
+        ],
+        "CommandHelp": null,
+        "Aliases": null,
+        "Hide": false,
+        "MetadataInfo": null
     }
 ]
