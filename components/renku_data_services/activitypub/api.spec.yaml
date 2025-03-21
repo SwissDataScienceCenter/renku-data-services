@@ -1,0 +1,608 @@
+openapi: 3.0.3
+info:
+  title: Renku ActivityPub API
+  description: API for ActivityPub integration with Renku
+  version: 1.0.0
+  contact:
+    name: Renku Team
+    url: https://renku.ch
+    email: renku@datascience.ch
+servers:
+  - url: /api/data
+    description: Renku Data API
+paths:
+  /ap/projects/{project_id}:
+    get:
+      summary: Get the ActivityPub representation of a project
+      description: Returns the ActivityPub actor representation of a project
+      operationId: getProjectActor
+      tags:
+        - ActivityPub
+      parameters:
+        - name: project_id
+          in: path
+          description: ID of the project
+          required: true
+          schema:
+            type: string
+            format: ulid
+      responses:
+        '200':
+          description: Project actor
+          content:
+            application/activity+json:
+              schema:
+                $ref: '#/components/schemas/Actor'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /ap/projects/{project_id}/followers:
+    get:
+      summary: Get the followers of a project
+      description: Returns the list of followers of a project
+      operationId: getProjectFollowers
+      tags:
+        - ActivityPub
+      parameters:
+        - name: project_id
+          in: path
+          description: ID of the project
+          required: true
+          schema:
+            type: string
+            format: ulid
+      responses:
+        '200':
+          description: Project followers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  followers:
+                    type: array
+                    items:
+                      type: string
+                      format: uri
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /ap/projects/{project_id}/followers/{follower_uri}:
+    delete:
+      summary: Remove a follower from a project
+      description: Removes a follower from a project's followers list
+      operationId: removeProjectFollower
+      tags:
+        - ActivityPub
+      parameters:
+        - name: project_id
+          in: path
+          description: ID of the project
+          required: true
+          schema:
+            type: string
+            format: ulid
+        - name: follower_uri
+          in: path
+          description: URI of the follower to remove
+          required: true
+          schema:
+            type: string
+            format: uri
+      responses:
+        '204':
+          description: Follower removed successfully
+        '404':
+          description: Project or follower not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /ap/projects/{project_id}/inbox:
+    post:
+      summary: Receive an ActivityPub activity for a project
+      description: Endpoint for receiving ActivityPub activities directed at a project
+      operationId: projectInbox
+      tags:
+        - ActivityPub
+      parameters:
+        - name: project_id
+          in: path
+          description: ID of the project
+          required: true
+          schema:
+            type: string
+            format: ulid
+      requestBody:
+        description: ActivityPub activity
+        required: true
+        content:
+          application/activity+json:
+            schema:
+              $ref: '#/components/schemas/Activity'
+      responses:
+        '200':
+          description: Activity accepted
+        '400':
+          description: Invalid activity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /ap/projects/{project_id}/outbox:
+    get:
+      summary: Get the outbox of a project
+      description: Returns the activities published by a project
+      operationId: getProjectOutbox
+      tags:
+        - ActivityPub
+      parameters:
+        - name: project_id
+          in: path
+          description: ID of the project
+          required: true
+          schema:
+            type: string
+            format: ulid
+        - name: page
+          in: query
+          description: Page number
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          description: Number of items per page
+          required: false
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Project outbox
+          content:
+            application/activity+json:
+              schema:
+                $ref: '#/components/schemas/OrderedCollection'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /ap/webfinger:
+    get:
+      summary: WebFinger endpoint
+      description: Endpoint for WebFinger protocol to discover ActivityPub actors
+      operationId: webfinger
+      tags:
+        - ActivityPub
+      parameters:
+        - name: resource
+          in: query
+          description: Resource to look up
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: WebFinger response
+          content:
+            application/jrd+json:
+              schema:
+                $ref: '#/components/schemas/WebFingerResponse'
+        '404':
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /ap/.well-known/host-meta:
+    get:
+      summary: Host metadata
+      description: Endpoint for host metadata
+      operationId: hostMeta
+      tags:
+        - ActivityPub
+      responses:
+        '200':
+          description: Host metadata
+          content:
+            application/xrd+xml:
+              schema:
+                type: string
+  /ap/.well-known/nodeinfo:
+    get:
+      summary: NodeInfo endpoint
+      description: Endpoint for NodeInfo protocol
+      operationId: nodeInfo
+      tags:
+        - ActivityPub
+      responses:
+        '200':
+          description: NodeInfo response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeInfoLinks'
+  /ap/nodeinfo/2.0:
+    get:
+      summary: NodeInfo 2.0 endpoint
+      description: Endpoint for NodeInfo 2.0 protocol
+      operationId: nodeInfo20
+      tags:
+        - ActivityPub
+      responses:
+        '200':
+          description: NodeInfo 2.0 response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeInfo'
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required:
+        - error
+        - message
+    Actor:
+      type: object
+      properties:
+        '@context':
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+          default: ['https://www.w3.org/ns/activitystreams']
+        id:
+          type: string
+          format: uri
+        type:
+          type: string
+          enum: ['Person', 'Service', 'Group', 'Organization', 'Application', 'Project']
+        name:
+          type: string
+        preferredUsername:
+          type: string
+        summary:
+          type: string
+        inbox:
+          type: string
+          format: uri
+        outbox:
+          type: string
+          format: uri
+        followers:
+          type: string
+          format: uri
+        following:
+          type: string
+          format: uri
+        publicKey:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uri
+            owner:
+              type: string
+              format: uri
+            publicKeyPem:
+              type: string
+          required:
+            - id
+            - owner
+            - publicKeyPem
+        url:
+          type: string
+          format: uri
+        published:
+          type: string
+          format: date-time
+        updated:
+          type: string
+          format: date-time
+        keywords:
+          type: array
+          items:
+            type: string
+        repositories:
+          type: array
+          items:
+            type: string
+        visibility:
+          type: string
+          enum: ['public', 'private']
+        documentation:
+          type: string
+      required:
+        - '@context'
+        - id
+        - type
+        - preferredUsername
+        - inbox
+        - outbox
+    Activity:
+      type: object
+      properties:
+        '@context':
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+          default: ['https://www.w3.org/ns/activitystreams']
+        id:
+          type: string
+          format: uri
+        type:
+          type: string
+          enum: ['Create', 'Update', 'Delete', 'Follow', 'Accept', 'Reject', 'Announce', 'Like', 'Undo']
+        actor:
+          oneOf:
+            - type: string
+              format: uri
+            - $ref: '#/components/schemas/Actor'
+        object:
+          oneOf:
+            - type: string
+              format: uri
+            - $ref: '#/components/schemas/Actor'
+            - $ref: '#/components/schemas/Activity'
+            - $ref: '#/components/schemas/Object'
+        to:
+          type: array
+          items:
+            type: string
+            format: uri
+        cc:
+          type: array
+          items:
+            type: string
+            format: uri
+        published:
+          type: string
+          format: date-time
+      required:
+        - '@context'
+        - id
+        - type
+        - actor
+    Object:
+      type: object
+      properties:
+        '@context':
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+          default: ['https://www.w3.org/ns/activitystreams']
+        id:
+          type: string
+          format: uri
+        type:
+          type: string
+          enum: ['Note', 'Article', 'Collection', 'Document', 'Image', 'Video', 'Audio', 'Page', 'Event', 'Place', 'Profile', 'Tombstone']
+        name:
+          type: string
+        content:
+          type: string
+        attributedTo:
+          oneOf:
+            - type: string
+              format: uri
+            - $ref: '#/components/schemas/Actor'
+        to:
+          type: array
+          items:
+            type: string
+            format: uri
+        cc:
+          type: array
+          items:
+            type: string
+            format: uri
+        published:
+          type: string
+          format: date-time
+        updated:
+          type: string
+          format: date-time
+      required:
+        - '@context'
+        - id
+        - type
+    OrderedCollection:
+      type: object
+      properties:
+        '@context':
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+          default: ['https://www.w3.org/ns/activitystreams']
+        id:
+          type: string
+          format: uri
+        type:
+          type: string
+          enum: ['OrderedCollection']
+        totalItems:
+          type: integer
+        first:
+          type: string
+          format: uri
+        last:
+          type: string
+          format: uri
+      required:
+        - '@context'
+        - id
+        - type
+        - totalItems
+    OrderedCollectionPage:
+      type: object
+      properties:
+        '@context':
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+          default: ['https://www.w3.org/ns/activitystreams']
+        id:
+          type: string
+          format: uri
+        type:
+          type: string
+          enum: ['OrderedCollectionPage']
+        totalItems:
+          type: integer
+        orderedItems:
+          type: array
+          items:
+            oneOf:
+              - $ref: '#/components/schemas/Activity'
+              - $ref: '#/components/schemas/Object'
+        next:
+          type: string
+          format: uri
+        prev:
+          type: string
+          format: uri
+        partOf:
+          type: string
+          format: uri
+      required:
+        - '@context'
+        - id
+        - type
+        - orderedItems
+    WebFingerResponse:
+      type: object
+      properties:
+        subject:
+          type: string
+        aliases:
+          type: array
+          items:
+            type: string
+        links:
+          type: array
+          items:
+            type: object
+            properties:
+              rel:
+                type: string
+              type:
+                type: string
+              href:
+                type: string
+                format: uri
+              template:
+                type: string
+            required:
+              - rel
+      required:
+        - subject
+        - links
+    NodeInfoLinks:
+      type: object
+      properties:
+        links:
+          type: array
+          items:
+            type: object
+            properties:
+              rel:
+                type: string
+              href:
+                type: string
+                format: uri
+            required:
+              - rel
+              - href
+      required:
+        - links
+    NodeInfo:
+      type: object
+      properties:
+        version:
+          type: string
+          enum: ['2.0']
+        software:
+          type: object
+          properties:
+            name:
+              type: string
+            version:
+              type: string
+          required:
+            - name
+            - version
+        protocols:
+          type: array
+          items:
+            type: string
+          default: ['activitypub']
+        services:
+          type: object
+          properties:
+            inbound:
+              type: array
+              items:
+                type: string
+            outbound:
+              type: array
+              items:
+                type: string
+          required:
+            - inbound
+            - outbound
+        usage:
+          type: object
+          properties:
+            users:
+              type: object
+              properties:
+                total:
+                  type: integer
+              required:
+                - total
+            localPosts:
+              type: integer
+          required:
+            - users
+        openRegistrations:
+          type: boolean
+        metadata:
+          type: object
+      required:
+        - version
+        - software
+        - protocols
+        - services
+        - usage
+        - openRegistrations
