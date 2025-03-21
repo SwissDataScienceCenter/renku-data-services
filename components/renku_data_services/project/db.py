@@ -935,7 +935,7 @@ class ProjectMigrationRepository:
 
         async with self.session_maker() as session:
             stmt = select(schemas.ProjectMigrationsORM)
-            stmt = stmt.where(schemas.ProjectMigrationsORM.id.in_(project_ids))
+            stmt = stmt.where(schemas.ProjectMigrationsORM.project_id.in_(project_ids))
 
             stmt = stmt.order_by(coalesce(schemas.ProjectMigrationsORM.id).desc())
 
