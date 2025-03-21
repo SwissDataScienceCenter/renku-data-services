@@ -13924,6 +13924,44 @@
       'prefix': 'zoho',
     }),
     dict({
+      'description': 'DOI datasets',
+      'name': 'doi',
+      'options': list([
+        dict({
+          'advanced': False,
+          'default': '',
+          'default_str': '',
+          'exclusive': False,
+          'help': 'The DOI or the doi.org URL.',
+          'name': 'doi',
+          'provider': '',
+          'required': True,
+          'sensitive': False,
+          'type': 'string',
+        }),
+        dict({
+          'advanced': False,
+          'default': '',
+          'default_str': '',
+          'examples': list([
+            dict({
+              'help': 'Zenodo',
+              'provider': '',
+              'value': 'Zenodo',
+            }),
+          ]),
+          'exclusive': False,
+          'help': 'DOI provider.',
+          'name': 'provider',
+          'provider': '',
+          'required': False,
+          'sensitive': False,
+          'type': 'string',
+        }),
+      ]),
+      'prefix': 'doi',
+    }),
+    dict({
       'description': 'Polybox',
       'name': 'PolyBox',
       'options': list([
