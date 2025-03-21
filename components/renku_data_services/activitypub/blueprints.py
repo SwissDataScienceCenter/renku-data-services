@@ -94,7 +94,8 @@ class ActivityPubBP(CustomBlueprint):
     def project_inbox(self) -> BlueprintFactoryResponse:
         """Receive an ActivityPub activity for a project."""
 
-        async def _project_inbox(request: Request, project_id: ULID) -> HTTPResponse:
+        @authenticate(self.authenticator)
+        async def _project_inbox(request: Request, user: base_models.APIUser, project_id: ULID) -> HTTPResponse:
             try:
                 # Parse the activity
                 activity_json = request.json
@@ -117,10 +118,8 @@ class ActivityPubBP(CustomBlueprint):
 
                     try:
                         # Handle the follow request
-                        # Note: We're using an admin user here because we need to access the project regardless of permissions
-                        admin_user = base_models.APIUser(id=None, is_admin=True)
                         await self.activitypub_service.handle_follow(
-                            user=admin_user, project_id=project_id, follower_actor_uri=actor_uri
+                            user=user, project_id=project_id, follower_actor_uri=actor_uri
                         )
                         return HTTPResponse(status=200)
                     except Exception as e:
@@ -143,10 +142,8 @@ class ActivityPubBP(CustomBlueprint):
 
                         try:
                             # Handle the unfollow request
-                            # Note: We're using an admin user here because we need to access the project regardless of permissions
-                            admin_user = base_models.APIUser(id=None, is_admin=True)
                             await self.activitypub_service.handle_unfollow(
-                                user=admin_user, project_id=project_id, follower_actor_uri=actor_uri
+                                user=user, project_id=project_id, follower_actor_uri=actor_uri
                             )
                             return HTTPResponse(status=200)
                         except Exception as e:
@@ -230,7 +227,6 @@ class ActivityPubBP(CustomBlueprint):
                 username = parts[0]
                 try:
                     # Get the actor by username
-                    admin_user = base_models.APIUser(id=None, is_admin=True)
                     actor = await self.activitypub_service.get_project_actor_by_username(username=username)
 
                     # Create the WebFinger response
@@ -266,8 +262,10 @@ class ActivityPubBP(CustomBlueprint):
                         project_id = ULID.from_str(path_parts[2])
 
                         # Get the actor
-                        admin_user = base_models.APIUser(id=None, is_admin=True)
-                        actor = await self.activitypub_service.get_project_actor(user=admin_user, project_id=project_id)
+                        # Create a user with no authentication
+                        # The project_repo.get_project method will check if the project is public
+                        user = base_models.APIUser(id=None, is_admin=False)
+                        actor = await self.activitypub_service.get_project_actor(user=user, project_id=project_id)
 
                         # Create the WebFinger response
                         response = {

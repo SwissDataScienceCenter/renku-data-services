@@ -64,10 +64,12 @@ class ActivityPubService:
         if actor.project_id is None:
             raise errors.MissingResourceError(message=f"Actor with username '{username}' is not a project actor.")
 
+        # Create a user with no authentication
+        # The project_repo.get_project method will check if the project is public
+        user = APIUser(id=None, is_admin=False)
+
         # Get the project
-        # Note: We're using an admin user here because we need to access the project regardless of permissions
-        admin_user = APIUser(id=None, is_admin=True)
-        project = await self.project_repo.get_project(user=admin_user, project_id=actor.project_id)
+        project = await self.project_repo.get_project(user=user, project_id=actor.project_id)
 
         # Convert to ProjectActor
         return self._create_project_actor(project, actor)

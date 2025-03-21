@@ -234,7 +234,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
     # Use the base_url and domain from the config
     activitypub_config = ActivityPubConfig(
         domain=config.domain,
-        base_url=config.base_url,  # Use the base_url from config
+        base_url=f"{config.base_url}{url_prefix}",  # Include the URL prefix
         admin_email=config.admin_email,
     )
 
