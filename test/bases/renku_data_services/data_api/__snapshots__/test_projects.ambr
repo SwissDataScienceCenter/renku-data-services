@@ -16,6 +16,47 @@
     }),
   ])
 # ---
+# name: test_project_copy_basics
+  dict({
+    'created_by': 'user',
+    'description': 'Template project',
+    'is_template': False,
+    'keywords': list([
+      'tag 1',
+      'tag 2',
+    ]),
+    'name': 'Renku Native Project',
+    'namespace': 'user.doe',
+    'repositories': list([
+      'http://repository-1.ch',
+      'http://repository-2.ch',
+    ]),
+    'secrets_mount_directory': '/secrets',
+    'slug': 'project-slug',
+    'visibility': 'public',
+  })
+# ---
+# name: test_project_copy_basics.1
+  dict({
+    'created_by': 'user',
+    'description': 'Template project',
+    'documentation': 'test documentation',
+    'is_template': False,
+    'keywords': list([
+      'tag 1',
+      'tag 2',
+    ]),
+    'name': 'Renku Native Project',
+    'namespace': 'user.doe',
+    'repositories': list([
+      'http://repository-1.ch',
+      'http://repository-2.ch',
+    ]),
+    'secrets_mount_directory': '/secrets',
+    'slug': 'project-slug',
+    'visibility': 'public',
+  })
+# ---
 # name: test_project_copy_creates_new_build_and_environment_instances
   dict({
     'description': 'A session launcher.',
