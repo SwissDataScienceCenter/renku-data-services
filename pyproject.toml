@@ -7,7 +7,7 @@ authors = [
 ]
 readme = "README.md"
 license = "Apache License 2.0"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 dynamic = ["dependencies"]
 
 [tool.poetry]
@@ -44,10 +44,10 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "^3.13"
 sanic = { extras = ["ext"], version = "^24.12.0" }
 pydantic = { extras = ["email"], version = "^2.10.6" }
-datamodel-code-generator = "^0.24.2"
+datamodel-code-generator = "^0.28.4"
 sqlalchemy = { extras = ["asyncio"], version = "^2.0.38" }
 alembic = "^1.14.1"
 asyncpg = "^0.30.0"
@@ -87,7 +87,7 @@ poetry = "^2.1.1"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.8.3"
-mypy = "~1.14.1"
+mypy = "~1.15.0"
 pytest = "^8.3.4"
 pytest-cov = "^6.0.0"
 pre-commit = "^4.1.0"
@@ -164,7 +164,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "test/*" = ["D"]
 "*/versions/*" = ["D", "E", "W"]
-"apispec.py" = ["D", "E", "W", "I", "UP"]
+"apispec.py" = ["D", "E", "W", "I", "UP", "F401"]
 "components/renku_data_services/notebooks/crs.py" = ["F401"]
 "components/renku_data_services/session/crs.py" = ["F401"]
 
@@ -198,7 +198,7 @@ postgresql_password = "renku"
 asyncio_mode = "auto"
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.13"
 mypy_path = ["components", "bases"]
 files = ["bases/**/*.py", "components/**/*.py"]
 namespace_packages = true

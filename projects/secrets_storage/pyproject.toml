@@ -6,7 +6,7 @@ authors = [
   { name = "Swiss Data Science Center", email = "contact@datascience.ch" },
 ]
 license = ""
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 dynamic = ["dependencies"]
 
 [tool.poetry]
@@ -43,7 +43,7 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "^3.13"
 sanic = { extras = ["ext"], version = "^24.12.0" }
 pydantic = "^2.10.6"
 datamodel-code-generator = "^0.24.2"

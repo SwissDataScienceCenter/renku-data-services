@@ -394,7 +394,6 @@ class ResourcePoolRepository(_Base):
             # NOTE: The .update method on the model validates the update to the resource pool
             old_rp_model = rp.dump(quota)
             new_rp_model = old_rp_model.update(**kwargs)
-            new_classes = None
             new_classes_coroutines = []
             for key, val in kwargs.items():
                 match key:
@@ -429,7 +428,6 @@ class ResourcePoolRepository(_Base):
                         rp.quota = new_quota.id
                         new_rp_model = new_rp_model.update(quota=new_quota)
                     case "classes":
-                        new_classes = []
                         for cls in val:
                             class_id = cls.pop("id")
                             cls.pop("matching", None)
