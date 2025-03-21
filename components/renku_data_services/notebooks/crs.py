@@ -20,6 +20,7 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     ExtraContainer,
     ExtraVolume,
     ExtraVolumeMount,
+    ImagePullPolicy,
     ImagePullSecret,
     Ingress,
     InitContainer,
@@ -277,6 +278,7 @@ class AmaltheaSessionV1Alpha1SpecSessionPatch(BaseCRD):
     resources: Resources | None = None
     shmSize: int | str | None = None
     storage: Storage | None = None
+    imagePullPolicy: ImagePullPolicy | None = None
 
 
 class AmaltheaSessionV1Alpha1SpecPatch(BaseCRD):
