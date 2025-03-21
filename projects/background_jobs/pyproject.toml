@@ -6,7 +6,7 @@ authors = [
   { name = "Swiss Data Science Center", email = "contact@datascience.ch" },
 ]
 license = ""
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 dynamic = ["dependencies"]
 
 [tool.poetry]
@@ -45,7 +45,7 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "^3.13"
 alembic = "^1.14.1"
 pydantic = { extras = ["email"], version = "^2.10.6" }
 requests = "^2.32.3"

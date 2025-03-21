@@ -1,4 +1,4 @@
-FROM python:3.12-bookworm AS builder
+FROM python:3.13-bookworm AS builder
 ARG DEV_BUILD=false
 ARG USER_UID=1000
 ARG RCLONE_VERSION=v1.65.2
@@ -36,7 +36,7 @@ RUN if $DEV_BUILD ; then \
 RUN /home/renku/.local/bin/poetry -C projects/renku_data_service build-project -f wheel --custom-temp-path=/tmp 
 RUN env/bin/pip --no-cache-dir install projects/renku_data_service/dist/*.whl
 
-FROM python:3.12-slim-bookworm
+FROM python:3.13-slim-bookworm
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 ENV prometheus_multiproc_dir=/prometheus
