@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   data_service:
-    image: "mcr.microsoft.com/devcontainers/python:3.12-bookworm"
+    image: "mcr.microsoft.com/devcontainers/python:3.13-bookworm"
     volumes:
       - ../:/workspace:cached
       - .poetry_cache/:/poetry_cache:delegated
