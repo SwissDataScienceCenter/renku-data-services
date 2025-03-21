@@ -1,3 +1,7 @@
+ARG RCLONE_IMAGE_REPOSITORY="ghcr.io/swissdatasciencecenter/rclone"
+ARG RCLONE_IMAGE_TAG="sha-f6e1d95"
+FROM ${RCLONE_IMAGE_REPOSITORY}:${RCLONE_IMAGE_TAG} AS rclone
+
 FROM python:3.13-bookworm AS builder
 ARG DEV_BUILD=false
 ARG USER_UID=1000
@@ -8,13 +12,16 @@ ARG USER_GID=$USER_UID
 
 RUN groupadd --gid $USER_GID renku && \
     DEBIAN_FRONTEND=noninteractive adduser --gid $USER_GID --uid $USER_UID renku
-RUN cd /tmp \
-    && wget -q https://downloads.rclone.org/${RCLONE_VERSION}/rclone-${RCLONE_VERSION}-${RCLONE_OS}-${RCLONE_ARCH}.zip \
-    && unzip /tmp/rclone-${RCLONE_VERSION}-${RCLONE_OS}-${RCLONE_ARCH}.zip \
-    && mv /tmp/rclone-${RCLONE_VERSION}-${RCLONE_OS}-${RCLONE_ARCH}/rclone /usr/bin \
-    && chmod 755 /usr/bin/rclone \
-    && chown root:root /usr/bin/rclone \
-    && rm -r /tmp/rclone*
+# RUN cd /tmp \
+#     && curl "${RCLONE_DOWNLOAD_URL}" -Lo rclone.zip \
+#     && unzip /tmp/rclone.zip -d /tmp/rclone-unzip \
+#     && mv /tmp/rclone-unzip/*/rclone /usr/bin \
+#     && chmod 755 /usr/bin/rclone \
+#     && chown root:root /usr/bin/rclone \
+#     && rm -r /tmp/rclone*
+COPY --from=rclone /rclone /usr/bin/rclone
+RUN chmod 755 /usr/bin/rclone \
+    && chown root:root /usr/bin/rclone
 USER $USER_UID:$USER_GID
 WORKDIR /app
 RUN python3 -m pip install --user pipx && \

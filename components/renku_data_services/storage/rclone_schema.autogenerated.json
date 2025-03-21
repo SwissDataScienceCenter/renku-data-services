@@ -3076,6 +3076,100 @@
     }
   },
   {
+    "Name": "doi",
+    "Description": "DOI datasets",
+    "Prefix": "doi",
+    "Options": [
+      {
+        "Name": "doi",
+        "Help": "The DOI or the doi.org URL.",
+        "Provider": "",
+        "Default": "",
+        "Value": null,
+        "ShortOpt": "",
+        "Hide": 0,
+        "Required": true,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": false,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "",
+        "ValueStr": "",
+        "Type": "string"
+      },
+      {
+        "Name": "provider",
+        "Help": "DOI provider.\n\nThe DOI provider can be set when rclone does not automatically recognize a supported DOI provider.",
+        "Provider": "",
+        "Default": "",
+        "Value": null,
+        "Examples": [
+          {
+            "Value": "auto",
+            "Help": "Auto-detect provider",
+            "Provider": ""
+          },
+          {
+            "Value": "zenodo",
+            "Help": "Zenodo",
+            "Provider": ""
+          },
+          {
+            "Value": "dataverse",
+            "Help": "Dataverse",
+            "Provider": ""
+          },
+          {
+            "Value": "invenio",
+            "Help": "Invenio",
+            "Provider": ""
+          }
+        ],
+        "ShortOpt": "",
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "",
+        "ValueStr": "",
+        "Type": "string"
+      }
+    ],
+    "CommandHelp": [
+      {
+        "Name": "metadata",
+        "Short": "Show metadata about the DOI.",
+        "Long": "This command returns the JSON representation of the DOI.\n\n    rclone backend medatadata doi: \n\nIt returns a JSON object representing the DOI.\n",
+        "Opts": null
+      },
+      {
+        "Name": "title",
+        "Short": "Show the DOI title if available.",
+        "Long": "This command returns the DOI title.\n\n    rclone backend title doi: \n\nIt returns a string representing the DOI title.\n",
+        "Opts": null
+      },
+      {
+        "Name": "provider",
+        "Short": "Show the DOI provider.",
+        "Long": "This command returns the DOI provider.\n\n    rclone backend provider doi: \n\nThis command can be used to update the rclone.conf file for faster operations with the doi backend\nas auto-detection for the provider can be avoided.\n\nIt returns a string representing the DOI provider.\n",
+        "Opts": null
+      },
+      {
+        "Name": "set",
+        "Short": "Set command for updating the config parameters.",
+        "Long": "This set command can be used to update the config parameters\nfor a running doi backend.\n\nUsage Examples:\n\n    rclone backend set doi: [-o opt_name=opt_value] [-o opt_name2=opt_value2]\n    rclone rc backend/command command=set fs=doi: [-o opt_name=opt_value] [-o opt_name2=opt_value2]\n    rclone rc backend/command command=set fs=doi: -o doi=NEW_DOI\n\nThe option keys are named as they are in the config file.\n\nThis rebuilds the connection to the doi backend when it is called with\nthe new parameters. Only new parameters need be passed as the values\nwill default to those currently in use.\n\nIt doesn't return anything.\n",
+        "Opts": null
+      }
+    ],
+    "Aliases": null,
+    "Hide": false,
+    "MetadataInfo": null
+  },
+  {
     "Name": "drive",
     "Description": "Google Drive",
     "Prefix": "drive",
