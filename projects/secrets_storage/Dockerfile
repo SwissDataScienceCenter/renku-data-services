@@ -1,4 +1,4 @@
-FROM python:3.12-bookworm AS builder
+FROM python:3.13-bookworm AS builder
 ARG DEV_BUILD=false
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
@@ -25,7 +25,7 @@ RUN if $DEV_BUILD ; then \
 RUN /home/renku/.local/bin/poetry -C projects/secrets_storage build-project -f wheel --custom-temp-path=/tmp 
 RUN env/bin/pip --no-cache-dir install projects/secrets_storage/dist/*.whl
 
-FROM python:3.12-slim-bookworm
+FROM python:3.13-slim-bookworm
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 ENV prometheus_multiproc_dir=/prometheus

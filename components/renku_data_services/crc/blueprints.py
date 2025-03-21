@@ -556,7 +556,10 @@ class UserResourcePoolsBP(CustomBlueprint):
         if not user_check:
             raise errors.MissingResourceError(message=f"User with user ID {user_id} cannot be found")
         rps = await self.repo.update_user_resource_pools(
-            keycloak_id=user_id, resource_pool_ids=resource_pool_ids.root, append=post, api_user=api_user
+            keycloak_id=user_id,
+            resource_pool_ids=[i.root for i in resource_pool_ids.root],
+            append=post,
+            api_user=api_user,
         )
         return validated_json(
             apispec.ResourcePoolsWithId,
