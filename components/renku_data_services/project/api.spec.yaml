@@ -443,27 +443,6 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - projects
-  /projects/{project_id}/data_connector_links:
-    parameters:
-      - in: path
-        name: project_id
-        required: true
-        schema:
-          $ref: "#/components/schemas/Ulid"
-        description: the ID of the project
-    get:
-      summary: Get all links from data connectors to a given project
-      responses:
-        "200":
-          description: List of data connector to project links
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DataConnectorToProjectLinksList"
-        default:
-          $ref: "#/components/responses/Error"
-      tags:
-        - projects
   /projects/{project_id}/session_secret_slots:
     parameters:
       - in: path

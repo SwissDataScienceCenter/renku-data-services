@@ -293,7 +293,7 @@ async def migrate_storages_v2_to_data_connectors(config: SyncConfig) -> list[Bas
             data_connector = await config.data_connector_migration_tool.migrate_storage_v2(
                 requested_by=api_user, storage=storage
             )
-            logger.info(f"Migrated {storage.name} to {data_connector.namespace.slug}/{data_connector.slug}.")
+            logger.info(f"Migrated {storage.name} to {data_connector.namespace.path.serialize()}.")
             logger.info(f"Deleted storage_v2: {storage.storage_id}")
         except Exception as err:
             logger.error(f"Failed to migrate {storage.name}.")
@@ -301,7 +301,7 @@ async def migrate_storages_v2_to_data_connectors(config: SyncConfig) -> list[Bas
             failed_storages.append(str(storage.storage_id))
             errors.append(err)
 
-    logger.info(f"Migrated {len(storages_v2)-len(failed_storages)}/{len(storages_v2)} data connectors.")
+    logger.info(f"Migrated {len(storages_v2) - len(failed_storages)}/{len(storages_v2)} data connectors.")
     if failed_storages:
         logger.error(f"Migration failed for storages: {failed_storages}.")
     return errors

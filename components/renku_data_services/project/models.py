@@ -9,7 +9,8 @@ from ulid import ULID
 
 from renku_data_services.authz.models import Visibility
 from renku_data_services.base_models import ResetType
-from renku_data_services.namespace.models import Namespace
+from renku_data_services.base_models.core import ProjectPath, ProjectSlug
+from renku_data_services.namespace.models import GroupNamespace, UserNamespace
 from renku_data_services.utils.etag import compute_etag_from_fields, compute_etag_from_timestamp
 
 Repository = str
@@ -39,7 +40,7 @@ class Project(BaseProject):
     """Model for a project which has been persisted in the database."""
 
     id: ULID
-    namespace: Namespace
+    namespace: UserNamespace | GroupNamespace
     secrets_mount_directory: PurePosixPath
 
     @property
@@ -47,8 +48,12 @@ class Project(BaseProject):
         """Entity tag value for this project object."""
         if self.updated_at is None:
             return None
-        # NOTE: `slug` is the only field from `self.namespace` which is serialized in API responses.
-        return compute_etag_from_fields(self.updated_at, self.namespace.slug)
+        return compute_etag_from_fields(self.updated_at, self.path.serialize())
+
+    @property
+    def path(self) -> ProjectPath:
+        """Get the entity slug path for the project."""
+        return self.namespace.path / ProjectSlug(self.slug)
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -56,6 +61,11 @@ class UnsavedProject(BaseProject):
     """A project that hasn't been stored in the database."""
 
     namespace: str
+
+    @property
+    def path(self) -> ProjectPath:
+        """Get the entity slug path for the project."""
+        return ProjectPath.from_strings(self.namespace, self.slug)
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
