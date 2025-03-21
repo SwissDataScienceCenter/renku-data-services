@@ -47,6 +47,7 @@ from renku_data_services.notebooks.crs import (
     AuthenticationType,
     ExtraVolume,
     ExtraVolumeMount,
+    ImagePullPolicy,
     ImagePullSecret,
     Ingress,
     InitContainer,
@@ -375,11 +376,16 @@ class NotebooksNewBP(CustomBlueprint):
                 extra_volumes.append(auth_secret.volume)
 
             image_pull_secret_name = None
+            # NOTE: It is easier if this is Always in all cases but we may hit the dockerhub API limits
+            # So we set it to always only for private images to prevent users abusing the cache and
+            # getting private images from the local cache without credentials.
+            image_pull_policy = ImagePullPolicy.IfNotPresent
             if isinstance(user, AuthenticatedAPIUser) and internal_gitlab_user.access_token is not None:
                 needs_pull_secret = await requires_image_pull_secret(self.nb_config, image, internal_gitlab_user)
 
                 if needs_pull_secret:
                     image_pull_secret_name = f"{server_name}-image-secret"
+                    image_pull_policy = ImagePullPolicy.Always
 
                     image_secret = get_gitlab_image_pull_secret(
                         self.nb_config, user, image_pull_secret_name, internal_gitlab_user.access_token
@@ -400,6 +406,7 @@ class NotebooksNewBP(CustomBlueprint):
                     priorityClassName=resource_class.quota,
                     session=Session(
                         image=image,
+                        imagePullPolicy=image_pull_policy,
                         urlPath=ui_path,
                         port=environment.port,
                         storage=Storage(
