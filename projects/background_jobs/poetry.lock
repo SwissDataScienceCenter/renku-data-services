@@ -1471,7 +1471,6 @@ files = [
 
 [package.dependencies]
 psycopg-binary = {version = "3.2.3", optional = true, markers = "implementation_name != \"pypy\" and extra == \"binary\""}
-typing-extensions = {version = ">=4.6", markers = "python_version < \"3.13\""}
 tzdata = {version = "*", markers = "sys_platform == \"win32\""}
 
 [package.extras]
@@ -2061,9 +2060,6 @@ files = [
     {file = "ruamel.yaml-0.18.6-py3-none-any.whl", hash = "sha256:57b53ba33def16c4f3d807c0ccbc00f8a6081827e81ba2491691b76882d0c636"},
     {file = "ruamel.yaml-0.18.6.tar.gz", hash = "sha256:8b27e6a217e786c6fbe5634d8f3f11bc63e0f80f6a5890f28863d9c45aac311b"},
 ]
-
-[package.dependencies]
-"ruamel.yaml.clib" = {version = ">=0.2.7", markers = "platform_python_implementation == \"CPython\" and python_version < \"3.13\""}
 
 [package.extras]
 docs = ["mercurial (>5.7)", "ryd"]
@@ -2779,5 +2775,5 @@ h11 = ">=0.9.0,<1"
 
 [metadata]
 lock-version = "2.1"
-python-versions = "^3.12"
-content-hash = "a1e8ddd367a9a324d6c440c7452073af8caab49ffa7402b920eaa4fcf238a28b"
+python-versions = "^3.13"
+content-hash = "dab1e4b5e015d5c010ec9164528564c8ab7514f4e84ab8f7e9bb85b9a426f7e5"
