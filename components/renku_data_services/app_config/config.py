@@ -41,9 +41,11 @@ from renku_data_services.authn.gitlab import GitlabAuthenticator
 from renku_data_services.authn.keycloak import KcUserStore, KeycloakAuthenticator
 from renku_data_services.authz.authz import Authz
 from renku_data_services.authz.config import AuthzConfig
+from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.crc import models
 from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
+from renku_data_services.data_api.posthog import PosthogService
 from renku_data_services.data_api.server_options import (
     ServerOptions,
     ServerOptionsDefaults,
@@ -130,6 +132,27 @@ class SentryConfig:
         sample_rate = float(os.environ.get(f"{prefix}SENTRY_SAMPLE_RATE", "0.2"))
 
         return cls(enabled, dsn=dsn, environment=environment, sample_rate=sample_rate)
+
+
+@dataclass
+class PosthogConfig:
+    """Configuration for posthog."""
+
+    enabled: bool
+    api_key: str
+    host: str
+    client: PosthogService
+
+    @classmethod
+    def from_env(cls, prefix: str = "") -> "PosthogConfig":
+        """Create posthog config from environment variables."""
+        enabled = os.environ.get(f"{prefix}POSTHOG_ENABLED", "false").lower() == "true"
+
+        api_key = os.environ.get(f"{prefix}POSTHOG_API_KEY", "")
+        host = os.environ.get(f"{prefix}POSTHOG_HOST", "")
+
+        client = PosthogService(enabled=enabled, api_key=api_key, host=host)
+        return cls(enabled, api_key, host, client)
 
 
 @dataclass
@@ -253,6 +276,7 @@ class Config:
     db: DBConfig
     redis: RedisConfig
     sentry: SentryConfig
+    metrics: MetricsService
     trusted_proxies: TrustedProxiesConfig
     gitlab_client: base_models.GitlabAPIProtocol
     kc_api: IKeycloakAPI
@@ -667,6 +691,7 @@ class Config:
             raise errors.ConfigurationError(message="Secret service public key is not an RSAPublicKey")
 
         sentry = SentryConfig.from_env(prefix)
+        posthog = PosthogConfig.from_env(prefix)
         trusted_proxies = TrustedProxiesConfig.from_env(prefix)
         message_queue = RedisQueue(redis)
         nb_config = NotebooksConfig.from_env(db)
@@ -694,4 +719,5 @@ class Config:
             gitlab_url=gitlab_url,
             nb_config=nb_config,
             builds_config=builds_config,
+            metrics=posthog.client,
         )
