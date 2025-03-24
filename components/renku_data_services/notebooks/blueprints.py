@@ -13,6 +13,7 @@ from renku_data_services import base_models
 from renku_data_services.base_api.auth import authenticate, authenticate_2
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser, Authenticator
+from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
@@ -237,6 +238,7 @@ class NotebooksNewBP(CustomBlueprint):
     user_repo: UserRepo
     data_connector_repo: DataConnectorRepository
     data_connector_secret_repo: DataConnectorSecretRepository
+    metrics: MetricsService
 
     def start(self) -> BlueprintFactoryResponse:
         """Start a session with the new operator."""
@@ -466,6 +468,17 @@ class NotebooksNewBP(CustomBlueprint):
                 except Exception:
                     await self.nb_config.k8s_v2_client.delete_server(server_name, user.id)
                     raise
+            await self.metrics.session_started(
+                user=user,
+                metadata={
+                    "cpu": resource_class.cpu,
+                    "memory": resource_class.memory,
+                    "gpu": resource_class.gpu,
+                    "storage": body.disk_storage,
+                    "resource_class_id": resource_class.id,
+                    "resource_class_name": resource_class.name,
+                },
+            )
 
             return json(manifest.as_apispec().model_dump(mode="json", exclude_none=True), 201)
 
