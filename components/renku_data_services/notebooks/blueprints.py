@@ -47,6 +47,7 @@ from renku_data_services.notebooks.crs import (
     AuthenticationType,
     ExtraVolume,
     ExtraVolumeMount,
+    ImagePullPolicy,
     ImagePullSecret,
     Ingress,
     InitContainer,
@@ -400,6 +401,7 @@ class NotebooksNewBP(CustomBlueprint):
                     priorityClassName=resource_class.quota,
                     session=Session(
                         image=image,
+                        imagePullPolicy=ImagePullPolicy.Always,
                         urlPath=ui_path,
                         port=environment.port,
                         storage=Storage(
