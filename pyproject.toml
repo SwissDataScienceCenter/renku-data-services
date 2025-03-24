@@ -83,6 +83,7 @@ aiofiles = "^24.1.0"
 # google.protobuf.runtime_version.VersionError:
 # Detected incompatible Protobuf Gencode/Runtime versions when loading authzed/api/v1/core.proto: gencode 5.28.2 runtime 5.27.3.
 protobuf = "^5.29.3"
+postgresql-audit = "^0.17.1"
 poetry = "^2.1.1"
 
 [tool.poetry.group.dev.dependencies]

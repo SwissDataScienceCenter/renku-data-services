@@ -33,6 +33,7 @@ def authenticate(
         async def decorated_function(request: Request, *args: _P.args, **kwargs: _P.kwargs) -> _T:
             token = request.headers.get(authenticator.token_field)
             user = await authenticator.authenticate(token or "", request)
+            request.ctx.keycloak_user_id = user.id
             response = await f(request, user, *args, **kwargs)
             return response
 
