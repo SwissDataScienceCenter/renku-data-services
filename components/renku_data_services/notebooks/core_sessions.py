@@ -1,6 +1,7 @@
 """A selection of core functions for AmaltheaSessions."""
 
 import base64
+import json
 import os
 from collections.abc import AsyncIterator
 from pathlib import PurePosixPath
@@ -13,6 +14,7 @@ from sanic import Request
 from toml import dumps
 from yaml import safe_dump
 
+from renku_data_services.base_models import APIUser
 from renku_data_services.base_models.core import AnonymousAPIUser, AuthenticatedAPIUser
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.crc.models import GpuKind, ResourceClass, ResourcePool
@@ -20,6 +22,7 @@ from renku_data_services.data_connectors.models import DataConnectorSecret, Data
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec
 from renku_data_services.notebooks.api.amalthea_patches import git_proxy, init_containers
+from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_data_services.notebooks.config import NotebooksConfig
@@ -33,6 +36,7 @@ from renku_data_services.notebooks.crs import (
     ExtraContainer,
     ExtraVolume,
     ExtraVolumeMount,
+    ImagePullSecret,
     InitContainer,
     Resources,
     SecretAsVolume,
@@ -161,6 +165,34 @@ async def get_auth_secret_anonymous(nb_config: NotebooksConfig, server_name: str
         }
     )
     secret = V1Secret(metadata=V1ObjectMeta(name=server_name), string_data=secret_data)
+    return ExtraSecret(secret)
+
+
+def get_gitlab_image_pull_secret(
+    nb_config: NotebooksConfig, user: AuthenticatedAPIUser, image_pull_secret_name: str, access_token: str
+) -> ExtraSecret:
+    """Create a Kubernetes secret for private GitLab registry authentication."""
+
+    preferred_namespace = nb_config.k8s_client.preferred_namespace
+
+    registry_secret = {
+        "auths": {
+            nb_config.git.registry: {
+                "Username": "oauth2",
+                "Password": access_token,
+                "Email": user.email,
+            }
+        }
+    }
+    registry_secret = json.dumps(registry_secret)
+
+    secret_data = {".dockerconfigjson": registry_secret}
+    secret = V1Secret(
+        metadata=V1ObjectMeta(name=image_pull_secret_name, namespace=preferred_namespace),
+        string_data=secret_data,
+        type="kubernetes.io/dockerconfigjson",
+    )
+
     return ExtraSecret(secret)
 
 
@@ -377,11 +409,31 @@ def get_culling(resource_pool: ResourcePool, nb_config: NotebooksConfig) -> Cull
     )
 
 
+async def requires_image_pull_secret(nb_config: NotebooksConfig, image: str, internal_gitlab_user: APIUser) -> bool:
+    """Determines if an image requires a pull secret based on its visibility and their GitLab access token."""
+
+    parsed_image = Image.from_path(image)
+    image_repo = parsed_image.repo_api()
+
+    image_exists_publicly = await image_repo.image_exists(parsed_image)
+    if image_exists_publicly:
+        return False
+
+    if parsed_image.hostname == nb_config.git.registry and internal_gitlab_user.access_token:
+        image_repo = image_repo.with_oauth2_token(internal_gitlab_user.access_token)
+        image_exists_privately = await image_repo.image_exists(parsed_image)
+        if image_exists_privately:
+            return True
+    # No pull secret needed if the image is private and the user cannot access it
+    return False
+
+
 async def patch_session(
     body: apispec.SessionPatchRequest,
     session_id: str,
     nb_config: NotebooksConfig,
     user: AnonymousAPIUser | AuthenticatedAPIUser,
+    internal_gitlab_user: APIUser,
     rp_repo: ResourcePoolRepository,
     project_repo: ProjectRepository,
 ) -> AmaltheaSessionV1Alpha1:
@@ -455,6 +507,27 @@ async def patch_session(
     )
     if extra_containers:
         patch.spec.extraContainers = extra_containers
+
+    if isinstance(user, AuthenticatedAPIUser) and internal_gitlab_user.access_token is not None:
+        image = session.spec.session.image
+        server_name = session.metadata.name
+        needs_pull_secret = await requires_image_pull_secret(nb_config, image, internal_gitlab_user)
+
+        if needs_pull_secret:
+            image_pull_secret_name = f"{server_name}-image-secret"
+
+            # Always create a fresh secret to ensure we have the latest token
+            image_secret = get_gitlab_image_pull_secret(
+                nb_config, user, image_pull_secret_name, internal_gitlab_user.access_token
+            )
+            if image_secret:
+                updated_secrets = [
+                    secret
+                    for secret in (session.spec.imagePullSecrets or [])
+                    if not secret.name.endswith("-image-secret")
+                ]
+                updated_secrets.append(ImagePullSecret(name=image_pull_secret_name, adopt=True))
+                patch.spec.imagePullSecrets = updated_secrets
 
     patch_serialized = patch.to_rfc7386()
     if len(patch_serialized) == 0:

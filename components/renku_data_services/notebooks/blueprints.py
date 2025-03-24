@@ -33,9 +33,11 @@ from renku_data_services.notebooks.core_sessions import (
     get_data_sources,
     get_extra_containers,
     get_extra_init_containers,
+    get_gitlab_image_pull_secret,
     patch_session,
     request_dc_secret_creation,
     request_session_secret_creation,
+    requires_image_pull_secret,
 )
 from renku_data_services.notebooks.crs import (
     AmaltheaSessionSpec,
@@ -44,6 +46,8 @@ from renku_data_services.notebooks.crs import (
     AuthenticationType,
     ExtraVolume,
     ExtraVolumeMount,
+    ImagePullPolicy,
+    ImagePullSecret,
     Ingress,
     InitContainer,
     Metadata,
@@ -368,16 +372,34 @@ class NotebooksNewBP(CustomBlueprint):
                 auth_secret = await get_auth_secret_anonymous(self.nb_config, server_name, request)
             if auth_secret.volume:
                 extra_volumes.append(auth_secret.volume)
+
+            image_pull_secret_name = None
+            if isinstance(user, AuthenticatedAPIUser) and internal_gitlab_user.access_token is not None:
+                needs_pull_secret = await requires_image_pull_secret(self.nb_config, image, internal_gitlab_user)
+
+                if needs_pull_secret:
+                    image_pull_secret_name = f"{server_name}-image-secret"
+
+                    image_secret = get_gitlab_image_pull_secret(
+                        self.nb_config, user, image_pull_secret_name, internal_gitlab_user.access_token
+                    )
+                    secrets_to_create.append(image_secret)
+
             secrets_to_create.append(auth_secret)
+
             manifest = AmaltheaSessionV1Alpha1(
                 metadata=Metadata(name=server_name, annotations=annotations),
                 spec=AmaltheaSessionSpec(
+                    imagePullSecrets=[ImagePullSecret(name=image_pull_secret_name, adopt=True)]
+                    if image_pull_secret_name
+                    else [],
                     codeRepositories=[],
                     hibernated=False,
                     reconcileStrategy=ReconcileStrategy.whenFailedOrHibernated,
                     priorityClassName=resource_class.quota,
                     session=Session(
                         image=image,
+                        imagePullPolicy=ImagePullPolicy.Always,
                         urlPath=ui_path,
                         port=environment.port,
                         storage=Storage(
@@ -489,15 +511,24 @@ class NotebooksNewBP(CustomBlueprint):
     def patch(self) -> BlueprintFactoryResponse:
         """Patch a session."""
 
-        @authenticate(self.authenticator)
+        @authenticate_2(self.authenticator, self.internal_gitlab_authenticator)
         @validate(json=apispec.SessionPatchRequest)
         async def _handler(
             _: Request,
             user: AuthenticatedAPIUser | AnonymousAPIUser,
+            internal_gitlab_user: APIUser,
             session_id: str,
             body: apispec.SessionPatchRequest,
         ) -> HTTPResponse:
-            new_session = await patch_session(body, session_id, self.nb_config, user, self.rp_repo, self.project_repo)
+            new_session = await patch_session(
+                body,
+                session_id,
+                self.nb_config,
+                user,
+                internal_gitlab_user,
+                rp_repo=self.rp_repo,
+                project_repo=self.project_repo,
+            )
             return json(new_session.as_apispec().model_dump(exclude_none=True, mode="json"))
 
         return "/sessions/<session_id>", ["PATCH"], _handler
