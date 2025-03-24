@@ -55,6 +55,43 @@ async def test_list_namespaces_pagination(sanic_client, user_headers) -> None:
     assert response.headers.get("total") == "7"
     assert response.headers.get("total-pages") == "4"
 
+    _, response = await sanic_client.get("/api/data/namespaces?per_page=1&page=3", headers=user_headers)
+    assert response.status_code == 200, response.text
+    res_json = response.json
+    assert len(res_json) == 1
+    user_ns = res_json[0]
+    assert user_ns["slug"] == "group-2"
+    assert response.headers.get("page") == "3"
+    assert response.headers.get("per-page") == "1"
+    assert response.headers.get("total") == "7"
+    assert response.headers.get("total-pages") == "7"
+
+    _, response = await sanic_client.get("/api/data/namespaces?per_page=5&page=1", headers=user_headers)
+    assert response.status_code == 200, response.text
+    res_json = response.json
+    assert len(res_json) == 5
+    user_ns = res_json[0]
+    assert user_ns["slug"] == "user.doe"
+    user_ns = res_json[4]
+    assert user_ns["slug"] == "group-4"
+    assert response.headers.get("page") == "1"
+    assert response.headers.get("per-page") == "5"
+    assert response.headers.get("total") == "7"
+    assert response.headers.get("total-pages") == "2"
+
+    _, response = await sanic_client.get("/api/data/namespaces?per_page=5&page=2", headers=user_headers)
+    assert response.status_code == 200, response.text
+    res_json = response.json
+    assert len(res_json) == 2
+    user_ns = res_json[0]
+    assert user_ns["slug"] == "group-5"
+    user_ns = res_json[1]
+    assert user_ns["slug"] == "group-6"
+    assert response.headers.get("page") == "2"
+    assert response.headers.get("per-page") == "5"
+    assert response.headers.get("total") == "7"
+    assert response.headers.get("total-pages") == "2"
+
 
 @pytest.mark.asyncio
 async def test_list_namespaces_all_groups_are_public(sanic_client, user_headers, member_1_headers) -> None:
@@ -196,3 +233,144 @@ async def test_get_namespace_by_slug_anonymously(sanic_client, user_headers) -> 
     assert response.status_code == 200, response.text
     assert response.json["slug"] == "user.doe"
     assert response.json["namespace_kind"] == "user"
+
+
+@pytest.mark.asyncio
+async def test_entity_slug_uniqueness(sanic_client, user_headers) -> None:
+    # Create a group i.e. /test1
+    payload = {
+        "name": "test1",
+        "slug": "test1",
+        "description": "Group 1 Description",
+    }
+    _, response = await sanic_client.post("/api/data/groups", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    # A group with the same name cannot be created
+    payload = {
+        "name": "test-conflict",
+        "slug": "user.doe",
+        "description": "Group 1 Description",
+    }
+    _, response = await sanic_client.post("/api/data/groups", headers=user_headers, json=payload)
+    assert response.status_code == 422, response.text
+
+    # Create a project in the group /test1/test1
+    payload = {
+        "name": "test1",
+        "namespace": "test1",
+        "slug": "test1",
+    }
+    _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    # Create a data connector in the project /test1/test1/test1
+    payload = {
+        "name": "test1",
+        "namespace": "test1/test1",
+        "slug": "test1",
+        "storage": {
+            "configuration": {"type": "s3", "endpoint": "http://s3.aws.com"},
+            "source_path": "giab",
+            "target_path": "giab",
+        },
+    }
+    _, response = await sanic_client.post("/api/data/data_connectors", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    # Creating the project again should fail because no slugs are free
+    _, response = await sanic_client.post("/api/data/data_connectors", headers=user_headers, json=payload)
+    assert response.status_code == 409, response.text
+
+    # Create a data connector in the same project with a different name /test1/test1/test2
+    payload = {
+        "name": "test2",
+        "namespace": "test1/test1",
+        "slug": "test2",
+        "storage": {
+            "configuration": {"type": "s3", "endpoint": "http://s3.aws.com"},
+            "source_path": "giab",
+            "target_path": "giab",
+        },
+    }
+    _, response = await sanic_client.post("/api/data/data_connectors", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    # Create a new project in the same group with the same name as the data connector /test1/test2
+    payload = {
+        "name": "test2",
+        "namespace": "test1",
+        "slug": "test2",
+    }
+    _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    # Trying to create a data connector with the same slug as the project in the same group should succeed
+    # i.e. /test1/test2/test1 because the test2 project does not have a data connector called test1
+    payload = {
+        "name": "test1",
+        "namespace": "test1/test2",
+        "slug": "test1",
+        "storage": {
+            "configuration": {"type": "s3", "endpoint": "http://s3.aws.com"},
+            "source_path": "giab",
+            "target_path": "giab",
+        },
+    }
+    _, response = await sanic_client.post("/api/data/data_connectors", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+
+@pytest.mark.asyncio
+async def test_listing_project_namespaces(sanic_client, user_headers) -> None:
+    # Create a group i.e. /test1
+    payload = {
+        "name": "test1",
+        "slug": "test1",
+        "description": "Group 1 Description",
+    }
+    _, response = await sanic_client.post("/api/data/groups", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    # Create a project in the group /test1/test1
+    payload = {
+        "name": "proj1",
+        "namespace": "test1",
+        "slug": "proj1",
+    }
+    _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    # Create a new project in the same group with the same name as the data connector /test1/test2
+    payload = {
+        "name": "proj2",
+        "namespace": "test1",
+        "slug": "proj2",
+    }
+    _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+
+    # If not defined by default you get only user and group namespaces
+    _, response = await sanic_client.get("/api/data/namespaces", headers=user_headers)
+    assert response.status_code == 200, response.text
+    assert len(response.json) == 2
+
+    # If requested then you should get all
+    _, response = await sanic_client.get(
+        "/api/data/namespaces", headers=user_headers, params={"kinds": ["group", "user", "project"]}
+    )
+    assert response.status_code == 200, response.text
+    assert len(response.json) == 4
+
+    # If requested only projects then you should get only projects
+    _, response = await sanic_client.get("/api/data/namespaces", headers=user_headers, params={"kinds": ["project"]})
+    assert response.status_code == 200, response.text
+    assert len(response.json) == 2
+    assert response.json[0]["name"] == "proj1"
+    assert response.json[0]["namespace_kind"] == "project"
+    assert response.json[0]["slug"] == "proj1"
+    assert response.json[0]["path"] == "test1/proj1"
+    assert response.json[1]["name"] == "proj2"
+    assert response.json[1]["namespace_kind"] == "project"
+    assert response.json[1]["slug"] == "proj2"
+    assert response.json[1]["path"] == "test1/proj2"

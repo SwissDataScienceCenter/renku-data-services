@@ -21,7 +21,7 @@ from renku_data_services.base_api.misc import validate_body_root_model, validate
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.base_models.core import Slug
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
-from renku_data_services.data_connectors.db import DataConnectorProjectLinkRepository, DataConnectorRepository
+from renku_data_services.data_connectors.db import DataConnectorRepository
 from renku_data_services.errors import errors
 from renku_data_services.project import apispec
 from renku_data_services.project import models as project_models
@@ -52,7 +52,6 @@ class ProjectsBP(CustomBlueprint):
     user_repo: UserRepo
     authenticator: base_models.Authenticator
     session_repo: SessionRepository
-    data_connector_to_project_link_repo: DataConnectorProjectLinkRepository
     data_connector_repo: DataConnectorRepository
     project_migration_repo: ProjectMigrationRepository
 
@@ -159,7 +158,6 @@ class ProjectsBP(CustomBlueprint):
                 secrets_mount_directory=body.secrets_mount_directory,
                 project_repo=self.project_repo,
                 session_repo=self.session_repo,
-                data_connector_to_project_link_repo=self.data_connector_to_project_link_repo,
                 data_connector_repo=self.data_connector_repo,
             )
             return validated_json(apispec.Project, self._dump_project(project), status=201)
@@ -300,7 +298,7 @@ class ProjectsBP(CustomBlueprint):
 
                 user_with_id = apispec.ProjectMemberResponse(
                     id=user_id,
-                    namespace=namespace_info.slug,
+                    namespace=namespace_info.path.first.value,
                     first_name=user_info.first_name,
                     last_name=user_info.last_name,
                     role=apispec.Role(member.role.value),
@@ -354,7 +352,7 @@ class ProjectsBP(CustomBlueprint):
         result = dict(
             id=project.id,
             name=project.name,
-            namespace=project.namespace.slug,
+            namespace=project.namespace.path.serialize(),
             slug=project.slug,
             creation_date=project.creation_date.isoformat(),
             created_by=project.created_by,

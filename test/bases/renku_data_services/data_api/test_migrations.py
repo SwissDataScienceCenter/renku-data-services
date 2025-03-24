@@ -49,7 +49,7 @@ async def test_upgrade_downgrade_cycle(
     await app_config_instance.group_repo.generate_user_namespaces()
     payload: dict[str, Any] = {
         "name": "test_project",
-        "namespace": admin_user.namespace.slug,
+        "namespace": admin_user.namespace.path.serialize(),
     }
     _, res = await sanic_client_no_migrations.post("/api/data/projects", headers=admin_headers, json=payload)
     assert res.status_code == 201

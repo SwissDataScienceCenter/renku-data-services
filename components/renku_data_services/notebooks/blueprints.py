@@ -16,7 +16,6 @@ from renku_data_services.base_models import AnonymousAPIUser, APIUser, Authentic
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.crc.models import GpuKind
 from renku_data_services.data_connectors.db import (
-    DataConnectorProjectLinkRepository,
     DataConnectorRepository,
     DataConnectorSecretRepository,
 )
@@ -238,7 +237,6 @@ class NotebooksNewBP(CustomBlueprint):
     storage_repo: StorageRepository
     user_repo: UserRepo
     data_connector_repo: DataConnectorRepository
-    data_connector_project_link_repo: DataConnectorProjectLinkRepository
     data_connector_secret_repo: DataConnectorSecretRepository
 
     def start(self) -> BlueprintFactoryResponse:

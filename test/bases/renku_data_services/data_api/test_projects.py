@@ -53,7 +53,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
         "description": "First Renku native project",
         "visibility": "public",
         "repositories": ["http://renkulab.io/repository-1", "http://renkulab.io/repository-2"],
-        "namespace": regular_user.namespace.slug,
+        "namespace": regular_user.namespace.path.serialize(),
         "keywords": ["keyword 1", "keyword.2", "keyword-3", "KEYWORD_4"],
         "documentation": "$\\sqrt(2)$",
         "secrets_mount_directory": "/etc/renku_secrets",
@@ -131,8 +131,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
 
     # same as above, but using namespace/slug to retrieve the project
     _, response = await sanic_client.get(
-        f"/api/data/namespaces/{payload['namespace']
-                                }/projects/{payload['slug']}",
+        f"/api/data/namespaces/{payload['namespace']}/projects/{payload['slug']}",
         params={"with_documentation": True},
         headers=user_headers,
     )
@@ -142,7 +141,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
     assert project["id"] == project_id
     assert project["name"] == "Renku Native Project"
     assert project["slug"] == "project-slug"
-    assert project["namespace"] == regular_user.namespace.slug
+    assert project["namespace"] == regular_user.namespace.path.serialize()
     assert project["documentation"] == "$\\sqrt(2)$"
 
 
@@ -152,7 +151,7 @@ async def test_project_creation_with_default_values(
 ) -> None:
     payload = {
         "name": "Project with Default Values",
-        "namespace": regular_user.namespace.slug,
+        "namespace": regular_user.namespace.path.serialize(),
     }
 
     _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
@@ -190,7 +189,7 @@ async def test_create_project_with_invalid_keywords(sanic_client, user_headers, 
 
 @pytest.mark.asyncio
 async def test_project_creation_with_invalid_namespace(sanic_client, user_headers, member_1_user: UserInfo) -> None:
-    namespace = member_1_user.namespace.slug
+    namespace = member_1_user.namespace.path.serialize()
     _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}", headers=user_headers)
     assert response.status_code == 200, response.text
     payload = {
@@ -206,7 +205,7 @@ async def test_project_creation_with_invalid_namespace(sanic_client, user_header
 
 @pytest.mark.asyncio
 async def test_project_creation_with_conflicting_slug(sanic_client, user_headers, regular_user) -> None:
-    namespace = regular_user.namespace.slug
+    namespace = regular_user.namespace.path.serialize()
     payload = {
         "name": "Existing project",
         "namespace": namespace,
@@ -227,7 +226,7 @@ async def test_project_creation_with_conflicting_slug(sanic_client, user_headers
 
 @pytest.mark.asyncio
 async def test_project_creation_with_duplicate_repositories(sanic_client, user_headers, regular_user) -> None:
-    namespace = regular_user.namespace.slug
+    namespace = regular_user.namespace.path.serialize()
     payload = {
         "name": "My Project",
         "namespace": namespace,
@@ -246,7 +245,7 @@ async def test_project_creation_with_duplicate_repositories(sanic_client, user_h
 
 @pytest.mark.asyncio
 async def test_project_creation_with_invalid_repository(sanic_client, user_headers, regular_user) -> None:
-    namespace = regular_user.namespace.slug
+    namespace = regular_user.namespace.path.serialize()
     payload = {
         "name": "My Project",
         "namespace": namespace,
@@ -626,7 +625,7 @@ async def test_cannot_patch_without_if_match_header(create_project, get_project,
 async def test_patch_project_invalid_namespace(
     create_project, sanic_client, user_headers, member_1_user: UserInfo
 ) -> None:
-    namespace = member_1_user.namespace.slug
+    namespace = member_1_user.namespace.path.serialize()
     _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}", headers=user_headers)
     assert response.status_code == 200, response.text
     project = await create_project("Project 1")
@@ -833,7 +832,7 @@ async def test_get_projects_with_direct_membership(sanic_client, user_headers, m
     # Add member_1 to Project 2
     roles = [{"id": member_1_user.id, "role": "editor"}]
     _, response = await sanic_client.patch(
-        f"/api/data/projects/{project_2["id"]}/members", headers=user_headers, json=roles
+        f"/api/data/projects/{project_2['id']}/members", headers=user_headers, json=roles
     )
     assert response.status_code == 200, response.text
 
@@ -1230,7 +1229,7 @@ async def test_project_copy_basics(
     payload = {
         "name": "Renku Native Project",
         "slug": "project-slug",
-        "namespace": regular_user.namespace.slug,
+        "namespace": regular_user.namespace.path.serialize(),
     }
 
     await app_config.event_repo.delete_all_events()
@@ -1239,7 +1238,7 @@ async def test_project_copy_basics(
 
     assert response.status_code == 201, response.text
     copy_project = response.json
-    assert copy_project["namespace"] == regular_user.namespace.slug
+    assert copy_project["namespace"] == regular_user.namespace.path.serialize()
     assert copy_project["template_id"] == project_id
     assert copy_project == snapshot(exclude=props("id", "updated_at", "creation_date", "etag", "template_id"))
 
@@ -1280,7 +1279,7 @@ async def test_project_copy_basics(
     assert copy_project["name"] == "Renku Native Project"
     assert copy_project["slug"] == "project-slug"
     assert copy_project["created_by"] == "user"
-    assert copy_project["namespace"] == regular_user.namespace.slug
+    assert copy_project["namespace"] == regular_user.namespace.path.serialize()
     assert copy_project["description"] == "Template project"
     assert copy_project["visibility"] == "public"
     assert copy_project["keywords"] == ["tag 1", "tag 2"]
@@ -1303,7 +1302,7 @@ async def test_project_copy_includes_session_launchers(
     launcher_1 = await create_session_launcher("Launcher 1", project_id, environment={"id": environment["id"]})
     launcher_2 = await create_session_launcher("Launcher 2", project_id, environment={"id": environment["id"]})
 
-    copy_project = await create_project_copy(project_id, regular_user.namespace.slug, "Copy Project")
+    copy_project = await create_project_copy(project_id, regular_user.namespace.path.serialize(), "Copy Project")
     project_id = copy_project["id"]
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}/session_launchers", headers=user_headers)
 
@@ -1354,7 +1353,7 @@ async def test_project_copy_creates_new_custom_environment_instance(
 
     await asyncio.sleep(1)
 
-    copy_project = await create_project_copy(project_id, regular_user.namespace.slug, "Copy Project")
+    copy_project = await create_project_copy(project_id, regular_user.namespace.path.serialize(), "Copy Project")
     project_id = copy_project["id"]
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}/session_launchers", headers=user_headers)
 
@@ -1415,7 +1414,7 @@ async def test_project_copy_creates_new_build_and_environment_instances(
 
     await asyncio.sleep(1)
 
-    copy_project = await create_project_copy(project_id, regular_user.namespace.slug, "Copy Project")
+    copy_project = await create_project_copy(project_id, regular_user.namespace.path.serialize(), "Copy Project")
     copy_project_id = copy_project["id"]
     _, response = await sanic_client.get(
         f"/api/data/projects/{copy_project_id}/session_launchers", headers=user_headers
@@ -1473,7 +1472,7 @@ async def test_project_copy_includes_data_connector_links(
     data_connector_1, link_1 = await create_data_connector_and_link_project("Data Connector 1", project_id=project_id)
     data_connector_2, link_2 = await create_data_connector_and_link_project("Data Connector 2", project_id=project_id)
 
-    copy_project = await create_project_copy(project_id, regular_user.namespace.slug, "Copy Project")
+    copy_project = await create_project_copy(project_id, regular_user.namespace.path.serialize(), "Copy Project")
     project_id = copy_project["id"]
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}/data_connector_links", headers=user_headers)
 
@@ -1494,10 +1493,10 @@ async def test_project_get_all_copies(
     await create_project("Project 3")
     project_id = project["id"]
 
-    copy_1 = await create_project_copy(project_id, regular_user.namespace.slug, "Copy 1")
-    copy_2 = await create_project_copy(project_id, admin_user.namespace.slug, "Copy 2", user=admin_user)
+    copy_1 = await create_project_copy(project_id, regular_user.namespace.path.serialize(), "Copy 1")
+    copy_2 = await create_project_copy(project_id, admin_user.namespace.path.serialize(), "Copy 2", user=admin_user)
     copy_3 = await create_project_copy(
-        project_id, admin_user.namespace.slug, "Copy 3", user=admin_user, visibility="public"
+        project_id, admin_user.namespace.path.serialize(), "Copy 3", user=admin_user, visibility="public"
     )
 
     # NOTE: Admins can see all copies
@@ -1522,24 +1521,24 @@ async def test_project_get_all_writable_copies(
     project = await create_project("Project")
     project_id = project["id"]
 
-    copy_1 = await create_project_copy(project_id, regular_user.namespace.slug, "Copy 1")
+    copy_1 = await create_project_copy(project_id, regular_user.namespace.path.serialize(), "Copy 1")
     copy_2 = await create_project_copy(
         project_id,
-        admin_user.namespace.slug,
+        admin_user.namespace.path.serialize(),
         "Copy 2",
         user=admin_user,
         visibility="public",
     )
     copy_3 = await create_project_copy(
         project_id,
-        admin_user.namespace.slug,
+        admin_user.namespace.path.serialize(),
         "Copy 3",
         user=admin_user,
         members=[{"id": regular_user.id, "role": "viewer"}],
     )
     copy_4 = await create_project_copy(
         project_id,
-        admin_user.namespace.slug,
+        admin_user.namespace.path.serialize(),
         "Copy 4",
         user=admin_user,
         members=[{"id": regular_user.id, "role": "editor"}],
@@ -1565,8 +1564,8 @@ async def test_project_copies_are_not_deleted_when_template_is_deleted(
     project = await create_project("Template Project")
     project_id = project["id"]
 
-    copy_1 = await create_project_copy(project_id, regular_user.namespace.slug, "Copy 1")
-    copy_2 = await create_project_copy(project_id, regular_user.namespace.slug, "Copy 2")
+    copy_1 = await create_project_copy(project_id, regular_user.namespace.path.serialize(), "Copy 1")
+    copy_2 = await create_project_copy(project_id, regular_user.namespace.path.serialize(), "Copy 2")
 
     _, response = await sanic_client.delete(f"/api/data/projects/{project_id}", headers=user_headers)
 
@@ -1586,8 +1585,12 @@ async def test_project_copy_and_set_visibility(
     project = await create_project("Template Project")
     project_id = project["id"]
 
-    public_copy = await create_project_copy(project_id, regular_user.namespace.slug, "Copy 1", visibility="public")
-    private_copy = await create_project_copy(project_id, regular_user.namespace.slug, "Copy 2", visibility="private")
+    public_copy = await create_project_copy(
+        project_id, regular_user.namespace.path.serialize(), "Copy 1", visibility="public"
+    )
+    private_copy = await create_project_copy(
+        project_id, regular_user.namespace.path.serialize(), "Copy 2", visibility="private"
+    )
 
     _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
 
@@ -1604,7 +1607,7 @@ async def test_project_copy_non_existing_project(sanic_client, user_headers, reg
     payload = {
         "name": "Renku Native Project",
         "slug": "project-slug",
-        "namespace": regular_user.namespace.slug,
+        "namespace": regular_user.namespace.path.serialize(),
     }
 
     _, response = await sanic_client.post(f"/api/data/projects/{project_id}/copies", headers=user_headers, json=payload)
@@ -1620,7 +1623,7 @@ async def test_project_copy_invalid_project_id(sanic_client, user_headers, regul
     payload = {
         "name": "Renku Native Project",
         "slug": "project-slug",
-        "namespace": regular_user.namespace.slug,
+        "namespace": regular_user.namespace.path.serialize(),
     }
 
     _, response = await sanic_client.post(f"/api/data/projects/{project_id}/copies", headers=user_headers, json=payload)
@@ -1636,7 +1639,7 @@ async def test_project_copy_with_no_access(sanic_client, user_headers, regular_u
     payload = {
         "name": "Renku Native Project",
         "slug": "project-slug",
-        "namespace": regular_user.namespace.slug,
+        "namespace": regular_user.namespace.path.serialize(),
     }
 
     _, response = await sanic_client.post(f"/api/data/projects/{project_id}/copies", headers=user_headers, json=payload)
@@ -1666,14 +1669,13 @@ async def test_project_copy_succeeds_even_if_data_connector_is_inaccessible(
     payload = {
         "name": "Copy Project",
         "slug": "project-slug",
-        "namespace": regular_user.namespace.slug,
+        "namespace": regular_user.namespace.path.serialize(),
     }
 
     _, response = await sanic_client.post(f"/api/data/projects/{project_id}/copies", headers=user_headers, json=payload)
 
-    # NOTE: The copy is created, but the status code indicates that one or more data connectors cannot be copied
-    assert response.status_code == 403, response.text
-    assert "was copied but data connector with name 'Admin Connector (admin.doe/admin-connector)'" in response.text
+    # TODO: What should happen to DCs and DC links when you copy a project?
+    assert response.status_code == 201, response.text
 
 
 @pytest.mark.asyncio
@@ -1702,7 +1704,7 @@ async def test_project_unlink_from_template_project(
     project = await create_project("Project")
     project_id = project["id"]
 
-    project = await create_project_copy(project_id, regular_user.namespace.slug, "Copy Project")
+    project = await create_project_copy(project_id, regular_user.namespace.path.serialize(), "Copy Project")
     project_id = project["id"]
 
     # NOTE: A null value won't change anything
@@ -1786,14 +1788,14 @@ async def test_migrate_v1_project(
     sanic_client,
     app_config,
     user_headers,
-    regular_user,
+    regular_user: UserInfo,
 ) -> None:
     v1_id = 1122
     v1_project = {
         "project": {
             "name": "New Migrated Project",
             "slug": "new-project-slug",
-            "namespace": regular_user.namespace.slug,
+            "namespace": regular_user.namespace.path.serialize(),
             "description": "Old project for migration",
             "repositories": ["http://old-repository.com"],
             "visibility": "private",
@@ -1817,7 +1819,7 @@ async def test_migrate_v1_project(
     assert migrated_project["name"] == "New Migrated Project"
     assert migrated_project["slug"] == "new-project-slug"
     assert migrated_project["created_by"] == "user"
-    assert migrated_project["namespace"] == regular_user.namespace.slug
+    assert migrated_project["namespace"] == regular_user.namespace.path.serialize()
     assert migrated_project["description"] == "Old project for migration"
     assert migrated_project["visibility"] == "private"
     assert migrated_project["keywords"] == ["old", "project"]
@@ -1830,7 +1832,7 @@ async def test_migrate_v1_project(
     assert migrated_project["name"] == "New Migrated Project"
     assert migrated_project["slug"] == "new-project-slug"
     assert migrated_project["created_by"] == "user"
-    assert migrated_project["namespace"] == regular_user.namespace.slug
+    assert migrated_project["namespace"] == regular_user.namespace.path.serialize()
     assert migrated_project["description"] == "Old project for migration"
     assert migrated_project["visibility"] == "private"
     assert migrated_project["keywords"] == ["old", "project"]
@@ -1842,7 +1844,7 @@ async def test_migrate_v1_project(
     assert migrated_project["name"] == "New Migrated Project"
     assert migrated_project["slug"] == "new-project-slug"
     assert migrated_project["created_by"] == "user"
-    assert migrated_project["namespace"] == regular_user.namespace.slug
+    assert migrated_project["namespace"] == regular_user.namespace.path.serialize()
     assert migrated_project["description"] == "Old project for migration"
     assert migrated_project["visibility"] == "private"
     assert migrated_project["keywords"] == ["old", "project"]

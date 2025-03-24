@@ -12,13 +12,9 @@ paths:
     get:
       summary: Get all groups
       parameters:
-        - in: query
-          description: query parameters
-          name: params
-          style: form
-          explode: true
-          schema:
-            $ref: "#/components/schemas/GroupsGetQuery"
+        - $ref: "#/components/parameters/PaginationRequestPage"
+        - $ref: "#/components/parameters/PaginationRequestPerPage"
+        - $ref: "#/components/parameters/OnlyDirectMember"
       responses:
         "200":
           description: List of groups
@@ -260,13 +256,10 @@ paths:
     get:
       summary: Get all namespaces
       parameters:
-        - in: query
-          description: query parameters
-          name: params
-          style: form
-          explode: true
-          schema:
-            $ref: "#/components/schemas/NamespaceGetQuery"
+        - $ref: "#/components/parameters/PaginationRequestPage"
+        - $ref: "#/components/parameters/PaginationRequestPerPage"
+        - $ref: "#/components/parameters/MinimumRole"
+        - $ref: "#/components/parameters/NamespaceKind"
       responses:
         "200":
           description: List of namespaces
@@ -305,6 +298,37 @@ paths:
       parameters:
         - in: path
           name: namespace_slug
+          required: true
+          schema:
+            $ref: "#/components/schemas/Slug"
+      responses:
+        "200":
+          description: The namespace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NamespaceResponse"
+        "404":
+          description: The namespace does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - namespaces
+  /namespaces/{first_slug}/{second_slug}:
+    get:
+      summary: Get a namespace
+      parameters:
+        - in: path
+          name: first_slug
+          required: true
+          schema:
+            $ref: "#/components/schemas/Slug"
+        - in: path
+          name: second_slug
           required: true
           schema:
             $ref: "#/components/schemas/Slug"
@@ -411,6 +435,13 @@ components:
       # - cannot contain uppercase characters
       pattern: '^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-z0-9][a-z0-9\-_.]*$'
       example: "a-slug-example"
+    OneOrTwoSlugs:
+      description: A command-line/url friendly name for a single slug or two slugs separated by /
+      type: string
+      minLength: 1
+      maxLength: 200
+      pattern: '^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-z0-9][a-z0-9\-_.]*(?<!\.git)(?<!\.atom)(?:/[a-z0-9][a-z0-9\-_.]*){0,1}$'
+      example: "user1/project-1"
     CreationDate:
       description: The date and time the resource was created (in UTC and ISO-8601 format)
       type: string
@@ -500,6 +531,7 @@ components:
       enum:
         - group
         - user
+        - project
     NamespaceResponseList:
       description: A list of Renku namespaces
       type: array
@@ -521,10 +553,13 @@ components:
           $ref: "#/components/schemas/KeycloakId"
         namespace_kind:
           $ref: "#/components/schemas/NamespaceKind"
+        path:
+          $ref: "#/components/schemas/OneOrTwoSlugs"
       required:
         - "id"
         - "namespace_kind"
         - "slug"
+        - "path"
       example:
         id: "01AN4Z79ZS5XN0F25N3DB94T4R"
         name: "R-Project Group"
@@ -532,6 +567,7 @@ components:
         created_by: "owner-keycloak-id"
         creation_date: "2024-03-04T13:04:45Z"
         namespace_kind: "group"
+        path: "r-project"
     UserId:
       type: string
       description: Keycloak user ID
@@ -543,23 +579,15 @@ components:
       example: John
       minLength: 1
       maxLength: 256
-    NamespaceGetQuery:
-      description: Query params for namespace get request
-      allOf:
-      - $ref: "#/components/schemas/PaginationRequest"
-      - properties:
-          minimum_role:
-            description: A minimum role to filter results by.
-            $ref: "#/components/schemas/GroupRole"
-    GroupsGetQuery:
-      description: Query params for namespace get request
-      allOf:
-      - $ref: "#/components/schemas/PaginationRequest"
-      - properties:
-          direct_member:
-            description: A flag to filter groups where the user is a direct member.
-            type: boolean
-            default: false
+    NamespaceGetQueryKind:
+      type: array
+      description: Which namespace kinds to include in the response
+      items:
+        $ref: "#/components/schemas/NamespaceKind"
+      default:
+        - user
+        - group
+      minItems: 1
     GroupPermissions:
       description: The set of permissions on a group
       type: object
@@ -573,21 +601,17 @@ components:
         change_membership:
           description: The user can manage group members
           type: boolean
-    PaginationRequest:
-      type: object
-      additionalProperties: false
-      properties:
-        page:
-          description: Result's page number starting from 1
-          type: integer
-          minimum: 1
-          default: 1
-        per_page:
-          description: The number of results per page
-          type: integer
-          minimum: 1
-          maximum: 100
-          default: 20
+    PaginationRequestPage:
+      description: Result's page number starting from 1
+      type: integer
+      minimum: 1
+      default: 1
+    PaginationRequestPerPage:
+      description: The number of results per page
+      type: integer
+      minimum: 1
+      maximum: 100
+      default: 20
     ErrorResponse:
       type: object
       properties:
@@ -610,6 +634,48 @@ components:
             - "message"
       required:
         - "error"
+  parameters:
+    PaginationRequestPage:
+      in: query
+      description: the current page in paginated response
+      name: page
+      style: form
+      explode: true
+      schema:
+        $ref: "#/components/schemas/PaginationRequestPage"
+    PaginationRequestPerPage:
+      in: query
+      description: the number of results per page in a paginated response
+      name: per_page
+      style: form
+      explode: true
+      schema:
+        $ref: "#/components/schemas/PaginationRequestPerPage"
+    MinimumRole:
+      in: query
+      description: The minimum role the user should have in the resources returned
+      name: minimum_role
+      style: form
+      explode: true
+      schema:
+        $ref: "#/components/schemas/GroupRole"
+    NamespaceKind:
+      in: query
+      description: environment kinds query parameter
+      name: kinds
+      style: form
+      explode: true
+      schema:
+        $ref: "#/components/schemas/NamespaceGetQueryKind"
+    OnlyDirectMember:
+      in: query
+      description: A flag to filter for where the user is a direct member.
+      name: direct_member
+      style: form
+      explode: true
+      schema:
+        type: boolean
+        default: false
   responses:
     Error:
       description: The schema for all 4xx and 5xx responses

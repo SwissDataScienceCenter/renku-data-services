@@ -27,7 +27,6 @@ from renku_data_services.data_connectors.core import (
     validate_unsaved_data_connector,
 )
 from renku_data_services.data_connectors.db import (
-    DataConnectorProjectLinkRepository,
     DataConnectorRepository,
     DataConnectorSecretRepository,
 )
@@ -39,7 +38,6 @@ class DataConnectorsBP(CustomBlueprint):
     """Handlers for manipulating data connectors."""
 
     data_connector_repo: DataConnectorRepository
-    data_connector_to_project_link_repo: DataConnectorProjectLinkRepository
     data_connector_secret_repo: DataConnectorSecretRepository
     authenticator: base_models.Authenticator
 
@@ -115,7 +113,10 @@ class DataConnectorsBP(CustomBlueprint):
         return "/data_connectors/<data_connector_id:ulid>", ["GET"], _get_one
 
     def get_one_by_slug(self) -> BlueprintFactoryResponse:
-        """Get a specific data connector by namespace/entity slug."""
+        """Get a specific data connector by namespace/entity slug.
+
+        This will not find or return data connectors owned by projects.
+        """
 
         @authenticate(self.authenticator)
         @extract_if_none_match
@@ -209,9 +210,7 @@ class DataConnectorsBP(CustomBlueprint):
             user: base_models.APIUser,
             data_connector_id: ULID,
         ) -> JSONResponse:
-            links = await self.data_connector_to_project_link_repo.get_links_from(
-                user=user, data_connector_id=data_connector_id
-            )
+            links = await self.data_connector_repo.get_links_from(user=user, data_connector_id=data_connector_id)
             return validated_json(
                 apispec.DataConnectorToProjectLinksList,
                 [self._dump_data_connector_to_project_link(link) for link in links],
@@ -235,7 +234,7 @@ class DataConnectorsBP(CustomBlueprint):
                 data_connector_id=data_connector_id,
                 project_id=ULID.from_str(body.project_id),
             )
-            link = await self.data_connector_to_project_link_repo.insert_link(user=user, link=unsaved_link)
+            link = await self.data_connector_repo.insert_link(user=user, link=unsaved_link)
             return validated_json(
                 apispec.DataConnectorToProjectLink, self._dump_data_connector_to_project_link(link), status=201
             )
@@ -253,9 +252,7 @@ class DataConnectorsBP(CustomBlueprint):
             data_connector_id: ULID,
             link_id: ULID,
         ) -> HTTPResponse:
-            await self.data_connector_to_project_link_repo.delete_link(
-                user=user, data_connector_id=data_connector_id, link_id=link_id
-            )
+            await self.data_connector_repo.delete_link(user=user, data_connector_id=data_connector_id, link_id=link_id)
             return HTTPResponse(status=204)
 
         return (
@@ -273,13 +270,33 @@ class DataConnectorsBP(CustomBlueprint):
             user: base_models.APIUser,
             project_id: ULID,
         ) -> JSONResponse:
-            links = await self.data_connector_to_project_link_repo.get_links_to(user=user, project_id=project_id)
+            links = await self.data_connector_repo.get_links_to(user=user, project_id=project_id)
             return validated_json(
                 apispec.DataConnectorToProjectLinksList,
                 [self._dump_data_connector_to_project_link(link) for link in links],
             )
 
         return "/projects/<project_id:ulid>/data_connector_links", ["GET"], _get_all_data_connectors_links_to_project
+
+    def get_inaccessible_data_connectors_links_to_project(self) -> BlueprintFactoryResponse:
+        """The number of data connector links in a given project the user has no access to."""
+
+        @authenticate(self.authenticator)
+        async def _get_inaccessible_data_connectors_links_to_project(
+            _: Request,
+            user: base_models.APIUser,
+            project_id: ULID,
+        ) -> JSONResponse:
+            link_ids = await self.data_connector_repo.get_inaccessible_links_to_project(
+                user=user, project_id=project_id
+            )
+            return validated_json(apispec.InaccessibleDataConnectorLinks, {"count": len(link_ids)})
+
+        return (
+            "/projects/<project_id:ulid>/inaccessible_data_connector_links",
+            ["GET"],
+            _get_inaccessible_data_connectors_links_to_project,
+        )
 
     def get_secrets(self) -> BlueprintFactoryResponse:
         """List all saved secrets for a data connector."""
@@ -346,7 +363,7 @@ class DataConnectorsBP(CustomBlueprint):
         return dict(
             id=str(data_connector.id),
             name=data_connector.name,
-            namespace=data_connector.namespace.slug,
+            namespace=data_connector.namespace.path.serialize(),
             slug=data_connector.slug,
             storage=storage,
             # secrets=,

@@ -11,7 +11,9 @@ from sqlalchemy.schema import ForeignKey, UniqueConstraint
 from ulid import ULID
 
 from renku_data_services.authz import models as authz_models
+from renku_data_services.base_models.core import ProjectPath
 from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
+from renku_data_services.namespace.models import ProjectNamespace
 from renku_data_services.project import constants, models
 from renku_data_services.project.apispec import Visibility
 from renku_data_services.secrets.orm import SecretORM
@@ -46,7 +48,15 @@ class ProjectORM(BaseORM):
     # NOTE: The project slugs table has a foreign key from the projects table, but there is a stored procedure
     # triggered by the deletion of slugs to remove the project used by the slug. See migration 89aa4573cfa9.
     slug: Mapped["EntitySlugORM"] = relationship(
-        lazy="joined", init=False, repr=False, viewonly=True, back_populates="project"
+        lazy="joined",
+        init=False,
+        repr=False,
+        viewonly=True,
+        back_populates="project",
+        # NOTE: If the data_connector ID is not null below then multiple joins are possible here
+        # since an entity slug for data connector owned by a project and an entity slug for a project
+        # will be in the same table.
+        primaryjoin="and_(EntitySlugORM.project_id == ProjectORM.id, EntitySlugORM.data_connector_id.is_(None))",
     )
     repositories: Mapped[list["ProjectRepositoryORM"]] = relationship(
         back_populates="project",
@@ -87,6 +97,18 @@ class ProjectORM(BaseORM):
             template_id=self.template_id,
             is_template=self.is_template,
             secrets_mount_directory=self.secrets_mount_directory or constants.DEFAULT_SESSION_SECRETS_MOUNT_DIR,
+        )
+
+    def dump_as_namespace(self) -> ProjectNamespace:
+        """Get the namespace representation of the project."""
+        return ProjectNamespace(
+            id=self.slug.namespace.id,
+            created_by=self.created_by_id,
+            underlying_resource_id=self.id,
+            latest_slug=self.slug.slug,
+            name=self.name,
+            creation_date=self.creation_date,
+            path=ProjectPath.from_strings(self.slug.namespace.slug, self.slug.slug),
         )
 
 

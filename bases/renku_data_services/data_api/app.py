@@ -103,7 +103,6 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         authenticator=config.authenticator,
         user_repo=config.kc_user_repo,
         session_repo=config.session_repo,
-        data_connector_to_project_link_repo=config.data_connector_to_project_link_repo,
         data_connector_repo=config.data_connector_repo,
         project_migration_repo=config.project_migration_repo,
     )
@@ -184,7 +183,6 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         rp_repo=config.rp_repo,
         user_repo=config.kc_user_repo,
         data_connector_repo=config.data_connector_repo,
-        data_connector_project_link_repo=config.data_connector_to_project_link_repo,
         data_connector_secret_repo=config.data_connector_secret_repo,
         internal_gitlab_authenticator=config.gitlab_authenticator,
     )
@@ -221,7 +219,6 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         name="data_connectors",
         url_prefix=url_prefix,
         data_connector_repo=config.data_connector_repo,
-        data_connector_to_project_link_repo=config.data_connector_to_project_link_repo,
         data_connector_secret_repo=config.data_connector_secret_repo,
         authenticator=config.authenticator,
     )
