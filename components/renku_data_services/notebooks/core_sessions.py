@@ -36,7 +36,6 @@ from renku_data_services.notebooks.crs import (
     ExtraContainer,
     ExtraVolume,
     ExtraVolumeMount,
-    ImagePullPolicy,
     ImagePullSecret,
     InitContainer,
     Resources,
@@ -521,9 +520,6 @@ async def patch_session(
             image_secret = get_gitlab_image_pull_secret(
                 nb_config, user, image_pull_secret_name, internal_gitlab_user.access_token
             )
-            if patch.spec.session is None:
-                patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()
-            patch.spec.session.imagePullPolicy = ImagePullPolicy.Always
             if image_secret:
                 updated_secrets = [
                     secret
