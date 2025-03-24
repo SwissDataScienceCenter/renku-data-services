@@ -1211,7 +1211,9 @@ async def test_project_slug_case(
 
 
 @pytest.mark.asyncio
-async def test_project_copy_basics(sanic_client, app_config, user_headers, regular_user, create_project) -> None:
+async def test_project_copy_basics(
+    sanic_client, app_config, user_headers, regular_user, create_project, snapshot
+) -> None:
     await app_config.search_updates_repo.clear_all()
     await create_project("Project 1")
     project = await create_project(
@@ -1220,6 +1222,7 @@ async def test_project_copy_basics(sanic_client, app_config, user_headers, regul
         keywords=["tag 1", "tag 2"],
         repositories=["http://repository-1.ch", "http://repository-2.ch"],
         visibility="public",
+        documentation="test documentation",
     )
     await create_project("Project 3")
     project_id = project["id"]
@@ -1236,14 +1239,16 @@ async def test_project_copy_basics(sanic_client, app_config, user_headers, regul
 
     assert response.status_code == 201, response.text
     copy_project = response.json
-    assert copy_project["name"] == "Renku Native Project"
-    assert copy_project["slug"] == "project-slug"
-    assert copy_project["created_by"] == "user"
     assert copy_project["namespace"] == regular_user.namespace.slug
-    assert copy_project["description"] == "Template project"
-    assert copy_project["visibility"] == project["visibility"]
-    assert copy_project["keywords"] == ["tag 1", "tag 2"]
-    assert copy_project["repositories"] == project["repositories"]
+    assert copy_project["template_id"] == project_id
+    assert copy_project == snapshot(exclude=props("id", "updated_at", "creation_date", "etag", "template_id"))
+
+    _, response = await sanic_client.get(
+        f"/api/data/projects/{copy_project["id"]}", params={"with_documentation": True}, headers=user_headers
+    )
+    assert response.status_code == 200, response.text
+    copy_project = response.json
+    assert copy_project == snapshot(exclude=props("id", "updated_at", "creation_date", "etag", "template_id"))
 
     # Check search updates
     search_updates = await app_config.search_updates_repo.select_next(20)

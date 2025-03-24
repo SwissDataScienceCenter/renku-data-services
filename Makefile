@@ -4,7 +4,7 @@ CODEGEN_PARAMS := \
     --input-file-type openapi \
     --output-model-type pydantic_v2.BaseModel \
     --use-double-quotes \
-    --target-python-version 3.12 \
+    --target-python-version 3.13 \
     --collapse-root-models \
     --field-constraints \
     --strict-nullable \
@@ -17,7 +17,7 @@ CR_CODEGEN_PARAMS := \
 	--input-file-type jsonschema \
 	--output-model-type pydantic_v2.BaseModel \
 	--use-double-quotes \
-	--target-python-version 3.12 \
+	--target-python-version 3.13 \
 	--collapse-root-models \
 	--field-constraints \
 	--strict-nullable \
