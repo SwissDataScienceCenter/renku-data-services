@@ -471,12 +471,14 @@ class NotebooksNewBP(CustomBlueprint):
             await self.metrics.session_started(
                 user=user,
                 metadata={
-                    "cpu": resource_class.cpu,
+                    "cpu": int(resource_class.cpu * 1000),
                     "memory": resource_class.memory,
                     "gpu": resource_class.gpu,
                     "storage": body.disk_storage,
                     "resource_class_id": resource_class.id,
-                    "resource_class_name": resource_class.name,
+                    "resource_pool_id": resource_pool.id or "",
+                    "resource_class_name": f"{resource_pool.name}.{resource_class.name}",
+                    "session_id": server_name,
                 },
             )
 
@@ -515,6 +517,7 @@ class NotebooksNewBP(CustomBlueprint):
         @authenticate(self.authenticator)
         async def _handler(_: Request, user: AuthenticatedAPIUser | AnonymousAPIUser, session_id: str) -> HTTPResponse:
             await self.nb_config.k8s_v2_client.delete_server(session_id, user.id)
+            await self.metrics.session_stopped(user, metadata={"session_id": session_id})
             return empty()
 
         return "/sessions/<session_id>", ["DELETE"], _handler
@@ -539,6 +542,7 @@ class NotebooksNewBP(CustomBlueprint):
                 internal_gitlab_user,
                 rp_repo=self.rp_repo,
                 project_repo=self.project_repo,
+                metrics=self.metrics,
             )
             return json(new_session.as_apispec().model_dump(exclude_none=True, mode="json"))
 
