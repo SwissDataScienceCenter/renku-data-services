@@ -65,7 +65,7 @@ class APIObjectInCluster:
         )
 
     @classmethod
-    def from_k8s_object(cls, obj: K8sObject, api: Api | None = None) -> Self:
+    def from_k8s_object(cls, obj: K8sObject, api: Api) -> Self:
         """Convert a regular k8s object to an api object."""
 
         return cls(

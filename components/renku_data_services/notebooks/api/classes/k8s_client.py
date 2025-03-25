@@ -165,7 +165,6 @@ class NotebookK8sClient(Generic[_SessionType]):
                 )
             )
         ]
-
         if len(objects) == 1:
             return objects[0]
 
@@ -236,7 +235,6 @@ class NotebookK8sClient(Generic[_SessionType]):
         cluster = await self.cluster_by_class_id(manifest.resource_class_id(), api_user)
 
         manifest.metadata.labels[self.username_label] = api_user.id
-
         session = await self.client.create(
             K8sObject(
                 name=server_name,
@@ -408,6 +406,7 @@ class NotebookK8sClient(Generic[_SessionType]):
 
     async def create_secret(self, secret: V1Secret) -> V1Secret:
         """Create a secret."""
+        # TODO: LSA Does not break current code, but bad, as it may be different based on the cluster
         assert secret.metadata is not None
         secret_obj = K8sObject(
             name=secret.metadata.name,
@@ -458,6 +457,7 @@ class NotebookK8sClient(Generic[_SessionType]):
     async def delete_secret(self, name: str) -> None:
         """Delete a secret."""
         return await self.client.delete(
+            # TODO: LSA Does not break current code, but bad, as it may be different based on the cluster
             K8sObjectMeta(
                 name=name,
                 namespace=self.namespace(),
@@ -469,6 +469,7 @@ class NotebookK8sClient(Generic[_SessionType]):
 
     async def patch_secret(self, name: str, patch: dict[str, Any] | list[dict[str, Any]]) -> None:
         """Patch a secret."""
+        # TODO: LSA Does not break current code, but bad, as it may be different based on the cluster
         result = await self.client.get(
             K8sObjectMeta(
                 name=name,
