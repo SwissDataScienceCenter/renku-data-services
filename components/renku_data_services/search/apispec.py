@@ -18,7 +18,7 @@ class PaginationRequest(BaseAPISpec):
     )
     page: int = Field(1, description="Result's page number starting from 1", ge=1)
     per_page: int = Field(
-        25, description="The number of results per page", ge=1, le=100
+        20, description="The number of results per page", ge=1, le=100
     )
 
 
