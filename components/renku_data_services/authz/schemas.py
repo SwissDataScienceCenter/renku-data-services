@@ -22,7 +22,8 @@ from authzed.api.v1 import (
 )
 from ulid import ULID
 
-from renku_data_services.authz.authz import ResourceType, _AuthzConverter, _Relation
+from renku_data_services.authz.authz import _AuthzConverter, _Relation
+from renku_data_services.base_models.core import ResourceType
 from renku_data_services.errors import errors
 
 
@@ -501,7 +502,7 @@ definition data_connector {
     relation viewer: user
     relation public_viewer: user:* | anonymous_user:*
     permission read = public_viewer + viewer + write + \
-        data_connector_namespace->read_children + read_from_linked_resource
+    data_connector_namespace->read_children + read_from_linked_resource
     permission read_from_linked_resource = linked_to->read_linked_resources
     permission write = editor + delete + data_connector_namespace->write
     permission change_membership = delete
@@ -513,4 +514,74 @@ definition data_connector {
 v5 = AuthzSchemaMigration(
     up=[WriteSchemaRequest(schema=_v5)],
     down=[WriteSchemaRequest(schema=_v4)],
+)
+
+_v6: str = """\
+definition user {}
+
+definition group {
+    relation group_platform: platform
+    relation owner: user
+    relation editor: user
+    relation viewer: user
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = public_viewer + read_children
+    permission read_children = viewer + write
+    permission write = editor + delete
+    permission change_membership = delete
+    permission delete = owner + group_platform->is_admin
+    permission non_public_read = owner + editor + viewer - public_viewer
+}
+
+definition user_namespace {
+    relation user_namespace_platform: platform
+    relation owner: user
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = public_viewer + read_children
+    permission read_children = delete
+    permission write = delete
+    permission delete = owner + user_namespace_platform->is_admin
+    permission non_public_read = owner - public_viewer
+}
+
+definition anonymous_user {}
+
+definition platform {
+    relation admin: user
+    permission is_admin = admin
+}
+
+definition project {
+    relation project_platform: platform
+    relation project_namespace: user_namespace | group
+    relation owner: user
+    relation editor: user
+    relation viewer: user
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = public_viewer + read_children
+    permission read_children = viewer + write + project_namespace->read_children
+    permission write = editor + delete + project_namespace->write
+    permission change_membership = delete
+    permission delete = owner + project_platform->is_admin + project_namespace->delete
+    permission non_public_read = owner + editor + viewer + project_namespace->read_children - public_viewer
+}
+
+definition data_connector {
+    relation data_connector_platform: platform
+    relation data_connector_namespace: user_namespace | group | project
+    relation linked_to: project
+    relation owner: user
+    relation editor: user
+    relation viewer: user
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = public_viewer + viewer + write + data_connector_namespace->read_children
+    permission write = editor + delete + data_connector_namespace->write
+    permission change_membership = delete
+    permission delete = owner + data_connector_platform->is_admin + data_connector_namespace->delete
+    permission non_public_read = owner + editor + viewer + data_connector_namespace->read_children - public_viewer
+}"""
+
+v6 = AuthzSchemaMigration(
+    up=[WriteSchemaRequest(schema=_v6)],
+    down=[WriteSchemaRequest(schema=_v5)],
 )

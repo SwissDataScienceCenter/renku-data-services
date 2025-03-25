@@ -12,10 +12,10 @@ from renku_data_services.base_api.auth import authenticate, only_authenticated, 
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_body_root_model, validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
-from renku_data_services.base_models.core import Slug
+from renku_data_services.base_models.core import NamespaceSlug, ProjectPath, Slug
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
 from renku_data_services.errors import errors
-from renku_data_services.namespace import apispec, models
+from renku_data_services.namespace import apispec, apispec_enhanced, models
 from renku_data_services.namespace.core import validate_group_patch
 from renku_data_services.namespace.db import GroupRepository
 
@@ -31,10 +31,13 @@ class GroupsBP(CustomBlueprint):
         """List all groups."""
 
         @authenticate(self.authenticator)
-        @validate_query(query=apispec.GroupsGetQuery)
+        @validate_query(query=apispec.GroupsGetParametersQuery)
         @paginate
         async def _get_all(
-            _: Request, user: base_models.APIUser, pagination: PaginationRequest, query: apispec.GroupsGetQuery
+            _: Request,
+            user: base_models.APIUser,
+            pagination: PaginationRequest,
+            query: apispec.GroupsGetParametersQuery,
         ) -> tuple[list[dict], int]:
             groups, rec_count = await self.group_repo.get_groups(
                 user=user, pagination=pagination, direct_member=query.direct_member
@@ -172,15 +175,24 @@ class GroupsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        @validate_query(query=apispec.NamespaceGetQuery)
+        @validate_query(query=apispec_enhanced.NamespacesGetParametersQuery)
         @paginate
         async def _get_namespaces(
-            request: Request, user: base_models.APIUser, pagination: PaginationRequest, query: apispec.NamespaceGetQuery
+            request: Request,
+            user: base_models.APIUser,
+            pagination: PaginationRequest,
+            query: apispec.NamespacesGetParametersQuery,
         ) -> tuple[list[dict], int]:
             minimum_role = Role.from_group_role(query.minimum_role) if query.minimum_role is not None else None
+            if query.kinds:
+                kinds = [models.NamespaceKind(kind.value) for kind in query.kinds]
+            else:
+                # NOTE: This is for API backwards compatibility reasons, removing or modifying
+                # this default will result in a breaking API change.
+                kinds = [models.NamespaceKind.group, models.NamespaceKind.user]
 
             nss, total_count = await self.group_repo.get_namespaces(
-                user=user, pagination=pagination, minimum_role=minimum_role
+                user=user, pagination=pagination, minimum_role=minimum_role, kinds=kinds
             )
             return validate_and_dump(
                 apispec.NamespaceResponseList,
@@ -188,10 +200,13 @@ class GroupsBP(CustomBlueprint):
                     dict(
                         id=ns.id,
                         name=ns.name,
-                        slug=ns.latest_slug if ns.latest_slug else ns.slug,
+                        slug=ns.latest_slug
+                        if ns.latest_slug
+                        else (ns.path.second.value if isinstance(ns, models.ProjectNamespace) else ns.path.first.value),
                         created_by=ns.created_by,
                         creation_date=ns.creation_date,
                         namespace_kind=apispec.NamespaceKind(ns.kind.value),
+                        path=ns.path.serialize(),
                     )
                     for ns in nss
                 ],
@@ -200,11 +215,11 @@ class GroupsBP(CustomBlueprint):
         return "/namespaces", ["GET"], _get_namespaces
 
     def get_namespace(self) -> BlueprintFactoryResponse:
-        """Get namespace by slug."""
+        """Get user or group namespace by slug."""
 
         @authenticate(self.authenticator)
         async def _get_namespace(_: Request, user: base_models.APIUser, slug: Slug) -> JSONResponse:
-            ns = await self.group_repo.get_namespace_by_slug(user=user, slug=slug)
+            ns = await self.group_repo.get_namespace_by_slug(user=user, slug=NamespaceSlug(slug.value))
             if not ns:
                 raise errors.MissingResourceError(message=f"The namespace with slug {slug} does not exist")
             return validated_json(
@@ -212,11 +227,38 @@ class GroupsBP(CustomBlueprint):
                 dict(
                     id=ns.id,
                     name=ns.name,
-                    slug=ns.latest_slug if ns.latest_slug else ns.slug,
+                    slug=ns.latest_slug or ns.path.last().value,
                     created_by=ns.created_by,
                     creation_date=None,  # NOTE: we do not save creation date in the DB
                     namespace_kind=apispec.NamespaceKind(ns.kind.value),
+                    path=ns.path.serialize(),
                 ),
             )
 
         return "/namespaces/<slug:renku_slug>", ["GET"], _get_namespace
+
+    def get_namespace_second_level(self) -> BlueprintFactoryResponse:
+        """Get project namespaces by slug (i.e. user1/projec2)."""
+
+        @authenticate(self.authenticator)
+        async def _get_namespace_second_level(
+            _: Request, user: base_models.APIUser, first_slug: Slug, second_slug: Slug
+        ) -> JSONResponse:
+            path = ProjectPath.from_strings(first_slug.value, second_slug.value)
+            ns = await self.group_repo.get_namespace_by_path(user=user, path=path)
+            if not ns:
+                raise errors.MissingResourceError(message=f"The namespace with slug {path} does not exist")
+            return validated_json(
+                apispec.NamespaceResponse,
+                dict(
+                    id=ns.id,
+                    name=ns.name,
+                    slug=ns.latest_slug or ns.path.last().value,
+                    created_by=ns.created_by,
+                    creation_date=None,  # NOTE: we do not save creation date in the DB
+                    namespace_kind=apispec.NamespaceKind(ns.kind.value),
+                    path=ns.path.serialize(),
+                ),
+            )
+
+        return "/namespaces/<first_slug:renku_slug>/<second_slug:renku_slug>", ["GET"], _get_namespace_second_level

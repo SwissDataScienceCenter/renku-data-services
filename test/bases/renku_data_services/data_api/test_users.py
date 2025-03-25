@@ -4,7 +4,8 @@ from uuid import uuid4
 import pytest
 from ulid import ULID
 
-from renku_data_services.namespace.models import Namespace, NamespaceKind
+from renku_data_services.base_models.core import NamespacePath
+from renku_data_services.namespace.models import UserNamespace
 from renku_data_services.users.models import UserInfo
 
 
@@ -15,12 +16,11 @@ async def test_get_all_users_as_admin(sanic_client, users) -> None:
         first_name="Admin",
         last_name="Adminson",
         email="admin@gmail.com",
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="admin.adminson",
-            kind=NamespaceKind.user,
             underlying_resource_id="admin-id",
             created_by="admin-id",
+            path=NamespacePath.from_strings("admin.adminson"),
         ),
     )
     admin_token = {
@@ -174,7 +174,7 @@ async def test_logged_in_user_check_adds_user_if_missing(sanic_client, users, ad
         "first_name": user["first_name"],
         "last_name": user["last_name"],
         "email": user["email"],
-        "name": f"{user["first_name"]} {user["last_name"]}",
+        "name": f"{user['first_name']} {user['last_name']}",
     }
     # Just by hitting the users endpoint with valid credentials the user will be aded to the database
     _, res = await sanic_client.get(
@@ -223,7 +223,7 @@ async def test_delete_user(sanic_client, admin_headers) -> None:
         "first_name": user["first_name"],
         "last_name": user["last_name"],
         "email": user["email"],
-        "name": f"{user["first_name"]} {user["last_name"]}",
+        "name": f"{user['first_name']} {user['last_name']}",
     }
     # Just by hitting the users endpoint with valid credentials the user will be added to the database
     _, res = await sanic_client.get(
@@ -282,7 +282,7 @@ async def test_get_self_user(sanic_client, user_headers, regular_user) -> None:
     assert response.json is not None
     user_info = response.json
     assert user_info.get("id") == regular_user.id
-    assert user_info.get("username") == regular_user.namespace.slug
+    assert user_info.get("username") == regular_user.namespace.path.serialize()
     assert user_info.get("email") == regular_user.email
     assert user_info.get("first_name") == regular_user.first_name
     assert user_info.get("last_name") == regular_user.last_name
@@ -297,7 +297,7 @@ async def test_get_self_user_as_admin(sanic_client, admin_headers, admin_user) -
     assert response.json is not None
     user_info = response.json
     assert user_info.get("id") == admin_user.id
-    assert user_info.get("username") == admin_user.namespace.slug
+    assert user_info.get("username") == admin_user.namespace.path.serialize()
     assert user_info.get("email") == admin_user.email
     assert user_info.get("first_name") == admin_user.first_name
     assert user_info.get("last_name") == admin_user.last_name

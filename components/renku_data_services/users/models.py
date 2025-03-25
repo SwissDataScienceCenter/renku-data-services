@@ -11,7 +11,7 @@ from typing import Any, NamedTuple
 from pydantic import BaseModel, Field
 from sanic.log import logger
 
-from renku_data_services.namespace.models import Namespace
+from renku_data_services.namespace.models import UserNamespace
 
 
 class KeycloakEvent(Enum):
@@ -257,7 +257,7 @@ class UnsavedUserInfo:
 class UserInfo(UnsavedUserInfo):
     """A tuple used to convey information about a user and their namespace."""
 
-    namespace: Namespace
+    namespace: UserNamespace
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

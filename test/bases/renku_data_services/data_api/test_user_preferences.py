@@ -9,12 +9,11 @@ from syrupy.filters import props
 from renku_data_services.base_models import APIUser
 from test.bases.renku_data_services.data_api.utils import create_user_preferences
 
-_valid_add_pinned_project: dict[str, Any] = {"project_slug": "user.1/first-project"}
-
-
-@pytest.fixture
-def valid_add_pinned_project_payload() -> dict[str, Any]:
-    return _valid_add_pinned_project
+_valid_add_pinned_project: list[dict[str, Any]] = [
+    {"project_slug": "user.1/first-project"},
+    {"project_slug": "john-doe-1/my-project-1"},
+    {"project_slug": "a-1-2-3/b-1-2-3"},
+]
 
 
 @pytest.fixture
@@ -45,6 +44,7 @@ def api_user() -> APIUser:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("valid_add_pinned_project_payload", _valid_add_pinned_project)
 async def test_get_user_preferences(
     sanic_client: SanicASGITestClient, valid_add_pinned_project_payload: dict[str, Any], api_user: APIUser, snapshot
 ) -> None:
@@ -62,11 +62,12 @@ async def test_get_user_preferences(
     assert res.json.get("pinned_projects") is not None
     assert len(res.json["pinned_projects"].get("project_slugs")) == 1
     project_slugs = res.json["pinned_projects"]["project_slugs"]
-    assert project_slugs[0] == "user.1/first-project"
+    assert project_slugs[0] == valid_add_pinned_project_payload["project_slug"]
     assert res.json == snapshot(exclude=props("user_id"))
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("valid_add_pinned_project_payload", _valid_add_pinned_project)
 async def test_post_user_preferences_pinned_projects(
     sanic_client: SanicASGITestClient, valid_add_pinned_project_payload: dict[str, Any], api_user: APIUser
 ) -> None:
@@ -91,11 +92,12 @@ async def test_post_user_preferences_pinned_projects(
     assert res.json.get("pinned_projects") is not None
     assert len(res.json["pinned_projects"].get("project_slugs")) == 2
     project_slugs = res.json["pinned_projects"]["project_slugs"]
-    assert project_slugs[0] == "user.1/first-project"
+    assert project_slugs[0] == valid_add_pinned_project_payload["project_slug"]
     assert project_slugs[1] == "user.2/second-project"
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("valid_add_pinned_project_payload", _valid_add_pinned_project)
 async def test_post_user_preferences_pinned_projects_existing(
     sanic_client: SanicASGITestClient, valid_add_pinned_project_payload: dict[str, Any], api_user: APIUser
 ) -> None:
@@ -114,10 +116,11 @@ async def test_post_user_preferences_pinned_projects_existing(
     assert res.json.get("pinned_projects") is not None
     assert len(res.json["pinned_projects"].get("project_slugs")) == 1
     project_slugs = res.json["pinned_projects"]["project_slugs"]
-    assert project_slugs[0] == "user.1/first-project"
+    assert project_slugs[0] == valid_add_pinned_project_payload["project_slug"]
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("valid_add_pinned_project_payload", _valid_add_pinned_project)
 async def test_delete_user_preferences_pinned_projects(
     sanic_client: SanicASGITestClient, valid_add_pinned_project_payload: dict[str, Any], api_user: APIUser
 ) -> None:
@@ -126,7 +129,7 @@ async def test_delete_user_preferences_pinned_projects(
 
     _, res = await sanic_client.delete(
         "/api/data/user/preferences/pinned_projects",
-        params=dict(project_slug="user.1/first-project"),
+        params=dict(project_slug=valid_add_pinned_project_payload["project_slug"]),
         headers={"Authorization": f"bearer {api_user.access_token}"},
     )
 
@@ -138,6 +141,7 @@ async def test_delete_user_preferences_pinned_projects(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("valid_add_pinned_project_payload", _valid_add_pinned_project)
 async def test_delete_user_preferences_pinned_projects_unknown(
     sanic_client: SanicASGITestClient, valid_add_pinned_project_payload: dict[str, Any], api_user: APIUser
 ) -> None:
@@ -156,4 +160,4 @@ async def test_delete_user_preferences_pinned_projects_unknown(
     assert res.json.get("pinned_projects") is not None
     assert len(res.json["pinned_projects"].get("project_slugs")) == 1
     project_slugs = res.json["pinned_projects"]["project_slugs"]
-    assert project_slugs[0] == "user.1/first-project"
+    assert project_slugs[0] == valid_add_pinned_project_payload["project_slug"]

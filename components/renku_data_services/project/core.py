@@ -8,7 +8,7 @@ from ulid import ULID
 from renku_data_services import errors
 from renku_data_services.authz.models import Visibility
 from renku_data_services.base_models import RESET, APIUser, ResetType, Slug
-from renku_data_services.data_connectors.db import DataConnectorProjectLinkRepository, DataConnectorRepository
+from renku_data_services.data_connectors.db import DataConnectorRepository
 from renku_data_services.project import apispec, models
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.session.db import SessionRepository
@@ -74,11 +74,10 @@ async def copy_project(
     secrets_mount_directory: str | None,
     project_repo: ProjectRepository,
     session_repo: SessionRepository,
-    data_connector_to_project_link_repo: DataConnectorProjectLinkRepository,
     data_connector_repo: DataConnectorRepository,
 ) -> models.Project:
     """Create a copy of a given project."""
-    template = await project_repo.get_project(user=user, project_id=project_id)
+    template = await project_repo.get_project(user=user, project_id=project_id, with_documentation=True)
     repositories_ = _validate_repositories(repositories)
 
     unsaved_project = models.UnsavedProject(
@@ -92,6 +91,7 @@ async def copy_project(
         keywords=keywords or template.keywords,
         template_id=template.id,
         secrets_mount_directory=PurePosixPath(secrets_mount_directory) if secrets_mount_directory else None,
+        documentation=template.documentation,
     )
     project = await project_repo.insert_project(user, unsaved_project)
 
@@ -103,10 +103,10 @@ async def copy_project(
     # NOTE: Copy data connector links. If this operation fails due to lack of permission, still proceed to create the
     # copy but return an error code that reflects this
     uncopied_dc_ids: list[ULID] = []
-    dc_links = await data_connector_to_project_link_repo.get_links_to(user=user, project_id=project_id)
+    dc_links = await data_connector_repo.get_links_to(user=user, project_id=project_id)
     for dc_link in dc_links:
         try:
-            await data_connector_to_project_link_repo.copy_link(user=user, project_id=project.id, link=dc_link)
+            await data_connector_repo.copy_link(user=user, project_id=project.id, link=dc_link)
         except errors.MissingResourceError:
             uncopied_dc_ids.append(dc_link.data_connector_id)
 

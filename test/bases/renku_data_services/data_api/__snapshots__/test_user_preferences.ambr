@@ -1,9 +1,27 @@
 # serializer version: 1
-# name: test_get_user_preferences
+# name: test_get_user_preferences[valid_add_pinned_project_payload0]
   dict({
     'pinned_projects': dict({
       'project_slugs': list([
         'user.1/first-project',
+      ]),
+    }),
+  })
+# ---
+# name: test_get_user_preferences[valid_add_pinned_project_payload1]
+  dict({
+    'pinned_projects': dict({
+      'project_slugs': list([
+        'john-doe-1/my-project-1',
+      ]),
+    }),
+  })
+# ---
+# name: test_get_user_preferences[valid_add_pinned_project_payload2]
+  dict({
+    'pinned_projects': dict({
+      'project_slugs': list([
+        'a-1-2-3/b-1-2-3',
       ]),
     }),
   })

@@ -93,7 +93,7 @@ class DataConnectorORM(BaseORM):
             id=self.id,
             name=self.name,
             slug=self.slug.slug,
-            namespace=self.slug.namespace.dump(),
+            namespace=self.slug.dump_namespace(),
             visibility=self._dump_visibility(),
             created_by=self.created_by_id,
             creation_date=self.creation_date,
