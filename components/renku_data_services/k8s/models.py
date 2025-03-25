@@ -116,7 +116,7 @@ class K8sObject(K8sObjectMeta):
     def __repr__(self) -> str:
         return super().__repr__()
 
-    def to_api_object(self, api: Api | None) -> APIObject:
+    def to_api_object(self, api: Api) -> APIObject:
         """Convert a regular k8s object to an api object."""
 
         class _APIObj(APIObject):

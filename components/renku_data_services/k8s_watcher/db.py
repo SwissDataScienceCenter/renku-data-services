@@ -33,10 +33,10 @@ class K8sDbCache:
         )
         if meta.user_id is not None:
             stmt = stmt.where(K8sObjectORM.user_id == meta.user_id)
-        logging.warn(f"getting resourceuu{meta}")
+        logging.warning(f"getting resourceuu{meta}")
 
         obj_orm = await session.scalar(stmt)
-        logging.warn(f"got resource from db: {obj_orm}")
+        logging.warning(f"got resource from db: {obj_orm}")
         return obj_orm
 
     async def upsert(self, obj: K8sObject) -> None:
