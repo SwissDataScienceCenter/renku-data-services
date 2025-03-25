@@ -11,6 +11,7 @@ from renku_data_services import base_models, errors
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_query
+from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.session import apispec, apispec_extras, models
 from renku_data_services.session.core import (
@@ -98,6 +99,7 @@ class SessionLaunchersBP(CustomBlueprint):
 
     session_repo: SessionRepository
     authenticator: base_models.Authenticator
+    metrics: MetricsService
 
     def get_all(self) -> BlueprintFactoryResponse:
         """List all session launcher visible to user."""
@@ -128,6 +130,11 @@ class SessionLaunchersBP(CustomBlueprint):
         async def _post(_: Request, user: base_models.APIUser, body: apispec.SessionLauncherPost) -> JSONResponse:
             new_launcher = validate_unsaved_session_launcher(body, builds_config=self.session_repo.builds_config)
             launcher = await self.session_repo.insert_launcher(user=user, launcher=new_launcher)
+            await self.metrics.session_launcher_created(
+                user,
+                environment_kind=launcher.environment.environment_kind.value,
+                environment_image_source=launcher.environment.environment_image_source.value,
+            )
             return validated_json(apispec.SessionLauncher, launcher, status=201)
 
         return "/session_launchers", ["POST"], _post

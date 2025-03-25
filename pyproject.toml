@@ -265,6 +265,7 @@ module = [
   "urllib3.*",
   "escapism.*",
   "kr8s.*",
+  "posthog.*",
 ]
 ignore_missing_imports = true
 
