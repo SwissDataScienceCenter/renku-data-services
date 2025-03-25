@@ -272,6 +272,7 @@ module = [
   "escapism.*",
   "kr8s.*",
   "parsy.*",
+  "posthog.*",
 ]
 ignore_missing_imports = true
 
