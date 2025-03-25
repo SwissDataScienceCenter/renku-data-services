@@ -311,6 +311,7 @@ async def launch_notebook_helper(
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     image: str | None,
     resource_class_id: int | None,
+    cluster_name: str,
     storage: int | None,
     environment_variables: dict[str, str],
     user_secrets: apispec.UserSecrets | None,
@@ -509,6 +510,7 @@ async def launch_notebook_helper(
         is_image_private=is_image_private,
         repositories=[Repository.from_dict(r.model_dump()) for r in repositories],
         config=nb_config,
+        cluster_name=cluster_name,
         **extra_kwargs,
     )
 
@@ -625,6 +627,7 @@ async def launch_notebook(
         user=user,
         image=launch_request.image,
         resource_class_id=launch_request.resource_class_id,
+        cluster_name=cluster_name,
         storage=launch_request.storage,
         environment_variables=launch_request.environment_variables,
         user_secrets=launch_request.user_secrets,
