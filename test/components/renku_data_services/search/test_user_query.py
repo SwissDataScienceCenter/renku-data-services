@@ -25,6 +25,14 @@ from renku_data_services.solr.solr_client import SortDirection
 ref_date: datetime = datetime(2024, 2, 27, 15, 34, 55, tzinfo=UTC)
 
 
+def midnight(d: datetime) -> datetime:
+    return d.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def end_of_day(d: datetime) -> datetime:
+    return d.replace(hour=23, minute=59, second=59, microsecond=0)
+
+
 def test_render_order_by() -> None:
     order = OrderBy(SortableField.fname, SortDirection.asc)
     assert order.render() == "name-asc"
@@ -159,8 +167,11 @@ def test_datetime_calc() -> None:
 
 
 def test_resolve_relative_date() -> None:
-    assert RelativeDate.today.resolve(ref_date, UTC) == (ref_date, None)
-    assert RelativeDate.yesterday.resolve(ref_date, UTC) == (ref_date - timedelta(days=1), None)
+    assert RelativeDate.today.resolve(ref_date, UTC) == (midnight(ref_date), end_of_day(ref_date))
+    assert RelativeDate.yesterday.resolve(ref_date, UTC) == (
+        midnight(ref_date) - timedelta(days=1),
+        end_of_day(ref_date) - timedelta(days=1),
+    )
 
 
 def test_resolve_partial_date() -> None:
@@ -182,7 +193,7 @@ def test_resolve_date_calc() -> None:
     calc = DateTimeCalc(pd, 5, True)
     assert calc.resolve(ref_date, UTC) == (
         pd.datetime_min(UTC) - timedelta(days=5),
-        pd.datetime_min(UTC) + timedelta(days=5),
+        pd.datetime_max(UTC) + timedelta(days=5),
     )
 
 
