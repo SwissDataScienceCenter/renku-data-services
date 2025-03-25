@@ -103,7 +103,7 @@
         ruff
         ruff-lsp
         poetry
-        python312
+        python313
         basedpyright
         rclone
         (writeShellScriptBin "pyfix" ''
