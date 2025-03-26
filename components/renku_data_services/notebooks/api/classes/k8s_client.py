@@ -210,7 +210,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
         return secret
 
     async def create_session(self, manifest: _SessionType) -> _SessionType:
-        """Create a jupyter session in the cluster."""
+        """Create a user session in the cluster."""
 
         # NOTE: You have to exclude none when using model dump below because otherwise we get
         # namespace=null which seems to break the kr8s client or simply k8s does not translate
@@ -289,7 +289,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
         return None
 
     async def get_session(self, name: str, num_retries: int = 0) -> _SessionType | None:
-        """Get a specific JupyterServer object."""
+        """Get a specific user session object."""
         try:
             session = await self._kr8s_type.get(api=self._api, name=name)
         except NotFoundError:
@@ -311,7 +311,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
         return self._session_type.model_validate(session.to_dict())
 
     async def list_sessions(self, safe_username: str) -> list[_SessionType]:
-        """Get a list of k8s JupyterServer objects for a specific user."""
+        """Get a list of k8s user sessions objects for a specific user."""
 
         label_selector = f"{self._username_label}={safe_username}"
         try:
@@ -494,7 +494,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
 
 
 class _ServerCache(Generic[_SessionType]):
-    """Utility class for calling the jupyter session cache."""
+    """Utility class for calling the user session cache."""
 
     def __init__(self, url: str, session_type: type[_SessionType]):
         self.url = url
@@ -505,38 +505,38 @@ class _ServerCache(Generic[_SessionType]):
             self.url_path_name = "sessions"
 
     async def list_sessions(self, safe_username: str) -> list[_SessionType]:
-        """List the jupyter sessions."""
+        """List the user sessions."""
         url = urljoin(self.url, f"/users/{safe_username}/{self.url_path_name}")
         try:
             res = await self.client.get(url, timeout=10)
         except httpx.RequestError as err:
-            logger.warning(f"Jupyter session cache at {url} cannot be reached: {err}")
-            raise CacheError("The jupyter session cache is not available")
+            logger.warning(f"User session cache at {url} cannot be reached: {err}")
+            raise CacheError("The user session cache is not available")
         if res.status_code != 200:
             logger.warning(
                 f"Listing sessions at {url} from "
-                f"jupyter session cache failed with status code: {res.status_code} "
+                f"user session cache failed with status code: {res.status_code} "
                 f"and body: {res.text}"
             )
-            raise CacheError(f"The JSCache produced an unexpected status code: {res.status_code}")
+            raise CacheError(f"The user session cache produced an unexpected status code: {res.status_code}")
 
         return [self.session_type.model_validate(session) for session in res.json()]
 
     async def get_session(self, name: str) -> _SessionType | None:
-        """Get a specific jupyter session."""
+        """Get a specific user session."""
         url = urljoin(self.url, f"/{self.url_path_name}/{name}")
         try:
             res = await self.client.get(url, timeout=10)
         except httpx.RequestError as err:
-            logger.warning(f"Jupyter session cache at {url} cannot be reached: {err}")
-            raise CacheError("The jupyter session cache is not available")
+            logger.warning(f"User session cache at {url} cannot be reached: {err}")
+            raise CacheError("The user session cache is not available")
         if res.status_code != 200:
             logger.warning(
                 f"Reading session at {url} from "
-                f"jupyter session cache failed with status code: {res.status_code} "
+                f"user session cache failed with status code: {res.status_code} "
                 f"and body: {res.text}"
             )
-            raise CacheError(f"The JSCache produced an unexpected status code: {res.status_code}")
+            raise CacheError(f"The user session cache produced an unexpected status code: {res.status_code}")
         output = res.json()
         if len(output) == 0:
             return None
@@ -593,7 +593,7 @@ class _CachedK8sClient[_SessionType, _Kr8sType](_BaseK8sClient):
 
 
 class _SingleK8sClient(Generic[_SessionType, _Kr8sType]):
-    """The K8s client that combines a namespaced client and a jupyter session cache."""
+    """The K8s client that combines a namespaced client and a user session cache."""
 
     def __init__(
         self,
@@ -685,7 +685,7 @@ class _SingleK8sClient(Generic[_SessionType, _Kr8sType]):
         await self._k8s_client.patch_image_pull_secret(session_name, gitlab_token)
 
     def namespace(self) -> str:
-        """Get the preferred namespace for creating jupyter sessions."""
+        """Get the preferred namespace for creating user sessions."""
         return self._k8s_client.namespace()
 
     async def patch_statefulset(

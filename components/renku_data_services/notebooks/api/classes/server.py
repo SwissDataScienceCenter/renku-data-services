@@ -382,7 +382,6 @@ class Renku1UserServer(UserServer):
         self,
         user: AnonymousAPIUser | AuthenticatedAPIUser,
         server_name: str,
-        namespace: str,
         project: str,
         branch: str,
         commit_sha: str,
@@ -400,6 +399,7 @@ class Renku1UserServer(UserServer):
         internal_gitlab_user: APIUser,
         is_image_private: bool = False,
         host: str | None = None,
+        **_: dict,  # Required to ignore unused arguments, among which repositories
     ):
         repositories = [
             Repository(
