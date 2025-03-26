@@ -122,12 +122,12 @@ class NotebooksConfig:
             amalthea_config = _AmaltheaConfig(cache_url="http://not.specified")
             git_config = _GitConfig("http://not.specified", "registry.not.specified")
             k8s_client = DummyK8sClient(
-                server_type=JupyterServerV1Alpha1,
+                session_type=JupyterServerV1Alpha1,
                 kr8s_type=JupyterServerV1Alpha1Kr8s,
                 username_label="renku.io/userId",
             )
             k8s_v2_client = DummyK8sClient(
-                server_type=AmaltheaSessionV1Alpha1,
+                session_type=AmaltheaSessionV1Alpha1,
                 kr8s_type=AmaltheaSessionV1Alpha1Kr8s,
                 username_label="renku.io/safe-username",
             )
@@ -143,7 +143,7 @@ class NotebooksConfig:
                 data_service_url, f"http://{sessions_config.ingress.host}", git_config.url
             )
             k8s_client = MultipleK8sClient(
-                server_type=JupyterServerV1Alpha1,
+                session_type=JupyterServerV1Alpha1,
                 kr8s_type=JupyterServerV1Alpha1Kr8s,
                 cache_url=amalthea_config.cache_url,
                 username_label="renku.io/userId",
@@ -153,7 +153,7 @@ class NotebooksConfig:
                 rp_repo=rp_repo,
             )
             k8s_v2_client = MultipleK8sClient(
-                server_type=AmaltheaSessionV1Alpha1,
+                session_type=AmaltheaSessionV1Alpha1,
                 kr8s_type=AmaltheaSessionV1Alpha1Kr8s,
                 cache_url=amalthea_v2_config.cache_url,
                 # NOTE: v2 sessions have no userId label, the safe-username label is the keycloak user ID

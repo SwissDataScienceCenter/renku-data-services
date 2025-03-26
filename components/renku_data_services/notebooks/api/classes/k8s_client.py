@@ -94,57 +94,57 @@ class K8sClientProto[_SessionType, _Kr8sType](ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def list_servers(self, safe_username: str) -> list[_SessionType]:
+    async def list_sessions(self, safe_username: str) -> list[_SessionType]:
         """List all the user sessions visible from the safe_username."""
         raise NotImplementedError()
 
     @abstractmethod
-    async def create_server(
+    async def create_session(
         self, manifest: _SessionType, api_user: AnonymousAPIUser | AuthenticatedAPIUser
     ) -> _SessionType:
         """Launch a user session."""
         raise NotImplementedError()
 
     @abstractmethod
-    async def get_server(self, name: str, safe_username: str) -> _SessionType | None:
+    async def get_session(self, name: str, safe_username: str) -> _SessionType | None:
         """Lookup a user session by name."""
         raise NotImplementedError()
 
     @abstractmethod
-    async def get_server_logs(
-        self, server_name: str, safe_username: str, max_log_lines: Optional[int] = None
+    async def get_session_logs(
+        self, session_name: str, safe_username: str, max_log_lines: Optional[int] = None
     ) -> dict[str, str]:
         """Retrieve the logs for the given user session."""
         raise NotImplementedError()
 
     @abstractmethod
-    async def patch_server(
-        self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
+    async def patch_session(
+        self, session_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> _SessionType:
         """Patch the user session."""
         raise NotImplementedError()
 
     @abstractmethod
-    async def delete_server(self, server_name: str, safe_username: str) -> None:
+    async def delete_session(self, session_name: str, safe_username: str) -> None:
         """Delete the provided user session."""
         raise NotImplementedError()
 
     @abstractmethod
-    async def patch_server_tokens(
-        self, server_name: str, safe_username: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken
+    async def patch_session_tokens(
+        self, session_name: str, safe_username: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken
     ) -> None:
         """Patch user authentication tokens in a user session."""
         raise NotImplementedError()
 
     @abstractmethod
     async def patch_statefulset(
-        self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
+        self, session_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> StatefulSet | None:
         """Patch a user session."""
         raise NotImplementedError()
 
     @abstractmethod
-    async def create_secret(self, secret: V1Secret) -> V1Secret:
+    async def create_secret(self, secret: V1Secret) -> None:
         """Create a kubernetes secret."""
         raise NotImplementedError()
 
@@ -164,13 +164,13 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
 
     # Mypy does not support inferring type dynamically from another generic type (_SessionType => _Kr8sType)
     def __init__(
-        self, server_type: type[_SessionType], kr8s_type: type[_Kr8sType], api: kr8s.asyncio.Api, username_label: str
+        self, session_type: type[_SessionType], kr8s_type: type[_Kr8sType], api: kr8s.asyncio.Api, username_label: str
     ):
         self._api = api
-        self._server_type: type[_SessionType] = server_type
+        self._session_type: type[_SessionType] = session_type
         self._kr8s_type: type[_Kr8sType] = kr8s_type
-        if (self._server_type == AmaltheaSessionV1Alpha1 and self._kr8s_type == JupyterServerV1Alpha1Kr8s) or (
-            self._server_type == JupyterServerV1Alpha1 and self._kr8s_type == AmaltheaSessionV1Alpha1Kr8s
+        if (self._session_type == AmaltheaSessionV1Alpha1 and self._kr8s_type == JupyterServerV1Alpha1Kr8s) or (
+            self._session_type == JupyterServerV1Alpha1 and self._kr8s_type == AmaltheaSessionV1Alpha1Kr8s
         ):
             raise errors.ProgrammingError(message="Incompatible manifest and client types in k8s client")
 
@@ -212,8 +212,8 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
             return None
         return secret
 
-    async def create_server(self, manifest: _SessionType) -> _SessionType:
-        """Create a jupyter server in the cluster."""
+    async def create_session(self, manifest: _SessionType) -> _SessionType:
+        """Create a user session in the cluster."""
 
         # NOTE: You have to exclude none when using model dump below because otherwise we get
         # namespace=null which seems to break the kr8s client or simply k8s does not translate
@@ -221,49 +221,49 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
         js = await self._kr8s_type(
             api=self._api, namespace=self.namespace(), resource=manifest.model_dump(exclude_none=True, mode="json")
         )
-        server_name = manifest.metadata.name
+        session_name = manifest.metadata.name
         try:
             await js.create()
         except ServerError as e:
-            logger.exception(f"Cannot start server {server_name} because of {e}")
+            logger.exception(f"Cannot start session {session_name} because of {e}")
             raise CannotStartServerError(
-                message=f"Cannot start the session {server_name}",
+                message=f"Cannot start the session {session_name}",
             )
         # NOTE: If refresh is not called then upon creating the object the status is blank
         await js.refresh()
-        # NOTE: We wait for the cache to sync with the newly created server
+        # NOTE: We wait for the cache to sync with the newly created session
         # If not then the user will get a non-null response from the POST request but
-        # then immediately after a null response because the newly created server has
+        # then immediately after a null response because the newly created session has
         # not made it into the cache. With this we wait for the cache to catch up
         # before we send the response from the POST request out. Exponential backoff
         # is used to avoid overwhelming the cache.
-        server = await retry_with_exponential_backoff_async(lambda x: x is None)(self.get_server)(server_name)
-        if server is None:
-            raise CannotStartServerError(message=f"Cannot start the session {server_name}")
-        return server
+        session = await retry_with_exponential_backoff_async(lambda x: x is None)(self.get_session)(session_name)
+        if session is None:
+            raise CannotStartServerError(message=f"Cannot start the session {session_name}")
+        return session
 
-    async def patch_server(self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]]) -> _SessionType:
-        """Patch the server."""
-        server = await self._kr8s_type(
-            api=self._api, namespace=self.namespace(), resource=dict(metadata=dict(name=server_name))
+    async def patch_session(self, session_name: str, patch: dict[str, Any] | list[dict[str, Any]]) -> _SessionType:
+        """Patch the session."""
+        session = await self._kr8s_type(
+            api=self._api, namespace=self.namespace(), resource=dict(metadata=dict(name=session_name))
         )
         patch_type: str | None = None  # rfc7386 patch
         if isinstance(patch, list):
             patch_type = "json"  # rfc6902 patch
         try:
-            await server.patch(patch, type=patch_type)
+            await session.patch(patch, type=patch_type)
         except ServerError as e:
-            logger.exception(f"Cannot patch server {server_name} because of {e}")
+            logger.exception(f"Cannot patch session {session_name} because of {e}")
             raise PatchServerError()
 
-        return self._server_type.model_validate(server.to_dict())
+        return self._session_type.model_validate(session.to_dict())
 
     async def patch_statefulset(
-        self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]]
+        self, session_name: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> StatefulSet | None:
         """Patch a statefulset."""
         sts = await StatefulSet(
-            api=self._api, namespace=self.namespace(), resource=dict(metadata=dict(name=server_name))
+            api=self._api, namespace=self.namespace(), resource=dict(metadata=dict(name=session_name))
         )
         patch_type: str | None = None  # rfc7386 patch
         if isinstance(patch, list):
@@ -279,42 +279,42 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
             raise
         return cast(StatefulSet, sts)
 
-    async def delete_server(self, server_name: str) -> None:
-        """Delete the server."""
-        server = await self._kr8s_type(
-            api=self._api, namespace=self.namespace(), resource=dict(metadata=dict(name=server_name))
+    async def delete_session(self, session_name: str) -> None:
+        """Delete the session."""
+        session = await self._kr8s_type(
+            api=self._api, namespace=self.namespace(), resource=dict(metadata=dict(name=session_name))
         )
         try:
-            await server.delete(propagation_policy="Foreground")
+            await session.delete(propagation_policy="Foreground")
         except ServerError as e:
-            logger.exception(f"Cannot delete server {server_name} because of {e}")
+            logger.exception(f"Cannot delete session {session_name} because of {e}")
             raise DeleteServerError()
         return None
 
-    async def get_server(self, name: str, num_retries: int = 0) -> _SessionType | None:
-        """Get a specific JupyterServer object."""
+    async def get_session(self, name: str, num_retries: int = 0) -> _SessionType | None:
+        """Get a specific user session object."""
         try:
-            server = await self._kr8s_type.get(api=self._api, name=name)
+            session = await self._kr8s_type.get(api=self._api, name=name)
         except NotFoundError:
             return None
         except ServerError as err:
             if err.response is not None and err.response.status_code == 429:
                 retry_after_sec = err.response.headers.get("Retry-After")
                 logger.warning(
-                    "Received 429 status code from k8s when getting server "
+                    "Received 429 status code from k8s when getting session "
                     f"will wait for {retry_after_sec} seconds and retry"
                 )
                 if isinstance(retry_after_sec, str) and retry_after_sec.isnumeric() and num_retries < 3:
                     await asyncio.sleep(int(retry_after_sec))
-                    return await self.get_server(name, num_retries=num_retries + 1)
+                    return await self.get_session(name, num_retries=num_retries + 1)
             if err.response is None or err.response.status_code not in [400, 404]:
-                logger.exception(f"Cannot get server {name} because of {err}")
-                raise IntermittentError(f"Cannot get server {name} from the k8s API.")
+                logger.exception(f"Cannot get session {name} because of {err}")
+                raise IntermittentError(f"Cannot get session {name} from the k8s API.")
             return None
-        return self._server_type.model_validate(server.to_dict())
+        return self._session_type.model_validate(session.to_dict())
 
-    async def list_servers(self, safe_username: str) -> list[_SessionType]:
-        """Get a list of k8s jupyterserver objects for a specific user."""
+    async def list_sessions(self, safe_username: str) -> list[_SessionType]:
+        """Get a list of k8s user sessions objects for a specific user."""
 
         label_selector = f"{self._username_label}={safe_username}"
         try:
@@ -324,19 +324,19 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
             resources = await self._api.async_get(kind=self._kr8s_type, api=self._api, label_selector=label_selector)
             if not isinstance(resources, list):
                 resources = [resources]
-            servers = [resource for resource in resources if isinstance(resource, self._kr8s_type)]
+            sessions = [resource for resource in resources if isinstance(resource, self._kr8s_type)]
 
         except ServerError as err:
             if err.response is None or err.response.status_code not in [400, 404]:
-                logger.exception(f"Cannot list servers because of {err}")
-                raise IntermittentError(f"Cannot list servers from the k8s API with selector {label_selector}.")
+                logger.exception(f"Cannot list sessions because of {err}")
+                raise IntermittentError(f"Cannot list session from the k8s API with selector {label_selector}.")
             return []
-        output: list[_SessionType] = [self._server_type.model_validate(server.to_dict()) for server in servers]
+        output: list[_SessionType] = [self._session_type.model_validate(session.to_dict()) for session in sessions]
         return output
 
-    async def patch_image_pull_secret(self, server_name: str, gitlab_token: GitlabToken) -> None:
+    async def patch_image_pull_secret(self, session_name: str, gitlab_token: GitlabToken) -> None:
         """Patch the image pull secret used in a Renku session."""
-        secret_name = f"{server_name}-image-secret"
+        secret_name = f"{session_name}-image-secret"
         secret = await self.get_secret(secret_name)
         if secret is None:
             return None
@@ -459,7 +459,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
 
     async def patch_statefulset_tokens(self, name: str, renku_tokens: RenkuTokens) -> None:
         """Patch the Renku and Gitlab access tokens that are used in the session statefulset."""
-        if self._server_type != JupyterServerV1Alpha1 or self._kr8s_type != JupyterServerV1Alpha1Kr8s:
+        if self._session_type != JupyterServerV1Alpha1 or self._kr8s_type != JupyterServerV1Alpha1Kr8s:
             raise NotImplementedError("patch_statefulset_tokens is only implemented for JupyterServers")
         try:
             sts = await StatefulSet.get(api=self._api, name=name)
@@ -471,7 +471,7 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
             return
         await sts.patch(patches, type="json")
 
-    async def create_secret(self, secret: V1Secret) -> V1Secret:
+    async def create_secret(self, secret: V1Secret) -> None:
         """Create a new secret."""
 
         new_secret = await Secret(api=self._api, namespace=self.namespace(), resource=_sanitizer(secret))
@@ -507,7 +507,6 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
                 ]
                 await new_secret.patch(patches, type="json")
             raise
-        return V1Secret(metadata=new_secret.metadata, data=new_secret.data, type=new_secret.raw.get("type"))
 
     async def delete_secret(self, name: str) -> None:
         """Delete a secret."""
@@ -515,7 +514,6 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
         if secret is not None:
             with suppress(NotFoundError):
                 await secret.delete()
-        return None
 
     async def patch_secret(self, name: str, patch: dict[str, Any] | list[dict[str, Any]]) -> None:
         """Patch a secret."""
@@ -530,55 +528,55 @@ class _BaseK8sClient(Generic[_SessionType, _Kr8sType]):
 
 
 class _ServerCache(Generic[_SessionType]):
-    """Utility class for calling the jupyter server cache."""
+    """Utility class for calling the user session cache."""
 
-    def __init__(self, url: str, server_type: type[_SessionType]):
+    def __init__(self, url: str, session_type: type[_SessionType]):
         self.url = url
         self.client = httpx.AsyncClient(timeout=10)
-        self.server_type: type[_SessionType] = server_type
+        self.session_type: type[_SessionType] = session_type
         self.url_path_name = "servers"
-        if server_type == AmaltheaSessionV1Alpha1:
+        if session_type == AmaltheaSessionV1Alpha1:
             self.url_path_name = "sessions"
 
-    async def list_servers(self, safe_username: str) -> list[_SessionType]:
-        """List the jupyter servers."""
+    async def list_sessions(self, safe_username: str) -> list[_SessionType]:
+        """List the user sessions."""
         url = urljoin(self.url, f"/users/{safe_username}/{self.url_path_name}")
         try:
             res = await self.client.get(url, timeout=10)
         except httpx.RequestError as err:
-            logger.warning(f"Jupyter server cache at {url} cannot be reached: {err}")
-            raise CacheError("The jupyter server cache is not available")
+            logger.warning(f"User session cache at {url} cannot be reached: {err}")
+            raise CacheError("The user session cache is not available")
         if res.status_code != 200:
             logger.warning(
-                f"Listing servers at {url} from "
-                f"jupyter server cache failed with status code: {res.status_code} "
+                f"Listing sessions at {url} from "
+                f"user session cache failed with status code: {res.status_code} "
                 f"and body: {res.text}"
             )
-            raise CacheError(f"The JSCache produced an unexpected status code: {res.status_code}")
+            raise CacheError(f"The user session cache produced an unexpected status code: {res.status_code}")
 
-        return [self.server_type.model_validate(server) for server in res.json()]
+        return [self.session_type.model_validate(session) for session in res.json()]
 
-    async def get_server(self, name: str) -> _SessionType | None:
-        """Get a specific jupyter server."""
+    async def get_session(self, name: str) -> _SessionType | None:
+        """Get a specific user session."""
         url = urljoin(self.url, f"/{self.url_path_name}/{name}")
         try:
             res = await self.client.get(url, timeout=10)
         except httpx.RequestError as err:
-            logger.warning(f"Jupyter server cache at {url} cannot be reached: {err}")
-            raise CacheError("The jupyter server cache is not available")
+            logger.warning(f"User session cache at {url} cannot be reached: {err}")
+            raise CacheError("The user session cache is not available")
         if res.status_code != 200:
             logger.warning(
-                f"Reading server at {url} from "
-                f"jupyter server cache failed with status code: {res.status_code} "
+                f"Reading session at {url} from "
+                f"user session cache failed with status code: {res.status_code} "
                 f"and body: {res.text}"
             )
-            raise CacheError(f"The JSCache produced an unexpected status code: {res.status_code}")
+            raise CacheError(f"The user session cache produced an unexpected status code: {res.status_code}")
         output = res.json()
         if len(output) == 0:
             return None
         if len(output) > 1:
-            raise ProgrammingError(f"Expected to find 1 server when getting server {name}, found {len(output)}.")
-        return self.server_type.model_validate(output[0])
+            raise ProgrammingError(f"Expected to find 1 session when getting session {name}, found {len(output)}.")
+        return self.session_type.model_validate(output[0])
 
 
 class _CachedK8sClient[_SessionType, _Kr8sType](_BaseK8sClient):
@@ -586,7 +584,7 @@ class _CachedK8sClient[_SessionType, _Kr8sType](_BaseK8sClient):
 
     def __init__(
         self,
-        server_type: type[_SessionType],
+        session_type: type[_SessionType],
         kr8s_type: type[_Kr8sType],
         api: kr8s.asyncio.Api,
         cache_url: str,
@@ -595,45 +593,45 @@ class _CachedK8sClient[_SessionType, _Kr8sType](_BaseK8sClient):
         # sessions can overload the k8s API by submitting a lot of calls directly.
         skip_cache_if_unavailable: bool = False,
     ):
-        super().__init__(server_type, kr8s_type, api, username_label)
-        self._cache: _ServerCache = _ServerCache(cache_url, server_type)
+        super().__init__(session_type, kr8s_type, api, username_label)
+        self._cache: _ServerCache = _ServerCache(cache_url, session_type)
         self._username_label = username_label
         self._skip_cache_if_unavailable = skip_cache_if_unavailable
 
-    async def list_servers(self, safe_username: str) -> list[_SessionType]:
-        """Get a list of servers that belong to a user.
+    async def list_sessions(self, safe_username: str) -> list[_SessionType]:
+        """Get a list of sessions that belong to a user.
 
         Attempt to use the cache first but if the cache fails then use the k8s API.
         """
         try:
-            return await self._cache.list_servers(safe_username)
+            return await self._cache.list_sessions(safe_username)
         except CacheError:
             if self._skip_cache_if_unavailable:
-                logger.warning(f"Skipping the cache to list servers for user: {safe_username}")
-                return await super().list_servers(safe_username)
+                logger.warning(f"Skipping the cache to list sessions for user: {safe_username}")
+                return await super().list_sessions(safe_username)
             else:
                 raise
 
-    async def get_server(self, name: str, num_retries: int = 0) -> _SessionType | None:
-        """Get a specific server by name.
+    async def get_session(self, name: str, num_retries: int = 0) -> _SessionType | None:
+        """Get a specific session by name.
 
         Attempt to use the cache first but if the cache fails then use the k8s API.
         """
         try:
-            return await self._cache.get_server(name)
+            return await self._cache.get_session(name)
         except CacheError:
             if self._skip_cache_if_unavailable:
-                return await super().get_server(name, num_retries)
+                return await super().get_session(name, num_retries)
             else:
                 raise
 
 
 class _SingleK8sClient(Generic[_SessionType, _Kr8sType]):
-    """The K8s client that combines a namespaced client and a jupyter server cache."""
+    """The K8s client that combines a namespaced client and a user session cache."""
 
     def __init__(
         self,
-        server_type: type[_SessionType],
+        session_type: type[_SessionType],
         kr8s_type: type[_Kr8sType],
         api: kr8s.asyncio.Api,
         cache_url: str,
@@ -641,93 +639,96 @@ class _SingleK8sClient(Generic[_SessionType, _Kr8sType]):
         skip_cache_if_unavailable: bool = False,
     ):
         self._k8s_client: _BaseK8sClient[_SessionType, _Kr8sType] = _CachedK8sClient(
-            server_type, kr8s_type, api, cache_url, username_label, skip_cache_if_unavailable
+            session_type, kr8s_type, api, cache_url, username_label, skip_cache_if_unavailable
         )
 
         self.username_label = username_label
         if not self.username_label:
             raise ProgrammingError("username_label has to be provided to K8sClient")
 
-    async def list_servers(self, safe_username: str) -> list[_SessionType]:
-        """Get a list of servers that belong to a user."""
-        return await self._k8s_client.list_servers(safe_username=safe_username)
+    async def list_sessions(self, safe_username: str) -> list[_SessionType]:
+        """Get a list of sessions that belong to a user."""
+        return await self._k8s_client.list_sessions(safe_username)
 
-    async def get_server(self, name: str, safe_username: str) -> _SessionType | None:
-        """Attempt to get a specific server by name from the cache.
+    async def get_session(self, name: str, safe_username: str) -> _SessionType | None:
+        """Attempt to get a specific session by name from the cache.
 
         If the request to the cache fails, fallback to the k8s API.
         """
-        server: _SessionType | None = await self._k8s_client.get_server(name)
+        session: _SessionType | None = await self._k8s_client.get_session(name)
 
-        # NOTE: only the user that the server belongs to can read it, without the line
-        # below anyone can request and read any one else's server
+        # NOTE: only the user that the session belongs to can read it, without the line
+        # below anyone can request and read anyone else's sessions
         if (
-            server is not None
-            and server.metadata is not None
-            and server.metadata.labels.get(self.username_label) != safe_username
+            session is not None
+            and session.metadata is not None
+            and session.metadata.labels.get(self.username_label) != safe_username
         ):
             return None
-        return server
+        return session
 
-    async def get_server_logs(
-        self, server_name: str, safe_username: str, max_log_lines: Optional[int] = None
+    async def get_session_logs(
+        self, session_name: str, safe_username: str, max_log_lines: Optional[int] = None
     ) -> dict[str, str]:
-        """Get the logs from the server."""
-        # NOTE: this get_server ensures the user has access to the server without it you could read someone elses logs
-        server = await self.get_server(server_name, safe_username)
-        if not server:
+        """Get the logs from the session."""
+        # NOTE: this get_session ensures the user has access to the session without this, you could read someone else's
+        #       logs
+        session = await self.get_session(session_name, safe_username)
+        if not session:
             raise errors.MissingResourceError(
-                message=f"Cannot find server {server_name} for user {safe_username} to retrieve logs."
+                message=f"Cannot find session {session_name} for user {safe_username} to retrieve logs."
             )
-        pod_name = f"{server_name}-0"
+        pod_name = f"{session_name}-0"
         return await self._k8s_client.get_pod_logs(pod_name, max_log_lines)
 
-    async def create_server(self, manifest: _SessionType, safe_username: str) -> _SessionType:
-        """Create a server."""
-        server_name = manifest.metadata.name
-        server = await self.get_server(server_name, safe_username)
-        if server:
-            # NOTE: server already exists
-            return server
+    async def create_session(self, manifest: _SessionType, safe_username: str) -> _SessionType:
+        """Create a session."""
+        session_name = manifest.metadata.name
+        session = await self.get_session(session_name, safe_username)
+        if session:
+            # NOTE: session already exists
+            return session
         manifest.metadata.labels[self.username_label] = safe_username
-        return await self._k8s_client.create_server(manifest)
+        return await self._k8s_client.create_session(manifest)
 
-    async def patch_server(
-        self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
+    async def patch_session(
+        self, session_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> _SessionType:
-        """Patch a server."""
-        server = await self.get_server(server_name, safe_username)
-        if not server:
+        """Patch a session."""
+        session = await self.get_session(session_name, safe_username)
+        if not session:
             raise errors.MissingResourceError(
-                message=f"Cannot find server {server_name} for user {safe_username} in order to patch it."
+                message=f"Cannot find session {session_name} for user {safe_username} in order to patch it."
             )
-        return await self._k8s_client.patch_server(server_name=server_name, patch=patch)
+        return await self._k8s_client.patch_session(session_name=session_name, patch=patch)
 
-    async def delete_server(self, server_name: str, safe_username: str) -> None:
-        """Delete the server."""
-        server = await self.get_server(server_name, safe_username)
-        if not server:
+    async def delete_session(self, session_name: str, safe_username: str) -> None:
+        """Delete the session."""
+        session = await self.get_session(session_name, safe_username)
+        if not session:
             raise errors.MissingResourceError(
-                message=f"Cannot find server {server_name} for user {safe_username} in order to delete it."
+                message=f"Cannot find session {session_name} for user {safe_username} in order to delete it."
             )
-        return await self._k8s_client.delete_server(server_name)
+        return await self._k8s_client.delete_session(session_name)
 
-    async def patch_server_tokens(self, server_name: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken) -> None:
+    async def patch_session_tokens(
+        self, session_name: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken
+    ) -> None:
         """Patch the Renku and Gitlab access tokens used in a session."""
-        await self._k8s_client.patch_statefulset_tokens(server_name, renku_tokens)
-        await self._k8s_client.patch_image_pull_secret(server_name, gitlab_token)
+        await self._k8s_client.patch_statefulset_tokens(session_name, renku_tokens)
+        await self._k8s_client.patch_image_pull_secret(session_name, gitlab_token)
 
     def namespace(self) -> str:
-        """Get the preferred namespace for creating jupyter servers."""
+        """Get the preferred namespace for creating user sessions."""
         return self._k8s_client.namespace()
 
     async def patch_statefulset(
-        self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]]
+        self, session_name: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> StatefulSet | None:
-        return await self._k8s_client.patch_statefulset(server_name, patch)
+        return await self._k8s_client.patch_statefulset(session_name, patch)
 
-    async def create_secret(self, secret: V1Secret) -> V1Secret:
-        return await self._k8s_client.create_secret(secret)
+    async def create_secret(self, secret: V1Secret) -> None:
+        await self._k8s_client.create_secret(secret)
 
     async def delete_secret(self, name: str) -> None:
         await self._k8s_client.delete_secret(name)
@@ -780,7 +781,7 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
 
     def __init__(
         self,
-        server_type: type[_SessionType],
+        session_type: type[_SessionType],
         kr8s_type: type[_Kr8sType],
         cache_url: str,
         username_label: str,
@@ -793,7 +794,7 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
 
         # Add at least one connection, to the default cluster.
         self._clients[DEFAULT_K8S_CLUSTER] = _SingleK8sClient(
-            server_type,
+            session_type,
             kr8s_type,
             _KubeConfigEnv().api(),
             cache_url,
@@ -805,7 +806,7 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
             for filename in glob.glob(pathname="*.yaml", root_dir=self.kube_conf_root_dir):
                 try:
                     self._clients[filename.removesuffix(".yaml")] = _SingleK8sClient(
-                        server_type,
+                        session_type,
                         kr8s_type,
                         _KubeConfigYaml(kubeconfig=f"{self.kube_conf_root_dir}/{filename}").api(),
                         cache_url,
@@ -832,7 +833,7 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
         client: _SingleK8sClient[_SessionType, _Kr8sType] | None = self._session2client.get(session_name, None)
         if client is None:
             for c in self._clients.values():
-                if session_name in await c.list_servers(safe_username):
+                if session_name in await c.list_sessions(safe_username):
                     self._session2client[session_name] = c
                     client = c
                     break
@@ -871,105 +872,105 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
 
         return name
 
-    async def list_servers(self, safe_username: str) -> list[_SessionType]:
+    async def list_sessions(self, safe_username: str) -> list[_SessionType]:
         """List all the user sessions visible from the safe_username."""
-        servers = []
+        sessions = []
         for c in self._clients.values():
-            for s in await c.list_servers(safe_username):
-                servers.append(s)
+            for s in await c.list_sessions(safe_username):
+                sessions.append(s)
 
-        return servers
+        return sessions
 
-    async def create_server(
+    async def create_session(
         self, manifest: _SessionType, api_user: AnonymousAPIUser | AuthenticatedAPIUser
     ) -> _SessionType:
         """Launch a user session."""
         class_id = manifest.metadata.annotations["renku.io/resource_class_id"]
-        server_name = manifest.metadata.name
+        session_name = manifest.metadata.name
 
         client = await self._client_by_class_id(class_id, api_user)
 
-        session = await client.create_server(manifest, api_user.id)
-        self._session2client[server_name] = client
+        session = await client.create_session(manifest, api_user.id)
+        self._session2client[session_name] = client
 
         return session
 
-    async def get_server(self, name: str, safe_username: str) -> _SessionType | None:
+    async def get_session(self, name: str, safe_username: str) -> _SessionType | None:
         """Lookup a user session by name."""
         client = await self._client_by_session(name, safe_username)
         if client is not None:
-            return await client.get_server(name, safe_username)
+            return await client.get_session(name, safe_username)
 
         return None
 
-    async def get_server_logs(
-        self, server_name: str, safe_username: str, max_log_lines: Optional[int] = None
+    async def get_session_logs(
+        self, session_name: str, safe_username: str, max_log_lines: Optional[int] = None
     ) -> dict[str, str]:
         """Retrieve the logs for the given user session."""
-        client = await self._client_by_session(server_name, safe_username)
+        client = await self._client_by_session(session_name, safe_username)
         if client is not None:
-            return await client.get_server_logs(server_name, safe_username, max_log_lines)
+            return await client.get_session_logs(session_name, safe_username, max_log_lines)
 
         raise errors.MissingResourceError(
-            message=f"Cannot find server {server_name} for user {safe_username} to retrieve logs."
+            message=f"Cannot find session {session_name} for user {safe_username} to retrieve logs."
         )
 
-    async def patch_server(
-        self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
+    async def patch_session(
+        self, session_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> _SessionType:
         """Patch the user session."""
-        client = await self._client_by_session(server_name, safe_username)
+        client = await self._client_by_session(session_name, safe_username)
         if client is not None:
-            return await client.patch_server(server_name, safe_username, patch)
+            return await client.patch_session(session_name, safe_username, patch)
 
         raise errors.MissingResourceError(
-            message=f"Cannot find cluster connection to server {server_name}"
+            message=f"Cannot find cluster connection to session {session_name}"
             f" for user {safe_username} in order to patch it."
         )
 
-    async def delete_server(self, server_name: str, safe_username: str) -> None:
+    async def delete_session(self, session_name: str, safe_username: str) -> None:
         """Delete the provided user session."""
         # Retrieve and remove from the mapping to the k8s client for this session
-        client = self._session2client.pop(server_name, None)
+        client = self._session2client.pop(session_name, None)
         if client is not None:
-            await client.delete_server(server_name, safe_username)
+            await client.delete_session(session_name, safe_username)
         else:
             found = False
             for c in self._clients.values():
                 with suppress(errors.MissingResourceError):
-                    await c.delete_server(server_name, safe_username)
+                    await c.delete_session(session_name, safe_username)
                     found = True
                     break
             if not found:
                 # If we did not find at all the session raise an exception
                 raise errors.MissingResourceError(
-                    message=f"Cannot find server {server_name} for user {safe_username} in order to delete it."
+                    message=f"Cannot find session {session_name} for user {safe_username} in order to delete it."
                 )
 
-    async def patch_server_tokens(
-        self, server_name: str, safe_username: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken
+    async def patch_session_tokens(
+        self, session_name: str, safe_username: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken
     ) -> None:
         """Patch user authentication tokens in a user session."""
-        client = self._session2client.get(server_name, safe_username)
+        client = self._session2client.get(session_name, safe_username)
         if client is not None:
-            await client.patch_server_tokens(server_name, renku_tokens, gitlab_token)
+            await client.patch_session_tokens(session_name, renku_tokens, gitlab_token)
 
     async def patch_statefulset(
-        self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
+        self, session_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> StatefulSet | None:
         """Patch a user session."""
         result = None
 
-        client = self._session2client.get(server_name, safe_username)
+        client = self._session2client.get(session_name, safe_username)
         if client is not None:
-            result = await client.patch_statefulset(server_name, patch)
+            result = await client.patch_statefulset(session_name, patch)
 
         return result
 
-    async def create_secret(self, secret: V1Secret) -> V1Secret:
+    async def create_secret(self, secret: V1Secret) -> None:
         """Create a kubernetes secret."""
         # TODO: LSA Does not break current code, but bad, as it may be different based on the cluster
-        return await self._clients[DEFAULT_K8S_CLUSTER].create_secret(secret)
+        await self._clients[DEFAULT_K8S_CLUSTER].create_secret(secret)
 
     async def delete_secret(self, name: str) -> None:
         """Delete a kubernetes secret."""
@@ -980,11 +981,11 @@ class MultipleK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
 class DummyK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
     """Dummy Kubernetes client wrapper for unit tests."""
 
-    def __init__(self, server_type: type[_SessionType], kr8s_type: type[_Kr8sType], username_label: str):
-        self._server_type: type[_SessionType] = server_type
+    def __init__(self, session_type: type[_SessionType], kr8s_type: type[_Kr8sType], username_label: str):
+        self._session_type: type[_SessionType] = session_type
         self._kr8s_type: type[_Kr8sType] = kr8s_type
         self._username_label = username_label
-        self._servers: list[_SessionType] = []
+        self._sessions: list[_SessionType] = []
 
     def sanitize(self, obj: APIObject) -> Any:
         """Sanitize a JSON object."""
@@ -998,76 +999,76 @@ class DummyK8sClient(K8sClientProto[_SessionType, _Kr8sType]):
         """Retrieve the cluster name given the resource class id."""
         return "a-cluster"
 
-    async def list_servers(self, safe_username: str) -> list[_SessionType]:
+    async def list_sessions(self, safe_username: str) -> list[_SessionType]:
         """List all the user sessions visible from the safe_username."""
-        return [s for s in self._servers if safe_username in s.metadata.labels.values()]
+        return [s for s in self._sessions if safe_username in s.metadata.labels.values()]
 
-    async def create_server(
+    async def create_session(
         self, manifest: _SessionType, api_user: AnonymousAPIUser | AuthenticatedAPIUser
     ) -> _SessionType:
         """Launch a user session."""
         manifest.metadata.labels[self._username_label] = api_user.id
         manifest.metadata.creationTimestamp = datetime.datetime.fromisoformat("2025-03-05T15:24:55.474Z")
 
-        self._servers.append(manifest)
+        self._sessions.append(manifest)
         return manifest
 
-    async def get_server(self, name: str, safe_username: str) -> _SessionType | None:
+    async def get_session(self, name: str, safe_username: str) -> _SessionType | None:
         """Lookup a user session by name."""
-        for s in self._servers:
+        for s in self._sessions:
             if s.metadata.name == name:
                 return s
         return None
 
-    async def get_server_logs(
-        self, server_name: str, safe_username: str, max_log_lines: Optional[int] = None
+    async def get_session_logs(
+        self, session_name: str, safe_username: str, max_log_lines: Optional[int] = None
     ) -> dict[str, str]:
         """Retrieve the logs for the given user session."""
-        server = await self.get_server(server_name, safe_username)
-        if server is not None:
+        session = await self.get_session(session_name, safe_username)
+        if session is not None:
             return {
                 "container-0": "fake log lines\n fake log lines",
                 "container-1": "fake log lines 2 \n fake log lines 2",
             }
 
         raise errors.MissingResourceError(
-            message=f"Cannot find server {server_name} for user {safe_username} to retrieve logs."
+            message=f"Cannot find session {session_name} for user {safe_username} to retrieve logs."
         )
 
-    async def patch_server(
-        self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
+    async def patch_session(
+        self, session_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> _SessionType:
         """Pretend to Patch the user session."""
-        server = await self.get_server(server_name, safe_username)
-        if not server:
+        session = await self.get_session(session_name, safe_username)
+        if not session:
             raise errors.MissingResourceError(
-                message=f"Cannot find server {server_name} for user {safe_username} in order to patch it."
+                message=f"Cannot find session {session_name} for user {safe_username} in order to patch it."
             )
-        return server
+        return session
 
-    async def delete_server(self, server_name: str, safe_username: str) -> None:
+    async def delete_session(self, session_name: str, safe_username: str) -> None:
         """Delete the provided user session."""
-        server = await self.get_server(server_name, safe_username)
-        if server is not None:
-            self._servers.remove(server)
+        session = await self.get_session(session_name, safe_username)
+        if session is not None:
+            self._sessions.remove(session)
         else:
             raise errors.MissingResourceError(
-                message=f"Cannot find server {server_name} for user {safe_username} in order to delete it."
+                message=f"Cannot find session {session_name} for user {safe_username} in order to delete it."
             )
 
-    async def patch_server_tokens(
-        self, server_name: str, safe_username: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken
+    async def patch_session_tokens(
+        self, session_name: str, safe_username: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken
     ) -> None:
         """Patch user authentication tokens in a user session."""
         raise NotImplementedError()
 
     async def patch_statefulset(
-        self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
+        self, session_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> StatefulSet | None:
         """Patch a user session."""
         raise NotImplementedError()
 
-    async def create_secret(self, secret: V1Secret) -> V1Secret:
+    async def create_secret(self, secret: V1Secret) -> None:
         """Create a kubernetes secret."""
         raise NotImplementedError()
 
