@@ -9,6 +9,32 @@ info:
 servers:
   - url: /api/data
 paths:
+  /classes/{class_id}:
+    get:
+      summary: Get a specific resource class
+      parameters:
+        - in: path
+          name: class_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The resource class that was requested
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ResourceClassWithId"
+        "404":
+          description: The resource class does not exist
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
+        - classes
   /resource_pools:
     get:
       summary: Get all resource pool definitions
@@ -592,32 +618,6 @@ paths:
       responses:
         "204":
           description: The node affinities have been removed
-        default:
-          $ref: '#/components/responses/Error'
-      tags:
-        - classes
-  /classes/{class_id}:
-    get:
-      summary: Get a specific resource class
-      parameters:
-        - in: path
-          name: class_id
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: The resource class that was requested
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/ResourceClassWithId"
-        "404":
-          description: The resource class does not exist
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
         default:
           $ref: '#/components/responses/Error'
       tags:
