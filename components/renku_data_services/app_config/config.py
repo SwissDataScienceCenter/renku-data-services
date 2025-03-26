@@ -141,6 +141,7 @@ class PosthogConfig:
     enabled: bool
     api_key: str
     host: str
+    environment: str
     client: PosthogService
 
     @classmethod
@@ -150,9 +151,10 @@ class PosthogConfig:
 
         api_key = os.environ.get(f"{prefix}POSTHOG_API_KEY", "")
         host = os.environ.get(f"{prefix}POSTHOG_HOST", "")
+        environment = os.environ.get(f"{prefix}POSTHOG_ENVIRONMENT", "development")
 
-        client = PosthogService(enabled=enabled, api_key=api_key, host=host)
-        return cls(enabled, api_key, host, client)
+        client = PosthogService(enabled=enabled, api_key=api_key, host=host, environment=environment)
+        return cls(enabled, api_key, host, environment, client)
 
 
 @dataclass
