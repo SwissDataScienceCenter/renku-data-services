@@ -35,6 +35,16 @@ paths:
           $ref: '#/components/responses/Error'
       tags:
         - classes
+  /error:
+    get:
+      summary: Get a sample error response with status code 422
+      responses:
+        "422":
+          description: The error
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /resource_pools:
     get:
       summary: Get all resource pool definitions
@@ -811,16 +821,6 @@ paths:
           $ref: '#/components/responses/Error'
       tags:
         - users
-  /error:
-    get:
-      summary: Get a sample error response with status code 422
-      responses:
-        "422":
-          description: The error
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
   /version:
     get:
       summary: Get the version of the service
@@ -1528,6 +1528,6 @@ components:
       type: openIdConnect
       openIdConnectUrl: /auth/realms/Renku/.well-known/openid-configuration
 security:
+  - bearer: []
   - oidc:
       - openid
-  - bearer: []
