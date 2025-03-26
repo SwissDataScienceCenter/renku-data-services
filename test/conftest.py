@@ -8,6 +8,7 @@ import socket
 import stat
 import subprocess
 from collections.abc import AsyncGenerator, Iterator
+from distutils.dir_util import copy_tree
 from multiprocessing import Lock
 from pathlib import Path
 from uuid import uuid4
@@ -342,6 +343,12 @@ def solr_config(solr_core, solr_bin_path):
     dir = os.getenv("SOLR_ROOT_DIR")
     conf_file = f"{dir}/{core}/conf/managed-schema.xml"
     os.chmod(conf_file, stat.S_IRUSR | stat.S_IWUSR | stat.S_IROTH | stat.S_IRGRP)
+
+    # we also need to create the configset/_default directory to make
+    # core-admin commands work
+    if not os.path.isdir(f"{dir}/configsets/_default"):
+        os.makedirs(f"{dir}/configsets/_default")
+        copy_tree(f"{dir}/{core}/conf", f"{dir}/configsets/_default/conf")
 
     return solr_config
 
