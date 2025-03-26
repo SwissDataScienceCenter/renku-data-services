@@ -204,18 +204,18 @@ class NotebooksConfig:
         k8s_client = NotebookK8sClient(
             client=client,
             rp_repo=rp_repo,
-            server_type=JupyterServerV1Alpha1,
-            server_kind=JUPYTER_SESSION_KIND,
-            server_api_version=JUPYTER_SESSION_VERSION,
+            session_type=JupyterServerV1Alpha1,
+            session_kind=JUPYTER_SESSION_KIND,
+            session_api_version=JUPYTER_SESSION_VERSION,
             username_label="renku.io/userId",
         )
         k8s_v2_client = NotebookK8sClient(
             client=client,
             rp_repo=rp_repo,
             # NOTE: v2 sessions have no userId label, the safe-username label is the keycloak user ID
-            server_type=AmaltheaSessionV1Alpha1,
-            server_kind=AMALTHEA_SESSION_KIND,
-            server_api_version=AMALTHEA_SESSION_VERSION,
+            session_type=AmaltheaSessionV1Alpha1,
+            session_kind=AMALTHEA_SESSION_KIND,
+            session_api_version=AMALTHEA_SESSION_VERSION,
             username_label="renku.io/safe-username",
         )
         return cls(

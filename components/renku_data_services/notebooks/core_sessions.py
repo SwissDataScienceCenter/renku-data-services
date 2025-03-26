@@ -467,7 +467,7 @@ async def patch_session(
     project_repo: ProjectRepository,
 ) -> AmaltheaSessionV1Alpha1:
     """Patch an Amalthea session."""
-    session = await nb_config.k8s_v2_client.get_server(session_id, user.id)
+    session = await nb_config.k8s_v2_client.get_session(session_id, user.id)
     if session is None:
         raise errors.MissingResourceError(message=f"The session with ID {session_id} does not exist", quiet=True)
     if session.spec is None:
@@ -523,7 +523,7 @@ async def patch_session(
     # If the session is being hibernated we do not need to patch anything else that is
     # not specifically called for in the request body, we can refresh things when the user resumes.
     if is_getting_hibernated:
-        return await nb_config.k8s_v2_client.patch_server(session_id, user.id, patch.to_rfc7386())
+        return await nb_config.k8s_v2_client.patch_session(session_id, user.id, patch.to_rfc7386())
 
     # Patching the extra containers (includes the git proxy)
     git_providers = await nb_config.git_provider_helper.get_providers(user)
@@ -562,4 +562,4 @@ async def patch_session(
     if len(patch_serialized) == 0:
         return session
 
-    return await nb_config.k8s_v2_client.patch_server(session_id, user.id, patch_serialized)
+    return await nb_config.k8s_v2_client.patch_session(session_id, user.id, patch_serialized)
