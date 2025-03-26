@@ -1,6 +1,6 @@
+import json
 import random
 import string
-import json
 
 import pytest
 
@@ -11,14 +11,14 @@ from renku_data_services.solr.solr_client import (
     DefaultSolrAdminClient,
     DefaultSolrClient,
     DocVersions,
-    SolrClientConfig,
-    SolrClientCreateCoreException,
     FacetArbitraryRange,
     FacetBuckets,
     FacetCount,
     FacetRange,
     FacetTerms,
     SolrBucketFacetResponse,
+    SolrClientConfig,
+    SolrClientCreateCoreException,
     SolrFacets,
     SolrQuery,
     SortDirection,
@@ -26,7 +26,7 @@ from renku_data_services.solr.solr_client import (
     UpsertResponse,
     UpsertSuccess,
 )
-from renku_data_services.solr.solr_schema import AddCommand, Field, SchemaCommandList, FieldName
+from renku_data_services.solr.solr_schema import AddCommand, Field, FieldName, SchemaCommandList
 from test.components.renku_data_services.solr import test_entity_documents
 
 
@@ -317,6 +317,7 @@ async def test_create_same_core_twice(solr_config):
 
         with pytest.raises(SolrClientCreateCoreException):
             await client.create(random_name)
+
 
 @pytest.mark.asyncio
 async def test_sub_query(solr_search):
