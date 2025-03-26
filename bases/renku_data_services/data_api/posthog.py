@@ -11,13 +11,13 @@ class PosthogService(MetricsService):
 
     enabled: bool
 
-    def __init__(self, enabled: bool, api_key: str, host: str) -> None:
+    def __init__(self, enabled: bool, api_key: str, host: str, environment: str) -> None:
         """Create new instance."""
         self.enabled = enabled
         if self.enabled:
             from posthog import Posthog
 
-            self._posthog = Posthog(api_key=api_key, host=host)
+            self._posthog = Posthog(api_key=api_key, host=host, super_properties={"environment": environment})
 
     def _anonymize_user_id(self, user: APIUser) -> str:
         """Anonymize a user id."""
