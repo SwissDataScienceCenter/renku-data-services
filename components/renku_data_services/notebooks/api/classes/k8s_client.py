@@ -51,16 +51,16 @@ class NotebookK8sClient(Generic[_SessionType]):
         self,
         client: K8sClusterClientsPool,
         rp_repo: ResourcePoolRepository,
-        server_type: type[_SessionType],
-        server_kind: str,
-        server_api_version: str,
+        session_type: type[_SessionType],
+        session_kind: str,
+        session_api_version: str,
         username_label: str,
     ) -> None:
         self.client = client
         self.rp_repo = rp_repo
-        self.server_type: type[_SessionType] = server_type
-        self.server_kind = server_kind
-        self.server_api_version = server_api_version
+        self.session_type: type[_SessionType] = session_type
+        self.session_kind = session_kind
+        self.session_api_version = session_api_version
         self.username_label = username_label
 
     @staticmethod
@@ -198,79 +198,79 @@ class NotebookK8sClient(Generic[_SessionType]):
         """Return the cluster associated with the given resource class id."""
         return self.client.cluster_by_name(await self.cluster_name_by_class_id(class_id, api_user))
 
-    async def list_servers(self, safe_username: str) -> list[_SessionType]:
-        """Get a list of servers that belong to a user."""
+    async def list_sessions(self, safe_username: str) -> list[_SessionType]:
+        """Get a list of sessions that belong to a user."""
         return [
-            self.server_type.model_validate(s.manifest)
+            self.session_type.model_validate(s.manifest)
             async for s in self.client.list(
                 K8sObjectFilter(
-                    kind=self.server_kind,
-                    version=self.server_api_version,
+                    kind=self.session_kind,
+                    version=self.session_api_version,
                     user_id=safe_username,
                     label_selector={self.username_label: safe_username},
                 )
             )
         ]
 
-    async def get_server(self, name: str, safe_username: str) -> _SessionType | None:
-        """Get a specific server, None is returned if the server does not exist."""
-        server = await self._get(name, self.server_kind, self.server_api_version, safe_username)
+    async def get_session(self, name: str, safe_username: str) -> _SessionType | None:
+        """Get a specific session, None is returned if the session does not exist."""
+        session = await self._get(name, self.session_kind, self.session_api_version, safe_username)
 
-        if server is None:
+        if session is None:
             return None
-        return self.server_type.model_validate(server.manifest)
+        return self.session_type.model_validate(session.manifest)
 
-    async def create_server(self, manifest: _SessionType, api_user: APIUser) -> _SessionType:
+    async def create_session(self, manifest: _SessionType, api_user: APIUser) -> _SessionType:
         """Launch a user session."""
         if api_user.id is None:
             raise ProgrammingError(message=f"API user id un set for {api_user}.")
 
-        server_name = manifest.metadata.name
+        session_name = manifest.metadata.name
 
-        server = await self.get_server(server_name, api_user.id)
-        if server:
-            # NOTE: server already exists
-            return server
+        session = await self.get_session(session_name, api_user.id)
+        if session:
+            # NOTE: session already exists
+            return session
 
         cluster = await self.cluster_by_class_id(manifest.resource_class_id(), api_user)
 
         manifest.metadata.labels[self.username_label] = api_user.id
         session = await self.client.create(
             K8sObject(
-                name=server_name,
+                name=session_name,
                 namespace=cluster.namespace,
                 cluster=cluster.id,
-                kind=self.server_kind,
-                version=self.server_api_version,
+                kind=self.session_kind,
+                version=self.session_api_version,
                 user_id=api_user.id,
                 manifest=Box(manifest.model_dump(exclude_none=True, mode="json")),
             )
         )
 
-        return self.server_type.model_validate(session.manifest)
+        return self.session_type.model_validate(session.manifest)
 
-    async def patch_server(
-        self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
+    async def patch_session(
+        self, session_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> _SessionType:
-        """Patch a server."""
-        server = await self._get(server_name, self.server_kind, self.server_api_version, safe_username)
-        if server is None:
+        """Patch a session."""
+        session = await self._get(session_name, self.session_kind, self.session_api_version, safe_username)
+        if session is None:
             raise errors.MissingResourceError(
-                message=f"Cannot find server {server_name} for user {safe_username} in order to patch it."
+                message=f"Cannot find session {session_name} for user {safe_username} in order to patch it."
             )
 
-        result = await self.client.patch(server, patch)
-        return self.server_type.model_validate(result.manifest)
+        result = await self.client.patch(session, patch)
+        return self.session_type.model_validate(result.manifest)
 
-    async def delete_server(self, server_name: str, safe_username: str) -> None:
-        """Delete the server."""
-        server = await self._get(server_name, self.server_kind, self.server_api_version, safe_username)
-        if server is not None:
-            await self.client.delete(server)
+    async def delete_session(self, session_name: str, safe_username: str) -> None:
+        """Delete the session."""
+        session = await self._get(session_name, self.session_kind, self.session_api_version, safe_username)
+        if session is not None:
+            await self.client.delete(session)
 
-    async def get_statefulset(self, server_name: str, safe_username: str) -> StatefulSet | None:
+    async def get_statefulset(self, session_name: str, safe_username: str) -> StatefulSet | None:
         """Return the statefulset for the given user session."""
-        statefulset = await self._get(server_name, StatefulSet.kind, StatefulSet.version, safe_username)
+        statefulset = await self._get(session_name, StatefulSet.kind, StatefulSet.version, safe_username)
         if statefulset is None:
             return None
 
@@ -282,10 +282,10 @@ class NotebookK8sClient(Generic[_SessionType]):
         return StatefulSet(resource=api_obj_in_cluster.obj, namespace=statefulset.meta.namespace, api=cluster.api)
 
     async def patch_statefulset(
-        self, server_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
+        self, session_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> StatefulSet | None:
         """Patch a statefulset."""
-        sts = await self.get_statefulset(server_name, safe_username)
+        sts = await self.get_statefulset(session_name, safe_username)
         if sts is None:
             return None
 
@@ -305,33 +305,33 @@ class NotebookK8sClient(Generic[_SessionType]):
 
         return sts
 
-    async def patch_statefulset_tokens(self, server_name: str, renku_tokens: RenkuTokens, safe_username: str) -> None:
+    async def patch_statefulset_tokens(self, session_name: str, renku_tokens: RenkuTokens, safe_username: str) -> None:
         """Patch the Renku and Gitlab access tokens used in a session."""
-        sts = await self.get_statefulset(server_name, safe_username)
+        sts = await self.get_statefulset(session_name, safe_username)
         if sts is None:
             return
         patches = self._get_statefulset_token_patches(sts, renku_tokens)
         await sts.patch(patch=patches, type="json")
 
-    async def patch_server_tokens(
-        self, server_name: str, safe_username: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken
+    async def patch_session_tokens(
+        self, session_name: str, safe_username: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken
     ) -> None:
         """Patch the Renku and Gitlab access tokens used in a session."""
-        await self.patch_statefulset_tokens(server_name, renku_tokens, safe_username)
-        await self.patch_image_pull_secret(server_name, gitlab_token, safe_username)
+        await self.patch_statefulset_tokens(session_name, renku_tokens, safe_username)
+        await self.patch_image_pull_secret(session_name, gitlab_token, safe_username)
 
-    async def get_server_logs(
-        self, server_name: str, safe_username: str, max_log_lines: Optional[int] = None
+    async def get_session_logs(
+        self, session_name: str, safe_username: str, max_log_lines: Optional[int] = None
     ) -> dict[str, str]:
-        """Get the logs from the server."""
-        # NOTE: this get_server ensures the user has access to the server, without this you could read someone else's
+        """Get the logs from the session."""
+        # NOTE: this get_session ensures the user has access to the session, without this you could read someone else's
         #       logs
-        server = await self.get_server(server_name, safe_username)
-        if server is None:
+        session = await self.get_session(session_name, safe_username)
+        if session is None:
             raise errors.MissingResourceError(
-                message=f"Cannot find server {server_name} for user {safe_username} to retrieve logs."
+                message=f"Cannot find session {session_name} for user {safe_username} to retrieve logs."
             )
-        pod_name = f"{server_name}-0"
+        pod_name = f"{session_name}-0"
         result = await self._get(pod_name, Pod.kind, Pod.version, None)
 
         logs: dict[str, str] = {}
@@ -363,9 +363,9 @@ class NotebookK8sClient(Generic[_SessionType]):
                 logs[container] = "\n".join(clogs)
         return logs
 
-    async def patch_image_pull_secret(self, server_name: str, gitlab_token: GitlabToken, safe_username: str) -> None:
+    async def patch_image_pull_secret(self, session_name: str, gitlab_token: GitlabToken, safe_username: str) -> None:
         """Patch the image pull secret used in a Renku session."""
-        secret_name = f"{server_name}-image-secret"
+        secret_name = f"{session_name}-image-secret"
         result = await self._get(secret_name, Secret.kind, Secret.version, safe_username)
         if result is None:
             return

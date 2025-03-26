@@ -258,7 +258,7 @@ class NotebooksNewBP(CustomBlueprint):
             server_name = renku_2_make_server_name(
                 user=user, project_id=str(launcher.project_id), launcher_id=body.launcher_id, cluster_name=cluster_name
             )
-            existing_session = await self.nb_config.k8s_v2_client.get_server(server_name, user.id)
+            existing_session = await self.nb_config.k8s_v2_client.get_session(server_name, user.id)
             if existing_session is not None and existing_session.spec is not None:
                 return json(existing_session.as_apispec().model_dump(exclude_none=True, mode="json"))
             environment = launcher.environment
@@ -449,7 +449,7 @@ class NotebooksNewBP(CustomBlueprint):
             for s in secrets_to_create:
                 await self.nb_config.k8s_v2_client.create_secret(s.secret)
             try:
-                manifest = await self.nb_config.k8s_v2_client.create_server(manifest, user)
+                manifest = await self.nb_config.k8s_v2_client.create_session(manifest, user)
             except Exception:
                 for s in secrets_to_create:
                     await self.nb_config.k8s_v2_client.delete_secret(s.secret.metadata.name)
@@ -459,7 +459,7 @@ class NotebooksNewBP(CustomBlueprint):
                     await request_session_secret_creation(user, self.nb_config, manifest, session_secrets)
                     await request_dc_secret_creation(user, self.nb_config, manifest, enc_secrets)
                 except Exception:
-                    await self.nb_config.k8s_v2_client.delete_server(server_name, user.id)
+                    await self.nb_config.k8s_v2_client.delete_session(server_name, user.id)
                     raise
 
             return json(manifest.as_apispec().model_dump(mode="json", exclude_none=True), 201)
@@ -471,7 +471,7 @@ class NotebooksNewBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _handler(_: Request, user: AuthenticatedAPIUser | AnonymousAPIUser) -> HTTPResponse:
-            sessions = await self.nb_config.k8s_v2_client.list_servers(user.id)
+            sessions = await self.nb_config.k8s_v2_client.list_sessions(user.id)
             output: list[dict] = []
             for session in sessions:
                 output.append(session.as_apispec().model_dump(exclude_none=True, mode="json"))
@@ -484,7 +484,7 @@ class NotebooksNewBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _handler(_: Request, user: AuthenticatedAPIUser | AnonymousAPIUser, session_id: str) -> HTTPResponse:
-            session = await self.nb_config.k8s_v2_client.get_server(session_id, user.id)
+            session = await self.nb_config.k8s_v2_client.get_session(session_id, user.id)
             if session is None:
                 raise errors.ValidationError(message=f"The session with ID {session_id} does not exist.", quiet=True)
             return json(session.as_apispec().model_dump(exclude_none=True, mode="json"))
@@ -496,7 +496,7 @@ class NotebooksNewBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _handler(_: Request, user: AuthenticatedAPIUser | AnonymousAPIUser, session_id: str) -> HTTPResponse:
-            await self.nb_config.k8s_v2_client.delete_server(session_id, user.id)
+            await self.nb_config.k8s_v2_client.delete_session(session_id, user.id)
             return empty()
 
         return "/sessions/<session_id>", ["DELETE"], _handler
@@ -537,7 +537,7 @@ class NotebooksNewBP(CustomBlueprint):
             session_id: str,
             query: apispec.SessionsSessionIdLogsGetParametersQuery,
         ) -> HTTPResponse:
-            logs = await self.nb_config.k8s_v2_client.get_server_logs(session_id, user.id, query.max_lines)
+            logs = await self.nb_config.k8s_v2_client.get_session_logs(session_id, user.id, query.max_lines)
             return json(apispec.SessionLogsResponse.model_validate(logs).model_dump(exclude_none=True))
 
         return "/sessions/<session_id>/logs", ["GET"], _handler
