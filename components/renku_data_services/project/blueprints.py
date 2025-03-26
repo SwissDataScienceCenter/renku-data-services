@@ -88,22 +88,12 @@ class ProjectsBP(CustomBlueprint):
         """List all project migrations."""
 
         @authenticate(self.authenticator)
-        @validate_query(query=apispec.ProjectMigrationGetQuery)
-        @paginate
-        async def _get_all_migrations(
-            _: Request,
-            user: base_models.APIUser,
-            pagination: PaginationRequest,
-            query: apispec.ProjectMigrationGetQuery,
-        ) -> tuple[list[dict[str, Any]], int]:
-            project_migrations, total_num = await self.project_migration_repo.get_project_migrations(
-                user=user, pagination=pagination
-            )
+        @only_authenticated
+        async def _get_all_migrations(_: Request, user: base_models.APIUser) -> JSONResponse:
+            project_migrations = await self.project_migration_repo.get_project_migrations(user=user)
 
-            return [
-                validate_and_dump(apispec.ProjectMigrationList, self._dump_project_migration(p))
-                for p in project_migrations
-            ], total_num
+            migrations_list = [self._dump_project_migration(p) for p in project_migrations]
+            return validated_json(apispec.ProjectMigrationList, migrations_list)
 
         return "/renku_v1_projects/migrations", ["GET"], _get_all_migrations
 
