@@ -76,7 +76,7 @@ async def user_servers(
     """Returns a filtered list of servers for the given user."""
 
     servers = [
-        UserServerManifest(s, config.sessions.default_image) for s in await config.k8s_client.list_servers(user.id)
+        UserServerManifest(s, config.sessions.default_image) for s in await config.k8s_client.list_sessions(user.id)
     ]
     filtered_servers = {}
     ann_prefix = config.session_get_endpoint_annotations.renku_annotation_prefix
@@ -91,7 +91,7 @@ async def user_server(
 ) -> UserServerManifest:
     """Returns the requested server for the user."""
 
-    server = await config.k8s_client.get_server(server_name, user.id)
+    server = await config.k8s_client.get_session(server_name, user.id)
     if server is None:
         raise errors.MissingResourceError(message=f"The server {server_name} does not exist.")
     return UserServerManifest(server, config.sessions.default_image)
@@ -109,7 +109,7 @@ async def patch_server(
     if not config.sessions.storage.pvs_enabled:
         raise intermittent.PVDisabledError()
 
-    server = await config.k8s_client.get_server(server_name, user.id)
+    server = await config.k8s_client.get_session(server_name, user.id)
     if server is None:
         raise errors.MissingResourceError(message=f"The server with name {server_name} cannot be found")
     if server.spec is None:
@@ -161,8 +161,8 @@ async def patch_server(
                     "path": "/metadata/labels/renku.io~1quota",
                 }
             )
-        new_server = await config.k8s_client.patch_server(
-            server_name=server_name, safe_username=user.id, patch=js_patch
+        new_server = await config.k8s_client.patch_session(
+            session_name=server_name, safe_username=user.id, patch=js_patch
         )
         ss_patch: list[dict[str, Any]] = [
             {
@@ -171,7 +171,7 @@ async def patch_server(
                 "value": parsed_server_options.priority_class,
             }
         ]
-        await config.k8s_client.patch_statefulset(server_name=server_name, safe_username=user.id, patch=ss_patch)
+        await config.k8s_client.patch_statefulset(session_name=server_name, safe_username=user.id, patch=ss_patch)
 
     if state == PatchServerStatusEnum.Hibernated:
         # NOTE: Do nothing if server is already hibernated
@@ -221,7 +221,7 @@ async def patch_server(
             },
         }
 
-        new_server = await config.k8s_client.patch_server(server_name=server_name, safe_username=user.id, patch=patch)
+        new_server = await config.k8s_client.patch_session(session_name=server_name, safe_username=user.id, patch=patch)
     elif state == PatchServerStatusEnum.Running:
         # NOTE: We clear hibernation annotations in Amalthea to avoid flickering in the UI (showing
         # the repository as dirty when resuming a session for a short period of time).
@@ -243,8 +243,8 @@ async def patch_server(
                 floor(user.access_token_expires_at.timestamp()) if user.access_token_expires_at is not None else -1
             ),
         )
-        await config.k8s_client.patch_server_tokens(server_name, user.id, renku_tokens, gitlab_token)
-        new_server = await config.k8s_client.patch_server(server_name=server_name, safe_username=user.id, patch=patch)
+        await config.k8s_client.patch_session_tokens(server_name, user.id, renku_tokens, gitlab_token)
+        new_server = await config.k8s_client.patch_session(session_name=server_name, safe_username=user.id, patch=patch)
 
     return UserServerManifest(new_server, config.sessions.default_image)
 
@@ -252,7 +252,7 @@ async def patch_server(
 async def stop_server(config: NotebooksConfig, user: AnonymousAPIUser | AuthenticatedAPIUser, server_name: str) -> None:
     """Stops / deletes the requested server."""
 
-    await config.k8s_client.delete_server(server_name, safe_username=user.id)
+    await config.k8s_client.delete_session(server_name, safe_username=user.id)
 
 
 def server_options(config: NotebooksConfig) -> dict:
@@ -271,8 +271,8 @@ async def server_logs(
 ) -> dict:
     """Returns the logs of the given server."""
 
-    return await config.k8s_client.get_server_logs(
-        server_name=server_name,
+    return await config.k8s_client.get_session_logs(
+        session_name=server_name,
         safe_username=user.id,
         max_log_lines=max_lines,
     )
@@ -323,11 +323,8 @@ async def launch_notebook_helper(
     project: str | None,  # Renku 1.0
     branch: str | None,  # Renku 1.0
     commit_sha: str | None,  # Renku 1.0
-    notebook: str | None,  # Renku 1.0
     gl_project: GitlabProject | None,  # Renku 1.0
     gl_project_path: str | None,  # Renku 1.0
-    project_id: str | None,  # Renku 2.0
-    launcher_id: str | None,  # Renku 2.0
     repositories: list[apispec.LaunchNotebookRequestRepository] | None,  # Renku 2.0
     internal_gitlab_user: APIUser,
     user_repo: UserRepo,
@@ -335,7 +332,7 @@ async def launch_notebook_helper(
 ) -> tuple[UserServerManifest, int]:
     """Helper function to launch a Jupyter server."""
 
-    server = await nb_config.k8s_client.get_server(server_name, user.id)
+    server = await nb_config.k8s_client.get_session(server_name, user.id)
 
     if server:
         return UserServerManifest(server, nb_config.sessions.default_image, nb_config.sessions.storage.pvs_enabled), 200
@@ -344,7 +341,6 @@ async def launch_notebook_helper(
 
     # Add annotation for old and new notebooks
     is_image_private = False
-    using_default_image = False
     if image:
         # A specific image was requested
         parsed_image = Image.from_path(image)
@@ -359,7 +355,6 @@ async def launch_notebook_helper(
             image_repo = image_repo.with_oauth2_token(internal_gitlab_user.access_token)
             image_exists_privately = await image_repo.image_exists(parsed_image)
         if not image_exists_privately and not image_exists_publicly:
-            using_default_image = True
             image = nb_config.sessions.default_image
             parsed_image = Image.from_path(image)
         if image_exists_privately:
@@ -484,16 +479,14 @@ async def launch_notebook_helper(
     if user_secrets:
         k8s_user_secret = K8sUserSecrets(f"{server_name}-secret", **user_secrets.model_dump())
 
+    # Renku 1-only parameters
     extra_kwargs: dict = dict(
         commit_sha=commit_sha,
         branch=branch,
         project=project,
         namespace=namespace,
-        launcher_id=launcher_id,
-        project_id=project_id,
-        notebook=notebook,
-        internal_gitlab_user=internal_gitlab_user,  # Renku 1
-        gitlab_project=gl_project,  # Renku 1
+        internal_gitlab_user=internal_gitlab_user,
+        gitlab_project=gl_project,
     )
     server = server_class(
         user=user,
@@ -506,7 +499,6 @@ async def launch_notebook_helper(
         k8s_client=nb_config.k8s_client,
         workspace_mount_path=mount_path,
         work_dir=server_work_dir,
-        using_default_image=using_default_image,
         is_image_private=is_image_private,
         repositories=[Repository.from_dict(r.model_dump()) for r in repositories],
         config=nb_config,
@@ -536,7 +528,7 @@ async def launch_notebook_helper(
 
     async def create_secret(payload: dict[str, Any], type_message: str) -> None:
         async def _on_error(server_name: str, error_msg: str) -> None:
-            await nb_config.k8s_client.delete_server(server_name, safe_username=user.id)
+            await nb_config.k8s_client.delete_session(server_name, safe_username=user.id)
             raise RuntimeError(error_msg)
 
         try:
@@ -639,11 +631,8 @@ async def launch_notebook(
         project=launch_request.project,
         branch=launch_request.branch,
         commit_sha=launch_request.commit_sha,
-        notebook=launch_request.notebook,
         gl_project=gl_project,
         gl_project_path=gl_project_path,
-        project_id=None,
-        launcher_id=None,
         repositories=None,
         internal_gitlab_user=internal_gitlab_user,
         user_repo=user_repo,
