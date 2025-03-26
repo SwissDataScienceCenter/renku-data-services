@@ -209,6 +209,7 @@ async def app_config(
 
 @pytest_asyncio.fixture
 async def app_config_instance(app_config, db_instance, authz_instance) -> AsyncGenerator[DataConfig, None]:
+    app_config.metrics.reset_mock()
     yield app_config
 
 

@@ -5,6 +5,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Self
+from unittest.mock import MagicMock
 
 from authzed.api.v1 import AsyncClient, SyncClient
 from cryptography.hazmat.primitives import serialization
@@ -26,6 +27,7 @@ from renku_data_services.app_config.server_options import (
 from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.authz.authz import Authz
 from renku_data_services.authz.config import AuthzConfig
+from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.crc import models as rp_models
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.db_config.config import DBConfig
@@ -227,6 +229,7 @@ class TestAppConfig(Config):
             authz_config=AuthzConfigStack.from_env(),
             nb_config=nb_config,
             builds_config=builds_config,
+            metrics=MagicMock(spec=MetricsService),
         )
 
     def __post_init__(self) -> None:
