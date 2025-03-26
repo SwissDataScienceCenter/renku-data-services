@@ -18,10 +18,21 @@ from renku_data_services.project import constants, models
 from renku_data_services.project.apispec import Visibility
 from renku_data_services.secrets.orm import SecretORM
 from renku_data_services.users.orm import UserORM
+from renku_data_services.utils.sanic_pgaudit import versioning_manager
 from renku_data_services.utils.sqlalchemy import PurePosixPathType, ULIDType
 
 if TYPE_CHECKING:
     from renku_data_services.namespace.orm import EntitySlugORM
+
+
+class CommonORM(MappedAsDataclass, DeclarativeBase):
+    """Base class for common schema."""
+
+    metadata = MetaData(schema="common")
+    registry = COMMON_ORM_REGISTRY
+
+
+versioning_manager.init(CommonORM)
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
@@ -36,6 +47,7 @@ class ProjectORM(BaseORM):
 
     __tablename__ = "projects"
     __table_args__ = (Index("ix_projects_project_template_id", "template_id"),)
+    __versioned__ = {"exclude": ["creation_date"]}
     id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
     name: Mapped[str] = mapped_column("name", String(99))
     visibility: Mapped[Visibility]
