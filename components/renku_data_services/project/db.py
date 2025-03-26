@@ -928,28 +928,16 @@ class ProjectMigrationRepository:
     async def get_project_migrations(
         self,
         user: base_models.APIUser,
-        pagination: PaginationRequest,
-    ) -> tuple[list[models.ProjectMigrationInfo], int]:
+    ) -> list[models.ProjectMigrationInfo]:
         """Get all project migrations from the database."""
         project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
 
         async with self.session_maker() as session:
             stmt = select(schemas.ProjectMigrationsORM)
             stmt = stmt.where(schemas.ProjectMigrationsORM.project_id.in_(project_ids))
-
-            stmt = stmt.order_by(coalesce(schemas.ProjectMigrationsORM.id).desc())
-
-            stmt = stmt.limit(pagination.per_page).offset(pagination.offset)
-
-            stmt_count = (
-                select(func.count())
-                .select_from(schemas.ProjectMigrationsORM)
-                .where(schemas.ProjectMigrationsORM.project_id.in_(project_ids))
-            )
-            results = await session.scalars(stmt), await session.scalar(stmt_count)
-            project_migrations_orm = results[0].all()
-            total_elements = results[1] or 0
-            return [p.dump() for p in project_migrations_orm], total_elements
+            result = await session.scalars(stmt)
+            project_migrations_orm = result.all()
+            return [p.dump() for p in project_migrations_orm]
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.create, ResourceType.project)

@@ -151,14 +151,6 @@ paths:
   /renku_v1_projects/migrations:
     get:
       summary: Return list of projects migrated from v1
-      parameters:
-        - in: query
-          description: query parameters
-          name: params
-          style: form
-          explode: true
-          schema:
-            $ref: "#/components/schemas/ProjectMigrationGetQuery"
       responses:
         "200":
           description: List of project migrations

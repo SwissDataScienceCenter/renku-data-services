@@ -390,10 +390,6 @@ class ProjectsGetParametersQuery(BaseAPISpec):
     params: Optional[ProjectGetQuery] = None
 
 
-class RenkuV1ProjectsMigrationsGetParametersQuery(BaseAPISpec):
-    params: Optional[ProjectMigrationGetQuery] = None
-
-
 class Project(BaseAPISpec):
     id: str = Field(
         ...,
