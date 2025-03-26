@@ -944,7 +944,7 @@ class ProjectMigrationRepository:
             stmt_count = (
                 select(func.count())
                 .select_from(schemas.ProjectMigrationsORM)
-                .where(schemas.ProjectMigrationsORM.id.in_(project_ids))
+                .where(schemas.ProjectMigrationsORM.project_id.in_(project_ids))
             )
             results = await session.scalars(stmt), await session.scalar(stmt_count)
             project_migrations_orm = results[0].all()
