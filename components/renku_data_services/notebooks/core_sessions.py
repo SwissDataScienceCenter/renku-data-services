@@ -3,7 +3,8 @@
 import base64
 import json
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, MutableMapping
+from datetime import timedelta
 from pathlib import PurePosixPath
 from typing import cast
 from urllib.parse import urljoin, urlparse
@@ -38,6 +39,8 @@ from renku_data_services.notebooks.crs import (
     ExtraVolumeMount,
     ImagePullSecret,
     InitContainer,
+    Quantity,
+    QuantityInt,
     Resources,
     SecretAsVolume,
     SecretAsVolumeItem,
@@ -353,17 +356,17 @@ async def request_session_secret_creation(
 
 def resources_from_resource_class(resource_class: ResourceClass) -> Resources:
     """Convert the resource class to a k8s resources spec."""
-    requests: dict[str, str | int] = {
-        "cpu": str(round(resource_class.cpu * 1000)) + "m",
-        "memory": f"{resource_class.memory}Gi",
+    requests: MutableMapping[str, Quantity | QuantityInt] = {
+        "cpu": Quantity(str(round(resource_class.cpu * 1000)) + "m"),
+        "memory": Quantity(f"{resource_class.memory}Gi"),
     }
-    limits: dict[str, str | int] = {}
+    limits: MutableMapping[str, Quantity | QuantityInt] = {}
     if resource_class.gpu > 0:
         gpu_name = GpuKind.NVIDIA.value + "/gpu"
-        requests[gpu_name] = resource_class.gpu
+        requests[gpu_name] = QuantityInt(resource_class.gpu)
         # NOTE: GPUs have to be set in limits too since GPUs cannot be overcommited, if
         # not on some clusters this will cause the session to fully fail to start.
-        limits[gpu_name] = resource_class.gpu
+        limits[gpu_name] = QuantityInt(resource_class.gpu)
     return Resources(requests=requests, limits=limits if len(limits) > 0 else None)
 
 
@@ -401,11 +404,11 @@ def get_culling(resource_pool: ResourcePool, nb_config: NotebooksConfig) -> Cull
         resource_pool.hibernation_threshold or nb_config.sessions.culling.registered.hibernated_seconds
     )
     return Culling(
-        maxAge=f"{nb_config.sessions.culling.registered.max_age_seconds}s",
-        maxFailedDuration=f"{nb_config.sessions.culling.registered.failed_seconds}s",
-        maxHibernatedDuration=f"{hibernation_threshold_seconds}s",
-        maxIdleDuration=f"{idle_threshold_seconds}s",
-        maxStartingDuration=f"{nb_config.sessions.culling.registered.pending_seconds}s",
+        maxAge=timedelta(seconds=nb_config.sessions.culling.registered.max_age_seconds),
+        maxFailedDuration=timedelta(seconds=nb_config.sessions.culling.registered.failed_seconds),
+        maxHibernatedDuration=timedelta(seconds=hibernation_threshold_seconds),
+        maxIdleDuration=timedelta(seconds=idle_threshold_seconds),
+        maxStartingDuration=timedelta(seconds=nb_config.sessions.culling.registered.pending_seconds),
     )
 
 

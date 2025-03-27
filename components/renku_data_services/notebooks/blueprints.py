@@ -51,6 +51,8 @@ from renku_data_services.notebooks.crs import (
     Ingress,
     InitContainer,
     Metadata,
+    Quantity,
+    QuantityInt,
     ReconcileStrategy,
     Resources,
     Session,
@@ -357,15 +359,15 @@ class NotebooksNewBP(CustomBlueprint):
                 "renku.io/launcher_id": body.launcher_id,
                 "renku.io/resource_class_id": str(body.resource_class_id or default_resource_class.id),
             }
-            requests: dict[str, str | int] = {
-                "cpu": str(round(resource_class.cpu * 1000)) + "m",
-                "memory": f"{resource_class.memory}Gi",
+            requests: dict[str, Quantity | QuantityInt] = {
+                "cpu": Quantity(str(round(resource_class.cpu * 1000)) + "m"),
+                "memory": Quantity(f"{resource_class.memory}Gi"),
             }
-            limits: dict[str, str | int] = {"memory": f"{resource_class.memory}Gi"}
+            limits: dict[str, Quantity | QuantityInt] = {"memory": Quantity(f"{resource_class.memory}Gi")}
             if resource_class.gpu > 0:
                 gpu_name = GpuKind.NVIDIA.value + "/gpu"
-                requests[gpu_name] = resource_class.gpu
-                limits[gpu_name] = resource_class.gpu
+                requests[gpu_name] = QuantityInt(resource_class.gpu)
+                limits[gpu_name] = QuantityInt(resource_class.gpu)
             if isinstance(user, AuthenticatedAPIUser):
                 auth_secret = await get_auth_secret_authenticated(self.nb_config, user, server_name)
             else:
@@ -404,7 +406,7 @@ class NotebooksNewBP(CustomBlueprint):
                         port=environment.port,
                         storage=Storage(
                             className=self.nb_config.sessions.storage.pvs_storage_class,
-                            size=str(body.disk_storage) + "G",
+                            size=Quantity(str(body.disk_storage) + "G"),
                             mountPath=storage_mount.as_posix(),
                         ),
                         workingDir=work_dir.as_posix(),
@@ -414,7 +416,8 @@ class NotebooksNewBP(CustomBlueprint):
                         extraVolumeMounts=extra_volume_mounts,
                         command=environment.command,
                         args=environment.args,
-                        shmSize="1G",
+                        shmSize=Quantity("1G"),
+                        stripURLPath=environment.strip_path_prefix,
                         env=[
                             SessionEnvItem(name="RENKU_BASE_URL_PATH", value=base_server_path),
                             SessionEnvItem(name="RENKU_BASE_URL", value=base_server_url),
