@@ -975,6 +975,7 @@ class ProjectMigrationRepository:
                     args=constants.MIGRATION_ARGS,
                     is_archived=False,
                     environment_image_source=session_apispec.EnvironmentImageSourceImage.image,
+                    strip_prefix_path=False,
                 ),
             )
 

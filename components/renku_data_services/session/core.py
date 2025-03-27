@@ -32,6 +32,7 @@ def validate_unsaved_environment(
         command=environment.command,
         is_archived=environment.is_archived,
         environment_image_source=models.EnvironmentImageSource.image,
+        strip_path_prefix=environment.strip_prefix_path or False,
     )
 
 
@@ -128,6 +129,7 @@ def validate_environment_patch(patch: apispec.EnvironmentPatch) -> models.Enviro
         args=RESET if "args" in data_dict and data_dict["args"] is None else patch.args,
         command=RESET if "command" in data_dict and data_dict["command"] is None else patch.command,
         is_archived=patch.is_archived,
+        strip_path_prefix=patch.strip_prefix_path,
     )
 
 
@@ -207,6 +209,7 @@ def validate_session_launcher_patch(
                         args=validated_env.args,
                         command=validated_env.command,
                         environment_image_source=models.EnvironmentImageSource.image,
+                        strip_path_prefix=validated_env.strip_prefix_path or False,
                     )
                 elif patch.environment.environment_image_source == apispec.EnvironmentImageSourceBuild.build:
                     # NOTE: The environment type is changed to be built, so, all required fields should be passed (as in
@@ -284,6 +287,7 @@ def validate_session_launcher_patch(
                         args=validated_env.args,
                         command=validated_env.command,
                         environment_image_source=models.EnvironmentImageSource.image,
+                        strip_path_prefix=validated_env.strip_prefix_path or False,
                     )
                 else:
                     environment = validate_environment_patch_in_launcher(patch.environment)
