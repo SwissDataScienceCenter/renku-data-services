@@ -3,7 +3,7 @@
 import datetime
 from typing import cast
 
-from parsy import (  # type: ignore
+from parsy import (
     Parser,
     char_from,
     decimal_digit,

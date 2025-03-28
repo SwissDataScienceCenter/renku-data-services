@@ -21,7 +21,6 @@ from renku_data_services.search.solr_user_query import (
     AuthAccess,
     Context,
     QueryInterpreter,
-    SearchRole,
     SolrUserQuery,
     UserRole,
 )
@@ -174,17 +173,12 @@ async def query(
     """Run the given user query against solr and return the result."""
 
     logger.info(f"User search query: {query.render()}")
-    role: SearchRole | None = None
-    if user.is_authenticated:
-        role = UserRole(user.id or "")
-    if user.is_admin:
-        role = AdminRole(user.id or "")
 
     class RoleAuthAccess(AuthAccess):
         async def get_role_ids(self, user_id: str, roles: Nel[Role]) -> list[str]:
             return await authz.get_role_ids(authz_client, user_id, roles)
 
-    ctx = Context(datetime.now(), UTC, role, RoleAuthAccess())
+    ctx = Context.for_api_user(datetime.now(), UTC, user).with_auth_access(RoleAuthAccess())
     suq = await QueryInterpreter.default().run(ctx, query)
     solr_query = await _renku_query(authz_client, ctx, suq, limit, offset)
     logger.info(f"Solr query: {solr_query.to_dict()}")
