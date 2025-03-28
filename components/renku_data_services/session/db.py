@@ -245,6 +245,9 @@ class SessionRepository:
         if update.is_archived is not None:
             environment.is_archived = update.is_archived
 
+        if update.strip_path_prefix is not None:
+            environment.strip_path_prefix = update.strip_path_prefix
+
     async def __update_environment_build_parameters(
         self, environment: schemas.EnvironmentORM, update: models.EnvironmentPatch
     ) -> None:
@@ -555,8 +558,7 @@ class SessionRepository:
             launcher = res.one_or_none()
             if launcher is None:
                 raise errors.MissingResourceError(
-                    message=f"Session launcher with id '{launcher_id}' does not "
-                    "exist or you do not have access to it."
+                    message=f"Session launcher with id '{launcher_id}' does not exist or you do not have access to it."
                 )
 
             authorized = await self.project_authz.has_permission(

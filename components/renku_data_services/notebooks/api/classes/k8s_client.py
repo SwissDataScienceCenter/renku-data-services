@@ -422,7 +422,7 @@ class ServerCache(Generic[_SessionType]):
         if len(output) == 0:
             return None
         if len(output) > 1:
-            raise ProgrammingError(f"Expected to find 1 server when getting server {name}, " f"found {len(output)}.")
+            raise ProgrammingError(f"Expected to find 1 server when getting server {name}, found {len(output)}.")
         return self.server_type.model_validate(output[0])
 
 
