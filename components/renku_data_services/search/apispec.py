@@ -111,7 +111,7 @@ class SearchProject(BaseAPISpec):
 
 class SearchResult(BaseAPISpec):
     items: Optional[List[Union[Group, SearchProject, User]]] = Field(
-        None, discriminator="type"
+        None
     )
     facets: FacetData
     pagingInfo: PageWithTotals
