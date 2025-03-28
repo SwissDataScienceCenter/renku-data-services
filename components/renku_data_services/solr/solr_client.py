@@ -14,7 +14,7 @@ from types import TracebackType
 from typing import Any, Literal, NewType, Optional, Protocol, Self, final
 from urllib.parse import urljoin, urlparse, urlunparse
 
-from httpx import AsyncClient, BasicAuth, Response
+from httpx import AsyncClient, BasicAuth, ConnectError, Response
 from pydantic import (
     AliasChoices,
     BaseModel,
@@ -82,8 +82,8 @@ class SolrClientConfig:
 class SolrClientException(BaseError, ABC):
     """Base exception for solr client."""
 
-    def __init__(self, message: str) -> None:
-        super().__init__(message=message)
+    def __init__(self, message: str, code: int = 1500, status_code: int = 500) -> None:
+        super().__init__(message=message, code=code, status_code=status_code)
 
 
 class SortDirection(StrEnum):
@@ -527,6 +527,13 @@ class QueryResponse(BaseModel):
     response: ResponseBody
 
 
+class SolrClientConnectException(SolrClientException):
+    """Error when connecting to solr fails."""
+
+    def __init__(self, cause: ConnectError):
+        super().__init__(f"Connecting to solr failed: {cause}", code=1503, status_code=503)
+
+
 class SolrClientGetByIdException(SolrClientException):
     """Error when a lookup by document id failed."""
 
@@ -639,11 +646,17 @@ class DefaultSolrClient(SolrClient):
 
     async def get_raw(self, id: str) -> Response:
         """Query documents and return the http response."""
-        return await self.delegate.get("/get", params={"wt": "json", "ids": id})
+        try:
+            return await self.delegate.get("/get", params={"wt": "json", "ids": id})
+        except ConnectError as e:
+            raise SolrClientConnectException(e)
 
     async def query_raw(self, query: SolrQuery) -> Response:
         """Query documents and return the http response."""
-        return await self.delegate.post("/query", params={"wt": "json"}, json=query.to_dict())
+        try:
+            return await self.delegate.post("/query", params={"wt": "json"}, json=query.to_dict())
+        except ConnectError as e:
+            raise SolrClientConnectException(e)
 
     async def get(self, id: str) -> QueryResponse:
         """Get a document by id, returning a `QueryResponse`."""
@@ -665,12 +678,15 @@ class DefaultSolrClient(SolrClient):
         """Updates the schema with the given commands."""
         data = cmds.to_json()
         logging.debug(f"modify schema: {data}")
-        return await self.delegate.post(
-            "/schema",
-            params={"commit": "true", "overwrite": "true"},
-            content=data.encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-        )
+        try:
+            return await self.delegate.post(
+                "/schema",
+                params={"commit": "true", "overwrite": "true"},
+                content=data.encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+            )
+        except ConnectError as e:
+            raise SolrClientConnectException(e)
 
     async def upsert(self, docs: list[SolrDocument]) -> UpsertResponse:
         """Inserts or updates a document in SOLR.
@@ -681,20 +697,23 @@ class DefaultSolrClient(SolrClient):
         """
         j = json.dumps([e.to_dict() for e in docs])
         logging.debug(f"upserting: {j}")
-        res = await self.delegate.post(
-            "/update",
-            params={"commit": "true"},
-            content=j.encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-        )
-        match res.status_code:
-            case 200:
-                h = ResponseHeader.model_validate(res.json()["responseHeader"])
-                return UpsertSuccess(header=h)
-            case 409:
-                return "VersionConflict"
-            case _:
-                raise SolrClientUpsertException(docs, res)
+        try:
+            res = await self.delegate.post(
+                "/update",
+                params={"commit": "true"},
+                content=j.encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+            )
+            match res.status_code:
+                case 200:
+                    h = ResponseHeader.model_validate(res.json()["responseHeader"])
+                    return UpsertSuccess(header=h)
+                case 409:
+                    return "VersionConflict"
+                case _:
+                    raise SolrClientUpsertException(docs, res)
+        except ConnectError as e:
+            raise SolrClientConnectException(e)
 
     async def get_schema(self) -> CoreSchema:
         """Return the current schema."""
