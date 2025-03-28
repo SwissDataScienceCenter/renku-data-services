@@ -3,6 +3,7 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     devshell-tools.url = "github:eikek/devshell-tools";
+    devshell-tools.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs = inputs @ {
@@ -74,6 +75,8 @@
         POETRY_VIRTUALENVS_OPTIONS_SYSTEM_SITE_PACKAGES = "true";
         POETRY_INSTALLER_NO_BINARY = "ruff";
 
+        DUMMY_STORES = "true";
+
         ZED_ENDPOINT = "localhost:50051";
         ZED_TOKEN = "dev";
 
@@ -102,7 +105,7 @@
         ruff
         ruff-lsp
         poetry
-        python312
+        python313
         basedpyright
         rclone
         (writeShellScriptBin "pyfix" ''

@@ -208,7 +208,7 @@ async def sanic_client_with_migrations(
 
 @pytest_asyncio.fixture
 async def sanic_client(
-    sanic_client_with_migrations: SanicASGITestClient, app_config_instance, bootstrap_admins
+    sanic_client_with_migrations: SanicASGITestClient, app_config_instance, solr_search, bootstrap_admins
 ) -> SanicASGITestClient:
     await app_config_instance.kc_user_repo.initialize(app_config_instance.kc_api)
     await sync_admins_from_keycloak(app_config_instance.kc_api, app_config_instance.authz)
