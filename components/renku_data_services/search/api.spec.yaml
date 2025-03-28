@@ -20,6 +20,10 @@ paths:
           schema:
             $ref: "#/components/schemas/SearchQuery"
       responses:
+        "422":
+          description: Failed to validate the query parameters
+        "500":
+          description: Internal server error.
         "200":
           description: Search results according to the query.
           #NOTE: This is not the standard way we do pagination, but to
@@ -348,7 +352,7 @@ components:
           Group: '#/components/schemas/Group'
           User: '#/components/schemas/User'
     Visibility:
-      title: Visibility
+      description: Project's visibility levels
       type: string
       enum:
         - private
