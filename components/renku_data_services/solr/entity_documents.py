@@ -19,7 +19,7 @@ from pydantic import (
 from ulid import ULID
 
 from renku_data_services.authz.models import Visibility
-from renku_data_services.base_models.core import Slug
+from renku_data_services.base_models.core import ResourceType, Slug
 from renku_data_services.solr.entity_schema import Fields
 from renku_data_services.solr.solr_client import DocVersion, DocVersions, ResponseBody
 
@@ -45,6 +45,17 @@ class EntityType(StrEnum):
     project = "Project"
     user = "User"
     group = "Group"
+
+    @property
+    def to_resource_type(self) -> ResourceType:
+        """Map this entity-type to the core resource type."""
+        match self:
+            case EntityType.project:
+                return ResourceType.project
+            case EntityType.user:
+                return ResourceType.user
+            case EntityType.group:
+                return ResourceType.group
 
 
 class EntityDoc(BaseModel, ABC, frozen=True):

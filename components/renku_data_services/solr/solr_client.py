@@ -319,13 +319,15 @@ class SolrBucketFacetResponse(BaseModel, frozen=True):
         return result
 
     @classmethod
-    def empty(cls) -> Self:
+    def empty(cls) -> SolrBucketFacetResponse:
         """Return an empty response."""
         return SolrBucketFacetResponse(count=0, buckets={})
 
-    @model_validator(mode="wrap")  # type: ignore
+    @model_validator(mode="wrap")
     @classmethod
-    def _validate(cls, data: Any, handler: ModelWrapValidatorHandler[Self]) -> Self:
+    def _validate(
+        cls, data: Any, handler: ModelWrapValidatorHandler[SolrBucketFacetResponse]
+    ) -> SolrBucketFacetResponse:
         try:
             return handler(data)
         except ValidationError:

@@ -22,6 +22,9 @@ paths:
       responses:
         "200":
           description: Search results according to the query.
+          #NOTE: This is not the standard way we do pagination, but to
+          #be compatible witht the current search API we make an
+          #exception for the search here
           headers:
             x-page:
               required: true

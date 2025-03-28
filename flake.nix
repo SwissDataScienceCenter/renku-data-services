@@ -75,6 +75,8 @@
         POETRY_VIRTUALENVS_OPTIONS_SYSTEM_SITE_PACKAGES = "true";
         POETRY_INSTALLER_NO_BINARY = "ruff";
 
+        DUMMY_STORES = "true";
+
         ZED_ENDPOINT = "localhost:50051";
         ZED_TOKEN = "dev";
 

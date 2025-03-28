@@ -5,10 +5,10 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, tzinfo
-from typing import Self
 
 import renku_data_services.search.solr_token as st
 from renku_data_services.authz.models import Role
+from renku_data_services.base_models.core import APIUser
 from renku_data_services.search.solr_token import SolrToken
 from renku_data_services.search.user_query import (
     Comparison,
@@ -44,7 +44,7 @@ class SolrUserQuery:
     query: SolrToken
     sort: list[tuple[FieldName, SortDirection]]
 
-    def append(self, next: Self) -> Self:
+    def append(self, next: SolrUserQuery) -> SolrUserQuery:
         """Creates a new query appending `next` to this."""
         return type(self)(SolrToken(f"({self.query}) AND ({next.query})"), self.sort + next.sort)
 
@@ -73,7 +73,7 @@ class UserRole:
 type SearchRole = AdminRole | UserRole
 
 
-class AuthAccess:
+class AuthAccess(ABC):
     """Access authorization information."""
 
     @abstractmethod
@@ -117,6 +117,15 @@ class Context:
         """Return a copy with no search role set."""
         return self if self.role is None else Context(self.current_time, self.zone, None)
 
+    def with_api_user(self, api_user: APIUser) -> Context:
+        """Return a copy with the search role set by the APIUser."""
+        if api_user.id is not None and api_user.is_admin:
+            return self.with_admin_role(api_user.id)
+        elif api_user.id is not None and api_user.is_authenticated:
+            return self.with_user_role(api_user.id)
+        else:
+            return self.with_anonymous()
+
     def with_auth_access(self, aa: AuthAccess) -> Context:
         """Return a copy with the given AuthAccess set."""
         return Context(self.current_time, self.zone, self.role, aa)
@@ -148,6 +157,11 @@ class Context:
     def for_user(cls, current_time: datetime, zone: tzinfo, user_id: str) -> Context:
         """Creates a Context for interpreting a query as a normal user."""
         return Context(current_time, zone, UserRole(user_id))
+
+    @classmethod
+    def for_api_user(cls, current_time: datetime, zone: tzinfo, api_user: APIUser) -> Context:
+        """Creates a Context for the give APIUser."""
+        return cls.for_anonymous(current_time, zone).with_api_user(api_user)
 
 
 class QueryInterpreter(ABC):
