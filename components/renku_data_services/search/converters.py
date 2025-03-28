@@ -7,7 +7,7 @@ from renku_data_services.search.apispec import (
     Group as GroupApi,
 )
 from renku_data_services.search.apispec import (
-    Project as ProjectApi,
+    SearchProject as ProjectApi,
 )
 from renku_data_services.search.apispec import (
     User as UserApi,
