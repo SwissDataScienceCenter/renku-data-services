@@ -581,7 +581,7 @@ class ClustersBP(CustomBlueprint):
         """Get the cluster descriptions."""
 
         @authenticate(self.authenticator)
-        @only_admins
+        # @only_admins
         async def _handler(_request: Request, _user: base_models.APIUser) -> HTTPResponse:
             clusters = await self.repo.select_all()
 
@@ -593,7 +593,7 @@ class ClustersBP(CustomBlueprint):
         """Get the cluster descriptions."""
 
         @authenticate(self.authenticator)
-        @only_admins
+        # @only_admins
         @validate(json=apispec.Cluster)
         async def _handler(_request: Request, _user: base_models.APIUser, body: apispec.Cluster) -> HTTPResponse:
             cluster = UnsavedCluster(name=body.name)
@@ -607,7 +607,7 @@ class ClustersBP(CustomBlueprint):
         """Get the cluster descriptions."""
 
         @authenticate(self.authenticator)
-        @only_admins
+        # @only_admins
         async def _handler(_request: Request, _user: base_models.APIUser, cluster_id: ULID) -> HTTPResponse:
             cluster = await self.repo.select(cluster_id)
 
@@ -619,7 +619,7 @@ class ClustersBP(CustomBlueprint):
         """Update the cluster descriptions."""
 
         @authenticate(self.authenticator)
-        @only_admins
+        # @only_admins
         @validate(json=apispec.Cluster)
         async def _handler(
             _request: Request, _user: base_models.APIUser, cluster_id: ULID, body: apispec.Cluster
@@ -636,7 +636,7 @@ class ClustersBP(CustomBlueprint):
         """Patch the cluster descriptions."""
 
         @authenticate(self.authenticator)
-        @only_admins
+        # @only_admins
         @validate(json=apispec.ClusterPatch)
         async def _handler(
             _request: Request, _user: base_models.APIUser, cluster_id: ULID, body: apispec.ClusterPatch
@@ -658,7 +658,7 @@ class ClustersBP(CustomBlueprint):
         """Remove the cluster description."""
 
         @authenticate(self.authenticator)
-        @only_admins
+        # @only_admins
         async def _handler(_request: Request, _user: base_models.APIUser, cluster_id: ULID) -> HTTPResponse:
             await self.repo.delete(cluster_id)
 

@@ -874,7 +874,7 @@ class ClusterRepository:
 
     session_maker: Callable[..., AsyncSession]
 
-    @_only_admins
+    # @_only_admins
     async def select_all(self) -> list[Cluster]:
         """Get cluster descriptions from the database."""
 
@@ -884,7 +884,7 @@ class ClusterRepository:
 
             return [c.to_cluster() for c in clusters]
 
-    @_only_admins
+    # @_only_admins
     async def select(self, cluster_id: ULID) -> Cluster:
         """Get cluster descriptions from the database."""
 
@@ -896,7 +896,7 @@ class ClusterRepository:
 
         return cluster.to_cluster()
 
-    @_only_admins
+    # @_only_admins
     async def insert(self, cluster: UnsavedCluster) -> Cluster:
         """Creates a new cluster description."""
 
@@ -908,7 +908,7 @@ class ClusterRepository:
 
         return cluster_orm.to_cluster()
 
-    @_only_admins
+    # @_only_admins
     async def update(self, cluster: SavedCluster, cluster_id: ULID) -> Cluster:
         """Creates a new cluster description."""
 
@@ -925,7 +925,7 @@ class ClusterRepository:
 
         return saved_cluster.to_cluster()
 
-    @_only_admins
+    # @_only_admins
     async def delete(self, cluster_id: ULID) -> None:
         """Get cluster descriptions from the database."""
 
