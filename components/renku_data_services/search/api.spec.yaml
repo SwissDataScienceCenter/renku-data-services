@@ -209,7 +209,7 @@ components:
         nextPage:
           type: integer
           format: int32
-    Project:
+    SearchProject:
       title: Project
       examples:
         - type: Project
@@ -283,13 +283,13 @@ components:
       title: SearchEntity
       oneOf:
         - $ref: '#/components/schemas/Group'
-        - $ref: '#/components/schemas/Project'
+        - $ref: '#/components/schemas/SearchProject'
         - $ref: '#/components/schemas/User'
       discriminator:
         propertyName: type
         mapping:
           Group: '#/components/schemas/Group'
-          Project: '#/components/schemas/Project'
+          Project: '#/components/schemas/SearchProject'
           User: '#/components/schemas/User'
     SearchResult:
       title: SearchResult
