@@ -1,0 +1,1 @@
+"""ActivityPub component for Renku."""

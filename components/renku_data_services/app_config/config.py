@@ -27,6 +27,7 @@ from sanic.log import logger
 from yaml import safe_load
 
 import renku_data_services.base_models as base_models
+import renku_data_services.activitypub
 import renku_data_services.connected_services
 import renku_data_services.crc
 import renku_data_services.data_connectors
@@ -260,6 +261,9 @@ class Config:
     gitlab_url: str | None
     nb_config: NotebooksConfig
     builds_config: BuildsConfig
+    domain: str
+    base_url: str
+    admin_email: str
 
     secrets_service_public_key: rsa.RSAPublicKey
     """The public key of the secrets service, used to encrypt user secrets that only it can decrypt."""
@@ -320,6 +324,7 @@ class Config:
             renku_data_services.message_queue.__file__,
             renku_data_services.data_connectors.__file__,
             renku_data_services.search.__file__,
+            renku_data_services.activitypub.__file__,
         ]
 
         api_specs = []
@@ -672,6 +677,11 @@ class Config:
         nb_config = NotebooksConfig.from_env(db)
         builds_config = BuildsConfig.from_env(prefix, k8s_namespace)
 
+        # ActivityPub configuration
+        domain = os.environ.get(f"{prefix}DOMAIN", "localhost")
+        base_url = os.environ.get(f"{prefix}BASE_URL", "http://localhost:8080")
+        admin_email = os.environ.get(f"{prefix}ADMIN_EMAIL", "admin@example.com")
+
         return cls(
             version=version,
             authenticator=authenticator,
@@ -694,4 +704,7 @@ class Config:
             gitlab_url=gitlab_url,
             nb_config=nb_config,
             builds_config=builds_config,
+            domain=domain,
+            base_url=base_url,
+            admin_email=admin_email,
         )
