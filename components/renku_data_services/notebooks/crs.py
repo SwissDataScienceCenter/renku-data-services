@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from datetime import datetime, timedelta
-import re
 from typing import Any, cast
 from urllib.parse import urlunparse
 
@@ -27,12 +27,6 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     ImagePullSecret,
     Ingress,
     InitContainer,
-    Limits,
-    Limits1,
-    Limits2,
-    Limits3,
-    Limits4,
-    Limits5,
     Limits6,
     Limits7,
     MatchExpression,
@@ -380,8 +374,8 @@ class Culling(_Culling):
 class Resources(_Resources):
     """The resource requests and limits for a session."""
 
-    limits: Mapping[str, Quantity | QuantityInt] = None
-    requests: Mapping[str, Quantity | QuantityInt] = None
+    limits: Mapping[str, Quantity | QuantityInt] | None = None
+    requests: Mapping[str, Quantity | QuantityInt] | None = None
 
 
 class Session(_Session):

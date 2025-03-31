@@ -391,9 +391,9 @@ components:
           $ref: "#/components/schemas/EnvironmentArgs"
         is_archived:
           $ref: "#/components/schemas/IsArchived"
-        strip_prefix_path:
+        strip_path_prefix:
           allOf:
-            - $ref: "#/components/schemas/StripPrefixPath"
+            - $ref: "#/components/schemas/StripPathPrefix"
           default: false
       required:
         - id
@@ -502,9 +502,9 @@ components:
           default: false
         environment_image_source:
           $ref: "#/components/schemas/EnvironmentImageSourceImage"
-        strip_prefix_path:
+        strip_path_prefix:
           allOf:
-            - $ref: "#/components/schemas/StripPrefixPath"
+            - $ref: "#/components/schemas/StripPathPrefix"
           default: false
       required:
         - name
@@ -550,8 +550,8 @@ components:
           $ref: "#/components/schemas/EnvironmentArgs"
         is_archived:
           $ref: "#/components/schemas/IsArchived"
-        strip_prefix_path:
-          $ref: "#/components/schemas/StripPrefixPath"
+        strip_path_prefix:
+          $ref: "#/components/schemas/StripPathPrefix"
     SessionLaunchersList:
       description: A list of Renku session launchers
       type: array
@@ -873,7 +873,7 @@ components:
       type: array
       items:
         $ref: "#/components/schemas/Build"
-    StripPrefixPath:
+    StripPathPrefix:
       type: boolean
       default: false
       description: |-
