@@ -333,6 +333,14 @@ def solr_core(solr_instance, monkeysession):
     return core_name
 
 
+@pytest.fixture
+def solr_config_from_env():
+    solr_core = os.getenv("SOLR_CORE")
+    solr_url = os.getenv("SOLR_URL")
+    solr_config = SolrClientConfig(base_url=solr_url, core=solr_core)
+    return solr_config
+
+
 @pytest.fixture()
 def solr_config(solr_core, solr_bin_path):
     core = solr_core
