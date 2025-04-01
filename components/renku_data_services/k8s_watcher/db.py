@@ -88,7 +88,7 @@ class K8sClient:
     def __get_cluster_or_die(self, cluster_id: ClusterId) -> Cluster:
         cluster = self.__clusters.get(cluster_id)
         if not cluster:
-            raise errors.MissingResourceError()
+            raise errors.MissingResourceError(message=f"Could not find cluster with id {cluster_id} in the list of clusters.")
         return cluster
 
     async def create(self, obj: K8sObject) -> K8sObject:
@@ -144,14 +144,14 @@ class K8sClient:
             )
             if not isinstance(res, list):
                 res = [res]
-            for i in res:
-                yield APIObjectInCluster(i, cluster.id)
+            for r in res:
+                yield APIObjectInCluster(r, cluster.id)
 
     async def list(self, filter: ListFilter) -> AsyncIterable[K8sObject]:
         """List all k8s objects."""
         results = self.__list(filter)
-        async for i in results:
-            yield i.to_k8s_object()
+        async for r in results:
+            yield r.to_k8s_object()
 
 
 class K8sCache:
@@ -231,7 +231,7 @@ class K8sCache:
 
 
 class CachedK8sClient(K8sClient):
-    """A wrapper around a kr8s k8s client."""
+    """A wrapper around a kr8s k8s client that provides access to a cache for listing and reading resources but fallback to the cluster for other operations."""
 
     def __init__(self, clusters: dict[ClusterId, Cluster], cache: K8sCache) -> None:
         super().__init__(clusters)
