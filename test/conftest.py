@@ -348,7 +348,7 @@ def solr_config(solr_core, solr_bin_path):
     solr_port = os.getenv("SOLR_PORT")
     solr_config = SolrClientConfig(base_url=f"http://{solr_host}:{solr_port}", core=core)
     solr_bin = solr_bin_path
-    subprocess.run([solr_bin, "create", "-c", core])
+    subprocess.check_call([solr_bin, "create", "-c", core])
 
     # Unfortunately, solr creates core directories with only read permissions
     # Then changing the schema via the api fails, because it can't write to that file
