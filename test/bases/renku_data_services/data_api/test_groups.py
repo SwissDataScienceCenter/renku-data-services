@@ -39,6 +39,7 @@ async def test_group_creation_basic(
     assert group["description"] == payload["description"]
     assert group["created_by"] == "user"
     datetime.fromisoformat(group["creation_date"])
+    app_config.metrics.group_created.assert_called_once()
 
     search_updates = await app_config.search_updates_repo.select_next(20)
     assert len(search_updates) == 1
@@ -228,6 +229,7 @@ async def test_group_members(
     new_members = [{"id": "member-1", "role": "viewer"}]
     _, response = await sanic_client.patch("/api/data/groups/group-1/members", headers=user_headers, json=new_members)
     assert response.status_code == 200
+    app_config.metrics.group_member_added.assert_called_once()
     _, response = await sanic_client.get("/api/data/groups/group-1/members", headers=user_headers)
     assert response.status_code == 200, response.text
     members = response.json
