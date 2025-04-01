@@ -92,9 +92,7 @@ class ProjectMigrationInfo(BaseAPISpec):
 class ProjectPermissions(BaseAPISpec):
     write: Optional[bool] = Field(None, description="The user can edit the project")
     delete: Optional[bool] = Field(None, description="The user can delete the project")
-    change_membership: Optional[bool] = Field(
-        None, description="The user can manage project members"
-    )
+    change_membership: Optional[bool] = Field(None, description="The user can manage project members")
 
 
 class SessionSecretPatch1(BaseAPISpec):
@@ -125,19 +123,13 @@ class PaginationRequest(BaseAPISpec):
         extra="forbid",
     )
     page: int = Field(1, description="Result's page number starting from 1", ge=1)
-    per_page: int = Field(
-        20, description="The number of results per page", ge=1, le=100
-    )
+    per_page: int = Field(20, description="The number of results per page", ge=1, le=100)
 
 
 class Error(BaseAPISpec):
     code: int = Field(..., examples=[1404], gt=0)
-    detail: Optional[str] = Field(
-        None, examples=["A more detailed optional message showing what the problem was"]
-    )
-    message: str = Field(
-        ..., examples=["Something went wrong - please try again later"]
-    )
+    detail: Optional[str] = Field(None, examples=["A more detailed optional message showing what the problem was"])
+    message: str = Field(..., examples=["Something went wrong - please try again later"])
 
 
 class ErrorResponse(BaseAPISpec):
@@ -184,9 +176,7 @@ class MigrationSessionLauncherPost(BaseAPISpec):
         examples=["/lab"],
         max_length=200,
     )
-    resource_class_id: Optional[int] = Field(
-        None, description="The identifier of a resource class"
-    )
+    resource_class_id: Optional[int] = Field(None, description="The identifier of a resource class")
     disk_storage: Optional[int] = Field(
         None,
         description="The size of disk storage for the session, in gigabytes",
@@ -280,9 +270,7 @@ class SessionSecretSlot(BaseAPISpec):
         max_length=99,
         min_length=1,
     )
-    description: Optional[str] = Field(
-        None, description="A description for the resource", max_length=500
-    )
+    description: Optional[str] = Field(None, description="A description for the resource", max_length=500)
     filename: str = Field(
         ...,
         description="The filename given to the corresponding secret in the session",
@@ -291,9 +279,7 @@ class SessionSecretSlot(BaseAPISpec):
         min_length=1,
         pattern="^[a-zA-Z0-9_\\-.]+$",
     )
-    etag: str = Field(
-        ..., description="Entity Tag", examples=["9EE498F9D565D0C41E511377425F32F3"]
-    )
+    etag: str = Field(..., description="Entity Tag", examples=["9EE498F9D565D0C41E511377425F32F3"])
 
 
 class SessionSecretSlotPost(BaseAPISpec):
@@ -314,9 +300,7 @@ class SessionSecretSlotPost(BaseAPISpec):
         max_length=99,
         min_length=1,
     )
-    description: Optional[str] = Field(
-        None, description="A description for the resource", max_length=500
-    )
+    description: Optional[str] = Field(None, description="A description for the resource", max_length=500)
     filename: str = Field(
         ...,
         description="The filename given to the corresponding secret in the session",
@@ -338,9 +322,7 @@ class SessionSecretSlotPatch(BaseAPISpec):
         max_length=99,
         min_length=1,
     )
-    description: Optional[str] = Field(
-        None, description="A description for the resource", max_length=500
-    )
+    description: Optional[str] = Field(None, description="A description for the resource", max_length=500)
     filename: Optional[str] = Field(
         None,
         description="The filename given to the corresponding secret in the session",
@@ -441,12 +423,8 @@ class Project(BaseAPISpec):
         min_length=0,
     )
     visibility: Visibility
-    description: Optional[str] = Field(
-        None, description="A description for the resource", max_length=500
-    )
-    etag: Optional[str] = Field(
-        None, description="Entity Tag", examples=["9EE498F9D565D0C41E511377425F32F3"]
-    )
+    description: Optional[str] = Field(None, description="A description for the resource", max_length=500)
+    etag: Optional[str] = Field(None, description="Entity Tag", examples=["9EE498F9D565D0C41E511377425F32F3"])
     keywords: Optional[List[Keyword]] = Field(
         None,
         description="Project keywords",
@@ -467,9 +445,7 @@ class Project(BaseAPISpec):
         min_length=26,
         pattern="^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
     )
-    is_template: bool = Field(
-        False, description="Shows if a project is a template or not"
-    )
+    is_template: bool = Field(False, description="Shows if a project is a template or not")
     secrets_mount_directory: str = Field(
         ...,
         description="The location where the secrets will be provided inside sessions, if left unset it will default to `/secrets`.\nRelative locations are supported and will be mounted relative to the session environment's mount directory.\n",
@@ -517,9 +493,7 @@ class ProjectPost(BaseAPISpec):
         min_length=0,
     )
     visibility: Optional[Visibility] = None
-    description: Optional[str] = Field(
-        None, description="A description for the resource", max_length=500
-    )
+    description: Optional[str] = Field(None, description="A description for the resource", max_length=500)
     keywords: Optional[List[Keyword]] = Field(
         None,
         description="Project keywords",
@@ -580,9 +554,7 @@ class ProjectPatch(BaseAPISpec):
         min_length=0,
     )
     visibility: Optional[Visibility] = None
-    description: Optional[str] = Field(
-        None, description="A description for the resource", max_length=500
-    )
+    description: Optional[str] = Field(None, description="A description for the resource", max_length=500)
     keywords: Optional[List[Keyword]] = Field(
         None,
         description="Project keywords",
@@ -602,9 +574,7 @@ class ProjectPatch(BaseAPISpec):
         max_length=0,
         min_length=0,
     )
-    is_template: Optional[bool] = Field(
-        None, description="Shows if a project is a template or not"
-    )
+    is_template: Optional[bool] = Field(None, description="Shows if a project is a template or not")
     secrets_mount_directory: Optional[str] = Field(None, examples=["/secrets"])
 
 
@@ -639,15 +609,11 @@ class ProjectMemberListResponse(RootModel[List[ProjectMemberResponse]]):
 
 
 class SessionSecretSlotList(RootModel[List[SessionSecretSlot]]):
-    root: List[SessionSecretSlot] = Field(
-        ..., description="A list of session secret slots"
-    )
+    root: List[SessionSecretSlot] = Field(..., description="A list of session secret slots")
 
 
 class SessionSecretList(RootModel[List[SessionSecret]]):
-    root: List[SessionSecret] = Field(
-        ..., description="A list of session launcher secrets"
-    )
+    root: List[SessionSecret] = Field(..., description="A list of session launcher secrets")
 
 
 class SessionSecretPatch3(SessionSecretPatchSecretValue, SessionSecretPatch1):
@@ -655,12 +621,8 @@ class SessionSecretPatch3(SessionSecretPatchSecretValue, SessionSecretPatch1):
 
 
 class ProjectsList(RootModel[List[Project]]):
-    root: List[Project] = Field(
-        ..., description="A list of Renku projects", min_length=0
-    )
+    root: List[Project] = Field(..., description="A list of Renku projects", min_length=0)
 
 
-class SessionSecretPatchList(
-    RootModel[List[Union[SessionSecretPatch2, SessionSecretPatch3]]]
-):
+class SessionSecretPatchList(RootModel[List[Union[SessionSecretPatch2, SessionSecretPatch3]]]):
     root: List[Union[SessionSecretPatch2, SessionSecretPatch3]]
