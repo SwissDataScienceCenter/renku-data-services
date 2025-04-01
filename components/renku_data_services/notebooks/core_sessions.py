@@ -1,18 +1,15 @@
 """A selection of core functions for AmaltheaSessions."""
 
-import base64
 import json
-import os
 from collections.abc import AsyncIterator, MutableMapping
 from datetime import timedelta
 from pathlib import PurePosixPath
 from typing import cast
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
 import httpx
 from kubernetes.client import V1ObjectMeta, V1Secret
 from sanic import Request
-from toml import dumps
 from yaml import safe_dump
 
 from renku_data_services.base_models import APIUser
@@ -36,14 +33,11 @@ from renku_data_services.notebooks.crs import (
     DataSource,
     ExtraContainer,
     ExtraVolume,
-    ExtraVolumeMount,
     ImagePullSecret,
     InitContainer,
     Quantity,
     QuantityInt,
     Resources,
-    SecretAsVolume,
-    SecretAsVolumeItem,
     State,
 )
 from renku_data_services.notebooks.models import ExtraSecret
@@ -102,50 +96,22 @@ async def get_extra_containers(
     return conts
 
 
-async def get_auth_secret_authenticated(
+def get_auth_secret_authenticated(
     nb_config: NotebooksConfig, user: AuthenticatedAPIUser, server_name: str
 ) -> ExtraSecret:
-    """Get the extra secrets that need to be added to the session for an authenticated user."""
-    secret_data = {}
-    base_server_url = nb_config.sessions.ingress.base_url(server_name)
-    base_server_path = nb_config.sessions.ingress.base_path(server_name)
-    base_server_https_url = nb_config.sessions.ingress.base_url(server_name, force_https=True)
-    parsed_proxy_url = urlparse(urljoin(base_server_url + "/", "oauth2"))
-    vol = ExtraVolume(
-        name="renku-authorized-emails",
-        secret=SecretAsVolume(
-            secretName=server_name,
-            items=[SecretAsVolumeItem(key="authorized_emails", path="authorized_emails")],
-        ),
-    )
-    secret_data["auth"] = dumps(
-        {
-            "provider": "oidc",
-            "client_id": nb_config.sessions.oidc.client_id,
-            "oidc_issuer_url": nb_config.sessions.oidc.issuer_url,
-            "session_cookie_minimal": True,
-            "skip_provider_button": True,
-            # NOTE: If the redirect url is not HTTPS then some or identity providers will fail.
-            "redirect_url": urljoin(base_server_https_url + "/", "oauth2/callback"),
-            "cookie_path": base_server_path,
-            "proxy_prefix": parsed_proxy_url.path,
-            "authenticated_emails_file": "/authorized_emails",
-            "client_secret": nb_config.sessions.oidc.client_secret,
-            "cookie_secret": base64.urlsafe_b64encode(os.urandom(32)).decode(),
-            "insecure_oidc_allow_unverified_email": nb_config.sessions.oidc.allow_unverified_email,
-        }
-    )
-    secret_data["authorized_emails"] = user.email
-    secret = V1Secret(metadata=V1ObjectMeta(name=server_name), string_data=secret_data)
-    vol_mount = ExtraVolumeMount(
-        name="renku-authorized-emails",
-        mountPath="/authorized_emails",
-        subPath="authorized_emails",
-    )
-    return ExtraSecret(secret, vol, vol_mount)
+    """The secrets needed for the OAuth2 proxy in the session."""
+    secret_data = {
+        "OIDC_CLIENT_ID": nb_config.sessions.oidc.client_id,
+        "OIDC_ISSUER_URL": nb_config.sessions.oidc.issuer_url,
+        "OIDC_CLIENT_SECRET": nb_config.sessions.oidc.client_secret,
+        "AUTHORIZED_EMAILS": user.email,
+        "ALLOW_UNVERIFIED_EMAILS": str(nb_config.sessions.oidc.allow_unverified_email).lower(),
+    }
+    secret = V1Secret(metadata=V1ObjectMeta(name=f"{server_name}-auth"), string_data=secret_data)
+    return ExtraSecret(secret)
 
 
-async def get_auth_secret_anonymous(nb_config: NotebooksConfig, server_name: str, request: Request) -> ExtraSecret:
+def get_auth_secret_anonymous(nb_config: NotebooksConfig, server_name: str, request: Request) -> ExtraSecret:
     """Get the extra secrets that need to be added to the session for an anonymous user."""
     # NOTE: We extract the session cookie value here in order to avoid creating a cookie.
     # The gateway encrypts and signs cookies so the user ID injected in the request headers does not

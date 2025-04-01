@@ -93,7 +93,7 @@ class ExtraSecret:
     volume_mount: ExtraVolumeMount | None = None
     adopt: bool = True
 
-    def key_ref(self, key: str) -> SecretRef:
+    def key_ref(self, key: str | None = None) -> SecretRef:
         """Get an amalthea secret key reference."""
         meta = self.secret.metadata
         if not meta:
@@ -103,7 +103,7 @@ class ExtraSecret:
             raise ProgrammingError(message="Cannot get reference to a secret that does not have a name.")
         data = self.secret.data or {}
         string_data = self.secret.string_data or {}
-        if key not in data and key not in string_data:
+        if key is not None and key not in data and key not in string_data:
             raise KeyError(f"Cannot find the key {key} in the secret with name {secret_name}")
         return SecretRef(key=key, name=secret_name, adopt=self.adopt)
 

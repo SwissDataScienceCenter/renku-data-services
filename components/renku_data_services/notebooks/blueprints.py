@@ -369,9 +369,21 @@ class NotebooksNewBP(CustomBlueprint):
                 requests[gpu_name] = QuantityInt(resource_class.gpu)
                 limits[gpu_name] = QuantityInt(resource_class.gpu)
             if isinstance(user, AuthenticatedAPIUser):
-                auth_secret = await get_auth_secret_authenticated(self.nb_config, user, server_name)
+                auth_secret = get_auth_secret_authenticated(self.nb_config, user, server_name)
+                authentication = Authentication(
+                    enabled=True,
+                    type=AuthenticationType.oidc,
+                    secretRef=auth_secret.key_ref(),
+                    extraVolumeMounts=[auth_secret.volume_mount] if auth_secret.volume_mount else [],
+                )
             else:
-                auth_secret = await get_auth_secret_anonymous(self.nb_config, server_name, request)
+                auth_secret = get_auth_secret_anonymous(self.nb_config, server_name, request)
+                authentication = Authentication(
+                    enabled=True,
+                    type=AuthenticationType.token,
+                    secretRef=auth_secret.key_ref("auth"),
+                    extraVolumeMounts=[auth_secret.volume_mount] if auth_secret.volume_mount else [],
+                )
             if auth_secret.volume:
                 extra_volumes.append(auth_secret.volume)
 
@@ -441,14 +453,7 @@ class NotebooksNewBP(CustomBlueprint):
                     initContainers=extra_init_containers,
                     extraVolumes=extra_volumes,
                     culling=get_culling(resource_pool, self.nb_config),
-                    authentication=Authentication(
-                        enabled=True,
-                        type=AuthenticationType.oauth2proxy
-                        if isinstance(user, AuthenticatedAPIUser)
-                        else AuthenticationType.token,
-                        secretRef=auth_secret.key_ref("auth"),
-                        extraVolumeMounts=[auth_secret.volume_mount] if auth_secret.volume_mount else [],
-                    ),
+                    authentication=authentication,
                     dataSources=data_sources,
                     tolerations=tolerations_from_resource_class(
                         resource_class, self.nb_config.sessions.tolerations_model
