@@ -531,7 +531,7 @@ class SolrClientConnectException(SolrClientException):
     """Error when connecting to solr fails."""
 
     def __init__(self, cause: ConnectError):
-        super().__init__(f"Connecting to solr failed: {cause}", code=1503, status_code=503)
+        super().__init__(f"Connecting to solr at '{cause.request.url}' failed: {cause}", code=1503, status_code=503)
 
 
 class SolrClientGetByIdException(SolrClientException):

@@ -292,20 +292,24 @@ async def solr_instance(tmp_path_factory, monkeysession, solr_bin_path):
     solr_bin = solr_bin_path
     port = free_port()
     logger.info(f"Starting SOLR at port {port}")
+    args = [
+        solr_bin,
+        "start",
+        "-f",
+        "--jvm-opts",
+        "-Xmx512M -Xms512M",
+        "--host",
+        "localhost",
+        "--port",
+        f"{port}",
+        "-s",
+        f"{solr_root}",
+        "-t",
+        f"{solr_root}",
+    ]
+    logger.info(f"Starting SOLR via: {args}")
     proc = subprocess.Popen(
-        [
-            solr_bin,
-            "start",
-            "-f",
-            "--host",
-            "localhost",
-            "--port",
-            f"{port}",
-            "-s",
-            f"{solr_root}",
-            "-t",
-            f"{solr_root}",
-        ],
+        args,
         env={"PATH": os.getenv("PATH", ""), "SOLR_LOGS_DIR": f"{solr_root}", "SOLR_ULIMIT_CHECKS": "false"},
     )
     monkeysession.setenv("SOLR_HOST", "localhost")
