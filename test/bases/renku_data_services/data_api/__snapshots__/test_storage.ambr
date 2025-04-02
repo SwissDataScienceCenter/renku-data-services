@@ -2124,6 +2124,65 @@
       'prefix': 'cloudinary',
     }),
     dict({
+      'description': 'DOI datasets',
+      'name': 'doi',
+      'options': list([
+        dict({
+          'advanced': False,
+          'default': '',
+          'default_str': '',
+          'exclusive': False,
+          'help': 'The DOI or the doi.org URL.',
+          'ispassword': False,
+          'name': 'doi',
+          'provider': '',
+          'required': True,
+          'sensitive': False,
+          'type': 'string',
+        }),
+        dict({
+          'advanced': True,
+          'default': '',
+          'default_str': '',
+          'examples': list([
+            dict({
+              'help': 'Auto-detect provider',
+              'provider': '',
+              'value': 'auto',
+            }),
+            dict({
+              'help': 'Zenodo',
+              'provider': '',
+              'value': 'zenodo',
+            }),
+            dict({
+              'help': 'Dataverse',
+              'provider': '',
+              'value': 'dataverse',
+            }),
+            dict({
+              'help': 'Invenio',
+              'provider': '',
+              'value': 'invenio',
+            }),
+          ]),
+          'exclusive': False,
+          'help': '''
+            DOI provider.
+            
+            The DOI provider can be set when rclone does not automatically recognize a supported DOI provider.
+          ''',
+          'ispassword': False,
+          'name': 'provider',
+          'provider': '',
+          'required': False,
+          'sensitive': False,
+          'type': 'string',
+        }),
+      ]),
+      'prefix': 'doi',
+    }),
+    dict({
       'description': 'Google Drive',
       'name': 'drive',
       'options': list([
@@ -16932,44 +16991,6 @@
         }),
       ]),
       'prefix': 'zoho',
-    }),
-    dict({
-      'description': 'DOI datasets',
-      'name': 'doi',
-      'options': list([
-        dict({
-          'advanced': False,
-          'default': '',
-          'default_str': '',
-          'exclusive': False,
-          'help': 'The DOI or the doi.org URL.',
-          'name': 'doi',
-          'provider': '',
-          'required': True,
-          'sensitive': False,
-          'type': 'string',
-        }),
-        dict({
-          'advanced': False,
-          'default': '',
-          'default_str': '',
-          'examples': list([
-            dict({
-              'help': 'Zenodo',
-              'provider': '',
-              'value': 'Zenodo',
-            }),
-          ]),
-          'exclusive': False,
-          'help': 'DOI provider.',
-          'name': 'provider',
-          'provider': '',
-          'required': False,
-          'sensitive': False,
-          'type': 'string',
-        }),
-      ]),
-      'prefix': 'doi',
     }),
     dict({
       'description': 'Polybox',
