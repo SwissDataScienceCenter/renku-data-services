@@ -474,6 +474,7 @@ class SessionRepository:
                 environment_id=environment_id,
                 resource_class_id=launcher.resource_class_id,
                 disk_storage=launcher.disk_storage,
+                env_variables=launcher.env_variables,
                 created_by_id=user.id,
                 creation_date=datetime.now(UTC).replace(microsecond=0),
             )

@@ -167,6 +167,7 @@ def validate_unsaved_session_launcher(
         description=launcher.description,
         resource_class_id=launcher.resource_class_id,
         disk_storage=launcher.disk_storage,
+        env_variables=launcher.env_variables,
         # NOTE: When you create an environment with a launcher the environment can only be custom
         environment=environment,
     )

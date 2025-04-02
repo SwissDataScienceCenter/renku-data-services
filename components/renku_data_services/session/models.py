@@ -151,7 +151,7 @@ class UnsavedSessionLauncher:
     description: str | None
     resource_class_id: int | None
     disk_storage: int | None
-    env_variables: dict[str, str] | None
+    env_variables: dict[str, str | None] | None
     environment: str | UnsavedEnvironment | UnsavedBuildParameters
     """When a string is passed for the environment it should be the ID of an existing environment."""
 
@@ -177,7 +177,7 @@ class SessionLauncherPatch:
     environment: str | EnvironmentPatch | UnsavedEnvironment | UnsavedBuildParameters | None = None
     resource_class_id: int | None | ResetType = None
     disk_storage: int | None | ResetType = None
-    env_variables: dict[str, str] | None | ResetType = None
+    env_variables: dict[str, str | None] | None | ResetType = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
