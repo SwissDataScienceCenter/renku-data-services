@@ -469,7 +469,16 @@ class SessionLauncherPost(BaseAPISpec):
         examples=[8],
         ge=1,
     )
-    env_variables: Optional[Dict[str, str]] = None
+    env_variables: Optional[Dict[str, str]] = Field(
+        None,
+        description="Environment variables pased to the session pod",
+        examples=[
+            {
+                    "MY_VAR": "value 1",
+                    "VAR2": None
+            }
+        ],
+    )
     environment: Union[
         EnvironmentIdOnlyPost,
         Union[EnvironmentPostInLauncherHelper, BuildParametersPost],
@@ -494,7 +503,16 @@ class SessionLauncherPatch(BaseAPISpec):
         None, description="The identifier of a resource class"
     )
     disk_storage: Optional[int] = Field(None, ge=1)
-    env_variables: Optional[Dict[str, str]] = None
+    env_variables: Optional[Dict[str, str]] = Field(
+        None,
+        description="Environment variables pased to the session pod",
+        examples=[
+            {
+                    "MY_VAR": "value 1",
+                    "VAR2": None
+            }
+        ],
+    )
     environment: Optional[Union[EnvironmentPatchInLauncher, EnvironmentIdOnlyPatch]] = (
         None
     )
@@ -558,7 +576,16 @@ class SessionLauncher(BaseAPISpec):
         examples=[8],
         ge=1,
     )
-    env_variables: Optional[Dict[str, str]] = None
+    env_variables: Optional[Dict[str, str]] = Field(
+        None,
+        description="Environment variables pased to the session pod",
+        examples=[
+            {
+                    "MY_VAR": "value 1",
+                    "VAR2": None
+            }
+        ],
+    )
 
 
 class SessionLaunchersList(RootModel[List[SessionLauncher]]):
