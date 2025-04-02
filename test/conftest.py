@@ -101,7 +101,7 @@ async def authz_setup(monkeysession) -> AsyncGenerator[None, None]:
 
 @pytest_asyncio.fixture
 async def db_config(monkeypatch, worker_id, authz_setup) -> AsyncGenerator[DBConfig, None]:
-    db_name = str(ULID()).lower() + "_" + worker_id
+    db_name = "R_" + str(ULID()).lower() + "_" + worker_id
     user = os.getenv("DB_USER", "renku")
     host = os.getenv("DB_HOST", "127.0.0.1")
     port = os.getenv("DB_PORT", "5432")
@@ -124,7 +124,7 @@ async def db_config(monkeypatch, worker_id, authz_setup) -> AsyncGenerator[DBCon
 
 @pytest_asyncio.fixture
 async def db_instance(monkeysession, worker_id, app_config, event_loop) -> AsyncGenerator[DBConfig, None]:
-    db_name = str(ULID()).lower() + "_" + worker_id
+    db_name = "R_" + str(ULID()).lower() + "_" + worker_id
     user = os.getenv("DB_USER", "renku")
     host = os.getenv("DB_HOST", "127.0.0.1")
     port = os.getenv("DB_PORT", "5432")
