@@ -1189,14 +1189,14 @@ async def test_project_slug_case(
     # Get the project
     _, res = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
     assert res.status_code == 200
-    assert res.json.get("slug") == uppercase_slug
+    assert res.json.get("slug") == uppercase_slug.lower()
     etag = res.headers["ETag"]
     # Get it by the namespace
     _, res = await sanic_client.get(
         f"/api/data/namespaces/{group['slug']}/projects/{uppercase_slug}", headers=user_headers
     )
     assert res.status_code == 200
-    assert res.json.get("slug") == uppercase_slug
+    assert res.json.get("slug") == uppercase_slug.lower()
     # Patch the project
     new_name = "new-name"
     _, res = await sanic_client.patch(
@@ -1205,7 +1205,7 @@ async def test_project_slug_case(
         headers={"If-Match": etag, **user_headers},
     )
     assert res.status_code == 200
-    assert res.json["slug"] == uppercase_slug
+    assert res.json["slug"] == uppercase_slug.lower()
     assert res.json["name"] == new_name
 
 
@@ -1243,7 +1243,7 @@ async def test_project_copy_basics(
     assert copy_project == snapshot(exclude=props("id", "updated_at", "creation_date", "etag", "template_id"))
 
     _, response = await sanic_client.get(
-        f"/api/data/projects/{copy_project["id"]}", params={"with_documentation": True}, headers=user_headers
+        f"/api/data/projects/{copy_project['id']}", params={"with_documentation": True}, headers=user_headers
     )
     assert response.status_code == 200, response.text
     copy_project = response.json

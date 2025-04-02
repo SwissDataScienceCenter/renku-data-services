@@ -92,7 +92,7 @@ class DataConnectorORM(BaseORM):
         return models.DataConnector(
             id=self.id,
             name=self.name,
-            slug=self.slug.slug,
+            slug=self.slug.slug.lower(),
             namespace=self.slug.dump_namespace(),
             visibility=self._dump_visibility(),
             created_by=self.created_by_id,

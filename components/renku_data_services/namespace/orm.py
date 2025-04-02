@@ -119,7 +119,7 @@ class NamespaceORM(BaseORM):
             created_by=self.created_by,
             creation_date=self.creation_date,
             underlying_resource_id=self.group_id,
-            latest_slug=self.slug,
+            latest_slug=self.slug.lower(),
             name=self.name,
             path=NamespacePath.from_strings(self.slug),
         )
@@ -135,7 +135,7 @@ class NamespaceORM(BaseORM):
             created_by=self.created_by,
             creation_date=self.creation_date,
             underlying_resource_id=self.user_id,
-            latest_slug=self.slug,
+            latest_slug=self.slug.lower(),
             name=self.name,
             path=NamespacePath.from_strings(self.slug),
         )

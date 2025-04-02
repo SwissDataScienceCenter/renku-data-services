@@ -200,9 +200,13 @@ class GroupsBP(CustomBlueprint):
                     dict(
                         id=ns.id,
                         name=ns.name,
-                        slug=ns.latest_slug
+                        slug=ns.latest_slug.lower()
                         if ns.latest_slug
-                        else (ns.path.second.value if isinstance(ns, models.ProjectNamespace) else ns.path.first.value),
+                        else (
+                            ns.path.second.value.lower()
+                            if isinstance(ns, models.ProjectNamespace)
+                            else ns.path.first.value.lower()
+                        ),
                         created_by=ns.created_by,
                         creation_date=ns.creation_date,
                         namespace_kind=apispec.NamespaceKind(ns.kind.value),
@@ -227,7 +231,7 @@ class GroupsBP(CustomBlueprint):
                 dict(
                     id=ns.id,
                     name=ns.name,
-                    slug=ns.latest_slug or ns.path.last().value,
+                    slug=ns.latest_slug.lower() if ns.latest_slug else ns.path.last().value.lower(),
                     created_by=ns.created_by,
                     creation_date=None,  # NOTE: we do not save creation date in the DB
                     namespace_kind=apispec.NamespaceKind(ns.kind.value),
@@ -253,7 +257,7 @@ class GroupsBP(CustomBlueprint):
                 dict(
                     id=ns.id,
                     name=ns.name,
-                    slug=ns.latest_slug or ns.path.last().value,
+                    slug=ns.latest_slug.lower() if ns.latest_slug else ns.path.last().value.lower(),
                     created_by=ns.created_by,
                     creation_date=None,  # NOTE: we do not save creation date in the DB
                     namespace_kind=apispec.NamespaceKind(ns.kind.value),

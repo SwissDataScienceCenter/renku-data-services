@@ -82,7 +82,7 @@ class ProjectORM(BaseORM):
         return models.Project(
             id=self.id,
             name=self.name,
-            slug=self.slug.slug,
+            slug=self.slug.slug.lower(),
             namespace=self.slug.namespace.dump(),
             visibility=authz_models.Visibility.PUBLIC
             if self.visibility == Visibility.public
@@ -105,7 +105,7 @@ class ProjectORM(BaseORM):
             id=self.slug.namespace.id,
             created_by=self.created_by_id,
             underlying_resource_id=self.id,
-            latest_slug=self.slug.slug,
+            latest_slug=self.slug.slug.lower(),
             name=self.name,
             creation_date=self.creation_date,
             path=ProjectPath.from_strings(self.slug.namespace.slug, self.slug.slug),

@@ -215,7 +215,7 @@ class DataConnectorSlug(Slug):
 
 class __NamespaceCommonMixin:
     def __repr__(self) -> str:
-        return "/".join([i.value for i in self.to_list()])
+        return "/".join([i.value for i in self.to_list()]).lower()
 
     def __getitem__(self, ind: int) -> Slug:
         return self.to_list()[ind]
@@ -227,7 +227,7 @@ class __NamespaceCommonMixin:
         raise NotImplementedError
 
     def serialize(self) -> str:
-        return "/".join([i.value for i in self.to_list()])
+        return "/".join([i.value for i in self.to_list()]).lower()
 
 
 @dataclass(frozen=True, eq=True, repr=False)
