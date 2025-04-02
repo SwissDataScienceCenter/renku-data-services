@@ -1,7 +1,6 @@
 services:
   data_service:
     image: "mcr.microsoft.com/devcontainers/python:3.13-bookworm"
-    container_name: renku-data-service
     volumes:
       - ../:/workspace:cached
       - .poetry_cache/:/poetry_cache:delegated
@@ -11,34 +10,30 @@ services:
       DB_USER: renku
       DB_NAME: renku
       DB_PASSWORD: renku
-      DB_HOST: renku-postgres
+      DB_HOST: 127.0.0.1
       CORS_ALLOW_ALL_ORIGINS: "true"
       ALEMBIC_CONFIG: /workspace/components/renku_data_services/migrations/alembic.ini
-      AUTHZ_DB_HOST: renku-authz
+      AUTHZ_DB_HOST: 127.0.0.1
       AUTHZ_DB_GRPC_PORT: "50051"
       AUTHZ_DB_KEY: renku
       AUTHZ_DB_NO_TLS_CONNECTION: "true"
-      ZED_ENDPOINT: renku-authz:50051
+      ZED_ENDPOINT: 127.0.0.1:50051
       ZED_TOKEN: renku
       ZED_INSECURE: "true"
       POETRY_CACHE_DIR: "/poetry_cache"
       NB_SERVER_OPTIONS__DEFAULTS_PATH: /workspace/server_defaults.json
       NB_SERVER_OPTIONS__UI_CHOICES_PATH: /workspace/server_options.json
       KUBECONFIG: "/workspace/.k3d-config.yaml"
-      SOLR_URL: "http://renku-solr:8983"
+      SOLR_URL: "http://localhost:8983"
       SOLR_CORE: "renku-search-dev"
-    ports:
-      - "8000:8000"
-      - "5678:5678"
-      - "8888:80"
+    network_mode: service:db
     depends_on:
-      - postgres
+      - db
       - authz
       - solr
 
-  postgres:
+  db:
     image: postgres:latest
-    container_name: renku-postgres
     restart: unless-stopped
     volumes:
       - postgres-data:/var/lib/postgresql/data
@@ -50,43 +45,43 @@ services:
       POSTGRES_DB: postgres
       POSTGRES_PASSWORD: renku
     ports:
+      - "8000:8000"
       - "5432:5432"
+      - "8080:8080"
+      - "5678:5678"
+      - "50051:50051"
+      - "8888:80"
+      - "8983:8983"
 
   swagger:
     image: swaggerapi/swagger-ui
-    container_name: renku-swagger
     environment:
-      SWAGGER_JSON_URL: http://data_service:8000/api/data/spec.json
+      SWAGGER_JSON_URL: http://localhost:8000/api/data/spec.json
       PORT: "8080"
-    ports:
-      - "8080:8080"
+    network_mode: service:db
 
   authz:
     image: authzed/spicedb:latest-debug
-    container_name: renku-authz
     restart: unless-stopped
     depends_on:
-      - postgres
+      - db
     environment:
       SPICEDB_GRPC_PRESHARED_KEY: renku
-      SPICEDB_DATASTORE_CONN_URI: "postgres://renku:renku@renku-postgres:5432/postgres"
-    ports:
-      - "50051:50051"
+      SPICEDB_DATASTORE_CONN_URI: "postgres://renku:renku@127.0.0.1:5432/postgres"
+    network_mode: service:db
     command:
       - serve
 
   solr:
     image: solr:9
-    container_name: renku-solr
     restart: unless-stopped
+    network_mode: service:db
     volumes:
       - solr_data:/var/solr
     command:
       - bash
       - -c
       - 'precreate-core renku-search-dev; exec solr -f -Dsolr.modules=analysis-extras'
-    ports:
-      - "8983:8983"
 
 volumes:
   postgres-data:

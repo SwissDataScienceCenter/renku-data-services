@@ -297,7 +297,7 @@ async def solr_instance(tmp_path_factory, monkeysession, solr_bin_path):
         "start",
         "-f",
         "--jvm-opts",
-        "-Xmx512M -Xms512M",
+        "-Xmx256M -Xms256M",
         "--host",
         "localhost",
         "--port",
@@ -306,14 +306,14 @@ async def solr_instance(tmp_path_factory, monkeysession, solr_bin_path):
         f"{solr_root}",
         "-t",
         f"{solr_root}",
+        "--user-managed",
     ]
     logger.info(f"Starting SOLR via: {args}")
     proc = subprocess.Popen(
         args,
         env={"PATH": os.getenv("PATH", ""), "SOLR_LOGS_DIR": f"{solr_root}", "SOLR_ULIMIT_CHECKS": "false"},
     )
-    monkeysession.setenv("SOLR_HOST", "localhost")
-    monkeysession.setenv("SOLR_PORT", f"{port}")
+    monkeysession.setenv("SOLR_TEST_PORT", f"{port}")
     monkeysession.setenv("SOLR_ROOT_DIR", solr_root)
     monkeysession.setenv("SOLR_URL", f"http://localhost:{port}")
 
@@ -330,31 +330,22 @@ async def solr_instance(tmp_path_factory, monkeysession, solr_bin_path):
 @pytest.fixture
 def solr_core(solr_instance, monkeypatch):
     core_name = "test_core_" + str(ULID()).lower()[-12:]
-    monkeypatch.setenv("SOLR_CORE_NAME", core_name)
+    monkeypatch.setenv("SOLR_TEST_CORE", core_name)
+    monkeypatch.setenv("SOLR_CORE", core_name)
     return core_name
-
-
-@pytest.fixture
-def solr_config_from_env():
-    solr_core = os.getenv("SOLR_CORE")
-    solr_url = os.getenv("SOLR_URL")
-    if solr_core is None or solr_url is None:
-        raise ValueError("No SOLR_CORE or SOLR_URL env variables found")
-
-    solr_config = SolrClientConfig(base_url=solr_url, core=solr_core)
-    return solr_config
 
 
 @pytest.fixture()
 def solr_config(solr_core, solr_bin_path):
     core = solr_core
-    solr_url = os.getenv("SOLR_URL")
-    if solr_url is None:
-        raise ValueError("No SOLR_URL env variable found")
+    solr_port = os.getenv("SOLR_TEST_PORT")
+    if solr_port is None:
+        raise ValueError("No SOLR_TEST_PORT env variable found")
 
+    solr_url = f"http://localhost:{solr_port}"
     solr_config = SolrClientConfig(base_url=solr_url, core=core)
     solr_bin = solr_bin_path
-    result = subprocess.run([solr_bin, "create", "-c", core])
+    result = subprocess.run([solr_bin, "create", "--solr-url", solr_url, "-c", core])
     result.check_returncode()
 
     # Unfortunately, solr creates core directories with only read permissions
@@ -373,9 +364,12 @@ def solr_config(solr_core, solr_bin_path):
 
 
 @pytest_asyncio.fixture()
-async def solr_search(solr_config):
+async def solr_search(solr_config, app_config):
     migrator = SchemaMigrator(solr_config)
-    migrations = entity_schema.all_migrations.copy()
-    result = await migrator.migrate(migrations)
-    assert result.migrations_run == len(migrations)
+    result = await migrator.migrate(entity_schema.all_migrations)
+    assert result.migrations_run == len(entity_schema.all_migrations)
+
+    # migrator = SchemaMigrator(app_config.solr_config)
+    # await migrator.migrate(entity_schema.all_migrations)
+
     return solr_config

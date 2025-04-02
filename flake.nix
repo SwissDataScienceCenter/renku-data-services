@@ -123,29 +123,34 @@
             commonPackages
             ++ [
               (pkgs.writeShellScriptBin "devc" ''
-                devcontainer exec --workspace-folder $FLAKE_ROOT -- bash -c "$@"
+                devcontainer exec --workspace-folder $FLAKE_ROOT --remote-env POETRY_VIRTUALENVS_IN_PROJECT=false -- bash -c "$@"
               '')
               (pkgs.writeShellScriptBin "devcontainer-up" ''
-                devcontainer up --workspace-folder $FLAKE_ROOT
+                devcontainer up --workspace-folder $FLAKE_ROOT --remote-env POETRY_VIRTUALENVS_IN_PROJECT=false
+              '')
+              (pkgs.writeShellScriptBin "devcontainer-build" ''
+                devcontainer build --workspace-folder $FLAKE_ROOT --remote-env POETRY_VIRTUALENVS_IN_PROJECT=false
               '')
               (pkgs.writeShellScriptBin "devcontainer-destroy" ''
+                set -e
                 docker stop $(docker ps -a -q)
-                docker container ls -f "name=renku-data-services_*" -a -q | xargs docker rm -fde
+                docker container ls -f "name=renku-data-services_*" -a -q | xargs docker rm -f
+                docker volume ls -f "name=renku-data-services_*" -q | xargs docker volume rm -f
               '')
               (pkgs.writeShellScriptBin "devcontainer-main-tests" ''
-                devcontainer exec --workspace-folder $FLAKE_ROOT -- bash -c "make main_tests"
+                devcontainer exec --workspace-folder $FLAKE_ROOT --remote-env POETRY_VIRTUALENVS_IN_PROJECT=false -- bash -c "make main_tests"
               '')
               (pkgs.writeShellScriptBin "devcontainer-schemathesis" ''
-                devcontainer exec --workspace-folder $FLAKE_ROOT --remote-env HYPOTHESIS_PROFILE=ci -- bash -c "make schemathesis_tests"
+                devcontainer exec --workspace-folder $FLAKE_ROOT --remote-env POETRY_VIRTUALENVS_IN_PROJECT=false --remote-env HYPOTHESIS_PROFILE=ci -- bash -c "make schemathesis_tests"
+              '')
+              (pkgs.writeShellScriptBin "devcontainer-pytest" ''
+                devcontainer exec --workspace-folder $FLAKE_ROOT --remote-env POETRY_VIRTUALENVS_IN_PROJECT=false --remote-env HYPOTHESIS_PROFILE=ci --remote-env DUMMY_STORES=true -- bash -c "poetry run pytest --no-cov -p no:warnings -s \"$@\""
               '')
             ];
 
           shellHook = ''
             export FLAKE_ROOT="$(git rev-parse --show-toplevel)"
             export PATH="$FLAKE_ROOT/.venv/bin:$PATH"
-            export ALEMBIC_CONFIG="$FLAKE_ROOT/components/renku_data_services/migrations/alembic.ini"
-            export NB_SERVER_OPTIONS__DEFAULTS_PATH="$FLAKE_ROOT/server_defaults.json"
-            export NB_SERVER_OPTIONS__UI_CHOICES_PATH="$FLAKE_ROOT/server_options.json"
           '';
         };
         vm = pkgs.mkShell (devSettings
