@@ -15,6 +15,7 @@ import kr8s
 import sqlalchemy
 from kr8s.asyncio import Api
 from kr8s.asyncio.objects import APIObject
+from sanic.log import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -76,7 +77,7 @@ class APIObjectInCluster:
         )
 
 
-EventHandler = Callable[[APIObjectInCluster], Awaitable[None]]
+type EventHandler = Callable[[APIObjectInCluster], Awaitable[None]]
 
 
 class K8sClient:
@@ -88,7 +89,9 @@ class K8sClient:
     def __get_cluster_or_die(self, cluster_id: ClusterId) -> Cluster:
         cluster = self.__clusters.get(cluster_id)
         if not cluster:
-            raise errors.MissingResourceError(message=f"Could not find cluster with id {cluster_id} in the list of clusters.")
+            raise errors.MissingResourceError(
+                message=f"Could not find cluster with id {cluster_id} in the list of clusters."
+            )
         return cluster
 
     async def create(self, obj: K8sObject) -> K8sObject:
@@ -130,18 +133,21 @@ class K8sClient:
             single_cluster = self.__clusters.get(filter.cluster)
             clusters = [single_cluster] if single_cluster else []
         for cluster in clusters:
-            if filter.cluster != cluster.id:
-                continue
-            if filter.namespace != filter.namespace:
+            if filter.namespace is not None and filter.namespace != cluster.namespace:
                 continue
             names = [filter.name] if filter.name else []
-            res = await cluster.api.async_get(
-                filter.kind,
-                *names,
-                label_selector=filter.label_selector,
-                api=cluster.api,
-                namespace=filter.namespace,
-            )
+
+            try:
+                res = await cluster.api.async_get(
+                    filter.kind,
+                    *names,
+                    label_selector=filter.label_selector,
+                    api=cluster.api,
+                    namespace=filter.namespace,
+                )
+            except (kr8s.ServerError, kr8s.APITimeoutError):
+                continue
+
             if not isinstance(res, list):
                 res = [res]
             for r in res:
@@ -231,7 +237,10 @@ class K8sCache:
 
 
 class CachedK8sClient(K8sClient):
-    """A wrapper around a kr8s k8s client that provides access to a cache for listing and reading resources but fallback to the cluster for other operations."""
+    """A wrapper around a kr8s k8s client.
+
+    Provides access to a cache for listing and reading resources but fallback to the cluster for other operations.
+    """
 
     def __init__(self, clusters: dict[ClusterId, Cluster], cache: K8sCache) -> None:
         super().__init__(clusters)
@@ -297,13 +306,17 @@ class K8sWatcher:
     async def stop(self, timeout: timedelta = timedelta(seconds=10)) -> None:
         """Stop the watcher or timeout."""
         if self.__tasks is None:
-            raise errors.ProgrammingError()
+            return
         for task in self.__tasks.values():
             if task.done():
                 continue
             task.cancel()
-            async with asyncio.timeout(timeout.total_seconds()):
-                await task
+            try:
+                async with asyncio.timeout(timeout.total_seconds()):
+                    await task
+            except TimeoutError:
+                logger.error("timeout trying to cancel k8s watche task")
+                continue
 
 
 def example_handler(cache: K8sCache) -> EventHandler:
