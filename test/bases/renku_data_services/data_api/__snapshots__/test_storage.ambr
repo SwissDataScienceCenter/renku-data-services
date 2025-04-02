@@ -13940,18 +13940,37 @@
           'type': 'string',
         }),
         dict({
-          'advanced': False,
+          'advanced': True,
           'default': '',
           'default_str': '',
           'examples': list([
             dict({
+              'help': 'Auto-detect provider',
+              'provider': '',
+              'value': 'auto',
+            }),
+            dict({
               'help': 'Zenodo',
               'provider': '',
-              'value': 'Zenodo',
+              'value': 'zenodo',
+            }),
+            dict({
+              'help': 'Dataverse',
+              'provider': '',
+              'value': 'dataverse',
+            }),
+            dict({
+              'help': 'Invenio',
+              'provider': '',
+              'value': 'invenio',
             }),
           ]),
           'exclusive': False,
-          'help': 'DOI provider.',
+          'help': '''
+            DOI provider.
+            
+            The DOI provider can be set when rclone does not automatically recognize a supported DOI provider.
+          ''',
           'name': 'provider',
           'provider': '',
           'required': False,
