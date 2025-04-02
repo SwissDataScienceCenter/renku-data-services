@@ -369,7 +369,4 @@ async def solr_search(solr_config, app_config):
     result = await migrator.migrate(entity_schema.all_migrations)
     assert result.migrations_run == len(entity_schema.all_migrations)
 
-    # migrator = SchemaMigrator(app_config.solr_config)
-    # await migrator.migrate(entity_schema.all_migrations)
-
     return solr_config
