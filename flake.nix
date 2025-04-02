@@ -129,7 +129,8 @@
                 devcontainer up --workspace-folder $FLAKE_ROOT
               '')
               (pkgs.writeShellScriptBin "devcontainer-destroy" ''
-                docker container ls -f "name=renku-data-services_*" -a -q | xargs docker rm -f
+                docker stop $(docker ps -a -q)
+                docker container ls -f "name=renku-data-services_*" -a -q | xargs docker rm -fde
               '')
               (pkgs.writeShellScriptBin "devcontainer-main-tests" ''
                 devcontainer exec --workspace-folder $FLAKE_ROOT -- bash -c "make main_tests"
