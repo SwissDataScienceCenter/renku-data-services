@@ -37,8 +37,8 @@ class K8sObjectORM(BaseORM):
         default=None,
         server_default="generate_ulid()",
     )
-    name: Mapped[str] = mapped_column("name", String(99), index=True)
-    namespace: Mapped[str] = mapped_column("namespace", String(99), index=True)
+    name: Mapped[str] = mapped_column("name", String(), index=True)
+    namespace: Mapped[str] = mapped_column("namespace", String(), index=True)
     creation_date: Mapped[datetime | None] = mapped_column(
         "creation_date",
         DateTime(timezone=True),
