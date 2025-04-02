@@ -315,6 +315,7 @@ async def solr_instance(tmp_path_factory, monkeysession, solr_bin_path):
     monkeysession.setenv("SOLR_HOST", "localhost")
     monkeysession.setenv("SOLR_PORT", f"{port}")
     monkeysession.setenv("SOLR_ROOT_DIR", solr_root)
+    monkeysession.setenv("SOLR_URL", f"http://localhost:{port}")
 
     await __wait_for_solr("localhost", port)
 
@@ -327,9 +328,9 @@ async def solr_instance(tmp_path_factory, monkeysession, solr_bin_path):
 
 
 @pytest.fixture
-def solr_core(solr_instance, monkeysession):
-    core_name = str(ULID()).lower()
-    monkeysession.setenv("SOLR_CORE_NAME", core_name)
+def solr_core(solr_instance, monkeypatch):
+    core_name = "test_core_" + str(ULID()).lower()[-12:]
+    monkeypatch.setenv("SOLR_CORE_NAME", core_name)
     return core_name
 
 
@@ -337,6 +338,9 @@ def solr_core(solr_instance, monkeysession):
 def solr_config_from_env():
     solr_core = os.getenv("SOLR_CORE")
     solr_url = os.getenv("SOLR_URL")
+    if solr_core is None or solr_url is None:
+        raise ValueError("No SOLR_CORE or SOLR_URL env variables found")
+
     solr_config = SolrClientConfig(base_url=solr_url, core=solr_core)
     return solr_config
 
@@ -344,24 +348,26 @@ def solr_config_from_env():
 @pytest.fixture()
 def solr_config(solr_core, solr_bin_path):
     core = solr_core
-    solr_host = os.getenv("SOLR_HOST")
-    solr_port = os.getenv("SOLR_PORT")
-    solr_config = SolrClientConfig(base_url=f"http://{solr_host}:{solr_port}", core=core)
+    solr_url = os.getenv("SOLR_URL")
+    if solr_url is None:
+        raise ValueError("No SOLR_URL env variable found")
+
+    solr_config = SolrClientConfig(base_url=solr_url, core=core)
     solr_bin = solr_bin_path
     result = subprocess.run([solr_bin, "create", "-c", core])
     result.check_returncode()
 
     # Unfortunately, solr creates core directories with only read permissions
     # Then changing the schema via the api fails, because it can't write to that file
-    dir = os.getenv("SOLR_ROOT_DIR")
-    conf_file = f"{dir}/{core}/conf/managed-schema.xml"
+    root_dir = os.getenv("SOLR_ROOT_DIR")
+    conf_file = f"{root_dir}/{core}/conf/managed-schema.xml"
     os.chmod(conf_file, stat.S_IRUSR | stat.S_IWUSR | stat.S_IROTH | stat.S_IRGRP)
 
     # we also need to create the configset/_default directory to make
     # core-admin commands work
-    if not os.path.isdir(f"{dir}/configsets/_default"):
-        os.makedirs(f"{dir}/configsets/_default")
-        copy_tree(f"{dir}/{core}/conf", f"{dir}/configsets/_default/conf")
+    if not os.path.isdir(f"{root_dir}/configsets/_default"):
+        os.makedirs(f"{root_dir}/configsets/_default")
+        copy_tree(f"{root_dir}/{core}/conf", f"{root_dir}/configsets/_default/conf")
 
     return solr_config
 
