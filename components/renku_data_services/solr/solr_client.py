@@ -635,6 +635,9 @@ class DefaultSolrClient(SolrClient):
         bauth = BasicAuth(username=cfg.user.username, password=cfg.user.password) if cfg.user is not None else None
         self.delegate = AsyncClient(auth=bauth, base_url=burl, timeout=cfg.timeout)
 
+    def __repr__(self) -> str:
+        return f"DefaultSolrClient(delegate={self.delegate}, config={self.config})"
+
     async def __aenter__(self) -> Self:
         await self.delegate.__aenter__()
         return self
