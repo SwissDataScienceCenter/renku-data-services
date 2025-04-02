@@ -20,6 +20,8 @@ from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.namespace.models import UserNamespace
 from renku_data_services.secrets.config import Config as SecretsConfig
 from renku_data_services.secrets_storage_api.app import register_all_handlers as register_secrets_handlers
+from renku_data_services.solr import entity_schema
+from renku_data_services.solr.solr_migrate import SchemaMigrator
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import UserInfo
@@ -215,6 +217,14 @@ async def sanic_client(
     await sync_admins_from_keycloak(app_config_instance.kc_api, app_config_instance.authz)
     await app_config_instance.group_repo.generate_user_namespaces()
     return sanic_client_with_migrations
+
+
+@pytest_asyncio.fixture
+async def sanic_client_with_solr(sanic_client: SanicASGITestClient, app_config) -> SanicASGITestClient:
+    migrator = SchemaMigrator(app_config.solr_config)
+    await migrator.migrate(entity_schema.all_migrations)
+
+    return sanic_client
 
 
 @pytest_asyncio.fixture
