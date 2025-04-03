@@ -26,6 +26,7 @@ class Config:
 
     db: DBConfig
     k8s: _K8sConfig
+    _k8s_cache: K8sDbCache | None = None
 
     @property
     def k8s_cache(self) -> K8sDbCache:
