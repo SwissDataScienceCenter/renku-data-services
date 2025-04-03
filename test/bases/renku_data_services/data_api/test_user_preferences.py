@@ -7,7 +7,10 @@ from sanic_testing.testing import SanicASGITestClient
 from syrupy.filters import props
 
 from renku_data_services.base_models import APIUser
-from test.bases.renku_data_services.data_api.utils import create_user_preferences
+from test.bases.renku_data_services.data_api.utils import (
+    create_user_preferences,
+    create_user_preferences_dismiss_banner,
+)
 
 _valid_add_pinned_project: list[dict[str, Any]] = [
     {"project_slug": "user.1/first-project"},
@@ -161,3 +164,16 @@ async def test_delete_user_preferences_pinned_projects_unknown(
     assert len(res.json["pinned_projects"].get("project_slugs")) == 1
     project_slugs = res.json["pinned_projects"]["project_slugs"]
     assert project_slugs[0] == valid_add_pinned_project_payload["project_slug"]
+
+
+@pytest.mark.asyncio
+async def test_adde_user_preferences_dismiss_projects_migration_banner(
+    sanic_client: SanicASGITestClient, api_user: APIUser
+) -> None:
+    _, res = await create_user_preferences_dismiss_banner(sanic_client, api_user)
+    assert res.status_code == 200
+
+    assert res.json is not None
+    assert res.json.get("user_id") == api_user.id
+    assert res.json.get("pinned_projects") == {"project_slugs": []}
+    assert res.json.get("dismiss_project_migration_banner")
