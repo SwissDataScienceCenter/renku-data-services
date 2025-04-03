@@ -21,7 +21,7 @@ from renku_data_services.notebooks.api.amalthea_patches import inject_certificat
 from renku_data_services.notebooks.api.amalthea_patches import jupyter_server as jupyter_server_patches
 from renku_data_services.notebooks.api.amalthea_patches import ssh as ssh_patches
 from renku_data_services.notebooks.api.classes.cloud_storage import ICloudStorageRequest
-from renku_data_services.notebooks.api.classes.k8s_client import JupyterServerV1Alpha1Kr8s, K8sClient
+from renku_data_services.notebooks.api.classes.k8s_client import K8sClient
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.api.schemas.secrets import K8sUserSecrets
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
@@ -54,7 +54,7 @@ class UserServer(ABC):
     ):
         self._user = user
         self.server_name = server_name
-        self._k8s_client: K8sClient[JupyterServerV1Alpha1, JupyterServerV1Alpha1Kr8s] = k8s_client
+        self._k8s_client: K8sClient[JupyterServerV1Alpha1] = k8s_client
         self.safe_username = self._user.id
         self.image = image
         self.server_options = server_options
@@ -236,7 +236,7 @@ class UserServer(ABC):
             }
         # Combine everything into the manifest
         manifest = {
-            "apiVersion": f"{self.config.amalthea.group}/{self.config.amalthea.version}",
+            "apiVersion": JupyterServerV1Alpha1.apiVersion,
             "kind": "JupyterServer",
             "metadata": {
                 "name": self.server_name,

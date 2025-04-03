@@ -4,12 +4,16 @@ import os
 from dataclasses import dataclass, field
 from typing import Optional, Protocol, Self
 
+import kr8s
+
 from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.crc.models import ResourceClass
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.k8s.clients import K8sCoreClient, K8sSchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
+from renku_data_services.k8s_watcher.db import CachedK8sClient, Cluster, K8sDbCache
+from renku_data_services.k8s_watcher.models import ClusterId
 from renku_data_services.notebooks.api.classes.data_service import (
     CRCValidator,
     DummyCRCValidator,
@@ -17,17 +21,11 @@ from renku_data_services.notebooks.api.classes.data_service import (
     GitProviderHelper,
 )
 from renku_data_services.notebooks.api.classes.k8s_client import (
-    AmaltheaSessionV1Alpha1Kr8s,
-    JupyterServerV1Alpha1Kr8s,
     K8sClient,
-    NamespacedK8sClient,
-    ServerCache,
 )
 from renku_data_services.notebooks.api.classes.repository import GitProvider
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
 from renku_data_services.notebooks.config.dynamic import (
-    _AmaltheaConfig,
-    _AmaltheaV2Config,
     _CloudStorage,
     _GitConfig,
     _K8sConfig,
@@ -78,7 +76,6 @@ class NotebooksConfig:
 
     server_options: _ServerOptionsConfig
     sessions: _SessionConfig
-    amalthea: _AmaltheaConfig
     sentry: _SentryConfig
     git: _GitConfig
     k8s: _K8sConfig
@@ -86,8 +83,8 @@ class NotebooksConfig:
     user_secrets: _UserSecrets
     crc_validator: CRCValidatorProto
     git_provider_helper: GitProviderHelperProto
-    k8s_client: K8sClient[JupyterServerV1Alpha1, JupyterServerV1Alpha1Kr8s]
-    k8s_v2_client: K8sClient[AmaltheaSessionV1Alpha1, AmaltheaSessionV1Alpha1Kr8s]
+    k8s_client: K8sClient[JupyterServerV1Alpha1]
+    k8s_v2_client: K8sClient[AmaltheaSessionV1Alpha1]
     current_resource_schema_version: int = 1
     anonymous_sessions_enabled: bool = False
     ssh_enabled: bool = False
@@ -113,53 +110,49 @@ class NotebooksConfig:
         git_provider_helper: GitProviderHelperProto
         k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
         quota_repo: QuotaRepository
+        db = DBConfig.from_env()
         if dummy_stores:
             crc_validator = DummyCRCValidator()
             sessions_config = _SessionConfig._for_testing()
             git_provider_helper = DummyGitProviderHelper()
-            amalthea_config = _AmaltheaConfig(cache_url="http://not.specified")
-            amalthea_v2_config = _AmaltheaV2Config(cache_url="http://not.specified")
             git_config = _GitConfig("http://not.specified", "registry.not.specified")
         else:
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
             rp_repo = ResourcePoolRepository(db_config.async_session_maker, quota_repo)
             crc_validator = CRCValidator(rp_repo)
             sessions_config = _SessionConfig.from_env()
-            amalthea_config = _AmaltheaConfig.from_env()
-            amalthea_v2_config = _AmaltheaV2Config.from_env()
             git_config = _GitConfig.from_env()
             git_provider_helper = GitProviderHelper(
                 data_service_url, f"http://{sessions_config.ingress.host}", git_config.url
             )
 
         k8s_config = _K8sConfig.from_env()
-        renku_ns_client = NamespacedK8sClient(
-            k8s_config.renku_namespace, JupyterServerV1Alpha1, JupyterServerV1Alpha1Kr8s
+        cluster_id = ClusterId("renkulab")
+        clusters = {cluster_id: Cluster(id=cluster_id, namespace=k8s_config.renku_namespace, api=kr8s.api())}
+        v2_cache = CachedK8sClient(
+            clusters=clusters,
+            cache=K8sDbCache(db.async_session_maker),
+            kinds_to_cache=[AmaltheaSessionV1Alpha1.kind, JupyterServerV1Alpha1.kind],
         )
-        js_cache = ServerCache(amalthea_config.cache_url, JupyterServerV1Alpha1)
         k8s_client = K8sClient(
-            cache=js_cache,
-            renku_ns_client=renku_ns_client,
+            cached_client=v2_cache,
+            # NOTE: v2 sessions have no userId label, the safe-username label is the keycloak user ID
             username_label="renku.io/userId",
-            # NOTE: if testing then we should skip the cache if unavailable because we dont deploy the cache in tests
-            skip_cache_if_unavailable=dummy_stores,
-        )
-        v2_cache = ServerCache(amalthea_v2_config.cache_url, AmaltheaSessionV1Alpha1)
-        renku_ns_v2_client = NamespacedK8sClient(
-            k8s_config.renku_namespace, AmaltheaSessionV1Alpha1, AmaltheaSessionV1Alpha1Kr8s
+            namespace=k8s_config.renku_namespace,
+            cluster=cluster_id,
+            server_type=JupyterServerV1Alpha1,
         )
         k8s_v2_client = K8sClient(
-            cache=v2_cache,
-            renku_ns_client=renku_ns_v2_client,
+            cached_client=v2_cache,
             # NOTE: v2 sessions have no userId label, the safe-username label is the keycloak user ID
             username_label="renku.io/safe-username",
-            # NOTE: if testing then we should skip the cache if unavailable because we dont deploy the cache in tests
-            skip_cache_if_unavailable=dummy_stores,
+            namespace=k8s_config.renku_namespace,
+            cluster=cluster_id,
+            server_type=AmaltheaSessionV1Alpha1,
         )
         return cls(
             server_options=server_options,
             sessions=sessions_config,
-            amalthea=amalthea_config,
             sentry=_SentryConfig.from_env(),
             git=git_config,
             k8s=k8s_config,
