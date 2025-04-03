@@ -402,6 +402,7 @@ async def test_post_session_launcher(sanic_client, admin_headers, create_project
         "description": "A session launcher.",
         "resource_class_id": resource_pool["classes"][0]["id"],
         "disk_storage": 2,
+        "env_variables": {"KEY_NUMBER_1": "a value"},
         "environment": {
             "container_image": "some_image:some_tag",
             "name": "custom_name",
@@ -425,6 +426,7 @@ async def test_post_session_launcher(sanic_client, admin_headers, create_project
     assert environment.get("id") is not None
     assert res.json.get("resource_class_id") == resource_pool["classes"][0]["id"]
     assert res.json.get("disk_storage") == 2
+    assert res.json.get("env_variables") == {"KEY_NUMBER_1": "a value"}
 
 
 @pytest.mark.asyncio
@@ -552,12 +554,14 @@ async def test_patch_session_launcher(
     assert environment.get("id") is not None
     assert res.json.get("resource_class_id") == resource_pool["classes"][0]["id"]
     assert res.json.get("disk_storage") is None
+    assert res.json.get("env_variables") is None
 
     patch_payload = {
         "name": "New Name",
         "description": "An updated session launcher.",
         "resource_class_id": resource_pool["classes"][1]["id"],
         "disk_storage": 3,
+        "env_variables": {"KEY_NUMBER_2": "another value"},
     }
     _, res = await sanic_client.patch(
         f"/api/data/session_launchers/{res.json['id']}", headers=user_headers, json=patch_payload
@@ -568,6 +572,7 @@ async def test_patch_session_launcher(
     assert res.json.get("description") == patch_payload["description"]
     assert res.json.get("resource_class_id") == patch_payload["resource_class_id"]
     assert res.json.get("disk_storage") == 3
+    assert res.json.get("env_variables") == {"KEY_NUMBER_2": "another value"}
 
 
 @pytest.mark.asyncio
@@ -925,6 +930,7 @@ async def test_patch_session_launcher_reset_fields(
         "description": "A session launcher.",
         "resource_class_id": resource_pool["classes"][0]["id"],
         "disk_storage": 2,
+        "env_variables": {"KEY_NUMBER_1": "a value"},
         "environment": {
             "container_image": "some_image:some_tag",
             "name": "custom_name",
@@ -945,8 +951,9 @@ async def test_patch_session_launcher_reset_fields(
     assert environment.get("id") is not None
     assert res.json.get("resource_class_id") == resource_pool["classes"][0]["id"]
     assert res.json.get("disk_storage") == 2
+    assert res.json.get("env_variables") == {"KEY_NUMBER_1": "a value"}
 
-    patch_payload = {"resource_class_id": None, "disk_storage": None}
+    patch_payload = {"resource_class_id": None, "disk_storage": None, "env_variables": None}
     _, res = await sanic_client.patch(
         f"/api/data/session_launchers/{res.json['id']}", headers=user_headers, json=patch_payload
     )
@@ -954,6 +961,7 @@ async def test_patch_session_launcher_reset_fields(
     assert res.json is not None
     assert res.json.get("resource_class_id") is None
     assert res.json.get("disk_storage") is None
+    assert res.json.get("env_variables") is None
 
 
 @pytest.mark.asyncio
@@ -968,6 +976,7 @@ async def test_patch_session_launcher_keeps_unset_values(
         description="A session launcher.",
         resource_class_id=resource_pool["classes"][0]["id"],
         disk_storage=42,
+        env_variables={"KEY_NUMBER_1": "a value"},
         environment={
             "container_image": "some_image:some_tag",
             "environment_kind": "CUSTOM",
@@ -987,6 +996,7 @@ async def test_patch_session_launcher_keeps_unset_values(
     assert response.json.get("description") == "A session launcher."
     assert response.json.get("resource_class_id") == resource_pool["classes"][0]["id"]
     assert response.json.get("disk_storage") == 42
+    assert response.json.get("env_variables") == {"KEY_NUMBER_1": "a value"}
     environment = response.json.get("environment", {})
     assert environment.get("container_image") == "some_image:some_tag"
     assert environment.get("environment_kind") == "CUSTOM"
