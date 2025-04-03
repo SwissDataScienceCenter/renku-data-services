@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from box import Box
 from sqlalchemy import JSON, DateTime, MetaData, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
@@ -69,6 +70,6 @@ class K8sObjectORM(BaseORM):
             cluster=ClusterId(self.cluster),
             kind=self.kind,
             version=self.version,
-            manifest=self.manifest,
+            manifest=Box(self.manifest),
             user_id=self.user_id,
         )

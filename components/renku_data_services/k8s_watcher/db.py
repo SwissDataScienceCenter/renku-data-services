@@ -13,6 +13,7 @@ from typing import Any, Self, cast
 
 import kr8s
 import sqlalchemy
+from box import Box
 from kr8s.asyncio import Api
 from kr8s.asyncio.objects import APIObject
 from sanic.log import logger
@@ -69,7 +70,7 @@ class APIObjectInCluster:
             namespace=self.obj.namespace,
             kind=self.obj.kind,
             version=self.obj.version,
-            manifest=self.obj.to_dict(),
+            manifest=Box(self.obj.to_dict()),
             cluster=self.cluster,
             user_id=self.user_id,
         )
@@ -111,12 +112,13 @@ class K8sClient:
         await api_obj.obj.create()
         return api_obj.meta.with_manifest(api_obj.obj.to_dict())
 
-    async def patch(self, meta: K8sObjectMeta, patch: dict[str, Any]) -> K8sObject:
+    async def patch(self, meta: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
         """Patch a k8s object."""
         obj = await self.__get(meta)
         if not obj:
             raise errors.MissingResourceError(message=f"The k8s resource with metadata {meta} cannot be found.")
-        await obj.obj.patch(patch)
+        patch_type = "json" if isinstance(patch, list) else None
+        await obj.obj.patch(patch, type=patch_type)
         return meta.with_manifest(obj.obj.to_dict())
 
     async def delete(self, meta: K8sObjectMeta) -> None:
@@ -189,6 +191,8 @@ class K8sDbCache:
 
     async def upsert(self, obj: K8sObject) -> None:
         """Insert or update an object in the cache."""
+        if obj.user_id is None:
+            raise errors.ValidationError(message="user_id is required to upsert k8s object.")
         async with self.__session_maker() as session, session.begin():
             obj_orm = await self.__get(obj.meta, session)
             if obj_orm is not None:
@@ -237,6 +241,8 @@ class K8sDbCache:
                 stmt = stmt.where(K8sObjectORM.kind == filter.kind)
             if filter.version:
                 stmt = stmt.where(K8sObjectORM.version == filter.version)
+            if filter.user_id:
+                stmt = stmt.where(K8sObjectORM.user_id == filter.user_id)
             if filter.label_selector:
                 stmt = stmt.where(
                     sqlalchemy.text("manifest -> 'metadata' -> 'labels' @> :labels").bindparams(
@@ -253,37 +259,55 @@ class CachedK8sClient(K8sClient):
     Provides access to a cache for listing and reading resources but fallback to the cluster for other operations.
     """
 
-    def __init__(self, clusters: dict[ClusterId, Cluster], cache: K8sDbCache) -> None:
+    def __init__(self, clusters: dict[ClusterId, Cluster], cache: K8sDbCache, kinds_to_cache: list[str]) -> None:
         super().__init__(clusters)
         self.__cache = cache
+        self.__kinds_to_cache = kinds_to_cache
 
     async def create(self, obj: K8sObject) -> K8sObject:
         """Create the k8s object."""
         obj = await super().create(obj)
-        await self.__cache.upsert(obj)
+        if obj.meta.kind in self.__kinds_to_cache:
+            await self.__cache.upsert(obj)
         return obj
 
-    async def patch(self, meta: K8sObjectMeta, patch: dict[str, Any]) -> K8sObject:
+    async def patch(self, meta: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
         """Patch a k8s object."""
         obj = await super().patch(meta, patch)
-        await self.__cache.upsert(obj)
+        if meta.kind in self.__kinds_to_cache:
+            await self.__cache.upsert(obj)
         return obj
 
     async def delete(self, meta: K8sObjectMeta) -> None:
         """Delete a k8s object."""
         await super().delete(meta)
-        await self.__cache.delete(meta)
+        if meta.kind in self.__kinds_to_cache:
+            await self.__cache.delete(meta)
 
     async def get(self, meta: K8sObjectMeta) -> K8sObject | None:
         """Get a specific k8s object, None is returned if the object does not exist."""
-        res = await self.__cache.get(meta)
+        if meta.kind in self.__kinds_to_cache:
+            res = await self.__cache.get(meta)
+        else:
+            res = await super().get(meta)
+        if res is None:
+            return None
+        return res
+
+    async def get_api_object(self, meta: K8sObjectMeta) -> APIObjectInCluster | None:
+        """Get a kr8s object directly, bypassing the cache.
+
+        Note: only use this if you actually need to do k8s operations.
+        """
+
+        res = await super().__get(meta)
         if res is None:
             return None
         return res
 
     async def list(self, filter: ListFilter) -> AsyncIterable[K8sObject]:
         """List all k8s objects."""
-        results = self.__cache.list(filter)
+        results = self.__cache.list(filter) if filter.kind in self.__kinds_to_cache else super().list(filter)
         async for res in results:
             yield res
 
@@ -291,21 +315,22 @@ class CachedK8sClient(K8sClient):
 class K8sWatcher:
     """Watch k8s events and call the handler with every event."""
 
-    def __init__(self, handler: EventHandler, clusters: dict[ClusterId, Cluster], kind: str) -> None:
+    def __init__(self, handler: EventHandler, clusters: dict[ClusterId, Cluster], kinds: list[str]) -> None:
         self.__handler = handler
         self.__tasks: dict[ClusterId, Task] | None = None
-        self.__kind = kind
+        self.__kinds = kinds
         self.__clusters = clusters
 
     async def __run_single(self, cluster: Cluster) -> None:
         # The loops and error handling here will need some testing and love
         while True:
-            try:
-                watch = cluster.api.async_watch(kind=self.__kind, namespace=cluster.namespace)
-                async for _, obj in watch:
-                    await self.__handler(APIObjectInCluster(obj, cluster.id))
-            except Exception:  # nosec: B110
-                pass
+            for kind in self.__kinds:
+                try:
+                    watch = cluster.api.async_watch(kind=kind, namespace=cluster.namespace)
+                    async for _, obj in watch:
+                        await self.__handler(APIObjectInCluster(obj, cluster.id))
+                except Exception:  # nosec: B110
+                    pass
 
     def start(self) -> None:
         """Start the watcher."""
