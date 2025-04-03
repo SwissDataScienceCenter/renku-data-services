@@ -136,7 +136,6 @@ class NotebooksConfig:
         )
         k8s_client = K8sClient(
             cached_client=v2_cache,
-            # NOTE: v2 sessions have no userId label, the safe-username label is the keycloak user ID
             username_label="renku.io/userId",
             namespace=k8s_config.renku_namespace,
             cluster=cluster_id,
