@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Optional
 
-from sqlalchemy import JSON, DateTime, Identity, Integer, LargeBinary, MetaData, String
+from sqlalchemy import JSON, Boolean, DateTime, Identity, Integer, LargeBinary, MetaData, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 
@@ -79,14 +79,22 @@ class UserPreferencesORM(BaseORM):
     pinned_projects: Mapped[dict[str, Any]] = mapped_column("pinned_projects", JSONVariant)
     """Pinned projects."""
 
+    dismiss_project_migration_banner: Mapped[bool] = mapped_column("dismiss_project_migration_banner", Boolean)
+    """Dismiss project migration banner."""
+
     @classmethod
     def load(cls, user_preferences: UserPreferences) -> "UserPreferencesORM":
         """Create UserPreferencesORM from the user preferences model."""
         return cls(
             user_id=user_preferences.user_id,
             pinned_projects=user_preferences.pinned_projects.model_dump(),
+            dismiss_project_migration_banner=user_preferences.dismiss_project_migration_banner,
         )
 
     def dump(self) -> UserPreferences:
         """Create a user preferences model from the ORM object."""
-        return UserPreferences(user_id=self.user_id, pinned_projects=PinnedProjects.from_dict(self.pinned_projects))
+        return UserPreferences(
+            user_id=self.user_id,
+            pinned_projects=PinnedProjects.from_dict(self.pinned_projects),
+            dismiss_project_migration_banner=self.dismiss_project_migration_banner,
+        )

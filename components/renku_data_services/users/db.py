@@ -411,7 +411,9 @@ class UserPreferencesRepository:
 
             if user_preferences is None:
                 new_preferences = UserPreferences(
-                    user_id=cast(str, requested_by.id), pinned_projects=PinnedProjects(project_slugs=[project_slug])
+                    user_id=cast(str, requested_by.id),
+                    pinned_projects=PinnedProjects(project_slugs=[project_slug]),
+                    dismiss_project_migration_banner=False,
                 )
                 user_preferences = UserPreferencesORM.load(new_preferences)
                 session.add(user_preferences)
@@ -460,4 +462,41 @@ class UserPreferencesRepository:
 
             pinned_projects = PinnedProjects(project_slugs=new_project_slugs).model_dump()
             user_preferences.pinned_projects = pinned_projects
+            return user_preferences.dump()
+
+    @only_authenticated
+    async def add_dismiss_project_migration_banner(self, requested_by: base_models.APIUser) -> UserPreferences:
+        """Set the dismiss project migration banner to true."""
+        async with self.session_maker() as session, session.begin():
+            result = await session.scalars(
+                select(UserPreferencesORM).where(UserPreferencesORM.user_id == cast(str, requested_by.id))
+            )
+            user_preferences_orm = result.one_or_none()
+            if user_preferences_orm is None:
+                new_project_slugs: list[str] = []
+                pinned_projects = PinnedProjects(project_slugs=new_project_slugs).model_dump()
+                user_preferences_orm = UserPreferencesORM(
+                    user_id=cast(str, requested_by.id),
+                    pinned_projects=pinned_projects,
+                    dismiss_project_migration_banner=True,
+                )
+                session.add(user_preferences_orm)
+            else:
+                user_preferences_orm.dismiss_project_migration_banner = True
+
+            await session.flush()
+            await session.refresh(user_preferences_orm)
+            return user_preferences_orm.dump()
+
+    @only_authenticated
+    async def remove_dismiss_project_migration_banner(self, requested_by: APIUser) -> UserPreferences:
+        """Removes dismiss project migration banner from the user's preferences."""
+        async with self.session_maker() as session, session.begin():
+            res = await session.scalars(select(UserPreferencesORM).where(UserPreferencesORM.user_id == requested_by.id))
+            user_preferences = res.one_or_none()
+
+            if user_preferences is None:
+                raise errors.MissingResourceError(message="Preferences not found for user.", quiet=True)
+
+            user_preferences.dismiss_project_migration_banner = False
             return user_preferences.dump()

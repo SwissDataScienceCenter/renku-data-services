@@ -40,6 +40,16 @@ async def create_user_preferences(
     )
 
 
+async def create_user_preferences_dismiss_banner(
+    test_client: SanicASGITestClient, api_user: APIUser
+) -> tuple[Request, TestingResponse]:
+    """Create user preferences by dismiss migration project banner"""
+    return await test_client.post(
+        "/api/data/user/preferences/dismiss_project_migration_banner",
+        headers={"Authorization": f"bearer {api_user.access_token}"},
+    )
+
+
 def merge_headers(*headers: dict[str, str]) -> dict[str, str]:
     """Merge multiple headers."""
     all_headers = dict()
