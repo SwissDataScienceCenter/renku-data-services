@@ -241,6 +241,7 @@ module = [
   "renku_data_services.notebooks.cr_jupyter_server",
   "renku_data_services.platform.apispec",
   "renku_data_services.message_queue.apispec",
+  "renku_data_services.search.apispec",
 ]
 ignore_errors = true
 

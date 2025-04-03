@@ -44,14 +44,18 @@ services:
       POSTGRES_USER: renku
       POSTGRES_DB: postgres
       POSTGRES_PASSWORD: renku
+    # All services is put into the network of this service, so
+    # everything is reachable via localhost. This is necessary,
+    # because authzed doesn't allow insecure connections from anything
+    # other than localhost….
     ports:
-      - "8000:8000"
-      - "5432:5432"
-      - "8080:8080"
-      - "5678:5678"
-      - "50051:50051"
+      - "8000:8000" # data-service api
+      - "5432:5432" # postgresql
+      - "8080:8080" # swagger
+      - "5678:5678" # python debugger (data_service)
+      - "50051:50051" # authzed grpc
       - "8888:80"
-      - "8983:8983"
+      - "8983:8983" # solr
 
   swagger:
     image: swaggerapi/swagger-ui
