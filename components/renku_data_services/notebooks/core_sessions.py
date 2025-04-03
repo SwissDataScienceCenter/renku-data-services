@@ -23,6 +23,7 @@ from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec
 from renku_data_services.notebooks.api.amalthea_patches import git_proxy, init_containers
 from renku_data_services.notebooks.api.classes.image import Image
+from renku_data_services.notebooks.api.classes.k8s_client import sanitize_for_serialization
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_data_services.notebooks.config import NotebooksConfig
@@ -66,8 +67,8 @@ async def get_extra_init_containers(
 ) -> tuple[list[InitContainer], list[ExtraVolume]]:
     """Get all extra init containers that should be added to an amalthea session."""
     cert_init, cert_vols = init_containers.certificates_container(nb_config)
-    session_init_containers = [InitContainer.model_validate(nb_config.k8s_v2_client.sanitize(cert_init))]
-    extra_volumes = [ExtraVolume.model_validate(nb_config.k8s_v2_client.sanitize(volume)) for volume in cert_vols]
+    session_init_containers = [InitContainer.model_validate(sanitize_for_serialization(cert_init))]
+    extra_volumes = [ExtraVolume.model_validate(sanitize_for_serialization(volume)) for volume in cert_vols]
     git_clone = await init_containers.git_clone_container_v2(
         user=user,
         config=nb_config,
@@ -95,7 +96,7 @@ async def get_extra_containers(
         user=user, config=nb_config, repositories=repositories, git_providers=git_providers
     )
     if git_proxy_container:
-        conts.append(ExtraContainer.model_validate(nb_config.k8s_v2_client.sanitize(git_proxy_container)))
+        conts.append(ExtraContainer.model_validate(sanitize_for_serialization(git_proxy_container)))
     return conts
 
 

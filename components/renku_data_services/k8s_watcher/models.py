@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, NewType
 
+from box import Box
+
 ClusterId = NewType("ClusterId", str)
 
 
@@ -17,7 +19,7 @@ class K8sObjectMeta:
     cluster: ClusterId
     kind: str
     version: str
-    user_id: str
+    user_id: str | None = None
 
     def with_manifest(self, manifest: dict[str, Any]) -> K8sObject:
         """Convert to a full k8s object."""
@@ -27,7 +29,7 @@ class K8sObjectMeta:
             cluster=self.cluster,
             kind=self.kind,
             version=self.version,
-            manifest=manifest,
+            manifest=Box(manifest),
             user_id=self.user_id,
         )
 
@@ -44,9 +46,9 @@ class K8sObjectMeta:
 
 @dataclass(eq=True, frozen=True, kw_only=True)
 class K8sObject(K8sObjectMeta):
-    """A full k8s object with metadata and a manifest."""
+    """Represents an object in k8s."""
 
-    manifest: dict[str, Any]
+    manifest: Box
 
     @property
     def meta(self) -> K8sObjectMeta:
@@ -71,3 +73,4 @@ class ListFilter:
     cluster: ClusterId | None = None
     version: str | None = None
     label_selector: dict[str, str] | None = None
+    user_id: str | None = None
