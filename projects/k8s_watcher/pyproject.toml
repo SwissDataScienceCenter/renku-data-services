@@ -11,7 +11,7 @@ dynamic = ["dependencies"]
 
 [tool.poetry]
 packages = [
-  { include = "renku_data_services/data_api", from = "../../bases" },
+  { include = "renku_data_services/k8s_cache", from = "../../bases" },
   { include = "renku_data_services/app_config", from = "../../components" },
   { include = "renku_data_services/authn", from = "../../components" },
   { include = "renku_data_services/authz", from = "../../components" },
@@ -24,6 +24,7 @@ packages = [
   { include = "renku_data_services/errors", from = "../../components" },
   { include = "renku_data_services/git", from = "../../components" },
   { include = "renku_data_services/k8s", from = "../../components" },
+  { include = "renku_data_services/k8s_watcher", from = "../../components" },
   { include = "renku_data_services/message_queue", from = "../../components" },
   { include = "renku_data_services/namespace", from = "../../components" },
   { include = "renku_data_services/platform", from = "../../components" },
