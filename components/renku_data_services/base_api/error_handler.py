@@ -29,7 +29,7 @@ class BaseError(Protocol):
 
 
 class BaseErrorResponse(Protocol):
-    """Porotocol for the error response class of an apispec module."""
+    """Protocol for the error response class of an apispec module."""
 
     error: BaseError
 
