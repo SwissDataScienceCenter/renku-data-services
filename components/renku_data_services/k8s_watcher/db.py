@@ -9,7 +9,7 @@ from asyncio import Task
 from collections.abc import AsyncIterable, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Any, Self
+from typing import Any, Self, cast
 
 import kr8s
 import sqlalchemy
@@ -43,7 +43,10 @@ class APIObjectInCluster:
     @property
     def user_id(self) -> str:
         """Extract the user id from annotations."""
-        return self.obj.metadata.labels["renku.io/safe-username"]
+        user_id = self.obj.metadata.labels["renku.io/safe-username"]
+        if user_id is None:
+            raise errors.ValidationError(message="Couldn't find user id on k8s object")
+        return cast(str, user_id)
 
     @property
     def meta(self) -> K8sObjectMeta:
@@ -301,7 +304,7 @@ class K8sWatcher:
                 watch = cluster.api.async_watch(kind=self.__kind, namespace=cluster.namespace)
                 async for _, obj in watch:
                     await self.__handler(APIObjectInCluster(obj, cluster.id))
-            except Exception:
+            except Exception:  # nosec: B110
                 pass
 
     def start(self) -> None:
