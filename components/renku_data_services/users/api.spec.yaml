@@ -266,7 +266,7 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - user_preferences
-  "/user/preferences/dismiss_banner_project_migration":
+  "/user/preferences/dismiss_project_migration_banner":
     post:
       summary: Dismiss banner project migration
       responses:

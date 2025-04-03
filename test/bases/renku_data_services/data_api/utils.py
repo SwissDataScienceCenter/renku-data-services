@@ -45,7 +45,7 @@ async def create_user_preferences_dismiss_banner(
 ) -> tuple[Request, TestingResponse]:
     """Create user preferences by dismiss migration project banner"""
     return await test_client.post(
-        "/api/data/user/preferences/dismiss_banner_project_migration",
+        "/api/data/user/preferences/dismiss_project_migration_banner",
         headers={"Authorization": f"bearer {api_user.access_token}"},
     )
 

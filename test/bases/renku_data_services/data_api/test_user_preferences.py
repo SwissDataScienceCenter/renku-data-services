@@ -167,7 +167,7 @@ async def test_delete_user_preferences_pinned_projects_unknown(
 
 
 @pytest.mark.asyncio
-async def test_adde_user_preferences_dismiss_projects_migration_banner(
+async def test_add_user_preferences_dismiss_projects_migration_banner(
     sanic_client: SanicASGITestClient, api_user: APIUser
 ) -> None:
     _, res = await create_user_preferences_dismiss_banner(sanic_client, api_user)
@@ -177,3 +177,11 @@ async def test_adde_user_preferences_dismiss_projects_migration_banner(
     assert res.json.get("user_id") == api_user.id
     assert res.json.get("pinned_projects") == {"project_slugs": []}
     assert res.json.get("dismiss_project_migration_banner")
+
+    _, res = await sanic_client.delete(
+        "/api/data/user/preferences/dismiss_project_migration_banner",
+        headers={"Authorization": f"bearer {api_user.access_token}"},
+    )
+
+    assert res.status_code == 200
+    assert not res.json.get("dismiss_project_migration_banner")
