@@ -266,7 +266,7 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - user_preferences
-  "/user/preferences/dissmiss_banner_project_migration":
+  "/user/preferences/dismiss_banner_project_migration":
     post:
       summary: Dismiss banner project migration
       responses:
@@ -533,6 +533,9 @@ components:
       enum:
         - general
         - storage
+    DismissBannerProjectMigration:
+      description: Is project migration banned dismissed
+      type: boolean
     UserPreferences:
       type: object
       description: The object containing user preferences
@@ -542,6 +545,8 @@ components:
           $ref: "#/components/schemas/UserId"
         pinned_projects:
           $ref: "#/components/schemas/PinnedProjects"
+        dismiss_project_migration_banner:
+          $ref: "#/components/schemas/DismissBannerProjectMigration"
       required: ["user_id", "pinned_projects"]
     PinnedProjects:
       type: object

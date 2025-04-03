@@ -300,3 +300,6 @@ class UserPreferences(BaseAPISpec):
         pattern="^[A-Za-z0-9]{1}[A-Za-z0-9-]+$",
     )
     pinned_projects: PinnedProjects
+    dismiss_project_migration_banner: Optional[bool] = Field(
+        None, description="Is project migration banned dismissed"
+    )

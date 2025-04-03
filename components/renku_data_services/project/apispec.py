@@ -137,11 +137,6 @@ class Error(BaseAPISpec):
 class ErrorResponse(BaseAPISpec):
     error: Error
 
-class ProjectsProjectIdGetParametersQuery(BaseAPISpec):
-    with_documentation: Optional[bool] = Field(
-        None, description="Projects with or without possibly extensive documentation?"
-    )
-
 
 class NamespacesNamespaceProjectsSlugGetParametersQuery(BaseAPISpec):
     with_documentation: Optional[bool] = Field(
@@ -157,16 +152,6 @@ class ProjectsProjectIdGetParametersQuery(BaseAPISpec):
     with_documentation: Optional[bool] = Field(
         None, description="Projects with or without possibly extensive documentation?"
     )
-
-
-class NamespacesNamespaceProjectsSlugGetParametersQuery(BaseAPISpec):
-    with_documentation: Optional[bool] = Field(
-        None, description="Projects with or without possibly extensive documentation?"
-    )
-
-
-class ProjectsProjectIdCopiesGetParametersQuery(BaseAPISpec):
-    writable: bool = False
 
 
 class MigrationSessionLauncherPost(BaseAPISpec):
