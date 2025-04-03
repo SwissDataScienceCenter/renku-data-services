@@ -17,6 +17,7 @@ class K8sObjectMeta:
     cluster: ClusterId
     kind: str
     version: str
+    user_id: str
 
     def with_manifest(self, manifest: dict[str, Any]) -> K8sObject:
         """Convert to a full k8s object."""
@@ -27,6 +28,7 @@ class K8sObjectMeta:
             kind=self.kind,
             version=self.version,
             manifest=manifest,
+            user_id=self.user_id,
         )
 
     def to_list_filter(self) -> ListFilter:
@@ -55,6 +57,7 @@ class K8sObject(K8sObjectMeta):
             cluster=self.cluster,
             kind=self.kind,
             version=self.version,
+            user_id=self.user_id,
         )
 
 

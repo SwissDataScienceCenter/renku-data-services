@@ -9,7 +9,7 @@ from asyncio import Task
 from collections.abc import AsyncIterable, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Any, Self
+from typing import Any, Self, cast
 
 import kr8s
 import sqlalchemy
@@ -41,6 +41,14 @@ class APIObjectInCluster:
     cluster: ClusterId
 
     @property
+    def user_id(self) -> str:
+        """Extract the user id from annotations."""
+        user_id = self.obj.metadata.labels["renku.io/safe-username"]
+        if user_id is None:
+            raise errors.ValidationError(message="Couldn't find user id on k8s object")
+        return cast(str, user_id)
+
+    @property
     def meta(self) -> K8sObjectMeta:
         """Extract the metadata from an api object."""
         return K8sObjectMeta(
@@ -49,6 +57,7 @@ class APIObjectInCluster:
             cluster=self.cluster,
             version=self.obj.version,
             kind=self.obj.kind,
+            user_id=self.user_id,
         )
 
     def to_k8s_object(self) -> K8sObject:
@@ -62,6 +71,7 @@ class APIObjectInCluster:
             version=self.obj.version,
             manifest=self.obj.to_dict(),
             cluster=self.cluster,
+            user_id=self.user_id,
         )
 
     @classmethod
@@ -160,7 +170,7 @@ class K8sClient:
             yield r.to_k8s_object()
 
 
-class K8sCache:
+class K8sDbCache:
     """Caching k8s objects in postgres."""
 
     def __init__(self, session_maker: Callable[..., AsyncSession]) -> None:
@@ -191,6 +201,7 @@ class K8sCache:
                 version=obj.version,
                 manifest=obj.manifest,
                 cluster=obj.cluster,
+                user_id=obj.user_id,
             )
             session.add(obj_orm)
             return
@@ -242,7 +253,7 @@ class CachedK8sClient(K8sClient):
     Provides access to a cache for listing and reading resources but fallback to the cluster for other operations.
     """
 
-    def __init__(self, clusters: dict[ClusterId, Cluster], cache: K8sCache) -> None:
+    def __init__(self, clusters: dict[ClusterId, Cluster], cache: K8sDbCache) -> None:
         super().__init__(clusters)
         self.__cache = cache
 
@@ -293,7 +304,7 @@ class K8sWatcher:
                 watch = cluster.api.async_watch(kind=self.__kind, namespace=cluster.namespace)
                 async for _, obj in watch:
                     await self.__handler(APIObjectInCluster(obj, cluster.id))
-            except Exception:
+            except Exception:  # nosec: B110
                 pass
 
     def start(self) -> None:
@@ -319,7 +330,7 @@ class K8sWatcher:
                 continue
 
 
-def example_handler(cache: K8sCache) -> EventHandler:
+def k8s_object_handler(cache: K8sDbCache) -> EventHandler:
     """Listens and to k8s events and updates the cache."""
 
     async def handler(obj: APIObjectInCluster) -> None:

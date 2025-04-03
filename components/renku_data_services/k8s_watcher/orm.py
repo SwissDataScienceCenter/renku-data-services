@@ -59,6 +59,7 @@ class K8sObjectORM(BaseORM):
     version: Mapped[str] = mapped_column(index=True)
     kind: Mapped[str] = mapped_column(index=True)
     cluster: Mapped[str] = mapped_column(index=True)
+    user_id: Mapped[str] = mapped_column(String(36), unique=True, index=True)
 
     def dump(self) -> K8sObject:
         """Convert to a k8s object."""
@@ -69,4 +70,5 @@ class K8sObjectORM(BaseORM):
             kind=self.kind,
             version=self.version,
             manifest=self.manifest,
+            user_id=self.user_id,
         )
