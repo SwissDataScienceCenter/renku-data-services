@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from authlib.integrations.httpx_client import AsyncOAuth2Client
+from components.renku_data_services.search.reprovision import SearchReprovision
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.types import PublicKeyTypes
@@ -285,6 +286,7 @@ class Config:
     _event_repo: EventRepository | None = field(default=None, repr=False, init=False)
     _reprovisioning_repo: ReprovisioningRepository | None = field(default=None, repr=False, init=False)
     _search_updates_repo: SearchUpdatesRepo | None = field(default=None, repr=False, init=False)
+    _search_reprovisioning: SearchReprovision | None = field(default=None, repr=False, init=False)
     _session_repo: SessionRepository | None = field(default=None, repr=False, init=False)
     _user_preferences_repo: UserPreferencesRepository | None = field(default=None, repr=False, init=False)
     _kc_user_repo: KcUserRepo | None = field(default=None, repr=False, init=False)
@@ -399,6 +401,20 @@ class Config:
         if not self._search_updates_repo:
             self._search_updates_repo = SearchUpdatesRepo(session_maker=self.db.async_session_maker)
         return self._search_updates_repo
+
+    @property
+    def search_reprovisioning(self) -> SearchReprovision:
+        """The SearchReprovisioning class."""
+        if not self._search_reprovisioning:
+            self._search_reprovisioning = SearchReprovision(
+                search_updates_repo=self.search_updates_repo,
+                reprovisioning_repo=self.reprovisioning_repo,
+                solr_config=self.solr_config,
+                user_repo=self.kc_user_repo,
+                group_repo=self.group_repo,
+                project_repo=self.project_repo,
+            )
+        return self._search_reprovisioning
 
     @property
     def project_repo(self) -> ProjectRepository:
