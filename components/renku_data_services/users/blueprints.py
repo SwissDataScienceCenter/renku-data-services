@@ -271,3 +271,25 @@ class UserPreferencesBP(CustomBlueprint):
             return validated_json(apispec.UserPreferences, res)
 
         return "/user/preferences/pinned_projects", ["DELETE"], _delete
+
+    def post_dismiss_project_migration_banner(self) -> BlueprintFactoryResponse:
+        """Add dismiss project migration banner to user preferences for the logged in user."""
+
+        @authenticate(self.authenticator)
+        @validate(json=apispec.AddPinnedProject)
+        async def _post(_: Request, user: base_models.APIUser) -> JSONResponse:
+            res = await self.user_preferences_repo.add_dismiss_project_migration_banner(requested_by=user)
+            return validated_json(apispec.UserPreferences, res)
+
+        return "/user/preferences/dissmiss_banner_project_migration", ["POST"], _post
+
+    def delete_dismiss_project_migration_banner(self) -> BlueprintFactoryResponse:
+        """Remove dismiss project migration banner from user preferences for the logged in user."""
+
+        @authenticate(self.authenticator)
+        @validate_query(query=apispec.DeletePinnedParams)
+        async def _delete(request: Request, user: base_models.APIUser) -> JSONResponse:
+            res = await self.user_preferences_repo.remove_dismiss_project_migration_banner(requested_by=user)
+            return validated_json(apispec.UserPreferences, res)
+
+        return "/user/preferences/dissmiss_banner_project_migration", ["DELETE"], _delete

@@ -308,3 +308,4 @@ class UserPreferences(BaseModel):
 
     user_id: str = Field(min_length=3)
     pinned_projects: PinnedProjects
+    dismiss_project_migration_banner: bool
