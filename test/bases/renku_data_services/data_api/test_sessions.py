@@ -10,6 +10,7 @@ from syrupy.filters import props
 
 from renku_data_services.app_config.config import Config
 from renku_data_services.crc.apispec import ResourcePool
+from renku_data_services.session.models import validate_env_variables
 from renku_data_services.users.models import UserInfo
 
 
@@ -388,6 +389,25 @@ async def test_get_project_launchers(
     assert res.json is not None
     launchers = res.json
     assert {launcher["name"] for launcher in launchers} == {"Launcher 2", "Launcher 3"}
+
+
+def test_env_variable_validation():
+    wrong_type_env_variables = {
+        "KEY_NUMBER_1": "a value",
+        "KEY_NUMBER_2": 123,
+        "KEY_NUMBER_3": True,
+        "KEY_NUMBER_4": None,
+    }
+    disallowed_name_env_variables = {
+        "RENKU_KEY_NUMBER_1": "a value",
+        "RENKULAB_THING": "another value",
+    }
+    validation_result = validate_env_variables(wrong_type_env_variables)
+    assert validation_result[0] == "Env variable values must be strings."
+
+    validation_result = validate_env_variables(disallowed_name_env_variables)
+    assert len(validation_result) == 2
+    assert validation_result[0] == "Env variable name 'RENKU_KEY_NUMBER_1' should not start with 'RENKU'."
 
 
 @pytest.mark.asyncio
@@ -910,6 +930,53 @@ async def test_patch_session_launcher_environment_with_invalid_build_parameters(
     assert res.status_code == 422, res.text
     assert "Invalid value for the field" in res.text
     assert "Valid values are" in res.text
+
+
+@pytest.mark.asyncio
+async def test_patch_session_launcher_invalid_env_variables(
+    sanic_client: SanicASGITestClient,
+    valid_resource_pool_payload: dict[str, Any],
+    user_headers,
+    create_project,
+    create_resource_pool,
+    create_session_environment,
+) -> None:
+    project = await create_project("Some project 1")
+    resource_pool_data = valid_resource_pool_payload
+    resource_pool = await create_resource_pool(admin=True, **resource_pool_data)
+
+    # Create a new custom environment with the launcher
+    payload = {
+        "name": "Launcher 1",
+        "project_id": project["id"],
+        "description": "A session launcher.",
+        "resource_class_id": resource_pool["classes"][0]["id"],
+        "environment": {
+            "container_image": "some_image:some_tag",
+            "name": "custom_name",
+            "environment_kind": "CUSTOM",
+            "environment_image_source": "image",
+        },
+    }
+    _, res = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
+    assert res.status_code == 201, res.text
+    assert res.json is not None
+    environment = res.json.get("environment", {})
+    assert environment.get("environment_kind") == "CUSTOM"
+    assert environment.get("container_image") == "some_image:some_tag"
+    assert environment.get("id") is not None
+
+    launcher_id = res.json["id"]
+    # Should not be able use env variables that start with 'renku'
+    patch_payload = {
+        "env_variables": {"renkustuff_1": "a value"},
+    }
+
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher_id}", headers=user_headers, json=patch_payload
+    )
+    assert res.status_code == 422, res.text
+    assert "Env variable name 'renkustuff_1'" in res.text
 
 
 @pytest.mark.asyncio
