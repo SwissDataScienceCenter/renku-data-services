@@ -167,6 +167,7 @@ def validate_unsaved_session_launcher(
         description=launcher.description,
         resource_class_id=launcher.resource_class_id,
         disk_storage=launcher.disk_storage,
+        env_variables=launcher.env_variables,
         # NOTE: When you create an environment with a launcher the environment can only be custom
         environment=environment,
     )
@@ -195,12 +196,12 @@ def validate_session_launcher_patch(
                         container_image=validated_env.container_image,
                         default_url=validated_env.default_url,
                         port=validated_env.port,
-                        working_directory=PurePosixPath(validated_env.working_directory)
-                        if validated_env.working_directory
-                        else None,
-                        mount_directory=PurePosixPath(validated_env.mount_directory)
-                        if validated_env.mount_directory
-                        else None,
+                        working_directory=(
+                            PurePosixPath(validated_env.working_directory) if validated_env.working_directory else None
+                        ),
+                        mount_directory=(
+                            PurePosixPath(validated_env.mount_directory) if validated_env.mount_directory else None
+                        ),
                         uid=validated_env.uid,
                         gid=validated_env.gid,
                         environment_kind=models.EnvironmentKind.CUSTOM,
@@ -248,7 +249,8 @@ def validate_session_launcher_patch(
                     )
                 elif (
                     # TODO: Add a test for new == None/"build" and current == "build"
-                    new == "build" or (new is None and current == "build")
+                    new == "build"
+                    or (new is None and current == "build")
                 ) and patch.environment.build_parameters is None:
                     raise errors.ValidationError(
                         message="There are errors in the following fields, environment.build_parameters: Must be set"
@@ -272,12 +274,12 @@ def validate_session_launcher_patch(
                         container_image=validated_env.container_image,
                         default_url=validated_env.default_url,
                         port=validated_env.port,
-                        working_directory=PurePosixPath(validated_env.working_directory)
-                        if validated_env.working_directory
-                        else None,
-                        mount_directory=PurePosixPath(validated_env.mount_directory)
-                        if validated_env.mount_directory
-                        else None,
+                        working_directory=(
+                            PurePosixPath(validated_env.working_directory) if validated_env.working_directory else None
+                        ),
+                        mount_directory=(
+                            PurePosixPath(validated_env.mount_directory) if validated_env.mount_directory else None
+                        ),
                         uid=validated_env.uid,
                         gid=validated_env.gid,
                         environment_kind=models.EnvironmentKind.CUSTOM,
@@ -297,12 +299,16 @@ def validate_session_launcher_patch(
     else:
         resource_class_id = patch.resource_class_id
     disk_storage = RESET if "disk_storage" in data_dict and data_dict["disk_storage"] is None else patch.disk_storage
+    env_variables = (
+        RESET if "env_variables" in data_dict and data_dict["env_variables"] is None else patch.env_variables
+    )
     return models.SessionLauncherPatch(
         name=patch.name,
         description=patch.description,
         environment=environment,
         resource_class_id=resource_class_id,
         disk_storage=disk_storage,
+        env_variables=env_variables,
     )
 
 

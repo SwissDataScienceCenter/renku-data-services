@@ -1,58 +1,60 @@
 {
-	"name": "Data services devcontainer",
-	"dockerComposeFile": "docker-compose.yml",
-	"service": "data_service",
-	"containerUser": "root",
-	"workspaceFolder": "/workspace",
-	"shutdownAction": "stopCompose",
-	"features": {
-		"ghcr.io/devcontainers-extra/features/poetry:2": {},
-		"ghcr.io/devcontainers-extra/features/bash-command:1": {
-			"command": "poetry self add poetry-polylith-plugin"
-		},
-		"ghcr.io/devcontainers/features/docker-in-docker:2": {},
-		"ghcr.io/devcontainers-extra/features/gh-release:1": {
-			"repo": "authzed/zed",
-			"binaryNames": "zed"
-		},
-		"ghcr.io/devcontainers-extra/features/spicedb:1": {},
-		"ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {
-			"minikube": "none"
-		},
-		"ghcr.io/eitsupi/devcontainer-features/jq-likes:2": {
-			"jqVersion": "latest",
-			"yqVersion": "latest"
-		},
-		"ghcr.io/dhoeric/features/k9s:1": {
-			"version": "0.40.9"
-		},
-		"ghcr.io/EliiseS/devcontainer-features/bash-profile:1": {
-			"command": "alias k=kubectl"
-		},
-		"ghcr.io/devcontainers-extra/features/rclone:1": {},
-		"./k3d": {},
-		"ghcr.io/devcontainers/features/java:1": {
-			"version": "21",
-			"jdkDistro": "open"
-		},
-		"./solr": {}
-	},
-	"overrideFeatureInstallOrder": [
-		"ghcr.io/devcontainers-extra/features/poetry",
-		"ghcr.io/devcontainers-extra/features/bash-command"
-	],
-	"postCreateCommand": "poetry install --with dev && mkdir -p /home/vscode/.config/k9s",
-	"customizations": {
-		"vscode": {
-			"extensions": [
-				"ms-python.python",
-				"ms-python.flake8",
-				"ms-python.black-formatter",
-				"ms-python.isort",
-				"ms-python.vscode-pylance",
-				"ms-vscode.makefile-tools",
-				"matangover.mypy"
-			]
-		}
-	}
+  "name": "Data services devcontainer",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "data_service",
+  "containerUser": "root",
+  "workspaceFolder": "/workspace",
+  "shutdownAction": "stopCompose",
+  "features": {
+    "ghcr.io/devcontainers-extra/features/poetry:2": {},
+    "ghcr.io/devcontainers-extra/features/bash-command:1": {
+      "command": "poetry self add poetry-polylith-plugin"
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers-extra/features/gh-release:1": {
+      "repo": "authzed/zed",
+      "binaryNames": "zed"
+    },
+    "ghcr.io/devcontainers-extra/features/spicedb:1": {},
+    "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {
+      "minikube": "none"
+    },
+    "ghcr.io/eitsupi/devcontainer-features/jq-likes:2": {
+      "jqVersion": "latest",
+      "yqVersion": "latest"
+    },
+    "ghcr.io/dhoeric/features/k9s:1": {
+      "version": "0.40.9"
+    },
+    "ghcr.io/EliiseS/devcontainer-features/bash-profile:1": {
+      "command": "alias k=kubectl"
+    },
+    "ghcr.io/devcontainers-extra/features/rclone:1": {},
+    "./k3d": {},
+    "ghcr.io/devcontainers/features/java:1": {
+      "version": "21",
+      "jdkDistro": "open"
+    },
+    "./solr": {}
+  },
+  "overrideFeatureInstallOrder": [
+    "ghcr.io/devcontainers-extra/features/poetry",
+    "ghcr.io/devcontainers-extra/features/bash-command"
+  ],
+  "postCreateCommand": "poetry install --with dev && mkdir -p /home/vscode/.config/k9s",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.flake8",
+        "ms-python.black-formatter",
+        "ms-python.isort",
+        "ms-python.vscode-pylance",
+        "ms-vscode.makefile-tools",
+        "matangover.mypy",
+        "ms-python.mypy-type-checker",
+        "charliermarsh.ruff"
+      ]
+    }
+  }
 }
