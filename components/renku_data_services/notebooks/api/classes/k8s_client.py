@@ -352,7 +352,38 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
         """Create a new secret."""
 
         new_secret = await Secret(self.sanitize(secret), self.namespace)
-        await new_secret.create()
+        try:
+            await new_secret.create()
+        except ServerError as err:
+            if err.response and err.response.status_code == 409:
+                # The secret exists and has not been cleaned up from another session.
+                # So we just patch it with the new data here.
+                annotations: Box | None = new_secret.metadata.get("annotations")
+                labels: Box | None = new_secret.metadata.get("labels")
+                patches = [
+                    {
+                        "op": "replace",
+                        "path": "/data",
+                        "value": new_secret.data.to_dict(),
+                    },
+                    {
+                        "op": "replace",
+                        "path": "/stringData",
+                        "value": new_secret.raw.get("stringData") or {},
+                    },
+                    {
+                        "op": "replace",
+                        "path": "/metadata/annotations",
+                        "value": annotations.to_dict() if annotations is not None else {},
+                    },
+                    {
+                        "op": "replace",
+                        "path": "/metadata/labels",
+                        "value": labels.to_dict() if labels is not None else {},
+                    },
+                ]
+                await new_secret.patch(patches, type="json")
+            raise
         return V1Secret(metadata=new_secret.metadata, data=new_secret.data, type=new_secret.raw.get("type"))
 
     async def delete_secret(self, name: str) -> None:
@@ -422,7 +453,7 @@ class ServerCache(Generic[_SessionType]):
         if len(output) == 0:
             return None
         if len(output) > 1:
-            raise ProgrammingError(f"Expected to find 1 server when getting server {name}, " f"found {len(output)}.")
+            raise ProgrammingError(f"Expected to find 1 server when getting server {name}, found {len(output)}.")
         return self.server_type.model_validate(output[0])
 
 
