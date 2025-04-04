@@ -78,7 +78,10 @@ class NamespacedK8sClient(Generic[_SessionType, _Kr8sType]):
 
     async def get_pod_logs(self, name: str, max_log_lines: Optional[int] = None) -> dict[str, str]:
         """Get the logs of all containers in the session."""
-        pod = await Pod.get(name=name, namespace=self.namespace)
+        try:
+            pod = await Pod.get(name=name, namespace=self.namespace)
+        except NotFoundError:
+            raise errors.MissingResourceError(message=f"The session pod {name} does not exist.")
         logs: dict[str, str] = {}
         containers = [container.name for container in pod.spec.containers + pod.spec.get("initContainers", [])]
         for container in containers:
@@ -422,7 +425,7 @@ class ServerCache(Generic[_SessionType]):
         if len(output) == 0:
             return None
         if len(output) > 1:
-            raise ProgrammingError(f"Expected to find 1 server when getting server {name}, " f"found {len(output)}.")
+            raise ProgrammingError(f"Expected to find 1 server when getting server {name}, found {len(output)}.")
         return self.server_type.model_validate(output[0])
 
 
