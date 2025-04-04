@@ -18,6 +18,7 @@ from sentry_sdk.integrations.sanic import SanicIntegration, _context_enter, _con
 import renku_data_services.search.core as search_core
 from renku_data_services.app_config import Config
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
+from renku_data_services.base_models.core import APIUser
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.data_api.prometheus import collect_system_metrics, setup_app_metrics, setup_prometheus
 from renku_data_services.errors.errors import (
@@ -27,9 +28,7 @@ from renku_data_services.errors.errors import (
     ValidationError,
 )
 from renku_data_services.migrations.core import run_migrations_for_app
-from renku_data_services.solr import entity_schema
 from renku_data_services.solr.solr_client import DefaultSolrClient
-from renku_data_services.solr.solr_migrate import SchemaMigrator
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.utils.middleware import validate_null_byte
 
@@ -92,6 +91,13 @@ def update_search(app_name: str) -> None:
 
     asyncio.set_event_loop(uvloop.new_event_loop())
     asyncio.run(_update_search(app))
+
+
+async def testing() -> None:
+    # this should run in the background…
+    while True:
+        await asyncio.sleep(1)
+        print("Hello world")
 
 
 def create_app() -> Sanic:
@@ -170,13 +176,33 @@ def create_app() -> Sanic:
         run_migrations_for_app("common")
         await config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
 
+    async def notify_me() -> None:
+        print(">>> notify me started....")
+        # admin = APIUser(is_admin=True)
+        # await config.search_reprovisioning.run_reprovision(admin)
+        while True:
+            await asyncio.sleep(1)
+            print("Notification: hello")
+
     @app.main_process_start
-    async def do_solr_migrations(_: Sanic) -> None:
+    async def do_solr_migrations(app: Sanic) -> None:
         logger.info(f"Running SOLR migrations at: {config.solr_config}")
-        migrator = SchemaMigrator(config.solr_config)
-        await migrator.ensure_core()
-        result = await migrator.migrate(entity_schema.all_migrations)
-        logger.info(f"SOLR migration done: {result}")
+        # migrator = SchemaMigrator(config.solr_config)
+        # await migrator.ensure_core()
+        # result = await migrator.migrate(entity_schema.all_migrations)
+        # if result.requires_reindex:
+        #     logger.info("SOLR migrations require a reindex. Reprovision search index now…")
+        try:
+            ## why is this not working???
+            ## with a name=... there is a runtime error. docs say not to create the coro object, but either way it doesn't work
+            app.add_task(notify_me)
+            print("Task added, i think…")
+            # app.add_task(testing)
+            # await config.search_reprovisioning.reprovision_task(requested_by=APIUser(is_admin = True))
+        except Exception as exc:
+            logger.warning(f"Cannot start search reprovisioning: {exc}", exc_info=exc)
+
+        # logger.info(f"SOLR migration done: {result}")
 
     @app.before_server_start
     async def setup_rclone_validator(app: Sanic) -> None:
@@ -186,10 +212,9 @@ def create_app() -> Sanic:
     @app.main_process_ready
     async def ready(app: Sanic) -> None:
         """Application ready event handler."""
-        config = Config.from_env()
         logger.info("starting events background job.")
-        app.manager.manage("SendEvents", send_pending_events, {"app_name": config.app_name}, transient=True)
-        app.manager.manage("UpdateSearch", update_search, {"app_name": config.app_name}, transient=True)
+        app.manager.manage("SendEvents", send_pending_events, {"app_name": app.name}, transient=True)
+        app.manager.manage("UpdateSearch", update_search, {"app_name": app.name}, transient=True)
 
     return app
 
