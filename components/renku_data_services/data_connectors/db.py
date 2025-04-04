@@ -927,57 +927,25 @@ def _old_data_connector_slug_queries(
         )
 
     def _dc_in_project(path: DataConnectorInProjectPath) -> list[Select[tuple[schemas.DataConnectorORM]]]:
-        old_ns_old_prj_old_slug = (
-            select(schemas.DataConnectorORM)
-            .where(_dc_old_ns_is(path.first))
-            .where(_dc_old_prj_is(path.second))
-            .where(_dc_old_slug_is(path.third))
-        )
-        new_ns_old_prj_old_slug = (
-            select(schemas.DataConnectorORM)
-            .where(_dc_new_ns_is(path.first))
-            .where(_dc_old_prj_is(path.second))
-            .where(_dc_old_slug_is(path.third))
-        )
-        old_ns_new_prj_old_slug = (
-            select(schemas.DataConnectorORM)
-            .where(_dc_old_ns_is(path.first))
-            .where(_dc_new_prj_is(path.second))
-            .where(_dc_old_slug_is(path.third))
-        )
-        new_ns_new_prj_old_slug = (
-            select(schemas.DataConnectorORM)
-            .where(_dc_new_ns_is(path.first))
-            .where(_dc_new_prj_is(path.second))
-            .where(_dc_old_slug_is(path.third))
-        )
-        old_ns_new_prj_new_slug = (
-            select(schemas.DataConnectorORM)
-            .where(_dc_old_ns_is(path.first))
-            .where(_dc_new_prj_is(path.second))
-            .where(_dc_new_slug_is(path.third))
-        )
-        old_ns_old_prj_new_slug = (
-            select(schemas.DataConnectorORM)
-            .where(_dc_old_ns_is(path.first))
-            .where(_dc_old_prj_is(path.second))
-            .where(_dc_new_slug_is(path.third))
-        )
-        new_ns_old_prj_new_slug = (
-            select(schemas.DataConnectorORM)
-            .where(_dc_new_ns_is(path.first))
-            .where(_dc_old_prj_is(path.second))
-            .where(_dc_new_slug_is(path.third))
-        )
-        return [
-            old_ns_old_prj_old_slug,
-            old_ns_old_prj_new_slug,
-            old_ns_new_prj_old_slug,
-            old_ns_new_prj_new_slug,
-            new_ns_old_prj_old_slug,
-            new_ns_new_prj_old_slug,
-            new_ns_old_prj_new_slug,
-        ]
+        result = []
+        for i in range(7):
+            stmt = select(schemas.DataConnectorORM)
+            if i & 0x01 == 0x01:
+                stmt = stmt.where(_dc_new_ns_is(path.first)
+            else:
+                stmt = stmt.where(_dc_old_ns_is(path.first)
+                
+            if i & 0x02 == 0x02:
+                stmt = stmt.where(_dc_new_prj_is(path.second)
+            else:
+                stmt = stmt.where(_dc_old_prj_is(path.second)
+                
+            if i & 0x04 == 0x04:
+                stmt = stmt.where(_dc_new_slug_is(path.third)
+            else:
+                stmt = stmt.where(_dc_old_slug_is(path.third)
+            result.append(stmt)
+        return result
 
     def _dc_in_user_or_group(path: DataConnectorPath) -> list[Select[tuple[schemas.DataConnectorORM]]]:
         old_ns_old_slug = (
