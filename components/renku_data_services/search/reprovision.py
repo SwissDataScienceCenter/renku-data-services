@@ -28,37 +28,40 @@ class SearchReprovision:
         group_repo: GroupRepository,
         project_repo: ProjectRepository,
     ) -> None:
-        self.search_updates_repo = search_updates_repo
-        self.reprovisioning_repo = reprovisioning_repo
-        self.solr_config = solr_config
-        self.user_repo = user_repo
-        self.group_repo = group_repo
-        self.project_repo = project_repo
+        self._search_updates_repo = search_updates_repo
+        self._reprovisioning_repo = reprovisioning_repo
+        self._solr_config = solr_config
+        self._user_repo = user_repo
+        self._group_repo = group_repo
+        self._project_repo = project_repo
+        self._reprovision_tasks = set()
 
     async def reprovision_task(self, requested_by: APIUser) -> Task:
         """Creates a task that initiates reprovisioning."""
-        reprovision = await self.reprovisioning_repo.start()
-        task = asyncio.create_task(
-            self.init_reprovision(requested_by, reprovision), name=f"search-reprovision-{reprovision.id}"
-        )
+        print(">>>>> starting task please")
+        task = asyncio.create_task(self.run_reprovision(requested_by), name="search-reprovision")
+        self._reprovision_tasks.add(task)
+        task.add_done_callback(self._reprovision_tasks.discard)
+        print(f">>>>> task should be running: {task}")
+        await asyncio.sleep(0)
         return task
 
     async def run_reprovision(self, requested_by: APIUser) -> None:
         """Start a reprovisioning if not already running."""
-        reprovision = await self.reprovisioning_repo.start()
+        reprovision = await self._reprovisioning_repo.start()
         await self.init_reprovision(requested_by, reprovision)
 
     async def acquire_reprovsion(self) -> Reprovisioning:
         """Acquire a reprovisioning slot. Throws if already taken."""
-        return await self.reprovisioning_repo.start()
+        return await self._reprovisioning_repo.start()
 
     async def kill_reprovision_lock(self) -> None:
         """Removes an existing reprovisioning lock."""
-        return await self.reprovisioning_repo.stop()
+        return await self._reprovisioning_repo.stop()
 
     async def get_current_reprovision(self) -> Reprovisioning | None:
         """Return the current reprovisioning lock."""
-        return await self.reprovisioning_repo.get_active_reprovisioning()
+        return await self._reprovisioning_repo.get_active_reprovisioning()
 
     async def init_reprovision(self, requested_by: APIUser, reprovisioning: Reprovisioning) -> None:
         """Initiates reprovisioning by inserting documents into the staging table."""
@@ -70,27 +73,30 @@ class SearchReprovision:
         try:
             logger.info(f"Starting reprovisioning with ID {reprovisioning.id}")
             started = datetime.now()
-            await self.search_updates_repo.clear_all()
-            async with DefaultSolrClient(self.solr_config) as client:
+            await self._search_updates_repo.clear_all()
+            async with DefaultSolrClient(self._solr_config) as client:
                 await client.delete("_type:*")
             counter = 0
-            all_users = self.user_repo.get_all_users(requested_by=requested_by)
+            all_users = self._user_repo.get_all_users(requested_by=requested_by)
             async for user_entity in all_users:
-                await self.search_updates_repo.insert(user_entity, started)
+                await self._search_updates_repo.insert(user_entity, started)
                 counter += 1
                 log_counter(counter)
+            logger.info("Done adding user entities to search_updates table.")
 
-            all_groups = self.group_repo.get_all_groups(requested_by=requested_by)
+            all_groups = self._group_repo.get_all_groups(requested_by=requested_by)
             async for group_entity in all_groups:
-                await self.search_updates_repo.insert(group_entity, started)
+                await self._search_updates_repo.insert(group_entity, started)
                 counter += 1
                 log_counter(counter)
+            logger.info("Done adding group entities to search_updates table.")
 
-            all_projects = self.project_repo.get_all_projects(requested_by=requested_by)
+            all_projects = self._project_repo.get_all_projects(requested_by=requested_by)
             async for project_entity in all_projects:
-                await self.search_updates_repo.insert(project_entity, started)
+                await self._search_updates_repo.insert(project_entity, started)
                 counter += 1
                 log_counter(counter)
+            logger.info("Done adding project entities to search_updates table.")
 
             logger.info(f"Inserted {counter} entities into the staging table.")
 
@@ -98,4 +104,4 @@ class SearchReprovision:
             logger.error("Error while reprovisioning entities!", exc_info=e)
             ## TODO error handling. skip or fail?
         finally:
-            await self.reprovisioning_repo.stop()
+            await self._reprovisioning_repo.stop()
