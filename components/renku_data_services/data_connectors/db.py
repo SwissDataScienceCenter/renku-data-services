@@ -4,10 +4,10 @@ import random
 import string
 from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import suppress
-from typing import TypeVar, cast
+from typing import TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
-from sqlalchemy import Select, delete, func, select
+from sqlalchemy import ColumnExpressionArgument, Select, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 from ulid import ULID
@@ -16,7 +16,15 @@ from renku_data_services import base_models, errors
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.authz.models import CheckPermissionItem, Scope
 from renku_data_services.base_api.pagination import PaginationRequest
-from renku_data_services.base_models.core import DataConnectorInProjectPath, DataConnectorSlug, ProjectPath, Slug
+from renku_data_services.base_models.core import (
+    DataConnectorInProjectPath,
+    DataConnectorPath,
+    DataConnectorSlug,
+    NamespacePath,
+    NamespaceSlug,
+    ProjectPath,
+    ProjectSlug,
+)
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors import orm as schemas
 from renku_data_services.namespace import orm as ns_schemas
@@ -48,7 +56,10 @@ class DataConnectorRepository:
         self.group_repo = group_repo
 
     async def get_data_connectors(
-        self, user: base_models.APIUser, pagination: PaginationRequest, namespace: str | None = None
+        self,
+        user: base_models.APIUser,
+        pagination: PaginationRequest,
+        namespace: ProjectPath | NamespacePath | None = None,
     ) -> tuple[list[models.DataConnector], int]:
         """Get multiple data connectors from the database."""
         data_connector_ids = await self.authz.resources_with_permission(
@@ -129,57 +140,37 @@ class DataConnectorRepository:
         return [(dc.name, f"{dc.slug.namespace.slug}/{dc.slug.slug}") for dc in data_connectors_orms]
 
     async def get_data_connector_by_slug(
-        self, user: base_models.APIUser, namespace: str, slug: Slug
+        self,
+        user: base_models.APIUser,
+        path: DataConnectorInProjectPath | DataConnectorPath,
     ) -> models.DataConnector:
         """Get one data connector from the database by slug.
 
         This will not return or find data connectors owned by projects.
         """
         not_found_msg = (
-            f"Data connector with identifier '{namespace}/{slug.value}' does not exist or you do not have access to it."
+            f"Data connector with identifier '{path.serialize()}' does not exist or you do not have access to it."
         )
 
         async with self.session_maker() as session:
             stmt = select(schemas.DataConnectorORM)
-            stmt = _filter_by_namespace_slug(stmt, namespace)
-            stmt = stmt.where(ns_schemas.EntitySlugORM.slug == slug.value.lower())
+            stmt = _filter_by_namespace_slug(stmt, path.parent())
+            stmt = stmt.where(
+                schemas.DataConnectorORM.slug.has(
+                    ns_schemas.EntitySlugORM.slug == path.last().value.lower(),
+                )
+            )
             result = await session.scalars(stmt)
             data_connector = result.one_or_none()
 
             if data_connector is None:
-                old_data_connector_stmt_old_ns_current_slug = (
-                    select(schemas.DataConnectorORM.id)
-                    .where(ns_schemas.NamespaceOldORM.slug == namespace.lower())
-                    .where(ns_schemas.NamespaceOldORM.latest_slug_id == ns_schemas.NamespaceORM.id)
-                    .where(ns_schemas.EntitySlugORM.namespace_id == ns_schemas.NamespaceORM.id)
-                    .where(schemas.DataConnectorORM.id == ns_schemas.EntitySlugORM.data_connector_id)
-                    .where(schemas.DataConnectorORM.slug.has(ns_schemas.EntitySlugORM.slug == slug.value.lower()))
-                )
-                old_data_connector_stmt_current_ns_old_slug = (
-                    select(schemas.DataConnectorORM.id)
-                    .where(ns_schemas.NamespaceORM.slug == namespace.lower())
-                    .where(ns_schemas.EntitySlugORM.namespace_id == ns_schemas.NamespaceORM.id)
-                    .where(schemas.DataConnectorORM.id == ns_schemas.EntitySlugORM.data_connector_id)
-                    .where(ns_schemas.EntitySlugOldORM.slug == slug.value.lower())
-                    .where(ns_schemas.EntitySlugOldORM.latest_slug_id == ns_schemas.EntitySlugORM.id)
-                )
-                old_data_connector_stmt_old_ns_old_slug = (
-                    select(schemas.DataConnectorORM.id)
-                    .where(ns_schemas.NamespaceOldORM.slug == namespace.lower())
-                    .where(ns_schemas.NamespaceOldORM.latest_slug_id == ns_schemas.NamespaceORM.id)
-                    .where(ns_schemas.EntitySlugORM.namespace_id == ns_schemas.NamespaceORM.id)
-                    .where(schemas.DataConnectorORM.id == ns_schemas.EntitySlugORM.data_connector_id)
-                    .where(ns_schemas.EntitySlugOldORM.slug == slug.value.lower())
-                    .where(ns_schemas.EntitySlugOldORM.latest_slug_id == ns_schemas.EntitySlugORM.id)
-                )
-                old_data_connector_stmt = old_data_connector_stmt_old_ns_current_slug.union(
-                    old_data_connector_stmt_current_ns_old_slug, old_data_connector_stmt_old_ns_old_slug
-                )
-                result_old = await session.scalars(old_data_connector_stmt)
-                result_old_id = cast(ULID | None, result_old.first())
-                if result_old_id is not None:
-                    stmt = select(schemas.DataConnectorORM).where(schemas.DataConnectorORM.id == result_old_id)
-                    data_connector = (await session.scalars(stmt)).first()
+                # Try to find the slugs passed in the tables of old slugs
+                queries = _old_data_connector_slug_queries(path)
+                for query in queries:
+                    result_old = await session.scalar(query)
+                    if result_old is not None:
+                        data_connector = result_old
+                        break
 
             if data_connector is None:
                 raise errors.MissingResourceError(message=not_found_msg)
@@ -859,13 +850,127 @@ class DataConnectorSecretRepository:
             await session.execute(stmt)
 
 
-_T = TypeVar("_T")
+_T = TypeVar("_T", int, schemas.DataConnectorORM)
 
 
-def _filter_by_namespace_slug(statement: Select[tuple[_T]], namespace: str) -> Select[tuple[_T]]:
+def _filter_by_namespace_slug(stmt: Select[tuple[_T]], namespace: ProjectPath | NamespacePath) -> Select[tuple[_T]]:
     """Filters a select query on data connectors to a given namespace."""
-    return (
-        statement.where(ns_schemas.NamespaceORM.slug == namespace.lower())
-        .where(ns_schemas.EntitySlugORM.namespace_id == ns_schemas.NamespaceORM.id)
-        .where(schemas.DataConnectorORM.id == ns_schemas.EntitySlugORM.data_connector_id)
+    stmt = stmt.where(
+        schemas.DataConnectorORM.slug.has(
+            ns_schemas.EntitySlugORM.namespace.has(
+                ns_schemas.NamespaceORM.slug == namespace.first.value.lower(),
+            )
+        )
     )
+    if isinstance(namespace, ProjectPath):
+        stmt = stmt.where(
+            schemas.DataConnectorORM.slug.has(
+                ns_schemas.EntitySlugORM.project.has(
+                    schemas.ProjectORM.slug.has(
+                        ns_schemas.EntitySlugORM.slug == namespace.second.value.lower(),
+                    )
+                )
+            )
+        )
+    return stmt
+
+
+def _old_data_connector_slug_queries(
+    path: DataConnectorInProjectPath | DataConnectorPath,
+) -> list[Select[tuple[schemas.DataConnectorORM]]]:
+    """Prepare queries that return data connector IDs based on a full data connector path."""
+
+    def _dc_old_ns_is(slug: NamespaceSlug) -> ColumnExpressionArgument[bool]:
+        return schemas.DataConnectorORM.slug.has(
+            ns_schemas.EntitySlugORM.namespace.has(
+                ns_schemas.NamespaceORM.old_namespaces.any(
+                    ns_schemas.NamespaceOldORM.slug == slug.value.lower(),
+                )
+            )
+        )
+
+    def _dc_new_ns_is(slug: NamespaceSlug) -> ColumnExpressionArgument[bool]:
+        return schemas.DataConnectorORM.slug.has(
+            ns_schemas.EntitySlugORM.namespace.has(
+                ns_schemas.NamespaceORM.slug == slug.value.lower(),
+            )
+        )
+
+    def _dc_old_prj_is(slug: ProjectSlug) -> ColumnExpressionArgument[bool]:
+        return schemas.DataConnectorORM.slug.has(
+            ns_schemas.EntitySlugORM.project.has(
+                ProjectORM.old_slugs.any(
+                    ns_schemas.EntitySlugOldORM.slug == slug.value.lower(),
+                )
+            )
+        )
+
+    def _dc_new_prj_is(slug: ProjectSlug) -> ColumnExpressionArgument[bool]:
+        return schemas.DataConnectorORM.slug.has(
+            ns_schemas.EntitySlugORM.project.has(
+                ProjectORM.slug.has(
+                    ns_schemas.EntitySlugORM.slug == slug.value.lower(),
+                )
+            )
+        )
+
+    def _dc_old_slug_is(slug: DataConnectorSlug) -> ColumnExpressionArgument[bool]:
+        return schemas.DataConnectorORM.old_slugs.any(
+            ns_schemas.EntitySlugOldORM.slug == slug.value.lower(),
+        )
+
+    def _dc_new_slug_is(slug: DataConnectorSlug) -> ColumnExpressionArgument[bool]:
+        return schemas.DataConnectorORM.slug.has(
+            ns_schemas.EntitySlugORM.slug == slug.value.lower(),
+        )
+
+    def _dc_in_project(path: DataConnectorInProjectPath) -> list[Select[tuple[schemas.DataConnectorORM]]]:
+        """This finds all combinations of old/new slugs for user/group, project and data connector.
+
+        It excludes the combination of new/new/new.
+        """
+        result = []
+        for i in range(2**3 - 1):
+            # NOTE: Changing the order of the statements here can lead to unexpected
+            # consequences or cause combinations that we want to exclude to be added (i.e. new/new/new).
+            stmt = select(schemas.DataConnectorORM)
+            if i & 0b001 == 0b001:  # noqa: SIM108
+                stmt = stmt.where(_dc_new_ns_is(path.first))
+            else:
+                stmt = stmt.where(_dc_old_ns_is(path.first))
+
+            if i & 0b010 == 0b010:  # noqa: SIM108
+                stmt = stmt.where(_dc_new_prj_is(path.second))
+            else:
+                stmt = stmt.where(_dc_old_prj_is(path.second))
+
+            if i & 0b100 == 0b100:  # noqa: SIM108
+                stmt = stmt.where(_dc_new_slug_is(path.third))
+            else:
+                stmt = stmt.where(_dc_old_slug_is(path.third))
+            result.append(stmt)
+        return result
+
+    def _dc_in_user_or_group(path: DataConnectorPath) -> list[Select[tuple[schemas.DataConnectorORM]]]:
+        old_ns_old_slug = (
+            select(schemas.DataConnectorORM).where(_dc_old_ns_is(path.first)).where(_dc_old_slug_is(path.second))
+        )
+        new_ns_old_slug = (
+            select(schemas.DataConnectorORM).where(_dc_new_ns_is(path.first)).where(_dc_old_slug_is(path.second))
+        )
+        old_ns_new_slug = (
+            select(schemas.DataConnectorORM).where(_dc_old_ns_is(path.first)).where(_dc_new_slug_is(path.second))
+        )
+        return [
+            old_ns_old_slug,
+            new_ns_old_slug,
+            old_ns_new_slug,
+        ]
+
+    match path:
+        case DataConnectorPath():
+            return _dc_in_user_or_group(path)
+        case DataConnectorInProjectPath():
+            return _dc_in_project(path)
+        case _:
+            raise errors.ProgrammingError(message="Got unknown data connector path type when resolving slugs.")

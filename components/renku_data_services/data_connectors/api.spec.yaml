@@ -164,6 +164,42 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - data_connectors
+  /namespaces/{namespace}/projects/{project}/data_connectors/{slug}:
+    parameters:
+      - in: path
+        name: namespace
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: project
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Get a data connector that is owned by a namespace by its slug
+      responses:
+        "200":
+          description: The data connector
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataConnector"
+        "404":
+          description: The data connector does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - data_connectors
   /data_connectors/{data_connector_id}/permissions:
     parameters:
       - in: path
@@ -370,9 +406,9 @@ components:
         name:
           $ref: "#/components/schemas/DataConnectorName"
         namespace:
-          $ref: "#/components/schemas/OneOrTwoSlugs"
+          $ref: "#/components/schemas/SlugResponse"
         slug:
-          $ref: "#/components/schemas/Slug"
+          $ref: "#/components/schemas/SlugResponse"
         storage:
           $ref: "#/components/schemas/CloudStorageCore"
         creation_date:
@@ -685,6 +721,11 @@ components:
       # - has to start with letter or number
       # - cannot contain uppercase characters
       pattern: '^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-z0-9][a-z0-9\-_.]*$'
+      example: "a-slug-example"
+    SlugResponse:
+      description: A command-line/url friendly name for a namespace
+      type: string
+      minLength: 1
       example: "a-slug-example"
     OneOrTwoSlugs:
       description: A command-line/url friendly name for a single slug or two slugs separated by /
