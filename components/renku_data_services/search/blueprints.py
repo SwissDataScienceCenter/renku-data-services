@@ -2,19 +2,19 @@
 
 from dataclasses import dataclass
 
-from components.renku_data_services.solr.solr_client import SolrClientConfig
 from sanic import HTTPResponse, Request, json
 from sanic.response import JSONResponse
 
 import renku_data_services.base_models as base_models
 import renku_data_services.search.core as core
-from components.renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.authz.authz import Authz
 from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_query
 from renku_data_services.search.apispec import SearchQuery
+from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.search.user_query_parser import QueryParser
+from renku_data_services.solr.solr_client import SolrClientConfig
 
 
 @dataclass(kw_only=True)

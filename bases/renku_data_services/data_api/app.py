@@ -25,6 +25,7 @@ from renku_data_services.platform.blueprints import PlatformConfigBP
 from renku_data_services.project.blueprints import ProjectsBP, ProjectSessionSecretBP
 from renku_data_services.repositories.blueprints import RepositoriesBP
 from renku_data_services.search.blueprints import SearchBP
+from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.session.blueprints import BuildsBP, EnvironmentsBP, SessionLaunchersBP
 from renku_data_services.storage.blueprints import StorageBP, StorageSchemaBP
 from renku_data_services.users.blueprints import KCUsersBP, UserPreferencesBP, UserSecretsBP
@@ -207,12 +208,15 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         name="search2",
         url_prefix=url_prefix,
         authenticator=config.authenticator,
-        reprovisioning_repo=config.reprovisioning_repo,
-        user_repo=config.kc_user_repo,
-        group_repo=config.group_repo,
+        search_reprovision=SearchReprovision(
+            search_updates_repo=config.search_updates_repo,
+            reprovisioning_repo=config.reprovisioning_repo,
+            solr_config=config.solr_config,
+            user_repo=config.kc_user_repo,
+            group_repo=config.group_repo,
+            project_repo=config.project_repo,
+        ),
         solr_config=config.solr_config,
-        project_repo=config.project_repo,
-        search_updates_repo=config.search_updates_repo,
         authz=config.authz,
     )
     data_connectors = DataConnectorsBP(
