@@ -406,9 +406,9 @@ components:
         name:
           $ref: "#/components/schemas/DataConnectorName"
         namespace:
-          $ref: "#/components/schemas/OneOrTwoSlugs"
+          $ref: "#/components/schemas/SlugResponse"
         slug:
-          $ref: "#/components/schemas/Slug"
+          $ref: "#/components/schemas/SlugResponse"
         storage:
           $ref: "#/components/schemas/CloudStorageCore"
         creation_date:
@@ -721,6 +721,11 @@ components:
       # - has to start with letter or number
       # - cannot contain uppercase characters
       pattern: '^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-z0-9][a-z0-9\-_.]*$'
+      example: "a-slug-example"
+    SlugResponse:
+      description: A command-line/url friendly name for a namespace
+      type: string
+      minLength: 1
       example: "a-slug-example"
     OneOrTwoSlugs:
       description: A command-line/url friendly name for a single slug or two slugs separated by /
