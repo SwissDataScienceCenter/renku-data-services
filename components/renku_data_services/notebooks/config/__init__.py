@@ -2,7 +2,8 @@
 
 import os
 from dataclasses import dataclass, field
-from typing import Optional, Protocol, Self
+from typing import Optional, Protocol, Self, cast
+from unittest.mock import MagicMock
 
 import kr8s
 
@@ -36,6 +37,7 @@ from renku_data_services.notebooks.config.dynamic import (
     _UserSecrets,
 )
 from renku_data_services.notebooks.config.static import _ServersGetEndpointAnnotations
+from renku_data_services.notebooks.constants import AMALTHEA_SESSION_KIND, JUPYTER_SESSION_KIND
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
 
 
@@ -104,6 +106,7 @@ class NotebooksConfig:
         dummy_stores = _parse_str_as_bool(os.environ.get("DUMMY_STORES", False))
         sessions_config: _SessionConfig
         git_config: _GitConfig
+        kr8s_api: kr8s.Api
         data_service_url = os.environ.get("NB_DATA_SERVICE_URL", "http://127.0.0.1:8000")
         server_options = _ServerOptionsConfig.from_env()
         crc_validator: CRCValidatorProto
@@ -116,6 +119,7 @@ class NotebooksConfig:
             sessions_config = _SessionConfig._for_testing()
             git_provider_helper = DummyGitProviderHelper()
             git_config = _GitConfig("http://not.specified", "registry.not.specified")
+            kr8s_api = MagicMock(spec=kr8s.Api)
         else:
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
             rp_repo = ResourcePoolRepository(db_config.async_session_maker, quota_repo)
@@ -125,14 +129,15 @@ class NotebooksConfig:
             git_provider_helper = GitProviderHelper(
                 data_service_url, f"http://{sessions_config.ingress.host}", git_config.url
             )
+            kr8s_api = cast(kr8s.Api, kr8s.api())
 
         k8s_config = _K8sConfig.from_env()
         cluster_id = ClusterId("renkulab")
-        clusters = {cluster_id: Cluster(id=cluster_id, namespace=k8s_config.renku_namespace, api=kr8s.api())}
+        clusters = {cluster_id: Cluster(id=cluster_id, namespace=k8s_config.renku_namespace, api=kr8s_api)}
         v2_cache = CachedK8sClient(
             clusters=clusters,
             cache=K8sDbCache(db.async_session_maker),
-            kinds_to_cache=[AmaltheaSessionV1Alpha1.kind, JupyterServerV1Alpha1.kind],
+            kinds_to_cache=[AMALTHEA_SESSION_KIND, JUPYTER_SESSION_KIND],
         )
         k8s_client = K8sClient(
             cached_client=v2_cache,

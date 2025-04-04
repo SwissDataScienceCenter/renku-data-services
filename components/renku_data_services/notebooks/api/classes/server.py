@@ -26,6 +26,7 @@ from renku_data_services.notebooks.api.classes.repository import GitProvider, Re
 from renku_data_services.notebooks.api.schemas.secrets import K8sUserSecrets
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
 from renku_data_services.notebooks.config import NotebooksConfig
+from renku_data_services.notebooks.constants import JUPYTER_SESSION_KIND, JUPYTER_SESSION_VERSION
 from renku_data_services.notebooks.crs import JupyterServerV1Alpha1
 from renku_data_services.notebooks.errors.programming import DuplicateEnvironmentVariableError
 from renku_data_services.notebooks.errors.user import MissingResourceError
@@ -236,8 +237,8 @@ class UserServer(ABC):
             }
         # Combine everything into the manifest
         manifest = {
-            "apiVersion": JupyterServerV1Alpha1.apiVersion,
-            "kind": "JupyterServer",
+            "apiVersion": JUPYTER_SESSION_VERSION,
+            "kind": JUPYTER_SESSION_KIND,
             "metadata": {
                 "name": self.server_name,
                 "labels": self.get_labels(),
