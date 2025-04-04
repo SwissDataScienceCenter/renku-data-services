@@ -17,7 +17,13 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_api.etag import extract_if_none_match, if_match_required
 from renku_data_services.base_api.misc import validate_body_root_model, validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
-from renku_data_services.base_models.core import Slug
+from renku_data_services.base_models.core import (
+    DataConnectorInProjectPath,
+    DataConnectorPath,
+    NamespacePath,
+    ProjectPath,
+    Slug,
+)
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors.core import (
@@ -30,6 +36,7 @@ from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
     DataConnectorSecretRepository,
 )
+from renku_data_services.errors import errors
 from renku_data_services.storage.rclone import RCloneValidator
 
 
@@ -54,10 +61,21 @@ class DataConnectorsBP(CustomBlueprint):
             query: apispec.DataConnectorsGetQuery,
             validator: RCloneValidator,
         ) -> tuple[list[dict[str, Any]], int]:
+            ns_segments = query.namespace.split("/")
+            ns: None | NamespacePath | ProjectPath
+            if len(ns_segments) == 0 or (len(ns_segments) == 1 and len(ns_segments[0]) == 0):
+                ns = None
+            elif len(ns_segments) == 1 and len(ns_segments[0]) > 0:
+                ns = NamespacePath.from_strings(*ns_segments)
+            elif len(ns_segments) == 2:
+                ns = ProjectPath.from_strings(*ns_segments)
+            else:
+                raise errors.ValidationError(
+                    message="Got an unexpected number of path segments for the data connector namespace"
+                    " in the request query parameter, expected 0, 1 or 2"
+                )
             data_connectors, total_num = await self.data_connector_repo.get_data_connectors(
-                user=user,
-                pagination=pagination,
-                namespace=query.namespace,
+                user=user, pagination=pagination, namespace=ns
             )
             return [
                 validate_and_dump(
@@ -113,10 +131,7 @@ class DataConnectorsBP(CustomBlueprint):
         return "/data_connectors/<data_connector_id:ulid>", ["GET"], _get_one
 
     def get_one_by_slug(self) -> BlueprintFactoryResponse:
-        """Get a specific data connector by namespace/entity slug.
-
-        This will not find or return data connectors owned by projects.
-        """
+        """Get a specific data connector by namespace/entity slug."""
 
         @authenticate(self.authenticator)
         @extract_if_none_match
@@ -129,7 +144,8 @@ class DataConnectorsBP(CustomBlueprint):
             validator: RCloneValidator,
         ) -> HTTPResponse:
             data_connector = await self.data_connector_repo.get_data_connector_by_slug(
-                user=user, namespace=namespace, slug=slug
+                user=user,
+                path=DataConnectorPath.from_strings(namespace, slug.value),
             )
 
             if data_connector.etag == etag:
@@ -143,6 +159,43 @@ class DataConnectorsBP(CustomBlueprint):
             )
 
         return "/namespaces/<namespace>/data_connectors/<slug:renku_slug>", ["GET"], _get_one_by_slug
+
+    def get_one_by_slug_from_project_namespace(self) -> BlueprintFactoryResponse:
+        """Get a specific data connector by namespace/project_slug/dc_slug slug."""
+
+        @authenticate(self.authenticator)
+        @extract_if_none_match
+        async def _get_one_from_project_namespace(
+            _: Request,
+            user: base_models.APIUser,
+            ns_slug: Slug,
+            project_slug: Slug,
+            dc_slug: Slug,
+            etag: str | None,
+            validator: RCloneValidator,
+        ) -> HTTPResponse:
+            dc_path = DataConnectorInProjectPath.from_strings(
+                ns_slug.value,
+                project_slug.value,
+                dc_slug.value,
+            )
+            data_connector = await self.data_connector_repo.get_data_connector_by_slug(user=user, path=dc_path)
+
+            if data_connector.etag == etag:
+                return HTTPResponse(status=304)
+
+            headers = {"ETag": data_connector.etag}
+            return validated_json(
+                apispec.DataConnector,
+                self._dump_data_connector(data_connector, validator=validator),
+                headers=headers,
+            )
+
+        return (
+            "/namespaces/<ns_slug:renku_slug>/projects/<project_slug:renku_slug>/data_connectors/<dc_slug:renku_slug>",
+            ["GET"],
+            _get_one_from_project_namespace,
+        )
 
     def patch(self) -> BlueprintFactoryResponse:
         """Partially update a data connector."""

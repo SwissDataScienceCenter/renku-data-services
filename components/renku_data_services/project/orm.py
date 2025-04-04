@@ -21,7 +21,7 @@ from renku_data_services.users.orm import UserORM
 from renku_data_services.utils.sqlalchemy import PurePosixPathType, ULIDType
 
 if TYPE_CHECKING:
-    from renku_data_services.namespace.orm import EntitySlugORM
+    from renku_data_services.namespace.orm import EntitySlugOldORM, EntitySlugORM
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
@@ -76,6 +76,16 @@ class ProjectORM(BaseORM):
         "is_template", Boolean(), default=False, server_default=false(), nullable=False
     )
     """Indicates whether a project is a template project or not."""
+
+    old_slugs: Mapped[list["EntitySlugOldORM"]] = relationship(
+        back_populates="project",
+        default_factory=list,
+        repr=False,
+        init=False,
+        viewonly=True,
+        lazy="selectin",
+        primaryjoin="and_(EntitySlugOldORM.project_id == ProjectORM.id, EntitySlugOldORM.data_connector_id.is_(None))",
+    )
 
     def dump(self, with_documentation: bool = False) -> models.Project:
         """Create a project model from the ProjectORM."""
