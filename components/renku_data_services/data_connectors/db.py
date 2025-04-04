@@ -853,11 +853,9 @@ class DataConnectorSecretRepository:
 _T = TypeVar("_T", int, schemas.DataConnectorORM)
 
 
-def _filter_by_namespace_slug(
-    statement: Select[tuple[_T]], namespace: ProjectPath | NamespacePath
-) -> Select[tuple[_T]]:
+def _filter_by_namespace_slug(stmt: Select[tuple[_T]], namespace: ProjectPath | NamespacePath) -> Select[tuple[_T]]:
     """Filters a select query on data connectors to a given namespace."""
-    output = statement.where(
+    stmt = stmt.where(
         schemas.DataConnectorORM.slug.has(
             ns_schemas.EntitySlugORM.namespace.has(
                 ns_schemas.NamespaceORM.slug == namespace.first.value.lower(),
@@ -865,7 +863,7 @@ def _filter_by_namespace_slug(
         )
     )
     if isinstance(namespace, ProjectPath):
-        output = output.where(
+        stmt = stmt.where(
             schemas.DataConnectorORM.slug.has(
                 ns_schemas.EntitySlugORM.project.has(
                     schemas.ProjectORM.slug.has(
@@ -874,7 +872,7 @@ def _filter_by_namespace_slug(
                 )
             )
         )
-    return output
+    return stmt
 
 
 def _old_data_connector_slug_queries(
@@ -927,23 +925,29 @@ def _old_data_connector_slug_queries(
         )
 
     def _dc_in_project(path: DataConnectorInProjectPath) -> list[Select[tuple[schemas.DataConnectorORM]]]:
+        """This finds all combinations of old/new slugs for user/group, project and data connector.
+
+        It excludes the combination of new/new/new.
+        """
         result = []
-        for i in range(7):
+        for i in range(2**3 - 1):
+            # NOTE: Changing the order of the statements here can lead to unexpected
+            # consequences or cause combinations that we want to exclude to be added (i.e. new/new/new).
             stmt = select(schemas.DataConnectorORM)
-            if i & 0x01 == 0x01:
-                stmt = stmt.where(_dc_new_ns_is(path.first)
+            if i & 0b001 == 0b001:  # noqa: SIM108
+                stmt = stmt.where(_dc_new_ns_is(path.first))
             else:
-                stmt = stmt.where(_dc_old_ns_is(path.first)
-                
-            if i & 0x02 == 0x02:
-                stmt = stmt.where(_dc_new_prj_is(path.second)
+                stmt = stmt.where(_dc_old_ns_is(path.first))
+
+            if i & 0b010 == 0b010:  # noqa: SIM108
+                stmt = stmt.where(_dc_new_prj_is(path.second))
             else:
-                stmt = stmt.where(_dc_old_prj_is(path.second)
-                
-            if i & 0x04 == 0x04:
-                stmt = stmt.where(_dc_new_slug_is(path.third)
+                stmt = stmt.where(_dc_old_prj_is(path.second))
+
+            if i & 0b100 == 0b100:  # noqa: SIM108
+                stmt = stmt.where(_dc_new_slug_is(path.third))
             else:
-                stmt = stmt.where(_dc_old_slug_is(path.third)
+                stmt = stmt.where(_dc_old_slug_is(path.third))
             result.append(stmt)
         return result
 
