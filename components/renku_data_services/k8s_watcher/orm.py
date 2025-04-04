@@ -30,7 +30,7 @@ class K8sObjectORM(BaseORM):
 
     __tablename__ = "k8s_objects"
 
-    id: Mapped[ULID | None] = mapped_column(
+    id: Mapped[ULID] = mapped_column(
         "id",
         ULIDType,
         primary_key=True,
@@ -40,14 +40,14 @@ class K8sObjectORM(BaseORM):
     )
     name: Mapped[str] = mapped_column("name", String(), index=True)
     namespace: Mapped[str] = mapped_column("namespace", String(), index=True)
-    creation_date: Mapped[datetime | None] = mapped_column(
+    creation_date: Mapped[datetime] = mapped_column(
         "creation_date",
         DateTime(timezone=True),
         server_default=func.now(),
         init=False,
         default=None,
     )
-    updated_at: Mapped[datetime | None] = mapped_column(
+    updated_at: Mapped[datetime] = mapped_column(
         "updated_at",
         DateTime(timezone=True),
         server_default=func.now(),
@@ -60,7 +60,7 @@ class K8sObjectORM(BaseORM):
     version: Mapped[str] = mapped_column(index=True)
     kind: Mapped[str] = mapped_column(index=True)
     cluster: Mapped[str] = mapped_column(index=True)
-    user_id: Mapped[str] = mapped_column(String(36), unique=True, index=True)
+    user_id: Mapped[str] = mapped_column(String(36), index=True)
 
     def dump(self) -> K8sObject:
         """Convert to a k8s object."""

@@ -15,6 +15,7 @@ from renku_data_services.errors import errors
 from renku_data_services.k8s_watcher.db import CachedK8sClient
 from renku_data_services.k8s_watcher.models import ClusterId, K8sObject, K8sObjectMeta, ListFilter
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
+from renku_data_services.notebooks.constants import JUPYTER_SESSION_KIND, JUPYTER_SESSION_VERSION
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
 from renku_data_services.notebooks.errors.programming import ProgrammingError
 from renku_data_services.notebooks.util.kubernetes_ import find_env_var
@@ -26,8 +27,8 @@ sanitize_for_serialization = ApiClient().sanitize_for_serialization
 class JupyterServerV1Alpha1Kr8s(APIObject):
     """Spec for jupyter servers used by the k8s client."""
 
-    kind: str = "JupyterServer"
-    version: str = "amalthea.dev/v1alpha1"
+    kind: str = JUPYTER_SESSION_KIND
+    version: str = JUPYTER_SESSION_VERSION
     namespaced: bool = True
     plural: str = "jupyterservers"
     singular: str = "jupyterserver"

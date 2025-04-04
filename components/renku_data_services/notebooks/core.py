@@ -30,6 +30,7 @@ from renku_data_services.notebooks.api.schemas.server_options import ServerOptio
 from renku_data_services.notebooks.api.schemas.servers_get import NotebookResponse
 from renku_data_services.notebooks.api.schemas.servers_patch import PatchServerStatusEnum
 from renku_data_services.notebooks.config import NotebooksConfig
+from renku_data_services.notebooks.constants import JUPYTER_SESSION_KIND, JUPYTER_SESSION_VERSION
 from renku_data_services.notebooks.errors import intermittent
 from renku_data_services.notebooks.errors import user as user_errors
 from renku_data_services.notebooks.util import repository
@@ -526,8 +527,8 @@ async def launch_notebook_helper(
     logger.debug(f"Server {server.server_name} has been started")
 
     owner_reference = {
-        "apiVersion": "amalthea.dev/v1alpha1",
-        "kind": "JupyterServer",
+        "apiVersion": JUPYTER_SESSION_VERSION,
+        "kind": JUPYTER_SESSION_KIND,
         "name": server.server_name,
         "uid": manifest.metadata.uid,
     }
