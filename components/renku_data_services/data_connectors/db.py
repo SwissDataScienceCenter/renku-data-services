@@ -24,6 +24,10 @@ from renku_data_services.base_models.core import (
     NamespaceSlug,
     ProjectPath,
     ProjectSlug,
+    DataConnectorGlobalPath,
+    DataConnectorInProjectPath,
+    DataConnectorSlug,
+    ProjectPath,
 )
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors import orm as schemas
@@ -137,7 +141,11 @@ class DataConnectorRepository:
             result = await session.scalars(stmt)
             data_connectors_orms = result.all()
 
-        return [(dc.name, f"{dc.slug.namespace.slug}/{dc.slug.slug}") for dc in data_connectors_orms]
+        return [
+            (dc.name, f"{dc.slug.namespace.slug}/{dc.slug.slug}")
+            for dc in data_connectors_orms
+            if dc.slug.namespace is not None
+        ]
 
     async def get_data_connector_by_slug(
         self,
@@ -198,16 +206,15 @@ class DataConnectorRepository:
         """Insert a new data connector entry."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required.")
-        ns = await session.scalar(
-            select(ns_schemas.NamespaceORM).where(
-                ns_schemas.NamespaceORM.slug == data_connector.namespace.first.value.lower()
+        ns: ns_schemas.NamespaceORM | None = None
+        if data_connector.namespace is not None:
+            ns = await session.scalar(
+                select(ns_schemas.NamespaceORM).where(
+                    ns_schemas.NamespaceORM.slug == data_connector.namespace.first.value.lower()
+                )
             )
-        )
-        if not ns:
-            raise errors.MissingResourceError(
-                message=f"The data connector cannot be created because the namespace {data_connector.namespace} does not exist."  # noqa E501
-            )
-        if not ns.group_id and not ns.user_id:
+
+        if ns and not ns.group_id and not ns.user_id:
             raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
 
         if user.id is None:
@@ -231,23 +238,31 @@ class DataConnectorRepository:
                 raise errors.MissingResourceError(message=error_msg)
             resource_type = ResourceType.project
             resource_id = project.id
-        elif ns.group and ns.group_id:
+        elif ns and ns.group and ns.group_id:
             resource_type, resource_id = (ResourceType.group, ns.group_id)
-        else:
+        elif ns:
             resource_type, resource_id = (ResourceType.user_namespace, ns.id)
+        else:
+            #! TODO: this is a global data connector, we need to check if the user is admin or it's a doi
+            pass
 
-        has_permission = await self.authz.has_permission(user, resource_type, resource_id, Scope.WRITE)
-        if not has_permission:
-            error_msg = f"The data connector cannot be created because you do not have sufficient permissions with the namespace {data_connector.namespace}"  # noqa: E501
-            if isinstance(data_connector.namespace, ProjectPath):
-                error_msg = f"The data connector cannot be created because you do not have sufficient permissions with the project {data_connector.namespace}"  # noqa: E501
-            raise errors.ForbiddenError(message=error_msg)
+        if ns:
+            has_permission = await self.authz.has_permission(user, resource_type, resource_id, Scope.WRITE)
+            if not has_permission:
+                error_msg = f"The data connector cannot be created because you do not have sufficient permissions with the namespace {data_connector.namespace}"  # noqa: E501
+                if isinstance(data_connector.namespace, ProjectPath):
+                    error_msg = f"The data connector cannot be created because you do not have sufficient permissions with the project {data_connector.namespace}"  # noqa: E501
+                raise errors.ForbiddenError(message=error_msg)
 
         slug = data_connector.slug or base_models.Slug.from_name(data_connector.name).value
 
         existing_slug_stmt = (
             select(ns_schemas.EntitySlugORM)
-            .where(ns_schemas.EntitySlugORM.namespace_id == ns.id)
+            .where(
+                ns_schemas.EntitySlugORM.namespace_id == ns.id
+                if ns
+                else ns_schemas.EntitySlugORM.namespace_id.is_(None)
+            )
             .where(ns_schemas.EntitySlugORM.slug == slug)
             .where(ns_schemas.EntitySlugORM.data_connector_id.is_not(None))
         )
@@ -279,7 +294,7 @@ class DataConnectorRepository:
         data_connector_slug = ns_schemas.EntitySlugORM.create_data_connector_slug(
             slug,
             data_connector_id=data_connector_orm.id,
-            namespace_id=ns.id,
+            namespace_id=ns.id if ns else None,
             project_id=project.id if project else None,
         )
 
@@ -355,10 +370,15 @@ class DataConnectorRepository:
             data_connector.visibility = visibility_orm
         if (patch.namespace is not None and patch.namespace != old_data_connector.namespace.path) or (
             patch.slug is not None and patch.slug != old_data_connector.slug
+            # or not isinstance(old_data_connector.path, DataConnectorGlobalPath)
         ):
             match patch.namespace, patch.slug:
                 case (None, new_slug) if new_slug is not None:
-                    new_path = old_data_connector.path.parent() / DataConnectorSlug(new_slug)
+                    new_path = (
+                        DataConnectorGlobalPath(DataConnectorSlug(new_slug))
+                        if isinstance(old_data_connector.path, DataConnectorGlobalPath)
+                        else old_data_connector.path.parent() / DataConnectorSlug(new_slug)
+                    )
                 case (new_ns, None) if new_ns is not None:
                     new_path = new_ns / DataConnectorSlug(old_data_connector.slug)
                 case (new_ns, new_slug) if new_ns is not None and new_slug is not None:

@@ -23,6 +23,7 @@ from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.authz.models import CheckPermissionItem, Member, MembershipChange, Role, Scope, UnsavedMember
 from renku_data_services.base_api.pagination import PaginationRequest, paginate_queries
 from renku_data_services.base_models.core import (
+    DataConnectorGlobalPath,
     DataConnectorInProjectPath,
     DataConnectorPath,
     NamespacePath,
@@ -529,7 +530,7 @@ class GroupRepository:
         self,
         user: base_models.APIUser,
         dc: DataConnector,
-        new: DataConnectorPath | DataConnectorInProjectPath,
+        new: DataConnectorPath | DataConnectorInProjectPath | DataConnectorGlobalPath,
         session: AsyncSession | None = None,
     ) -> None:
         """Rename or move a namespace."""

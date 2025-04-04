@@ -242,6 +242,7 @@ class EntitySlugORM(BaseORM):
     - namespace_id + project_id
     - namespace_id + project_id + data_connector_id
     - namespace_id + data_connector_id
+    - data_connector_id
     """
 
     __tablename__ = "entity_slugs"
@@ -274,8 +275,8 @@ class EntitySlugORM(BaseORM):
         unique=True,
     )
     data_connector: Mapped[DataConnectorORM | None] = relationship(init=False, repr=False, back_populates="slug")
-    namespace_id: Mapped[ULID] = mapped_column(
-        ForeignKey(NamespaceORM.id, ondelete="CASCADE", name="entity_slugs_namespace_id_fk"), index=True
+    namespace_id: Mapped[ULID | None] = mapped_column(
+        ForeignKey(NamespaceORM.id, ondelete="CASCADE", name="entity_slugs_namespace_id_fk"), index=True, nullable=True
     )
     namespace: Mapped[NamespaceORM] = relationship(lazy="joined", init=False, repr=False, viewonly=True)
 
@@ -294,7 +295,7 @@ class EntitySlugORM(BaseORM):
         cls,
         slug: str,
         data_connector_id: ULID,
-        namespace_id: ULID,
+        namespace_id: ULID | None = None,
         project_id: ULID | None = None,
     ) -> "EntitySlugORM":
         """Create an entity slug for a data connector."""
@@ -305,8 +306,10 @@ class EntitySlugORM(BaseORM):
             namespace_id=namespace_id,
         )
 
-    def dump_namespace(self) -> models.UserNamespace | models.GroupNamespace | models.ProjectNamespace:
-        """Dump the entity slug as a namespace."""
+    def dump_namespace(
+        self,
+    ) -> models.UserNamespace | models.GroupNamespace | models.ProjectNamespace | models.GlobalNamespace:
+        """Dump the entity slug as a namespace, if available."""
         if self.project:
             return self.dump_project_namespace()
         return self.namespace.dump()

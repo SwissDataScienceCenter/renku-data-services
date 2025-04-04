@@ -3,12 +3,14 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
+
+# # from typing import Final, Literal
 from typing import Final
 
 from ulid import ULID
 
 from renku_data_services.authz.models import Role
-from renku_data_services.base_models.core import NamespacePath, ProjectPath, ResourceType
+from renku_data_services.base_models.core import DataConnectorGlobalPath, NamespacePath, ProjectPath, ResourceType
 from renku_data_services.errors import errors
 
 
@@ -62,6 +64,7 @@ class NamespaceKind(StrEnum):
     """Allowed kinds of namespaces."""
 
     group = "group"
+    glbl = "glbl"
     user = "user"
     project = "project"  # For now only applicable to data connectors
 
@@ -83,7 +86,8 @@ class Namespace:
     id: ULID
     kind: NamespaceKind
     created_by: str
-    path: NamespacePath | ProjectPath
+    # # path: NamespacePath | ProjectPath | Literal["global"]
+    path: NamespacePath | ProjectPath | DataConnectorGlobalPath
     underlying_resource_id: ULID | str  # The user, group or project ID depending on the Namespace kind
     latest_slug: str | None = None
     name: str | None = None
@@ -115,6 +119,24 @@ class ProjectNamespace(Namespace):
     path: ProjectPath
     underlying_resource_id: ULID
     kind: Final[NamespaceKind] = field(default=NamespaceKind.project, init=False)
+
+
+# @dataclass(frozen=True, kw_only=True)
+# class GlobalNamespace(Namespace):
+#     """A renku global namespace."""
+
+#     underlying_resource_id: str  # This corresponds to the keycloak user ID - which is not a ULID
+#     kind: Final[NamespaceKind] = field(default=NamespaceKind.glbl, init=False)
+#     path: Final[Literal["global"]] = "global"
+
+
+@dataclass(frozen=True, kw_only=True)
+class GlobalNamespace(Namespace):
+    """A renku global namespace."""
+
+    underlying_resource_id: str
+    kind: Final[NamespaceKind] = field(default=NamespaceKind.glbl, init=False)
+    path: DataConnectorGlobalPath
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

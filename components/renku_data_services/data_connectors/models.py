@@ -8,13 +8,14 @@ from ulid import ULID
 
 from renku_data_services.authz.models import Visibility
 from renku_data_services.base_models.core import (
+    DataConnectorGlobalPath,
     DataConnectorInProjectPath,
     DataConnectorPath,
     DataConnectorSlug,
     NamespacePath,
     ProjectPath,
 )
-from renku_data_services.namespace.models import GroupNamespace, ProjectNamespace, UserNamespace
+from renku_data_services.namespace.models import GlobalNamespace, GroupNamespace, ProjectNamespace, UserNamespace
 from renku_data_services.project.models import Project
 from renku_data_services.utils.etag import compute_etag_from_fields
 
@@ -53,7 +54,7 @@ class DataConnector(BaseDataConnector):
     """Data connector model."""
 
     id: ULID
-    namespace: UserNamespace | GroupNamespace | ProjectNamespace
+    namespace: UserNamespace | GroupNamespace | ProjectNamespace | GlobalNamespace  # ! GlobalNamespace must be None
     updated_at: datetime
     project: Project | None = None
 
@@ -63,8 +64,10 @@ class DataConnector(BaseDataConnector):
         return compute_etag_from_fields(self.updated_at, self.path.serialize())
 
     @property
-    def path(self) -> DataConnectorPath | DataConnectorInProjectPath:
+    def path(self) -> DataConnectorPath | DataConnectorInProjectPath | DataConnectorGlobalPath:
         """The full path (i.e. sequence of slugs) for the data connector including group or user and/or project."""
+        if isinstance(self.namespace, GlobalNamespace):
+            return DataConnectorGlobalPath(DataConnectorSlug(self.slug))
         return self.namespace.path / DataConnectorSlug(self.slug)
 
 
@@ -72,11 +75,14 @@ class DataConnector(BaseDataConnector):
 class UnsavedDataConnector(BaseDataConnector):
     """A data connector that hasn't been stored in the database."""
 
-    namespace: NamespacePath | ProjectPath
+    # namespace: NamespacePath | ProjectPath | DataConnectorGlobalPath
+    namespace: NamespacePath | ProjectPath | None
 
     @property
-    def path(self) -> DataConnectorPath | DataConnectorInProjectPath:
+    def path(self) -> DataConnectorPath | DataConnectorInProjectPath | DataConnectorGlobalPath:
         """The full path (i.e. sequence of slugs) for the data connector including group or user and/or project."""
+        if self.namespace is None:
+            return DataConnectorGlobalPath(DataConnectorSlug(self.slug))
         return self.namespace / DataConnectorSlug(self.slug)
 
 

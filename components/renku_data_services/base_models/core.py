@@ -308,6 +308,41 @@ class ProjectPath(__NamespaceCommonMixin):
 
 
 @dataclass(frozen=True, eq=True, repr=False)
+class DataConnectorGlobalPath(__NamespaceCommonMixin):
+    """The collection of slugs that makes up the path to a data connector with no namespace in Renku."""
+
+    __match_args__ = "first"
+    first: DataConnectorSlug
+
+    def __truediv__(self, other: Never) -> Never:
+        """Create new entity path with an extra slug."""
+        raise errors.ProgrammingError(
+            message="A path for a data connector with no namespace cannot be further joined with more slugs"
+        )
+
+    def to_list(self) -> list[Slug]:
+        """Convert to list of slugs."""
+        return [self.first]
+
+    def parent(self) -> None:
+        """The parent path."""
+        return None
+
+    def last(self) -> DataConnectorSlug:
+        """Return the last slug in the path."""
+        return self.first
+
+    @classmethod
+    def from_strings(cls, *slugs: str) -> Self:
+        """Convert strings to a data connector path."""
+        if len(slugs) != 1:
+            raise errors.ValidationError(
+                message=f"One slug string is needed to create a global data connector path, got {slugs}."
+            )
+        return cls(DataConnectorSlug(slugs[0]))
+
+
+@dataclass(frozen=True, eq=True, repr=False)
 class DataConnectorPath(__NamespaceCommonMixin):
     """The collection of slugs that makes up the path to a data connector in a user or group in Renku."""
 

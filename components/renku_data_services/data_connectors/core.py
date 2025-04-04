@@ -63,17 +63,22 @@ def validate_unsaved_data_connector(
 
     keywords = [kw.root for kw in body.keywords] if body.keywords is not None else []
     storage = validate_unsaved_storage(body.storage, validator=validator)
+    path: NamespacePath | ProjectPath | None
 
-    slugs = body.namespace.split("/")
-    path: NamespacePath | ProjectPath
-    if len(slugs) == 1:
-        path = NamespacePath.from_strings(*slugs)
-    elif len(slugs) == 2:
-        path = ProjectPath.from_strings(*slugs)
+    if body.namespace is None:
+        if body.visibility.value == Visibility.PRIVATE.value:
+            raise errors.ValidationError(message="A data connector with private visibility must have a namespace.")
+        path = None  # DataConnectorGlobalPath.from_strings(body.slug or base_models.Slug.from_name(body.name).value)
     else:
-        raise errors.ValidationError(
-            message=f"Got an unexpected number of slugs in the namespace for a data connector {slugs}"
-        )
+        slugs = body.namespace.split("/")
+        if len(slugs) == 1:
+            path = NamespacePath.from_strings(*slugs)
+        elif len(slugs) == 2:
+            path = ProjectPath.from_strings(*slugs)
+        else:
+            raise errors.ValidationError(
+                message=f"Got an unexpected number of slugs in the namespace for a data connector {slugs}"
+            )
 
     return models.UnsavedDataConnector(
         name=body.name,

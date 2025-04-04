@@ -388,6 +388,26 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - projects
+  /data_connectors_doi:
+    post:
+      summary: Create a DOI global data connector
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataConnectorDoiPost"
+      responses:
+        "201":
+          description: The data connector was created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataConnector"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - data_connectors
 components:
   schemas:
     DataConnectorsList:
@@ -426,7 +446,6 @@ components:
       required:
         - id
         - name
-        - namespace
         - slug
         - storage
         - creation_date
@@ -458,8 +477,20 @@ components:
           $ref: "#/components/schemas/KeywordsList"
       required:
         - name
-        - namespace
         - storage
+    DataConnectorDoiPost:
+      description: |
+        A DOI global data connector to be created in Renku 2.0
+      type: object
+      additionalProperties: false
+      properties:
+        doi:
+          $ref: "#/components/schemas/DOI"
+        provider:
+          type: string
+          description: Optional provider for the DOI.
+      required:
+        - doi
     DataConnectorPatch:
       description: |
         Patch of a data connector
@@ -817,6 +848,10 @@ components:
         change_membership:
           description: The user can manage data connector members
           type: boolean
+    DOI:
+      type: string
+      description: A DOI (Digital Object Identifier) is composed of a DOI encoded prefix, a slash, and a DOI encoded suffix. In both parts, only letters, digits, and the characters "-", ".", "_", "~", ":", "@", "!", "$", "&", "'", "(", ")", "*", "+", ",", ";", "=" are allowed. Every other UTF-8 char should be encoded. Refer to the [reference document](https://doi.org/10.1000/292) for further details.
+      pattern: "^[-A-Za-z0-9._~:@!$&'()*+,;=]+/[-A-Za-z0-9._~:@!$&'()*+,;=]+$"
     PaginationRequest:
       type: object
       additionalProperties: false
