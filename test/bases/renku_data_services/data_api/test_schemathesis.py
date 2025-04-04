@@ -102,7 +102,7 @@ EXCLUDE_PATH_PREFIXES = ["/sessions", "/notebooks"]
 @settings(max_examples=5, suppress_health_check=[HealthCheck.filter_too_much, HealthCheck.data_too_large])
 async def test_api_schemathesis(
     case: schemathesis.Case,
-    sanic_client: SanicASGITestClient,
+    sanic_client_with_solr: SanicASGITestClient,
     admin_headers: dict,
     requests_statistics: list[timedelta],
 ) -> None:
@@ -110,7 +110,7 @@ async def test_api_schemathesis(
         if case.path.startswith(exclude_prefix):
             return
     req_kwargs = case.as_requests_kwargs(headers=admin_headers)
-    _, res = await sanic_client.request(**req_kwargs)
+    _, res = await sanic_client_with_solr.request(**req_kwargs)
     res.request.uri = str(res.url)
 
     if all(slow[0] != case.path or slow[1] != case.method for slow in ALLOWED_SLOW_ENDPOINTS):
