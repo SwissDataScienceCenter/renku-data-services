@@ -9,10 +9,6 @@ import renku_data_services.search.apispec as apispec
 import renku_data_services.search.solr_token as st
 from renku_data_services.authz.models import Role
 from renku_data_services.base_models import APIUser
-from renku_data_services.message_queue.db import ReprovisioningRepository
-from renku_data_services.message_queue.models import Reprovisioning
-from renku_data_services.namespace.db import GroupRepository
-from renku_data_services.project.db import ProjectRepository
 from renku_data_services.search import authz, converters
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.models import DeleteDoc
@@ -37,57 +33,6 @@ from renku_data_services.solr.solr_client import (
     SolrQuery,
     SubQuery,
 )
-from renku_data_services.users.db import UserRepo
-
-
-async def reprovision(
-    requested_by: APIUser,
-    reprovisioning: Reprovisioning,
-    search_updates_repo: SearchUpdatesRepo,
-    reprovisioning_repo: ReprovisioningRepository,
-    solr_config: SolrClientConfig,
-    user_repo: UserRepo,
-    group_repo: GroupRepository,
-    project_repo: ProjectRepository,
-) -> None:
-    """Initiates reprovisioning by inserting documents into the staging table."""
-
-    def log_counter(c: int) -> None:
-        if c % 50 == 0:
-            logger.info(f"Inserted {c}. entities into staging table...")
-
-    try:
-        logger.info(f"Starting reprovisioning with ID {reprovisioning.id}")
-        started = datetime.now()
-        await search_updates_repo.clear_all()
-        async with DefaultSolrClient(solr_config) as client:
-            await client.delete("_type:*")
-        counter = 0
-        all_users = user_repo.get_all_users(requested_by=requested_by)
-        async for user_entity in all_users:
-            await search_updates_repo.insert(user_entity, started)
-            counter += 1
-            log_counter(counter)
-
-        all_groups = group_repo.get_all_groups(requested_by=requested_by)
-        async for group_entity in all_groups:
-            await search_updates_repo.insert(group_entity, started)
-            counter += 1
-            log_counter(counter)
-
-        all_projects = project_repo.get_all_projects(requested_by=requested_by)
-        async for project_entity in all_projects:
-            await search_updates_repo.insert(project_entity, started)
-            counter += 1
-            log_counter(counter)
-
-        logger.info(f"Inserted {counter} entities into the staging table.")
-
-    except Exception as e:
-        logger.error("Error while reprovisioning entities!", exc_info=e)
-        ## TODO error handling. skip or fail?
-    finally:
-        await reprovisioning_repo.stop()
 
 
 async def update_solr(search_updates_repo: SearchUpdatesRepo, solr_client: SolrClient, batch_size: int) -> None:

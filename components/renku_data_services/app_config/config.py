@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import Any, Optional
 
 from authlib.integrations.httpx_client import AsyncOAuth2Client
-from components.renku_data_services.search.reprovision import SearchReprovision
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.types import PublicKeyTypes
@@ -73,6 +72,7 @@ from renku_data_services.project.db import (
 )
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.search.db import SearchUpdatesRepo
+from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsRepo
 from renku_data_services.session import crs as session_crs
 from renku_data_services.session.db import SessionRepository
