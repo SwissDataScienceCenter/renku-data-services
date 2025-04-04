@@ -115,6 +115,22 @@
           poetry run ruff check --fix
           poetry run ruff format
         '')
+        (
+          writeShellScriptBin "poetry-setup" ''
+            venv_path="$(poetry env info -p)"
+            if [ "$1" == "-c" ]; then
+               echo "Removing virtual env at $venv_path"
+               rm -rf "$venv_path"/*
+            fi
+            poetry install
+            if ! poetry self show --addons | grep poetry-multiproject-plugin > /dev/null; then
+                poetry self add poetry-multiproject-plugin
+            fi
+            if ! poetry self show --addons | grep poetry-polylith-plugin > /dev/null; then
+                poetry self add poetry-polylith-plugin
+            fi
+          ''
+        )
       ];
     in {
       formatter = pkgs.alejandra;
