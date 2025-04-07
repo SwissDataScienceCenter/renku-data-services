@@ -7,7 +7,7 @@ from typing import Any
 from urllib.parse import urljoin
 
 from authlib.integrations.base_client import InvalidTokenError
-from authlib.integrations.httpx_client import AsyncOAuth2Client
+from authlib.integrations.httpx_client import AsyncOAuth2Client, OAuthError
 from sanic.log import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -343,7 +343,16 @@ class ConnectedServicesRepository:
     ) -> models.OAuth2TokenSet:
         """Get the OAuth2 access token from one connection from the database."""
         async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (oauth2_client, _, _):
-            await oauth2_client.ensure_active_token(oauth2_client.token)
+            try:
+                await oauth2_client.ensure_active_token(oauth2_client.token)
+            except OAuthError as err:
+                if err.error == "bad_refresh_token":
+                    raise errors.InvalidTokenError(
+                        message="The refresh token for the connected service has expired or is invalid.",
+                        detail=f"Please recconect your integration for the service with ID {str(connection_id)} "
+                        "and try again.",
+                    )
+                raise
             token_model = models.OAuth2TokenSet.from_dict(oauth2_client.token)
             return token_model
 
