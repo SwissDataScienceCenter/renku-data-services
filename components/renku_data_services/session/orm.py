@@ -153,6 +153,11 @@ class SessionLauncherORM(BaseORM):
     disk_storage: Mapped[int | None] = mapped_column("disk_storage", BigInteger, default=None, nullable=True)
     """Default value for requested disk storage."""
 
+    env_variables: Mapped[dict[str, str | None] | None] = mapped_column(
+        "env_variables", JSONVariant, default=None, nullable=True
+    )
+    """Environment variables to set in the session."""
+
     @classmethod
     def load(cls, launcher: models.SessionLauncher) -> "SessionLauncherORM":
         """Create SessionLauncherORM from the session launcher model."""
@@ -165,6 +170,7 @@ class SessionLauncherORM(BaseORM):
             environment_id=launcher.environment.id,
             resource_class_id=launcher.resource_class_id,
             disk_storage=launcher.disk_storage,
+            env_variables=launcher.env_variables,
         )
 
     def dump(self) -> models.SessionLauncher:
@@ -178,6 +184,7 @@ class SessionLauncherORM(BaseORM):
             description=self.description,
             resource_class_id=self.resource_class_id,
             disk_storage=self.disk_storage,
+            env_variables=self.env_variables,
             environment=self.environment.dump(),
         )
 
