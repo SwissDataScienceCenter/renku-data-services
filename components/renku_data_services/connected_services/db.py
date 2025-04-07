@@ -369,7 +369,16 @@ class ConnectedServicesRepository:
             if connection.client.kind == ProviderKind.github and isinstance(adapter, GitHubAdapter):
                 request_url = urljoin(adapter.api_url, "user/installations")
                 params = dict(page=pagination.page, per_page=pagination.per_page)
-                response = await oauth2_client.get(request_url, params=params, headers=adapter.api_common_headers)
+                try:
+                    response = await oauth2_client.get(request_url, params=params, headers=adapter.api_common_headers)
+                except OAuthError as err:
+                    if err.error == "bad_refresh_token":
+                        raise errors.InvalidTokenError(
+                            message="The refresh token for the connected service has expired or is invalid.",
+                            detail=f"Please recconect your integration for the service with ID {str(connection_id)} "
+                            "and try again.",
+                        )
+                    raise
 
                 if response.status_code > 200:
                     raise errors.UnauthorizedError(message="Could not get installation information.")
