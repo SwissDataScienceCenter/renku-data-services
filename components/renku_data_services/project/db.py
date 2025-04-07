@@ -976,6 +976,7 @@ class ProjectMigrationRepository:
                     is_archived=False,
                     environment_image_source=session_apispec.EnvironmentImageSourceImage.image,
                 ),
+                env_variables=None,
             )
 
             new_launcher = validate_unsaved_session_launcher(
