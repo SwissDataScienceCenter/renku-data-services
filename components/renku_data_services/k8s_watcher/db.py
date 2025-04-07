@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import json
 from asyncio import Task
 from collections.abc import AsyncIterable, Awaitable, Callable
 from dataclasses import dataclass
@@ -17,7 +16,8 @@ from box import Box
 from kr8s.asyncio import Api
 from kr8s.asyncio.objects import APIObject
 from sanic.log import logger
-from sqlalchemy import select
+from sqlalchemy import bindparam, select
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.errors import errors
@@ -78,10 +78,19 @@ class APIObjectInCluster:
     @classmethod
     def from_k8s_object(cls, obj: K8sObject, api: Api | None = None) -> Self:
         """Convert a regular k8s object to an api object."""
+
+        class _APIObj(APIObject):
+            kind = obj.meta.kind
+            version = obj.meta.version
+            singular = obj.meta.singular
+            plural = obj.meta.plural
+            endpoint = obj.meta.plural
+            namespaced = obj.meta.namespaced
+
         return cls(
-            obj=APIObject(
+            obj=_APIObj(
                 resource=obj.manifest,
-                namespace=obj.namespace,
+                namespace=obj.meta.namespace,
                 api=api,
             ),
             cluster=obj.cluster,
@@ -154,7 +163,6 @@ class K8sClient:
                     filter.kind,
                     *names,
                     label_selector=filter.label_selector,
-                    api=cluster.api,
                     namespace=filter.namespace,
                 )
             except (kr8s.ServerError, kr8s.APITimeoutError):
@@ -245,8 +253,9 @@ class K8sDbCache:
                 stmt = stmt.where(K8sObjectORM.user_id == filter.user_id)
             if filter.label_selector:
                 stmt = stmt.where(
+                    # K8sObjectORM.manifest.comparator.contains({"metadata": {"labels": filter.label_selector}})
                     sqlalchemy.text("manifest -> 'metadata' -> 'labels' @> :labels").bindparams(
-                        labels=json.dumps(filter.label_selector)
+                        bindparam("labels", filter.label_selector, type_=JSONB)
                     )
                 )
             async for res in await session.stream_scalars(stmt):
