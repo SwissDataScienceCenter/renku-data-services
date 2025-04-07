@@ -127,7 +127,7 @@ class GitRepositoriesRepository:
                 if err.error == "bad_refresh_token":
                     raise errors.InvalidTokenError(
                         message="The refresh token for the repository has expired or is invalid.",
-                        detail=f"Please recconect your integration for {repository_url} and try again.",
+                        detail=f"Please reconnect your integration for {repository_url} and try again.",
                     )
                 raise
 
