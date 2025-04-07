@@ -51,7 +51,9 @@
 				"ms-python.isort",
 				"ms-python.vscode-pylance",
 				"ms-vscode.makefile-tools",
-				"matangover.mypy"
+				"matangover.mypy",
+				"ms-python.mypy-type-checker",
+				"charliermarsh.ruff"
 			]
 		}
 	}
