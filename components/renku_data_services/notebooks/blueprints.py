@@ -377,6 +377,22 @@ class NotebooksNewBP(CustomBlueprint):
 
             secrets_to_create.append(auth_secret)
 
+            env = [
+                SessionEnvItem(name="RENKU_BASE_URL_PATH", value=base_server_path),
+                SessionEnvItem(name="RENKU_BASE_URL", value=base_server_url),
+                SessionEnvItem(name="RENKU_MOUNT_DIR", value=storage_mount.as_posix()),
+                SessionEnvItem(name="RENKU_SESSION", value="1"),
+                SessionEnvItem(name="RENKU_SESSION_IP", value="0.0.0.0"),  # nosec B104
+                SessionEnvItem(name="RENKU_SESSION_PORT", value=f"{environment.port}"),
+                SessionEnvItem(name="RENKU_WORKING_DIR", value=work_dir.as_posix()),
+            ]
+            if launcher.env_variables:
+                env.extend(
+                    SessionEnvItem(name=env_var.name, value=env_var.value)
+                    for env_var in launcher.env_variables
+                    if env_var.value
+                )
+
             manifest = AmaltheaSessionV1Alpha1(
                 metadata=Metadata(name=server_name, annotations=annotations),
                 spec=AmaltheaSessionSpec(
@@ -405,15 +421,7 @@ class NotebooksNewBP(CustomBlueprint):
                         command=environment.command,
                         args=environment.args,
                         shmSize="1G",
-                        env=[
-                            SessionEnvItem(name="RENKU_BASE_URL_PATH", value=base_server_path),
-                            SessionEnvItem(name="RENKU_BASE_URL", value=base_server_url),
-                            SessionEnvItem(name="RENKU_MOUNT_DIR", value=storage_mount.as_posix()),
-                            SessionEnvItem(name="RENKU_SESSION", value="1"),
-                            SessionEnvItem(name="RENKU_SESSION_IP", value="0.0.0.0"),  # nosec B104
-                            SessionEnvItem(name="RENKU_SESSION_PORT", value=f"{environment.port}"),
-                            SessionEnvItem(name="RENKU_WORKING_DIR", value=work_dir.as_posix()),
-                        ],
+                        env=env,
                     ),
                     ingress=Ingress(
                         host=self.nb_config.sessions.ingress.host,
