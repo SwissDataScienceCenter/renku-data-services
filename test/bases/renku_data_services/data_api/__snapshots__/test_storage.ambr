@@ -12774,110 +12774,6 @@
       'prefix': 'storj',
     }),
     dict({
-      'description': 'Storj Decentralized Cloud Storage',
-      'name': 'tardigrade',
-      'options': list([
-        dict({
-          'advanced': False,
-          'default': 'existing',
-          'default_str': 'existing',
-          'examples': list([
-            dict({
-              'help': 'Use an existing access grant.',
-              'provider': '',
-              'value': 'existing',
-            }),
-            dict({
-              'help': 'Create a new access grant from satellite address, API key, and passphrase.',
-              'provider': '',
-              'value': 'new',
-            }),
-          ]),
-          'exclusive': False,
-          'help': 'Choose an authentication method.',
-          'name': 'provider',
-          'provider': '',
-          'required': False,
-          'sensitive': False,
-          'type': 'string',
-        }),
-        dict({
-          'advanced': False,
-          'default': '',
-          'default_str': '',
-          'exclusive': False,
-          'help': 'Access grant.',
-          'name': 'access_grant',
-          'provider': 'existing',
-          'required': False,
-          'sensitive': True,
-          'type': 'string',
-        }),
-        dict({
-          'advanced': False,
-          'default': 'us1.storj.io',
-          'default_str': 'us1.storj.io',
-          'examples': list([
-            dict({
-              'help': 'US1',
-              'provider': '',
-              'value': 'us1.storj.io',
-            }),
-            dict({
-              'help': 'EU1',
-              'provider': '',
-              'value': 'eu1.storj.io',
-            }),
-            dict({
-              'help': 'AP1',
-              'provider': '',
-              'value': 'ap1.storj.io',
-            }),
-          ]),
-          'exclusive': False,
-          'help': '''
-            Satellite address.
-            
-            Custom satellite address should match the format: `<nodeid>@<address>:<port>`.
-          ''',
-          'name': 'satellite_address',
-          'provider': 'new',
-          'required': False,
-          'sensitive': False,
-          'type': 'string',
-        }),
-        dict({
-          'advanced': False,
-          'default': '',
-          'default_str': '',
-          'exclusive': False,
-          'help': 'API key.',
-          'name': 'api_key',
-          'provider': 'new',
-          'required': False,
-          'sensitive': True,
-          'type': 'string',
-        }),
-        dict({
-          'advanced': False,
-          'default': '',
-          'default_str': '',
-          'exclusive': False,
-          'help': '''
-            Encryption passphrase.
-            
-            To access existing objects enter passphrase used for uploading.
-          ''',
-          'name': 'passphrase',
-          'provider': 'new',
-          'required': False,
-          'sensitive': True,
-          'type': 'string',
-        }),
-      ]),
-      'prefix': 'tardigrade',
-    }),
-    dict({
       'description': 'Sugarsync',
       'name': 'sugarsync',
       'options': list([
@@ -13481,6 +13377,110 @@
         }),
       ]),
       'prefix': 'swift',
+    }),
+    dict({
+      'description': 'Storj Decentralized Cloud Storage',
+      'name': 'tardigrade',
+      'options': list([
+        dict({
+          'advanced': False,
+          'default': 'existing',
+          'default_str': 'existing',
+          'examples': list([
+            dict({
+              'help': 'Use an existing access grant.',
+              'provider': '',
+              'value': 'existing',
+            }),
+            dict({
+              'help': 'Create a new access grant from satellite address, API key, and passphrase.',
+              'provider': '',
+              'value': 'new',
+            }),
+          ]),
+          'exclusive': False,
+          'help': 'Choose an authentication method.',
+          'name': 'provider',
+          'provider': '',
+          'required': False,
+          'sensitive': False,
+          'type': 'string',
+        }),
+        dict({
+          'advanced': False,
+          'default': '',
+          'default_str': '',
+          'exclusive': False,
+          'help': 'Access grant.',
+          'name': 'access_grant',
+          'provider': 'existing',
+          'required': False,
+          'sensitive': True,
+          'type': 'string',
+        }),
+        dict({
+          'advanced': False,
+          'default': 'us1.storj.io',
+          'default_str': 'us1.storj.io',
+          'examples': list([
+            dict({
+              'help': 'US1',
+              'provider': '',
+              'value': 'us1.storj.io',
+            }),
+            dict({
+              'help': 'EU1',
+              'provider': '',
+              'value': 'eu1.storj.io',
+            }),
+            dict({
+              'help': 'AP1',
+              'provider': '',
+              'value': 'ap1.storj.io',
+            }),
+          ]),
+          'exclusive': False,
+          'help': '''
+            Satellite address.
+            
+            Custom satellite address should match the format: `<nodeid>@<address>:<port>`.
+          ''',
+          'name': 'satellite_address',
+          'provider': 'new',
+          'required': False,
+          'sensitive': False,
+          'type': 'string',
+        }),
+        dict({
+          'advanced': False,
+          'default': '',
+          'default_str': '',
+          'exclusive': False,
+          'help': 'API key.',
+          'name': 'api_key',
+          'provider': 'new',
+          'required': False,
+          'sensitive': True,
+          'type': 'string',
+        }),
+        dict({
+          'advanced': False,
+          'default': '',
+          'default_str': '',
+          'exclusive': False,
+          'help': '''
+            Encryption passphrase.
+            
+            To access existing objects enter passphrase used for uploading.
+          ''',
+          'name': 'passphrase',
+          'provider': 'new',
+          'required': False,
+          'sensitive': True,
+          'type': 'string',
+        }),
+      ]),
+      'prefix': 'tardigrade',
     }),
     dict({
       'description': 'Uptobox',
