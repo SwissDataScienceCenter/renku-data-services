@@ -349,7 +349,7 @@ class ConnectedServicesRepository:
                 if err.error == "bad_refresh_token":
                     raise errors.InvalidTokenError(
                         message="The refresh token for the connected service has expired or is invalid.",
-                        detail=f"Please recconect your integration for the service with ID {str(connection_id)} "
+                        detail=f"Please reconnect your integration for the service with ID {str(connection_id)} "
                         "and try again.",
                     )
                 raise
@@ -375,7 +375,7 @@ class ConnectedServicesRepository:
                     if err.error == "bad_refresh_token":
                         raise errors.InvalidTokenError(
                             message="The refresh token for the connected service has expired or is invalid.",
-                            detail=f"Please recconect your integration for the service with ID {str(connection_id)} "
+                            detail=f"Please reconnect your integration for the service with ID {str(connection_id)} "
                             "and try again.",
                         )
                     raise
