@@ -1,9 +1,9 @@
 """Base motebooks svc configuration."""
 
+import asyncio
 import os
 from dataclasses import dataclass, field
-from typing import Optional, Protocol, Self, cast
-from unittest.mock import MagicMock
+from typing import Any, Optional, Protocol, Self, cast
 
 import kr8s
 
@@ -37,7 +37,12 @@ from renku_data_services.notebooks.config.dynamic import (
     _UserSecrets,
 )
 from renku_data_services.notebooks.config.static import _ServersGetEndpointAnnotations
-from renku_data_services.notebooks.constants import AMALTHEA_SESSION_KIND, JUPYTER_SESSION_KIND
+from renku_data_services.notebooks.constants import (
+    AMALTHEA_SESSION_KIND,
+    AMALTHEA_SESSION_VERSION,
+    JUPYTER_SESSION_KIND,
+    JUPYTER_SESSION_VERSION,
+)
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
 
 
@@ -72,6 +77,34 @@ class GitProviderHelperProto(Protocol):
         ...
 
 
+class Kr8sApiStack:
+    """Class maintaining a stack of current api clients.
+
+    Used for testing.
+    """
+
+    stack: list[kr8s.Api] = list()
+
+    def push(self, api: kr8s.Api) -> None:
+        """Push a new api client onto the stack."""
+        self.stack.append(api)
+
+    def pop(self) -> kr8s.Api:
+        """Pop the current kr8s api client from the stack."""
+        return self.stack.pop()
+
+    @property
+    def current(self) -> kr8s.Api:
+        """Get the currently active api client."""
+        return self.stack[-1]
+
+    def __getattribute__(self, name: str) -> Any:
+        """Pass on requests to current api client."""
+        if name in ["push", "pop", "current", "stack"]:
+            return object.__getattribute__(self, name)
+        return object.__getattribute__(self.current, name)
+
+
 @dataclass
 class NotebooksConfig:
     """The notebooks configuration."""
@@ -81,6 +114,7 @@ class NotebooksConfig:
     sentry: _SentryConfig
     git: _GitConfig
     k8s: _K8sConfig
+    _kr8s_api: kr8s.Api
     cloud_storage: _CloudStorage
     user_secrets: _UserSecrets
     crc_validator: CRCValidatorProto
@@ -113,13 +147,12 @@ class NotebooksConfig:
         git_provider_helper: GitProviderHelperProto
         k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
         quota_repo: QuotaRepository
-        db = DBConfig.from_env()
         if dummy_stores:
             crc_validator = DummyCRCValidator()
             sessions_config = _SessionConfig._for_testing()
             git_provider_helper = DummyGitProviderHelper()
             git_config = _GitConfig("http://not.specified", "registry.not.specified")
-            kr8s_api = MagicMock(spec=kr8s.Api)
+            kr8s_api = Kr8sApiStack()  # type: ignore[assignment]
         else:
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
             rp_repo = ResourcePoolRepository(db_config.async_session_maker, quota_repo)
@@ -129,14 +162,14 @@ class NotebooksConfig:
             git_provider_helper = GitProviderHelper(
                 data_service_url, f"http://{sessions_config.ingress.host}", git_config.url
             )
-            kr8s_api = cast(kr8s.Api, kr8s.api())
+            kr8s_api = cast(kr8s.Api, asyncio.run(kr8s.asyncio.api()))
 
         k8s_config = _K8sConfig.from_env()
         cluster_id = ClusterId("renkulab")
         clusters = {cluster_id: Cluster(id=cluster_id, namespace=k8s_config.renku_namespace, api=kr8s_api)}
         v2_cache = CachedK8sClient(
             clusters=clusters,
-            cache=K8sDbCache(db.async_session_maker),
+            cache=K8sDbCache(db_config.async_session_maker),
             kinds_to_cache=[AMALTHEA_SESSION_KIND, JUPYTER_SESSION_KIND],
         )
         k8s_client = K8sClient(
@@ -145,6 +178,8 @@ class NotebooksConfig:
             namespace=k8s_config.renku_namespace,
             cluster=cluster_id,
             server_type=JupyterServerV1Alpha1,
+            server_kind=JUPYTER_SESSION_KIND,
+            server_api_version=JUPYTER_SESSION_VERSION,
         )
         k8s_v2_client = K8sClient(
             cached_client=v2_cache,
@@ -153,6 +188,8 @@ class NotebooksConfig:
             namespace=k8s_config.renku_namespace,
             cluster=cluster_id,
             server_type=AmaltheaSessionV1Alpha1,
+            server_kind=AMALTHEA_SESSION_KIND,
+            server_api_version=AMALTHEA_SESSION_VERSION,
         )
         return cls(
             server_options=server_options,
@@ -173,4 +210,5 @@ class NotebooksConfig:
             git_provider_helper=git_provider_helper,
             k8s_client=k8s_client,
             k8s_v2_client=k8s_v2_client,
+            _kr8s_api=kr8s_api,
         )

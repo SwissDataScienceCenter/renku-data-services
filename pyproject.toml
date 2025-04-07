@@ -76,6 +76,7 @@ cryptography = "^44.0.1"
 # see https://github.com/sanic-org/sanic/issues/2828 for setuptools dependency, remove when not needed anymore
 setuptools = { version = "^75.8.2" }
 kr8s = "^0.18.1"
+python-box="^7.0.1"
 werkzeug = "^3.1.3"
 toml = "^0.10.2"
 aiofiles = "^24.1.0"

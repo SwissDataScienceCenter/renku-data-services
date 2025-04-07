@@ -49,12 +49,16 @@ class K8sClient(Generic[_SessionType]):
         namespace: str,
         cluster: ClusterId,
         server_type: type[_SessionType],
+        server_kind: str,
+        server_api_version: str,
     ):
         self.cached_client: CachedK8sClient = cached_client
         self.username_label = username_label
         self.namespace = namespace
         self.cluster = cluster
         self.server_type: type[_SessionType] = server_type
+        self.server_kind = server_kind
+        self.server_api_version = server_api_version
         if not self.username_label:
             raise ProgrammingError("username_label has to be provided to K8sClient")
 
@@ -67,8 +71,8 @@ class K8sClient(Generic[_SessionType]):
             self.server_type.model_validate(s.manifest)
             async for s in self.cached_client.list(
                 ListFilter(
-                    kind=self.server_type.kind,
-                    version=self.server_type.apiVersion,
+                    kind=self.server_kind,
+                    version=self.server_api_version,
                     user_id=safe_username,
                     label_selector={self.username_label: safe_username},
                     namespace=self.namespace,
@@ -83,8 +87,8 @@ class K8sClient(Generic[_SessionType]):
         """
         server = await self.cached_client.get(
             K8sObjectMeta(
-                kind=self.server_type.kind,
-                version=self.server_type.apiVersion,
+                kind=self.server_kind,
+                version=self.server_api_version,
                 user_id=safe_username,
                 name=name,
                 namespace=self.namespace,
@@ -167,10 +171,10 @@ class K8sClient(Generic[_SessionType]):
                 name=server_name,
                 namespace=self.namespace,
                 cluster=self.cluster,
-                kind=self.server_type.kind,
-                version=self.server_type.apiVersion,
+                kind=self.server_kind,
+                version=self.server_api_version,
                 user_id=safe_username,
-                manifest=Box(manifest),
+                manifest=Box(manifest.model_dump(exclude_none=True, mode="json")),
             )
         )
         return self.server_type.model_validate(result.manifest)
@@ -181,8 +185,8 @@ class K8sClient(Generic[_SessionType]):
         """Patch a server."""
         server = await self.cached_client.get(
             K8sObjectMeta(
-                kind=self.server_type.kind,
-                version=self.server_type.apiVersion,
+                kind=self.server_kind,
+                version=self.server_api_version,
                 user_id=safe_username,
                 name=server_name,
                 namespace=self.namespace,
@@ -220,8 +224,8 @@ class K8sClient(Generic[_SessionType]):
         """Delete the server."""
         return await self.cached_client.delete(
             K8sObjectMeta(
-                kind=self.server_type.kind,
-                version=self.server_type.apiVersion,
+                kind=self.server_kind,
+                version=self.server_api_version,
                 user_id=safe_username,
                 name=server_name,
                 namespace=self.namespace,

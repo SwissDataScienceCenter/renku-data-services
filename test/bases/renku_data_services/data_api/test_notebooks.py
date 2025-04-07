@@ -1,12 +1,12 @@
 """Tests for notebook blueprints."""
 
 import asyncio
-import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Generator
 from contextlib import suppress
 from unittest.mock import MagicMock
 from uuid import uuid4
 
+import kr8s
 import pytest
 import pytest_asyncio
 from kr8s import NotFoundError
@@ -17,7 +17,10 @@ from renku_data_services.notebooks.api.classes.k8s_client import JupyterServerV1
 
 from .utils import ClusterRequired, setup_amalthea
 
-os.environ["KUBECONFIG"] = ".k3d-config.yaml"
+
+@pytest.fixture(scope="module", autouse=True)
+def kubeconfig(monkeysession):
+    monkeysession.setenv("KUBECONFIG", ".k3d-config.yaml")
 
 
 @pytest.fixture
@@ -270,9 +273,13 @@ async def test_check_docker_image(sanic_client: SanicASGITestClient, user_header
 
 class TestNotebooks(ClusterRequired):
     @pytest.fixture(scope="class", autouse=True)
-    def amalthea(self, cluster) -> None:
+    def amalthea(self, cluster, app_config) -> Generator[None, None]:
         if cluster is not None:
             setup_amalthea("amalthea-js", "amalthea", "0.12.2", cluster)
+            app_config.nb_config._kr8s_api.push(asyncio.run(kr8s.asyncio.api()))
+
+        yield
+        app_config.nb_config._kr8s_api.pop()
 
     @pytest.mark.asyncio
     async def test_user_server_list(

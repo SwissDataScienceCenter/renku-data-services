@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from box import Box
-from sqlalchemy import JSON, DateTime, MetaData, String, func
+from sqlalchemy import DateTime, MetaData, String, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 from ulid import ULID
@@ -14,8 +14,6 @@ from ulid import ULID
 from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
 from renku_data_services.k8s_watcher.models import ClusterId, K8sObject
 from renku_data_services.utils.sqlalchemy import ULIDType
-
-JSONVariant = JSON().with_variant(JSONB(), "postgresql")
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
@@ -35,8 +33,8 @@ class K8sObjectORM(BaseORM):
         ULIDType,
         primary_key=True,
         init=False,
-        default=None,
-        server_default="generate_ulid()",
+        default_factory=lambda: str(ULID()),
+        server_default=text("generate_ulid()"),
     )
     name: Mapped[str] = mapped_column("name", String(), index=True)
     namespace: Mapped[str] = mapped_column("namespace", String(), index=True)
@@ -55,7 +53,7 @@ class K8sObjectORM(BaseORM):
         init=False,
         default=None,
     )
-    manifest: Mapped[dict[str, Any]] = mapped_column("manifest", JSONVariant)
+    manifest: Mapped[dict[str, Any]] = mapped_column("manifest", JSONB)
     deleted: Mapped[bool] = mapped_column(default=False, init=False, index=True)
     version: Mapped[str] = mapped_column(index=True)
     kind: Mapped[str] = mapped_column(index=True)

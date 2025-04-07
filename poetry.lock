@@ -1876,14 +1876,14 @@ zstd = ["zstandard (>=0.18.0)"]
 
 [[package]]
 name = "httpx-ws"
-version = "0.6.2"
+version = "0.7.2"
 description = "WebSockets support for HTTPX"
 optional = false
-python-versions = ">=3.8"
+python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "httpx_ws-0.6.2-py3-none-any.whl", hash = "sha256:24f87427acb757ada200aeab016cc429fa0bc71b0730429c37634867194e305c"},
-    {file = "httpx_ws-0.6.2.tar.gz", hash = "sha256:b07446b9067a30f1012fa9851fdfd14207012cd657c485565884f90553d0854c"},
+    {file = "httpx_ws-0.7.2-py3-none-any.whl", hash = "sha256:dd7bf9dbaa96dcd5cef1af3a7e1130cfac068bebecce25a74145022f5a8427a3"},
+    {file = "httpx_ws-0.7.2.tar.gz", hash = "sha256:93edea6c8fc313464fc287bff7d2ad20e6196b7754c76f946f73b4af79886d4e"},
 ]
 
 [package.dependencies]
@@ -5621,4 +5621,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.13"
-content-hash = "c0179c47f61267313401c010408b618b047b67b48ba37e7023b533299ac73ec4"
+content-hash = "1c9ac041db701d39f84efe1b900db1d9c9a18da0d4b97a9961f23acebc20775e"
