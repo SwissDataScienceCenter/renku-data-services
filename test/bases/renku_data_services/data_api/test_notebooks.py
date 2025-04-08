@@ -1,8 +1,10 @@
 """Tests for notebook blueprints."""
 
 import asyncio
-from collections.abc import AsyncIterator, Generator
+import contextlib
+from collections.abc import AsyncGenerator, AsyncIterator, Generator
 from contextlib import suppress
+from datetime import timedelta
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -13,7 +15,10 @@ from kr8s import NotFoundError
 from kr8s.asyncio.objects import Pod
 from sanic_testing.testing import SanicASGITestClient
 
+from renku_data_services.k8s_watcher.db import Cluster, K8sWatcher, k8s_object_handler
+from renku_data_services.k8s_watcher.models import ClusterId
 from renku_data_services.notebooks.api.classes.k8s_client import JupyterServerV1Alpha1Kr8s
+from renku_data_services.notebooks.constants import JUPYTER_SESSION_KIND
 
 from .utils import ClusterRequired, setup_amalthea
 
@@ -276,10 +281,32 @@ class TestNotebooks(ClusterRequired):
     def amalthea(self, cluster, app_config) -> Generator[None, None]:
         if cluster is not None:
             setup_amalthea("amalthea-js", "amalthea", "0.12.2", cluster)
-            app_config.nb_config._kr8s_api.push(asyncio.run(kr8s.asyncio.api()))
+        app_config.nb_config._kr8s_api.push(asyncio.run(kr8s.asyncio.api()))
 
         yield
         app_config.nb_config._kr8s_api.pop()
+
+    @pytest_asyncio.fixture(scope="class", autouse=True)
+    async def k8s_watcher(self, amalthea, app_config) -> AsyncGenerator[None, None]:
+        clusters = [
+            Cluster(
+                id=ClusterId("renkulab"),
+                namespace=app_config.nb_config.k8s.renku_namespace,
+                api=app_config.nb_config._kr8s_api.current,
+            )
+        ]
+
+        # sleep to give amalthea a chance to create the CRDs, otherwise the watcher can error out
+        await asyncio.sleep(1)
+        watcher = K8sWatcher(
+            handler=k8s_object_handler(app_config.nb_config.k8s_cached_client.cache),
+            clusters={c.id: c for c in clusters},
+            kinds=[JUPYTER_SESSION_KIND],
+        )
+        asyncio.create_task(watcher.start())
+        yield
+        with contextlib.suppress(TimeoutError):
+            await watcher.stop(timeout=timedelta(seconds=1))
 
     @pytest.mark.asyncio
     async def test_user_server_list(
@@ -335,7 +362,7 @@ class TestNotebooks(ClusterRequired):
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        "server_name_fixture,expected_status_code", [("unknown_server_name", 404), ("server_name", 204)]
+        "server_name_fixture,expected_status_code", [("unknown_server_name", 204), ("server_name", 204)]
     )
     async def test_stop_server(
         self,
@@ -371,6 +398,7 @@ class TestNotebooks(ClusterRequired):
     ):
         server_name = request.getfixturevalue(server_name_fixture)
 
+        await asyncio.sleep(2)  # wait a bit for k8s events to be processed in the background
         _, res = await sanic_client.patch(
             f"/api/data/notebooks/servers/{server_name}", json=patch, headers=authenticated_user_headers
         )

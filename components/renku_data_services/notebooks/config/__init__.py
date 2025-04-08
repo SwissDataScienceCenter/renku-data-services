@@ -114,6 +114,7 @@ class NotebooksConfig:
     sentry: _SentryConfig
     git: _GitConfig
     k8s: _K8sConfig
+    k8s_cached_client: CachedK8sClient
     _kr8s_api: kr8s.Api
     cloud_storage: _CloudStorage
     user_secrets: _UserSecrets
@@ -167,13 +168,13 @@ class NotebooksConfig:
         k8s_config = _K8sConfig.from_env()
         cluster_id = ClusterId("renkulab")
         clusters = {cluster_id: Cluster(id=cluster_id, namespace=k8s_config.renku_namespace, api=kr8s_api)}
-        v2_cache = CachedK8sClient(
+        k8s_cached_client = CachedK8sClient(
             clusters=clusters,
             cache=K8sDbCache(db_config.async_session_maker),
             kinds_to_cache=[AMALTHEA_SESSION_KIND, JUPYTER_SESSION_KIND],
         )
         k8s_client = K8sClient(
-            cached_client=v2_cache,
+            cached_client=k8s_cached_client,
             username_label="renku.io/userId",
             namespace=k8s_config.renku_namespace,
             cluster=cluster_id,
@@ -182,7 +183,7 @@ class NotebooksConfig:
             server_api_version=JUPYTER_SESSION_VERSION,
         )
         k8s_v2_client = K8sClient(
-            cached_client=v2_cache,
+            cached_client=k8s_cached_client,
             # NOTE: v2 sessions have no userId label, the safe-username label is the keycloak user ID
             username_label="renku.io/safe-username",
             namespace=k8s_config.renku_namespace,
@@ -210,5 +211,6 @@ class NotebooksConfig:
             git_provider_helper=git_provider_helper,
             k8s_client=k8s_client,
             k8s_v2_client=k8s_v2_client,
+            k8s_cached_client=k8s_cached_client,
             _kr8s_api=kr8s_api,
         )

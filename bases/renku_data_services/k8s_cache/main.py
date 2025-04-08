@@ -10,7 +10,10 @@ from renku_data_services.k8s_watcher.db import Cluster, K8sWatcher, k8s_object_h
 from renku_data_services.k8s_watcher.models import ClusterId
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_KIND, JUPYTER_SESSION_KIND
 
-if __name__ == "__main__":
+
+async def main() -> None:
+    """K8s cache entrypoint."""
+
     config = Config.from_env()
 
     kr8s_api = cast(kr8s.Api, asyncio.run(kr8s.asyncio.api()))
@@ -21,4 +24,8 @@ if __name__ == "__main__":
         clusters={c.id: c for c in clusters},
         kinds=[AMALTHEA_SESSION_KIND, JUPYTER_SESSION_KIND],
     )
-    watcher.start()
+    await watcher.start()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
