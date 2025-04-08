@@ -1,8 +1,27 @@
 """Protocol for metrics service."""
 
+from enum import StrEnum
 from typing import Protocol
 
 from renku_data_services.base_models.core import APIUser
+
+
+class MetricsEvent(StrEnum):
+    """The different types of metrics events."""
+
+    code_repo_linked_to_project = "code_repo_linked_to_project"
+    data_connector_created = "data_connector_created"
+    data_connector_linked = "data_connector_linked"
+    group_created = "group_created"
+    group_member_added = "group_member_added"
+    project_created = "project_created"
+    project_member_added = "project_member_added"
+    search_queried = "search_queried"
+    session_hibernated = "session_hibernated"
+    session_launcher_created = "session_launcher_created"
+    session_resumed = "session_resumed"
+    session_started = "session_started"
+    session_stopped = "session_stopped"
 
 
 class MetricsService(Protocol):

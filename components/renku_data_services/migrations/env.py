@@ -8,6 +8,7 @@ from renku_data_services.crc.orm import BaseORM as crc
 from renku_data_services.data_connectors.orm import BaseORM as data_connectors
 from renku_data_services.k8s_watcher.orm import BaseORM as k8s_cache
 from renku_data_services.message_queue.orm import BaseORM as events
+from renku_data_services.metrics.orm import BaseORM as metrics
 from renku_data_services.migrations.utils import logging_config, run_migrations
 from renku_data_services.namespace.orm import BaseORM as namespaces
 from renku_data_services.platform.orm import BaseORM as platform
@@ -29,6 +30,7 @@ all_metadata = [
     data_connectors.metadata,
     events.metadata,
     k8s_cache.metadata,
+    metrics.metadata,
     namespaces.metadata,
     platform.metadata,
     project.metadata,

@@ -18,7 +18,14 @@ from yaml import safe_load
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
-from renku_data_services.app_config.config import BuildsConfig, Config, SentryConfig, TrustedProxiesConfig
+from renku_data_services.app_config.config import (
+    BuildsConfig,
+    Config,
+    MetricsConfig,
+    PosthogConfig,
+    SentryConfig,
+    TrustedProxiesConfig,
+)
 from renku_data_services.app_config.server_options import (
     ServerOptions,
     ServerOptionsDefaults,
@@ -194,7 +201,7 @@ class TestAppConfig(Config):
         user_always_exists = os.environ.get("DUMMY_USERSTORE_USER_ALWAYS_EXISTS", "true").lower() == "true"
         user_store = DummyUserStore(user_always_exists=user_always_exists)
         gitlab_client = DummyGitlabAPI()
-        kc_api = DummyKeycloakAPI(users=[i._to_keycloak_dict() for i in dummy_users])
+        kc_api = DummyKeycloakAPI(users=[i.to_keycloak_dict() for i in dummy_users])
         redis = RedisConfig.fake()
         gitlab_url = None
 
@@ -206,6 +213,8 @@ class TestAppConfig(Config):
         message_queue = RedisQueue(redis)
         nb_config = NotebooksConfig.from_env(db)
         builds_config = BuildsConfig.from_env(prefix)
+        metrics_config = MetricsConfig.from_env(prefix)
+        posthog = PosthogConfig.from_env(prefix)
 
         return cls(
             version=version,
@@ -229,7 +238,8 @@ class TestAppConfig(Config):
             authz_config=AuthzConfigStack.from_env(),
             nb_config=nb_config,
             builds_config=builds_config,
-            metrics=MagicMock(spec=MetricsService),
+            metrics_config=metrics_config,
+            posthog=posthog,
         )
 
     def __post_init__(self) -> None:
@@ -246,10 +256,15 @@ class TestAppConfig(Config):
             self.default_resource_pool = generate_default_resource_pool(options, defaults)
 
         self.authz = NonCachingAuthz(self.authz_config)
+        self._metrics_mock = MagicMock(spec=MetricsService)
+
+    @property
+    def metrics(self) -> MagicMock:
+        return self._metrics_mock
 
 
 class SanicReusableASGITestClient(SanicASGITestClient):
-    """Reuasable async test client for sanic.
+    """Reusable async test client for sanic.
 
     Sanic has 3 test clients, SanicTestClient (sync), SanicASGITestClient (async) and ReusableClient (sync).
     The first two will drop all routes and server state before each request (!) and calculate all routes

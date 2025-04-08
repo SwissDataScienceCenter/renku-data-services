@@ -1,120 +1,59 @@
-"""Posthog implementation for metrics server."""
+"""Sanic task for processing metrics data and sending to PostHog."""
 
-import hashlib
+import asyncio
 
-from renku_data_services.base_models.core import APIUser
-from renku_data_services.base_models.metrics import MetricsService
+import uvloop
+from sanic.log import logger
+
+from renku_data_services.app_config import Config
 
 
-class PosthogService(MetricsService):
-    """Posthog metrics service."""
+async def _send_metrics_to_posthog() -> None:
+    from posthog import Posthog
 
-    enabled: bool
+    config = Config.from_env()
 
-    def __init__(self, enabled: bool, api_key: str, host: str, environment: str) -> None:
-        """Create new instance."""
-        self.enabled = enabled
-        if self.enabled:
-            from posthog import Posthog
+    posthog = Posthog(
+        api_key=config.posthog.api_key,
+        host=config.posthog.host,
+        sync_mode=True,
+        super_properties={"environment": config.posthog.environment},
+    )
 
-            self._posthog = Posthog(api_key=api_key, host=host, super_properties={"environment": environment})
+    while True:
+        try:
+            metrics = await config.metrics_repo.get_unprocessed_metrics(limit=100)
 
-    def _anonymize_user_id(self, user: APIUser) -> str:
-        """Anonymize a user id."""
-        return hashlib.md5(user.id.encode("utf-8"), usedforsecurity=False).hexdigest() if user.id else "anonymous"
+            processed_ids = []
+            for metric in metrics:
+                try:
+                    posthog.capture(
+                        distinct_id=metric.anonymous_user_id,
+                        timestamp=metric.timestamp,
+                        event=metric.event,
+                        properties=metric.metadata_ or {},
+                        # This is sent to avoid duplicate events if multiple instances of data service are running.
+                        # Posthog deduplicates events with the same timestamp, distinct_id, event, and uuid fields:
+                        # https://github.com/PostHog/posthog/issues/17211#issuecomment-1723136534
+                        uuid=metric.id,
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to process metrics event {metric.id}: {e}")
+                else:
+                    processed_ids.append(metric.id)
 
-    async def session_started(self, user: APIUser, metadata: dict[str, str | int]) -> None:
-        """Send session started event to posthog."""
-        if not self.enabled:
+            # Delete processed events
+            if processed_ids:
+                await config.metrics_repo.delete_processed_metrics(processed_ids)
+        except (asyncio.CancelledError, KeyboardInterrupt) as e:
+            logger.warning(f"Exiting: {e}")
             return
-        metadata["authenticated"] = user.is_authenticated
-        self._posthog.capture(distinct_id=self._anonymize_user_id(user), event="session_started", properties=metadata)
+        else:
+            # NOTE: Sleep 10 seconds between processing cycles
+            await asyncio.sleep(10)
 
-    async def session_resumed(self, user: APIUser, metadata: dict[str, str | int]) -> None:
-        """Send session resumed event to metrics."""
-        if not self.enabled:
-            return
-        self._posthog.capture(distinct_id=self._anonymize_user_id(user), event="session_resumed", properties=metadata)
 
-    async def session_hibernated(self, user: APIUser, metadata: dict[str, str | int]) -> None:
-        """Send session paused event to metrics."""
-        if not self.enabled:
-            return
-        self._posthog.capture(
-            distinct_id=self._anonymize_user_id(user), event="session_hibernated", properties=metadata
-        )
-
-    async def session_stopped(self, user: APIUser, metadata: dict[str, str | int]) -> None:
-        """Send session stopped event to metrics."""
-        if not self.enabled:
-            return
-        metadata["authenticated"] = user.is_authenticated
-        self._posthog.capture(
-            distinct_id=self._anonymize_user_id(user),
-            event="session_stopped",
-            properties=metadata,
-        )
-
-    async def session_launcher_created(
-        self, user: APIUser, environment_kind: str, environment_image_source: str
-    ) -> None:
-        """Send session launcher created event to metrics."""
-        if not self.enabled:
-            return
-        self._posthog.capture(
-            distinct_id=self._anonymize_user_id(user),
-            event="session_launcher_created",
-            properties={"environment_kind": environment_kind, "environment_image_source": environment_image_source},
-        )
-
-    async def project_created(self, user: APIUser) -> None:
-        """Send project created event to metrics."""
-        if not self.enabled:
-            return
-        self._posthog.capture(distinct_id=self._anonymize_user_id(user), event="project_created")
-
-    async def code_repo_linked_to_project(self, user: APIUser) -> None:
-        """Send code linked to project event to metrics."""
-        if not self.enabled:
-            return
-        self._posthog.capture(distinct_id=self._anonymize_user_id(user), event="code_repo_linked_to_project")
-
-    async def data_connector_created(self, user: APIUser) -> None:
-        """Send data connector created event to metrics."""
-        if not self.enabled:
-            return
-        self._posthog.capture(distinct_id=self._anonymize_user_id(user), event="data_connector_created")
-
-    async def data_connector_linked(self, user: APIUser) -> None:
-        """Send data connector linked event to metrics."""
-        if not self.enabled:
-            return
-        self._posthog.capture(distinct_id=self._anonymize_user_id(user), event="data_connector_linked")
-
-    async def project_member_added(self, user: APIUser) -> None:
-        """Send project member added event to metrics."""
-        if not self.enabled:
-            return
-        self._posthog.capture(distinct_id=self._anonymize_user_id(user), event="project_member_added")
-
-    async def group_created(self, user: APIUser) -> None:
-        """Send group created event to metrics."""
-        if not self.enabled:
-            return
-        self._posthog.capture(distinct_id=self._anonymize_user_id(user), event="group_created")
-
-    async def group_member_added(self, user: APIUser) -> None:
-        """Send group member added event to metrics."""
-        if not self.enabled:
-            return
-        self._posthog.capture(distinct_id=self._anonymize_user_id(user), event="group_member_added")
-
-    async def search_queried(self, user: APIUser) -> None:
-        """Send search queried event to metrics."""
-        if not self.enabled:
-            return
-        self._posthog.capture(
-            distinct_id=self._anonymize_user_id(user),
-            event="search_queried",
-            properties={"authenticated": user.is_authenticated},
-        )
+def start_metrics_task() -> None:
+    """Start the metrics processing task."""
+    asyncio.set_event_loop(uvloop.new_event_loop())
+    asyncio.run(_send_metrics_to_posthog())
