@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import concurrent.futures
 from os import environ
 from typing import TYPE_CHECKING, Any
 
@@ -181,8 +182,8 @@ def create_app() -> Sanic:
         # admin = APIUser(is_admin=True)
         # await config.search_reprovisioning.run_reprovision(admin)
         while True:
-            await asyncio.sleep(1)
-            print("Notification: hello")
+            await asyncio.sleep(0)
+            print("++++++ Notification: hello")
 
     @app.main_process_start
     async def do_solr_migrations(app: Sanic) -> None:
@@ -195,8 +196,10 @@ def create_app() -> Sanic:
         try:
             ## why is this not working???
             ## with a name=... there is a runtime error. docs say not to create the coro object, but either way it doesn't work
-            app.add_task(notify_me)
-            print("Task added, i think…")
+            t = asyncio.create_task(notify_me(), name="my_task")
+            print(f"Task added, i think… {t}")
+            print("But the loop is not executed, because the sleep doesn't return. But why?")
+
             # app.add_task(testing)
             # await config.search_reprovisioning.reprovision_task(requested_by=APIUser(is_admin = True))
         except Exception as exc:
