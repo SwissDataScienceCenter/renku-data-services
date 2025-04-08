@@ -31,6 +31,7 @@ from renku_data_services.data_connectors.core import (
     validate_data_connector_patch,
     validate_data_connector_secrets_patch,
     validate_unsaved_data_connector,
+    validate_unsaved_global_data_connector,
 )
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
@@ -105,6 +106,25 @@ class DataConnectorsBP(CustomBlueprint):
             )
 
         return "/data_connectors", ["POST"], _post
+    
+    def post_global(self) -> BlueprintFactoryResponse:
+        """Create a new global data connector."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @validate(json=apispec.GlobalDataConnectorPost)
+        async def _post(
+            _: Request, user: base_models.APIUser, body: apispec.GlobalDataConnectorPost, validator: RCloneValidator
+        ) -> JSONResponse:
+            data_connector = validate_unsaved_global_data_connector(body, validator=validator)
+            result = await self.data_connector_repo.insert_data_connector(user=user, data_connector=data_connector)
+            return validated_json(
+                apispec.DataConnector,
+                self._dump_data_connector(result, validator=validator),
+                status=201,
+            )
+
+        return "/data_connectors/global", ["POST"], _post
 
     def get_one(self) -> BlueprintFactoryResponse:
         """Get a specific data connector."""
@@ -410,9 +430,23 @@ class DataConnectorsBP(CustomBlueprint):
         return "/data_connectors/<data_connector_id:ulid>/secrets", ["DELETE"], _delete_secrets
 
     @staticmethod
-    def _dump_data_connector(data_connector: models.DataConnector, validator: RCloneValidator) -> dict[str, Any]:
+    def _dump_data_connector(data_connector: models.DataConnector | models.GlobalDataConnector, validator: RCloneValidator) -> dict[str, Any]:
         """Dumps a data connector for API responses."""
         storage = dump_storage_with_sensitive_fields(data_connector.storage, validator=validator)
+        if (data_connector.namespace is None):
+            return dict(
+                id=str(data_connector.id),
+                name=data_connector.name,
+                slug=data_connector.slug,
+                storage=storage,
+                # secrets=,
+                creation_date=data_connector.creation_date,
+                created_by=data_connector.created_by,
+                visibility=data_connector.visibility.value,
+                description=data_connector.description,
+                etag=data_connector.etag,
+                keywords=data_connector.keywords or [],
+            )
         return dict(
             id=str(data_connector.id),
             name=data_connector.name,

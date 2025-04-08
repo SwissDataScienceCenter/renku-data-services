@@ -51,6 +51,7 @@ from renku_data_services.data_connectors.models import (
     DataConnectorToProjectLink,
     DataConnectorUpdate,
     DeletedDataConnector,
+    GlobalDataConnector,
 )
 from renku_data_services.errors import errors
 from renku_data_services.namespace.models import (
@@ -90,6 +91,7 @@ _AuthzChangeFuncResult = TypeVar(
     | UserInfo
     | DeletedUser
     | DataConnector
+    | GlobalDataConnector
     | DataConnectorUpdate
     | DeletedDataConnector
     | DataConnectorToProjectLink
@@ -1667,7 +1669,7 @@ class Authz:
     # NOTE changing visibility is the same access level as removal
     @_is_allowed_on_resource(Scope.DELETE, ResourceType.data_connector)
     async def _update_data_connector_visibility(
-        self, user: base_models.APIUser, data_connector: DataConnector, *, zed_token: ZedToken | None = None
+        self, user: base_models.APIUser, data_connector: DataConnector | GlobalDataConnector, *, zed_token: ZedToken | None = None
     ) -> _AuthzChange:
         """Update the visibility of the data connector in the authorization database."""
         data_connector_id_str = str(data_connector.id)
@@ -1757,7 +1759,7 @@ class Authz:
     # NOTE changing namespace is the same access level as removal
     @_is_allowed_on_resource(Scope.DELETE, ResourceType.data_connector)
     async def _update_data_connector_namespace(
-        self, user: base_models.APIUser, data_connector: DataConnector, *, zed_token: ZedToken | None = None
+        self, user: base_models.APIUser, data_connector: DataConnector | GlobalDataConnector, *, zed_token: ZedToken | None = None
     ) -> _AuthzChange:
         """Update the namespace of the data connector in the authorization database."""
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
