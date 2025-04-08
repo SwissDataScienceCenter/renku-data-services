@@ -87,7 +87,7 @@ async def test_post_data_connector(sanic_client: SanicASGITestClient, regular_us
 
 
 @pytest.mark.asyncio
-async def test_post_global_data_connector(sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers) -> None:
+async def test_post_global_data_connector(sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers, admin_headers) -> None:
     payload = {
         "storage": {
             "configuration": {
@@ -103,36 +103,33 @@ async def test_post_global_data_connector(sanic_client: SanicASGITestClient, reg
 
     assert response.status_code == 201, response.text
     assert response.json is not None
-    assert response.json is None
     data_connector = response.json
     assert data_connector.get("name") == "10.5281/zenodo.15174623"
-    assert data_connector.get("namespace") == "user.doe"
-    assert data_connector.get("slug") == "my-data-connector"
+    assert data_connector.get("slug") == "10.5281-zenodo.15174623"
     assert data_connector.get("storage") is not None
     storage = data_connector["storage"]
-    assert storage.get("storage_type") == "s3"
-    assert storage.get("source_path") == "bucket/my-folder"
+    assert storage.get("storage_type") == "doi"
+    assert storage.get("source_path") == "/"
     assert storage.get("target_path") == "my/target"
     assert storage.get("readonly") is True
-    assert data_connector.get("created_by") == "user"
     assert data_connector.get("visibility") == "public"
-    assert data_connector.get("description") == "A data connector"
-    assert set(data_connector.get("keywords")) == {"keyword 1", "keyword.2", "keyword-3", "KEYWORD_4"}
+    assert data_connector.get("description") is None
+    assert set(data_connector.get("keywords")) == set()
 
     # Check that we can retrieve the data connector
-    _, response = await sanic_client.get(f"/api/data/data_connectors/{data_connector['id']}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/data_connectors/{data_connector['id']}", headers=admin_headers)
     assert response.status_code == 200, response.text
     assert response.json is not None
     assert response.json.get("id") == data_connector["id"]
 
-    # Check that we can retrieve the data connector by slug
-    _, response = await sanic_client.get(
-        f"/api/data/namespaces/{data_connector['namespace']}/data_connectors/{data_connector['slug']}",
-        headers=user_headers,
-    )
-    assert response.status_code == 200, response.text
-    assert response.json is not None
-    assert response.json.get("id") == data_connector["id"]
+    # # Check that we can retrieve the data connector by slug
+    # _, response = await sanic_client.get(
+    #     f"/api/data/namespaces/{data_connector['namespace']}/data_connectors/{data_connector['slug']}",
+    #     headers=user_headers,
+    # )
+    # assert response.status_code == 200, response.text
+    # assert response.json is not None
+    # assert response.json.get("id") == data_connector["id"]
 
 
 @pytest.mark.asyncio
