@@ -66,10 +66,13 @@ class DataConnectorORM(BaseORM):
     keywords: Mapped[list[str] | None] = mapped_column("keywords", ARRAY(String(99)), nullable=True)
     """Keywords for the data connector."""
 
-    slug: Mapped["EntitySlugORM"] = relationship(
+    slug: Mapped["EntitySlugORM | None"] = relationship(
         lazy="joined", init=False, repr=False, viewonly=True, back_populates="data_connector"
     )
     """Slug of the data connector."""
+
+    global_slug: Mapped[str | None] = mapped_column(String(99), index=True, nullable=True, default=None, unique=True)
+    """Slug for global data connectors."""
 
     readonly: Mapped[bool] = mapped_column("readonly", Boolean(), default=True)
     """Whether this storage should be mounted readonly or not """
@@ -95,8 +98,25 @@ class DataConnectorORM(BaseORM):
         viewonly=True,
     )
 
-    def dump(self) -> models.DataConnector:
+    def dump(self) -> models.DataConnector | models.GlobalDataConnector:
         """Create a data connector model from the DataConnectorORM."""
+        if self.global_slug:
+            return models.GlobalDataConnector(
+                id=self.id,
+                name=self.name,
+                slug=self.global_slug,
+                visibility=self._dump_visibility(),
+                created_by=self.created_by_id, # TODO: should we use an admin id? Or drop it?
+                creation_date=self.creation_date,
+                updated_at=self.updated_at,
+                storage=self._dump_storage(),
+                description=self.description,
+                keywords=self.keywords,
+            )
+        
+        elif self.slug is None:
+            raise ValueError("Either the slug or the global slug must be set.")
+
         return models.DataConnector(
             id=self.id,
             name=self.name,

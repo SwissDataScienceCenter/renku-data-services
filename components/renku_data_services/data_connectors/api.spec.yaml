@@ -70,6 +70,32 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - data_connectors
+  /data_connectors/global:
+    post:
+      summary: Create a new data connector
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GlobalDataConnectorPost"
+      responses:
+        "200":
+          description: The data connector already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataConnector"
+        "201":
+          description: The data connector was created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataConnector"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - data_connectors
   /data_connectors/{data_connector_id}:
     parameters:
       - in: path
@@ -426,7 +452,6 @@ components:
       required:
         - id
         - name
-        - namespace
         - slug
         - storage
         - creation_date
@@ -458,7 +483,18 @@ components:
           $ref: "#/components/schemas/KeywordsList"
       required:
         - name
-        - namespace
+        - storage
+    GlobalDataConnectorPost:
+      description: |
+        A global data connector to be created in Renku 2.0
+      type: object
+      additionalProperties: false
+      properties:
+        storage:
+          oneOf:
+            - $ref: "#/components/schemas/CloudStorageCorePost"
+            - $ref: "#/components/schemas/CloudStorageUrlV2"
+      required:
         - storage
     DataConnectorPatch:
       description: |

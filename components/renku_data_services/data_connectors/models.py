@@ -39,7 +39,7 @@ class BaseDataConnector:
     name: str
     slug: str
     visibility: Visibility
-    created_by: str
+    created_by: str | None = None
     creation_date: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime | None = field(default=None)
     description: str | None = None
@@ -76,6 +76,25 @@ class UnsavedDataConnector(BaseDataConnector):
     def path(self) -> DataConnectorPath | DataConnectorInProjectPath:
         """The full path (i.e. sequence of slugs) for the data connector including group or user and/or project."""
         return self.namespace / DataConnectorSlug(self.slug)
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class GlobalDataConnector(BaseDataConnector):
+    """Global data connector model."""
+
+    id: ULID
+    namespace: None = None
+    updated_at: datetime
+
+    @property
+    def etag(self) -> str:
+        """Entity tag value for this data connector object."""
+        return compute_etag_from_fields(self.updated_at)
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedGlobalDataConnector(BaseDataConnector):
+    """Global data connector model."""
+
+    namespace: None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -121,8 +140,8 @@ class CloudStorageCoreWithSensitiveFields(CloudStorageCore):
 class DataConnectorUpdate:
     """Information about the update of a data connector."""
 
-    old: DataConnector
-    new: DataConnector
+    old: DataConnector | GlobalDataConnector
+    new: DataConnector | GlobalDataConnector
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -174,5 +193,5 @@ class DataConnectorPermissions:
 class DataConnectorWithSecrets:
     """A data connector with its secrets."""
 
-    data_connector: DataConnector
+    data_connector: DataConnector | GlobalDataConnector
     secrets: list[DataConnectorSecret] = field(default_factory=list)

@@ -64,7 +64,7 @@ class DataConnectorRepository:
         user: base_models.APIUser,
         pagination: PaginationRequest,
         namespace: ProjectPath | NamespacePath | None = None,
-    ) -> tuple[list[models.DataConnector], int]:
+    ) -> tuple[list[models.DataConnector | models.GlobalDataConnector], int]:
         """Get multiple data connectors from the database."""
         data_connector_ids = await self.authz.resources_with_permission(
             user, user.id, ResourceType.data_connector, Scope.READ
@@ -100,7 +100,7 @@ class DataConnectorRepository:
         self,
         user: base_models.APIUser,
         data_connector_id: ULID,
-    ) -> models.DataConnector:
+    ) -> models.DataConnector | models.GlobalDataConnector:
         """Get one data connector from the database."""
         not_found_msg = f"Data connector with id '{data_connector_id}' does not exist or you do not have access to it."
 
@@ -141,13 +141,13 @@ class DataConnectorRepository:
             result = await session.scalars(stmt)
             data_connectors_orms = result.all()
 
-        return [(dc.name, f"{dc.slug.namespace.slug}/{dc.slug.slug}") for dc in data_connectors_orms]
+        return [(dc.name, f"{dc.slug.namespace.slug}/{dc.slug.slug}" if dc.slug is not None else f"{dc.global_slug}") for dc in data_connectors_orms]
 
     async def get_data_connector_by_slug(
         self,
         user: base_models.APIUser,
         path: DataConnectorInProjectPath | DataConnectorPath,
-    ) -> models.DataConnector:
+    ) -> models.DataConnector | models.GlobalDataConnector:
         """Get one data connector from the database by slug.
 
         This will not return or find data connectors owned by projects.
@@ -196,30 +196,35 @@ class DataConnectorRepository:
     async def insert_data_connector(
         self,
         user: base_models.APIUser,
-        data_connector: models.UnsavedDataConnector,
+        data_connector: models.UnsavedDataConnector | models.UnsavedGlobalDataConnector,
         *,
         session: AsyncSession | None = None,
-    ) -> models.DataConnector:
+    ) -> models.DataConnector | models.GlobalDataConnector:
         """Insert a new data connector entry."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required.")
-        ns = await session.scalar(
-            select(ns_schemas.NamespaceORM).where(
-                ns_schemas.NamespaceORM.slug == data_connector.namespace.first.value.lower()
+        ns: ns_schemas.NamespaceORM | None = None
+        if isinstance(data_connector, models.UnsavedDataConnector):
+            ns = await session.scalar(
+                select(ns_schemas.NamespaceORM).where(
+                    ns_schemas.NamespaceORM.slug == data_connector.namespace.first.value.lower()
+                )
             )
-        )
-        if not ns:
-            raise errors.MissingResourceError(
-                message=f"The data connector cannot be created because the namespace {data_connector.namespace} does not exist."  # noqa E501
-            )
-        if not ns.group_id and not ns.user_id:
-            raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
+            if not ns:
+                raise errors.MissingResourceError(
+                    message=f"The data connector cannot be created because the namespace {data_connector.namespace} does not exist."  # noqa E501
+                )
+            if not ns.group_id and not ns.user_id:
+                raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
 
         if user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
         project: Project | None = None
-        if isinstance(data_connector.namespace, ProjectPath):
+        if ns is None:
+            # TODO
+            pass
+        elif isinstance(data_connector.namespace, ProjectPath):
             error_msg = (
                 f"The project with slug {data_connector.namespace} does not exist or you do not have access to it."
             )
@@ -249,20 +254,29 @@ class DataConnectorRepository:
             raise errors.ForbiddenError(message=error_msg)
 
         slug = data_connector.slug or base_models.Slug.from_name(data_connector.name).value
-
-        existing_slug_stmt = (
-            select(ns_schemas.EntitySlugORM)
-            .where(ns_schemas.EntitySlugORM.namespace_id == ns.id)
-            .where(ns_schemas.EntitySlugORM.slug == slug)
-            .where(ns_schemas.EntitySlugORM.data_connector_id.is_not(None))
-        )
-        if project:
-            existing_slug_stmt = existing_slug_stmt.where(ns_schemas.EntitySlugORM.project_id == project.id)
-        else:
-            existing_slug_stmt = existing_slug_stmt.where(ns_schemas.EntitySlugORM.project_id.is_(None))
-        existing_slug = await session.scalar(existing_slug_stmt)
-        if existing_slug is not None:
-            raise errors.ConflictError(message=f"An entity with the slug '{data_connector.path}' already exists.")
+        
+        if ns is not None and isinstance(data_connector, models.UnsavedDataConnector):
+            existing_slug_stmt = (
+                select(ns_schemas.EntitySlugORM)
+                .where(ns_schemas.EntitySlugORM.namespace_id == ns.id)
+                .where(ns_schemas.EntitySlugORM.slug == slug)
+                .where(ns_schemas.EntitySlugORM.data_connector_id.is_not(None))
+            )
+            if project:
+                existing_slug_stmt = existing_slug_stmt.where(ns_schemas.EntitySlugORM.project_id == project.id)
+            else:
+                existing_slug_stmt = existing_slug_stmt.where(ns_schemas.EntitySlugORM.project_id.is_(None))
+            existing_slug = await session.scalar(existing_slug_stmt)
+            if existing_slug is not None:
+                raise errors.ConflictError(message=f"An entity with the slug '{data_connector.path}' already exists.")
+        elif isinstance(data_connector, models.UnsavedGlobalDataConnector):
+            existing_global_dc_stmt = (
+                select(schemas.DataConnectorORM)
+                .where(schemas.DataConnectorORM.global_slug == slug)
+            )
+            existing_global_dc = await session.scalar(existing_global_dc_stmt)
+            if existing_global_dc is not None:
+                return existing_global_dc.dump()
 
         visibility_orm = (
             apispec.Visibility(data_connector.visibility)
@@ -280,19 +294,23 @@ class DataConnectorRepository:
             created_by_id=user.id,
             description=data_connector.description,
             keywords=data_connector.keywords,
+            global_slug=slug if isinstance(data_connector, models.UnsavedGlobalDataConnector) else None,
         )
-        data_connector_slug = ns_schemas.EntitySlugORM.create_data_connector_slug(
-            slug,
-            data_connector_id=data_connector_orm.id,
-            namespace_id=ns.id,
-            project_id=project.id if project else None,
-        )
+        if ns is not None:
+            data_connector_slug = ns_schemas.EntitySlugORM.create_data_connector_slug(
+                slug,
+                data_connector_id=data_connector_orm.id,
+                namespace_id=ns.id,
+                project_id=project.id if project else None,
+            )
 
         session.add(data_connector_orm)
-        session.add(data_connector_slug)
+        if ns is not None:
+            session.add(data_connector_slug)
         await session.flush()
         await session.refresh(data_connector_orm)
-        await session.refresh(data_connector_slug)
+        if ns is not None:
+            await session.refresh(data_connector_slug)
         if project:
             await session.refresh(data_connector_slug.project)
 
@@ -328,6 +346,8 @@ class DataConnectorRepository:
         if data_connector is None:
             raise errors.MissingResourceError(message=not_found_msg)
         old_data_connector = data_connector.dump()
+        if old_data_connector.namespace is None:
+            raise NotImplementedError("Update not supported yet.")
         old_data_connector_parent = old_data_connector.path.parent()
 
         required_scope = Scope.WRITE

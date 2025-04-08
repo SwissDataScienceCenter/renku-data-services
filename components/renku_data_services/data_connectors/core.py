@@ -78,6 +78,9 @@ def validate_unsaved_data_connector(
     keywords = [kw.root for kw in body.keywords] if body.keywords is not None else []
     storage = validate_unsaved_storage(body.storage, validator=validator)
 
+    if body.namespace is None:
+        raise NotImplementedError("Missing namespace not supported")
+
     slugs = body.namespace.split("/")
     path: NamespacePath | ProjectPath
     if len(slugs) == 1:
@@ -98,6 +101,32 @@ def validate_unsaved_data_connector(
         storage=storage,
         description=body.description,
         keywords=keywords,
+    )
+
+def validate_unsaved_global_data_connector(
+    body: apispec.GlobalDataConnectorPost, validator: RCloneValidator
+) -> models.UnsavedGlobalDataConnector:
+    """Validate an unsaved data connector."""
+
+    # TODO: we need to be sure the source_path is ="/" and target_path is "<slugified doi>"
+    storage = validate_unsaved_storage(body.storage, validator=validator)
+    if storage.storage_type != "doi":
+        raise errors.ValidationError(message="Only doi storage type is allowed for global data connectors")
+
+    # TODO: doi should be de-duplicated (E.G. 10.1221/zenodo.1234 is the same of doi:10.1221/zenodo.1234)
+    name = str(storage.configuration.get("doi"))
+    if not name:
+        raise errors.ValidationError(message="Missing doi in the storage configuration")
+    slug = base_models.Slug.from_name(name).value
+
+    return models.UnsavedGlobalDataConnector(
+        name=name,
+        slug=slug,
+        visibility=Visibility.PUBLIC,
+        created_by="",
+        storage=storage,
+        description=None,
+        keywords=[],
     )
 
 
@@ -126,7 +155,7 @@ def validate_storage_patch(
 
 
 def validate_data_connector_patch(
-    data_connector: models.DataConnector,
+    data_connector: models.DataConnector | models.GlobalDataConnector,
     patch: apispec.DataConnectorPatch,
     validator: RCloneValidator,
 ) -> models.DataConnectorPatch:
