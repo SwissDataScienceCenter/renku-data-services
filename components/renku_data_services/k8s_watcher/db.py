@@ -44,10 +44,10 @@ class APIObjectInCluster:
     @property
     def user_id(self) -> str:
         """Extract the user id from annotations."""
-        user_id = self.obj.metadata.labels["renku.io/safe-username"]
+        user_id = user_id_from_api_object(self.obj)
         if user_id is None:
             raise errors.ValidationError(message="Couldn't find user id on k8s object")
-        return cast(str, user_id)
+        return user_id
 
     @property
     def meta(self) -> K8sObjectMeta:
@@ -123,7 +123,7 @@ class K8sClient:
 
     async def patch(self, meta: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
         """Patch a k8s object."""
-        obj = await self.__get(meta)
+        obj = await self._get(meta)
         if not obj:
             raise errors.MissingResourceError(message=f"The k8s resource with metadata {meta} cannot be found.")
         patch_type = "json" if isinstance(patch, list) else None
@@ -132,18 +132,18 @@ class K8sClient:
 
     async def delete(self, meta: K8sObjectMeta) -> None:
         """Delete a k8s object."""
-        obj = await self.__get(meta)
+        obj = await self._get(meta)
         if not obj:
             return None
         with contextlib.suppress(kr8s.NotFoundError):
             await obj.obj.delete(propagation_policy="Foreground")
 
-    async def __get(self, meta: K8sObjectMeta) -> APIObjectInCluster | None:
+    async def _get(self, meta: K8sObjectMeta) -> APIObjectInCluster | None:
         return await anext(aiter(self.__list(meta.to_list_filter())), None)
 
     async def get(self, meta: K8sObjectMeta) -> K8sObject | None:
         """Get a specific k8s object, None is returned if the object does not exist."""
-        obj = await self.__get(meta)
+        obj = await self._get(meta)
         if not obj:
             return None
         return meta.with_manifest(obj.obj.to_dict())
@@ -187,7 +187,7 @@ class K8sDbCache:
         self.__session_maker = session_maker
 
     async def __get(self, meta: K8sObjectMeta, session: AsyncSession) -> K8sObjectORM | None:
-        obj_orm = await session.scalar(
+        stmt = (
             select(K8sObjectORM)
             .where(K8sObjectORM.name == meta.name)
             .where(K8sObjectORM.namespace == meta.namespace)
@@ -195,6 +195,7 @@ class K8sDbCache:
             .where(K8sObjectORM.kind == meta.kind)
             .where(K8sObjectORM.version == meta.version)
         )
+        obj_orm = await session.scalar(stmt)
         return obj_orm
 
     async def upsert(self, obj: K8sObject) -> None:
@@ -205,6 +206,7 @@ class K8sDbCache:
             obj_orm = await self.__get(obj.meta, session)
             if obj_orm is not None:
                 obj_orm.manifest = obj.manifest
+                await session.flush()
                 return
             obj_orm = K8sObjectORM(
                 name=obj.name,
@@ -216,6 +218,7 @@ class K8sDbCache:
                 user_id=obj.user_id,
             )
             session.add(obj_orm)
+            await session.flush()
             return
 
     async def delete(self, meta: K8sObjectMeta) -> None:
@@ -270,33 +273,33 @@ class CachedK8sClient(K8sClient):
 
     def __init__(self, clusters: dict[ClusterId, Cluster], cache: K8sDbCache, kinds_to_cache: list[str]) -> None:
         super().__init__(clusters)
-        self.__cache = cache
+        self.cache = cache
         self.__kinds_to_cache = kinds_to_cache
 
     async def create(self, obj: K8sObject) -> K8sObject:
         """Create the k8s object."""
         obj = await super().create(obj)
         if obj.meta.kind in self.__kinds_to_cache:
-            await self.__cache.upsert(obj)
+            await self.cache.upsert(obj)
         return obj
 
     async def patch(self, meta: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
         """Patch a k8s object."""
         obj = await super().patch(meta, patch)
         if meta.kind in self.__kinds_to_cache:
-            await self.__cache.upsert(obj)
+            await self.cache.upsert(obj)
         return obj
 
     async def delete(self, meta: K8sObjectMeta) -> None:
         """Delete a k8s object."""
         await super().delete(meta)
         if meta.kind in self.__kinds_to_cache:
-            await self.__cache.delete(meta)
+            await self.cache.delete(meta)
 
     async def get(self, meta: K8sObjectMeta) -> K8sObject | None:
         """Get a specific k8s object, None is returned if the object does not exist."""
         if meta.kind in self.__kinds_to_cache:
-            res = await self.__cache.get(meta)
+            res = await self.cache.get(meta)
         else:
             res = await super().get(meta)
         if res is None:
@@ -308,15 +311,14 @@ class CachedK8sClient(K8sClient):
 
         Note: only use this if you actually need to do k8s operations.
         """
-
-        res = await super().__get(meta)
+        res = await super()._get(meta)
         if res is None:
             return None
         return res
 
     async def list(self, filter: ListFilter) -> AsyncIterable[K8sObject]:
         """List all k8s objects."""
-        results = self.__cache.list(filter) if filter.kind in self.__kinds_to_cache else super().list(filter)
+        results = self.cache.list(filter) if filter.kind in self.__kinds_to_cache else super().list(filter)
         async for res in results:
             yield res
 
@@ -330,18 +332,25 @@ class K8sWatcher:
         self.__kinds = kinds
         self.__clusters = clusters
 
+    async def __watch_kind(self, kind: str, cluster: Cluster) -> None:
+        while True:
+            try:
+                watch = cluster.api.async_watch(kind=kind, namespace=cluster.namespace)
+                async for _, obj in watch:
+                    await self.__handler(APIObjectInCluster(obj, cluster.id))
+                    # yield so other tasks have a chance to run
+                    await asyncio.sleep(0)
+            except Exception:
+                # without sleeping, this can just hang the code as exceptions seem to bypass the async scheduler
+                await asyncio.sleep(1)
+                pass
+
     async def __run_single(self, cluster: Cluster) -> None:
         # The loops and error handling here will need some testing and love
-        while True:
-            for kind in self.__kinds:
-                try:
-                    watch = cluster.api.async_watch(kind=kind, namespace=cluster.namespace)
-                    async for _, obj in watch:
-                        await self.__handler(APIObjectInCluster(obj, cluster.id))
-                except Exception:  # nosec: B110
-                    pass
+        for kind in self.__kinds:
+            asyncio.create_task(self.__watch_kind(kind, cluster))
 
-    def start(self) -> None:
+    async def start(self) -> None:
         """Start the watcher."""
         if self.__tasks is None:
             self.__tasks = {}
@@ -358,9 +367,10 @@ class K8sWatcher:
             task.cancel()
             try:
                 async with asyncio.timeout(timeout.total_seconds()):
+                    # with contextlib.suppress(CancelledError):
                     await task
             except TimeoutError:
-                logger.error("timeout trying to cancel k8s watche task")
+                logger.error("timeout trying to cancel k8s watcher task")
                 continue
 
 
@@ -375,3 +385,14 @@ def k8s_object_handler(cache: K8sDbCache) -> EventHandler:
         await cache.upsert(obj.to_k8s_object())
 
     return handler
+
+
+def user_id_from_api_object(obj: APIObject) -> str:
+    """Get the user id from an api object."""
+    match obj.kind:
+        case "JupyterServer":
+            return cast(str, obj.metadata.labels["renku.io/userId"])
+        case "AmaltheaSession":
+            return cast(str, obj.metadata.labels["renku.io/safe-username"])
+        case _:
+            raise NotImplementedError(f"Can't get user id for object of kind {obj.kind}")
