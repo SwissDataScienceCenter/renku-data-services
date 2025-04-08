@@ -28,6 +28,8 @@ def test_user_dict():
         "lastName": "Ullrich",
         "_type": "User",
         "_kind": "fullentity",
+        "visibility": "public",
+        "_version_": -1,
     }
     assert user_tadej_pogacar.to_dict() == {
         "id": "hij-klm",
@@ -36,6 +38,8 @@ def test_user_dict():
         "lastName": "Pogačar",
         "_type": "User",
         "_kind": "fullentity",
+        "visibility": "public",
+        "_version_": -1,
     }
 
 
@@ -47,8 +51,10 @@ def test_read_user_dict():
         "lastName": "Ullrich",
         "_type": "User",
         "_kind": "fullentity",
+        "visibility": "public",
+        "_version_": -1,
     }
-    u = User.model_validate(u1)
+    u = User.from_dict(u1)
     assert u == user_jan_ullrich
 
 
@@ -60,11 +66,13 @@ def test_group_dict():
         "description": "A group consisting of a team",
         "_type": "Group",
         "_kind": "fullentity",
+        "visibility": "public",
+        "_version_": -1,
     }
 
 
 def test_read_group_dict():
-    g = Group.model_validate(
+    g = Group.from_dict(
         {
             "id": str(group_team.id),
             "name": "The Team",
@@ -72,6 +80,8 @@ def test_read_group_dict():
             "description": "A group consisting of a team",
             "_type": "Group",
             "_kind": "fullentity",
+            "visibility": "public",
+            "_version_": -1,
         }
     )
     assert g == group_team
@@ -84,15 +94,18 @@ def test_project_dict():
         "slug": "the-p1",
         "namespace": "janu",
         "visibility": "public",
+        "repositories": [],
+        "keywords": [],
         "createdBy": "abc-def",
         "creationDate": "2025-01-31T09:47:44Z",
         "_type": "Project",
         "_kind": "fullentity",
+        "_version_": -1,
     }
 
 
 def test_read_project_dict():
-    p = Project.model_validate(
+    p = Project.from_dict(
         {
             "id": str(project_ai_stuff.id),
             "name": "AI stuff",
@@ -103,6 +116,7 @@ def test_read_project_dict():
             "creationDate": "2025-01-31T09:47:44Z",
             "_type": "Project",
             "_kind": "fullentity",
+            "_version_": -1,
         }
     )
     assert p == project_ai_stuff

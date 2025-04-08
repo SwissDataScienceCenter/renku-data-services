@@ -102,7 +102,7 @@ class SearchUpdatesRepo:
     async def upsert(self, entity: Entity, started_at: datetime | None = None) -> ULID:
         """Add entity documents to the staging table.
 
-        If a user already exists, it is updated.
+        If an entity with same id already exists, it is updated.
         """
         started = started_at if started_at is not None else datetime.now()
         params = self.__make_params(entity, started)
