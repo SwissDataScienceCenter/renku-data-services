@@ -87,13 +87,12 @@ async def test_post_data_connector(sanic_client: SanicASGITestClient, regular_us
 
 
 @pytest.mark.asyncio
-async def test_post_global_data_connector(sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers, admin_headers) -> None:
+async def test_post_global_data_connector(
+    sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers, admin_headers
+) -> None:
     payload = {
         "storage": {
-            "configuration": {
-                "type": "doi",
-                "doi": "10.5281/zenodo.15174623"
-            },
+            "configuration": {"type": "doi", "doi": "10.5281/zenodo.15174623"},
             "source_path": "/",
             "target_path": "my/target",
         },
