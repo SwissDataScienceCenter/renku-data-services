@@ -673,6 +673,9 @@ class Authz:
                             authz_change.extend(db_repo.authz._add_user_namespace(res.namespace))
                     case AuthzOperation.create, ResourceType.data_connector if isinstance(result, DataConnector):
                         authz_change = db_repo.authz._add_data_connector(result)
+                    case AuthzOperation.create, ResourceType.data_connector if isinstance(result, GlobalDataConnector):
+                        # TODO: handle permissions for GlobalDC
+                        pass
                     case AuthzOperation.delete, ResourceType.data_connector if result is None:
                         # NOTE: This means that the dc does not exist in the first place so nothing was deleted
                         pass
