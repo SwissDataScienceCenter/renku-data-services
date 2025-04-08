@@ -246,12 +246,13 @@ class DataConnectorRepository:
         else:
             resource_type, resource_id = (ResourceType.user_namespace, ns.id)
 
-        has_permission = await self.authz.has_permission(user, resource_type, resource_id, Scope.WRITE)
-        if not has_permission:
-            error_msg = f"The data connector cannot be created because you do not have sufficient permissions with the namespace {data_connector.namespace}"  # noqa: E501
-            if isinstance(data_connector.namespace, ProjectPath):
-                error_msg = f"The data connector cannot be created because you do not have sufficient permissions with the project {data_connector.namespace}"  # noqa: E501
-            raise errors.ForbiddenError(message=error_msg)
+        if ns is not None:
+            has_permission = await self.authz.has_permission(user, resource_type, resource_id, Scope.WRITE)
+            if not has_permission:
+                error_msg = f"The data connector cannot be created because you do not have sufficient permissions with the namespace {data_connector.namespace}"  # noqa: E501
+                if isinstance(data_connector.namespace, ProjectPath):
+                    error_msg = f"The data connector cannot be created because you do not have sufficient permissions with the project {data_connector.namespace}"  # noqa: E501
+                raise errors.ForbiddenError(message=error_msg)
 
         slug = data_connector.slug or base_models.Slug.from_name(data_connector.name).value
         
