@@ -141,7 +141,10 @@ class DataConnectorRepository:
             result = await session.scalars(stmt)
             data_connectors_orms = result.all()
 
-        return [(dc.name, f"{dc.slug.namespace.slug}/{dc.slug.slug}" if dc.slug is not None else f"{dc.global_slug}") for dc in data_connectors_orms]
+        return [
+            (dc.name, f"{dc.slug.namespace.slug}/{dc.slug.slug}" if dc.slug is not None else f"{dc.global_slug}")
+            for dc in data_connectors_orms
+        ]
 
     async def get_data_connector_by_slug(
         self,
@@ -255,7 +258,7 @@ class DataConnectorRepository:
                 raise errors.ForbiddenError(message=error_msg)
 
         slug = data_connector.slug or base_models.Slug.from_name(data_connector.name).value
-        
+
         if ns is not None and isinstance(data_connector, models.UnsavedDataConnector):
             existing_slug_stmt = (
                 select(ns_schemas.EntitySlugORM)
@@ -271,9 +274,8 @@ class DataConnectorRepository:
             if existing_slug is not None:
                 raise errors.ConflictError(message=f"An entity with the slug '{data_connector.path}' already exists.")
         elif isinstance(data_connector, models.UnsavedGlobalDataConnector):
-            existing_global_dc_stmt = (
-                select(schemas.DataConnectorORM)
-                .where(schemas.DataConnectorORM.global_slug == slug)
+            existing_global_dc_stmt = select(schemas.DataConnectorORM).where(
+                schemas.DataConnectorORM.global_slug == slug
             )
             existing_global_dc = await session.scalar(existing_global_dc_stmt)
             if existing_global_dc is not None:

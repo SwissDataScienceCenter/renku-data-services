@@ -163,9 +163,7 @@ class DataConnectorMigrationTool:
             user=user, data_connector=unsaved_data_connector
         )
         if isinstance(data_connector, models.GlobalDataConnector):
-            raise errors.ProgrammingError(
-                message=f"Migration to global data connector should not happen."
-            )
+            raise errors.ProgrammingError(message=f"Migration to global data connector should not happen.")
         return data_connector
 
     async def get_storages_v2(self, requested_by: base_models.APIUser) -> list[storage_models.CloudStorage]:

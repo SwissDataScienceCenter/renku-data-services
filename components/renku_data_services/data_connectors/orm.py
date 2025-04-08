@@ -106,14 +106,14 @@ class DataConnectorORM(BaseORM):
                 name=self.name,
                 slug=self.global_slug,
                 visibility=self._dump_visibility(),
-                created_by=self.created_by_id, # TODO: should we use an admin id? Or drop it?
+                created_by=self.created_by_id,  # TODO: should we use an admin id? Or drop it?
                 creation_date=self.creation_date,
                 updated_at=self.updated_at,
                 storage=self._dump_storage(),
                 description=self.description,
                 keywords=self.keywords,
             )
-        
+
         elif self.slug is None:
             raise ValueError("Either the slug or the global slug must be set.")
 

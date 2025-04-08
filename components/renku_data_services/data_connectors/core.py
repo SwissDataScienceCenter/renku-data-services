@@ -103,6 +103,7 @@ def validate_unsaved_data_connector(
         keywords=keywords,
     )
 
+
 def validate_unsaved_global_data_connector(
     body: apispec.GlobalDataConnectorPost, validator: RCloneValidator
 ) -> models.UnsavedGlobalDataConnector:

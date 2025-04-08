@@ -106,7 +106,7 @@ class DataConnectorsBP(CustomBlueprint):
             )
 
         return "/data_connectors", ["POST"], _post
-    
+
     def post_global(self) -> BlueprintFactoryResponse:
         """Create a new global data connector."""
 
@@ -430,10 +430,12 @@ class DataConnectorsBP(CustomBlueprint):
         return "/data_connectors/<data_connector_id:ulid>/secrets", ["DELETE"], _delete_secrets
 
     @staticmethod
-    def _dump_data_connector(data_connector: models.DataConnector | models.GlobalDataConnector, validator: RCloneValidator) -> dict[str, Any]:
+    def _dump_data_connector(
+        data_connector: models.DataConnector | models.GlobalDataConnector, validator: RCloneValidator
+    ) -> dict[str, Any]:
         """Dumps a data connector for API responses."""
         storage = dump_storage_with_sensitive_fields(data_connector.storage, validator=validator)
-        if (data_connector.namespace is None):
+        if data_connector.namespace is None:
             return dict(
                 id=str(data_connector.id),
                 name=data_connector.name,

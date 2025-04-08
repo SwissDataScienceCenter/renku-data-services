@@ -77,6 +77,7 @@ class UnsavedDataConnector(BaseDataConnector):
         """The full path (i.e. sequence of slugs) for the data connector including group or user and/or project."""
         return self.namespace / DataConnectorSlug(self.slug)
 
+
 @dataclass(frozen=True, eq=True, kw_only=True)
 class GlobalDataConnector(BaseDataConnector):
     """Global data connector model."""
@@ -89,6 +90,7 @@ class GlobalDataConnector(BaseDataConnector):
     def etag(self) -> str:
         """Entity tag value for this data connector object."""
         return compute_etag_from_fields(self.updated_at)
+
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedGlobalDataConnector(BaseDataConnector):
