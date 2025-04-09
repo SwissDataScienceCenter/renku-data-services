@@ -329,6 +329,9 @@ class TestNotebooks(ClusterRequired):
         assert res.status_code == 201, res.text
         server_name = res.json["name"]
 
+        # TODO: make sure server listing doesn't depend on amalthea being fast enough updating the server
+        await asyncio.sleep(1)
+
         _, res = await sanic_client.get("/api/data/notebooks/servers", headers=authenticated_user_headers)
         assert res.status_code == 200, res.text
         assert "servers" in res.json

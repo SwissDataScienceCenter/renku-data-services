@@ -1,9 +1,8 @@
 """Base motebooks svc configuration."""
 
-import asyncio
 import os
 from dataclasses import dataclass, field
-from typing import Any, Optional, Protocol, Self, cast
+from typing import Any, Optional, Protocol, Self
 
 import kr8s
 
@@ -44,6 +43,30 @@ from renku_data_services.notebooks.constants import (
     JUPYTER_SESSION_VERSION,
 )
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
+
+
+def kr8s_async_api(
+    url: Optional[str] = None,
+    kubeconfig: Optional[str] = None,
+    serviceaccount: Optional[str] = None,
+    namespace: Optional[str] = None,
+    context: Optional[str] = None,
+) -> kr8s.asyncio.Api:
+    """Create an async api client from sync code.
+
+    Kr8s cannot return an AsyncAPI instance from sync code, and we can't easily make all our config code async,
+    so this method is a direct copy of the kr8s sync client code, just that it returns an async client.
+    """
+    ret = kr8s._async_utils.run_sync(kr8s.asyncio.api)(
+        url=url,
+        kubeconfig=kubeconfig,
+        serviceaccount=serviceaccount,
+        namespace=namespace,
+        context=context,
+        _asyncio=True,  # This is the only line that is different from kr8s code
+    )
+    assert isinstance(ret, kr8s.asyncio.Api)
+    return ret
 
 
 class CRCValidatorProto(Protocol):
@@ -115,7 +138,7 @@ class NotebooksConfig:
     git: _GitConfig
     k8s: _K8sConfig
     k8s_cached_client: CachedK8sClient
-    _kr8s_api: kr8s.Api
+    _kr8s_api: kr8s.asyncio.Api
     cloud_storage: _CloudStorage
     user_secrets: _UserSecrets
     crc_validator: CRCValidatorProto
@@ -141,7 +164,7 @@ class NotebooksConfig:
         dummy_stores = _parse_str_as_bool(os.environ.get("DUMMY_STORES", False))
         sessions_config: _SessionConfig
         git_config: _GitConfig
-        kr8s_api: kr8s.Api
+        kr8s_api: kr8s.asyncio.Api
         data_service_url = os.environ.get("NB_DATA_SERVICE_URL", "http://127.0.0.1:8000")
         server_options = _ServerOptionsConfig.from_env()
         crc_validator: CRCValidatorProto
@@ -163,8 +186,9 @@ class NotebooksConfig:
             git_provider_helper = GitProviderHelper(
                 data_service_url, f"http://{sessions_config.ingress.host}", git_config.url
             )
-            loop = asyncio.get_event_loop()
-            kr8s_api = cast(kr8s.Api, loop.run_until_complete(kr8s.asyncio.api()))
+            # NOTE: we need to get an async client as a sync client can't be used in an async way
+            # But all the config code is not async, so we need to drop into the running loop, if there is one
+            kr8s_api = kr8s_async_api()
 
         k8s_config = _K8sConfig.from_env()
         cluster_id = ClusterId("renkulab")

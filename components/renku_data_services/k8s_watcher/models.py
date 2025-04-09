@@ -13,17 +13,6 @@ ClusterId = NewType("ClusterId", str)
 class K8sObjectMeta:
     """Metadata about a k8s object."""
 
-    name: str
-    namespace: str
-    cluster: ClusterId
-    kind: str
-    version: str
-    user_id: str | None
-    endpoint: str
-    singular: str
-    plural: str
-    namespaced: bool
-
     def __init__(
         self,
         name: str,
@@ -35,7 +24,7 @@ class K8sObjectMeta:
         endpoint: str | None = None,
         singular: str | None = None,
         plural: str | None = None,
-        namespaced: bool | None = None,
+        namespaced: bool = True,
     ) -> None:
         self.name = name
         self.namespace = namespace
@@ -54,8 +43,6 @@ class K8sObjectMeta:
         if endpoint is None:
             endpoint = plural
         self.endpoint = endpoint
-        if namespaced is None:
-            namespaced = True
         self.namespaced = namespaced
 
     def with_manifest(self, manifest: dict[str, Any]) -> K8sObject:
@@ -80,11 +67,15 @@ class K8sObjectMeta:
             version=self.version,
         )
 
+    def __repr__(self) -> str:
+        return (
+            f"K8sObject(name={self.name}, namespace={self.namespace},cluster={self.cluster},"
+            f"version={self.version},kind={self.kind},user_id={self.user_id})"
+        )
+
 
 class K8sObject(K8sObjectMeta):
     """Represents an object in k8s."""
-
-    manifest: Box
 
     def __init__(
         self,
@@ -98,7 +89,7 @@ class K8sObject(K8sObjectMeta):
         endpoint: str | None = None,
         singular: str | None = None,
         plural: str | None = None,
-        namespaced: bool | None = None,
+        namespaced: bool = True,
     ) -> None:
         super().__init__(name, namespace, cluster, kind, version, user_id, endpoint, singular, plural, namespaced)
         self.manifest = manifest
@@ -118,6 +109,9 @@ class K8sObject(K8sObjectMeta):
             endpoint=self.endpoint,
             namespaced=self.namespaced,
         )
+
+    def __repr__(self) -> str:
+        return super().__repr__()
 
 
 @dataclass

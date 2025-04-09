@@ -99,10 +99,6 @@ class K8sClient(Generic[_SessionType]):
             return None
         server = self.server_type.model_validate(server.manifest)
 
-        # NOTE: only the user that the server belongs to can read it, without the line
-        # below anyone can request and read any one else's server
-        if server and server.metadata and server.metadata.labels.get(self.username_label) != safe_username:
-            return None
         return server
 
     async def get_server_logs(
@@ -124,8 +120,7 @@ class K8sClient(Generic[_SessionType]):
         logs: dict[str, str] = {}
         if result is None:
             return logs
-        pod = result.obj
-        assert isinstance(pod, Pod)
+        pod = Pod(resource=result.obj, namespace=result.meta.namespace, api=result.obj.api)
         containers = [container.name for container in pod.spec.containers + pod.spec.get("initContainers", [])]
         for container in containers:
             try:
@@ -143,19 +138,6 @@ class K8sClient(Generic[_SessionType]):
             else:
                 logs[container] = "\n".join(clogs)
         return logs
-
-    async def _get_secret(self, name: str) -> Secret | None:
-        """Get a specific secret."""
-        result = await self.cached_client.get_api_object(
-            K8sObjectMeta(
-                name=name, namespace=self.namespace, cluster=self.cluster, kind=Secret.kind, version=Secret.version
-            )
-        )
-        if result is None:
-            return None
-        secret = result.obj
-        assert isinstance(secret, Secret)
-        return secret
 
     async def create_server(self, manifest: _SessionType, safe_username: str) -> _SessionType:
         """Create a server."""
@@ -203,7 +185,7 @@ class K8sClient(Generic[_SessionType]):
         self, server_name: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> StatefulSet | None:
         """Patch a statefulset."""
-        sts = await self.cached_client.get_api_object(
+        result = await self.cached_client.get_api_object(
             K8sObjectMeta(
                 name=server_name,
                 namespace=self.namespace,
@@ -212,10 +194,10 @@ class K8sClient(Generic[_SessionType]):
                 version=StatefulSet.version,
             )
         )
-        if sts is None:
+        if result is None:
             return None
-        assert isinstance(sts, StatefulSet)
-        await sts.obj.patch(patch=patch)
+        sts = StatefulSet(resource=result.obj, namespace=result.meta.namespace, api=result.obj.api)
+        await sts.patch(patch=patch)
 
         return sts
 
@@ -234,7 +216,7 @@ class K8sClient(Generic[_SessionType]):
 
     async def patch_tokens(self, server_name: str, renku_tokens: RenkuTokens, gitlab_token: GitlabToken) -> None:
         """Patch the Renku and Gitlab access tokens used in a session."""
-        sts = await self.cached_client.get_api_object(
+        result = await self.cached_client.get_api_object(
             K8sObjectMeta(
                 name=server_name,
                 namespace=self.namespace,
@@ -243,9 +225,9 @@ class K8sClient(Generic[_SessionType]):
                 version=StatefulSet.version,
             )
         )
-        if sts is None:
+        if result is None:
             return None
-        assert isinstance(sts, StatefulSet)
+        sts = StatefulSet(resource=result.obj, namespace=result.meta.namespace, api=result.obj.api)
         patches = self._get_statefulset_token_patches(sts, renku_tokens)
         await sts.patch(patch=patches, type="json")
         await self.patch_image_pull_secret(server_name, gitlab_token)
@@ -264,8 +246,7 @@ class K8sClient(Generic[_SessionType]):
         )
         if result is None:
             return None
-        secret = result.obj
-        assert isinstance(secret, Secret)
+        secret = Secret(resource=result.obj, namespace=result.meta.namespace, api=result.obj.api)
 
         secret_data = secret.data.to_dict()
         old_docker_config = json.loads(base64.b64decode(secret_data[".dockerconfigjson"]).decode())
@@ -397,32 +378,24 @@ class K8sClient(Generic[_SessionType]):
             cluster=self.cluster,
             kind=Secret.kind,
             version=Secret.version,
-            manifest=Box(secret.to_dict()),
+            manifest=Box(sanitize_for_serialization(secret)),
         )
         try:
             result = await self.cached_client.create(secret_obj)
         except ServerError as err:
             if err.response and err.response.status_code == 409:
-                new_secret = await self.cached_client.get_api_object(secret_obj.meta)
-                if new_secret is None:
-                    raise errors.MissingResourceError(
-                        message="Couldn't get secret even though k8s said it already exists."
-                    )
-                new_secret_obj = cast(Secret, new_secret.obj)
-                # The secret exists and has not been cleaned up from another session.
-                # So we just patch it with the new data here.
-                annotations: Box | None = new_secret_obj.metadata.get("annotations")
-                labels: Box | None = new_secret_obj.metadata.get("labels")
+                annotations: Box | None = secret_obj.manifest.metadata.get("annotations")
+                labels: Box | None = secret_obj.manifest.metadata.get("labels")
                 patches = [
                     {
                         "op": "replace",
                         "path": "/data",
-                        "value": new_secret_obj.data.to_dict(),
+                        "value": secret.data or {},
                     },
                     {
                         "op": "replace",
                         "path": "/stringData",
-                        "value": new_secret_obj.raw.get("stringData") or {},
+                        "value": secret.string_data or {},
                     },
                     {
                         "op": "replace",
@@ -435,9 +408,15 @@ class K8sClient(Generic[_SessionType]):
                         "value": labels.to_dict() if labels is not None else {},
                     },
                 ]
-                await new_secret_obj.patch(patches, type="json")
-            raise
-        return V1Secret(metadata=result.manifest.metadata, data=result.manifest.data, type=result.manifest.get("type"))
+                result = await self.cached_client.patch(secret_obj, patches)
+            else:
+                raise
+        return V1Secret(
+            metadata=result.manifest.metadata,
+            data=result.manifest.get("data", {}),
+            string_data=result.manifest.get("stringData", {}),
+            type=result.manifest.get("type"),
+        )
 
     async def delete_secret(self, name: str) -> None:
         """Delete a secret."""
