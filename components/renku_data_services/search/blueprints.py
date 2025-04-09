@@ -32,7 +32,7 @@ class SearchBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         async def _post(request: Request, user: base_models.APIUser) -> HTTPResponse | JSONResponse:
-            reprovisioning = await self.search_reprovision.acquire_reprovsion()
+            reprovisioning = await self.search_reprovision.acquire_reprovision()
 
             request.app.add_task(
                 self.search_reprovision.init_reprovision(requested_by=user, reprovisioning=reprovisioning),

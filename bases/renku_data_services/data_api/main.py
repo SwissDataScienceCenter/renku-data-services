@@ -213,7 +213,7 @@ def create_app() -> Sanic:
         logger.info("starting events background job.")
         app.manager.manage("SendEvents", send_pending_events, {"app_name": app.name}, transient=True)
         app.manager.manage("UpdateSearch", update_search, {"app_name": app.name}, transient=True)
-        if hasattr(app.ctx, "solr_reindex") and app.ctx.solr_reindex:
+        if getattr(app.ctx, "solr_reindex", False):
             app.manager.manage("SolrReindex", solr_reindex, {"app_name": app.name}, transient=True)
 
     return app

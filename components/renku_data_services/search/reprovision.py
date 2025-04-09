@@ -1,5 +1,6 @@
 """Code for reprovisioning the search index."""
 
+from collections.abc import AsyncGenerator, Callable
 from datetime import datetime
 
 from sanic.log import logger
@@ -8,10 +9,13 @@ from renku_data_services.base_models.core import APIUser
 from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.message_queue.models import Reprovisioning
 from renku_data_services.namespace.db import GroupRepository
+from renku_data_services.namespace.models import Group
 from renku_data_services.project.db import ProjectRepository
+from renku_data_services.project.models import Project
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.solr.solr_client import DefaultSolrClient, SolrClientConfig
 from renku_data_services.users.db import UserRepo
+from renku_data_services.users.models import UserInfo
 
 
 class SearchReprovision:
@@ -38,7 +42,7 @@ class SearchReprovision:
         reprovision = await self._reprovisioning_repo.start()
         await self.init_reprovision(requested_by, reprovision)
 
-    async def acquire_reprovsion(self) -> Reprovisioning:
+    async def acquire_reprovision(self) -> Reprovisioning:
         """Acquire a reprovisioning slot. Throws if already taken."""
         return await self._reprovisioning_repo.start()
 
@@ -70,26 +74,18 @@ class SearchReprovision:
             await self._search_updates_repo.clear_all()
             async with DefaultSolrClient(self._solr_config) as client:
                 await client.delete("_type:*")
+
             counter = 0
             all_users = self._user_repo.get_all_users(requested_by=requested_by)
-            async for user_entity in all_users:
-                await self._search_updates_repo.insert(user_entity, started)
-                counter += 1
-                log_counter(counter)
+            counter = await self.__update_entities(all_users, "user", started, counter, log_counter)
             logger.info("Done adding user entities to search_updates table.")
 
             all_groups = self._group_repo.get_all_groups(requested_by=requested_by)
-            async for group_entity in all_groups:
-                await self._search_updates_repo.insert(group_entity, started)
-                counter += 1
-                log_counter(counter)
+            counter = await self.__update_entities(all_groups, "group", started, counter, log_counter)
             logger.info("Done adding group entities to search_updates table.")
 
             all_projects = self._project_repo.get_all_projects(requested_by=requested_by)
-            async for project_entity in all_projects:
-                await self._search_updates_repo.insert(project_entity, started)
-                counter += 1
-                log_counter(counter)
+            counter = await self.__update_entities(all_projects, "project", started, counter, log_counter)
             logger.info("Done adding project entities to search_updates table.")
 
             logger.info(f"Inserted {counter} entities into the staging table.")
@@ -99,3 +95,24 @@ class SearchReprovision:
             ## TODO error handling. skip or fail?
         finally:
             await self._reprovisioning_repo.stop()
+
+    async def __update_entities(
+        self,
+        iter: AsyncGenerator[Project | Group | UserInfo, None],
+        name: str,
+        started: datetime,
+        counter: int,
+        on_count: Callable[[int], None],
+    ) -> int:
+        try:
+            async for entity in iter:
+                try:
+                    await self._search_updates_repo.insert(entity, started)
+                    counter += 1
+                    on_count(counter)
+                except Exception as e:
+                    logger.error(f"Error updating search entry for {name} {entity.id}: {e}", exc_info=e)
+        except Exception as e:
+            logger.error(f"Error updating search entry for {name}s: {e}", exc_info=e)
+
+        return counter
