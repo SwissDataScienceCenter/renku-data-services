@@ -474,7 +474,7 @@ class SessionRepository:
                 environment_id=environment_id,
                 resource_class_id=launcher.resource_class_id,
                 disk_storage=launcher.disk_storage,
-                env_variables=launcher.env_variables,
+                env_variables=launcher.env_variables.to_dict() if launcher.env_variables else None,
                 created_by_id=user.id,
                 creation_date=datetime.now(UTC).replace(microsecond=0),
             )
@@ -522,7 +522,7 @@ class SessionRepository:
                 environment_id=environment_id,
                 resource_class_id=launcher.resource_class_id,
                 disk_storage=launcher.disk_storage,
-                env_variables=launcher.env_variables,
+                env_variables=launcher.env_variables.to_dict() if launcher.env_variables else None,
                 created_by_id=user.id,
                 creation_date=datetime.now(UTC).replace(microsecond=0),
             )
@@ -601,8 +601,8 @@ class SessionRepository:
                 launcher.disk_storage = patch.disk_storage
             elif patch.disk_storage is RESET:
                 launcher.disk_storage = None
-            if isinstance(patch.env_variables, dict):
-                launcher.env_variables = patch.env_variables
+            if isinstance(patch.env_variables, models.EnvVars):
+                launcher.env_variables = patch.env_variables.to_dict()
             elif patch.env_variables is RESET:
                 launcher.env_variables = None
 

@@ -1,6 +1,5 @@
 """Models for sessions."""
 
-import re
 import typing
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -12,6 +11,8 @@ from ulid import ULID
 from renku_data_services import errors
 from renku_data_services.base_models.core import ResetType
 from renku_data_services.session import crs
+
+from .constants import ENV_VARIABLE_NAME_MATCHER, ENV_VARIABLE_REGEX
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -144,39 +145,27 @@ class EnvironmentPatch:
     environment_image_source: EnvironmentImageSource | None = None
 
 
-def validate_env_variables(env_variables: dict[str, typing.Any] | None) -> list[str] | None:
+def validate_env_variables(env_variables: dict[str, str | None] | None) -> list[str] | None:
     """Validate environment variables."""
 
     if env_variables is None:
         return None
 
     # TODO: Verify that these limits are compatible with k8s
-    MAX_NUMBER_ENV_VARIABLES = 32
-    MAX_LENGTH_ENV_VARIABLES_NAME = 256
-    MAX_LENGTH_ENV_VARIABLES_VALUE = 1000
-
-    # see https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap03.html#tag_03_231
-    variable_regex = r"^[a-zA-Z_][a-zA-Z0-9_]*$"
-    variable_name_matcher = re.compile(variable_regex)
+    MAX_NUMBER_ENV_VARIABLES: typing.Final[int] = 32
+    MAX_LENGTH_ENV_VARIABLES_NAME: typing.Final[int] = 256
+    MAX_LENGTH_ENV_VARIABLES_VALUE: typing.Final[int] = 1000
 
     errors = []
     if len(env_variables) > MAX_NUMBER_ENV_VARIABLES:
         errors.append(f"Cannot have more than {MAX_NUMBER_ENV_VARIABLES} env variables.")
-    has_non_str_value = False
-    for value in env_variables.values():
-        if value is not None and not isinstance(value, str):
-            errors.append("Env variable values must be strings.")
-            has_non_str_value = True
-            break
-    if has_non_str_value:
-        return errors
     for name, value in env_variables.items():
         if len(name) > MAX_LENGTH_ENV_VARIABLES_NAME:
             errors.append(f"Env variable name '{name}' is longer than {MAX_LENGTH_ENV_VARIABLES_NAME} characters.")
         if name.upper().startswith("RENKU"):
             errors.append(f"Env variable name '{name}' should not start with 'RENKU'.")
-        if variable_name_matcher.match(name) is None:
-            errors.append(f"Env variable name '{name}' must match the regex '{variable_regex}'.")
+        if ENV_VARIABLE_NAME_MATCHER.match(name) is None:
+            errors.append(f"Env variable name '{name}' must match the regex '{ENV_VARIABLE_REGEX}'.")
         if value and len(value) > MAX_LENGTH_ENV_VARIABLES_VALUE:
             errors.append(
                 f"Env variable value for '{name}' is longer than {MAX_LENGTH_ENV_VARIABLES_VALUE} characters."
@@ -188,6 +177,61 @@ def validate_env_variables(env_variables: dict[str, typing.Any] | None) -> list[
     return None
 
 
+# TODO: Verify that these limits are compatible with k8s
+MAX_NUMBER_ENV_VARIABLES: typing.Final[int] = 32
+MAX_LENGTH_ENV_VARIABLES_NAME: typing.Final[int] = 256
+MAX_LENGTH_ENV_VARIABLES_VALUE: typing.Final[int] = 1000
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class EnvVar:
+    """Model for an environment variable."""
+
+    name: str
+    value: str | None = None
+
+    def __post_init__(self) -> None:
+        error_msgs: list[str] = []
+        if len(self.name) > MAX_LENGTH_ENV_VARIABLES_NAME:
+            error_msgs.append(
+                f"Env variable name '{self.name}' is longer than {MAX_LENGTH_ENV_VARIABLES_NAME} characters."
+            )
+        if self.name.upper().startswith("RENKU"):
+            error_msgs.append(f"Env variable name '{self.name}' should not start with 'RENKU'.")
+        if ENV_VARIABLE_NAME_MATCHER.match(self.name) is None:
+            error_msgs.append(f"Env variable name '{self.name}' must match the regex '{ENV_VARIABLE_REGEX}'.")
+        if self.value and len(self.value) > MAX_LENGTH_ENV_VARIABLES_VALUE:
+            error_msgs.append(
+                f"Env variable value for '{self.name}' is longer than {MAX_LENGTH_ENV_VARIABLES_VALUE} characters."
+            )
+
+        if error_msgs:
+            if len(error_msgs) == 1:
+                raise errors.ValidationError(message=error_msgs[0])
+            raise errors.ValidationError(message="\n".join(error_msgs))
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class EnvVars:
+    """Model for a dictionary of environment variables."""
+
+    var_list: list[EnvVar] = []
+
+    @classmethod
+    def from_dict(cls, env_dict: dict[str, str | None]) -> "EnvVars":
+        """Create an EnvVars instance from a dictionary."""
+        var_list = [EnvVar(name=name, value=value) for name, value in env_dict.items()]
+        return cls(var_list=var_list)
+
+    def __post_init__(self) -> None:
+        if len(self.var_list) > MAX_NUMBER_ENV_VARIABLES:
+            raise errors.ValidationError(message=f"Cannot have more than {MAX_NUMBER_ENV_VARIABLES} env variables.")
+
+    def to_dict(self) -> dict[str, str | None]:
+        """Convert to dict."""
+        return {var.name: var.value for var in self.var_list}
+
+
 @dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedSessionLauncher:
     """Session launcher model that has not been persisted in the DB."""
@@ -197,16 +241,9 @@ class UnsavedSessionLauncher:
     description: str | None
     resource_class_id: int | None
     disk_storage: int | None
-    env_variables: dict[str, str | None] | None
+    env_variables: EnvVars | None
     environment: str | UnsavedEnvironment | UnsavedBuildParameters
     """When a string is passed for the environment it should be the ID of an existing environment."""
-
-    def __post_init__(self) -> None:
-        env_variable_errors = validate_env_variables(self.env_variables)
-        if env_variable_errors:
-            if len(env_variable_errors) == 1:
-                raise errors.ValidationError(message=env_variable_errors[0])
-            raise errors.ValidationError(message="\n".join(env_variable_errors))
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -230,7 +267,7 @@ class SessionLauncherPatch:
     environment: str | EnvironmentPatch | UnsavedEnvironment | UnsavedBuildParameters | None = None
     resource_class_id: int | None | ResetType = None
     disk_storage: int | None | ResetType = None
-    env_variables: dict[str, str | None] | None | ResetType = None
+    env_variables: EnvVars | None | ResetType = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

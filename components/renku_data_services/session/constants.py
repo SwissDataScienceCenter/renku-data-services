@@ -1,6 +1,8 @@
 """Constants for sessions environments, session launchers and container image builds."""
 
+import re
 from datetime import timedelta
+from re import Pattern
 from typing import Final
 
 BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX: Final[str] = "harbor.dev.renku.ch/renku-builds/"
@@ -26,3 +28,12 @@ BUILD_RUN_DEFAULT_RETENTION_AFTER_SUCCEEDED: Final[timedelta] = timedelta(minute
 
 BUILD_RUN_DEFAULT_TIMEOUT: Final[timedelta] = timedelta(hours=1)
 """The default timeout for build after which they get cancelled."""
+
+# see https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap03.html#tag_03_235
+ENV_VARIABLE_REGEX: Final[str] = r"^[a-zA-Z_][a-zA-Z0-9_]*$"
+"""The regex to validate environment variable names.
+see Name at https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap03.html#tag_03_235
+"""
+
+ENV_VARIABLE_NAME_MATCHER: Final[Pattern[str]] = re.compile(ENV_VARIABLE_REGEX)
+"""The compiled regex to validate environment variable names."""
