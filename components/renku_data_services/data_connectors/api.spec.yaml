@@ -855,7 +855,7 @@ components:
       description: Information about inaccessible data connector links
       type: object
       properties:
-        count: 
+        count:
           type: integer
           minimum: 0
           description: The number of data links the user does not have access to
