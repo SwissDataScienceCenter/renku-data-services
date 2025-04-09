@@ -934,17 +934,17 @@ def _old_data_connector_slug_queries(
             # NOTE: Changing the order of the statements here can lead to unexpected
             # consequences or cause combinations that we want to exclude to be added (i.e. new/new/new).
             stmt = select(schemas.DataConnectorORM)
-            if i & 0b001 == 0b001:
+            if i & 0b001 == 0b001:  # noqa: SIM108
                 stmt = stmt.where(_dc_new_ns_is(path.first))
             else:
                 stmt = stmt.where(_dc_old_ns_is(path.first))
 
-            if i & 0b010 == 0b010:
+            if i & 0b010 == 0b010:  # noqa: SIM108
                 stmt = stmt.where(_dc_new_prj_is(path.second))
             else:
                 stmt = stmt.where(_dc_old_prj_is(path.second))
 
-            if i & 0b100 == 0b100:
+            if i & 0b100 == 0b100:  # noqa: SIM108
                 stmt = stmt.where(_dc_new_slug_is(path.third))
             else:
                 stmt = stmt.where(_dc_old_slug_is(path.third))
