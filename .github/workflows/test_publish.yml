@@ -89,7 +89,7 @@ jobs:
         with:
           runCmd: |
             make style_checks
-            poetry self add poetry-polylith-plugin # Not sure why it's needed here
+            pre-commit install
             poetry run pre-commit run --all-files --show-diff-on-failure --hook-stage manual
           push: never
           skipContainerUserIdUpdate: false
