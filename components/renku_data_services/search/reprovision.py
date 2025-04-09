@@ -1,7 +1,5 @@
 """Code for reprovisioning the search index."""
 
-import asyncio
-from asyncio import Task
 from datetime import datetime
 
 from sanic.log import logger
@@ -34,17 +32,6 @@ class SearchReprovision:
         self._user_repo = user_repo
         self._group_repo = group_repo
         self._project_repo = project_repo
-        self._reprovision_tasks = set()
-
-    async def reprovision_task(self, requested_by: APIUser) -> Task:
-        """Creates a task that initiates reprovisioning."""
-        print(">>>>> starting task please")
-        task = asyncio.create_task(self.run_reprovision(requested_by), name="search-reprovision")
-        self._reprovision_tasks.add(task)
-        task.add_done_callback(self._reprovision_tasks.discard)
-        print(f">>>>> task should be running: {task}")
-        await asyncio.sleep(0)
-        return task
 
     async def run_reprovision(self, requested_by: APIUser) -> None:
         """Start a reprovisioning if not already running."""
@@ -64,7 +51,14 @@ class SearchReprovision:
         return await self._reprovisioning_repo.get_active_reprovisioning()
 
     async def init_reprovision(self, requested_by: APIUser, reprovisioning: Reprovisioning) -> None:
-        """Initiates reprovisioning by inserting documents into the staging table."""
+        """Initiates reprovisioning by inserting documents into the staging table.
+
+        Deletes all renku entities in the solr core. Then it goes
+        through all entities in the postgres datatabase and inserts
+        solr documents into the `search_update` table. A background
+        process is querying this table and will eventually update
+        solr with these entries.
+        """
 
         def log_counter(c: int) -> None:
             if c % 50 == 0:
