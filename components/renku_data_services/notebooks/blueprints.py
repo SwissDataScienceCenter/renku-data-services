@@ -398,7 +398,9 @@ class NotebooksNewBP(CustomBlueprint):
             ]
             if launcher.env_variables:
                 env.extend(
-                    SessionEnvItem(name=key, value=value) for key, value in launcher.env_variables.items() if value
+                    SessionEnvItem(name=env_var.name, value=env_var.value)
+                    for env_var in launcher.env_variables.var_list
+                    if env_var.value
                 )
 
             manifest = AmaltheaSessionV1Alpha1(
