@@ -1,15 +1,26 @@
 """Defines the entity documents used with Solr."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Annotated, Any, Self
+from typing import Annotated, Any, Literal, Self
 
-from pydantic import AliasChoices, BaseModel, BeforeValidator, Field, errors, field_serializer, field_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    BeforeValidator,
+    Field,
+    errors,
+    field_serializer,
+    field_validator,
+)
 from ulid import ULID
 
 from renku_data_services.authz.models import Visibility
-from renku_data_services.base_models.core import Slug
+from renku_data_services.base_models.core import ResourceType, Slug
+from renku_data_services.solr.entity_schema import Fields
 from renku_data_services.solr.solr_client import DocVersion, DocVersions, ResponseBody
 
 
@@ -21,12 +32,30 @@ def _str_to_slug(value: Any) -> Slug:
     raise errors.ValidationError(message="converting to slug in solr documents was not successful")
 
 
+def _str_to_visibility_public(value: Any) -> Literal[Visibility.PUBLIC]:
+    if isinstance(value, str) and value.lower() == "public":
+        return Visibility.PUBLIC
+    else:
+        raise ValueError(f"Expected visibility public, got: {value}")
+
+
 class EntityType(StrEnum):
     """The different type of entities available from search."""
 
     project = "Project"
     user = "User"
     group = "Group"
+
+    @property
+    def to_resource_type(self) -> ResourceType:
+        """Map this entity-type to the core resource type."""
+        match self:
+            case EntityType.project:
+                return ResourceType.project
+            case EntityType.user:
+                return ResourceType.user
+            case EntityType.group:
+                return ResourceType.group
 
 
 class EntityDoc(BaseModel, ABC, frozen=True):
@@ -36,7 +65,7 @@ class EntityDoc(BaseModel, ABC, frozen=True):
     version: DocVersion = Field(
         serialization_alias="_version_",
         validation_alias=AliasChoices("version", "_version_"),
-        default=DocVersions.not_exists(),
+        default_factory=DocVersions.not_exists,
     )
     score: float | None = None
 
@@ -48,7 +77,7 @@ class EntityDoc(BaseModel, ABC, frozen=True):
 
     def to_dict(self) -> dict[str, Any]:
         """Return the dict of this group."""
-        dict = self.model_dump(by_alias=True, exclude_defaults=True)
+        dict = self.model_dump(by_alias=True, exclude_none=True, mode="json")
         # note: _kind=fullentity is for being backwards compatible, it might not be needed in the future
         dict.update(_type=self.entity_type.value, _kind="fullentity")
         return dict
@@ -64,6 +93,7 @@ class User(EntityDoc, frozen=True):
     id: str
     firstName: str | None = None
     lastName: str | None = None
+    visibility: Annotated[Literal[Visibility.PUBLIC], BeforeValidator(_str_to_visibility_public)] = Visibility.PUBLIC
 
     @property
     def entity_type(self) -> EntityType:
@@ -75,7 +105,7 @@ class User(EntityDoc, frozen=True):
         return namespace.value
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "User":
+    def from_dict(cls, d: dict[str, Any]) -> User:
         """Create a User from a dictionary."""
         return User.model_validate(d)
 
@@ -86,6 +116,7 @@ class Group(EntityDoc, frozen=True):
     id: ULID
     name: str
     description: str | None = None
+    visibility: Annotated[Literal[Visibility.PUBLIC], BeforeValidator(_str_to_visibility_public)] = Visibility.PUBLIC
 
     @property
     def entity_type(self) -> EntityType:
@@ -101,7 +132,7 @@ class Group(EntityDoc, frozen=True):
         return namespace.value
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Group":
+    def from_dict(cls, d: dict[str, Any]) -> Group:
         """Create a Group from a dictionary."""
         return Group.model_validate(d)
 
@@ -152,6 +183,26 @@ class Project(EntityDoc, frozen=True):
         return v.replace(tzinfo=UTC)
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Project":
+    def from_dict(cls, d: dict[str, Any]) -> Project:
         """Create a Project from a dictionary."""
         return Project.model_validate(d)
+
+
+class EntityDocReader:
+    """Reads dicts into one of the entity document classes."""
+
+    @classmethod
+    def from_dict(cls, doc: dict[str, Any]) -> User | Project | Group | None:
+        """Reads dicts into one of the entity document classes."""
+        dt = doc.get(Fields.entity_type)
+        if dt is None:
+            return None
+        else:
+            discriminator = EntityType[dt.lower()]
+            match discriminator:
+                case EntityType.project:
+                    return Project.from_dict(doc)
+                case EntityType.user:
+                    return User.from_dict(doc)
+                case EntityType.group:
+                    return Group.from_dict(doc)

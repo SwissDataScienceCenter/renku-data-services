@@ -36,8 +36,13 @@ class Fields:
     keywords: Final[FieldName] = FieldName("keywords")
     namespace: Final[FieldName] = FieldName("namespace")
     content_all: Final[FieldName] = FieldName("content_all")
+    deleted: Final[FieldName] = FieldName("deleted")
     # virtual score field
     score: Final[FieldName] = FieldName("score")
+
+    # sub query fields
+    creator_details: Final[FieldName] = FieldName("creatorDetails")
+    namespace_details: Final[FieldName] = FieldName("namespaceDetails")
 
 
 class Analyzers:
@@ -70,6 +75,7 @@ class FieldTypes:
 
     id: Final[FieldType] = FieldType.id(TypeName("SearchId")).make_doc_value()
     string: Final[FieldType] = FieldType.str(TypeName("SearchString")).make_doc_value()
+    boolean: Final[FieldType] = FieldType.boolean(TypeName("SearchBool"))
     text: Final[FieldType] = (
         FieldType.text(TypeName("SearchText"))
         .with_index_analyzer(Analyzers.text_index)
@@ -120,5 +126,10 @@ initial_entity_schema: Final[list[SchemaCommand]] = [
 
 
 all_migrations: Final[list[SchemaMigration]] = [
-    SchemaMigration(version=9, commands=initial_entity_schema, requires_reindex=True)
+    SchemaMigration(version=9, commands=initial_entity_schema, requires_reindex=True),
+    SchemaMigration(
+        version=10,
+        commands=[AddCommand(FieldTypes.boolean), AddCommand(Field.of(Fields.deleted, FieldTypes.boolean))],
+        requires_reindex=False,
+    ),
 ]

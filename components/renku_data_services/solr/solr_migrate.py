@@ -236,12 +236,14 @@ class SchemaMigrator:
         remain.sort(key=lambda m: m.version)
         schema = await client.get_schema()
         state = MigrationState(solr_schema=schema, doc=initialDoc, skipped_migrations=0)
-        [finalState := await self.__applyMigration(client, state, x) for x in remain]
+        for x in remain:
+            state = await self.__applyMigration(client, state, x)
+
         return MigrateResult(
             start_version=initialDoc.current_schema_version_l,
             end_version=remain[-1].version,
             migrations_run=len(remain),
-            migrations_skipped=finalState.skipped_migrations,
+            migrations_skipped=state.skipped_migrations,
             requires_reindex=any(x.requires_reindex for x in remain),
         )
 
