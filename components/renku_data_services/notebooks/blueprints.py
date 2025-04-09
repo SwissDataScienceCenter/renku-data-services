@@ -528,6 +528,7 @@ class NotebooksNewBP(CustomBlueprint):
                 internal_gitlab_user,
                 rp_repo=self.rp_repo,
                 project_repo=self.project_repo,
+                session_repo=self.session_repo,
             )
             return json(new_session.as_apispec().model_dump(exclude_none=True, mode="json"))
 

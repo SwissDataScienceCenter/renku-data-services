@@ -436,6 +436,7 @@ async def patch_session(
     internal_gitlab_user: APIUser,
     rp_repo: ResourcePoolRepository,
     project_repo: ProjectRepository,
+    session_repo,
 ) -> AmaltheaSessionV1Alpha1:
     """Patch an Amalthea session."""
     session = await nb_config.k8s_v2_client.get_server(session_id, user.id)
@@ -529,8 +530,16 @@ async def patch_session(
                 updated_secrets.append(ImagePullSecret(name=image_pull_secret_name, adopt=True))
                 patch.spec.imagePullSecrets = updated_secrets
 
+    launcher_id = session.metadata.annotations.get("renku.io/launcher_id")
+    if launcher_id:
+        patch.spec.env = make_env_vars()
+
     patch_serialized = patch.to_rfc7386()
     if len(patch_serialized) == 0:
         return session
 
     return await nb_config.k8s_v2_client.patch_server(session_id, user.id, patch_serialized)
+
+
+def make_env_vars() -> None:
+    pass

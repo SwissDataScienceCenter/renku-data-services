@@ -279,6 +279,8 @@ class AmaltheaSessionV1Alpha1SpecSessionPatch(BaseCRD):
     shmSize: int | str | None = None
     storage: Storage | None = None
     imagePullPolicy: ImagePullPolicy | None = None
+    env: 
+
 
 
 class AmaltheaSessionV1Alpha1SpecPatch(BaseCRD):
