@@ -87,14 +87,17 @@ async def test_post_data_connector(sanic_client: SanicASGITestClient, regular_us
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "doi", ["10.5281/zenodo.15174623", "doi:10.5281/zenodo.15174623", "https://doi.org/10.5281/zenodo.15174623"]
+)
 async def test_post_global_data_connector(
-    sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers, admin_headers
+    sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers, admin_headers, doi
 ) -> None:
     payload = {
         "storage": {
-            "configuration": {"type": "doi", "doi": "10.5281/zenodo.15174623"},
-            "source_path": "/",
-            "target_path": "my/target",
+            "configuration": {"type": "doi", "doi": doi},
+            "source_path": "",
+            "target_path": "",
         },
     }
 
@@ -103,13 +106,13 @@ async def test_post_global_data_connector(
     assert response.status_code == 201, response.text
     assert response.json is not None
     data_connector = response.json
-    assert data_connector.get("name") == "10.5281/zenodo.15174623"
-    assert data_connector.get("slug") == "10.5281-zenodo.15174623"
+    assert data_connector.get("name") == "doi:10.5281/zenodo.15174623"
+    assert data_connector.get("slug") == "doi-10.5281-zenodo.15174623"
     assert data_connector.get("storage") is not None
     storage = data_connector["storage"]
     assert storage.get("storage_type") == "doi"
     assert storage.get("source_path") == "/"
-    assert storage.get("target_path") == "my/target"
+    assert storage.get("target_path") == "doi-10.5281-zenodo.15174623"
     assert storage.get("readonly") is True
     assert data_connector.get("visibility") == "public"
     assert data_connector.get("description") is None
@@ -121,6 +124,7 @@ async def test_post_global_data_connector(
     assert response.json is not None
     assert response.json.get("id") == data_connector["id"]
 
+    # TODO: enable this part of the test once there is an API endpoint for it
     # # Check that we can retrieve the data connector by slug
     # _, response = await sanic_client.get(
     #     f"/api/data/namespaces/{data_connector['namespace']}/data_connectors/{data_connector['slug']}",

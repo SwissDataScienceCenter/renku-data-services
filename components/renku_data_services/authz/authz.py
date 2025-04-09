@@ -674,8 +674,7 @@ class Authz:
                     case AuthzOperation.create, ResourceType.data_connector if isinstance(result, DataConnector):
                         authz_change = db_repo.authz._add_data_connector(result)
                     case AuthzOperation.create, ResourceType.data_connector if isinstance(result, GlobalDataConnector):
-                        # TODO: handle permissions for GlobalDC
-                        pass
+                        authz_change = db_repo.authz._add_global_data_connector(result)
                     case AuthzOperation.delete, ResourceType.data_connector if result is None:
                         # NOTE: This means that the dc does not exist in the first place so nothing was deleted
                         pass
@@ -1590,6 +1589,42 @@ class Authz:
             subject=SubjectReference(object=self._platform),
         )
         relationships = [owner, data_connector_in_platform]
+        if data_connector.visibility == Visibility.PUBLIC:
+            all_users_are_viewers = Relationship(
+                resource=data_connector_res,
+                relation=_Relation.public_viewer.value,
+                subject=all_users,
+            )
+            all_anon_users_are_viewers = Relationship(
+                resource=data_connector_res,
+                relation=_Relation.public_viewer.value,
+                subject=all_anon_users,
+            )
+            relationships.extend([all_users_are_viewers, all_anon_users_are_viewers])
+        apply = WriteRelationshipsRequest(
+            updates=[
+                RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=i) for i in relationships
+            ]
+        )
+        undo = WriteRelationshipsRequest(
+            updates=[
+                RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=i) for i in relationships
+            ]
+        )
+        return _AuthzChange(apply=apply, undo=undo)
+
+    def _add_global_data_connector(self, data_connector: GlobalDataConnector) -> _AuthzChange:
+        """Create the new global data connector and associated resources and relations in the DB."""
+        data_connector_res = _AuthzConverter.data_connector(data_connector.id)
+
+        all_users = SubjectReference(object=_AuthzConverter.all_users())
+        all_anon_users = SubjectReference(object=_AuthzConverter.anonymous_users())
+        data_connector_in_platform = Relationship(
+            resource=data_connector_res,
+            relation=_Relation.data_connector_platform,
+            subject=SubjectReference(object=self._platform),
+        )
+        relationships = [data_connector_in_platform]
         if data_connector.visibility == Visibility.PUBLIC:
             all_users_are_viewers = Relationship(
                 resource=data_connector_res,

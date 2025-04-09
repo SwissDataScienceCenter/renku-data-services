@@ -2,6 +2,7 @@
 
 from dataclasses import asdict
 from typing import Any
+from urllib.parse import urlparse
 
 from pydantic import ValidationError as PydanticValidationError
 
@@ -109,16 +110,26 @@ def validate_unsaved_global_data_connector(
 ) -> models.UnsavedGlobalDataConnector:
     """Validate an unsaved data connector."""
 
-    # TODO: we need to be sure the source_path is ="/" and target_path is "<slugified doi>"
     storage = validate_unsaved_storage(body.storage, validator=validator)
     if storage.storage_type != "doi":
         raise errors.ValidationError(message="Only doi storage type is allowed for global data connectors")
+    if not storage.readonly:
+        raise errors.ValidationError(message="Global data connectors must be read-only")
 
-    # TODO: doi should be de-duplicated (E.G. 10.1221/zenodo.1234 is the same of doi:10.1221/zenodo.1234)
-    name = str(storage.configuration.get("doi"))
-    if not name:
+    doi = _validate_doi(str(storage.configuration.get("doi")))
+    if not doi:
         raise errors.ValidationError(message="Missing doi in the storage configuration")
+    name = f"doi:{doi}"
     slug = base_models.Slug.from_name(name).value
+
+    # Override source_path and target_path
+    storage = models.CloudStorageCore(
+        storage_type=storage.storage_type,
+        configuration=storage.configuration,
+        source_path="/",
+        target_path=slug,
+        readonly=storage.readonly,
+    )
 
     return models.UnsavedGlobalDataConnector(
         name=name,
@@ -209,3 +220,15 @@ def validate_data_connector_secrets_patch(
         )
         for secret in put.root
     ]
+
+
+def _validate_doi(doi: str) -> str:
+    """Validate a DOI."""
+    doi = doi.lower()
+    if doi.startswith("doi:"):
+        return doi[len("doi:") :]
+    parsed = urlparse(doi)
+    if parsed.hostname is not None and parsed.hostname.endswith("doi.org"):
+        path = parsed.path
+        return path[1:] if path.startswith("/") else path
+    return doi
