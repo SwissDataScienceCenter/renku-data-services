@@ -113,7 +113,7 @@ class DataConnectorsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_authenticated
         @validate(json=apispec.GlobalDataConnectorPost)
-        async def _post(
+        async def _post_global(
             _: Request, user: base_models.APIUser, body: apispec.GlobalDataConnectorPost, validator: RCloneValidator
         ) -> JSONResponse:
             data_connector = validate_unsaved_global_data_connector(body, validator=validator)
@@ -124,7 +124,7 @@ class DataConnectorsBP(CustomBlueprint):
                 status=201,
             )
 
-        return "/data_connectors/global", ["POST"], _post
+        return "/data_connectors/global", ["POST"], _post_global
 
     def get_one(self) -> BlueprintFactoryResponse:
         """Get a specific data connector."""
