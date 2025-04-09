@@ -18,7 +18,7 @@ repos:
       - id: check-toml
       - id: debug-statements
       - id: end-of-file-fixer
-        exclude: 'components/renku_data_services/message_queue/(avro_models|schemas)'
+        exclude: '(components/renku_data_services/message_queue/(avro_models|schemas))|(.ambr)'
       - id: mixed-line-ending
       - id: trailing-whitespace
-        exclude: 'components/renku_data_services/message_queue/(avro_models|schemas)'
+        exclude: '(components/renku_data_services/message_queue/(avro_models|schemas))|(.ambr)'
