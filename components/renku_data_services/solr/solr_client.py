@@ -481,6 +481,10 @@ class RawDocument(SolrDocument):
 
     data: dict[str, Any]
 
+    def set_version(self, v: DocVersion) -> None:
+        """Set the given document version."""
+        self.data.update(_version_=v)
+
     @property
     def id(self) -> str:
         """Return the document id."""
@@ -489,6 +493,13 @@ class RawDocument(SolrDocument):
     def to_dict(self) -> dict[str, Any]:
         """Return the data dictionary."""
         return self.data
+
+    @classmethod
+    def create(cls, payload: dict[str, Any], version: DocVersion) -> RawDocument:
+        """Create new RawDocument with the given version."""
+        d = RawDocument(payload)
+        d.set_version(version)
+        return d
 
 
 class ResponseBody(BaseModel):

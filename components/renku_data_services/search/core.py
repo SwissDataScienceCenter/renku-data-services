@@ -1,5 +1,6 @@
 """Business logic for searching."""
 
+import asyncio
 from datetime import UTC, datetime
 
 from authzed.api.v1 import AsyncClient as AuthzClient
@@ -25,6 +26,7 @@ from renku_data_services.solr.entity_documents import EntityDocReader, Group, Pr
 from renku_data_services.solr.entity_schema import Fields
 from renku_data_services.solr.solr_client import (
     DefaultSolrClient,
+    DocVersions,
     FacetTerms,
     RawDocument,
     SolrClient,
@@ -45,10 +47,11 @@ async def update_solr(search_updates_repo: SearchUpdatesRepo, solr_client: SolrC
 
         ids = [e.id for e in entries]
         try:
-            docs: list[SolrDocument] = [RawDocument(e.payload) for e in entries]
+            docs: list[SolrDocument] = [RawDocument.create(e.payload, DocVersions.off()) for e in entries]
             result = await solr_client.upsert(docs)
             if result == "VersionConflict":
                 await search_updates_repo.mark_reset(ids)
+                await asyncio.sleep(1)
             else:
                 counter = counter + len(entries)
                 await search_updates_repo.mark_processed(ids)
