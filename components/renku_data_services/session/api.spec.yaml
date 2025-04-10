@@ -915,14 +915,10 @@ components:
       example: "succeeded"
     EnvVariables:
       description: Environment variables for the session pod
-      type: object
-      properties:
-        env_vars:
-          type: array
-          maxItems: 32
-          default: []
-          items:
-            $ref: "#/components/schemas/EnvVar"
+      type: array
+      maxItems: 32
+      items:
+        $ref: "#/components/schemas/EnvVar"
     EnvVar:
       description: An environment variable for the session pod
       type: object

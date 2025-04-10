@@ -1349,7 +1349,7 @@ async def test_project_copy_creates_new_custom_environment_instance(
         },
         resource_class_id=resource_pool["classes"][0]["id"],
         disk_storage=42,
-        env_variables={"KEY_NUMBER_1": "a value"},
+        env_variables=[{"name": "KEY_NUMBER_1", "value": "a value"}],
     )
 
     await asyncio.sleep(1)

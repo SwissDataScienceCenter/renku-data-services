@@ -11,7 +11,7 @@ from syrupy.filters import props
 from renku_data_services import errors
 from renku_data_services.app_config.config import Config
 from renku_data_services.crc.apispec import ResourcePool
-from renku_data_services.session.models import EnvVariables
+from renku_data_services.session.models import EnvVar
 from renku_data_services.users.models import UserInfo
 
 
@@ -398,8 +398,8 @@ def test_env_variable_validation():
         "RENKULAB_THING": "another value",
     }
     try:
-        EnvVariables.from_dict(renku_name_env_variables)
-        assert "EnvVariables should have rejected ones starting with 'renku'"
+        EnvVar.from_dict(renku_name_env_variables)
+        assert False  # should not reach this point
     except errors.ValidationError as e:
         assert e.message == "Env variable name 'RENKU_KEY_NUMBER_1' should not start with 'RENKU'."
 
@@ -408,7 +408,7 @@ def test_env_variable_validation():
         "thing=bar": "another value",
     }
     try:
-        EnvVariables.from_dict(non_posix_name_env_variables)
+        EnvVar.from_dict(non_posix_name_env_variables)
     except errors.ValidationError as e:
         assert e.message == "Env variable name '1foo' must match the regex '^[a-zA-Z_][a-zA-Z0-9_]*$'."
 
@@ -425,7 +425,7 @@ async def test_post_session_launcher(sanic_client, admin_headers, create_project
         "description": "A session launcher.",
         "resource_class_id": resource_pool["classes"][0]["id"],
         "disk_storage": 2,
-        "env_variables": {"env_vars": [{"name": "KEY_NUMBER_1", "value": "a value"}]},
+        "env_variables": [{"name": "KEY_NUMBER_1", "value": "a value"}],
         "environment": {
             "container_image": "some_image:some_tag",
             "name": "custom_name",
@@ -449,7 +449,7 @@ async def test_post_session_launcher(sanic_client, admin_headers, create_project
     assert environment.get("id") is not None
     assert res.json.get("resource_class_id") == resource_pool["classes"][0]["id"]
     assert res.json.get("disk_storage") == 2
-    assert res.json.get("env_variables") == {"env_vars": [{"name": "KEY_NUMBER_1", "value": "a value"}]}
+    assert res.json.get("env_variables") == [{"name": "KEY_NUMBER_1", "value": "a value"}]
 
 
 @pytest.mark.asyncio
@@ -584,7 +584,7 @@ async def test_patch_session_launcher(
         "description": "An updated session launcher.",
         "resource_class_id": resource_pool["classes"][1]["id"],
         "disk_storage": 3,
-        "env_variables": {"env_vars": [{"name": "KEY_NUMBER_2", "value": "another value"}]},
+        "env_variables": [{"name": "KEY_NUMBER_2", "value": "another value"}],
     }
     _, res = await sanic_client.patch(
         f"/api/data/session_launchers/{res.json['id']}", headers=user_headers, json=patch_payload
@@ -595,7 +595,7 @@ async def test_patch_session_launcher(
     assert res.json.get("description") == patch_payload["description"]
     assert res.json.get("resource_class_id") == patch_payload["resource_class_id"]
     assert res.json.get("disk_storage") == 3
-    assert res.json.get("env_variables") == {"env_vars": [{"name": "KEY_NUMBER_2", "value": "another value"}]}
+    assert res.json.get("env_variables") == [{"name": "KEY_NUMBER_2", "value": "another value"}]
 
 
 @pytest.mark.asyncio
@@ -971,9 +971,7 @@ async def test_patch_session_launcher_invalid_env_variables(
 
     launcher_id = res.json["id"]
     # Should not be able use env variables that start with 'renku'
-    patch_payload = {
-        "env_variables": {"env_vars": [{"name": "renkustuff_1", "value": "a value"}]},
-    }
+    patch_payload = {"env_variables": [{"name": "renkustuff_1", "value": "a value"}]}
 
     _, res = await sanic_client.patch(
         f"/api/data/session_launchers/{launcher_id}", headers=user_headers, json=patch_payload
@@ -1000,7 +998,7 @@ async def test_patch_session_launcher_reset_fields(
         "description": "A session launcher.",
         "resource_class_id": resource_pool["classes"][0]["id"],
         "disk_storage": 2,
-        "env_variables": {"env_vars": [{"name": "KEY_NUMBER_1", "value": "a value"}]},
+        "env_variables": [{"name": "KEY_NUMBER_1", "value": "a value"}],
         "environment": {
             "container_image": "some_image:some_tag",
             "name": "custom_name",
@@ -1021,7 +1019,7 @@ async def test_patch_session_launcher_reset_fields(
     assert environment.get("id") is not None
     assert res.json.get("resource_class_id") == resource_pool["classes"][0]["id"]
     assert res.json.get("disk_storage") == 2
-    assert res.json.get("env_variables") == {"env_vars": [{"name": "KEY_NUMBER_1", "value": "a value"}]}
+    assert res.json.get("env_variables") == [{"name": "KEY_NUMBER_1", "value": "a value"}]
 
     patch_payload = {"resource_class_id": None, "disk_storage": None, "env_variables": None}
     _, res = await sanic_client.patch(
@@ -1046,7 +1044,7 @@ async def test_patch_session_launcher_keeps_unset_values(
         description="A session launcher.",
         resource_class_id=resource_pool["classes"][0]["id"],
         disk_storage=42,
-        env_variables={"env_vars": [{"name": "KEY_NUMBER_1", "value": "a value"}]},
+        env_variables=[{"name": "KEY_NUMBER_1", "value": "a value"}],
         environment={
             "container_image": "some_image:some_tag",
             "environment_kind": "CUSTOM",
@@ -1066,7 +1064,7 @@ async def test_patch_session_launcher_keeps_unset_values(
     assert response.json.get("description") == "A session launcher."
     assert response.json.get("resource_class_id") == resource_pool["classes"][0]["id"]
     assert response.json.get("disk_storage") == 42
-    assert response.json.get("env_variables") == {"env_vars": [{"name": "KEY_NUMBER_1", "value": "a value"}]}
+    assert response.json.get("env_variables") == [{"name": "KEY_NUMBER_1", "value": "a value"}]
     environment = response.json.get("environment", {})
     assert environment.get("container_image") == "some_image:some_tag"
     assert environment.get("environment_kind") == "CUSTOM"
