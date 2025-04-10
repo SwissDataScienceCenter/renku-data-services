@@ -47,7 +47,7 @@
         'exclusive': False,
         'help': '''
           AWS Secret Access Key (password).
-
+          
           Leave blank for anonymous access or runtime credentials.
         ''',
         'name': 'secret_access_key',
@@ -209,7 +209,7 @@
         'exclusive': False,
         'help': '''
           AWS Secret Access Key (password).
-
+          
           Leave blank for anonymous access or runtime credentials.
         ''',
         'name': 'secret_access_key',
@@ -259,7 +259,7 @@
           'exclusive': False,
           'help': '''
             Auth server URL.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'auth_url',
@@ -275,7 +275,7 @@
           'exclusive': False,
           'help': '''
             Token server url.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'token_url',
@@ -303,24 +303,24 @@
           'exclusive': False,
           'help': '''
             Additional time per GiB to wait after a failed complete upload to see if it appears.
-
+            
             Sometimes Amazon Drive gives an error when a file has been fully
             uploaded but the file appears anyway after a little while.  This
             happens sometimes for files over 1 GiB in size and nearly every time for
             files bigger than 10 GiB. This parameter controls the time rclone waits
             for the file to appear.
-
+            
             The default value for this parameter is 3 minutes per GiB, so by
             default it will wait 3 minutes for every GiB uploaded to see if the
             file appears.
-
+            
             You can disable this feature by setting it to 0. This may cause
             conflict errors as rclone retries the failed upload but the file will
             most likely appear correctly eventually.
-
+            
             These values were determined empirically by observing lots of uploads
             of big files for a range of file sizes.
-
+            
             Upload with the "-v" flag to see more info about what rclone is doing
             in this situation.
           ''',
@@ -337,12 +337,12 @@
           'exclusive': False,
           'help': '''
             Files >= this size will be downloaded via their tempLink.
-
+            
             Files this size or more will be downloaded via their "tempLink". This
             is to work around a problem with Amazon Drive which blocks downloads
             of files bigger than about 10 GiB. The default for this is 9 GiB which
             shouldn't need to be changed.
-
+            
             To download files above this threshold, rclone requests a "tempLink"
             which downloads the file through a temporary URL directly from the
             underlying S3 storage.
@@ -360,7 +360,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -383,14 +383,14 @@
           'exclusive': False,
           'help': '''
             Azure Storage Account Name.
-
+            
             Set this to the Azure Storage Account Name in use.
-
+            
             Leave blank to use SAS URL or Emulator, otherwise it needs to be set.
-
+            
             If this is blank and if env_auth is set it will be read from the
             environment variable `AZURE_STORAGE_ACCOUNT_NAME` if possible.
-
+  
           ''',
           'name': 'account',
           'provider': '',
@@ -405,7 +405,7 @@
           'exclusive': False,
           'help': '''
             Read credentials from runtime (environment variables, CLI or MSI).
-
+            
             See the [authentication docs](/azureblob#authentication) for full info.
           ''',
           'name': 'env_auth',
@@ -421,7 +421,7 @@
           'exclusive': False,
           'help': '''
             Storage Account Shared Key.
-
+            
             Leave blank to use SAS URL or Emulator.
           ''',
           'name': 'key',
@@ -437,7 +437,7 @@
           'exclusive': False,
           'help': '''
             SAS URL for container level access only.
-
+            
             Leave blank if using account/key or Emulator.
           ''',
           'name': 'sas_url',
@@ -453,12 +453,12 @@
           'exclusive': False,
           'help': '''
             ID of the service principal's tenant. Also called its directory ID.
-
+            
             Set this if using
             - Service principal with client secret
             - Service principal with certificate
             - User with username and password
-
+  
           ''',
           'name': 'tenant',
           'provider': '',
@@ -473,12 +473,12 @@
           'exclusive': False,
           'help': '''
             The ID of the client in use.
-
+            
             Set this if using
             - Service principal with client secret
             - Service principal with certificate
             - User with username and password
-
+  
           ''',
           'name': 'client_id',
           'provider': '',
@@ -493,10 +493,10 @@
           'exclusive': False,
           'help': '''
             One of the service principal's client secrets
-
+            
             Set this if using
             - Service principal with client secret
-
+  
           ''',
           'name': 'client_secret',
           'provider': '',
@@ -511,10 +511,10 @@
           'exclusive': False,
           'help': '''
             Path to a PEM or PKCS12 certificate file including the private key.
-
+            
             Set this if using
             - Service principal with certificate
-
+  
           ''',
           'name': 'client_certificate_path',
           'provider': '',
@@ -529,12 +529,12 @@
           'exclusive': False,
           'help': '''
             Password for the certificate file (optional).
-
+            
             Optionally set this if using
             - Service principal with certificate
-
+            
             And the certificate has a password.
-
+  
           ''',
           'name': 'client_certificate_password',
           'provider': '',
@@ -549,14 +549,14 @@
           'exclusive': False,
           'help': '''
             Send the certificate chain when using certificate auth.
-
+            
             Specifies whether an authentication request will include an x5c header
             to support subject name / issuer based authentication. When set to
             true, authentication requests include the x5c header.
-
+            
             Optionally set this if using
             - Service principal with certificate
-
+  
           ''',
           'name': 'client_send_certificate_chain',
           'provider': '',
@@ -571,10 +571,10 @@
           'exclusive': False,
           'help': '''
             User name (usually an email address)
-
+            
             Set this if using
             - User with username and password
-
+  
           ''',
           'name': 'username',
           'provider': '',
@@ -589,10 +589,10 @@
           'exclusive': False,
           'help': '''
             The user's password
-
+            
             Set this if using
             - User with username and password
-
+  
           ''',
           'name': 'password',
           'provider': '',
@@ -607,20 +607,20 @@
           'exclusive': False,
           'help': '''
             Path to file containing credentials for use with a service principal.
-
+            
             Leave blank normally. Needed only if you want to use a service principal instead of interactive login.
-
+            
                 $ az ad sp create-for-rbac --name "<name>" \
                   --role "Storage Blob Data Owner" \
                   --scopes "/subscriptions/<subscription>/resourceGroups/<resource-group>/providers/Microsoft.Storage/storageAccounts/<storage-account>/blobServices/default/containers/<container>" \
                   > azure-principal.json
-
+            
             See ["Create an Azure service principal"](https://docs.microsoft.com/en-us/cli/azure/create-an-azure-service-principal-azure-cli) and ["Assign an Azure role for access to blob data"](https://docs.microsoft.com/en-us/azure/storage/common/storage-auth-aad-rbac-cli) pages for more details.
-
+            
             It may be more convenient to put the credentials directly into the
             rclone config file under the `client_id`, `tenant` and `client_secret`
             keys instead of setting `service_principal_file`.
-
+  
           ''',
           'name': 'service_principal_file',
           'provider': '',
@@ -635,10 +635,10 @@
           'exclusive': False,
           'help': '''
             Use a managed service identity to authenticate (only works in Azure).
-
+            
             When true, use a [managed service identity](https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/)
             to authenticate to Azure Storage instead of a SAS token or account key.
-
+            
             If the VM(SS) on which this program is running has a system-assigned identity, it will
             be used by default. If the resource has no system-assigned but exactly one user-assigned identity,
             the user-assigned identity will be used by default. If the resource has multiple user-assigned
@@ -658,7 +658,7 @@
           'exclusive': False,
           'help': '''
             Object ID of the user-assigned MSI to use, if any.
-
+            
             Leave blank if msi_client_id or msi_mi_res_id specified.
           ''',
           'name': 'msi_object_id',
@@ -674,7 +674,7 @@
           'exclusive': False,
           'help': '''
             Object ID of the user-assigned MSI to use, if any.
-
+            
             Leave blank if msi_object_id or msi_mi_res_id specified.
           ''',
           'name': 'msi_client_id',
@@ -690,7 +690,7 @@
           'exclusive': False,
           'help': '''
             Azure resource ID of the user-assigned MSI to use, if any.
-
+            
             Leave blank if msi_client_id or msi_object_id specified.
           ''',
           'name': 'msi_mi_res_id',
@@ -706,7 +706,7 @@
           'exclusive': False,
           'help': '''
             Uses local storage emulator if provided as 'true'.
-
+            
             Leave blank if using real azure storage endpoint.
           ''',
           'name': 'use_emulator',
@@ -722,7 +722,7 @@
           'exclusive': False,
           'help': '''
             Endpoint for the service.
-
+            
             Leave blank normally.
           ''',
           'name': 'endpoint',
@@ -750,7 +750,7 @@
           'exclusive': False,
           'help': '''
             Upload chunk size.
-
+            
             Note that this is stored in memory and there may be up to
             "--transfers" * "--azureblob-upload-concurrency" chunks stored at once
             in memory.
@@ -768,18 +768,18 @@
           'exclusive': False,
           'help': '''
             Concurrency for multipart uploads.
-
+            
             This is the number of chunks of the same file that are uploaded
             concurrently.
-
+            
             If you are uploading small numbers of large files over high-speed
             links and these uploads do not fully utilize your bandwidth, then
             increasing this may help to speed up the transfers.
-
+            
             In tests, upload speed increases almost linearly with upload
             concurrency. For example to fill a gigabit pipe it may be necessary to
             raise this to 64. Note that this will use more memory.
-
+            
             Note that chunks are stored in memory and there may be up to
             "--transfers" * "--azureblob-upload-concurrency" chunks stored at once
             in memory.
@@ -797,7 +797,7 @@
           'exclusive': False,
           'help': '''
             Size of blob list.
-
+            
             This sets the number of blobs requested in each listing chunk. Default
             is the maximum, 5000. "List blobs" requests are permitted 2 minutes
             per megabyte to complete. If an operation is taking longer than 2
@@ -819,11 +819,11 @@
           'exclusive': False,
           'help': '''
             Access tier of blob: hot, cool or archive.
-
+            
             Archived blobs can be restored by setting access tier to hot or
             cool. Leave blank if you intend to use default access tier, which is
             set at account level
-
+            
             If there is no "access tier" specified, rclone doesn't apply any tier.
             rclone performs "Set Tier" operation on blobs while uploading, if objects
             are not modified, specifying "access tier" to new one will have no effect.
@@ -844,19 +844,19 @@
           'exclusive': False,
           'help': '''
             Delete archive tier blobs before overwriting.
-
+            
             Archive tier blobs cannot be updated. So without this flag, if you
             attempt to update an archive tier blob, then rclone will produce the
             error:
-
+            
                 can't update archive tier blob without --azureblob-archive-tier-delete
-
+            
             With this flag set then before rclone attempts to overwrite an archive
             tier blob, it will delete the existing blob before uploading its
             replacement.  This has the potential for data loss if the upload fails
             (unlike updating a normal blob) and also may cost more since deleting
             archive tier blobs early may be chargable.
-
+  
           ''',
           'name': 'archive_tier_delete',
           'provider': '',
@@ -871,7 +871,7 @@
           'exclusive': False,
           'help': '''
             Don't store MD5 checksum with object metadata.
-
+            
             Normally rclone will calculate the MD5 checksum of the input before
             uploading it so it can add it to metadata on the object. This is great
             for data integrity checking but can cause long delays for large files
@@ -890,7 +890,7 @@
           'exclusive': False,
           'help': '''
             How often internal memory buffer pools will be flushed.
-
+            
             Uploads which requires additional buffers (f.e multipart) will use memory pool for allocations.
             This option controls how often unused buffers will be removed from the pool.
           ''',
@@ -919,7 +919,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -967,13 +967,13 @@
           'exclusive': False,
           'help': '''
             Upload an empty object with a trailing slash when a new directory is created
-
+            
             Empty folders are unsupported for bucket based remotes, this option
             creates an empty object ending with "/", to persist the folder.
-
+            
             This object also has the metadata "hdi_isfolder = true" to conform to
             the Microsoft standard.
-
+             
           ''',
           'name': 'directory_markers',
           'provider': '',
@@ -988,10 +988,10 @@
           'exclusive': False,
           'help': '''
             If set, don't attempt to check the container exists or create it.
-
+            
             This can be useful when trying to minimise the number of transactions
             rclone does if you know the container exists already.
-
+  
           ''',
           'name': 'no_check_container',
           'provider': '',
@@ -1049,7 +1049,7 @@
           'exclusive': False,
           'help': '''
             Endpoint for the service.
-
+            
             Leave blank normally.
           ''',
           'name': 'endpoint',
@@ -1065,14 +1065,14 @@
           'exclusive': False,
           'help': '''
             A flag string for X-Bz-Test-Mode header for debugging.
-
+            
             This is for debugging purposes only. Setting it to one of the strings
             below will cause b2 to return specific errors:
-
+            
               * "fail_some_uploads"
               * "expire_some_account_authorization_tokens"
               * "force_cap_exceeded"
-
+            
             These will be set in the "X-Bz-Test-Mode" header which is documented
             in the [b2 integrations checklist](https://www.backblaze.com/b2/docs/integration_checklist.html).
           ''',
@@ -1089,7 +1089,7 @@
           'exclusive': False,
           'help': '''
             Include old versions in directory listings.
-
+            
             Note that when using this no file write operations are permitted,
             so you can't upload files or delete them.
           ''',
@@ -1106,7 +1106,7 @@
           'exclusive': False,
           'help': '''
             Show file versions as they were at the specified time.
-
+            
             Note that when using this no file write operations are permitted,
             so you can't upload files or delete them.
           ''',
@@ -1135,9 +1135,9 @@
           'exclusive': False,
           'help': '''
             Cutoff for switching to chunked upload.
-
+            
             Files above this size will be uploaded in chunks of "--b2-chunk-size".
-
+            
             This value should be set no larger than 4.657 GiB (== 5 GB).
           ''',
           'name': 'upload_cutoff',
@@ -1153,10 +1153,10 @@
           'exclusive': False,
           'help': '''
             Cutoff for switching to multipart copy.
-
+            
             Any files larger than this that need to be server-side copied will be
             copied in chunks of this size.
-
+            
             The minimum is 0 and the maximum is 4.6 GiB.
           ''',
           'name': 'copy_cutoff',
@@ -1172,12 +1172,12 @@
           'exclusive': False,
           'help': '''
             Upload chunk size.
-
+            
             When uploading large files, chunk the file into this size.
-
+            
             Must fit in memory. These chunks are buffered in memory and there
             might a maximum of "--transfers" chunks in progress at once.
-
+            
             5,000,000 Bytes is the minimum size.
           ''',
           'name': 'chunk_size',
@@ -1193,7 +1193,7 @@
           'exclusive': False,
           'help': '''
             Disable checksums for large (> upload cutoff) files.
-
+            
             Normally rclone will calculate the SHA1 checksum of the input before
             uploading it so it can add it to metadata on the object. This is great
             for data integrity checking but can cause long delays for large files
@@ -1212,18 +1212,18 @@
           'exclusive': False,
           'help': '''
             Custom endpoint for downloads.
-
+            
             This is usually set to a Cloudflare CDN URL as Backblaze offers
             free egress for data downloaded through the Cloudflare network.
             Rclone works with private buckets by sending an "Authorization" header.
             If the custom endpoint rewrites the requests for authentication,
             e.g., in Cloudflare Workers, this header needs to be handled properly.
             Leave blank if you want to use the endpoint provided by Backblaze.
-
+            
             The URL provided here SHOULD have the protocol and SHOULD NOT have
             a trailing slash or specify the /file/bucket subpath as rclone will
             request files with "{download_url}/file/{bucket_name}/{path}".
-
+            
             Example:
             > https://mysubdomain.mydomain.tld
             (No trailing "/", "file" or "bucket")
@@ -1241,7 +1241,7 @@
           'exclusive': False,
           'help': '''
             Time before the authorization token will expire in s or suffix ms|s|m|h|d.
-
+            
             The duration before the download authorization token will expire.
             The minimum value is 1 second. The maximum value is one week.
           ''',
@@ -1286,7 +1286,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -1321,7 +1321,7 @@
           'exclusive': False,
           'help': '''
             Auth server URL.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'auth_url',
@@ -1337,7 +1337,7 @@
           'exclusive': False,
           'help': '''
             Token server url.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'token_url',
@@ -1365,9 +1365,9 @@
           'exclusive': False,
           'help': '''
             Box App config.json location
-
+            
             Leave blank normally.
-
+            
             Leading `~` will be expanded in the file name as will environment variables such as `${RCLONE_CONFIG_DIR}`.
           ''',
           'name': 'box_config_file',
@@ -1383,7 +1383,7 @@
           'exclusive': False,
           'help': '''
             Box App Primary Access Token
-
+            
             Leave blank normally.
           ''',
           'name': 'access_token',
@@ -1471,7 +1471,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -1506,7 +1506,7 @@
           'exclusive': False,
           'help': '''
             Auth server URL.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'auth_url',
@@ -1522,7 +1522,7 @@
           'exclusive': False,
           'help': '''
             Token server url.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'token_url',
@@ -1588,10 +1588,10 @@
           'help': '''
             ID of the root folder.
             Leave blank normally.
-
+            
             Fill in to access "Computers" folders (see docs), or for rclone to use
             a non root folder as its starting point.
-
+  
           ''',
           'name': 'root_folder_id',
           'provider': '',
@@ -1606,10 +1606,10 @@
           'exclusive': False,
           'help': '''
             Service Account Credentials JSON file path.
-
+            
             Leave blank normally.
             Needed only if you want use SA instead of interactive login.
-
+            
             Leading `~` will be expanded in the file name as will environment variables such as `${RCLONE_CONFIG_DIR}`.
           ''',
           'name': 'service_account_file',
@@ -1625,7 +1625,7 @@
           'exclusive': False,
           'help': '''
             Service Account Credentials JSON blob.
-
+            
             Leave blank normally.
             Needed only if you want use SA instead of interactive login.
           ''',
@@ -1666,7 +1666,7 @@
           'exclusive': False,
           'help': '''
             Send files to the trash instead of deleting permanently.
-
+            
             Defaults to true, namely sending files to the trash.
             Use `--drive-use-trash=false` to delete files permanently instead.
           ''',
@@ -1683,10 +1683,10 @@
           'exclusive': False,
           'help': '''
             Server side copy contents of shortcuts instead of the shortcut.
-
+            
             When doing server side copies, normally rclone will copy shortcuts as
             shortcuts.
-
+            
             If this flag is used then rclone will copy the contents of shortcuts
             rather than shortcuts themselves when doing server side copies.
           ''',
@@ -1703,7 +1703,7 @@
           'exclusive': False,
           'help': '''
             Skip google documents in all listings.
-
+            
             If given, gdocs practically become invisible to rclone.
           ''',
           'name': 'skip_gdocs',
@@ -1719,15 +1719,15 @@
           'exclusive': False,
           'help': '''
             Skip MD5 checksum on Google photos and videos only.
-
+            
             Use this if you get checksum errors when transferring Google photos or
             videos.
-
+            
             Setting this flag will cause Google photos and videos to return a
             blank MD5 checksum.
-
+            
             Google photos are identified by being in the "photos" space.
-
+            
             Corrupted checksums are caused by Google modifying the image/video but
             not updating the checksum.
           ''',
@@ -1744,11 +1744,11 @@
           'exclusive': False,
           'help': '''
             Only show files that are shared with me.
-
+            
             Instructs rclone to operate on your "Shared with me" folder (where
             Google Drive lets you access the files and folders others have shared
             with you).
-
+            
             This works both with the "list" (lsd, lsl, etc.) and the "copy"
             commands (copy, sync, etc.), and with all other commands too.
           ''',
@@ -1765,7 +1765,7 @@
           'exclusive': False,
           'help': '''
             Only show files that are in the trash.
-
+            
             This will show trashed files in their original directory structure.
           ''',
           'name': 'trashed_only',
@@ -1829,7 +1829,7 @@
           'exclusive': False,
           'help': '''
             Allow the filetype to change when uploading Google docs.
-
+            
             E.g. file.doc to file.docx. This will confuse sync and reupload every time.
           ''',
           'name': 'allow_import_name_change',
@@ -1845,17 +1845,17 @@
           'exclusive': False,
           'help': '''
             Use file created date instead of modified date.
-
+            
             Useful when downloading data and you want the creation date used in
             place of the last modified date.
-
+            
             **WARNING**: This flag may have some unexpected consequences.
-
+            
             When uploading to your drive all files will be overwritten unless they
             haven't been modified since their creation. And the inverse will occur
             while downloading.  This side effect can be avoided by using the
             "--checksum" flag.
-
+            
             This feature was implemented to retain photos capture date as recorded
             by google photos. You will first need to check the "Create a Google
             Photos folder" option in your google drive settings. You can then copy
@@ -1875,10 +1875,10 @@
           'exclusive': False,
           'help': '''
             Use date file was shared instead of modified date.
-
+            
             Note that, as with "--drive-use-created-date", this flag may have
             unexpected consequences when uploading/downloading files.
-
+            
             If both this flag and "--drive-use-created-date" are set, the created
             date is used.
           ''',
@@ -1943,12 +1943,12 @@
           'exclusive': False,
           'help': '''
             Upload chunk size.
-
+            
             Must a power of 2 >= 256k.
-
+            
             Making this larger will improve performance, but note that each chunk
             is buffered in memory one per transfer.
-
+            
             Reducing this will reduce memory usage but decrease performance.
           ''',
           'name': 'chunk_size',
@@ -1964,13 +1964,13 @@
           'exclusive': False,
           'help': '''
             Set to allow files which return cannotDownloadAbusiveFile to be downloaded.
-
+            
             If downloading a file returns the error "This file has been identified
             as malware or spam and cannot be downloaded" with the error code
             "cannotDownloadAbusiveFile" then supply this flag to rclone to
             indicate you acknowledge the risks of downloading the file and rclone
             will download it anyway.
-
+            
             Note that if you are using service account it will need Manager
             permission (not Content Manager) to for this flag to work. If the SA
             does not have the right permission, Google will just ignore the flag.
@@ -2000,17 +2000,17 @@
           'exclusive': False,
           'help': '''
             Show sizes as storage quota usage, not actual size.
-
+            
             Show the size of a file as the storage quota used. This is the
             current version plus any older versions that have been set to keep
             forever.
-
+            
             **WARNING**: This flag may have some unexpected consequences.
-
+            
             It is not recommended to set this flag in your config - the
             recommended usage is using the flag form --drive-size-as-quota when
             doing rclone ls/lsl/lsf/lsjson/etc only.
-
+            
             If you do use this flag for syncing (not recommended) then you will
             need to use --ignore size also.
           ''',
@@ -2063,9 +2063,9 @@
           'exclusive': False,
           'help': '''
             Deprecated: use --server-side-across-configs instead.
-
+            
             Allow server-side operations (e.g. copy) to work across different drive configs.
-
+            
             This can be useful if you wish to do a server-side copy between two
             different Google drives.  Note that this isn't enabled by default
             because it isn't easy to tell if it will work between any two
@@ -2084,15 +2084,15 @@
           'exclusive': False,
           'help': '''
             Disable drive using http2.
-
+            
             There is currently an unsolved issue with the google drive backend and
             HTTP/2.  HTTP/2 is therefore disabled by default for the drive backend
             but can be re-enabled here.  When the issue is solved this flag will
             be removed.
-
+            
             See: https://github.com/rclone/rclone/issues/3631
-
-
+            
+  
           ''',
           'name': 'disable_http2',
           'provider': '',
@@ -2107,18 +2107,18 @@
           'exclusive': False,
           'help': '''
             Make upload limit errors be fatal.
-
+            
             At the time of writing it is only possible to upload 750 GiB of data to
             Google Drive a day (this is an undocumented limit). When this limit is
             reached Google Drive produces a slightly different error message. When
             this flag is set it causes these errors to be fatal.  These will stop
             the in-progress sync.
-
+            
             Note that this detection is relying on error message strings which
             Google don't document so it may break in the future.
-
+            
             See: https://github.com/rclone/rclone/issues/3857
-
+  
           ''',
           'name': 'stop_on_upload_limit',
           'provider': '',
@@ -2133,16 +2133,16 @@
           'exclusive': False,
           'help': '''
             Make download limit errors be fatal.
-
+            
             At the time of writing it is only possible to download 10 TiB of data from
             Google Drive a day (this is an undocumented limit). When this limit is
             reached Google Drive produces a slightly different error message. When
             this flag is set it causes these errors to be fatal.  These will stop
             the in-progress sync.
-
+            
             Note that this detection is relying on error message strings which
             Google don't document so it may break in the future.
-
+  
           ''',
           'name': 'stop_on_download_limit',
           'provider': '',
@@ -2157,11 +2157,11 @@
           'exclusive': False,
           'help': '''
             If set skip shortcut files.
-
+            
             Normally rclone dereferences shortcut files making them appear as if
             they are the original file (see [the shortcuts section](#shortcuts)).
             If this flag is set then rclone will ignore shortcut files completely.
-
+  
           ''',
           'name': 'skip_shortcuts',
           'provider': '',
@@ -2176,9 +2176,9 @@
           'exclusive': False,
           'help': '''
             If set skip dangling shortcut files.
-
+            
             If this is set then rclone will not show any dangling shortcuts in listings.
-
+  
           ''',
           'name': 'skip_dangling_shortcuts',
           'provider': '',
@@ -2193,23 +2193,23 @@
           'exclusive': False,
           'help': '''
             Resource key for accessing a link-shared file.
-
+            
             If you need to access files shared with a link like this
-
+            
                 https://drive.google.com/drive/folders/XXX?resourcekey=YYY&usp=sharing
-
+            
             Then you will need to use the first part "XXX" as the "root_folder_id"
             and the second part "YYY" as the "resource_key" otherwise you will get
             404 not found errors when trying to access the directory.
-
+            
             See: https://developers.google.com/drive/api/guides/resource-keys
-
+            
             This resource key requirement only applies to a subset of old files.
-
+            
             Note also that opening the folder once in the web interface (with the
             user you've authenticated rclone with) seems to be enough so that the
             resource key is no needed.
-
+  
           ''',
           'name': 'resource_key',
           'provider': '',
@@ -2224,7 +2224,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -2252,7 +2252,7 @@
           'exclusive': False,
           'help': '''
             Get IAM credentials from runtime (environment variables or instance meta data if no env vars).
-
+            
             Only applies if service_account_file and service_account_credentials is blank.
           ''',
           'name': 'env_auth',
@@ -2287,7 +2287,7 @@
           'exclusive': False,
           'help': '''
             Auth server URL.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'auth_url',
@@ -2303,7 +2303,7 @@
           'exclusive': False,
           'help': '''
             Token server url.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'token_url',
@@ -2319,9 +2319,9 @@
           'exclusive': False,
           'help': '''
             Upload chunk size (< 150Mi).
-
+            
             Any files larger than this will be uploaded in chunks of this size.
-
+            
             Note that chunks are buffered in memory (one at a time) so rclone can
             deal with retries.  Setting this larger will increase the speed
             slightly (at most 10% for 128 MiB in tests) at the cost of using more
@@ -2340,21 +2340,21 @@
           'exclusive': False,
           'help': '''
             Impersonate this user when using a business account.
-
+            
             Note that if you want to use impersonate, you should make sure this
             flag is set when running "rclone config" as this will cause rclone to
             request the "members.read" scope which it won't normally. This is
             needed to lookup a members email address into the internal ID that
             dropbox uses in the API.
-
+            
             Using the "members.read" scope will require a Dropbox Team Admin
             to approve during the OAuth flow.
-
+            
             You will have to use your own App (setting your own client_id and
             client_secret) to use this option as currently rclone's default set of
             permissions doesn't include "members.read". This can be added once
             v1.55 or later is in use everywhere.
-
+  
           ''',
           'name': 'impersonate',
           'provider': '',
@@ -2369,8 +2369,8 @@
           'exclusive': False,
           'help': '''
             Instructs rclone to work on individual shared files.
-
-            In this mode rclone's features are extremely limited - only list (ls, lsl, etc.)
+            
+            In this mode rclone's features are extremely limited - only list (ls, lsl, etc.) 
             operations and read operations (e.g. downloading) are supported in this mode.
             All other operations will be disabled.
           ''',
@@ -2387,16 +2387,16 @@
           'exclusive': False,
           'help': '''
             Instructs rclone to work on shared folders.
-
-            When this flag is used with no path only the List operation is supported and
-            all available shared folders will be listed. If you specify a path the first part
-            will be interpreted as the name of shared folder. Rclone will then try to mount this
-            shared to the root namespace. On success shared folder rclone proceeds normally.
-            The shared folder is now pretty much a normal folder and all normal operations
-            are supported.
-
-            Note that we don't unmount the shared folder afterwards so the
-            --dropbox-shared-folders can be omitted after the first use of a particular
+            			
+            When this flag is used with no path only the List operation is supported and 
+            all available shared folders will be listed. If you specify a path the first part 
+            will be interpreted as the name of shared folder. Rclone will then try to mount this 
+            shared to the root namespace. On success shared folder rclone proceeds normally. 
+            The shared folder is now pretty much a normal folder and all normal operations 
+            are supported. 
+            
+            Note that we don't unmount the shared folder afterwards so the 
+            --dropbox-shared-folders can be omitted after the first use of a particular 
             shared folder.
           ''',
           'name': 'shared_folders',
@@ -2412,20 +2412,20 @@
           'exclusive': False,
           'help': '''
             Upload file batching sync|async|off.
-
+            
             This sets the batch mode used by rclone.
-
+            
             For full info see [the main docs](https://rclone.org/dropbox/#batch-mode)
-
+            
             This has 3 possible values
-
+            
             - off - no batching
             - sync - batch uploads and check completion (default)
             - async - batch upload and don't check completion
-
+            
             Rclone will close any outstanding batches when it exits which may make
             a delay on quit.
-
+  
           ''',
           'name': 'batch_mode',
           'provider': '',
@@ -2440,23 +2440,23 @@
           'exclusive': False,
           'help': '''
             Max number of files in upload batch.
-
+            
             This sets the batch size of files to upload. It has to be less than 1000.
-
+            
             By default this is 0 which means rclone which calculate the batch size
             depending on the setting of batch_mode.
-
+            
             - batch_mode: async - default batch_size is 100
             - batch_mode: sync - default batch_size is the same as --transfers
             - batch_mode: off - not in use
-
+            
             Rclone will close any outstanding batches when it exits which may make
             a delay on quit.
-
+            
             Setting this is a great idea if you are uploading lots of small files
             as it will make them a lot quicker. You can use --transfers 32 to
             maximise throughput.
-
+  
           ''',
           'name': 'batch_size',
           'provider': '',
@@ -2471,17 +2471,17 @@
           'exclusive': False,
           'help': '''
             Max time to allow an idle upload batch before uploading.
-
+            
             If an upload batch is idle for more than this long then it will be
             uploaded.
-
+            
             The default for this is 0 which means rclone will choose a sensible
             default based on the batch_mode in use.
-
+            
             - batch_mode: async - default batch_timeout is 10s
             - batch_mode: sync - default batch_timeout is 500ms
             - batch_mode: off - not in use
-
+  
           ''',
           'name': 'batch_timeout',
           'provider': '',
@@ -2520,7 +2520,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -2603,7 +2603,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -2655,11 +2655,11 @@
           'exclusive': False,
           'help': '''
             ID of the root folder.
-
+            
             Leave blank normally.
-
+            
             Fill in to make rclone start with directory of a given ID.
-
+  
           ''',
           'name': 'root_folder_id',
           'provider': '',
@@ -2674,16 +2674,16 @@
           'exclusive': False,
           'help': '''
             Permanent Authentication Token.
-
+            
             A Permanent Authentication Token can be created in the Enterprise File
             Fabric, on the users Dashboard under Security, there is an entry
             you'll see called "My Authentication Tokens". Click the Manage button
             to create one.
-
+            
             These tokens are normally valid for several years.
-
+            
             For more info see: https://docs.storagemadeeasy.com/organisationcloud/api-tokens
-
+  
           ''',
           'name': 'permanent_token',
           'provider': '',
@@ -2698,12 +2698,12 @@
           'exclusive': False,
           'help': '''
             Session Token.
-
+            
             This is a session token which rclone caches in the config file. It is
             usually valid for 1 hour.
-
+            
             Don't set this value - rclone will set it automatically.
-
+  
           ''',
           'name': 'token',
           'provider': '',
@@ -2718,9 +2718,9 @@
           'exclusive': False,
           'help': '''
             Token expiry time.
-
+            
             Don't set this value - rclone will set it automatically.
-
+  
           ''',
           'name': 'token_expiry',
           'provider': '',
@@ -2735,9 +2735,9 @@
           'exclusive': False,
           'help': '''
             Version read from the file fabric.
-
+            
             Don't set this value - rclone will set it automatically.
-
+  
           ''',
           'name': 'version',
           'provider': '',
@@ -2752,7 +2752,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -2775,7 +2775,7 @@
           'exclusive': False,
           'help': '''
             FTP host to connect to.
-
+            
             E.g. "ftp.example.com".
           ''',
           'name': 'host',
@@ -2827,7 +2827,7 @@
           'exclusive': False,
           'help': '''
             Use Implicit FTPS (FTP over TLS).
-
+            
             When using implicit FTP over TLS the client connects using TLS
             right from the start which breaks compatibility with
             non-TLS-aware servers. This is usually served over port 990 rather
@@ -2846,7 +2846,7 @@
           'exclusive': False,
           'help': '''
             Use Explicit FTPS (FTP over TLS).
-
+            
             When using explicit FTP over TLS the client explicitly requests
             security from the server in order to upgrade a plain text connection
             to an encrypted one. Cannot be used in combination with implicit FTPS.
@@ -2864,20 +2864,20 @@
           'exclusive': False,
           'help': '''
             Maximum number of FTP simultaneous connections, 0 for unlimited.
-
+            
             Note that setting this is very likely to cause deadlocks so it should
             be used with care.
-
+            
             If you are doing a sync or copy then make sure concurrency is one more
             than the sum of `--transfers` and `--checkers`.
-
+            
             If you use `--check-first` then it just needs to be one more than the
             maximum of `--checkers` and `--transfers`.
-
+            
             So for `concurrency 3` you'd use `--checkers 2 --transfers 2
             --check-first` or `--checkers 1 --transfers 1`.
-
-
+            
+  
           ''',
           'name': 'concurrency',
           'provider': '',
@@ -2964,12 +2964,12 @@
           'exclusive': False,
           'help': '''
             Max time before closing idle connections.
-
+            
             If no connections have been returned to the connection pool in the time
             given, rclone will empty the connection pool.
-
+            
             Set to 0 to keep connections indefinitely.
-
+  
           ''',
           'name': 'idle_timeout',
           'provider': '',
@@ -2996,7 +2996,7 @@
           'exclusive': False,
           'help': '''
             Size of TLS session cache for all control and data connections.
-
+            
             TLS cache allows to resume TLS sessions and reuse PSK between connections.
             Increase if default size is not enough resulting in TLS resumption errors.
             Enabled by default. Use 0 to disable.
@@ -3038,9 +3038,9 @@
           'exclusive': False,
           'help': '''
             Allow asking for FTP password when needed.
-
+            
             If this is set and no password is supplied then rclone will ask for a password
-
+  
           ''',
           'name': 'ask_password',
           'provider': '',
@@ -3072,7 +3072,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -3107,7 +3107,7 @@
           'exclusive': False,
           'help': '''
             Auth server URL.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'auth_url',
@@ -3123,7 +3123,7 @@
           'exclusive': False,
           'help': '''
             Token server url.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'token_url',
@@ -3139,7 +3139,7 @@
           'exclusive': False,
           'help': '''
             Project number.
-
+            
             Optional - needed only for list/create/delete buckets - see your developer console.
           ''',
           'name': 'project_number',
@@ -3155,7 +3155,7 @@
           'exclusive': False,
           'help': '''
             User project.
-
+            
             Optional - needed only for requester pays.
           ''',
           'name': 'user_project',
@@ -3171,10 +3171,10 @@
           'exclusive': False,
           'help': '''
             Service Account Credentials JSON file path.
-
+            
             Leave blank normally.
             Needed only if you want use SA instead of interactive login.
-
+            
             Leading `~` will be expanded in the file name as will environment variables such as `${RCLONE_CONFIG_DIR}`.
           ''',
           'name': 'service_account_file',
@@ -3190,7 +3190,7 @@
           'exclusive': False,
           'help': '''
             Service Account Credentials JSON blob.
-
+            
             Leave blank normally.
             Needed only if you want use SA instead of interactive login.
           ''',
@@ -3207,7 +3207,7 @@
           'exclusive': False,
           'help': '''
             Access public buckets and objects without credentials.
-
+            
             Set to 'true' if you just want to download files and don't configure credentials.
           ''',
           'name': 'anonymous',
@@ -3336,18 +3336,18 @@
           'exclusive': False,
           'help': '''
             Access checks should use bucket-level IAM policies.
-
+            
             If you want to upload objects to a bucket with Bucket Policy Only set
             then you will need to set this.
-
+            
             When it is set, rclone:
-
+            
             - ignores ACLs set on buckets
             - ignores ACLs set on objects
             - creates buckets with Bucket Policy Only set
-
+            
             Docs: https://cloud.google.com/storage/docs/bucket-policy-only
-
+  
           ''',
           'name': 'bucket_policy_only',
           'provider': '',
@@ -3605,10 +3605,10 @@
           'exclusive': False,
           'help': '''
             Upload an empty object with a trailing slash when a new directory is created
-
+            
             Empty folders are unsupported for bucket based remotes, this option creates an empty
             object ending with "/", to persist the folder.
-
+  
           ''',
           'name': 'directory_markers',
           'provider': '',
@@ -3623,10 +3623,10 @@
           'exclusive': False,
           'help': '''
             If set, don't attempt to check the bucket exists or create it.
-
+            
             This can be useful when trying to minimise the number of transactions
             rclone does if you know the bucket exists already.
-
+  
           ''',
           'name': 'no_check_bucket',
           'provider': '',
@@ -3641,14 +3641,14 @@
           'exclusive': False,
           'help': '''
             If set this will decompress gzip encoded objects.
-
+            
             It is possible to upload objects to GCS with "Content-Encoding: gzip"
             set. Normally rclone will download these files as compressed objects.
-
+            
             If this flag is set then rclone will decompress these files with
             "Content-Encoding: gzip" as they are received. This means that rclone
             can't check the size and hash but the file contents will be decompressed.
-
+  
           ''',
           'name': 'decompress',
           'provider': '',
@@ -3663,7 +3663,7 @@
           'exclusive': False,
           'help': '''
             Endpoint for the service.
-
+            
             Leave blank normally.
           ''',
           'name': 'endpoint',
@@ -3679,7 +3679,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -3707,7 +3707,7 @@
           'exclusive': False,
           'help': '''
             Get GCP IAM credentials from runtime (environment variables or instance meta data if no env vars).
-
+            
             Only applies if service_account_file and service_account_credentials is blank.
           ''',
           'name': 'env_auth',
@@ -3742,7 +3742,7 @@
           'exclusive': False,
           'help': '''
             Auth server URL.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'auth_url',
@@ -3758,7 +3758,7 @@
           'exclusive': False,
           'help': '''
             Token server url.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'token_url',
@@ -3774,7 +3774,7 @@
           'exclusive': False,
           'help': '''
             Set to make the Google Photos backend read only.
-
+            
             If you choose read only then rclone will only request read only access
             to your photos, otherwise rclone will request full access.
           ''',
@@ -3791,7 +3791,7 @@
           'exclusive': False,
           'help': '''
             Set to read the size of media items.
-
+            
             Normally rclone does not read the size of media items since this takes
             another transaction.  This isn't necessary for syncing.  However
             rclone mount needs to know the size of files in advance of reading
@@ -3823,16 +3823,16 @@
           'exclusive': False,
           'help': '''
             Also view and download archived media.
-
+            
             By default, rclone does not request archived media. Thus, when syncing,
             archived media is not visible in directory listings or transferred.
-
+            
             Note that media in albums is always visible and synced, no matter
             their archive status.
-
+            
             With this flag, archived media are always visible in directory
             listings and transferred.
-
+            
             Without this flag, archived media will not be visible in directory
             listings and won't be transferred.
           ''',
@@ -3849,7 +3849,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -3872,7 +3872,7 @@
           'exclusive': False,
           'help': '''
             Hadoop name node and port.
-
+            
             E.g. "namenode:8020" to connect to host namenode at port 8020.
           ''',
           'name': 'namenode',
@@ -3907,7 +3907,7 @@
           'exclusive': False,
           'help': '''
             Kerberos service principal name for the namenode.
-
+            
             Enables KERBEROS authentication. Specifies the Service Principal Name
             (SERVICE/FQDN) for the namenode. E.g. \"hdfs/namenode.hadoop.docker\"
             for namenode running as service 'hdfs' with FQDN 'namenode.hadoop.docker'.
@@ -3932,7 +3932,7 @@
           'exclusive': False,
           'help': '''
             Kerberos data transfer protection: authentication|integrity|privacy.
-
+            
             Specifies whether or not authentication, data signature integrity
             checks, and wire encryption are required when communicating with
             the datanodes. Possible values are 'authentication', 'integrity'
@@ -3951,7 +3951,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -3986,7 +3986,7 @@
           'exclusive': False,
           'help': '''
             Auth server URL.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'auth_url',
@@ -4002,7 +4002,7 @@
           'exclusive': False,
           'help': '''
             Token server url.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'token_url',
@@ -4097,7 +4097,7 @@
           'exclusive': False,
           'help': '''
             The root/parent folder for all paths.
-
+            
             Fill in to use the specified folder as the parent for all paths given to the remote.
             This way rclone can use any folder as its starting point.
           ''',
@@ -4114,7 +4114,7 @@
           'exclusive': False,
           'help': '''
             Endpoint for the service.
-
+            
             This is the URL that API-calls will be made to.
           ''',
           'name': 'endpoint',
@@ -4130,7 +4130,7 @@
           'exclusive': False,
           'help': '''
             Do not fetch number of objects in directories unless it is absolutely necessary.
-
+            
             Requests may be faster if the number of objects in subdirectories is not fetched.
           ''',
           'name': 'disable_fetching_member_count',
@@ -4146,13 +4146,13 @@
           'exclusive': False,
           'help': '''
             Chunksize for chunked uploads.
-
+            
             Any files larger than the configured cutoff (or files of unknown size) will be uploaded in chunks of this size.
-
+            
             The upper limit for this is 2147483647 bytes (about 2.000Gi).
             That is the maximum amount of bytes a single upload-operation will support.
             Setting this above the upper limit or to a negative value will cause uploads to fail.
-
+            
             Setting this to larger values may increase the upload speed at the cost of using more memory.
             It can be set to smaller values smaller to save on memory.
           ''',
@@ -4169,9 +4169,9 @@
           'exclusive': False,
           'help': '''
             Cutoff/Threshold for chunked uploads.
-
+            
             Any files larger than this will be uploaded in chunks of the configured chunksize.
-
+            
             The upper limit for this is 2147483647 bytes (about 2.000Gi).
             That is the maximum amount of bytes a single upload-operation will support.
             Setting this above the upper limit will cause uploads to fail.
@@ -4189,10 +4189,10 @@
           'exclusive': False,
           'help': '''
             Concurrency for chunked uploads.
-
+            
             This is the upper limit for how many transfers for the same file are running concurrently.
             Setting this above to a value smaller than 1 will cause uploads to deadlock.
-
+            
             If you are uploading small numbers of large files over high-speed links
             and these uploads do not fully utilize your bandwidth, then increasing
             this may help to speed up the transfers.
@@ -4210,7 +4210,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -4233,7 +4233,7 @@
           'exclusive': False,
           'help': '''
             URL of HTTP host to connect to.
-
+            
             E.g. "https://example.com", or "https://user:pass@example.com" to use a username and password.
           ''',
           'name': 'url',
@@ -4250,14 +4250,14 @@
           'exclusive': False,
           'help': '''
             Set HTTP headers for all transactions.
-
+            
             Use this to set additional HTTP headers for all transactions.
-
+            
             The input format is comma separated list of key,value pairs.  Standard
             [CSV encoding](https://godoc.org/encoding/csv) may be used.
-
+            
             For example, to set a Cookie use 'Cookie,name=value', or '"Cookie","name=value"'.
-
+            
             You can set multiple headers, e.g. '"Cookie","name=value","Authorization","xxx"'.
           ''',
           'name': 'headers',
@@ -4273,15 +4273,15 @@
           'exclusive': False,
           'help': '''
             Set this if the site doesn't end directories with /.
-
+            
             Use this if your target website does not use / on the end of
             directories.
-
+            
             A / on the end of a path is how rclone normally tells the difference
             between files and directories.  If this flag is set, then rclone will
             treat all files with Content-Type: text/html as directories and read
             URLs from them rather than downloading them.
-
+            
             Note that this may cause rclone to confuse genuine HTML files with
             directories.
           ''',
@@ -4298,16 +4298,16 @@
           'exclusive': False,
           'help': '''
             Don't use HEAD requests.
-
+            
             HEAD requests are mainly used to find file sizes in dir listing.
             If your site is being very slow to load then you can try this option.
             Normally rclone does a HEAD request for each potential file in a
             directory listing to:
-
+            
             - find its size
             - check it really exists
             - check to see if it is a directory
-
+            
             If you set this option, rclone will not do the HEAD request. This will mean
             that directory listings are much quicker, but rclone won't have the times or
             sizes of any files, and some files that don't exist may be in the listing.
@@ -4332,7 +4332,7 @@
           'exclusive': False,
           'help': '''
             IAS3 Access Key.
-
+            
             Leave blank for anonymous access.
             You can find one here: https://archive.org/account/s3.php
           ''',
@@ -4349,7 +4349,7 @@
           'exclusive': False,
           'help': '''
             IAS3 Secret Key (password).
-
+            
             Leave blank for anonymous access.
           ''',
           'name': 'secret_access_key',
@@ -4365,7 +4365,7 @@
           'exclusive': False,
           'help': '''
             IAS3 Endpoint.
-
+            
             Leave blank for default value.
           ''',
           'name': 'endpoint',
@@ -4381,7 +4381,7 @@
           'exclusive': False,
           'help': '''
             Host of InternetArchive Frontend.
-
+            
             Leave blank for default value.
           ''',
           'name': 'front_endpoint',
@@ -4431,7 +4431,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -4466,7 +4466,7 @@
           'exclusive': False,
           'help': '''
             Auth server URL.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'auth_url',
@@ -4482,7 +4482,7 @@
           'exclusive': False,
           'help': '''
             Token server url.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'token_url',
@@ -4510,7 +4510,7 @@
           'exclusive': False,
           'help': '''
             Only show files that are in the trash.
-
+            
             This will show trashed files in their original directory structure.
           ''',
           'name': 'trashed_only',
@@ -4562,7 +4562,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -4626,7 +4626,7 @@
           'exclusive': False,
           'help': '''
             Mount ID of the mount to use.
-
+            
             If omitted, the primary mount is used.
           ''',
           'name': 'mountid',
@@ -4642,7 +4642,7 @@
           'exclusive': False,
           'help': '''
             Does the backend support setting modification time.
-
+            
             Set this to false if you use a mount ID that points to a Dropbox or Amazon Drive backend.
           ''',
           'name': 'setmtime',
@@ -4706,7 +4706,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -4741,7 +4741,7 @@
           'exclusive': False,
           'help': '''
             Auth server URL.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'auth_url',
@@ -4757,7 +4757,7 @@
           'exclusive': False,
           'help': '''
             Token server url.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'token_url',
@@ -4785,11 +4785,11 @@
           'exclusive': False,
           'help': '''
             Password.
-
+            
             This must be an app password - rclone will not work with your normal
             password. See the Configuration section in the docs for how to make an
             app password.
-
+  
           ''',
           'name': 'pass',
           'provider': '',
@@ -4816,7 +4816,7 @@
           'exclusive': False,
           'help': '''
             Skip full upload if there is another file with same data hash.
-
+            
             This feature is called "speedup" or "put by hash". It is especially efficient
             in case of generally available files like popular books, video or audio clips,
             because files are searched by hash in all accounts of all mailru users.
@@ -4861,7 +4861,7 @@
           'exclusive': False,
           'help': '''
             Comma separated list of file name patterns eligible for speedup (put by hash).
-
+            
             Patterns are case insensitive and can contain '*' or '?' meta characters.
           ''',
           'name': 'speedup_file_patterns',
@@ -4894,7 +4894,7 @@
           'exclusive': False,
           'help': '''
             This option allows you to disable speedup (put by hash) for large files.
-
+            
             Reason is that preliminary hashing can exhaust your RAM or disk space.
           ''',
           'name': 'speedup_max_disk',
@@ -4963,7 +4963,7 @@
           'exclusive': False,
           'help': '''
             HTTP user agent used internally by client.
-
+            
             Defaults to "rclone/VERSION" or "--user-agent" provided on command line.
           ''',
           'name': 'user_agent',
@@ -4979,7 +4979,7 @@
           'exclusive': False,
           'help': '''
             Comma separated list of internal maintenance flags.
-
+            
             This option must not be used by an ordinary user. It is intended only to
             facilitate remote troubleshooting of backend issues. Strict meaning of
             flags is not documented and not guaranteed to persist between releases.
@@ -4999,7 +4999,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -5046,7 +5046,7 @@
           'exclusive': False,
           'help': '''
             Output more debug from Mega.
-
+            
             If this flag is set (along with -vv) it will print further debugging
             information from the mega backend.
           ''',
@@ -5063,7 +5063,7 @@
           'exclusive': False,
           'help': '''
             Delete files permanently rather than putting them into the trash.
-
+            
             Normally the mega backend will put all deletions into the trash rather
             than permanently deleting them.  If you specify this then rclone will
             permanently delete objects instead.
@@ -5081,7 +5081,7 @@
           'exclusive': False,
           'help': '''
             Use HTTPS for transfers.
-
+            
             MEGA uses plain text HTTP connections by default.
             Some ISPs throttle HTTP connections, this causes transfers to become very slow.
             Enabling this will force MEGA to use HTTPS for all transfers.
@@ -5101,7 +5101,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -5136,7 +5136,7 @@
           'exclusive': False,
           'help': '''
             Select between HTTP or HTTPS protocol.
-
+            
             Most users should choose HTTPS, which is the default.
             HTTP is provided primarily for debugging purposes.
           ''',
@@ -5153,7 +5153,7 @@
           'exclusive': False,
           'help': '''
             Domain+path of NetStorage host to connect to.
-
+            
             Format should be `<domain>/<internal folders>`
           ''',
           'name': 'host',
@@ -5181,7 +5181,7 @@
           'exclusive': False,
           'help': '''
             Set the NetStorage account secret/G2O key for authentication.
-
+            
             Please choose the 'y' option to set your own password then enter your secret.
           ''',
           'name': 'secret',
@@ -5216,7 +5216,7 @@
           'exclusive': False,
           'help': '''
             Auth server URL.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'auth_url',
@@ -5232,7 +5232,7 @@
           'exclusive': False,
           'help': '''
             Token server url.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'token_url',
@@ -5282,7 +5282,7 @@
           'exclusive': False,
           'help': '''
             Chunk size to upload files with - must be multiple of 320k (327,680 bytes).
-
+            
             Above this size files will be chunked - must be multiple of 320k (327,680 bytes) and
             should not exceed 250M (262,144,000 bytes) else you may encounter \"Microsoft.SharePoint.Client.InvalidClientQueryException: The request message is too big.\"
             Note that the chunks will be buffered into memory.
@@ -5324,11 +5324,11 @@
           'exclusive': False,
           'help': '''
             ID of the root folder.
-
+            
             This isn't normally needed, but in special circumstances you might
             know the folder ID that you wish to access but not be able to get
             there through a path traversal.
-
+  
           ''',
           'name': 'root_folder_id',
           'provider': '',
@@ -5360,7 +5360,7 @@
             }),
             dict({
               'help': '''
-                Read and write access to all resources, without the ability to browse SharePoint sites.
+                Read and write access to all resources, without the ability to browse SharePoint sites. 
                 Same as if disable_site_permission was set to true
               ''',
               'provider': '',
@@ -5370,9 +5370,9 @@
           'exclusive': False,
           'help': '''
             Set scopes to be requested by rclone.
-
+            
             Choose or manually enter a custom space separated list with all scopes, that rclone should request.
-
+  
           ''',
           'name': 'access_scopes',
           'provider': '',
@@ -5387,7 +5387,7 @@
           'exclusive': False,
           'help': '''
             Disable the request for Sites.Read.All permission.
-
+            
             If set to true, you will no longer be able to search for a SharePoint site when
             configuring drive ID, because rclone will not request Sites.Read.All permission.
             Set it to true if your organization didn't assign Sites.Read.All permission to the
@@ -5407,7 +5407,7 @@
           'exclusive': False,
           'help': '''
             Set to make OneNote files show up in directory listings.
-
+            
             By default, rclone will hide OneNote files in directory listings because
             operations like "Open" and "Update" won't work on them.  But this
             behaviour may also prevent you from deleting them.  If you want to
@@ -5427,9 +5427,9 @@
           'exclusive': False,
           'help': '''
             Deprecated: use --server-side-across-configs instead.
-
+            
             Allow server-side operations (e.g. copy) to work across different onedrive configs.
-
+            
             This will only work if you are copying between two OneDrive *Personal* drives AND
             the files to copy are already shared between them.  In other cases, rclone will
             fall back to normal copy (which will be slightly slower).
@@ -5459,18 +5459,18 @@
           'exclusive': False,
           'help': '''
             Remove all versions on modifying operations.
-
+            
             Onedrive for business creates versions when rclone uploads new files
             overwriting an existing one and when it sets the modification time.
-
+            
             These versions take up space out of the quota.
-
+            
             This flag checks for versions after file upload and setting
             modification time and removes all but the last version.
-
+            
             **NB** Onedrive personal can't currently delete versions so don't use
             this flag there.
-
+  
           ''',
           'name': 'no_versions',
           'provider': '',
@@ -5545,9 +5545,9 @@
           'exclusive': False,
           'help': '''
             Set the password for links created by the link command.
-
+            
             At the time of writing this only works with OneDrive personal paid accounts.
-
+  
           ''',
           'name': 'link_password',
           'provider': '',
@@ -5594,24 +5594,24 @@
           'exclusive': False,
           'help': '''
             Specify the hash in use for the backend.
-
+            
             This specifies the hash type in use. If set to "auto" it will use the
             default hash which is QuickXorHash.
-
+            
             Before rclone 1.62 an SHA1 hash was used by default for Onedrive
             Personal. For 1.62 and later the default is to use a QuickXorHash for
             all onedrive types. If an SHA1 hash is desired then set this option
             accordingly.
-
+            
             From July 2023 QuickXorHash will be the only available hash for
             both OneDrive for Business and OneDriver Personal.
-
+            
             This can be set to "none" to not use any hashes.
-
+            
             If the hash requested does not exist on the object, it will be
             returned as an empty string which is treated as a missing hash by
             rclone.
-
+  
           ''',
           'name': 'hash_type',
           'provider': '',
@@ -5626,19 +5626,19 @@
           'exclusive': False,
           'help': '''
             Allows download of files the server thinks has a virus.
-
+            
             The onedrive/sharepoint server may check files uploaded with an Anti
             Virus checker. If it detects any potential viruses or malware it will
             block download of the file.
-
+            
             In this case you will see a message like this
-
-                server reports this file is infected with a virus - use --onedrive-av-override to download anyway: Infected (name of virus): 403 Forbidden:
-
+            
+                server reports this file is infected with a virus - use --onedrive-av-override to download anyway: Infected (name of virus): 403 Forbidden: 
+            
             If you are 100% sure you want to download this file anyway then use
             the --onedrive-av-override flag, or av_override = true in the config
             file.
-
+  
           ''',
           'name': 'av_override',
           'provider': '',
@@ -5653,7 +5653,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -5700,7 +5700,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -5716,7 +5716,7 @@
           'exclusive': False,
           'help': '''
             Files will be uploaded in chunks this size.
-
+            
             Note that these chunks are buffered in memory so increasing them will
             increase memory use.
           ''',
@@ -5754,8 +5754,8 @@
             }),
             dict({
               'help': '''
-                use instance principals to authorize an instance to make API calls.
-                each instance has its own identity, and authenticates using the certificates that are read from instance metadata.
+                use instance principals to authorize an instance to make API calls. 
+                each instance has its own identity, and authenticates using the certificates that are read from instance metadata. 
                 https://docs.oracle.com/en-us/iaas/Content/Identity/Tasks/callingservicesfrominstances.htm
               ''',
               'provider': '',
@@ -5823,7 +5823,7 @@
           'exclusive': False,
           'help': '''
             Endpoint for Object storage API.
-
+            
             Leave blank to use the default endpoint for the region.
           ''',
           'name': 'endpoint',
@@ -5906,7 +5906,7 @@
           'exclusive': False,
           'help': '''
             Cutoff for switching to chunked upload.
-
+            
             Any files larger than this will be uploaded in chunks of chunk_size.
             The minimum is 0 and the maximum is 5 GiB.
           ''',
@@ -5923,30 +5923,30 @@
           'exclusive': False,
           'help': '''
             Chunk size to use for uploading.
-
+            
             When uploading files larger than upload_cutoff or files with unknown
             size (e.g. from "rclone rcat" or uploaded with "rclone mount" or google
             photos or google docs) they will be uploaded as multipart uploads
             using this chunk size.
-
+            
             Note that "upload_concurrency" chunks of this size are buffered
             in memory per transfer.
-
+            
             If you are transferring large files over high-speed links and you have
             enough memory, then increasing this will speed up the transfers.
-
+            
             Rclone will automatically increase the chunk size when uploading a
             large file of known size to stay below the 10,000 chunks limit.
-
+            
             Files of unknown size are uploaded with the configured
             chunk_size. Since the default chunk size is 5 MiB and there can be at
             most 10,000 chunks, this means that by default the maximum size of
             a file you can stream upload is 48 GiB.  If you wish to stream upload
             larger files then you will need to increase chunk_size.
-
+            
             Increasing the chunk size decreases the accuracy of the progress
             statistics displayed with "-P" flag.
-
+  
           ''',
           'name': 'chunk_size',
           'provider': '',
@@ -5961,10 +5961,10 @@
           'exclusive': False,
           'help': '''
             Concurrency for multipart uploads.
-
+            
             This is the number of chunks of the same file that are uploaded
             concurrently.
-
+            
             If you are uploading small numbers of large files over high-speed links
             and these uploads do not fully utilize your bandwidth, then increasing
             this may help to speed up the transfers.
@@ -5982,10 +5982,10 @@
           'exclusive': False,
           'help': '''
             Cutoff for switching to multipart copy.
-
+            
             Any files larger than this that need to be server-side copied will be
             copied in chunks of this size.
-
+            
             The minimum is 0 and the maximum is 5 GiB.
           ''',
           'name': 'copy_cutoff',
@@ -6001,9 +6001,9 @@
           'exclusive': False,
           'help': '''
             Timeout for copy.
-
+            
             Copy is an asynchronous operation, specify timeout to wait for copy to succeed
-
+  
           ''',
           'name': 'copy_timeout',
           'provider': '',
@@ -6018,7 +6018,7 @@
           'exclusive': False,
           'help': '''
             Don't store MD5 checksum with object metadata.
-
+            
             Normally rclone will calculate the MD5 checksum of the input before
             uploading it so it can add it to metadata on the object. This is great
             for data integrity checking but can cause long delays for large files
@@ -6037,7 +6037,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -6053,12 +6053,12 @@
           'exclusive': False,
           'help': '''
             If true avoid calling abort upload on a failure, leaving all successfully uploaded parts on S3 for manual recovery.
-
+            
             It should be set to true for resuming uploads across different sessions.
-
+            
             WARNING: Storing parts of an incomplete multipart upload counts towards space usage on object storage and will add
             additional costs if not cleaned up.
-
+  
           ''',
           'name': 'leave_parts_on_error',
           'provider': '',
@@ -6073,13 +6073,13 @@
           'exclusive': False,
           'help': '''
             If set, don't attempt to check the bucket exists or create it.
-
+            
             This can be useful when trying to minimise the number of transactions
             rclone does if you know the bucket exists already.
-
+            
             It can also be needed if the user you are using does not have bucket
             creation permissions.
-
+  
           ''',
           'name': 'no_check_bucket',
           'provider': '',
@@ -6124,7 +6124,7 @@
           'help': '''
             To use SSE-C, the optional header that specifies the base64-encoded 256-bit encryption key to use to
             encrypt or  decrypt the data. Please note only one of sse_customer_key_file|sse_customer_key|sse_kms_key_id is
-            needed. For more information, see Using Your Own Keys for Server-Side Encryption
+            needed. For more information, see Using Your Own Keys for Server-Side Encryption 
             (https://docs.cloud.oracle.com/Content/Object/Tasks/usingyourencryptionkeys.htm)
           ''',
           'name': 'sse_customer_key',
@@ -6147,7 +6147,7 @@
           'exclusive': False,
           'help': '''
             If using SSE-C, The optional header that specifies the base64-encoded SHA256 hash of the encryption
-            key. This value is used to check the integrity of the encryption key. see Using Your Own Keys for
+            key. This value is used to check the integrity of the encryption key. see Using Your Own Keys for 
             Server-Side Encryption (https://docs.cloud.oracle.com/Content/Object/Tasks/usingyourencryptionkeys.htm).
           ''',
           'name': 'sse_customer_key_sha256',
@@ -6234,7 +6234,7 @@
           'exclusive': False,
           'help': '''
             Auth server URL.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'auth_url',
@@ -6250,7 +6250,7 @@
           'exclusive': False,
           'help': '''
             Token server url.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'token_url',
@@ -6266,7 +6266,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -6306,11 +6306,11 @@
           'exclusive': False,
           'help': '''
             Hostname to connect to.
-
+            
             This is normally set when rclone initially does the oauth connection,
             however you will need to set it by hand if you are using remote config
             with rclone authorize.
-
+  
           ''',
           'name': 'hostname',
           'provider': '',
@@ -6325,7 +6325,7 @@
           'exclusive': False,
           'help': '''
             Your pcloud username.
-
+            			
             This is only required when you want to use the cleanup command. Due to a bug
             in the pcloud API the required API does not support OAuth authentication so
             we have to rely on user password authentication for it.
@@ -6374,7 +6374,7 @@
           'exclusive': False,
           'help': '''
             Auth server URL.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'auth_url',
@@ -6390,7 +6390,7 @@
           'exclusive': False,
           'help': '''
             Token server url.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'token_url',
@@ -6431,9 +6431,9 @@
           'help': '''
             ID of the root folder.
             Leave blank normally.
-
+            
             Fill in for rclone to use a non root folder as its starting point.
-
+  
           ''',
           'name': 'root_folder_id',
           'provider': '',
@@ -6448,7 +6448,7 @@
           'exclusive': False,
           'help': '''
             Send files to the trash instead of deleting permanently.
-
+            
             Defaults to true, namely sending files to the trash.
             Use `--pikpak-use-trash=false` to delete files permanently instead.
           ''',
@@ -6465,7 +6465,7 @@
           'exclusive': False,
           'help': '''
             Only show files that are in the trash.
-
+            
             This will show trashed files in their original directory structure.
           ''',
           'name': 'trashed_only',
@@ -6493,7 +6493,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -6516,7 +6516,7 @@
           'exclusive': False,
           'help': '''
             OAuth Client Id.
-
+            
             Leave blank normally.
           ''',
           'name': 'client_id',
@@ -6532,7 +6532,7 @@
           'exclusive': False,
           'help': '''
             OAuth Client Secret.
-
+            
             Leave blank normally.
           ''',
           'name': 'client_secret',
@@ -6560,7 +6560,7 @@
           'exclusive': False,
           'help': '''
             Auth server URL.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'auth_url',
@@ -6576,7 +6576,7 @@
           'exclusive': False,
           'help': '''
             Token server url.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'token_url',
@@ -6592,9 +6592,9 @@
           'exclusive': False,
           'help': '''
             API Key.
-
+            
             This is not normally used - use oauth instead.
-
+  
           ''',
           'name': 'api_key',
           'provider': '',
@@ -6609,7 +6609,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -6656,7 +6656,7 @@
           'exclusive': False,
           'help': '''
             The 2FA code
-            The 2FA code of your proton drive account if the account is set up with
+            The 2FA code of your proton drive account if the account is set up with 
             two-factor authentication
           ''',
           'name': '2fa',
@@ -6672,7 +6672,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -6688,11 +6688,11 @@
           'exclusive': False,
           'help': '''
             Return the file size before encryption
-
-            The size of the encrypted file will be different from (bigger than) the
-            original file size. Unless there is a reason to return the file size
-            after encryption is performed, otherwise, set this option to true, as
-            features like Open() which will need to be supplied with original content
+            			
+            The size of the encrypted file will be different from (bigger than) the 
+            original file size. Unless there is a reason to return the file size 
+            after encryption is performed, otherwise, set this option to true, as 
+            features like Open() which will need to be supplied with original content 
             size, will fail to operate properly
           ''',
           'name': 'original_file_size',
@@ -6707,10 +6707,10 @@
           'default_str': 'macos-drive@1.0.0-alpha.1+rclone',
           'exclusive': False,
           'help': '''
-            The app version string
-
-            The app version string indicates the client that is currently performing
-            the API request. This information is required and will be sent with every
+            The app version string 
+            
+            The app version string indicates the client that is currently performing 
+            the API request. This information is required and will be sent with every 
             API request.
           ''',
           'name': 'app_version',
@@ -6726,17 +6726,17 @@
           'exclusive': False,
           'help': '''
             Create a new revision when filename conflict is detected
-
-            When a file upload is cancelled or failed before completion, a draft will be
-            created and the subsequent upload of the same file to the same location will be
+            
+            When a file upload is cancelled or failed before completion, a draft will be 
+            created and the subsequent upload of the same file to the same location will be 
             reported as a conflict.
-
-            If the option is set to true, the draft will be replaced and then the upload
-            operation will restart. If there are other clients also uploading at the same
-            file location at the same time, the behavior is currently unknown. Need to set
+            
+            If the option is set to true, the draft will be replaced and then the upload 
+            operation will restart. If there are other clients also uploading at the same 
+            file location at the same time, the behavior is currently unknown. Need to set 
             to true for integration tests.
-            If the option is set to false, an error "a draft exist - usually this means a
-            file is being uploaded at another client, or, there was a failed upload attempt"
+            If the option is set to false, an error "a draft exist - usually this means a 
+            file is being uploaded at another client, or, there was a failed upload attempt" 
             will be returned, and no upload will happen.
           ''',
           'name': 'replace_existing_draft',
@@ -6752,15 +6752,15 @@
           'exclusive': False,
           'help': '''
             Caches the files and folders metadata to reduce API calls
-
-            The files and folders on ProtonDrive are represented as links with keyrings,
+            
+            The files and folders on ProtonDrive are represented as links with keyrings, 
             which can be cached to improve performance and be friendly to the API server.
-
-            The cache is currently built for the case when the rclone is the only instance
+            
+            The cache is currently built for the case when the rclone is the only instance 
             performing operations to the mount point. The event system, which is the proton
-            API system that provides visibility of what has changed on the drive, is yet
-            to be implemented, so updates from other clients won’t be reflected in the
-            cache. Thus, if there are concurrent clients accessing the same mount point,
+            API system that provides visibility of what has changed on the drive, is yet 
+            to be implemented, so updates from other clients won’t be reflected in the 
+            cache. Thus, if there are concurrent clients accessing the same mount point, 
             then we might have a problem with caching the stale data.
           ''',
           'name': 'enable_caching',
@@ -6795,7 +6795,7 @@
           'exclusive': False,
           'help': '''
             Auth server URL.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'auth_url',
@@ -6811,7 +6811,7 @@
           'exclusive': False,
           'help': '''
             Token server url.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'token_url',
@@ -6827,7 +6827,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -6862,7 +6862,7 @@
           'exclusive': False,
           'help': '''
             Get QingStor credentials from runtime.
-
+            
             Only applies if access_key_id and secret_access_key is blank.
           ''',
           'name': 'env_auth',
@@ -6878,7 +6878,7 @@
           'exclusive': False,
           'help': '''
             QingStor Access Key ID.
-
+            
             Leave blank for anonymous access or runtime credentials.
           ''',
           'name': 'access_key_id',
@@ -6894,7 +6894,7 @@
           'exclusive': False,
           'help': '''
             QingStor Secret Access Key (password).
-
+            
             Leave blank for anonymous access or runtime credentials.
           ''',
           'name': 'secret_access_key',
@@ -6910,7 +6910,7 @@
           'exclusive': False,
           'help': '''
             Enter an endpoint URL to connection QingStor API.
-
+            
             Leave blank will use the default value "https://qingstor.com:443".
           ''',
           'name': 'endpoint',
@@ -6952,7 +6952,7 @@
           'exclusive': False,
           'help': '''
             Zone to connect to.
-
+            
             Default is "pek3a".
           ''',
           'name': 'zone',
@@ -6980,7 +6980,7 @@
           'exclusive': False,
           'help': '''
             Cutoff for switching to chunked upload.
-
+            
             Any files larger than this will be uploaded in chunks of chunk_size.
             The minimum is 0 and the maximum is 5 GiB.
           ''',
@@ -6997,13 +6997,13 @@
           'exclusive': False,
           'help': '''
             Chunk size to use for uploading.
-
+            
             When uploading files larger than upload_cutoff they will be uploaded
             as multipart uploads using this chunk size.
-
+            
             Note that "--qingstor-upload-concurrency" chunks of this size are buffered
             in memory per transfer.
-
+            
             If you are transferring large files over high-speed links and you have
             enough memory, then increasing this will speed up the transfers.
           ''',
@@ -7020,13 +7020,13 @@
           'exclusive': False,
           'help': '''
             Concurrency for multipart uploads.
-
+            
             This is the number of chunks of the same file that are uploaded
             concurrently.
-
+            
             NB if you set this to > 1 then the checksums of multipart uploads
             become corrupted (the uploads themselves are not corrupted though).
-
+            
             If you are uploading small numbers of large files over high-speed links
             and these uploads do not fully utilize your bandwidth, then increasing
             this may help to speed up the transfers.
@@ -7044,7 +7044,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -7243,7 +7243,7 @@
           'exclusive': False,
           'help': '''
             Get AWS credentials from runtime (environment variables or EC2/ECS meta data if no env vars).
-
+            
             Only applies if access_key_id and secret_access_key is blank.
           ''',
           'name': 'env_auth',
@@ -7259,7 +7259,7 @@
           'exclusive': False,
           'help': '''
             AWS Access Key ID.
-
+            
             Leave blank for anonymous access or runtime credentials.
           ''',
           'name': 'access_key_id',
@@ -7275,7 +7275,7 @@
           'exclusive': False,
           'help': '''
             AWS Secret Access Key (password).
-
+            
             Leave blank for anonymous access or runtime credentials.
           ''',
           'name': 'secret_access_key',
@@ -7603,7 +7603,7 @@
           'exclusive': False,
           'help': '''
             region - the location where your bucket will be created and your data stored.
-
+  
           ''',
           'name': 'region',
           'provider': 'RackCorp',
@@ -7724,7 +7724,7 @@
           'exclusive': False,
           'help': '''
             Region to connect to. - the location where your bucket will be created and your data stored. Need bo be same with your endpoint.
-
+  
           ''',
           'name': 'region',
           'provider': 'HuaweiOBS',
@@ -7846,7 +7846,7 @@
           'exclusive': False,
           'help': '''
             Region where your bucket will be created and your data stored.
-
+  
           ''',
           'name': 'region',
           'provider': 'IONOS',
@@ -7888,7 +7888,7 @@
           'exclusive': False,
           'help': '''
             Region where your bucket will be created and your data stored.
-
+  
           ''',
           'name': 'region',
           'provider': 'Petabox',
@@ -7930,7 +7930,7 @@
           'exclusive': False,
           'help': '''
             Region where your data stored.
-
+  
           ''',
           'name': 'region',
           'provider': 'Synology',
@@ -7963,7 +7963,7 @@
           'exclusive': False,
           'help': '''
             Region to connect to.
-
+            
             Leave blank if you are using an S3 clone and you don't have a region.
           ''',
           'name': 'region',
@@ -7979,7 +7979,7 @@
           'exclusive': False,
           'help': '''
             Endpoint for S3 API.
-
+            
             Leave blank if using AWS to use the default endpoint for the region.
           ''',
           'name': 'endpoint',
@@ -8501,7 +8501,7 @@
           'exclusive': False,
           'help': '''
             Endpoint for IBM COS S3 API.
-
+            
             Specify if using an IBM COS On Premise.
           ''',
           'name': 'endpoint',
@@ -8534,7 +8534,7 @@
           'exclusive': False,
           'help': '''
             Endpoint for IONOS S3 Object Storage.
-
+            
             Specify the endpoint from the same region.
           ''',
           'name': 'endpoint',
@@ -8582,7 +8582,7 @@
           'exclusive': False,
           'help': '''
             Endpoint for Petabox S3 Object Storage.
-
+            
             Specify the endpoint from the same region.
           ''',
           'name': 'endpoint',
@@ -9409,7 +9409,7 @@
           'exclusive': False,
           'help': '''
             Endpoint for S3 API.
-
+            
             Required when using an S3 clone.
           ''',
           'name': 'endpoint',
@@ -9552,7 +9552,7 @@
           'exclusive': False,
           'help': '''
             Location constraint - must be set to match the Region.
-
+            
             Used when creating buckets only.
           ''',
           'name': 'location_constraint',
@@ -9720,7 +9720,7 @@
           'exclusive': False,
           'help': '''
             Location constraint - must match endpoint.
-
+            
             Used when creating buckets only.
           ''',
           'name': 'location_constraint',
@@ -9748,7 +9748,7 @@
           'exclusive': False,
           'help': '''
             Location constraint - must match endpoint.
-
+            
             Used when creating buckets only.
           ''',
           'name': 'location_constraint',
@@ -9926,7 +9926,7 @@
           'exclusive': False,
           'help': '''
             Location constraint - must match endpoint when using IBM Cloud Public.
-
+            
             For on-prem COS, do not make a selection from this list, hit enter.
           ''',
           'name': 'location_constraint',
@@ -10039,7 +10039,7 @@
           'exclusive': False,
           'help': '''
             Location constraint - the location where your bucket will be located and your data stored.
-
+  
           ''',
           'name': 'location_constraint',
           'provider': 'RackCorp',
@@ -10091,7 +10091,7 @@
           'exclusive': False,
           'help': '''
             Location constraint - must be set to match the Region.
-
+            
             Used when creating buckets only.
           ''',
           'name': 'location_constraint',
@@ -10107,7 +10107,7 @@
           'exclusive': False,
           'help': '''
             Location constraint - must be set to match the Region.
-
+            
             Leave blank if not sure. Used when creating buckets only.
           ''',
           'name': 'location_constraint',
@@ -10220,17 +10220,17 @@
           'exclusive': False,
           'help': '''
             Canned ACL used when creating buckets and storing or copying objects.
-
+            
             This ACL is used for creating objects and if bucket_acl isn't set, for creating buckets too.
-
+            
             For more info visit https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html#canned-acl
-
+            
             Note that this ACL is applied when server-side copying objects as S3
             doesn't copy the ACL from the source but rather writes a fresh one.
-
+            
             If the acl is an empty string then no X-Amz-Acl: header is added and
             the default (private) will be used.
-
+  
           ''',
           'name': 'acl',
           'provider': '!Storj,Synology,Cloudflare',
@@ -10280,15 +10280,15 @@
           'exclusive': False,
           'help': '''
             Canned ACL used when creating buckets.
-
+            
             For more info visit https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html#canned-acl
-
+            
             Note that this ACL is applied when only when creating buckets.  If it
             isn't set then "acl" is used instead.
-
+            
             If the "acl" and "bucket_acl" are empty strings then no X-Amz-Acl:
             header is added and the default (private) will be used.
-
+  
           ''',
           'name': 'bucket_acl',
           'provider': '',
@@ -10399,7 +10399,7 @@
           'exclusive': False,
           'help': '''
             To use SSE-C you may provide the secret encryption key used to encrypt/decrypt your data.
-
+            
             Alternatively you can provide --sse-customer-key-base64.
           ''',
           'name': 'sse_customer_key',
@@ -10422,7 +10422,7 @@
           'exclusive': False,
           'help': '''
             If using SSE-C you must provide the secret encryption key encoded in base64 format to encrypt/decrypt your data.
-
+            
             Alternatively you can provide --sse-customer-key.
           ''',
           'name': 'sse_customer_key_base64',
@@ -10445,9 +10445,9 @@
           'exclusive': False,
           'help': '''
             If using SSE-C you may provide the secret encryption key MD5 checksum (optional).
-
+            
             If you leave it blank, this is calculated automatically from the sse_customer_key provided.
-
+  
           ''',
           'name': 'sse_customer_key_md5',
           'provider': 'AWS,Ceph,ChinaMobile,Minio',
@@ -10741,7 +10741,7 @@
           'exclusive': False,
           'help': '''
             Cutoff for switching to chunked upload.
-
+            
             Any files larger than this will be uploaded in chunks of chunk_size.
             The minimum is 0 and the maximum is 5 GiB.
           ''',
@@ -10758,33 +10758,33 @@
           'exclusive': False,
           'help': '''
             Chunk size to use for uploading.
-
+            
             When uploading files larger than upload_cutoff or files with unknown
             size (e.g. from "rclone rcat" or uploaded with "rclone mount" or google
             photos or google docs) they will be uploaded as multipart uploads
             using this chunk size.
-
+            
             Note that "--s3-upload-concurrency" chunks of this size are buffered
             in memory per transfer.
-
+            
             If you are transferring large files over high-speed links and you have
             enough memory, then increasing this will speed up the transfers.
-
+            
             Rclone will automatically increase the chunk size when uploading a
             large file of known size to stay below the 10,000 chunks limit.
-
+            
             Files of unknown size are uploaded with the configured
             chunk_size. Since the default chunk size is 5 MiB and there can be at
             most 10,000 chunks, this means that by default the maximum size of
             a file you can stream upload is 48 GiB.  If you wish to stream upload
             larger files then you will need to increase chunk_size.
-
+            
             Increasing the chunk size decreases the accuracy of the progress
             statistics displayed with "-P" flag. Rclone treats chunk as sent when
             it's buffered by the AWS SDK, when in fact it may still be uploading.
             A bigger chunk size means a bigger AWS SDK buffer and progress
             reporting more deviating from the truth.
-
+  
           ''',
           'name': 'chunk_size',
           'provider': '',
@@ -10799,16 +10799,16 @@
           'exclusive': False,
           'help': '''
             Maximum number of parts in a multipart upload.
-
+            
             This option defines the maximum number of multipart chunks to use
             when doing a multipart upload.
-
+            
             This can be useful if a service does not support the AWS S3
             specification of 10,000 chunks.
-
+            
             Rclone will automatically increase the chunk size when uploading a
             large file of a known size to stay below this number of chunks limit.
-
+  
           ''',
           'name': 'max_upload_parts',
           'provider': '',
@@ -10823,10 +10823,10 @@
           'exclusive': False,
           'help': '''
             Cutoff for switching to multipart copy.
-
+            
             Any files larger than this that need to be server-side copied will be
             copied in chunks of this size.
-
+            
             The minimum is 0 and the maximum is 5 GiB.
           ''',
           'name': 'copy_cutoff',
@@ -10842,7 +10842,7 @@
           'exclusive': False,
           'help': '''
             Don't store MD5 checksum with object metadata.
-
+            
             Normally rclone will calculate the MD5 checksum of the input before
             uploading it so it can add it to metadata on the object. This is great
             for data integrity checking but can cause long delays for large files
@@ -10861,16 +10861,16 @@
           'exclusive': False,
           'help': '''
             Path to the shared credentials file.
-
+            
             If env_auth = true then rclone can use a shared credentials file.
-
+            
             If this variable is empty rclone will look for the
             "AWS_SHARED_CREDENTIALS_FILE" env variable. If the env value is empty
             it will default to the current user's home directory.
-
+            
                 Linux/OSX: "$HOME/.aws/credentials"
                 Windows:   "%USERPROFILE%\.aws\credentials"
-
+  
           ''',
           'name': 'shared_credentials_file',
           'provider': '',
@@ -10885,13 +10885,13 @@
           'exclusive': False,
           'help': '''
             Profile to use in the shared credentials file.
-
+            
             If env_auth = true then rclone can use a shared credentials file. This
             variable controls which profile is used in that file.
-
+            
             If empty it will default to the environment variable "AWS_PROFILE" or
             "default" if that environment variable is also not set.
-
+  
           ''',
           'name': 'profile',
           'provider': '',
@@ -10918,10 +10918,10 @@
           'exclusive': False,
           'help': '''
             Concurrency for multipart uploads.
-
+            
             This is the number of chunks of the same file that are uploaded
             concurrently.
-
+            
             If you are uploading small numbers of large files over high-speed links
             and these uploads do not fully utilize your bandwidth, then increasing
             this may help to speed up the transfers.
@@ -10939,12 +10939,12 @@
           'exclusive': False,
           'help': '''
             If true use path style access if false use virtual hosted style.
-
+            
             If this is true (the default) then rclone will use path style access,
             if false then rclone will use virtual path style. See [the AWS S3
             docs](https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingBucket.html#access-bucket-intro)
             for more info.
-
+            
             Some providers (e.g. AWS, Aliyun OSS, Netease COS, or Tencent COS) require this set to
             false - rclone will do this automatically based on the provider
             setting.
@@ -10962,10 +10962,10 @@
           'exclusive': False,
           'help': '''
             If true use v2 authentication.
-
+            
             If this is false (the default) then rclone will use v4 authentication.
             If it is set then rclone will use v2 authentication.
-
+            
             Use this only if v4 signatures don't work, e.g. pre Jewel/v10 CEPH.
           ''',
           'name': 'v2_auth',
@@ -10981,7 +10981,7 @@
           'exclusive': False,
           'help': '''
             If true use the AWS S3 accelerated endpoint.
-
+            
             See: [AWS S3 Transfer acceleration](https://docs.aws.amazon.com/AmazonS3/latest/dev/transfer-acceleration-examples.html)
           ''',
           'name': 'use_accelerate_endpoint',
@@ -10997,11 +10997,11 @@
           'exclusive': False,
           'help': '''
             If true avoid calling abort upload on a failure, leaving all successfully uploaded parts on S3 for manual recovery.
-
+            
             It should be set to true for resuming uploads across different sessions.
-
+            
             WARNING: Storing parts of an incomplete multipart upload counts towards space usage on S3 and will add additional costs if not cleaned up.
-
+  
           ''',
           'name': 'leave_parts_on_error',
           'provider': 'AWS',
@@ -11016,12 +11016,12 @@
           'exclusive': False,
           'help': '''
             Size of listing chunk (response list for each ListObject S3 request).
-
+            
             This option is also known as "MaxKeys", "max-items", or "page-size" from the AWS S3 specification.
             Most services truncate the response list to 1000 objects even if requested more than that.
             In AWS S3 this is a global maximum and cannot be changed, see [AWS S3](https://docs.aws.amazon.com/cli/latest/reference/s3/ls.html).
             In Ceph, this can be increased with the "rgw list buckets max chunk" option.
-
+  
           ''',
           'name': 'list_chunk',
           'provider': '',
@@ -11036,17 +11036,17 @@
           'exclusive': False,
           'help': '''
             Version of ListObjects to use: 1,2 or 0 for auto.
-
+            
             When S3 originally launched it only provided the ListObjects call to
             enumerate objects in a bucket.
-
+            
             However in May 2016 the ListObjectsV2 call was introduced. This is
             much higher performance and should be used if at all possible.
-
+            
             If set to the default, 0, rclone will guess according to the provider
             set which list objects method to call. If it guesses wrong, then it
             may be set manually here.
-
+  
           ''',
           'name': 'list_version',
           'provider': '',
@@ -11064,13 +11064,13 @@
           'exclusive': False,
           'help': '''
             Whether to url encode listings: true/false/unset
-
+            
             Some providers support URL encoding listings and where this is
             available this is more reliable when using control characters in file
             names. If this is set to unset (the default) then rclone will choose
             according to the provider setting what to apply, but you can override
             rclone's choice here.
-
+  
           ''',
           'name': 'list_url_encode',
           'provider': '',
@@ -11085,14 +11085,14 @@
           'exclusive': False,
           'help': '''
             If set, don't attempt to check the bucket exists or create it.
-
+            
             This can be useful when trying to minimise the number of transactions
             rclone does if you know the bucket exists already.
-
+            
             It can also be needed if the user you are using does not have bucket
             creation permissions. Before v1.52.0 this would have passed silently
             due to a bug.
-
+  
           ''',
           'name': 'no_check_bucket',
           'provider': '',
@@ -11107,34 +11107,34 @@
           'exclusive': False,
           'help': '''
             If set, don't HEAD uploaded objects to check integrity.
-
+            
             This can be useful when trying to minimise the number of transactions
             rclone does.
-
+            
             Setting it means that if rclone receives a 200 OK message after
             uploading an object with PUT then it will assume that it got uploaded
             properly.
-
+            
             In particular it will assume:
-
+            
             - the metadata, including modtime, storage class and content type was as uploaded
             - the size was as uploaded
-
+            
             It reads the following items from the response for a single part PUT:
-
+            
             - the MD5SUM
             - The uploaded date
-
+            
             For multipart uploads these items aren't read.
-
+            
             If an source object of unknown length is uploaded then rclone **will** do a
             HEAD request.
-
+            
             Setting this flag increases the chance for undetected upload failures,
             in particular an incorrect size, so it isn't recommended for normal
             operation. In practice the chance of an undetected upload failure is
             very small even with this flag.
-
+  
           ''',
           'name': 'no_head',
           'provider': '',
@@ -11161,7 +11161,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -11177,7 +11177,7 @@
           'exclusive': False,
           'help': '''
             How often internal memory buffer pools will be flushed.
-
+            
             Uploads which requires additional buffers (f.e multipart) will use memory pool for allocations.
             This option controls how often unused buffers will be removed from the pool.
           ''',
@@ -11206,14 +11206,14 @@
           'exclusive': False,
           'help': '''
             Disable usage of http2 for S3 backends.
-
+            
             There is currently an unsolved issue with the s3 (specifically minio) backend
             and HTTP/2.  HTTP/2 is enabled by default for the s3 backend but can be
             disabled here.  When the issue is solved this flag will be removed.
-
+            
             See: https://github.com/rclone/rclone/issues/4673, https://github.com/rclone/rclone/issues/3631
-
-
+            
+  
           ''',
           'name': 'disable_http2',
           'provider': '',
@@ -11244,10 +11244,10 @@
           'exclusive': False,
           'help': '''
             Upload an empty object with a trailing slash when a new directory is created
-
+            
             Empty folders are unsupported for bucket based remotes, this option creates an empty
             object ending with "/", to persist the folder.
-
+  
           ''',
           'name': 'directory_markers',
           'provider': '',
@@ -11265,9 +11265,9 @@
           'exclusive': False,
           'help': '''
             Whether to use ETag in multipart uploads for verification
-
+            
             This should be true, false or left unset to use the default for the provider.
-
+  
           ''',
           'name': 'use_multipart_etag',
           'provider': '',
@@ -11282,15 +11282,15 @@
           'exclusive': False,
           'help': '''
             Whether to use a presigned request or PutObject for single part uploads
-
+            
             If this is false rclone will use PutObject from the AWS SDK to upload
             an object.
-
+            
             Versions of rclone < 1.59 use presigned requests to upload a single
             part object and setting this flag to true will re-enable that
             functionality. This shouldn't be necessary except in exceptional
             circumstances or for testing.
-
+  
           ''',
           'name': 'use_presigned_request',
           'provider': '',
@@ -11317,15 +11317,15 @@
           'exclusive': False,
           'help': '''
             Show file versions as they were at the specified time.
-
+            
             The parameter should be a date, "2006-01-02", datetime "2006-01-02
             15:04:05" or a duration for that long ago, eg "100d" or "1h".
-
+            
             Note that when using this no file write operations are permitted,
             so you can't upload files or delete them.
-
+            
             See [the time option docs](/docs/#time-option) for valid formats.
-
+  
           ''',
           'name': 'version_at',
           'provider': '',
@@ -11340,14 +11340,14 @@
           'exclusive': False,
           'help': '''
             If set this will decompress gzip encoded objects.
-
+            
             It is possible to upload objects to S3 with "Content-Encoding: gzip"
             set. Normally rclone will download these files as compressed objects.
-
+            
             If this flag is set then rclone will decompress these files with
             "Content-Encoding: gzip" as they are received. This means that rclone
             can't check the size and hash but the file contents will be decompressed.
-
+  
           ''',
           'name': 'decompress',
           'provider': '',
@@ -11365,26 +11365,26 @@
           'exclusive': False,
           'help': '''
             Set this if the backend might gzip objects.
-
+            
             Normally providers will not alter objects when they are downloaded. If
             an object was not uploaded with `Content-Encoding: gzip` then it won't
             be set on download.
-
+            
             However some providers may gzip objects even if they weren't uploaded
             with `Content-Encoding: gzip` (eg Cloudflare).
-
+            
             A symptom of this would be receiving errors like
-
+            
                 ERROR corrupted on transfer: sizes differ NNN vs MMM
-
+            
             If you set this flag and rclone downloads an object with
             Content-Encoding: gzip set and chunked transfer encoding, then rclone
             will decompress the object on the fly.
-
+            
             If this is set to unset (the default) then rclone will choose
             according to the provider setting what to apply, but you can override
             rclone's choice here.
-
+  
           ''',
           'name': 'might_gzip',
           'provider': '',
@@ -11402,19 +11402,19 @@
           'exclusive': False,
           'help': '''
             Whether to send `Accept-Encoding: gzip` header.
-
+            
             By default, rclone will append `Accept-Encoding: gzip` to the request to download
             compressed objects whenever possible.
-
+            
             However some providers such as Google Cloud Storage may alter the HTTP headers, breaking
             the signature of the request.
-
+            
             A symptom of this would be receiving errors like
-
+            
             	SignatureDoesNotMatch: The request signature we calculated does not match the signature you provided.
-
+            
             In this case, you might want to try disabling this option.
-
+  
           ''',
           'name': 'use_accept_encoding_gzip',
           'provider': '',
@@ -11441,7 +11441,7 @@
           'exclusive': False,
           'help': '''
             Endpoint for STS.
-
+            
             Leave blank if using AWS to use the default endpoint for the region.
           ''',
           'name': 'sts_endpoint',
@@ -11548,7 +11548,7 @@
           'exclusive': False,
           'help': '''
             Name of the library.
-
+            
             Leave blank to access all non-encrypted libraries.
           ''',
           'name': 'library',
@@ -11564,7 +11564,7 @@
           'exclusive': False,
           'help': '''
             Library password (for encrypted libraries only).
-
+            
             Leave blank if you pass it through the command line.
           ''',
           'name': 'library_key',
@@ -11604,7 +11604,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -11627,7 +11627,7 @@
           'exclusive': False,
           'help': '''
             SSH host to connect to.
-
+            
             E.g. "example.com".
           ''',
           'name': 'host',
@@ -11679,7 +11679,7 @@
           'exclusive': False,
           'help': '''
             Raw PEM-encoded private key.
-
+            
             If specified, will override key_file parameter.
           ''',
           'name': 'key_pem',
@@ -11695,9 +11695,9 @@
           'exclusive': False,
           'help': '''
             Path to PEM-encoded private key file.
-
+            
             Leave blank or set key-use-agent to use ssh-agent.
-
+            
             Leading `~` will be expanded in the file name as will environment variables such as `${RCLONE_CONFIG_DIR}`.
           ''',
           'name': 'key_file',
@@ -11713,7 +11713,7 @@
           'exclusive': False,
           'help': '''
             The passphrase to decrypt the PEM-encoded private key file.
-
+            
             Only PEM encrypted key files (old OpenSSH format) are supported. Encrypted keys
             in the new OpenSSH format can't be used.
           ''',
@@ -11730,9 +11730,9 @@
           'exclusive': False,
           'help': '''
             Optional path to public key file.
-
+            
             Set this if you have a signed certificate you want to use for authentication.
-
+            
             Leading `~` will be expanded in the file name as will environment variables such as `${RCLONE_CONFIG_DIR}`.
           ''',
           'name': 'pubkey_file',
@@ -11755,9 +11755,9 @@
           'exclusive': False,
           'help': '''
             Optional path to known_hosts file.
-
+            
             Set this value to enable server host key validation.
-
+            
             Leading `~` will be expanded in the file name as will environment variables such as `${RCLONE_CONFIG_DIR}`.
           ''',
           'name': 'known_hosts_file',
@@ -11773,7 +11773,7 @@
           'exclusive': False,
           'help': '''
             When set forces the usage of the ssh-agent.
-
+            
             When key-file is also set, the ".pub" file of the specified key-file is read and only the associated key is
             requested from the ssh-agent. This allows to avoid `Too many authentication failures for *username*` errors
             when the ssh-agent contains many keys.
@@ -11803,20 +11803,20 @@
           'exclusive': False,
           'help': '''
             Enable the use of insecure ciphers and key exchange methods.
-
+            
             This enables the use of the following insecure ciphers and key exchange methods:
-
+            
             - aes128-cbc
             - aes192-cbc
             - aes256-cbc
             - 3des-cbc
             - diffie-hellman-group-exchange-sha256
             - diffie-hellman-group-exchange-sha1
-
+            
             Those algorithms are insecure and may allow plaintext data to be recovered by an attacker.
-
+            
             This must be false if you use either ciphers or key_exchange advanced options.
-
+  
           ''',
           'name': 'use_insecure_cipher',
           'provider': '',
@@ -11831,7 +11831,7 @@
           'exclusive': False,
           'help': '''
             Disable the execution of SSH commands to determine if remote file hashing is available.
-
+            
             Leave blank or set to false to enable hashing (recommended), set to true to disable hashing.
           ''',
           'name': 'disable_hashcheck',
@@ -11847,11 +11847,11 @@
           'exclusive': False,
           'help': '''
             Allow asking for SFTP password when needed.
-
+            
             If this is set and no password is supplied then rclone will:
             - ask for a password
             - not contact the ssh agent
-
+  
           ''',
           'name': 'ask_password',
           'provider': '',
@@ -11866,16 +11866,16 @@
           'exclusive': False,
           'help': '''
             Override path used by SSH shell commands.
-
+            
             This allows checksum calculation when SFTP and SSH paths are
             different. This issue affects among others Synology NAS boxes.
-
+            
             E.g. if shared folders can be found in directories representing volumes:
-
+            
                 rclone sync /home/local/directory remote:/directory --sftp-path-override /volume2/directory
-
+            
             E.g. if home directory can be found in a shared folder called "home":
-
+            
                 rclone sync /home/local/directory remote:/home/directory --sftp-path-override /volume1/homes/USER/directory
           ''',
           'name': 'path_override',
@@ -11925,7 +11925,7 @@
           'exclusive': False,
           'help': '''
             The type of SSH shell on remote server, if any.
-
+            
             Leave blank for autodetect.
           ''',
           'name': 'shell_type',
@@ -11941,7 +11941,7 @@
           'exclusive': False,
           'help': '''
             The command used to read md5 hashes.
-
+            
             Leave blank for autodetect.
           ''',
           'name': 'md5sum_command',
@@ -11957,7 +11957,7 @@
           'exclusive': False,
           'help': '''
             The command used to read sha1 hashes.
-
+            
             Leave blank for autodetect.
           ''',
           'name': 'sha1sum_command',
@@ -11997,7 +11997,7 @@
           'exclusive': False,
           'help': '''
             Specifies the path or command to run a sftp server on the remote host.
-
+            
             The subsystem option is ignored when server_command is defined.
           ''',
           'name': 'server_command',
@@ -12013,15 +12013,15 @@
           'exclusive': False,
           'help': '''
             If set use fstat instead of stat.
-
+            
             Some servers limit the amount of open files and calling Stat after opening
             the file will throw an error from the server. Setting this flag will call
             Fstat instead of Stat which is called on an already open file handle.
-
+            
             It has been found that this helps with IBM Sterling SFTP servers which have
             "extractability" level set to 1 which means only 1 file can be opened at
             any given time.
-
+  
           ''',
           'name': 'use_fstat',
           'provider': '',
@@ -12036,20 +12036,20 @@
           'exclusive': False,
           'help': '''
             If set don't use concurrent reads.
-
+            
             Normally concurrent reads are safe to use and not using them will
             degrade performance, so this option is disabled by default.
-
+            
             Some servers limit the amount number of times a file can be
             downloaded. Using concurrent reads can trigger this limit, so if you
             have a server which returns
-
+            
                 Failed to copy: file does not exist
-
+            
             Then you may need to enable this flag.
-
+            
             If concurrent reads are disabled, the use_fstat option is ignored.
-
+  
           ''',
           'name': 'disable_concurrent_reads',
           'provider': '',
@@ -12064,12 +12064,12 @@
           'exclusive': False,
           'help': '''
             If set don't use concurrent writes.
-
+            
             Normally rclone uses concurrent writes to upload files. This improves
             the performance greatly, especially for distant servers.
-
+            
             This option disables concurrent writes should that be necessary.
-
+  
           ''',
           'name': 'disable_concurrent_writes',
           'provider': '',
@@ -12084,12 +12084,12 @@
           'exclusive': False,
           'help': '''
             Max time before closing idle connections.
-
+            
             If no connections have been returned to the connection pool in the time
             given, rclone will empty the connection pool.
-
+            
             Set to 0 to keep connections indefinitely.
-
+  
           ''',
           'name': 'idle_timeout',
           'provider': '',
@@ -12104,7 +12104,7 @@
           'exclusive': False,
           'help': '''
             Upload and download chunk size.
-
+            
             This controls the maximum size of payload in SFTP protocol packets.
             The RFC limits this to 32768 bytes (32k), which is the default. However,
             a lot of servers support larger sizes, typically limited to a maximum
@@ -12112,7 +12112,7 @@
             speed dramatically on high latency links. This includes OpenSSH, and,
             for example, using the value of 255k works well, leaving plenty of room
             for overhead while still being within a total packet size of 256k.
-
+            
             Make sure to test thoroughly before using a value higher than 32k,
             and only use it if you always connect to the same server or after
             sufficiently broad testing. If you get errors such as
@@ -12123,7 +12123,7 @@
             set a different chunk_size when downloading files, but it accepts
             packets up to the 256k total size, so for uploads the chunk_size
             can be set as for the OpenSSH example above.
-
+  
           ''',
           'name': 'chunk_size',
           'provider': '',
@@ -12138,11 +12138,11 @@
           'exclusive': False,
           'help': '''
             The maximum number of outstanding requests for one file
-
+            
             This controls the maximum number of outstanding requests for one file.
             Increasing it will increase throughput on high latency links at the
             cost of using more memory.
-
+  
           ''',
           'name': 'concurrency',
           'provider': '',
@@ -12158,22 +12158,22 @@
           'exclusive': False,
           'help': '''
             Environment variables to pass to sftp and commands
-
+            
             Set environment variables in the form:
-
+            
                 VAR=value
-
+            
             to be passed to the sftp client and to any commands run (eg md5sum).
-
+            
             Pass multiple variables space separated, eg
-
+            
                 VAR1=value VAR2=value
-
+            
             and pass variables with spaces in quotes, eg
-
+            
                 "VAR3=value with space" "VAR4=value with space" VAR5=nospacehere
-
-
+            
+  
           ''',
           'name': 'set_env',
           'provider': '',
@@ -12189,15 +12189,15 @@
           'exclusive': False,
           'help': '''
             Space separated list of ciphers to be used for session encryption, ordered by preference.
-
+            
             At least one must match with server configuration. This can be checked for example using ssh -Q cipher.
-
+            
             This must not be set if use_insecure_cipher is true.
-
+            
             Example:
-
+            
                 aes128-ctr aes192-ctr aes256-ctr aes128-gcm@openssh.com aes256-gcm@openssh.com
-
+  
           ''',
           'name': 'ciphers',
           'provider': '',
@@ -12213,15 +12213,15 @@
           'exclusive': False,
           'help': '''
             Space separated list of key exchange algorithms, ordered by preference.
-
+            
             At least one must match with server configuration. This can be checked for example using ssh -Q kex.
-
+            
             This must not be set if use_insecure_cipher is true.
-
+            
             Example:
-
+            
                 sntrup761x25519-sha512@openssh.com curve25519-sha256 curve25519-sha256@libssh.org ecdh-sha2-nistp256
-
+  
           ''',
           'name': 'key_exchange',
           'provider': '',
@@ -12237,13 +12237,13 @@
           'exclusive': False,
           'help': '''
             Space separated list of MACs (message authentication code) algorithms, ordered by preference.
-
+            
             At least one must match with server configuration. This can be checked for example using ssh -Q mac.
-
+            
             Example:
-
+            
                 umac-64-etm@openssh.com umac-128-etm@openssh.com hmac-sha2-256-etm@openssh.com
-
+  
           ''',
           'name': 'macs',
           'provider': '',
@@ -12259,15 +12259,15 @@
           'exclusive': False,
           'help': '''
             Space separated list of host key algorithms, ordered by preference.
-
+            
             At least one must match with server configuration. This can be checked for example using ssh -Q HostKeyAlgorithms.
-
+            
             Note: This can affect the outcome of key negotiation with the server even if server host key validation is not enabled.
-
+            
             Example:
-
+            
                 ssh-ed25519 ssh-rsa ssh-dss
-
+  
           ''',
           'name': 'host_key_algorithms',
           'provider': '',
@@ -12301,7 +12301,7 @@
           'exclusive': False,
           'help': '''
             Auth server URL.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'auth_url',
@@ -12317,7 +12317,7 @@
           'exclusive': False,
           'help': '''
             Token server url.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'token_url',
@@ -12372,7 +12372,7 @@
           'exclusive': False,
           'help': '''
             ID of the root folder.
-
+            
             Leave blank to access "Personal Folders".  You can use one of the
             standard values here or any folder ID (long hex number ID).
           ''',
@@ -12389,12 +12389,12 @@
           'exclusive': False,
           'help': '''
             Upload chunk size.
-
+            
             Must a power of 2 >= 256k.
-
+            
             Making this larger will improve performance, but note that each chunk
             is buffered in memory one per transfer.
-
+            
             Reducing this will reduce memory usage but decrease performance.
           ''',
           'name': 'chunk_size',
@@ -12410,10 +12410,10 @@
           'exclusive': False,
           'help': '''
             Endpoint for API calls.
-
+            
             This is usually auto discovered as part of the oauth process, but can
             be set manually to something like: https://XXX.sharefile.com
-
+  
           ''',
           'name': 'endpoint',
           'provider': '',
@@ -12428,7 +12428,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -12451,7 +12451,7 @@
           'exclusive': False,
           'help': '''
             Sia daemon API URL, like http://sia.daemon.host:9980.
-
+            
             Note that siad must run with --disable-api-security to open API port for other hosts (not recommended).
             Keep default if Sia daemon runs on localhost.
           ''',
@@ -12468,7 +12468,7 @@
           'exclusive': False,
           'help': '''
             Sia Daemon API Password.
-
+            
             Can be found in the apipassword file located in HOME/.sia/ or in the daemon directory.
           ''',
           'name': 'api_password',
@@ -12484,7 +12484,7 @@
           'exclusive': False,
           'help': '''
             Siad User Agent
-
+            
             Sia daemon requires the 'Sia-Agent' user agent by default for security
           ''',
           'name': 'user_agent',
@@ -12500,7 +12500,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -12523,7 +12523,7 @@
           'exclusive': False,
           'help': '''
             SMB server hostname to connect to.
-
+            
             E.g. "example.com".
           ''',
           'name': 'host',
@@ -12587,14 +12587,14 @@
           'exclusive': False,
           'help': '''
             Service principal name.
-
+            
             Rclone presents this name to the server. Some servers use this as further
             authentication, and it often needs to be set for clusters. For example:
-
+            
                 cifs/remotehost:1020
-
+            
             Leave blank if not sure.
-
+  
           ''',
           'name': 'spn',
           'provider': '',
@@ -12609,12 +12609,12 @@
           'exclusive': False,
           'help': '''
             Max time before closing idle connections.
-
+            
             If no connections have been returned to the connection pool in the time
             given, rclone will empty the connection pool.
-
+            
             Set to 0 to keep connections indefinitely.
-
+  
           ''',
           'name': 'idle_timeout',
           'provider': '',
@@ -12641,7 +12641,7 @@
           'exclusive': False,
           'help': '''
             Whether the server is configured to be case-insensitive.
-
+            
             Always true on Windows shares.
           ''',
           'name': 'case_insensitive',
@@ -12657,7 +12657,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -12733,7 +12733,7 @@
           'exclusive': False,
           'help': '''
             Satellite address.
-
+            
             Custom satellite address should match the format: `<nodeid>@<address>:<port>`.
           ''',
           'name': 'satellite_address',
@@ -12761,7 +12761,7 @@
           'exclusive': False,
           'help': '''
             Encryption passphrase.
-
+            
             To access existing objects enter passphrase used for uploading.
           ''',
           'name': 'passphrase',
@@ -12784,7 +12784,7 @@
           'exclusive': False,
           'help': '''
             Sugarsync App ID.
-
+            
             Leave blank to use rclone's.
           ''',
           'name': 'app_id',
@@ -12800,7 +12800,7 @@
           'exclusive': False,
           'help': '''
             Sugarsync Access Key ID.
-
+            
             Leave blank to use rclone's.
           ''',
           'name': 'access_key_id',
@@ -12816,7 +12816,7 @@
           'exclusive': False,
           'help': '''
             Sugarsync Private Access Key.
-
+            
             Leave blank to use rclone's.
           ''',
           'name': 'private_access_key',
@@ -12847,7 +12847,7 @@
           'exclusive': False,
           'help': '''
             Sugarsync refresh token.
-
+            
             Leave blank normally, will be auto configured by rclone.
           ''',
           'name': 'refresh_token',
@@ -12863,7 +12863,7 @@
           'exclusive': False,
           'help': '''
             Sugarsync authorization.
-
+            
             Leave blank normally, will be auto configured by rclone.
           ''',
           'name': 'authorization',
@@ -12879,7 +12879,7 @@
           'exclusive': False,
           'help': '''
             Sugarsync authorization expiry.
-
+            
             Leave blank normally, will be auto configured by rclone.
           ''',
           'name': 'authorization_expiry',
@@ -12895,7 +12895,7 @@
           'exclusive': False,
           'help': '''
             Sugarsync user.
-
+            
             Leave blank normally, will be auto configured by rclone.
           ''',
           'name': 'user',
@@ -12911,7 +12911,7 @@
           'exclusive': False,
           'help': '''
             Sugarsync root id.
-
+            
             Leave blank normally, will be auto configured by rclone.
           ''',
           'name': 'root_id',
@@ -12927,7 +12927,7 @@
           'exclusive': False,
           'help': '''
             Sugarsync deleted folder id.
-
+            
             Leave blank normally, will be auto configured by rclone.
           ''',
           'name': 'deleted_id',
@@ -12943,7 +12943,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -13239,7 +13239,7 @@
           'exclusive': False,
           'help': '''
             If true avoid calling abort upload on a failure.
-
+            
             It should be set to true for resuming uploads across different sessions.
           ''',
           'name': 'leave_parts_on_error',
@@ -13272,7 +13272,7 @@
           'exclusive': False,
           'help': '''
             The storage policy to use when creating a new container.
-
+            
             This applies the specified storage policy when creating a new
             container. The policy cannot be changed afterwards. The allowed
             configuration values and their meaning depend on your Swift storage
@@ -13291,7 +13291,7 @@
           'exclusive': False,
           'help': '''
             Above this size files will be chunked into a _segments container.
-
+            
             Above this size files will be chunked into a _segments container.  The
             default for this is 5 GiB which is its maximum value.
           ''',
@@ -13308,13 +13308,13 @@
           'exclusive': False,
           'help': '''
             Don't chunk files during streaming upload.
-
+            
             When doing streaming uploads (e.g. using rcat or mount) setting this
             flag will cause the swift backend to not upload chunked files.
-
+            
             This will limit the maximum upload size to 5 GiB. However non chunked
             files are easier to deal with and have an MD5SUM.
-
+            
             Rclone will still chunk files bigger than chunk_size when doing normal
             copy operations.
           ''',
@@ -13331,27 +13331,27 @@
           'exclusive': False,
           'help': '''
             Disable support for static and dynamic large objects
-
+            
             Swift cannot transparently store files bigger than 5 GiB. There are
             two schemes for doing that, static or dynamic large objects, and the
             API does not allow rclone to determine whether a file is a static or
             dynamic large object without doing a HEAD on the object. Since these
             need to be treated differently, this means rclone has to issue HEAD
             requests for objects for example when reading checksums.
-
+            
             When `no_large_objects` is set, rclone will assume that there are no
             static or dynamic large objects stored. This means it can stop doing
             the extra HEAD calls which in turn increases performance greatly
             especially when doing a swift to swift transfer with `--checksum` set.
-
+            
             Setting this option implies `no_chunk` and also that no files will be
             uploaded in chunks, so files bigger than 5 GiB will just fail on
             upload.
-
+            
             If you set this option and there *are* static or dynamic large objects,
             then this will give incorrect hashes for them. Downloads will succeed,
             but other operations such as Remove and Copy will fail.
-
+  
           ''',
           'name': 'no_large_objects',
           'provider': '',
@@ -13366,7 +13366,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -13442,7 +13442,7 @@
           'exclusive': False,
           'help': '''
             Satellite address.
-
+            
             Custom satellite address should match the format: `<nodeid>@<address>:<port>`.
           ''',
           'name': 'satellite_address',
@@ -13470,7 +13470,7 @@
           'exclusive': False,
           'help': '''
             Encryption passphrase.
-
+            
             To access existing objects enter passphrase used for uploading.
           ''',
           'name': 'passphrase',
@@ -13493,7 +13493,7 @@
           'exclusive': False,
           'help': '''
             Your access token.
-
+            
             Get it from https://uptobox.com/my_account.
           ''',
           'name': 'access_token',
@@ -13521,7 +13521,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -13544,7 +13544,7 @@
           'exclusive': False,
           'help': '''
             URL of http host to connect to.
-
+            
             E.g. https://example.com.
           ''',
           'name': 'url',
@@ -13604,7 +13604,7 @@
           'exclusive': False,
           'help': '''
             User name.
-
+            
             In case NTLM authentication is used, the username should be in the format 'Domain\User'.
           ''',
           'name': 'user',
@@ -13656,9 +13656,9 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
-
+            
             Default encoding is Slash,LtGt,DoubleQuote,Colon,Question,Asterisk,Pipe,Hash,Percent,BackSlash,Del,Ctl,LeftSpace,LeftTilde,RightSpace,RightPeriod,InvalidUtf8 for sharepoint-ntlm or identity otherwise.
           ''',
           'name': 'encoding',
@@ -13675,16 +13675,16 @@
           'exclusive': False,
           'help': '''
             Set HTTP headers for all transactions.
-
+            
             Use this to set additional HTTP headers for all transactions
-
+            
             The input format is comma separated list of key,value pairs.  Standard
             [CSV encoding](https://godoc.org/encoding/csv) may be used.
-
+            
             For example, to set a Cookie use 'Cookie,name=value', or '"Cookie","name=value"'.
-
+            
             You can set multiple headers, e.g. '"Cookie","name=value","Authorization","xxx"'.
-
+  
           ''',
           'name': 'headers',
           'provider': '',
@@ -13711,12 +13711,12 @@
           'exclusive': False,
           'help': '''
             Nextcloud upload chunk size.
-
+            
             We recommend configuring your NextCloud instance to increase the max chunk size to 1 GB for better upload performances.
             See https://docs.nextcloud.com/server/latest/admin_manual/configuration_files/big_file_upload_configuration.html#adjust-chunk-size-on-nextcloud-side
-
+            
             Set to 0 to disable chunked uploading.
-
+  
           ''',
           'name': 'nextcloud_chunk_size',
           'provider': '',
@@ -13750,7 +13750,7 @@
           'exclusive': False,
           'help': '''
             Auth server URL.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'auth_url',
@@ -13766,7 +13766,7 @@
           'exclusive': False,
           'help': '''
             Token server url.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'token_url',
@@ -13794,7 +13794,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -13829,7 +13829,7 @@
           'exclusive': False,
           'help': '''
             Auth server URL.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'auth_url',
@@ -13845,7 +13845,7 @@
           'exclusive': False,
           'help': '''
             Token server url.
-
+            
             Leave blank to use the provider defaults.
           ''',
           'name': 'token_url',
@@ -13893,7 +13893,7 @@
           'exclusive': False,
           'help': '''
             Zoho region to connect to.
-
+            
             You'll have to use the region your organization is registered in. If
             not sure use the same top level domain as you connect to in your
             browser.
@@ -13911,7 +13911,7 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
           ''',
           'name': 'encoding',
@@ -13934,7 +13934,7 @@
           'exclusive': False,
           'help': '''
             URL of http host to connect to.
-
+            
             E.g. https://example.com.
           ''',
           'name': 'url',
@@ -13950,7 +13950,7 @@
           'exclusive': False,
           'help': '''
             User name.
-
+            
             In case NTLM authentication is used, the username should be in the format 'Domain\User'.
           ''',
           'name': 'user',
@@ -14002,9 +14002,9 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
-
+            
             Default encoding is Slash,LtGt,DoubleQuote,Colon,Question,Asterisk,Pipe,Hash,Percent,BackSlash,Del,Ctl,LeftSpace,LeftTilde,RightSpace,RightPeriod,InvalidUtf8 for sharepoint-ntlm or identity otherwise.
           ''',
           'name': 'encoding',
@@ -14021,16 +14021,16 @@
           'exclusive': False,
           'help': '''
             Set HTTP headers for all transactions.
-
+            
             Use this to set additional HTTP headers for all transactions
-
+            
             The input format is comma separated list of key,value pairs.  Standard
             [CSV encoding](https://godoc.org/encoding/csv) may be used.
-
+            
             For example, to set a Cookie use 'Cookie,name=value', or '"Cookie","name=value"'.
-
+            
             You can set multiple headers, e.g. '"Cookie","name=value","Authorization","xxx"'.
-
+  
           ''',
           'name': 'headers',
           'provider': 'personal',
@@ -14100,7 +14100,7 @@
           'exclusive': False,
           'help': '''
             URL of http host to connect to.
-
+            
             E.g. https://example.com.
           ''',
           'name': 'url',
@@ -14116,7 +14116,7 @@
           'exclusive': False,
           'help': '''
             User name.
-
+            
             In case NTLM authentication is used, the username should be in the format 'Domain\User'.
           ''',
           'name': 'user',
@@ -14168,9 +14168,9 @@
           'exclusive': False,
           'help': '''
             The encoding for the backend.
-
+            
             See the [encoding section in the overview](/overview/#encoding) for more info.
-
+            
             Default encoding is Slash,LtGt,DoubleQuote,Colon,Question,Asterisk,Pipe,Hash,Percent,BackSlash,Del,Ctl,LeftSpace,LeftTilde,RightSpace,RightPeriod,InvalidUtf8 for sharepoint-ntlm or identity otherwise.
           ''',
           'name': 'encoding',
@@ -14187,16 +14187,16 @@
           'exclusive': False,
           'help': '''
             Set HTTP headers for all transactions.
-
+            
             Use this to set additional HTTP headers for all transactions
-
+            
             The input format is comma separated list of key,value pairs.  Standard
             [CSV encoding](https://godoc.org/encoding/csv) may be used.
-
+            
             For example, to set a Cookie use 'Cookie,name=value', or '"Cookie","name=value"'.
-
+            
             You can set multiple headers, e.g. '"Cookie","name=value","Authorization","xxx"'.
-
+  
           ''',
           'name': 'headers',
           'provider': 'personal',
