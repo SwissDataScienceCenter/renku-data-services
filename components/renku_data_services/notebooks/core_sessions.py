@@ -4,12 +4,14 @@ import base64
 import json
 import os
 from collections.abc import AsyncIterator
+from datetime import timedelta
 from pathlib import PurePosixPath
 from typing import cast
 from urllib.parse import urljoin, urlparse
 
 import httpx
 from kubernetes.client import V1ObjectMeta, V1Secret
+from kubernetes.utils.duration import format_duration
 from sanic import Request
 from toml import dumps
 from yaml import safe_dump
@@ -401,11 +403,11 @@ def get_culling(resource_pool: ResourcePool, nb_config: NotebooksConfig) -> Cull
         resource_pool.hibernation_threshold or nb_config.sessions.culling.registered.hibernated_seconds
     )
     return Culling(
-        maxAge=f"{nb_config.sessions.culling.registered.max_age_seconds}s",
-        maxFailedDuration=f"{nb_config.sessions.culling.registered.failed_seconds}s",
-        maxHibernatedDuration=f"{hibernation_threshold_seconds}s",
-        maxIdleDuration=f"{idle_threshold_seconds}s",
-        maxStartingDuration=f"{nb_config.sessions.culling.registered.pending_seconds}s",
+        maxAge=format_duration(timedelta(seconds=nb_config.sessions.culling.registered.max_age_seconds)),
+        maxFailedDuration=format_duration(timedelta(seconds=nb_config.sessions.culling.registered.failed_seconds)),
+        maxHibernatedDuration=format_duration(timedelta(seconds=hibernation_threshold_seconds)),
+        maxIdleDuration=format_duration(timedelta(seconds=idle_threshold_seconds)),
+        maxStartingDuration=format_duration(timedelta(seconds=nb_config.sessions.culling.registered.pending_seconds)),
     )
 
 
