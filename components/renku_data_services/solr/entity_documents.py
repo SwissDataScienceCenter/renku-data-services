@@ -45,6 +45,7 @@ class EntityType(StrEnum):
     project = "Project"
     user = "User"
     group = "Group"
+    data_connector = "DataConnector"
 
     @property
     def to_resource_type(self) -> ResourceType:
@@ -187,6 +188,56 @@ class Project(EntityDoc, frozen=True):
         """Create a Project from a dictionary."""
         return Project.model_validate(d)
 
+
+class DataConnector(EntityDoc, frozen=True):
+    """Represents a renku data connector in SOLR."""
+
+    id: ULID
+    project_id: ULID | None
+    name: str
+    slug: Annotated[Slug, BeforeValidator(_str_to_slug)]
+    visibility: Visibility
+    createdBy: str
+    creationDate: datetime
+    description: str | None = None
+    keywords: list[str] = Field(default_factory=list)
+    namespaceDetails: ResponseBody | None = None
+    creatorDetails: ResponseBody | None = None
+
+    @property
+    def entity_type(self) -> EntityType:
+        """Return the type of this entity."""
+        return EntityType.data_connector
+
+    @field_serializer("namespace", when_used="always")
+    def __serialize_namespace(self, namespace: Slug) -> str:
+        return namespace.value
+
+    @field_serializer("id", when_used="always")
+    def __serialize_id(self, id: ULID) -> str:
+        return str(id)
+
+    @field_serializer("slug", when_used="always")
+    def __serialize_slug(self, slug: Slug) -> str:
+        return slug.value
+
+    @field_serializer("visibility", when_used="always")
+    def __serialize_visibilty(self, visibility: Visibility) -> str:
+        return visibility.value
+
+    @field_serializer("creationDate", when_used="always")
+    def __serialize_creation_date(self, creationDate: datetime) -> str:
+        return creationDate.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    @field_validator("creationDate")
+    @classmethod
+    def _add_tzinfo(cls, v: datetime) -> datetime:
+        return v.replace(tzinfo=UTC)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> Project:
+        """Create a Project from a dictionary."""
+        return Project.model_validate(d)
 
 class EntityDocReader:
     """Reads dicts into one of the entity document classes."""
