@@ -89,8 +89,6 @@ jobs:
         with:
           runCmd: |
             make style_checks
-            poetry env activate
-            pre-commit install
             poetry run pre-commit run --all-files --show-diff-on-failure --hook-stage manual
           push: never
           skipContainerUserIdUpdate: false
