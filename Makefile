@@ -94,7 +94,7 @@ style_checks: ${API_SPECS} ## Run linting and style checks
 	poetry check
 	poetry run mypy
 	poetry run ruff format --check
-	poetry run ruff check . --extend-select RUF100
+	poetry run ruff check
 	poetry run bandit -c pyproject.toml -r .
 	poetry poly check
 	poetry poly libs
