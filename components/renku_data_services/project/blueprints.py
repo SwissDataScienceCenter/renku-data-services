@@ -146,7 +146,7 @@ class ProjectsBP(CustomBlueprint):
             _: Request, user: base_models.APIUser, project_id: ULID, body: apispec.ProjectPost
         ) -> JSONResponse:
             project = await copy_project(
-                project_id=project_id,
+                source_project_id=project_id,
                 user=user,
                 name=body.name,
                 namespace=body.namespace,
