@@ -1,7 +1,7 @@
 """Models for sessions."""
 
 import typing
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 from pathlib import PurePosixPath
@@ -162,6 +162,21 @@ class EnvVar:
     name: str
     value: str | None = None
 
+    @classmethod
+    def from_dict(cls, env_dict: dict[str, str | None]) -> list["EnvVar"]:
+        """Create a list of EnvVar instances from a dictionary."""
+        return [cls(name=name, value=value) for name, value in env_dict.items()]
+
+    @classmethod
+    def from_apispec(cls, env_variables: list["apispec.EnvVar"]) -> list["EnvVar"]:
+        """Create a list of EnvVar instances from apispec objects."""
+        return [cls(name=env_var.name, value=env_var.value) for env_var in env_variables]
+
+    @classmethod
+    def to_dict(cls, env_variables: list["EnvVar"]) -> dict[str, str | None]:
+        """Convert to dict."""
+        return {var.name: var.value for var in env_variables}
+
     def __post_init__(self) -> None:
         error_msgs: list[str] = []
         if len(self.name) > MAX_LENGTH_ENV_VARIABLES_NAME:
@@ -184,33 +199,6 @@ class EnvVar:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class EnvVariables:
-    """Model for a dictionary of environment variables."""
-
-    env_vars: list[EnvVar] = field(default_factory=list)
-
-    @classmethod
-    def from_dict(cls, env_dict: dict[str, str | None]) -> "EnvVariables":
-        """Create an EnvVariables instance from a dictionary."""
-        env_vars = [EnvVar(name=name, value=value) for name, value in env_dict.items()]
-        return cls(env_vars=env_vars)
-
-    @classmethod
-    def from_apispec(cls, env_variables: "apispec.EnvVariables") -> "EnvVariables":
-        """Create an EnvVariables instance from a dictionary."""
-        env_vars = [EnvVar(name=env_var.name, value=env_var.value) for env_var in env_variables.env_vars]
-        return cls(env_vars=env_vars)
-
-    def __post_init__(self) -> None:
-        if len(self.env_vars) > MAX_NUMBER_ENV_VARIABLES:
-            raise errors.ValidationError(message=f"Cannot have more than {MAX_NUMBER_ENV_VARIABLES} env variables.")
-
-    def to_dict(self) -> dict[str, str | None]:
-        """Convert to dict."""
-        return {var.name: var.value for var in self.env_vars}
-
-
-@dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedSessionLauncher:
     """Session launcher model that has not been persisted in the DB."""
 
@@ -219,7 +207,7 @@ class UnsavedSessionLauncher:
     description: str | None
     resource_class_id: int | None
     disk_storage: int | None
-    env_variables: EnvVariables | None
+    env_variables: list[EnvVar] | None
     environment: str | UnsavedEnvironment | UnsavedBuildParameters
     """When a string is passed for the environment it should be the ID of an existing environment."""
 
@@ -245,7 +233,7 @@ class SessionLauncherPatch:
     environment: str | EnvironmentPatch | UnsavedEnvironment | UnsavedBuildParameters | None = None
     resource_class_id: int | None | ResetType = None
     disk_storage: int | None | ResetType = None
-    env_variables: EnvVariables | None | ResetType = None
+    env_variables: list[EnvVar] | None | ResetType = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
