@@ -184,7 +184,7 @@ class SessionLauncherORM(BaseORM):
             description=self.description,
             resource_class_id=self.resource_class_id,
             disk_storage=self.disk_storage,
-            env_variables=models.EnvVars.from_dict(self.env_variables) if self.env_variables else None,
+            env_variables=models.EnvVariables.from_dict(self.env_variables) if self.env_variables else None,
             environment=self.environment.dump(),
         )
 
