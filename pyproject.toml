@@ -147,6 +147,8 @@ select = [
   "UP",
   # flake8-simplify
   "SIM",
+  # unused-noqa https://docs.astral.sh/ruff/rules/unused-noqa/
+  "RUF100"
 ]
 ignore = [
   "D105",
