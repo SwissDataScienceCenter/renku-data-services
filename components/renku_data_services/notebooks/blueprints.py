@@ -399,7 +399,7 @@ class NotebooksNewBP(CustomBlueprint):
             if launcher.env_variables:
                 env.extend(
                     SessionEnvItem(name=env_var.name, value=env_var.value)
-                    for env_var in launcher.env_variables.var_list
+                    for env_var in launcher.env_variables.env_vars
                     if env_var.value
                 )
 

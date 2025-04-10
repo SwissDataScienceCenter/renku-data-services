@@ -601,7 +601,7 @@ class SessionRepository:
                 launcher.disk_storage = patch.disk_storage
             elif patch.disk_storage is RESET:
                 launcher.disk_storage = None
-            if isinstance(patch.env_variables, models.EnvVars):
+            if isinstance(patch.env_variables, models.EnvVariables):
                 launcher.env_variables = patch.env_variables.to_dict()
             elif patch.env_variables is RESET:
                 launcher.env_variables = None

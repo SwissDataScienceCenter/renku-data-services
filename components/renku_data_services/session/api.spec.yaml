@@ -916,12 +916,28 @@ components:
     EnvVariables:
       description: Environment variables for the session pod
       type: object
-      additionalProperties:
-        type: string
-        default: {}
-      example:
-        MY_VAR: value 1
-        VAR2: null
+      properties:
+        env_vars:
+          type: array
+          maxItems: 32
+          default: []
+          items:
+            $ref: "#/components/schemas/EnvVar"
+    EnvVar:
+      description: An environment variable for the session pod
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 256
+          # based on https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap03.html#tag_03_235
+          pattern: "^[a-zA-Z_][a-zA-Z0-9_]*$"
+          example: MY_VAR
+        value:
+          type: string
+          maxLength: 500
+      required:
+        - name
     ErrorReason:
       description: The reason why a container image build did not succeed, if available.
       type: string

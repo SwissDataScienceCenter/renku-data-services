@@ -167,7 +167,7 @@ def validate_unsaved_session_launcher(
         description=launcher.description,
         resource_class_id=launcher.resource_class_id,
         disk_storage=launcher.disk_storage,
-        env_variables=models.EnvVars.from_dict(launcher.env_variables) if launcher.env_variables else None,
+        env_variables=models.EnvVariables.from_apispec(launcher.env_variables) if launcher.env_variables else None,
         # NOTE: When you create an environment with a launcher the environment can only be custom
         environment=environment,
     )
@@ -301,7 +301,7 @@ def validate_session_launcher_patch(
     env_variables = (
         RESET
         if "env_variables" in data_dict and data_dict["env_variables"] is None
-        else models.EnvVars.from_dict(patch.env_variables)
+        else models.EnvVariables.from_apispec(patch.env_variables)
         if patch.env_variables
         else None
     )
