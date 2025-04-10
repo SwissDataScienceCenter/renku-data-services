@@ -87,7 +87,9 @@ jobs:
       - name: Style checks
         uses: devcontainers/ci@v0.3
         with:
-          runCmd: make style_checks
+          runCmd: |
+            make style_checks
+            poetry run pre-commit run --all-files --show-diff-on-failure --hook-stage manual
           push: never
           skipContainerUserIdUpdate: false
           cacheFrom: ${{ needs.build-devcontainer.outputs.image_repository }}:${{ needs.build-devcontainer.outputs.image_tag }}
