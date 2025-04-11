@@ -4,7 +4,7 @@ from ulid import ULID
 
 from renku_data_services.authz.models import Visibility
 from renku_data_services.base_models.core import Slug
-from renku_data_services.solr.entity_documents import Group, Project, User
+from renku_data_services.solr.entity_documents import DataConnector, Group, Project, User
 
 user_jan_ullrich = User(id="abc-def", firstName="Jan", lastName="Ullrich", namespace=Slug("janu"))
 user_tadej_pogacar = User(id="hij-klm", firstName="Tadej", lastName="Pogačar", namespace=Slug("tadejp"))
@@ -18,6 +18,56 @@ project_ai_stuff = Project(
     createdBy=user_jan_ullrich.id,
     creationDate=datetime(year=2025, month=1, day=31, hour=9, minute=47, second=44),
 )
+dc_one = DataConnector(
+    id=ULID(),
+    project_id=project_ai_stuff.id,
+    namespace=user_jan_ullrich.namespace,
+    name="qq dc one",
+    slug=Slug("dc-xy1"),
+    visibility=Visibility.PUBLIC,
+    createdBy=user_jan_ullrich.id,
+    creationDate=datetime(year=2025, month=4, day=10, hour=16, minute=14, second=4),
+    description="Bad data is filtered out.",
+)
+
+
+def test_dc_dict():
+    assert dc_one.to_dict() == {
+        "id": str(dc_one.id),
+        "slug": "dc-xy1",
+        "name": "qq dc one",
+        "project_id": str(project_ai_stuff.id),
+        "namespace": str(user_jan_ullrich.namespace),
+        "createdBy": user_jan_ullrich.id,
+        "creationDate": "2025-04-10T16:14:04Z",
+        "description": "Bad data is filtered out.",
+        "keywords": [],
+        "visibility": "public",
+        "_kind": "fullentity",
+        "_type": "DataConnector",
+        "_version_": -1,
+    }
+
+
+def test_read_dc_from_dict():
+    dc = DataConnector.from_dict(
+        {
+            "id": str(dc_one.id),
+            "slug": "dc-xy1",
+            "name": "qq dc one",
+            "project_id": str(project_ai_stuff.id),
+            "namespace": str(user_jan_ullrich.namespace),
+            "createdBy": user_jan_ullrich.id,
+            "creationDate": "2025-04-10T16:14:04Z",
+            "description": "Bad data is filtered out.",
+            "keywords": [],
+            "visibility": "public",
+            "_kind": "fullentity",
+            "_type": "DataConnector",
+            "_version_": -1,
+        }
+    )
+    assert dc == dc_one
 
 
 def test_user_dict():

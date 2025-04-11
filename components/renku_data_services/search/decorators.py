@@ -6,6 +6,7 @@ from typing import Concatenate, ParamSpec, Protocol, TypeVar, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from renku_data_services.data_connectors.models import DataConnector, DataConnectorUpdate, DeletedDataConnector
 from renku_data_services.errors import errors
 from renku_data_services.namespace.models import DeletedGroup, Group
 from renku_data_services.project.models import DeletedProject, Project, ProjectUpdate
@@ -31,7 +32,7 @@ _WithSearchUpdateRepo = TypeVar("_WithSearchUpdateRepo", bound=WithSearchUpdateR
 def update_search_document(
     f: Callable[Concatenate[_WithSearchUpdateRepo, _P], Awaitable[_T]],
 ) -> Callable[Concatenate[_WithSearchUpdateRepo, _P], Awaitable[_T]]:
-    """Initializes a transaction and commits it on successful exit of the wrapped function."""
+    """Calls the wrapped function and updates the search_update table with corresponding data."""
 
     @functools.wraps(f)
     async def func_wrapper(self: _WithSearchUpdateRepo, *args: _P.args, **kwargs: _P.kwargs) -> _T:
@@ -71,6 +72,16 @@ def update_search_document(
 
             case DeletedGroup() as g:
                 record = DeleteDoc.group(g.id)
+                await self.search_updates_repo.upsert(record)
+
+            case DataConnector() as dc:
+                await self.search_updates_repo.upsert(dc)
+
+            case DataConnectorUpdate() as dc:
+                await self.search_updates_repo.upsert(dc.new)
+
+            case DeletedDataConnector() as dc:
+                record = DeleteDoc.data_connector(dc.id)
                 await self.search_updates_repo.upsert(record)
 
             case list():

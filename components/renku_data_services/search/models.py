@@ -1,10 +1,13 @@
 """Model classes for search."""
 
+from __future__ import annotations
+
 from typing import Any
 
 from pydantic import BaseModel
 from ulid import ULID
 
+from renku_data_services.data_connectors.models import DataConnector
 from renku_data_services.namespace.models import Group
 from renku_data_services.project.models import Project
 from renku_data_services.users.models import UserInfo
@@ -26,19 +29,24 @@ class DeleteDoc(BaseModel):
         return "deleted:true"
 
     @classmethod
-    def group(cls, id: ULID) -> "DeleteDoc":
+    def group(cls, id: ULID) -> DeleteDoc:
         """For deleting a group."""
         return DeleteDoc(id=str(id), entity_type="Group")
 
     @classmethod
-    def project(cls, id: ULID) -> "DeleteDoc":
+    def project(cls, id: ULID) -> DeleteDoc:
         """For deleting a project."""
         return DeleteDoc(id=str(id), entity_type="Project")
 
     @classmethod
-    def user(cls, id: str) -> "DeleteDoc":
+    def user(cls, id: str) -> DeleteDoc:
         """For deleting a user."""
         return DeleteDoc(id=id, entity_type="User")
 
+    @classmethod
+    def data_connector(cls, id: ULID) -> DeleteDoc:
+        """For deleting a data connector."""
+        return DeleteDoc(id=str(id), entity_type="DataConnector")
 
-Entity = UserInfo | Group | Project | DeleteDoc
+
+Entity = UserInfo | Group | Project | DataConnector | DeleteDoc

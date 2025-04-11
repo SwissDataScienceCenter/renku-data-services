@@ -575,6 +575,7 @@ class Config:
                 authz=self.authz,
                 project_repo=self.project_repo,
                 group_repo=self.group_repo,
+                search_updates_repo=self.search_updates_repo,
             )
         return self._data_connector_repo
 

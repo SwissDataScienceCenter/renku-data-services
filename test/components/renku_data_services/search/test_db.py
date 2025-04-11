@@ -3,11 +3,14 @@
 import pytest
 from ulid import ULID
 
+from renku_data_services.authz.models import Visibility
 from renku_data_services.base_models.core import NamespacePath
+from renku_data_services.data_connectors.models import CloudStorageCore, DataConnector
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.namespace.models import UserNamespace
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.models import DeleteDoc
+from renku_data_services.solr.entity_documents import DataConnector as DataConnectorDoc
 from renku_data_services.solr.entity_documents import User as UserDoc
 from renku_data_services.users.models import UserInfo
 
@@ -19,6 +22,28 @@ user_namespace = UserNamespace(
 )
 
 
+@pytest.mark.asyncio
+async def test_data_connector_upsert(app_config_instance):
+    run_migrations_for_app("common")
+    repo = SearchUpdatesRepo(app_config_instance.db.async_session_maker)
+    dc = DataConnector(
+        id=ULID(),
+        name="mygreat dc",
+        storage=CloudStorageCore(storage_type="s3", configuration={}, source_path="", target_path="", readonly=True),
+        slug="dc-1",
+        visibility=Visibility.PUBLIC,
+        created_by="userid_2",
+        namespace=user_namespace,
+    )
+    orm_id = await repo.upsert(dc, started_at=None)
+    db_doc = await repo.find_by_id(orm_id)
+    if db_doc is None:
+        raise Exception("dataconnector not found")
+    dc = DataConnectorDoc.from_dict(db_doc.payload)
+    print(dc)
+
+
+@pytest.mark.asyncio
 async def test_delete_doc(app_config_instance):
     run_migrations_for_app("common")
     repo = SearchUpdatesRepo(app_config_instance.db.async_session_maker)
