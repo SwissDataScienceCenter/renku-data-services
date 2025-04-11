@@ -121,6 +121,19 @@ To update the snapshot data, run the following command in the devcontainer:
 $ poetry run pytest -m "not schemathesis" -n auto --snapshot-update
 ```
 
+### Directly from PyCharm
+
+From the root folder of the repository, run:
+
+1. `devcontainer build --workspace-folder .`
+2. `devcontainer up --workspace-folder .`
+3. `make schemas`
+4. `make amalthea_schema`
+5. `make k3d_cluster`
+
+Then you can run the test as usual directly from PyCharm by clicking on the green arrow next to a specific test, or a
+whole test suite or part of the test hierarchy.
+
 ## Migrations
 
 We use Alembic for migrations, and we have a single version table for all schemas. This version table

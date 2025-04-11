@@ -16,11 +16,14 @@ from sqlalchemy import NullPool, delete, false, select, true
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select, and_, not_, or_
+from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
+from renku_data_services.crc.models import Cluster, SavedCluster, UnsavedCluster
+from renku_data_services.crc.orm import ClusterORM
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.users.db import UserRepo
 
@@ -391,6 +394,8 @@ class ResourcePoolRepository(_Base):
                 kwargs["idle_threshold"] = None
             if kwargs.get("hibernation_threshold") == 0:
                 kwargs["hibernation_threshold"] = None
+            if kwargs.get("cluster_id") == 0:
+                kwargs["cluster_id"] = None
             # NOTE: The .update method on the model validates the update to the resource pool
             old_rp_model = rp.dump(quota)
             new_rp_model = old_rp_model.update(**kwargs)
@@ -398,6 +403,10 @@ class ResourcePoolRepository(_Base):
             for key, val in kwargs.items():
                 match key:
                     case "name" | "public" | "default" | "idle_threshold" | "hibernation_threshold":
+                        setattr(rp, key, val)
+                    case "cluster_id":
+                        if val is None:
+                            continue
                         setattr(rp, key, val)
                     case "quota":
                         if val is None:
@@ -858,3 +867,71 @@ class UserRepository(_Base):
             if (no_default_access := kwargs.get("no_default_access")) is not None:
                 user.no_default_access = no_default_access
             return user.dump()
+
+
+@dataclass
+class ClusterRepository:
+    """Repository for cluster descriptions."""
+
+    session_maker: Callable[..., AsyncSession]
+
+    @_only_admins
+    async def select_all(self, api_user: base_models.APIUser) -> list[Cluster]:
+        """Get cluster descriptions from the database."""
+
+        async with self.session_maker() as session:
+            r = await session.scalars(select(ClusterORM))
+            clusters = r.fetchall()
+
+            return [c.to_cluster() for c in clusters]
+
+    @_only_admins
+    async def select(self, api_user: base_models.APIUser, cluster_id: ULID) -> Cluster:
+        """Get cluster descriptions from the database."""
+
+        async with self.session_maker() as session:
+            r = await session.scalars(select(ClusterORM).where(ClusterORM.id == cluster_id))
+            cluster = r.one_or_none()
+            if cluster is None:
+                raise errors.MissingResourceError(message=f"Cluster definition id='{cluster_id}' does not exist.")
+
+            return cluster.to_cluster()
+
+    @_only_admins
+    async def insert(self, api_user: base_models.APIUser, cluster: UnsavedCluster) -> Cluster:
+        """Creates a new cluster description."""
+
+        cluster_orm = ClusterORM.from_model(cluster)
+        async with self.session_maker() as session, session.begin():
+            session.add(cluster_orm)
+            await session.flush()
+            await session.refresh(cluster_orm)
+
+            return cluster_orm.to_cluster()
+
+    @_only_admins
+    async def update(self, api_user: base_models.APIUser, cluster: SavedCluster, cluster_id: ULID) -> Cluster:
+        """Updates a cluster description."""
+
+        async with self.session_maker() as session, session.begin():
+            saved_cluster = (await session.scalars(select(ClusterORM).where(ClusterORM.id == cluster_id))).one_or_none()
+            if saved_cluster is None:
+                raise errors.MissingResourceError(message=f"Cluster definition id='{cluster.id}' does not exist.")
+
+            saved_cluster.name = cluster.name
+            saved_cluster.id = cluster.id
+
+            await session.flush()
+            await session.refresh(saved_cluster)
+
+            return saved_cluster.to_cluster()
+
+    @_only_admins
+    async def delete(self, api_user: base_models.APIUser, cluster_id: ULID) -> None:
+        """Get cluster descriptions from the database."""
+
+        async with self.session_maker() as session, session.begin():
+            r = await session.scalars(select(ClusterORM).where(ClusterORM.id == cluster_id))
+            cluster = r.one_or_none()
+            if cluster is not None:
+                await session.delete(cluster)

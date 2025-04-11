@@ -1,0 +1,26 @@
+DATA_SERVICE_ROOT=$(cd "$(dirname ${0})"; pwd)
+
+KUBECONFIG="${DATA_SERVICE_ROOT}/.k3d-config.yaml"
+
+NB_SERVER_OPTIONS__DEFAULTS_PATH="${DATA_SERVICE_ROOT}/server_defaults.json"
+NB_SERVER_OPTIONS__UI_CHOICES_PATH="${DATA_SERVICE_ROOT}/server_options.json"
+CORS_ALLOW_ALL_ORIGINS=true
+
+ALEMBIC_CONFIG="${DATA_SERVICE_ROOT}/components/renku_data_services/migrations/alembic.ini"
+
+AUTHZ_DB_GRPC_PORT=50051
+AUTHZ_DB_HOST=127.0.0.1
+AUTHZ_DB_KEY=renku
+AUTHZ_DB_NO_TLS_CONNECTION=true
+
+DB_HOST=127.0.0.1
+DB_NAME=renku
+DB_PASSWORD=renku
+DB_USER=renku
+
+ZED_TOKEN=renku
+ZED_ENDPOINT=127.0.0.1:50051
+ZED_INSECURE=true
+
+SOLR_URL="http://127.0.0.1:8983"
+SOLR_CORE="renku-search-dev"
