@@ -14,6 +14,7 @@ from kubernetes.client import V1ObjectMeta, V1Secret
 from kubernetes.utils.duration import format_duration
 from sanic import Request
 from toml import dumps
+from ulid import ULID
 from yaml import safe_dump
 
 from renku_data_services.base_models import APIUser
@@ -43,6 +44,7 @@ from renku_data_services.notebooks.crs import (
     Resources,
     SecretAsVolume,
     SecretAsVolumeItem,
+    SessionEnvItem,
     State,
 )
 from renku_data_services.notebooks.models import ExtraSecret
@@ -52,6 +54,8 @@ from renku_data_services.notebooks.utils import (
 )
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.models import Project, SessionSecret
+from renku_data_services.session.db import SessionRepository
+from renku_data_services.session.models import SessionLauncher
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.cryptography import get_encryption_key
 
@@ -438,6 +442,7 @@ async def patch_session(
     internal_gitlab_user: APIUser,
     rp_repo: ResourcePoolRepository,
     project_repo: ProjectRepository,
+    session_repo: SessionRepository,
 ) -> AmaltheaSessionV1Alpha1:
     """Patch an Amalthea session."""
     session = await nb_config.k8s_v2_client.get_server(session_id, user.id)
@@ -531,8 +536,32 @@ async def patch_session(
                 updated_secrets.append(ImagePullSecret(name=image_pull_secret_name, adopt=True))
                 patch.spec.imagePullSecrets = updated_secrets
 
+    launcher_id = session.metadata.annotations.get("renku.io/launcher-id")
+    if launcher_id and session.spec.session.env:
+        launcher = await session_repo.get_launcher(user, ULID.from_str(launcher_id))
+        if not patch.spec.session:
+            patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()
+        patch.spec.session.env = _updated_env_vars(
+            env=session.spec.session.env,
+            launcher=launcher,
+        )
     patch_serialized = patch.to_rfc7386()
     if len(patch_serialized) == 0:
         return session
 
     return await nb_config.k8s_v2_client.patch_server(session_id, user.id, patch_serialized)
+
+
+def _updated_env_vars(
+    env: list[SessionEnvItem],
+    launcher: SessionLauncher,
+) -> list[SessionEnvItem]:
+    # Carry over the RENKU env vars
+    new_env_vars = [env_var for env_var in env if env_var.name.startswith("RENKU")]
+    if launcher.env_variables:
+        new_env_vars.extend(
+            SessionEnvItem(name=env_var.name, value=env_var.value)
+            for env_var in launcher.env_variables
+            if env_var.value
+        )
+    return new_env_vars
