@@ -13,6 +13,9 @@ import httpx
 from kubernetes.client import V1ObjectMeta, V1Secret
 from kubernetes.utils.duration import format_duration
 from sanic import Request
+
+# DEBUG
+from sanic.log import logger
 from toml import dumps
 from ulid import ULID
 from yaml import safe_dump
@@ -537,14 +540,18 @@ async def patch_session(
                 patch.spec.imagePullSecrets = updated_secrets
 
     launcher_id = session.metadata.annotations.get("renku.io/launcher-id")
+    logger.debug(f"Launcher ID: {launcher_id}", "Has env" if session.spec.session.env else "No env")
     if launcher_id and session.spec.session.env:
         launcher = await session_repo.get_launcher(user, ULID.from_str(launcher_id))
+        logger.debug("Has launcher")
         if not patch.spec.session:
             patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()
         patch.spec.session.env = _updated_env_vars(
             env=session.spec.session.env,
             launcher=launcher,
         )
+        for env in session.spec.session.env:
+            logger.debug(f"Env: {env.name}={env.value}")
     patch_serialized = patch.to_rfc7386()
     if len(patch_serialized) == 0:
         return session
