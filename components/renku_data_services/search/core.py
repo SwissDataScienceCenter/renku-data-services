@@ -22,7 +22,7 @@ from renku_data_services.search.solr_user_query import (
     UserRole,
 )
 from renku_data_services.search.user_query import Nel, UserQuery
-from renku_data_services.solr.entity_documents import EntityDocReader, Group, Project, User
+from renku_data_services.solr.entity_documents import DataConnector, EntityDocReader, Group, Project, User
 from renku_data_services.solr.entity_schema import Fields
 from renku_data_services.solr.solr_client import (
     DefaultSolrClient,
@@ -112,6 +112,12 @@ async def _renku_query(
                 limit=1,
             ).with_all_fields(),
         )
+        .add_sub_query(
+            Fields.project_details,
+            SubQuery(
+                query="{!terms f=id v=$row.projectId}", filter="{!terms f=_type v=Project}", limit=1
+            ).with_all_fields(),
+        )
     )
 
 
@@ -137,7 +143,7 @@ async def query(
         if results.response.num_found % limit != 0:
             total_pages += 1
 
-        solr_docs: list[Group | Project | User] = results.response.read_to(EntityDocReader.from_dict)
+        solr_docs: list[Group | Project | DataConnector | User] = results.response.read_to(EntityDocReader.from_dict)
 
         docs = list(map(converters.from_entity, solr_docs))
         return apispec.SearchResult(
