@@ -57,6 +57,8 @@ class EntityType(StrEnum):
                 return ResourceType.user
             case EntityType.group:
                 return ResourceType.group
+            case EntityType.data_connector:
+                return ResourceType.data_connector
 
 
 class EntityDoc(BaseModel, ABC, frozen=True):
@@ -193,8 +195,10 @@ class DataConnector(EntityDoc, frozen=True):
     """Represents a renku data connector in SOLR."""
 
     id: ULID
-    project_id: ULID | None
+    projectId: ULID | None = None
     name: str
+    storageType: str
+    readonly: bool
     slug: Annotated[Slug, BeforeValidator(_str_to_slug)]
     visibility: Visibility
     createdBy: str
@@ -203,6 +207,7 @@ class DataConnector(EntityDoc, frozen=True):
     keywords: list[str] = Field(default_factory=list)
     namespaceDetails: ResponseBody | None = None
     creatorDetails: ResponseBody | None = None
+    projectDetails: ResponseBody | None = None
 
     @property
     def entity_type(self) -> EntityType:
@@ -235,15 +240,16 @@ class DataConnector(EntityDoc, frozen=True):
         return v.replace(tzinfo=UTC)
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> Project:
+    def from_dict(cls, d: dict[str, Any]) -> DataConnector:
         """Create a Project from a dictionary."""
-        return Project.model_validate(d)
+        return DataConnector.model_validate(d)
+
 
 class EntityDocReader:
     """Reads dicts into one of the entity document classes."""
 
     @classmethod
-    def from_dict(cls, doc: dict[str, Any]) -> User | Project | Group | None:
+    def from_dict(cls, doc: dict[str, Any]) -> User | Project | Group | DataConnector | None:
         """Reads dicts into one of the entity document classes."""
         dt = doc.get(Fields.entity_type)
         if dt is None:
@@ -257,3 +263,5 @@ class EntityDocReader:
                     return User.from_dict(doc)
                 case EntityType.group:
                     return Group.from_dict(doc)
+                case EntityType.data_connector:
+                    return DataConnector.from_dict(doc)

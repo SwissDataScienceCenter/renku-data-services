@@ -49,6 +49,7 @@ async def update_solr(search_updates_repo: SearchUpdatesRepo, solr_client: SolrC
             docs: list[SolrDocument] = [RawDocument(e.payload) for e in entries]
             result = await solr_client.upsert(docs)
             if result == "VersionConflict":
+                logger.error(f"There was a version conflict updating search entities: {docs}")
                 await search_updates_repo.mark_reset(ids)
                 await asyncio.sleep(1)
             else:
