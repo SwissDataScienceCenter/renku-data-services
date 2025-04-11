@@ -605,7 +605,7 @@ class DataConnectorRepository:
     async def copy_link(
         self,
         user: base_models.APIUser,
-        project_id: ULID,
+        target_project_id: ULID,
         link: models.DataConnectorToProjectLink,
         *,
         session: AsyncSession | None = None,
@@ -615,7 +615,7 @@ class DataConnectorRepository:
             user, ResourceType.data_connector, link.data_connector_id, Scope.READ
         )
         allowed_to_write_project = await self.authz.has_permission(
-            user, ResourceType.project, link.project_id, Scope.WRITE
+            user, ResourceType.project, target_project_id, Scope.WRITE
         )
         if not allowed_to_read_dc:
             raise errors.MissingResourceError(
@@ -627,7 +627,7 @@ class DataConnectorRepository:
                 message=f"The project with ID {link.project_id} does not exist or you do not have access to it"
             )
         unsaved_link = models.UnsavedDataConnectorToProjectLink(
-            data_connector_id=link.data_connector_id, project_id=project_id
+            data_connector_id=link.data_connector_id, project_id=target_project_id
         )
         return await self.insert_link(user=user, link=unsaved_link, session=session)
 
