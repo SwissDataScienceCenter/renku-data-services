@@ -74,6 +74,9 @@
           DB_NAME = "renku";
           DB_PASSWORD = "dev";
           PGPASSWORD = "dev";
+          PSQLRC = (pkgs.writeText "rsdrc.sql" ''
+            SET SEARCH_PATH TO authz,common,connected_services,events,platform,projects,public,resource_pools,secrets,sessions,storage,users
+          '');
           AUTHZ_DB_KEY = "dev";
           AUTHZ_DB_NO_TLS_CONNECTION = "true";
           AUTHZ_DB_GRPC_PORT = "50051";
@@ -111,6 +114,10 @@
         python313
         basedpyright
         rclone
+        (writeShellScriptBin "pg" ''
+          psql -h $DB_HOST -U dev renku
+        ''
+        )
         (writeShellScriptBin "pyfix" ''
           poetry run ruff check --fix
           poetry run ruff format
