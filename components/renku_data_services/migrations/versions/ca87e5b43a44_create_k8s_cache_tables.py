@@ -31,14 +31,14 @@ def upgrade() -> None:
         sa.Column("version", sa.String(), nullable=False),
         sa.Column("kind", sa.String(), nullable=False),
         sa.Column("cluster", sa.String(), nullable=False),
-        sa.Column("user_id", sa.String(length=36), nullable=False),
+        sa.Column("user_id", sa.String(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
         schema="common",
     )
     op.create_index(op.f("ix_common_k8s_objects_cluster"), "k8s_objects", ["cluster"], unique=False, schema="common")
     op.create_index(op.f("ix_common_k8s_objects_deleted"), "k8s_objects", ["deleted"], unique=False, schema="common")
     op.create_index(op.f("ix_common_k8s_objects_kind"), "k8s_objects", ["kind"], unique=False, schema="common")
-    op.create_index(op.f("ix_common_k8s_objects_name"), "k8s_objects", ["name"], unique=False, schema="common")
+    op.create_index(op.f("ix_common_k8s_objects_name"), "k8s_objects", ["name"], unique=True, schema="common")
     op.create_index(
         op.f("ix_common_k8s_objects_namespace"), "k8s_objects", ["namespace"], unique=False, schema="common"
     )

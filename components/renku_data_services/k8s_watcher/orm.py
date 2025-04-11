@@ -36,7 +36,7 @@ class K8sObjectORM(BaseORM):
         default_factory=lambda: str(ULID()),
         server_default=text("generate_ulid()"),
     )
-    name: Mapped[str] = mapped_column("name", String(), index=True)
+    name: Mapped[str] = mapped_column("name", String(), index=True, unique=True)
     namespace: Mapped[str] = mapped_column("namespace", String(), index=True)
     creation_date: Mapped[datetime] = mapped_column(
         "creation_date",
@@ -58,7 +58,7 @@ class K8sObjectORM(BaseORM):
     version: Mapped[str] = mapped_column(index=True)
     kind: Mapped[str] = mapped_column(index=True)
     cluster: Mapped[str] = mapped_column(index=True)
-    user_id: Mapped[str] = mapped_column(String(36), index=True)
+    user_id: Mapped[str] = mapped_column(String(), index=True)
 
     def dump(self) -> K8sObject:
         """Convert to a k8s object."""
