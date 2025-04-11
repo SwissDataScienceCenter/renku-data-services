@@ -2,7 +2,7 @@
 
 import random
 import string
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import AsyncGenerator, AsyncIterator, Callable, Sequence
 from contextlib import suppress
 from typing import TypeVar
 
@@ -17,6 +17,7 @@ from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.authz.models import CheckPermissionItem, Scope
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models.core import (
+    APIUser,
     DataConnectorInProjectPath,
     DataConnectorPath,
     DataConnectorSlug,
@@ -95,6 +96,20 @@ class DataConnectorRepository:
             data_connectors = results[0].all()
             total_elements = results[1] or 0
             return [dc.dump() for dc in data_connectors], total_elements
+
+    async def get_all_data_connectors(
+        self, user: APIUser, per_page: int = 20
+    ) -> AsyncGenerator[models.DataConnector, None]:
+        """Get all data connectors, retrieving `per_page` each time."""
+        preq = PaginationRequest(page=1, per_page=per_page)
+        result: tuple[list[models.DataConnector], int] | None = None
+        count: int = 0
+        while result is None or result[1] > count:
+            result = await self.get_data_connectors(user=user, pagination=preq)
+            count = count + len(result[0])
+            preq = PaginationRequest(page=preq.page + 1, per_page=per_page)
+            for dc in result[0]:
+                yield dc
 
     async def get_data_connector(
         self,

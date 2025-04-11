@@ -215,6 +215,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
             user_repo=config.kc_user_repo,
             group_repo=config.group_repo,
             project_repo=config.project_repo,
+            data_connector_repo=config.data_connector_repo,
         ),
         solr_config=config.solr_config,
         authz=config.authz,

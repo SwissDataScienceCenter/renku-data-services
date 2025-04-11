@@ -7,6 +7,9 @@ from renku_data_services.search.apispec import (
     Group as GroupApi,
 )
 from renku_data_services.search.apispec import (
+    SearchDataConnector as DataConnectorApi,
+)
+from renku_data_services.search.apispec import (
     SearchProject as ProjectApi,
 )
 from renku_data_services.search.apispec import (
@@ -14,6 +17,9 @@ from renku_data_services.search.apispec import (
 )
 from renku_data_services.search.apispec import (
     Visibility as VisibilityApi,
+)
+from renku_data_services.solr.entity_documents import (
+    DataConnector as DataConnectorDocument,
 )
 from renku_data_services.solr.entity_documents import (
     EntityDocReader,
@@ -56,34 +62,64 @@ def from_group(group: GroupDocument) -> GroupApi:
     )
 
 
+def __creator_details(e: ProjectDocument | DataConnectorDocument) -> UserApi | None:
+    if e.creatorDetails is not None and e.creatorDetails.docs != []:
+        return from_user(UserDocument.from_dict(e.creatorDetails.docs[0]))
+    else:
+        return None
+
+
+def __namespace_details(d: ProjectDocument | DataConnectorDocument) -> UserApi | GroupApi | None:
+    if d.namespaceDetails is not None and d.namespaceDetails.docs != []:
+        e = EntityDocReader.from_dict(d.namespaceDetails.docs[0])
+        if e is not None:
+            return cast(UserApi | GroupApi, from_entity(e))
+    return None
+
+
 def from_project(project: ProjectDocument) -> ProjectApi:
     """Creates a apispec project from a solr project document."""
-    cb: UserApi | None = None
-    if project.creatorDetails is not None and project.creatorDetails.docs != []:
-        cb = from_user(UserDocument.from_dict(project.creatorDetails.docs[0]))
-
-    ns: UserApi | GroupApi | None = None
-    if project.namespaceDetails is not None and project.namespaceDetails.docs != []:
-        e = EntityDocReader.from_dict(project.namespaceDetails.docs[0])
-        if e is not None:
-            ns = cast(UserApi | GroupApi, from_entity(e))
-
     return ProjectApi(
         id=str(project.id),
         name=project.name,
         slug=project.slug.value,
-        namespace=ns,
+        namespace=__namespace_details(project),
         repositories=project.repositories,
         visibility=from_visibility(project.visibility),
         description=project.description,
-        createdBy=cb,
+        createdBy=__creator_details(project),
         creationDate=project.creationDate,
         keywords=project.keywords,
         score=project.score,
     )
 
 
-def from_entity(entity: GroupDocument | ProjectDocument | UserDocument) -> UserApi | GroupApi | ProjectApi:
+def from_data_connector(dc: DataConnectorDocument) -> DataConnectorApi:
+    """Creates an apispec data connector from a solr data connector document."""
+    p: ProjectApi | None = None
+    if dc.projectDetails is not None and dc.projectDetails.docs != []:
+        p = from_project(ProjectDocument.from_dict(dc.projectDetails.docs[0]))
+
+    return DataConnectorApi(
+        id=str(dc.id),
+        project=p,
+        name=dc.name,
+        slug=dc.slug.value,
+        namespace=__namespace_details(dc),
+        visibility=from_visibility(dc.visibility),
+        description=dc.description,
+        createdBy=__creator_details(dc),
+        creationDate=dc.creationDate,
+        keywords=dc.keywords,
+        storageType=dc.storageType,
+        readonly=dc.readonly,
+        score=dc.score,
+    )
+
+
+def from_entity(
+    entity: GroupDocument | ProjectDocument | UserDocument | DataConnectorDocument,
+) -> UserApi | GroupApi | ProjectApi | DataConnectorApi:
     """Creates an apispec entity from a solr entity document."""
     match entity:
         case UserDocument() as d:
@@ -92,3 +128,5 @@ def from_entity(entity: GroupDocument | ProjectDocument | UserDocument) -> UserA
             return from_group(d)
         case ProjectDocument() as d:
             return from_project(d)
+        case DataConnectorDocument() as d:
+            return from_data_connector(d)

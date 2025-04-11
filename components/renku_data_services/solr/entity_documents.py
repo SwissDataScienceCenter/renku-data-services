@@ -45,7 +45,7 @@ class EntityType(StrEnum):
     project = "Project"
     user = "User"
     group = "Group"
-    data_connector = "DataConnector"
+    dataconnector = "DataConnector"
 
     @property
     def to_resource_type(self) -> ResourceType:
@@ -57,7 +57,7 @@ class EntityType(StrEnum):
                 return ResourceType.user
             case EntityType.group:
                 return ResourceType.group
-            case EntityType.data_connector:
+            case EntityType.dataconnector:
                 return ResourceType.data_connector
 
 
@@ -212,7 +212,7 @@ class DataConnector(EntityDoc, frozen=True):
     @property
     def entity_type(self) -> EntityType:
         """Return the type of this entity."""
-        return EntityType.data_connector
+        return EntityType.dataconnector
 
     @field_serializer("namespace", when_used="always")
     def __serialize_namespace(self, namespace: Slug) -> str:
@@ -263,5 +263,5 @@ class EntityDocReader:
                     return User.from_dict(doc)
                 case EntityType.group:
                     return Group.from_dict(doc)
-                case EntityType.data_connector:
+                case EntityType.dataconnector:
                     return DataConnector.from_dict(doc)

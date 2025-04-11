@@ -6,6 +6,8 @@ from datetime import datetime
 from sanic.log import logger
 
 from renku_data_services.base_models.core import APIUser
+from renku_data_services.data_connectors.db import DataConnectorRepository
+from renku_data_services.data_connectors.models import DataConnector
 from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.message_queue.models import Reprovisioning
 from renku_data_services.namespace.db import GroupRepository
@@ -29,6 +31,7 @@ class SearchReprovision:
         user_repo: UserRepo,
         group_repo: GroupRepository,
         project_repo: ProjectRepository,
+        data_connector_repo: DataConnectorRepository,
     ) -> None:
         self._search_updates_repo = search_updates_repo
         self._reprovisioning_repo = reprovisioning_repo
@@ -36,6 +39,7 @@ class SearchReprovision:
         self._user_repo = user_repo
         self._group_repo = group_repo
         self._project_repo = project_repo
+        self._data_connector_repo = data_connector_repo
 
     async def run_reprovision(self, requested_by: APIUser) -> None:
         """Start a reprovisioning if not already running."""
@@ -88,6 +92,9 @@ class SearchReprovision:
             counter = await self.__update_entities(all_projects, "project", started, counter, log_counter)
             logger.info("Done adding project entities to search_updates table.")
 
+            all_dcs = self._data_connector_repo.get_all_data_connectors(requested_by, per_page=20)
+            counter = await self.__update_entities(all_dcs, "data connector", started, counter, log_counter)
+
             logger.info(f"Inserted {counter} entities into the staging table.")
 
         except Exception as e:
@@ -98,7 +105,7 @@ class SearchReprovision:
 
     async def __update_entities(
         self,
-        iter: AsyncGenerator[Project | Group | UserInfo, None],
+        iter: AsyncGenerator[Project | Group | UserInfo | DataConnector, None],
         name: str,
         started: datetime,
         counter: int,
