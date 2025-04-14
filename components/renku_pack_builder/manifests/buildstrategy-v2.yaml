@@ -1,0 +1,73 @@
+---
+apiVersion: shipwright.io/v1beta1
+kind: BuildStrategy
+metadata:
+  name: renku-buildpacks-v2
+spec:
+  parameters:
+    - name: platform-api-version
+      description: The referenced version is the minimum version that all relevant buildpack implementations support.
+      default: "0.12"
+    - name: process-type
+      description: |
+        The process to execute at launch time
+        https://buildpacks.io/docs/for-buildpack-authors/how-to/write-buildpacks/specify-launch-processes/
+      default: "bash"
+    - name: builder-image
+      default: olevski90/selector:0.0.1-test1
+      description: The buildpack builder image to use
+    - name: procfile
+      description: |
+        Define entrypoints
+      default: |
+        bash: /bin/bash
+    - name: frontend
+      description: Which frontend should be used in the image. Either "jupyterlab" or "vscodium".
+      default: vscodium
+  steps:
+    - name: prep-procfile
+      image: alpine
+      imagePullPolicy: IfNotPresent
+      command: ["/bin/sh", "-c"]
+      args: ["echo \"$(params.procfile)\" > $(params.shp-source-context)/Procfile"]
+      volumeMounts:
+        - mountPath: /platform/env
+          name: platform-env
+      resources:
+        limits:
+          cpu: 500m
+          memory: 1Gi
+        requests:
+          cpu: 250m
+          memory: 65Mi
+    - name: build-and-push
+      image: $(params.builder-image)
+      imagePullPolicy: IfNotPresent
+      env:
+        - name: CNB_PLATFORM_API
+          value: $(params.platform-api-version)
+        - name: BP_REQUIRES
+          value: $(params.frontend)
+      command:
+        - /cnb/lifecycle/creator
+      args:
+        - "-app=$(params.shp-source-context)"
+        - "-report=/tmp/report.toml"
+        - "-process-type=$(params.process-type)"
+        - "$(params.shp-output-image)"
+      volumeMounts:
+        - mountPath: /platform/env
+          name: platform-env
+      resources:
+        limits:
+          cpu: 4000m
+          memory: 8Gi
+        requests:
+          cpu: 2000m
+          memory: 4Gi
+  volumes:
+    - name: platform-env
+      emptyDir: {}
+  securityContext:
+    runAsUser: 1001
+    runAsGroup: 1000
