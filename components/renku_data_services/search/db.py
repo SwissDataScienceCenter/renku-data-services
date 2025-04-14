@@ -18,6 +18,7 @@ from renku_data_services.search.orm import RecordState, SearchUpdatesORM
 from renku_data_services.solr.entity_documents import Group as GroupDoc
 from renku_data_services.solr.entity_documents import Project as ProjectDoc
 from renku_data_services.solr.entity_documents import User as UserDoc
+from renku_data_services.solr.solr_client import DocVersions
 from renku_data_services.users.models import UserInfo
 
 
@@ -27,11 +28,18 @@ def _user_to_entity_doc(user: UserInfo) -> UserDoc:
         id=user.id,
         firstName=user.first_name,
         lastName=user.last_name,
+        version=DocVersions.off(),
     )
 
 
 def _group_to_entity_doc(group: Group) -> GroupDoc:
-    return GroupDoc(namespace=Slug.from_name(group.slug), id=group.id, name=group.name, description=group.description)
+    return GroupDoc(
+        namespace=Slug.from_name(group.slug),
+        id=group.id,
+        name=group.name,
+        description=group.description,
+        version=DocVersions.off(),
+    )
 
 
 def _project_to_entity_doc(p: Project) -> ProjectDoc:
@@ -46,6 +54,7 @@ def _project_to_entity_doc(p: Project) -> ProjectDoc:
         repositories=p.repositories,
         description=p.description,
         keywords=p.keywords if p.keywords is not None else [],
+        version=DocVersions.off(),
     )
 
 
@@ -102,7 +111,7 @@ class SearchUpdatesRepo:
     async def upsert(self, entity: Entity, started_at: datetime | None = None) -> ULID:
         """Add entity documents to the staging table.
 
-        If a user already exists, it is updated.
+        If an entity with same id already exists, it is updated.
         """
         started = started_at if started_at is not None else datetime.now()
         params = self.__make_params(entity, started)

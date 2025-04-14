@@ -89,12 +89,12 @@ def upgrade() -> None:
             op.execute(
                 sa.text(
                     """INSERT INTO sessions.environments(
-                        id, 
+                        id,
                         name, description,
-                        created_by_id, 
-                        creation_date, 
-                        container_image, 
-                        default_url, 
+                        created_by_id,
+                        creation_date,
+                        container_image,
+                        default_url,
                         port,
                         working_directory,
                         mount_directory,
@@ -102,14 +102,14 @@ def upgrade() -> None:
                         gid,
                         args,
                         command,
-                        environment_kind 
+                        environment_kind
                     )VALUES (
-                        generate_ulid(), 
-                        :name, 
-                        :description, 
-                        :created_by_id, 
-                        now(), 
-                        :container_image, 
+                        generate_ulid(),
+                        :name,
+                        :description,
+                        :created_by_id,
+                        now(),
+                        :container_image,
                         :default_url,
                         :port,
                         :working_directory,

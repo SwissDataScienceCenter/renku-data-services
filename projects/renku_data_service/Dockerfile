@@ -25,7 +25,7 @@ RUN python3 -m pip install --user pipx && \
     /home/renku/.local/bin/poetry self add poetry-multiproject-plugin && \
     /home/renku/.local/bin/poetry self add poetry-polylith-plugin && \
     /home/renku/.local/bin/poetry self add poetry-plugin-export
-    
+
 COPY --chown=$USER_UID:$USER_GID . .
 RUN if $DEV_BUILD ; then \
     /home/renku/.local/bin/poetry export -o requirements.txt --with dev; \
@@ -33,7 +33,7 @@ RUN if $DEV_BUILD ; then \
     /home/renku/.local/bin/poetry export -o requirements.txt; \
   fi && \
   env/bin/pip install -r requirements.txt
-RUN /home/renku/.local/bin/poetry -C projects/renku_data_service build-project -f wheel --custom-temp-path=/tmp 
+RUN /home/renku/.local/bin/poetry -C projects/renku_data_service build-project -f wheel --custom-temp-path=/tmp
 RUN env/bin/pip --no-cache-dir install projects/renku_data_service/dist/*.whl
 
 FROM python:3.13-slim-bookworm

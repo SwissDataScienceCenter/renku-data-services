@@ -13,6 +13,7 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_api.misc import validate_body_root_model, validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.base_models.core import NamespaceSlug, ProjectPath, Slug
+from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
 from renku_data_services.errors import errors
 from renku_data_services.namespace import apispec, apispec_enhanced, models
@@ -26,6 +27,7 @@ class GroupsBP(CustomBlueprint):
 
     group_repo: GroupRepository
     authenticator: base_models.Authenticator
+    metrics: MetricsService
 
     def get_all(self) -> BlueprintFactoryResponse:
         """List all groups."""
@@ -58,6 +60,7 @@ class GroupsBP(CustomBlueprint):
         async def _post(_: Request, user: base_models.APIUser, body: apispec.GroupPostRequest) -> JSONResponse:
             new_group = models.UnsavedGroup(**body.model_dump())
             result = await self.group_repo.insert_group(user=user, payload=new_group)
+            await self.metrics.group_created(user)
             return validated_json(apispec.GroupResponse, result, 201)
 
         return "/groups", ["POST"], _post
@@ -135,6 +138,7 @@ class GroupsBP(CustomBlueprint):
                 slug=slug,
                 members=members,
             )
+            await self.metrics.group_member_added(user)
             return validated_json(
                 apispec.GroupMemberPatchRequestList,
                 [

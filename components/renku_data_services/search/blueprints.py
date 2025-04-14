@@ -6,16 +6,15 @@ from sanic import HTTPResponse, Request, json
 from sanic.response import JSONResponse
 
 import renku_data_services.base_models as base_models
+import renku_data_services.search.core as core
 from renku_data_services.authz.authz import Authz
 from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
-from renku_data_services.message_queue.db import ReprovisioningRepository
-from renku_data_services.namespace.db import GroupRepository
-from renku_data_services.project.db import ProjectRepository
-from renku_data_services.search.core import reprovision
-from renku_data_services.search.db import SearchUpdatesRepo
+from renku_data_services.base_api.misc import validate_query
+from renku_data_services.search.apispec import SearchQuery
+from renku_data_services.search.reprovision import SearchReprovision
+from renku_data_services.search.user_query_parser import QueryParser
 from renku_data_services.solr.solr_client import SolrClientConfig
-from renku_data_services.users.db import UserRepo
 
 
 @dataclass(kw_only=True)
@@ -23,12 +22,8 @@ class SearchBP(CustomBlueprint):
     """Handlers for search."""
 
     authenticator: base_models.Authenticator
-    reprovisioning_repo: ReprovisioningRepository
-    user_repo: UserRepo
-    group_repo: GroupRepository
-    project_repo: ProjectRepository
-    search_updates_repo: SearchUpdatesRepo
     solr_config: SolrClientConfig
+    search_reprovision: SearchReprovision
     authz: Authz
 
     def post(self) -> BlueprintFactoryResponse:
@@ -37,19 +32,10 @@ class SearchBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         async def _post(request: Request, user: base_models.APIUser) -> HTTPResponse | JSONResponse:
-            reprovisioning = await self.reprovisioning_repo.start()
+            reprovisioning = await self.search_reprovision.acquire_reprovision()
 
             request.app.add_task(
-                reprovision(
-                    requested_by=user,
-                    reprovisioning=reprovisioning,
-                    search_updates_repo=self.search_updates_repo,
-                    reprovisioning_repo=self.reprovisioning_repo,
-                    solr_config=self.solr_config,
-                    user_repo=self.user_repo,
-                    group_repo=self.group_repo,
-                    project_repo=self.project_repo,
-                ),
+                self.search_reprovision.init_reprovision(requested_by=user, reprovisioning=reprovisioning),
                 name=f"reprovisioning-{reprovisioning.id}",
             )
 
@@ -62,7 +48,7 @@ class SearchBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _get_status(_: Request, __: base_models.APIUser) -> JSONResponse | HTTPResponse:
-            reprovisioning = await self.reprovisioning_repo.get_active_reprovisioning()
+            reprovisioning = await self.search_reprovision.get_current_reprovision()
             if not reprovisioning:
                 return HTTPResponse(status=404)
             return json({"id": str(reprovisioning.id), "start_date": reprovisioning.start_date.isoformat()})
@@ -75,7 +61,29 @@ class SearchBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         async def _delete(_: Request, __: base_models.APIUser) -> HTTPResponse:
-            await self.reprovisioning_repo.stop()
+            await self.search_reprovision.kill_reprovision_lock()
             return HTTPResponse(status=204)
 
         return "/search/reprovision", ["DELETE"], _delete
+
+    def query(self) -> BlueprintFactoryResponse:
+        """Run a query."""
+
+        @authenticate(self.authenticator)
+        @validate_query(query=SearchQuery)
+        async def _query(_: Request, user: base_models.APIUser, query: SearchQuery) -> HTTPResponse | JSONResponse:
+            per_page = query.per_page
+            offset = (query.page - 1) * per_page
+            uq = QueryParser.parse(query.q)
+            result = await core.query(self.authz.client, self.solr_config, uq, user, per_page, offset)
+            return json(
+                result.model_dump(by_alias=True, exclude_none=True, mode="json"),
+                headers={
+                    "x-page": f"{query.page}",
+                    "x-per-page": f"{per_page}",
+                    "x-total": f"{result.pagingInfo.totalPages}",
+                    "x-total-pages": f"{result.pagingInfo.totalPages}",
+                },
+            )
+
+        return "/search/query", ["GET"], _query

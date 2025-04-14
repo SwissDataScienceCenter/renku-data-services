@@ -36,19 +36,21 @@ import renku_data_services.search
 import renku_data_services.storage
 import renku_data_services.users
 from renku_data_services import errors
+from renku_data_services.app_config.server_options import (
+    ServerOptions,
+    ServerOptionsDefaults,
+    generate_default_resource_pool,
+)
 from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.authn.gitlab import GitlabAuthenticator
 from renku_data_services.authn.keycloak import KcUserStore, KeycloakAuthenticator
 from renku_data_services.authz.authz import Authz
 from renku_data_services.authz.config import AuthzConfig
+from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.crc import models
 from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
-from renku_data_services.data_api.server_options import (
-    ServerOptions,
-    ServerOptionsDefaults,
-    generate_default_resource_pool,
-)
+from renku_data_services.data_api.posthog import PosthogService
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
     DataConnectorSecretRepository,
@@ -72,6 +74,7 @@ from renku_data_services.project.db import (
 )
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.search.db import SearchUpdatesRepo
+from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsRepo
 from renku_data_services.session import crs as session_crs
 from renku_data_services.session.db import SessionRepository
@@ -130,6 +133,29 @@ class SentryConfig:
         sample_rate = float(os.environ.get(f"{prefix}SENTRY_SAMPLE_RATE", "0.2"))
 
         return cls(enabled, dsn=dsn, environment=environment, sample_rate=sample_rate)
+
+
+@dataclass
+class PosthogConfig:
+    """Configuration for posthog."""
+
+    enabled: bool
+    api_key: str
+    host: str
+    environment: str
+    client: PosthogService
+
+    @classmethod
+    def from_env(cls, prefix: str = "") -> "PosthogConfig":
+        """Create posthog config from environment variables."""
+        enabled = os.environ.get(f"{prefix}POSTHOG_ENABLED", "false").lower() == "true"
+
+        api_key = os.environ.get(f"{prefix}POSTHOG_API_KEY", "")
+        host = os.environ.get(f"{prefix}POSTHOG_HOST", "")
+        environment = os.environ.get(f"{prefix}POSTHOG_ENVIRONMENT", "development")
+
+        client = PosthogService(enabled=enabled, api_key=api_key, host=host, environment=environment)
+        return cls(enabled, api_key, host, environment, client)
 
 
 @dataclass
@@ -253,6 +279,7 @@ class Config:
     db: DBConfig
     redis: RedisConfig
     sentry: SentryConfig
+    metrics: MetricsService
     trusted_proxies: TrustedProxiesConfig
     gitlab_client: base_models.GitlabAPIProtocol
     kc_api: IKeycloakAPI
@@ -285,6 +312,7 @@ class Config:
     _event_repo: EventRepository | None = field(default=None, repr=False, init=False)
     _reprovisioning_repo: ReprovisioningRepository | None = field(default=None, repr=False, init=False)
     _search_updates_repo: SearchUpdatesRepo | None = field(default=None, repr=False, init=False)
+    _search_reprovisioning: SearchReprovision | None = field(default=None, repr=False, init=False)
     _session_repo: SessionRepository | None = field(default=None, repr=False, init=False)
     _user_preferences_repo: UserPreferencesRepository | None = field(default=None, repr=False, init=False)
     _kc_user_repo: KcUserRepo | None = field(default=None, repr=False, init=False)
@@ -399,6 +427,20 @@ class Config:
         if not self._search_updates_repo:
             self._search_updates_repo = SearchUpdatesRepo(session_maker=self.db.async_session_maker)
         return self._search_updates_repo
+
+    @property
+    def search_reprovisioning(self) -> SearchReprovision:
+        """The SearchReprovisioning class."""
+        if not self._search_reprovisioning:
+            self._search_reprovisioning = SearchReprovision(
+                search_updates_repo=self.search_updates_repo,
+                reprovisioning_repo=self.reprovisioning_repo,
+                solr_config=self.solr_config,
+                user_repo=self.kc_user_repo,
+                group_repo=self.group_repo,
+                project_repo=self.project_repo,
+            )
+        return self._search_reprovisioning
 
     @property
     def project_repo(self) -> ProjectRepository:
@@ -667,6 +709,7 @@ class Config:
             raise errors.ConfigurationError(message="Secret service public key is not an RSAPublicKey")
 
         sentry = SentryConfig.from_env(prefix)
+        posthog = PosthogConfig.from_env(prefix)
         trusted_proxies = TrustedProxiesConfig.from_env(prefix)
         message_queue = RedisQueue(redis)
         nb_config = NotebooksConfig.from_env(db)
@@ -694,4 +737,5 @@ class Config:
             gitlab_url=gitlab_url,
             nb_config=nb_config,
             builds_config=builds_config,
+            metrics=posthog.client,
         )

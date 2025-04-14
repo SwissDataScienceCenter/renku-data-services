@@ -76,6 +76,13 @@ class NamespaceORM(BaseORM):
     user: Mapped[UserORM | None] = relationship(
         lazy="joined", back_populates="namespace", init=False, repr=False, viewonly=True
     )
+    old_namespaces: Mapped[list["NamespaceOldORM"]] = relationship(
+        back_populates="latest_slug",
+        default_factory=list,
+        repr=False,
+        init=False,
+        viewonly=True,
+    )
 
     @property
     def created_by(self) -> str:
@@ -332,8 +339,10 @@ class EntitySlugOldORM(BaseORM):
     project_id: Mapped[ULID | None] = mapped_column(
         ForeignKey(ProjectORM.id, ondelete="CASCADE", name="entity_slugs_project_id_fk"), index=True, nullable=True
     )
+    project: Mapped[ProjectORM | None] = relationship(init=False, repr=False, viewonly=True, default=None)
     data_connector_id: Mapped[ULID | None] = mapped_column(
         ForeignKey(DataConnectorORM.id, ondelete="CASCADE", name="entity_slugs_data_connector_id_fk"),
         index=True,
         nullable=True,
     )
+    data_connector: Mapped[DataConnectorORM | None] = relationship(init=False, repr=False, viewonly=True, default=None)

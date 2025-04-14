@@ -6,6 +6,10 @@ dataService:
     image:
       repository: renku/data-service-background-jobs
       tag:
+  k8sWatcher:
+    image:
+      repository: renku/data-service-k8s-watcher
+      tag:
 secretsStorage:
   image:
     repository: renku/secrets-storage

@@ -5,6 +5,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Self
+from unittest.mock import MagicMock
 
 from authzed.api.v1 import AsyncClient, SyncClient
 from cryptography.hazmat.primitives import serialization
@@ -18,16 +19,17 @@ from yaml import safe_load
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.app_config.config import BuildsConfig, Config, SentryConfig, TrustedProxiesConfig
-from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
-from renku_data_services.authz.authz import Authz
-from renku_data_services.authz.config import AuthzConfig
-from renku_data_services.crc import models as rp_models
-from renku_data_services.crc.db import ResourcePoolRepository
-from renku_data_services.data_api.server_options import (
+from renku_data_services.app_config.server_options import (
     ServerOptions,
     ServerOptionsDefaults,
     generate_default_resource_pool,
 )
+from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
+from renku_data_services.authz.authz import Authz
+from renku_data_services.authz.config import AuthzConfig
+from renku_data_services.base_models.metrics import MetricsService
+from renku_data_services.crc import models as rp_models
+from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.git.gitlab import DummyGitlabAPI
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient
@@ -227,6 +229,7 @@ class TestAppConfig(Config):
             authz_config=AuthzConfigStack.from_env(),
             nb_config=nb_config,
             builds_config=builds_config,
+            metrics=MagicMock(spec=MetricsService),
         )
 
     def __post_init__(self) -> None:

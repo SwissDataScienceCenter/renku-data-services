@@ -22,7 +22,7 @@ RUN if $DEV_BUILD ; then \
     /home/renku/.local/bin/poetry export -o requirements.txt; \
   fi && \
   env/bin/pip install -r requirements.txt
-RUN /home/renku/.local/bin/poetry -C projects/background_jobs build-project -f wheel --custom-temp-path=/tmp 
+RUN /home/renku/.local/bin/poetry -C projects/background_jobs build-project -f wheel --custom-temp-path=/tmp
 RUN env/bin/pip --no-cache-dir install projects/background_jobs/dist/*.whl
 
 FROM python:3.13-slim-bookworm

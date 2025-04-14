@@ -523,7 +523,7 @@ components:
         project_slugs:
           type: array
           items:
-            $ref: "#/components/schemas/ProjectSlug"
+            $ref: "#/components/schemas/ProjectSlugResponse"
     ProjectSlug:
       type: string
       description: The slug used to identify a project
@@ -532,6 +532,11 @@ components:
       # limitations based on allowed characters in project slugs from Gitlab from here:
       # https://docs.gitlab.com/ee/user/reserved_names.html
       pattern: "^[a-zA-Z0-9]+([_.\\-/][a-zA-Z0-9]+)*[_.\\-/]?[a-zA-Z0-9]$"
+    ProjectSlugResponse:
+      type: string
+      description: The slug used to identify a project
+      minLength: 3
+      example: "user/my-project"
     AddPinnedProject:
       type: object
       additionalProperties: false

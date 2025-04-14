@@ -25,6 +25,7 @@ from renku_data_services.platform.blueprints import PlatformConfigBP
 from renku_data_services.project.blueprints import ProjectsBP, ProjectSessionSecretBP
 from renku_data_services.repositories.blueprints import RepositoriesBP
 from renku_data_services.search.blueprints import SearchBP
+from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.session.blueprints import BuildsBP, EnvironmentsBP, SessionLaunchersBP
 from renku_data_services.storage.blueprints import StorageBP, StorageSchemaBP
 from renku_data_services.users.blueprints import KCUsersBP, UserPreferencesBP, UserSecretsBP
@@ -105,6 +106,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         session_repo=config.session_repo,
         data_connector_repo=config.data_connector_repo,
         project_migration_repo=config.project_migration_repo,
+        metrics=config.metrics,
     )
     project_session_secrets = ProjectSessionSecretBP(
         name="project_session_secrets",
@@ -117,6 +119,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         url_prefix=url_prefix,
         authenticator=config.authenticator,
         group_repo=config.group_repo,
+        metrics=config.metrics,
     )
     session_environments = EnvironmentsBP(
         name="session_environments",
@@ -129,6 +132,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         url_prefix=url_prefix,
         session_repo=config.session_repo,
         authenticator=config.authenticator,
+        metrics=config.metrics,
     )
     builds = (
         BuildsBP(
@@ -185,6 +189,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         data_connector_repo=config.data_connector_repo,
         data_connector_secret_repo=config.data_connector_secret_repo,
         internal_gitlab_authenticator=config.gitlab_authenticator,
+        metrics=config.metrics,
     )
     platform_config = PlatformConfigBP(
         name="platform_config",
@@ -207,12 +212,15 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         name="search2",
         url_prefix=url_prefix,
         authenticator=config.authenticator,
-        reprovisioning_repo=config.reprovisioning_repo,
-        user_repo=config.kc_user_repo,
-        group_repo=config.group_repo,
+        search_reprovision=SearchReprovision(
+            search_updates_repo=config.search_updates_repo,
+            reprovisioning_repo=config.reprovisioning_repo,
+            solr_config=config.solr_config,
+            user_repo=config.kc_user_repo,
+            group_repo=config.group_repo,
+            project_repo=config.project_repo,
+        ),
         solr_config=config.solr_config,
-        project_repo=config.project_repo,
-        search_updates_repo=config.search_updates_repo,
         authz=config.authz,
     )
     data_connectors = DataConnectorsBP(
@@ -221,6 +229,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         data_connector_repo=config.data_connector_repo,
         data_connector_secret_repo=config.data_connector_secret_repo,
         authenticator=config.authenticator,
+        metrics=config.metrics,
     )
     app.blueprint(
         [

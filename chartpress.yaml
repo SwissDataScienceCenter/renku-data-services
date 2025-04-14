@@ -23,3 +23,7 @@ charts:
         contextPath: .
         dockerfilePath: projects/secrets_storage/Dockerfile
         valuesPath: secretsStorage.image
+      data-service-k8s-watcher:
+        contextPath: .
+        dockerfilePath: projects/k8s_watcher/Dockerfile
+        valuesPath: dataService.k8sWatcher.image

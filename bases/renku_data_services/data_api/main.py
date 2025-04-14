@@ -16,8 +16,10 @@ from sentry_sdk.integrations.grpc import GRPCIntegration
 from sentry_sdk.integrations.sanic import SanicIntegration, _context_enter, _context_exit, _set_transaction
 
 import renku_data_services.search.core as search_core
+import renku_data_services.solr.entity_schema as entity_schema
 from renku_data_services.app_config import Config
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
+from renku_data_services.base_models.core import APIUser
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.data_api.prometheus import collect_system_metrics, setup_app_metrics, setup_prometheus
 from renku_data_services.errors.errors import (
@@ -27,7 +29,6 @@ from renku_data_services.errors.errors import (
     ValidationError,
 )
 from renku_data_services.migrations.core import run_migrations_for_app
-from renku_data_services.solr import entity_schema
 from renku_data_services.solr.solr_client import DefaultSolrClient
 from renku_data_services.solr.solr_migrate import SchemaMigrator
 from renku_data_services.storage.rclone import RCloneValidator
@@ -72,6 +73,17 @@ async def _update_search(app: Sanic) -> None:
             raise
 
 
+async def _solr_reindex(app: Sanic) -> None:
+    """Run a solr reindex of all data.
+
+    This might be required after migrating the solr schema.
+    """
+    config = Config.from_env()
+    reprovision = config.search_reprovisioning
+    admin = APIUser(is_admin=True)
+    await reprovision.run_reprovision(admin)
+
+
 def send_pending_events(app_name: str) -> None:
     """Send pending messages to redis."""
     app = Sanic(app_name)
@@ -92,6 +104,16 @@ def update_search(app_name: str) -> None:
 
     asyncio.set_event_loop(uvloop.new_event_loop())
     asyncio.run(_update_search(app))
+
+
+def solr_reindex(app_name: str) -> None:
+    """Runs a solr reindex."""
+    app = Sanic(app_name)
+    setup_app_metrics(app)
+
+    logger.info("Running SOLR reindex triggered by a migration")
+    asyncio.set_event_loop(uvloop.new_event_loop())
+    asyncio.run(_solr_reindex(app))
 
 
 def create_app() -> Sanic:
@@ -171,11 +193,13 @@ def create_app() -> Sanic:
         await config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
 
     @app.main_process_start
-    async def do_solr_migrations(_: Sanic) -> None:
+    async def do_solr_migrations(app: Sanic) -> None:
         logger.info(f"Running SOLR migrations at: {config.solr_config}")
         migrator = SchemaMigrator(config.solr_config)
         await migrator.ensure_core()
         result = await migrator.migrate(entity_schema.all_migrations)
+        # starting background tasks can only be done in `main_process_ready`
+        app.ctx.solr_reindex = result.requires_reindex
         logger.info(f"SOLR migration done: {result}")
 
     @app.before_server_start
@@ -186,10 +210,11 @@ def create_app() -> Sanic:
     @app.main_process_ready
     async def ready(app: Sanic) -> None:
         """Application ready event handler."""
-        config = Config.from_env()
         logger.info("starting events background job.")
-        app.manager.manage("SendEvents", send_pending_events, {"app_name": config.app_name}, transient=True)
-        app.manager.manage("UpdateSearch", update_search, {"app_name": config.app_name}, transient=True)
+        app.manager.manage("SendEvents", send_pending_events, {"app_name": app.name}, transient=True)
+        app.manager.manage("UpdateSearch", update_search, {"app_name": app.name}, transient=True)
+        if getattr(app.ctx, "solr_reindex", False):
+            app.manager.manage("SolrReindex", solr_reindex, {"app_name": app.name}, transient=True)
 
     return app
 

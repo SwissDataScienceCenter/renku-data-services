@@ -10,6 +10,7 @@ from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.namespace.models import UserNamespace
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.orm import RecordState, SearchUpdatesORM
+from renku_data_services.solr.entity_documents import User
 from renku_data_services.solr.solr_client import DefaultSolrClient, SolrClientConfig, SolrQuery
 from renku_data_services.users.models import UserInfo
 
@@ -42,6 +43,15 @@ async def test_update_solr(app_config_instance, solr_search):
         assert len(result.response.docs) == 2
         entities = await repo.select_next(10)
         assert len(entities) == 0
+
+        user = UserInfo(id="user234", first_name="Greg", last_name="Larrsson", namespace=user_namespace)
+        await repo.upsert(user, started_at=None)
+        await core.update_solr(repo, client, 10)
+        entities = await repo.select_next(10)
+        assert len(entities) == 0
+        doc = await client.get("user234")
+        users = doc.response.read_to(User.from_dict)
+        assert users[0].lastName == "Larrsson"
 
 
 @pytest.mark.asyncio

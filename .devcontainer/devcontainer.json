@@ -23,17 +23,19 @@
 			"jqVersion": "latest",
 			"yqVersion": "latest"
 		},
-		"ghcr.io/dhoeric/features/k9s:1": {},
+		"ghcr.io/dhoeric/features/k9s:1": {
+			"version": "0.40.9"
+		},
 		"ghcr.io/EliiseS/devcontainer-features/bash-profile:1": {
 			"command": "alias k=kubectl"
 		},
 		"ghcr.io/devcontainers-extra/features/rclone:1": {},
 		"./k3d": {},
-    "ghcr.io/devcontainers/features/java:1": {
-        "version": "21",
-        "jdkDistro": "open"
-    },
-    "./solr": {}
+		"ghcr.io/devcontainers/features/java:1": {
+			"version": "21",
+			"jdkDistro": "open"
+		},
+		"./solr": {}
 	},
 	"overrideFeatureInstallOrder": [
 		"ghcr.io/devcontainers-extra/features/poetry",

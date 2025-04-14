@@ -19,7 +19,7 @@ from renku_data_services.users.orm import UserORM
 from renku_data_services.utils.sqlalchemy import ULIDType
 
 if TYPE_CHECKING:
-    from renku_data_services.namespace.orm import EntitySlugORM
+    from renku_data_services.namespace.orm import EntitySlugOldORM, EntitySlugORM
 
 JSONVariant = JSON().with_variant(JSONB(), "postgresql")
 
@@ -86,6 +86,14 @@ class DataConnectorORM(BaseORM):
         nullable=False,
     )
     project_links: Mapped[list["DataConnectorToProjectLinkORM"]] = relationship(init=False, viewonly=True)
+
+    old_slugs: Mapped[list["EntitySlugOldORM"]] = relationship(
+        back_populates="data_connector",
+        default_factory=list,
+        repr=False,
+        init=False,
+        viewonly=True,
+    )
 
     def dump(self) -> models.DataConnector:
         """Create a data connector model from the DataConnectorORM."""
