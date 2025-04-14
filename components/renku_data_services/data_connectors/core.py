@@ -105,7 +105,7 @@ def validate_unsaved_data_connector(
     )
 
 
-def validate_unsaved_global_data_connector(
+async def validate_unsaved_global_data_connector(
     body: apispec.GlobalDataConnectorPost, validator: RCloneValidator
 ) -> models.UnsavedGlobalDataConnector:
     """Validate an unsaved data connector."""
@@ -115,6 +115,13 @@ def validate_unsaved_global_data_connector(
         raise errors.ValidationError(message="Only doi storage type is allowed for global data connectors")
     if not storage.readonly:
         raise errors.ValidationError(message="Global data connectors must be read-only")
+
+    # Check that we can list the files in the DOI
+    connection_result = await validator.test_connection(configuration=storage.configuration, source_path="/")
+    if not connection_result.success:
+        raise errors.ValidationError(
+            message="The provided storage configuration is not currently working", detail=connection_result.error
+        )
 
     doi = _validate_doi(str(storage.configuration.get("doi")))
     if not doi:
