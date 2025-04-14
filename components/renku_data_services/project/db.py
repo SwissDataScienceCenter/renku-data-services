@@ -8,7 +8,7 @@ import string
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import PurePosixPath
-from typing import Concatenate, ParamSpec, TypeVar, cast
+from typing import Concatenate, ParamSpec, TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
 from sqlalchemy import Select, delete, func, select, update
@@ -199,7 +199,7 @@ class ProjectRepository:
                     old_project_stmt_current_ns_old_slug, old_project_stmt_old_ns_old_slug
                 )
                 result_old = await session.scalars(old_project_stmt)
-                result_old_id = cast(ULID | None, result_old.first())
+                result_old_id = result_old.first()
                 if result_old_id is not None:
                     stmt = select(schemas.ProjectORM).where(schemas.ProjectORM.id == result_old_id)
                     if with_documentation:

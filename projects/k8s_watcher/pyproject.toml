@@ -1,5 +1,5 @@
 [project]
-name = "renku_data_service"
+name = "k8s_cache"
 version = "0.1.0"
 description = ""
 authors = [
@@ -11,7 +11,7 @@ dynamic = ["dependencies"]
 
 [tool.poetry]
 packages = [
-  { include = "renku_data_services/data_api", from = "../../bases" },
+  { include = "renku_data_services/k8s_cache", from = "../../bases" },
   { include = "renku_data_services/app_config", from = "../../components" },
   { include = "renku_data_services/authn", from = "../../components" },
   { include = "renku_data_services/authz", from = "../../components" },
