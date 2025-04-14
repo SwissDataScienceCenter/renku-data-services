@@ -152,22 +152,22 @@ async def test_post_global_data_connector_unauthorized(
     assert response.status_code == 401, response.text
 
 
-# @pytest.mark.asyncio
-# async def test_post_global_data_connector_invalid_doi(
-#     sanic_client: SanicASGITestClient,
-#     user_headers,
-# ) -> None:
-#     payload = {
-#         "storage": {
-#             "configuration": {"type": "doi", "doi": "10.5281/zenodo.15174623"},
-#             "source_path": "",
-#             "target_path": "",
-#         },
-#     }
+@pytest.mark.asyncio
+async def test_post_global_data_connector_invalid_doi(
+    sanic_client: SanicASGITestClient,
+    user_headers,
+) -> None:
+    payload = {
+        "storage": {
+            "configuration": {"type": "doi", "doi": "foo/bar"},
+            "source_path": "",
+            "target_path": "",
+        },
+    }
 
-#     _, response = await sanic_client.post("/api/data/data_connectors/global", headers=user_headers, json=payload)
+    _, response = await sanic_client.post("/api/data/data_connectors/global", headers=user_headers, json=payload)
 
-#     assert response.status_code == 0, response.text
+    assert response.status_code == 422, response.text
 
 
 @pytest.mark.asyncio

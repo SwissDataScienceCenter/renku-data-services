@@ -116,7 +116,7 @@ class DataConnectorsBP(CustomBlueprint):
         async def _post_global(
             _: Request, user: base_models.APIUser, body: apispec.GlobalDataConnectorPost, validator: RCloneValidator
         ) -> JSONResponse:
-            data_connector = validate_unsaved_global_data_connector(body, validator=validator)
+            data_connector = await validate_unsaved_global_data_connector(body, validator=validator)
             result = await self.data_connector_repo.insert_data_connector(user=user, data_connector=data_connector)
             return validated_json(
                 apispec.DataConnector,
