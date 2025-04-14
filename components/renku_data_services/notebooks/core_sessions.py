@@ -4,12 +4,14 @@ import base64
 import json
 import os
 from collections.abc import AsyncIterator
+from datetime import timedelta
 from pathlib import PurePosixPath
 from typing import cast
 from urllib.parse import urljoin, urlparse
 
 import httpx
 from kubernetes.client import V1ObjectMeta, V1Secret
+from kubernetes.utils.duration import format_duration
 from sanic import Request
 from toml import dumps
 from yaml import safe_dump
@@ -23,6 +25,7 @@ from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec
 from renku_data_services.notebooks.api.amalthea_patches import git_proxy, init_containers
 from renku_data_services.notebooks.api.classes.image import Image
+from renku_data_services.notebooks.api.classes.k8s_client import sanitize_for_serialization
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_data_services.notebooks.config import NotebooksConfig
@@ -66,8 +69,8 @@ async def get_extra_init_containers(
 ) -> tuple[list[InitContainer], list[ExtraVolume]]:
     """Get all extra init containers that should be added to an amalthea session."""
     cert_init, cert_vols = init_containers.certificates_container(nb_config)
-    session_init_containers = [InitContainer.model_validate(nb_config.k8s_v2_client.sanitize(cert_init))]
-    extra_volumes = [ExtraVolume.model_validate(nb_config.k8s_v2_client.sanitize(volume)) for volume in cert_vols]
+    session_init_containers = [InitContainer.model_validate(sanitize_for_serialization(cert_init))]
+    extra_volumes = [ExtraVolume.model_validate(sanitize_for_serialization(volume)) for volume in cert_vols]
     git_clone = await init_containers.git_clone_container_v2(
         user=user,
         config=nb_config,
@@ -95,7 +98,7 @@ async def get_extra_containers(
         user=user, config=nb_config, repositories=repositories, git_providers=git_providers
     )
     if git_proxy_container:
-        conts.append(ExtraContainer.model_validate(nb_config.k8s_v2_client.sanitize(git_proxy_container)))
+        conts.append(ExtraContainer.model_validate(sanitize_for_serialization(git_proxy_container)))
     return conts
 
 
@@ -357,7 +360,7 @@ def resources_from_resource_class(resource_class: ResourceClass) -> Resources:
         "cpu": str(round(resource_class.cpu * 1000)) + "m",
         "memory": f"{resource_class.memory}Gi",
     }
-    limits: dict[str, str | int] = {}
+    limits: dict[str, str | int] = {"memory": f"{resource_class.memory}Gi"}
     if resource_class.gpu > 0:
         gpu_name = GpuKind.NVIDIA.value + "/gpu"
         requests[gpu_name] = resource_class.gpu
@@ -401,11 +404,11 @@ def get_culling(resource_pool: ResourcePool, nb_config: NotebooksConfig) -> Cull
         resource_pool.hibernation_threshold or nb_config.sessions.culling.registered.hibernated_seconds
     )
     return Culling(
-        maxAge=f"{nb_config.sessions.culling.registered.max_age_seconds}s",
-        maxFailedDuration=f"{nb_config.sessions.culling.registered.failed_seconds}s",
-        maxHibernatedDuration=f"{hibernation_threshold_seconds}s",
-        maxIdleDuration=f"{idle_threshold_seconds}s",
-        maxStartingDuration=f"{nb_config.sessions.culling.registered.pending_seconds}s",
+        maxAge=format_duration(timedelta(seconds=nb_config.sessions.culling.registered.max_age_seconds)),
+        maxFailedDuration=format_duration(timedelta(seconds=nb_config.sessions.culling.registered.failed_seconds)),
+        maxHibernatedDuration=format_duration(timedelta(seconds=hibernation_threshold_seconds)),
+        maxIdleDuration=format_duration(timedelta(seconds=idle_threshold_seconds)),
+        maxStartingDuration=format_duration(timedelta(seconds=nb_config.sessions.culling.registered.pending_seconds)),
     )
 
 

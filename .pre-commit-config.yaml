@@ -1,5 +1,5 @@
 default_language_version:
-    python: python3.12
+  python: python3.13
 repos:
   - repo: local
     hooks:
@@ -8,6 +8,8 @@ repos:
         entry: make style_checks
         language: system
         pass_filenames: false
+        stages:
+          - pre-commit
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
     hooks:
@@ -18,11 +20,7 @@ repos:
       - id: check-toml
       - id: debug-statements
       - id: end-of-file-fixer
-        exclude: 'components/renku_data_services/message_queue/(avro_models|schemas)'
+        exclude: '(components/renku_data_services/message_queue/(avro_models|schemas))|(.ambr)'
       - id: mixed-line-ending
       - id: trailing-whitespace
-        exclude: 'components/renku_data_services/message_queue/(avro_models|schemas)'
-  - repo: https://github.com/asottile/yesqa
-    rev: v1.5.0
-    hooks:
-      - id: yesqa
+        exclude: '(components/renku_data_services/message_queue/(avro_models|schemas))|(.ambr)'

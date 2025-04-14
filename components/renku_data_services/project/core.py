@@ -62,7 +62,7 @@ def validate_project_patch(patch: apispec.ProjectPatch) -> models.ProjectPatch:
 
 
 async def copy_project(
-    project_id: ULID,
+    source_project_id: ULID,
     user: APIUser,
     name: str,
     namespace: str,
@@ -77,7 +77,7 @@ async def copy_project(
     data_connector_repo: DataConnectorRepository,
 ) -> models.Project:
     """Create a copy of a given project."""
-    template = await project_repo.get_project(user=user, project_id=project_id, with_documentation=True)
+    template = await project_repo.get_project(user=user, project_id=source_project_id, with_documentation=True)
     repositories_ = _validate_repositories(repositories)
 
     unsaved_project = models.UnsavedProject(
@@ -96,17 +96,17 @@ async def copy_project(
     project = await project_repo.insert_project(user, unsaved_project)
 
     # NOTE: Copy session launchers
-    launchers = await session_repo.get_project_launchers(user=user, project_id=project_id)
+    launchers = await session_repo.get_project_launchers(user=user, project_id=source_project_id)
     for launcher in launchers:
         await session_repo.copy_launcher(user=user, project_id=project.id, launcher=launcher)
 
     # NOTE: Copy data connector links. If this operation fails due to lack of permission, still proceed to create the
     # copy but return an error code that reflects this
     uncopied_dc_ids: list[ULID] = []
-    dc_links = await data_connector_repo.get_links_to(user=user, project_id=project_id)
+    dc_links = await data_connector_repo.get_links_to(user=user, project_id=source_project_id)
     for dc_link in dc_links:
         try:
-            await data_connector_repo.copy_link(user=user, project_id=project.id, link=dc_link)
+            await data_connector_repo.copy_link(user=user, target_project_id=project.id, link=dc_link)
         except errors.MissingResourceError:
             uncopied_dc_ids.append(dc_link.data_connector_id)
 

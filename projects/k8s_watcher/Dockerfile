@@ -15,6 +15,7 @@ RUN python3 -m pip install --user pipx && \
     /home/renku/.local/bin/poetry self add poetry-multiproject-plugin && \
     /home/renku/.local/bin/poetry self add poetry-polylith-plugin && \
     /home/renku/.local/bin/poetry self add poetry-plugin-export
+
 COPY --chown=$USER_UID:$USER_GID . .
 RUN if $DEV_BUILD ; then \
     /home/renku/.local/bin/poetry export -o requirements.txt --with dev; \
@@ -22,12 +23,13 @@ RUN if $DEV_BUILD ; then \
     /home/renku/.local/bin/poetry export -o requirements.txt; \
   fi && \
   env/bin/pip install -r requirements.txt
-RUN /home/renku/.local/bin/poetry -C projects/background_jobs build-project -f wheel --custom-temp-path=/tmp
-RUN env/bin/pip --no-cache-dir install projects/background_jobs/dist/*.whl
+RUN /home/renku/.local/bin/poetry -C projects/k8s_watcher build-project -f wheel --custom-temp-path=/tmp
+RUN env/bin/pip --no-cache-dir install projects/k8s_watcher/dist/*.whl
 
 FROM python:3.13-slim-bookworm
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
+RUN mkdir /prometheus && chown $USER_UID:$USER_GID /prometheus
 RUN apt-get update && apt-get install -y \
     tini vim-tiny procps curl && \
     rm -rf /var/lib/apt/lists/* && \
@@ -36,4 +38,4 @@ RUN apt-get update && apt-get install -y \
 USER $USER_UID:$USER_GID
 WORKDIR /app
 COPY --from=builder /app/env ./env
-ENTRYPOINT ["tini", "-g", "--", "env/bin/python", "-m", "renku_data_services.background_jobs.main"]
+ENTRYPOINT ["tini", "-g", "--", "env/bin/python", "-m", "renku_data_services.k8s_cache.main"]

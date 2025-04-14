@@ -63,7 +63,7 @@ class ConnectedServicesRepository:
             client = result.one_or_none()
             if client is None:
                 raise errors.MissingResourceError(
-                    message=f"OAuth2 Client with id '{provider_id}' does not exist or you do not have access to it."  # noqa: E501
+                    message=f"OAuth2 Client with id '{provider_id}' does not exist or you do not have access to it."
                 )
             return client.dump(user_is_admin=user.is_admin)
 
@@ -302,7 +302,7 @@ class ConnectedServicesRepository:
         """Get one OAuth2 connection from the database."""
         if not user.is_authenticated or user.id is None:
             raise errors.MissingResourceError(
-                message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."  # noqa: E501
+                message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."
             )
 
         async with self.session_maker() as session:
@@ -394,7 +394,7 @@ class ConnectedServicesRepository:
         """Get the AsyncOAuth2Client for the given connection_id and user."""
         if not user.is_authenticated or user.id is None:
             raise errors.MissingResourceError(
-                message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."  # noqa: E501
+                message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."
             )
 
         async with self.session_maker() as session:

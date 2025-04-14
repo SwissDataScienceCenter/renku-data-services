@@ -1,5 +1,6 @@
 """Business logic for searching."""
 
+import asyncio
 from datetime import UTC, datetime
 
 from authzed.api.v1 import AsyncClient as AuthzClient
@@ -49,6 +50,7 @@ async def update_solr(search_updates_repo: SearchUpdatesRepo, solr_client: SolrC
             result = await solr_client.upsert(docs)
             if result == "VersionConflict":
                 await search_updates_repo.mark_reset(ids)
+                await asyncio.sleep(1)
             else:
                 counter = counter + len(entries)
                 await search_updates_repo.mark_processed(ids)

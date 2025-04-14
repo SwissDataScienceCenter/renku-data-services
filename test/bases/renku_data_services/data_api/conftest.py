@@ -1,15 +1,16 @@
 import json
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from copy import deepcopy
 from typing import Any
 
+import pytest
 import pytest_asyncio
 from authzed.api.v1 import Relationship, RelationshipUpdate, SubjectReference, WriteRelationshipsRequest
+from httpx import Response
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 from ulid import ULID
 
-from components.renku_data_services.utils.middleware import validate_null_byte
 from renku_data_services.app_config.config import Config
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.authz.authz import _AuthzConverter
@@ -25,6 +26,7 @@ from renku_data_services.solr.solr_migrate import SchemaMigrator
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import UserInfo
+from renku_data_services.utils.middleware import validate_null_byte
 from test.bases.renku_data_services.background_jobs.test_sync import get_kc_users
 from test.utils import SanicReusableASGITestClient
 
@@ -167,6 +169,34 @@ async def unauthorized_headers() -> dict[str, str]:
     return {"Authorization": "Bearer {}"}
 
 
+@pytest.fixture
+def headers_from_user(
+    admin_user: UserInfo,
+    admin_headers: dict[str, str],
+    regular_user: UserInfo,
+    user_headers: dict[str, str],
+    member_1_user: UserInfo,
+    member_1_headers: dict[str, str],
+    member_2_user: UserInfo,
+    member_2_headers: dict[str, str],
+    unauthorized_headers: dict[str, str],
+) -> Callable[[UserInfo], dict[str, str]]:
+    def _headers_from_user(user: UserInfo) -> dict[str, str]:
+        match user.id:
+            case admin_user.id:
+                return admin_headers
+            case regular_user.id:
+                return user_headers
+            case member_1_user.id:
+                return member_1_headers
+            case member_2_user.id:
+                return member_2_headers
+            case _:
+                return unauthorized_headers
+
+    return _headers_from_user
+
+
 @pytest_asyncio.fixture
 async def bootstrap_admins(
     sanic_client_with_migrations, app_config_instance: Config, event_loop, admin_user: UserInfo
@@ -258,7 +288,7 @@ async def create_project(sanic_client, user_headers, admin_headers, regular_user
 
 
 @pytest_asyncio.fixture
-async def create_project_copy(sanic_client, user_headers, admin_headers, regular_user, admin_user):
+async def create_project_copy(sanic_client, user_headers, headers_from_user):
     async def create_project_copy_helper(
         id: str,
         namespace: str,
@@ -268,7 +298,7 @@ async def create_project_copy(sanic_client, user_headers, admin_headers, regular
         members: list[dict[str, str]] = None,
         **payload,
     ) -> dict[str, Any]:
-        headers = user_headers if user is None or user is regular_user else admin_headers
+        headers = headers_from_user(user) if user is not None else user_headers
         copy_payload = {"slug": Slug.from_name(name).value}
         copy_payload.update(payload)
         copy_payload.update({"namespace": namespace, "name": name})
@@ -391,7 +421,7 @@ async def create_data_connector(sanic_client: SanicASGITestClient, regular_user:
 
 @pytest_asyncio.fixture
 async def create_data_connector_and_link_project(
-    sanic_client, regular_user, user_headers, admin_user, admin_headers, create_data_connector
+    regular_user, user_headers, admin_user, admin_headers, create_data_connector, link_data_connector
 ):
     async def create_data_connector_and_link_project_helper(
         name: str, project_id: str, admin: bool = False, **payload
@@ -401,18 +431,25 @@ async def create_data_connector_and_link_project(
 
         data_connector = await create_data_connector(name, user=user, headers=headers, **payload)
         data_connector_id = data_connector["id"]
-        payload = {"project_id": project_id}
-
-        _, response = await sanic_client.post(
-            f"/api/data/data_connectors/{data_connector_id}/project_links", headers=headers, json=payload
-        )
-
-        assert response.status_code == 201, response.text
+        response = await link_data_connector(project_id, data_connector_id, headers=headers)
         data_connector_link = response.json
 
         return data_connector, data_connector_link
 
     return create_data_connector_and_link_project_helper
+
+
+@pytest.fixture
+def link_data_connector(sanic_client: SanicASGITestClient):
+    async def _link_data_connector(project_id: str, dc_id: str, headers: dict[str, str]) -> Response:
+        payload = {"project_id": project_id}
+        _, response = await sanic_client.post(
+            f"/api/data/data_connectors/{dc_id}/project_links", headers=headers, json=payload
+        )
+        assert response.status_code == 201, response.text
+        return response
+
+    return _link_data_connector
 
 
 @pytest_asyncio.fixture

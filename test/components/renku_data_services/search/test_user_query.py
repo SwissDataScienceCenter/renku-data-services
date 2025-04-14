@@ -4,8 +4,8 @@ from datetime import UTC, datetime, timedelta
 
 from ulid import ULID
 
-from components.renku_data_services.search.user_query import DateTimeCalc, RelativeDate
 from renku_data_services.search.user_query import (
+    DateTimeCalc,
     Helper,
     IdIs,
     Nel,
@@ -14,6 +14,7 @@ from renku_data_services.search.user_query import (
     PartialDate,
     PartialDateTime,
     PartialTime,
+    RelativeDate,
     Segments,
     SortableField,
     TypeIs,
