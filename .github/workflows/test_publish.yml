@@ -368,3 +368,42 @@ jobs:
         with:
           sarif_file: ss.sarif
           category: snyk_secrets_storage
+      - name: Docker meta k8s watcher
+        id: meta-k8s-watcher
+        uses: docker/metadata-action@v5
+        with:
+          # list of Docker images to use as base name for tags
+          images: |
+            renku/data-service-k8s-watcher
+          # generate Docker tags based on the following events/attributes
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+      - name: Build and push k8s watcher
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./projects/k8s_watcher/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta-k8s-watcher.outputs.tags }}
+          labels: ${{ steps.meta-k8s-watcher.outputs.labels }}
+          cache-from: type=registry,ref=renku/data-service-k8s-watcher:buildcache
+          cache-to: type=registry,ref=renku/data-service-k8s-watcher:buildcache,mode=max
+          provenance: false
+      - name: Scan k8s watcher image
+        uses: snyk/actions/docker@master
+        continue-on-error: true
+        with:
+          image: ${{ steps.meta-k8s-watcher.outputs.tags}}
+          args: --file=./projects/k8s_watcher/Dockerfile --severity-threshold=high --sarif-file-output=bj.sarif
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      - name: Upload Snyk report
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: bj.sarif
+          category: snyk_k8s-watcher
