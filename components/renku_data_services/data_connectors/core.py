@@ -126,8 +126,10 @@ async def validate_unsaved_global_data_connector(
     doi = _validate_doi(str(storage.configuration.get("doi")))
     if not doi:
         raise errors.ValidationError(message="Missing doi in the storage configuration")
-    name = f"doi:{doi}"
-    slug = base_models.Slug.from_name(name).value
+    doi_uri = f"doi:{doi}"
+    name = await validator.get_doi_name(configuration=storage.configuration)
+    name = name or doi_uri
+    slug = base_models.Slug.from_name(doi_uri).value
 
     # Override source_path and target_path
     storage = models.CloudStorageCore(
