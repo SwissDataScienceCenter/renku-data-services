@@ -11,6 +11,9 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
 env:
   DEVCONTAINER_REGISTRY: ghcr.io
   DEVCONTAINER_IMAGE_NAME: ${{ github.repository }}/devcontainer
