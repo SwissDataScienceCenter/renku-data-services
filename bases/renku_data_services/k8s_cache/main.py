@@ -21,7 +21,7 @@ async def main() -> None:
     clusters = [Cluster(id=ClusterId("renkulab"), namespace=config.k8s.renku_namespace, api=kr8s_api)]
 
     watcher = K8sWatcher(
-        handler=k8s_object_handler(config.k8s_cache),
+        handler=k8s_object_handler(config.k8s_cache, config.metrics, rp_repo=config.rp_repo),
         clusters={c.id: c for c in clusters},
         kinds=[AMALTHEA_SESSION_KIND, JUPYTER_SESSION_KIND],
     )

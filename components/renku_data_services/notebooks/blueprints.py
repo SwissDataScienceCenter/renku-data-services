@@ -468,19 +468,6 @@ class NotebooksNewBP(CustomBlueprint):
                 except Exception:
                     await self.nb_config.k8s_v2_client.delete_server(server_name, user.id)
                     raise
-            await self.metrics.session_started(
-                user=user,
-                metadata={
-                    "cpu": int(resource_class.cpu * 1000),
-                    "memory": resource_class.memory,
-                    "gpu": resource_class.gpu,
-                    "storage": body.disk_storage,
-                    "resource_class_id": resource_class.id,
-                    "resource_pool_id": resource_pool.id or "",
-                    "resource_class_name": f"{resource_pool.name}.{resource_class.name}",
-                    "session_id": server_name,
-                },
-            )
 
             return json(manifest.as_apispec().model_dump(mode="json", exclude_none=True), 201)
 
@@ -517,7 +504,6 @@ class NotebooksNewBP(CustomBlueprint):
         @authenticate(self.authenticator)
         async def _handler(_: Request, user: AuthenticatedAPIUser | AnonymousAPIUser, session_id: str) -> HTTPResponse:
             await self.nb_config.k8s_v2_client.delete_server(session_id, user.id)
-            await self.metrics.session_stopped(user, metadata={"session_id": session_id})
             return empty()
 
         return "/sessions/<session_id>", ["DELETE"], _handler

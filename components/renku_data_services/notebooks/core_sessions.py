@@ -465,7 +465,6 @@ async def patch_session(
         # Session is being hibernated
         patch.spec.hibernated = True
         is_getting_hibernated = True
-        await metrics.session_hibernated(user, metadata={"session_id": session_id})
     elif (
         body.state is not None
         and body.state.value.lower() == State.Running.value.lower()
@@ -473,7 +472,6 @@ async def patch_session(
     ):
         # Session is being resumed
         patch.spec.hibernated = False
-        await metrics.session_resumed(user, metadata={"session_id": session_id})
 
     # Resource class
     if body.resource_class_id is not None:
