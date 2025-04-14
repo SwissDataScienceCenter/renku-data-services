@@ -88,7 +88,7 @@ async def test_post_data_connector(sanic_client: SanicASGITestClient, regular_us
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "doi", ["10.5281/zenodo.15174623", "doi:10.5281/zenodo.15174623", "https://doi.org/10.5281/zenodo.15174623"]
+    "doi", ["10.5281/zenodo.13321077", "doi:10.5281/zenodo.13321077", "https://doi.org/10.5281/zenodo.13321077"]
 )
 async def test_post_global_data_connector(
     sanic_client: SanicASGITestClient, user_headers: dict[str, str], doi: str
@@ -106,13 +106,13 @@ async def test_post_global_data_connector(
     assert response.status_code == 201, response.text
     assert response.json is not None
     data_connector = response.json
-    assert data_connector.get("name") == "doi:10.5281/zenodo.15174623"
-    assert data_connector.get("slug") == "doi-10.5281-zenodo.15174623"
+    assert data_connector.get("name") == "Brazilian Flora: Brazilian Flora DwCA"
+    assert data_connector.get("slug") == "doi-10.5281-zenodo.13321077"
     assert data_connector.get("storage") is not None
     storage = data_connector["storage"]
     assert storage.get("storage_type") == "doi"
     assert storage.get("source_path") == "/"
-    assert storage.get("target_path") == "doi-10.5281-zenodo.15174623"
+    assert storage.get("target_path") == "doi-10.5281-zenodo.13321077"
     assert storage.get("readonly") is True
     assert data_connector.get("visibility") == "public"
     assert data_connector.get("description") is None

@@ -124,6 +124,37 @@ class RCloneValidator:
         provider = self.get_provider(configuration)
         return provider.get_private_fields(configuration)
 
+    async def get_doi_name(self, configuration: Union["RCloneConfig", dict[str, Any]]) -> str:
+        """Returns the name of a DOI."""
+        try:
+            provider = self.get_provider(configuration)
+            if provider.name != "doi":
+                return ""
+        except errors.ValidationError:
+            return ""
+
+        # Obscure configuration and transform if needed
+        obscured_config = await self.obscure_config(configuration)
+
+        with tempfile.NamedTemporaryFile(mode="w+", delete=False, encoding="utf-8") as f:
+            config = "\n".join(f"{k}={v}" for k, v in obscured_config.items())
+            f.write(f"[temp]\n{config}")
+            f.close()
+            # go run rclone.go --config ./test_config.toml backend title lease:
+            proc = await asyncio.create_subprocess_exec(
+                "rclone",
+                "backend",
+                "title",
+                "--config",
+                f.name,
+                "temp:",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await proc.communicate()
+            success = proc.returncode == 0
+        return stdout.decode().strip() if success else ""
+
     @staticmethod
     def transform_polybox_switchdriver_config(
         configuration: Union["RCloneConfig", dict[str, Any]],
