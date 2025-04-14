@@ -28,7 +28,7 @@ async def main() -> None:
     await watcher.start()
     logging.info("started watching resources")
     # create file for liveness probe
-    with open("/tmp/cache_ready", "w") as f:
+    with open("/tmp/cache_ready", "w") as f:  # nosec B108
         f.write("ready")
     await watcher.wait()
 
