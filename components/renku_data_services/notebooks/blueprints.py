@@ -33,6 +33,7 @@ from renku_data_services.notebooks.core_sessions import (
     get_extra_containers,
     get_extra_init_containers,
     get_gitlab_image_pull_secret,
+    get_launcher_env_variables,
     patch_session,
     request_dc_secret_creation,
     request_session_secret_creation,
@@ -386,12 +387,9 @@ class NotebooksNewBP(CustomBlueprint):
                 SessionEnvItem(name="RENKU_SESSION_PORT", value=f"{environment.port}"),
                 SessionEnvItem(name="RENKU_WORKING_DIR", value=work_dir.as_posix()),
             ]
-            if launcher.env_variables:
-                env.extend(
-                    SessionEnvItem(name=env_var.name, value=env_var.value)
-                    for env_var in launcher.env_variables
-                    if env_var.value
-                )
+            launcher_env_variables = get_launcher_env_variables(launcher, body)
+            if launcher_env_variables:
+                env.extend(launcher_env_variables)
 
             manifest = AmaltheaSessionV1Alpha1(
                 metadata=Metadata(name=server_name, annotations=annotations),
