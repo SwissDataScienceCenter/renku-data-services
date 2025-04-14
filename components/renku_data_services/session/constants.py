@@ -13,10 +13,9 @@ BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX: Final[str] = "harbor.dev.renku.ch/renku-build
 BUILD_OUTPUT_IMAGE_NAME: Final[str] = "renku-build"
 """The container image name created from Renku builds."""
 
-BUILD_VSCODIUM_PYTHON_DEFAULT_RUN_IMAGE: Final[str] = "renku/renkulab-vscodium-python-runimage:ubuntu-c794f36"
-"""The default run image for vscodium+python builds."""
+BUILD_BUILDER_IMAGE: Final[str] = "olevski90/selector:0.0.1-test1"
 
-BUILD_DEFAULT_BUILD_STRATEGY_NAME: Final[str] = "renku-buildpacks"
+BUILD_DEFAULT_BUILD_STRATEGY_NAME: Final[str] = "renku-buildpacks-v2"
 """The name of the default build strategy."""
 
 BUILD_DEFAULT_PUSH_SECRET_NAME: Final[str] = "renku-build-secret"

@@ -557,8 +557,7 @@ class SessionRepository:
             launcher = res.one_or_none()
             if launcher is None:
                 raise errors.MissingResourceError(
-                    message=f"Session launcher with id '{launcher_id}' does not "
-                    "exist or you do not have access to it."
+                    message=f"Session launcher with id '{launcher_id}' does not exist or you do not have access to it."
                 )
 
             authorized = await self.project_authz.has_permission(
@@ -1022,15 +1021,12 @@ class SessionRepository:
         build: models.Build,
         build_parameters: models.BuildParameters,
         launcher: models.SessionLauncher | None,
-    ) -> models.ShipwrightBuildRunParams:
+    ) -> models.ShipwrightBuildRunParamsV2:
         """Derive the Shipwright BuildRun params from a Build instance and a BuildParameters instance."""
         if not user.is_authenticated or user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
         git_repository = build_parameters.repository
-
-        # TODO: define the run image from `build_parameters`
-        run_image = self.builds_config.vscodium_python_run_image or constants.BUILD_VSCODIUM_PYTHON_DEFAULT_RUN_IMAGE
 
         output_image_prefix = (
             self.builds_config.build_output_image_prefix or constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
@@ -1063,10 +1059,10 @@ class SessionRepository:
             annotations["renku.io/launcher_id"] = str(launcher.id)
             annotations["renku.io/project_id"] = str(launcher.project_id)
 
-        return models.ShipwrightBuildRunParams(
+        return models.ShipwrightBuildRunParamsV2(
             name=build.k8s_name,
             git_repository=git_repository,
-            run_image=run_image,
+            build_image=constants.BUILD_BUILDER_IMAGE,
             output_image=output_image,
             build_strategy_name=build_strategy_name,
             push_secret_name=push_secret_name,
@@ -1077,6 +1073,7 @@ class SessionRepository:
             tolerations=self.builds_config.tolerations,
             labels=labels,
             annotations=annotations,
+            frontend=build_parameters.frontend_variant,
         )
 
     async def _get_environment_authorization(
