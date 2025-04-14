@@ -50,6 +50,7 @@ class FrontendVariant(StrEnum):
     """The environment frontend choice."""
 
     vscodium = "vscodium"
+    jupyterlab = "jupyterlab"
 
 
 @dataclass(kw_only=True, frozen=True, eq=True)
@@ -297,6 +298,26 @@ class ShipwrightBuildRunParams:
     output_image: str
     build_strategy_name: str
     push_secret_name: str
+    retention_after_failed: timedelta | None = None
+    retention_after_succeeded: timedelta | None = None
+    build_timeout: timedelta | None = None
+    node_selector: dict[str, str] | None = None
+    tolerations: list[crs.Toleration] | None = None
+    labels: dict[str, str] | None = None
+    annotations: dict[str, str] | None = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ShipwrightBuildRunParamsV2:
+    """Model to represent the parameters used to create a new Shipwright BuildRun."""
+
+    name: str
+    git_repository: str
+    output_image: str
+    build_strategy_name: str
+    push_secret_name: str
+    frontend: str = FrontendVariant.vscodium.value
+    build_image: str | None = None
     retention_after_failed: timedelta | None = None
     retention_after_succeeded: timedelta | None = None
     build_timeout: timedelta | None = None
