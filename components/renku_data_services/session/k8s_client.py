@@ -88,12 +88,12 @@ class _ShipwrightClientBase:
         """Get a list of Shipwright BuildRuns."""
         try:
             builds = await ShipwrightBuildRunV1Beta1Kr8s.list(namespace=self.namespace, label_selector=label_selector)
+            output = [BuildRun.model_validate(b.to_dict()) for b in builds]
         except ServerError as e:
             if not e.response or e.response.status_code not in [400, 404]:
                 logger.exception(f"Cannot list builds because of {e}")
                 raise IntermittentError("Cannot list builds")
             return []
-        output = [BuildRun.model_validate(b.to_dict()) for b in builds]
         return output
 
     async def delete_build_run(self, name: str) -> None:

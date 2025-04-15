@@ -36,6 +36,11 @@ import renku_data_services.search
 import renku_data_services.storage
 import renku_data_services.users
 from renku_data_services import errors
+from renku_data_services.app_config.server_options import (
+    ServerOptions,
+    ServerOptionsDefaults,
+    generate_default_resource_pool,
+)
 from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.authn.gitlab import GitlabAuthenticator
 from renku_data_services.authn.keycloak import KcUserStore, KeycloakAuthenticator
@@ -44,11 +49,6 @@ from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.crc import models
 from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
-from renku_data_services.data_api.server_options import (
-    ServerOptions,
-    ServerOptionsDefaults,
-    generate_default_resource_pool,
-)
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
     DataConnectorSecretRepository,
