@@ -218,7 +218,7 @@ def create_app() -> Sanic:
             app.manager.manage("SolrReindex", solr_reindex, {"app_name": app.name}, transient=True)
 
         logger.info("Starting metrics background task.")
-        app.manager.manage("StartMetricsProcessing", start_metrics_task, {}, transient=False)
+        app.manager.manage("StartMetricsProcessing", start_metrics_task, {}, transient=True)
 
     return app
 

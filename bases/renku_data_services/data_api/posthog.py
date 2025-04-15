@@ -22,10 +22,10 @@ async def _send_metrics_to_posthog() -> None:
 
     while True:
         try:
-            metrics = await config.metrics_repo.get_unprocessed_metrics(limit=100)
+            metrics = config.metrics_repo.get_unprocessed_metrics()
 
             processed_ids = []
-            for metric in metrics:
+            async for metric in metrics:
                 try:
                     posthog.capture(
                         distinct_id=metric.anonymous_user_id,
@@ -42,9 +42,7 @@ async def _send_metrics_to_posthog() -> None:
                 else:
                     processed_ids.append(metric.id)
 
-            # Delete processed events
-            if processed_ids:
-                await config.metrics_repo.delete_processed_metrics(processed_ids)
+            await config.metrics_repo.delete_processed_metrics(processed_ids)
         except (asyncio.CancelledError, KeyboardInterrupt) as e:
             logger.warning(f"Exiting: {e}")
             return

@@ -61,8 +61,8 @@ from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.message_queue.db import EventRepository, ReprovisioningRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import RedisQueue
+from renku_data_services.metrics.core import StagingMetricsService
 from renku_data_services.metrics.db import MetricsRepository
-from renku_data_services.metrics.staging import StagingMetricsService
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.platform.db import PlatformRepository

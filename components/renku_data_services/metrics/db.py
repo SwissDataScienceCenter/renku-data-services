@@ -1,10 +1,11 @@
 """Repository for the metrics staging table."""
 
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from ulid import ULID
 
 from renku_data_services.metrics.orm import MetricsORM
 
@@ -23,14 +24,14 @@ class MetricsRepository:
         async with self.session_maker() as session, session.begin():
             session.add(metric_orm)
 
-    async def get_unprocessed_metrics(self, limit: int = 100) -> list[MetricsORM]:
+    async def get_unprocessed_metrics(self) -> AsyncGenerator[MetricsORM, None]:
         """Get unprocessed metrics events from the staging table."""
-        stmt = select(MetricsORM).order_by(MetricsORM.timestamp).limit(limit)
         async with self.session_maker() as session:
-            result = await session.execute(stmt)
-            return list(result.scalars().all())
+            result = await session.stream_scalars(select(MetricsORM))
+            async for metrics in result:
+                yield metrics
 
-    async def delete_processed_metrics(self, metrics_ids: list[int]) -> None:
+    async def delete_processed_metrics(self, metrics_ids: list[ULID]) -> None:
         """Delete metrics events from the staging table."""
         if not metrics_ids:
             return
