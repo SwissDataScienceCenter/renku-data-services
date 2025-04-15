@@ -14,7 +14,7 @@ spec:
         https://buildpacks.io/docs/for-buildpack-authors/how-to/write-buildpacks/specify-launch-processes/
       default: "bash"
     - name: builder-image
-      default: olevski90/selector:0.0.1-test1
+      default: olevski90/selector:0.0.1-test2
       description: The buildpack builder image to use
     - name: procfile
       description: |
