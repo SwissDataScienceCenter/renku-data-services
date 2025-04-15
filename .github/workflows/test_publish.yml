@@ -11,6 +11,9 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
 env:
   DEVCONTAINER_REGISTRY: ghcr.io
   DEVCONTAINER_IMAGE_NAME: ${{ github.repository }}/devcontainer
@@ -88,8 +91,7 @@ jobs:
         uses: devcontainers/ci@v0.3
         with:
           runCmd: |
-            make style_checks
-            poetry run pre-commit run --all-files --show-diff-on-failure --hook-stage manual
+            make style_checks && poetry run pre-commit run --all-files --show-diff-on-failure --hook-stage manual
           push: never
           skipContainerUserIdUpdate: false
           cacheFrom: ${{ needs.build-devcontainer.outputs.image_repository }}:${{ needs.build-devcontainer.outputs.image_tag }}
