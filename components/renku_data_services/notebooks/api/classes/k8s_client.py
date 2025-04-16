@@ -12,8 +12,8 @@ from kr8s.asyncio.objects import APIObject, Pod, Secret, StatefulSet
 from kubernetes.client import ApiClient, V1Secret
 
 from renku_data_services.errors import errors
+from renku_data_services.k8s.clients import CachedK8sClient
 from renku_data_services.k8s.models import ClusterId, K8sObject, K8sObjectMeta, ListFilter
-from renku_data_services.k8s_watcher.db import CachedK8sClient
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
 from renku_data_services.notebooks.constants import JUPYTER_SESSION_KIND, JUPYTER_SESSION_VERSION
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
