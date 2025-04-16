@@ -2,7 +2,7 @@
 
 from dataclasses import asdict
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 from renku_data_services import base_models, errors
 from renku_data_services.authz.models import Visibility
@@ -11,6 +11,7 @@ from renku_data_services.base_models.core import (
     ProjectPath,
 )
 from renku_data_services.data_connectors import apispec, models
+from renku_data_services.data_connectors.doi.metadata import get_dataset_metadata
 from renku_data_services.storage import models as storage_models
 from renku_data_services.storage.rclone import RCloneValidator
 
@@ -113,7 +114,12 @@ async def validate_unsaved_global_data_connector(
     if not doi:
         raise errors.ValidationError(message="Missing doi in the storage configuration")
     doi_uri = f"doi:{doi}"
-    name = await validator.get_doi_name(configuration=storage.configuration)
+    name = ""
+    rclone_metadata = await validator.get_doi_metadata(configuration=storage.configuration)
+    if rclone_metadata is not None:
+        metadata = await get_dataset_metadata(rclone_metadata=rclone_metadata)
+        if metadata is not None:
+            name = metadata.name
     name = name or doi_uri
     slug = base_models.Slug.from_name(doi_uri).value
 
@@ -221,9 +227,9 @@ def _validate_doi(doi: str) -> str:
     """Validate a DOI."""
     doi = doi.lower()
     if doi.startswith("doi:"):
-        return doi[len("doi:") :]
+        return quote(doi[len("doi:") :])
     parsed = urlparse(doi)
     if parsed.hostname is not None and parsed.hostname.endswith("doi.org"):
         path = parsed.path
-        return path[1:] if path.startswith("/") else path
-    return doi
+        return quote(path[1:] if path.startswith("/") else path)
+    return quote(doi)

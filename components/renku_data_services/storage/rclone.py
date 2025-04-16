@@ -124,14 +124,16 @@ class RCloneValidator:
         provider = self.get_provider(configuration)
         return provider.get_private_fields(configuration)
 
-    async def get_doi_name(self, configuration: Union["RCloneConfig", dict[str, Any]]) -> str:
-        """Returns the name of a DOI."""
+    async def get_doi_metadata(
+        self, configuration: Union["RCloneConfig", dict[str, Any]]
+    ) -> "RCloneDOIMetadata | None":
+        """Returns the metadata of a DOI remote."""
         try:
             provider = self.get_provider(configuration)
             if provider.name != "doi":
-                return ""
+                return None
         except errors.ValidationError:
-            return ""
+            return None
 
         # Obscure configuration and transform if needed
         obscured_config = await self.obscure_config(configuration)
@@ -144,16 +146,22 @@ class RCloneValidator:
             proc = await asyncio.create_subprocess_exec(
                 "rclone",
                 "backend",
-                "title",
+                "metadata",
                 "--config",
                 f.name,
                 "temp:",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = await proc.communicate()
+            stdout, _ = await proc.communicate()
             success = proc.returncode == 0
-        return stdout.decode().strip() if success else ""
+        if success:
+            try:
+                metadata = RCloneDOIMetadata.model_validate_json(stdout.decode().strip())
+                return metadata
+            except ValidationError:
+                return None
+        return None
 
     @staticmethod
     def transform_polybox_switchdriver_config(
@@ -412,3 +420,12 @@ class RCloneProviderSchema(BaseModel):
             if option.name not in configuration:
                 continue
             yield option
+
+
+class RCloneDOIMetadata(BaseModel):
+    """Schema for metadata provided by rclone about a DOI remote."""
+
+    doi: str = Field(alias="DOI")
+    url: str = Field(alias="URL")
+    metadata_url: str = Field(alias="metadataURL")
+    provider: str = Field()
