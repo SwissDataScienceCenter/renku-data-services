@@ -124,15 +124,14 @@ async def test_post_global_data_connector(
     assert response.json is not None
     assert response.json.get("id") == data_connector["id"]
 
-    # TODO: enable this part of the test once there is an API endpoint for it
-    # # Check that we can retrieve the data connector by slug
-    # _, response = await sanic_client.get(
-    #     f"/api/data/namespaces/{data_connector['namespace']}/data_connectors/{data_connector['slug']}",
-    #     headers=user_headers,
-    # )
-    # assert response.status_code == 200, response.text
-    # assert response.json is not None
-    # assert response.json.get("id") == data_connector["id"]
+    # Check that we can retrieve the data connector by slug
+    _, response = await sanic_client.get(
+        f"/api/data/data_connectors/global/{data_connector['slug']}",
+        headers=user_headers,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == data_connector["id"]
 
 
 @pytest.mark.asyncio

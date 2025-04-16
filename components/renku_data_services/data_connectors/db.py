@@ -195,6 +195,34 @@ class DataConnectorRepository:
 
             return data_connector.dump()
 
+    async def get_global_data_connector_by_slug(
+        self,
+        user: base_models.APIUser,
+        slug: base_models.Slug,
+    ) -> models.DataConnector | models.GlobalDataConnector:
+        """Get one global data connector from the database by slug."""
+        not_found_msg = f"Data connector with identifier '{slug}' does not exist or you do not have access to it."
+
+        async with self.session_maker() as session:
+            stmt = select(schemas.DataConnectorORM).where(schemas.DataConnectorORM.global_slug == slug.value.lower())
+            result = await session.scalars(stmt)
+            data_connector = result.one_or_none()
+
+            # TODO: find from old slug for global data connectors
+            if data_connector is None:
+                raise errors.MissingResourceError(message=not_found_msg)
+
+            authorized = await self.authz.has_permission(
+                user=user,
+                resource_type=ResourceType.data_connector,
+                resource_id=data_connector.id,
+                scope=Scope.READ,
+            )
+            if not authorized:
+                raise errors.MissingResourceError(message=not_found_msg)
+
+            return data_connector.dump()
+
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.create, ResourceType.data_connector)
     @update_search_document
