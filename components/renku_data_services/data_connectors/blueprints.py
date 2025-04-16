@@ -99,9 +99,7 @@ class DataConnectorsBP(CustomBlueprint):
             _: Request, user: base_models.APIUser, body: apispec.DataConnectorPost, validator: RCloneValidator
         ) -> JSONResponse:
             data_connector = validate_unsaved_data_connector(body, validator=validator)
-            result = await self.data_connector_repo.insert_data_connector(
-                user=user, data_connector=data_connector, validator=None
-            )
+            result = await self.data_connector_repo.insert_data_connector(user=user, data_connector=data_connector)
             return validated_json(
                 apispec.DataConnector,
                 self._dump_data_connector(result, validator=validator),
@@ -120,13 +118,13 @@ class DataConnectorsBP(CustomBlueprint):
             _: Request, user: base_models.APIUser, body: apispec.GlobalDataConnectorPost, validator: RCloneValidator
         ) -> JSONResponse:
             data_connector = await prevalidate_unsaved_global_data_connector(body, validator=validator)
-            result = await self.data_connector_repo.insert_data_connector(
+            result, inserted = await self.data_connector_repo.insert_global_data_connector(
                 user=user, data_connector=data_connector, validator=validator
             )
             return validated_json(
                 apispec.DataConnector,
                 self._dump_data_connector(result, validator=validator),
-                status=201,
+                status=201 if inserted else 200,
             )
 
         return "/data_connectors/global", ["POST"], _post_global

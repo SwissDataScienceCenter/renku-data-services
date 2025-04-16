@@ -230,7 +230,6 @@ class DataConnectorRepository:
         self,
         user: base_models.APIUser,
         data_connector: models.UnsavedDataConnector | models.UnsavedGlobalDataConnector,
-        validator: RCloneValidator | None,
         *,
         session: AsyncSession | None = None,
     ) -> models.DataConnector | models.GlobalDataConnector:
@@ -256,7 +255,6 @@ class DataConnectorRepository:
 
         project: Project | None = None
         if ns is None:
-            # TODO
             pass
         elif isinstance(data_connector.namespace, ProjectPath):
             error_msg = (
@@ -310,15 +308,7 @@ class DataConnectorRepository:
             )
             existing_global_dc = await session.scalar(existing_global_dc_stmt)
             if existing_global_dc is not None:
-                return existing_global_dc.dump()
-
-        # Fully validate a global data connector before inserting
-        if isinstance(data_connector, models.UnsavedGlobalDataConnector):
-            if validator is None:
-                raise RuntimeError("Could not validate global data connector")
-            data_connector = await validate_unsaved_global_data_connector(
-                data_connector=data_connector, validator=validator
-            )
+                raise errors.ConflictError(message=f"An entity with the slug '{data_connector.slug}' already exists.")
 
         visibility_orm = (
             apispec.Visibility(data_connector.visibility)
@@ -359,6 +349,44 @@ class DataConnectorRepository:
         return data_connector_orm.dump()
 
     @with_db_transaction
+    async def insert_global_data_connector(
+        self,
+        user: base_models.APIUser,
+        data_connector: models.UnsavedGlobalDataConnector,
+        validator: RCloneValidator | None,
+        *,
+        session: AsyncSession | None = None,
+    ) -> tuple[models.GlobalDataConnector, bool]:
+        """Insert a new global data connector entry."""
+        if not session:
+            raise errors.ProgrammingError(message="A database session is required.")
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        slug = data_connector.slug or base_models.Slug.from_name(data_connector.name).value
+
+        existing_global_dc_stmt = select(schemas.DataConnectorORM).where(schemas.DataConnectorORM.global_slug == slug)
+        existing_global_dc = await session.scalar(existing_global_dc_stmt)
+        if existing_global_dc is not None:
+            dc = existing_global_dc.dump()
+            if not isinstance(dc, models.GlobalDataConnector):
+                raise errors.ProgrammingError(message=f"Expected to get a global data connector ('{dc.id}')")
+            return dc, False
+
+        # Fully validate a global data connector before inserting
+        if isinstance(data_connector, models.UnsavedGlobalDataConnector):
+            if validator is None:
+                raise RuntimeError("Could not validate global data connector")
+            data_connector = await validate_unsaved_global_data_connector(
+                data_connector=data_connector, validator=validator
+            )
+
+        dc = await self.insert_data_connector(user=user, data_connector=data_connector, session=session)
+        if not isinstance(dc, models.GlobalDataConnector):
+            raise errors.ProgrammingError(message=f"Expected to get a global data connector ('{dc.id}')")
+        return dc, True
+
+    @with_db_transaction
     @Authz.authz_change(AuthzOperation.update, ResourceType.data_connector)
     @update_search_document
     async def update_data_connector(
@@ -388,9 +416,14 @@ class DataConnectorRepository:
         if data_connector is None:
             raise errors.MissingResourceError(message=not_found_msg)
         old_data_connector = data_connector.dump()
-        if old_data_connector.namespace is None:
-            raise NotImplementedError("Update not supported yet.")
-        old_data_connector_parent = old_data_connector.path.parent()
+        # if old_data_connector.namespace is None:
+        #     raise NotImplementedError("Update not supported yet.")
+        old_data_connector_parent = (
+            old_data_connector.path.parent() if isinstance(old_data_connector, models.DataConnector) else None
+        )
+
+        if isinstance(old_data_connector, models.GlobalDataConnector) and patch.namespace:
+            raise errors.ValidationError(message="Moving a global data connector into a namespace is not supported.")
 
         required_scope = Scope.WRITE
         if patch.visibility is not None and patch.visibility != old_data_connector.visibility:
@@ -421,8 +454,9 @@ class DataConnectorRepository:
                 else apispec.Visibility(patch.visibility.value)
             )
             data_connector.visibility = visibility_orm
-        if (patch.namespace is not None and patch.namespace != old_data_connector.namespace.path) or (
-            patch.slug is not None and patch.slug != old_data_connector.slug
+        if isinstance(old_data_connector, models.DataConnector) and (
+            (patch.namespace is not None and patch.namespace != old_data_connector.namespace.path)
+            or (patch.slug is not None and patch.slug != old_data_connector.slug)
         ):
             match patch.namespace, patch.slug:
                 case (None, new_slug) if new_slug is not None:
@@ -459,6 +493,12 @@ class DataConnectorRepository:
                         link,
                         session=session,
                     )
+        if (
+            isinstance(old_data_connector, models.GlobalDataConnector)
+            and patch.slug is not None
+            and patch.slug != old_data_connector.slug
+        ):
+            data_connector.global_slug = patch.slug
         if patch.description is not None:
             data_connector.description = patch.description if patch.description else None
         if patch.keywords is not None:

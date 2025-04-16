@@ -234,7 +234,7 @@ async def test_post_global_data_connector_no_duplicates(
 
     _, response = await sanic_client.post("/api/data/data_connectors/global", headers=user_headers, json=payload)
 
-    assert response.status_code == 201, response.text
+    assert response.status_code == 200, response.text
     assert response.json is not None
     assert response.json.get("id") == data_connector_id
 
@@ -884,7 +884,6 @@ async def test_patch_data_connector_slug(
 
 
 @pytest.mark.asyncio
-@pytest.mark.skip(reason="TODO: support patching")
 async def test_patch_global_data_connector(
     sanic_client: SanicASGITestClient, user_headers: dict[str, str], admin_headers: dict[str, str]
 ) -> None:
@@ -907,20 +906,34 @@ async def test_patch_global_data_connector(
 
     # Check that a regular user cannot patch a global data connector
     headers = merge_headers(user_headers, {"If-Match": data_connector["etag"]})
-    payload = {"name": "New name"}
+    payload = {"name": "New name", "slug": "new-slug"}
 
     _, response = await sanic_client.patch(
         f"/api/data/data_connectors/{data_connector_id}", headers=headers, json=payload
     )
 
-    assert response.status_code == 0, response.text
+    assert response.status_code == 404, response.text
 
     # Check that an admin user can delete a global data connector
+    headers = merge_headers(admin_headers, {"If-Match": data_connector["etag"]})
+
     _, response = await sanic_client.patch(
-        f"/api/data/data_connectors/{data_connector_id}", headers=admin_headers, json=payload
+        f"/api/data/data_connectors/{data_connector_id}", headers=headers, json=payload
     )
 
-    assert response.status_code == 0, response.text
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == data_connector_id
+    assert response.json.get("name") == "New name"
+    assert response.json.get("slug") == "new-slug"
+    assert response.json.get("description") == data_connector["description"]
+    assert response.json.get("storage") == data_connector["storage"]
+
+    # Check that we can get the data connector with the new slug
+    _, response = await sanic_client.get("/api/data/data_connectors/global/new-slug")
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == data_connector_id
 
 
 @pytest.mark.asyncio
