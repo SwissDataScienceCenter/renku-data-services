@@ -42,10 +42,10 @@ class SearchReprovision:
         self._project_repo = project_repo
         self._data_connector_repo = data_connector_repo
 
-    async def run_reprovision(self, requested_by: APIUser) -> None:
+    async def run_reprovision(self, requested_by: APIUser) -> int:
         """Start a reprovisioning if not already running."""
-        reprovision = await self._reprovisioning_repo.start()
-        await self.init_reprovision(requested_by, reprovision)
+        reprovision = await self.acquire_reprovision()
+        return await self.init_reprovision(requested_by, reprovision)
 
     async def acquire_reprovision(self) -> Reprovisioning:
         """Acquire a reprovisioning slot. Throws if already taken."""
@@ -71,7 +71,7 @@ class SearchReprovision:
             for dc in result[0]:
                 yield dc
 
-    async def init_reprovision(self, requested_by: APIUser, reprovisioning: Reprovisioning) -> None:
+    async def init_reprovision(self, requested_by: APIUser, reprovisioning: Reprovisioning) -> int:
         """Initiates reprovisioning by inserting documents into the staging table.
 
         Deletes all renku entities in the solr core. Then it goes
@@ -85,6 +85,7 @@ class SearchReprovision:
             if c % 50 == 0:
                 logger.info(f"Inserted {c}. entities into staging table...")
 
+        counter = 0
         try:
             logger.info(f"Starting reprovisioning with ID {reprovisioning.id}")
             started = datetime.now()
@@ -92,7 +93,6 @@ class SearchReprovision:
             async with DefaultSolrClient(self._solr_config) as client:
                 await client.delete("_type:*")
 
-            counter = 0
             all_users = self._user_repo.get_all_users(requested_by=requested_by)
             counter = await self.__update_entities(all_users, "user", started, counter, log_counter)
             logger.info("Done adding user entities to search_updates table.")
@@ -109,12 +109,13 @@ class SearchReprovision:
             counter = await self.__update_entities(all_dcs, "data connector", started, counter, log_counter)
 
             logger.info(f"Inserted {counter} entities into the staging table.")
-
         except Exception as e:
             logger.error("Error while reprovisioning entities!", exc_info=e)
             ## TODO error handling. skip or fail?
         finally:
             await self._reprovisioning_repo.stop()
+
+        return counter
 
     async def __update_entities(
         self,
