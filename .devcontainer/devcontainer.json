@@ -29,13 +29,14 @@
 		"ghcr.io/EliiseS/devcontainer-features/bash-profile:1": {
 			"command": "alias k=kubectl"
 		},
-		"ghcr.io/devcontainers-extra/features/rclone:1": {},
 		"./k3d": {},
 		"ghcr.io/devcontainers/features/java:1": {
 			"version": "21",
 			"jdkDistro": "open"
 		},
-		"./solr": {}
+		"./solr": {},
+		"ghcr.io/devcontainers/features/go:1": {},
+		"./rclone": {}
 	},
 	"overrideFeatureInstallOrder": [
 		"ghcr.io/devcontainers-extra/features/poetry",
@@ -45,12 +46,15 @@
 	"customizations": {
 		"vscode": {
 			"extensions": [
+				"charliermarsh.ruff",
+				"matangover.mypy",
+				"ms-python.black-formatter",
+				"ms-python.flake8",
+				"ms-python.isort",
+				"ms-python.mypy-type-checker",
 				"ms-python.python",
 				"ms-python.vscode-pylance",
-				"ms-vscode.makefile-tools",
-				"matangover.mypy",
-				"ms-python.mypy-type-checker",
-				"charliermarsh.ruff"
+				"ms-vscode.makefile-tools"
 			]
 		}
 	}
