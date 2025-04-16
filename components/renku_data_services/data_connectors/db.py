@@ -27,6 +27,7 @@ from renku_data_services.base_models.core import (
 )
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors import orm as schemas
+from renku_data_services.data_connectors.core import validate_unsaved_global_data_connector
 from renku_data_services.namespace import orm as ns_schemas
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.namespace.models import ProjectNamespace
@@ -38,6 +39,7 @@ from renku_data_services.search.decorators import update_search_document
 from renku_data_services.secrets import orm as secrets_schemas
 from renku_data_services.secrets.core import encrypt_user_secret
 from renku_data_services.secrets.models import SecretKind
+from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.core import with_db_transaction
 
@@ -200,6 +202,7 @@ class DataConnectorRepository:
         self,
         user: base_models.APIUser,
         data_connector: models.UnsavedDataConnector | models.UnsavedGlobalDataConnector,
+        validator: RCloneValidator | None,
         *,
         session: AsyncSession | None = None,
     ) -> models.DataConnector | models.GlobalDataConnector:
@@ -280,6 +283,14 @@ class DataConnectorRepository:
             existing_global_dc = await session.scalar(existing_global_dc_stmt)
             if existing_global_dc is not None:
                 return existing_global_dc.dump()
+
+        # Fully validate a global data connector before inserting
+        if isinstance(data_connector, models.UnsavedGlobalDataConnector):
+            if validator is None:
+                raise RuntimeError("Could not validate global data connector")
+            data_connector = await validate_unsaved_global_data_connector(
+                data_connector=data_connector, validator=validator
+            )
 
         visibility_orm = (
             apispec.Visibility(data_connector.visibility)

@@ -2,7 +2,6 @@
 
 from dataclasses import asdict
 from typing import Any
-from urllib.parse import quote, urlparse
 
 from pydantic import ValidationError as PydanticValidationError
 
@@ -106,54 +105,98 @@ def validate_unsaved_data_connector(
     )
 
 
-async def validate_unsaved_global_data_connector(
+async def prevalidate_unsaved_global_data_connector(
     body: apispec.GlobalDataConnectorPost, validator: RCloneValidator
 ) -> models.UnsavedGlobalDataConnector:
-    """Validate an unsaved data connector."""
+    """Pre-validate an unsaved data connector."""
 
     storage = validate_unsaved_storage(body.storage, validator=validator)
+    # TODO: allow admins to create global data connectors, e.g. s3://giab
     if storage.storage_type != "doi":
         raise errors.ValidationError(message="Only doi storage type is allowed for global data connectors")
     if not storage.readonly:
         raise errors.ValidationError(message="Global data connectors must be read-only")
 
-    # Check that we can list the files in the DOI
-    connection_result = await validator.test_connection(configuration=storage.configuration, source_path="/")
-    if not connection_result.success:
-        raise errors.ValidationError(
-            message="The provided storage configuration is not currently working", detail=connection_result.error
-        )
-
-    doi = _validate_doi(str(storage.configuration.get("doi")))
-    if not doi:
-        raise errors.ValidationError(message="Missing doi in the storage configuration")
-    doi_uri = f"doi:{doi}"
-    name = ""
     rclone_metadata = await validator.get_doi_metadata(configuration=storage.configuration)
-    if rclone_metadata is not None:
-        metadata = await get_dataset_metadata(rclone_metadata=rclone_metadata)
-        if metadata is not None:
-            name = metadata.name
-    name = name or doi_uri
+    if rclone_metadata is None:
+        raise errors.ValidationError(message=f"Could not resolve DOI {storage.configuration.get("doi", "<unknown>")}")
+
+    doi_uri = f"doi:{rclone_metadata.doi}"
     slug = base_models.Slug.from_name(doi_uri).value
 
-    # Override source_path and target_path
-    storage = models.CloudStorageCore(
-        storage_type=storage.storage_type,
-        configuration=storage.configuration,
-        source_path="/",
-        target_path=slug,
-        readonly=storage.readonly,
-    )
-
     return models.UnsavedGlobalDataConnector(
-        name=name,
+        name=doi_uri,
         slug=slug,
         visibility=Visibility.PUBLIC,
         created_by="",
         storage=storage,
         description=None,
         keywords=[],
+    )
+
+
+async def validate_unsaved_global_data_connector(
+    data_connector: models.UnsavedGlobalDataConnector,
+    validator: RCloneValidator,
+    # body: apispec.GlobalDataConnectorPost, validator: RCloneValidator
+) -> models.UnsavedGlobalDataConnector:
+    """Validate an unsaved data connector."""
+
+    # Check that we can list the files in the DOI
+    connection_result = await validator.test_connection(
+        configuration=data_connector.storage.configuration, source_path="/"
+    )
+    if not connection_result.success:
+        raise errors.ValidationError(
+            message="The provided storage configuration is not currently working", detail=connection_result.error
+        )
+
+    # Override source_path and target_path
+    storage = models.CloudStorageCore(
+        storage_type=data_connector.storage.storage_type,
+        configuration=data_connector.storage.configuration,
+        source_path="/",
+        target_path=data_connector.slug,
+        readonly=data_connector.storage.readonly,
+    )
+
+    # Fetch DOI metadata
+    rclone_metadata = await validator.get_doi_metadata(configuration=data_connector.storage.configuration)
+    if rclone_metadata is None:
+        raise errors.ValidationError(
+            message=f"Could not resolve DOI {data_connector.storage.configuration.get("doi", "<unknown>")}"
+        )
+    metadata = await get_dataset_metadata(rclone_metadata=rclone_metadata)
+
+    name = data_connector.name
+    description = ""
+    keywords: list[str] = []
+    if metadata is not None:
+        name = metadata.name or name
+        description = metadata.description
+        keywords = metadata.keywords
+
+    # Fix metadata if needed
+    if len(name) > 99:
+        name = f"{name[:96]}..."
+    if len(description) > 500:
+        description = f"{description[:497]}..."
+    print(keywords)
+    fixed_keywords: list[str] = []
+    for word in keywords:
+        for kw in word.strip().split(","):
+            fixed_keywords.append(kw.strip())
+    keywords = fixed_keywords
+    print(fixed_keywords)
+
+    return models.UnsavedGlobalDataConnector(
+        name=name,
+        slug=data_connector.slug,
+        visibility=Visibility.PUBLIC,
+        created_by="",
+        storage=storage,
+        description=description or None,
+        keywords=keywords,
     )
 
 
@@ -235,15 +278,3 @@ def validate_data_connector_secrets_patch(
         )
         for secret in put.root
     ]
-
-
-def _validate_doi(doi: str) -> str:
-    """Validate a DOI."""
-    doi = doi.lower()
-    if doi.startswith("doi:"):
-        return quote(doi[len("doi:") :])
-    parsed = urlparse(doi)
-    if parsed.hostname is not None and parsed.hostname.endswith("doi.org"):
-        path = parsed.path
-        return quote(path[1:] if path.startswith("/") else path)
-    return quote(doi)
