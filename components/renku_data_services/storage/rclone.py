@@ -180,7 +180,7 @@ class RCloneExample(BaseModel):
 
     value: str = Field(alias="Value")
     help: str = Field(alias="Help")
-    provider: str = Field(alias="Provider")
+    provider: str | None = Field(alias="Provider", default=None)
 
 
 class RCloneOption(BaseModel):
@@ -188,11 +188,11 @@ class RCloneOption(BaseModel):
 
     name: str = Field(alias="Name")
     help: str = Field(alias="Help")
-    provider: str = Field(alias="Provider")
+    provider: str | None = Field(alias="Provider", default=None)
     default: str | int | bool | list[str] | RCloneTriState | None = Field(alias="Default")
     value: str | int | bool | RCloneTriState | None = Field(alias="Value")
     examples: list[RCloneExample] | None = Field(default=None, alias="Examples")
-    short_opt: str = Field(alias="ShortOpt")
+    short_opt: str | None = Field(alias="ShortOpt", default=None)
     hide: int = Field(alias="Hide")
     required: bool = Field(alias="Required")
     is_password: bool = Field(alias="IsPassword")
