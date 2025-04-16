@@ -155,6 +155,32 @@ class DataConnectorsBP(CustomBlueprint):
 
         return "/data_connectors/<data_connector_id:ulid>", ["GET"], _get_one
 
+    def get_one_global_by_slug(self) -> BlueprintFactoryResponse:
+        """Get a specific global data connector by slug."""
+
+        @authenticate(self.authenticator)
+        @extract_if_none_match
+        async def _get_one_global_by_slug(
+            _: Request,
+            user: base_models.APIUser,
+            slug: Slug,
+            etag: str | None,
+            validator: RCloneValidator,
+        ) -> HTTPResponse:
+            data_connector = await self.data_connector_repo.get_global_data_connector_by_slug(user=user, slug=slug)
+
+            if data_connector.etag == etag:
+                return HTTPResponse(status=304)
+
+            headers = {"ETag": data_connector.etag}
+            return validated_json(
+                apispec.DataConnector,
+                self._dump_data_connector(data_connector, validator=validator),
+                headers=headers,
+            )
+
+        return "/data_connectors/global/<slug:renku_slug>", ["GET"], _get_one_global_by_slug
+
     def get_one_by_slug(self) -> BlueprintFactoryResponse:
         """Get a specific data connector by namespace/entity slug."""
 
