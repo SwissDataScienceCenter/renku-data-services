@@ -124,6 +124,45 @@ class RCloneValidator:
         provider = self.get_provider(configuration)
         return provider.get_private_fields(configuration)
 
+    async def get_doi_metadata(
+        self, configuration: Union["RCloneConfig", dict[str, Any]]
+    ) -> "RCloneDOIMetadata | None":
+        """Returns the metadata of a DOI remote."""
+        try:
+            provider = self.get_provider(configuration)
+            if provider.name != "doi":
+                return None
+        except errors.ValidationError:
+            return None
+
+        # Obscure configuration and transform if needed
+        obscured_config = await self.obscure_config(configuration)
+
+        with tempfile.NamedTemporaryFile(mode="w+", delete=False, encoding="utf-8") as f:
+            config = "\n".join(f"{k}={v}" for k, v in obscured_config.items())
+            f.write(f"[temp]\n{config}")
+            f.close()
+            # go run rclone.go --config ./test_config.toml backend title lease:
+            proc = await asyncio.create_subprocess_exec(
+                "rclone",
+                "backend",
+                "metadata",
+                "--config",
+                f.name,
+                "temp:",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await proc.communicate()
+            success = proc.returncode == 0
+        if success:
+            try:
+                metadata = RCloneDOIMetadata.model_validate_json(stdout.decode().strip())
+                return metadata
+            except ValidationError:
+                return None
+        return None
+
     @staticmethod
     def transform_polybox_switchdriver_config(
         configuration: Union["RCloneConfig", dict[str, Any]],
@@ -381,3 +420,12 @@ class RCloneProviderSchema(BaseModel):
             if option.name not in configuration:
                 continue
             yield option
+
+
+class RCloneDOIMetadata(BaseModel):
+    """Schema for metadata provided by rclone about a DOI remote."""
+
+    doi: str = Field(alias="DOI")
+    url: str = Field(alias="URL")
+    metadata_url: str = Field(alias="metadataURL")
+    provider: str = Field()

@@ -10,6 +10,7 @@ from renku_data_services.base_models.core import (
     ProjectPath,
 )
 from renku_data_services.data_connectors import apispec, models
+from renku_data_services.data_connectors.doi.metadata import get_dataset_metadata
 from renku_data_services.storage import models as storage_models
 from renku_data_services.storage.rclone import RCloneValidator
 
@@ -64,6 +65,9 @@ def validate_unsaved_data_connector(
     keywords = [kw.root for kw in body.keywords] if body.keywords is not None else []
     storage = validate_unsaved_storage(body.storage, validator=validator)
 
+    if body.namespace is None:
+        raise NotImplementedError("Missing namespace not supported")
+
     slugs = body.namespace.split("/")
     path: NamespacePath | ProjectPath
     if len(slugs) == 1:
@@ -83,6 +87,101 @@ def validate_unsaved_data_connector(
         created_by="",
         storage=storage,
         description=body.description,
+        keywords=keywords,
+    )
+
+
+async def prevalidate_unsaved_global_data_connector(
+    body: apispec.GlobalDataConnectorPost, validator: RCloneValidator
+) -> models.UnsavedGlobalDataConnector:
+    """Pre-validate an unsaved data connector."""
+
+    storage = validate_unsaved_storage(body.storage, validator=validator)
+    # TODO: allow admins to create global data connectors, e.g. s3://giab
+    if storage.storage_type != "doi":
+        raise errors.ValidationError(message="Only doi storage type is allowed for global data connectors")
+    if not storage.readonly:
+        raise errors.ValidationError(message="Global data connectors must be read-only")
+
+    rclone_metadata = await validator.get_doi_metadata(configuration=storage.configuration)
+    if rclone_metadata is None:
+        raise errors.ValidationError(message=f"Could not resolve DOI {storage.configuration.get("doi", "<unknown>")}")
+
+    doi_uri = f"doi:{rclone_metadata.doi}"
+    slug = base_models.Slug.from_name(doi_uri).value
+
+    return models.UnsavedGlobalDataConnector(
+        name=doi_uri,
+        slug=slug,
+        visibility=Visibility.PUBLIC,
+        created_by="",
+        storage=storage,
+        description=None,
+        keywords=[],
+    )
+
+
+async def validate_unsaved_global_data_connector(
+    data_connector: models.UnsavedGlobalDataConnector,
+    validator: RCloneValidator,
+    # body: apispec.GlobalDataConnectorPost, validator: RCloneValidator
+) -> models.UnsavedGlobalDataConnector:
+    """Validate an unsaved data connector."""
+
+    # Check that we can list the files in the DOI
+    connection_result = await validator.test_connection(
+        configuration=data_connector.storage.configuration, source_path="/"
+    )
+    if not connection_result.success:
+        raise errors.ValidationError(
+            message="The provided storage configuration is not currently working", detail=connection_result.error
+        )
+
+    # Override source_path and target_path
+    storage = models.CloudStorageCore(
+        storage_type=data_connector.storage.storage_type,
+        configuration=data_connector.storage.configuration,
+        source_path="/",
+        target_path=data_connector.slug,
+        readonly=data_connector.storage.readonly,
+    )
+
+    # Fetch DOI metadata
+    rclone_metadata = await validator.get_doi_metadata(configuration=data_connector.storage.configuration)
+    if rclone_metadata is None:
+        raise errors.ValidationError(
+            message=f"Could not resolve DOI {data_connector.storage.configuration.get("doi", "<unknown>")}"
+        )
+    metadata = await get_dataset_metadata(rclone_metadata=rclone_metadata)
+
+    name = data_connector.name
+    description = ""
+    keywords: list[str] = []
+    if metadata is not None:
+        name = metadata.name or name
+        description = metadata.description
+        keywords = metadata.keywords
+
+    # Fix metadata if needed
+    if len(name) > 99:
+        name = f"{name[:96]}..."
+    if len(description) > 500:
+        description = f"{description[:497]}..."
+    print(keywords)
+    fixed_keywords: list[str] = []
+    for word in keywords:
+        for kw in word.strip().split(","):
+            fixed_keywords.append(kw.strip())
+    keywords = fixed_keywords
+    print(fixed_keywords)
+
+    return models.UnsavedGlobalDataConnector(
+        name=name,
+        slug=data_connector.slug,
+        visibility=Visibility.PUBLIC,
+        created_by="",
+        storage=storage,
+        description=description or None,
         keywords=keywords,
     )
 
@@ -112,7 +211,7 @@ def validate_storage_patch(
 
 
 def validate_data_connector_patch(
-    data_connector: models.DataConnector,
+    data_connector: models.DataConnector | models.GlobalDataConnector,
     patch: apispec.DataConnectorPatch,
     validator: RCloneValidator,
 ) -> models.DataConnectorPatch:

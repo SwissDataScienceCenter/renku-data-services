@@ -87,6 +87,159 @@ async def test_post_data_connector(sanic_client: SanicASGITestClient, regular_us
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "doi", ["10.5281/zenodo.13321077", "doi:10.5281/zenodo.13321077", "https://doi.org/10.5281/zenodo.13321077"]
+)
+async def test_post_global_data_connector(
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str], doi: str
+) -> None:
+    payload = {
+        "storage": {
+            "configuration": {"type": "doi", "doi": doi},
+            "source_path": "",
+            "target_path": "",
+        },
+    }
+
+    _, response = await sanic_client.post("/api/data/data_connectors/global", headers=user_headers, json=payload)
+
+    assert response.status_code == 201, response.text
+    assert response.json is not None
+    data_connector = response.json
+    assert data_connector.get("name") == "Brazilian Flora: Brazilian Flora DwCA"
+    assert data_connector.get("slug") == "doi-10.5281-zenodo.13321077"
+    assert data_connector.get("storage") is not None
+    storage = data_connector["storage"]
+    assert storage.get("storage_type") == "doi"
+    assert storage.get("source_path") == "/"
+    assert storage.get("target_path") == "doi-10.5281-zenodo.13321077"
+    assert storage.get("readonly") is True
+    assert data_connector.get("visibility") == "public"
+    assert data_connector.get("description") is not None
+    assert set(data_connector.get("keywords")) == {"active"}
+
+    # Check that we can retrieve the data connector
+    _, response = await sanic_client.get(f"/api/data/data_connectors/{data_connector['id']}", headers=user_headers)
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == data_connector["id"]
+
+    # Check that we can retrieve the data connector by slug
+    _, response = await sanic_client.get(
+        f"/api/data/data_connectors/global/{data_connector['slug']}",
+        headers=user_headers,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == data_connector["id"]
+
+
+@pytest.mark.asyncio
+async def test_post_global_data_connector_dataverse(
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str]
+) -> None:
+    doi = "10.7910/DVN/2SA6SN"
+    payload = {
+        "storage": {
+            "configuration": {"type": "doi", "doi": doi},
+            "source_path": "",
+            "target_path": "",
+        },
+    }
+
+    _, response = await sanic_client.post("/api/data/data_connectors/global", headers=user_headers, json=payload)
+
+    assert response.status_code == 201, response.text
+    assert response.json is not None
+    data_connector = response.json
+    assert data_connector.get("name") == "Dataset metadata of known Dataverse installations, August 2024"
+    assert data_connector.get("slug") == "doi-10.7910-dvn-2sa6sn"
+    assert data_connector.get("storage") is not None
+    storage = data_connector["storage"]
+    assert storage.get("storage_type") == "doi"
+    assert storage.get("source_path") == "/"
+    assert storage.get("target_path") == "doi-10.7910-dvn-2sa6sn"
+    assert storage.get("readonly") is True
+    assert data_connector.get("visibility") == "public"
+    assert data_connector.get("description") is not None
+    assert set(data_connector.get("keywords")) == {"dataset metadata", "dataverse", "metadata blocks"}
+
+
+@pytest.mark.asyncio
+async def test_post_global_data_connector_unauthorized(
+    sanic_client: SanicASGITestClient,
+) -> None:
+    payload = {
+        "storage": {
+            "configuration": {"type": "doi", "doi": "10.5281/zenodo.15174623"},
+            "source_path": "",
+            "target_path": "",
+        },
+    }
+
+    _, response = await sanic_client.post("/api/data/data_connectors/global", json=payload)
+
+    assert response.status_code == 401, response.text
+
+
+@pytest.mark.asyncio
+async def test_post_global_data_connector_invalid_doi(
+    sanic_client: SanicASGITestClient,
+    user_headers,
+) -> None:
+    payload = {
+        "storage": {
+            "configuration": {"type": "doi", "doi": "foo/bar"},
+            "source_path": "",
+            "target_path": "",
+        },
+    }
+
+    _, response = await sanic_client.post("/api/data/data_connectors/global", headers=user_headers, json=payload)
+
+    assert response.status_code == 422, response.text
+
+
+@pytest.mark.asyncio
+async def test_post_global_data_connector_no_duplicates(
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str]
+) -> None:
+    doi = "10.5281/zenodo.13321077"
+    payload = {
+        "storage": {
+            "configuration": {"type": "doi", "doi": doi},
+            "source_path": "",
+            "target_path": "",
+        },
+    }
+
+    _, response = await sanic_client.post("/api/data/data_connectors/global", headers=user_headers, json=payload)
+
+    assert response.status_code == 201, response.text
+    assert response.json is not None
+    data_connector = response.json
+    data_connector_id = data_connector["id"]
+    assert data_connector.get("name") == "Brazilian Flora: Brazilian Flora DwCA"
+    assert data_connector.get("slug") == "doi-10.5281-zenodo.13321077"
+
+    # Check that posting the same DOI returns the same data connector ULID
+    doi = "https://doi.org/10.5281/zenodo.13321077"
+    payload = {
+        "storage": {
+            "configuration": {"type": "doi", "doi": doi},
+            "source_path": "",
+            "target_path": "",
+        },
+    }
+
+    _, response = await sanic_client.post("/api/data/data_connectors/global", headers=user_headers, json=payload)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == data_connector_id
+
+
+@pytest.mark.asyncio
 async def test_post_data_connector_with_s3_url(
     sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers
 ) -> None:
@@ -731,6 +884,59 @@ async def test_patch_data_connector_slug(
 
 
 @pytest.mark.asyncio
+async def test_patch_global_data_connector(
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str], admin_headers: dict[str, str]
+) -> None:
+    doi = "10.5281/zenodo.13321077"
+    payload = {
+        "storage": {
+            "configuration": {"type": "doi", "doi": doi},
+            "source_path": "",
+            "target_path": "",
+        },
+    }
+
+    _, response = await sanic_client.post("/api/data/data_connectors/global", headers=user_headers, json=payload)
+
+    assert response.status_code == 201, response.text
+    assert response.json is not None
+    data_connector = response.json
+    data_connector_id = data_connector["id"]
+    assert data_connector.get("name") == "Brazilian Flora: Brazilian Flora DwCA"
+
+    # Check that a regular user cannot patch a global data connector
+    headers = merge_headers(user_headers, {"If-Match": data_connector["etag"]})
+    payload = {"name": "New name", "slug": "new-slug"}
+
+    _, response = await sanic_client.patch(
+        f"/api/data/data_connectors/{data_connector_id}", headers=headers, json=payload
+    )
+
+    assert response.status_code == 404, response.text
+
+    # Check that an admin user can delete a global data connector
+    headers = merge_headers(admin_headers, {"If-Match": data_connector["etag"]})
+
+    _, response = await sanic_client.patch(
+        f"/api/data/data_connectors/{data_connector_id}", headers=headers, json=payload
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == data_connector_id
+    assert response.json.get("name") == "New name"
+    assert response.json.get("slug") == "new-slug"
+    assert response.json.get("description") == data_connector["description"]
+    assert response.json.get("storage") == data_connector["storage"]
+
+    # Check that we can get the data connector with the new slug
+    _, response = await sanic_client.get("/api/data/data_connectors/global/new-slug")
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == data_connector_id
+
+
+@pytest.mark.asyncio
 async def test_delete_data_connector(sanic_client: SanicASGITestClient, create_data_connector, user_headers) -> None:
     await create_data_connector("Data connector 1")
     data_connector = await create_data_connector("Data connector 2")
@@ -745,6 +951,42 @@ async def test_delete_data_connector(sanic_client: SanicASGITestClient, create_d
 
     assert response.status_code == 200, response.text
     assert {dc["name"] for dc in response.json} == {"Data connector 1", "Data connector 3"}
+
+
+@pytest.mark.asyncio
+async def test_delete_global_data_connector(
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str], admin_headers: dict[str, str]
+) -> None:
+    doi = "10.5281/zenodo.13321077"
+    payload = {
+        "storage": {
+            "configuration": {"type": "doi", "doi": doi},
+            "source_path": "",
+            "target_path": "",
+        },
+    }
+
+    _, response = await sanic_client.post("/api/data/data_connectors/global", headers=user_headers, json=payload)
+
+    assert response.status_code == 201, response.text
+    assert response.json is not None
+    data_connector = response.json
+    data_connector_id = data_connector["id"]
+
+    # Check that a regular user cannot delete a global data connector
+    _, response = await sanic_client.delete(f"/api/data/data_connectors/{data_connector_id}", headers=user_headers)
+
+    assert response.status_code == 404, response.text
+
+    # Check that an admin user can delete a global data connector
+    _, response = await sanic_client.delete(f"/api/data/data_connectors/{data_connector_id}", headers=admin_headers)
+
+    assert response.status_code == 204, response.text
+
+    _, response = await sanic_client.get("/api/data/data_connectors")
+
+    assert response.status_code == 200, response.text
+    assert {dc["name"] for dc in response.json} == set()
 
 
 @pytest.mark.asyncio
