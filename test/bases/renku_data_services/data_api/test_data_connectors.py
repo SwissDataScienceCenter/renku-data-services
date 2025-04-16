@@ -136,6 +136,37 @@ async def test_post_global_data_connector(
 
 
 @pytest.mark.asyncio
+async def test_post_global_data_connector_dataverse(
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str]
+) -> None:
+    doi = "10.7910/DVN/2SA6SN"
+    payload = {
+        "storage": {
+            "configuration": {"type": "doi", "doi": doi},
+            "source_path": "",
+            "target_path": "",
+        },
+    }
+
+    _, response = await sanic_client.post("/api/data/data_connectors/global", headers=user_headers, json=payload)
+
+    assert response.status_code == 201, response.text
+    assert response.json is not None
+    data_connector = response.json
+    assert data_connector.get("name") == "Dataset metadata of known Dataverse installations, August 2024"
+    assert data_connector.get("slug") == "doi-10.7910-dvn-2sa6sn"
+    assert data_connector.get("storage") is not None
+    storage = data_connector["storage"]
+    assert storage.get("storage_type") == "doi"
+    assert storage.get("source_path") == "/"
+    assert storage.get("target_path") == "doi-10.7910-dvn-2sa6sn"
+    assert storage.get("readonly") is True
+    assert data_connector.get("visibility") == "public"
+    assert data_connector.get("description") is not None
+    assert set(data_connector.get("keywords")) == {"dataset metadata", "dataverse", "metadata blocks"}
+
+
+@pytest.mark.asyncio
 async def test_post_global_data_connector_unauthorized(
     sanic_client: SanicASGITestClient,
 ) -> None:
