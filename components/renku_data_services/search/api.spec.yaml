@@ -338,8 +338,6 @@ components:
           type: string
         createdBy:
           $ref: '#/components/schemas/User'
-        project:
-          $ref: '#/components/schemas/SearchProject'
         creationDate:
           type: string
           format: date-time

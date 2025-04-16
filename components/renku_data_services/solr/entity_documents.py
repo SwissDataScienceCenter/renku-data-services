@@ -195,7 +195,6 @@ class DataConnector(EntityDoc, frozen=True):
     """Represents a renku data connector in SOLR."""
 
     id: ULID
-    projectId: ULID | None = None
     name: str
     storageType: str
     readonly: bool
@@ -207,7 +206,6 @@ class DataConnector(EntityDoc, frozen=True):
     keywords: list[str] = Field(default_factory=list)
     namespaceDetails: ResponseBody | None = None
     creatorDetails: ResponseBody | None = None
-    projectDetails: ResponseBody | None = None
 
     @property
     def entity_type(self) -> EntityType:

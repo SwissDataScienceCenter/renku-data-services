@@ -39,14 +39,12 @@ class Fields:
     deleted: Final[FieldName] = FieldName("deleted")
     readonly: Final[FieldName] = FieldName("readonly")
     storageType: Final[FieldName] = FieldName("storageType")
-    projectId: Final[FieldName] = FieldName("projectId")
     # virtual score field
     score: Final[FieldName] = FieldName("score")
 
     # sub query fields
     creator_details: Final[FieldName] = FieldName("creatorDetails")
     namespace_details: Final[FieldName] = FieldName("namespaceDetails")
-    project_details: Final[FieldName] = FieldName("projectDetails")
 
 
 class Analyzers:
@@ -141,7 +139,6 @@ all_migrations: Final[list[SchemaMigration]] = [
         commands=[
             AddCommand(Field.of(Fields.readonly, FieldTypes.boolean)),
             AddCommand(Field.of(Fields.storageType, FieldTypes.string)),
-            AddCommand(Field.of(Fields.projectId, FieldTypes.id)),
         ],
         requires_reindex=False,
     ),

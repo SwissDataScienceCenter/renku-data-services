@@ -112,12 +112,6 @@ async def _renku_query(
                 limit=1,
             ).with_all_fields(),
         )
-        .add_sub_query(
-            Fields.project_details,
-            SubQuery(
-                query="{!terms f=id v=$row.projectId}", filter="{!terms f=_type v=Project}", limit=1
-            ).with_all_fields(),
-        )
     )
 
 
