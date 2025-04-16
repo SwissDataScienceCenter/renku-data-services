@@ -1,7 +1,7 @@
 """Add global_slug to data connectors
 
 Revision ID: 8d67347dcbec
-Revises: a1f7f5fbec9a
+Revises: ca87e5b43a44
 Create Date: 2025-04-08 13:37:03.408870
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "8d67347dcbec"
-down_revision = "a1f7f5fbec9a"
+down_revision = "ca87e5b43a44"
 branch_labels = None
 depends_on = None
 
