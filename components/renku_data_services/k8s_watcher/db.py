@@ -336,21 +336,6 @@ class CachedK8sClient(K8sClient):
             yield res
 
 
-def k8s_object_handler(cache: K8sDbCache) -> EventHandler:
-    """Listens and to k8s events and updates the cache."""
-
-    async def handler(obj: APIObjectInCluster) -> None:
-        if obj.obj.metadata.get("deletionTimestamp"):
-            # The object is being deleted
-            await cache.delete(obj.meta)
-            return
-        k8s_object = obj.to_k8s_object()
-        k8s_object.user_id = user_id_from_api_object(obj.obj)
-        await cache.upsert(k8s_object)
-
-    return handler
-
-
 def user_id_from_api_object(obj: APIObject) -> str | None:
     """Get the user id from an api object."""
     match obj.kind.lower():

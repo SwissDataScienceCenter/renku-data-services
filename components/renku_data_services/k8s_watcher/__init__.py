@@ -9,7 +9,13 @@ from asyncio import CancelledError, Task
 from datetime import timedelta
 
 from renku_data_services.k8s.models import ClusterId
-from renku_data_services.k8s_watcher.db import APIObjectInCluster, Cluster, EventHandler
+from renku_data_services.k8s_watcher.db import (
+    APIObjectInCluster,
+    Cluster,
+    EventHandler,
+    K8sDbCache,
+    user_id_from_api_object,
+)
 
 
 class K8sWatcher:
@@ -78,3 +84,18 @@ class K8sWatcher:
                 except TimeoutError:
                     logging.error("timeout trying to cancel k8s watcher task")
                     continue
+
+
+def k8s_object_handler(cache: K8sDbCache) -> EventHandler:
+    """Listens and to k8s events and updates the cache."""
+
+    async def handler(obj: APIObjectInCluster) -> None:
+        if obj.obj.metadata.get("deletionTimestamp"):
+            # The object is being deleted
+            await cache.delete(obj.meta)
+            return
+        k8s_object = obj.to_k8s_object()
+        k8s_object.user_id = user_id_from_api_object(obj.obj)
+        await cache.upsert(k8s_object)
+
+    return handler

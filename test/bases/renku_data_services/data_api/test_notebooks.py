@@ -16,8 +16,8 @@ from kr8s.asyncio.objects import Pod
 from sanic_testing.testing import SanicASGITestClient
 
 from renku_data_services.k8s.models import ClusterId
-from renku_data_services.k8s_watcher import K8sWatcher
-from renku_data_services.k8s_watcher.db import Cluster, k8s_object_handler
+from renku_data_services.k8s_watcher import K8sWatcher, k8s_object_handler
+from renku_data_services.k8s_watcher.db import Cluster
 from renku_data_services.notebooks.api.classes.k8s_client import JupyterServerV1Alpha1Kr8s
 from renku_data_services.notebooks.constants import JUPYTER_SESSION_KIND
 
