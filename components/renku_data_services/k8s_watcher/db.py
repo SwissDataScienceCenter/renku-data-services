@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncIterable, Awaitable, Callable
+from collections.abc import AsyncIterable, Callable
 
 import sqlalchemy
 from sqlalchemy import bindparam, select
@@ -11,10 +11,8 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.errors import errors
-from renku_data_services.k8s.models import APIObjectInCluster, K8sObject, K8sObjectMeta, ListFilter
+from renku_data_services.k8s.models import K8sObject, K8sObjectMeta, ListFilter
 from renku_data_services.k8s_watcher.orm import K8sObjectORM
-
-type EventHandler = Callable[[APIObjectInCluster], Awaitable[None]]
 
 
 class K8sDbCache:

@@ -6,13 +6,15 @@ import asyncio
 import contextlib
 import logging
 from asyncio import CancelledError, Task
+from collections.abc import Awaitable, Callable
 from datetime import timedelta
 
 from renku_data_services.k8s.models import APIObjectInCluster, Cluster, ClusterId, user_id_from_api_object
 from renku_data_services.k8s_watcher.db import (
-    EventHandler,
     K8sDbCache,
 )
+
+type EventHandler = Callable[[APIObjectInCluster], Awaitable[None]]
 
 
 class K8sWatcher:
