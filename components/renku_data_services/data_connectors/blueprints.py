@@ -28,10 +28,11 @@ from renku_data_services.base_models.validation import validate_and_dump, valida
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors.core import (
     dump_storage_with_sensitive_fields,
+    # validate_unsaved_global_data_connector,
+    prevalidate_unsaved_global_data_connector,
     validate_data_connector_patch,
     validate_data_connector_secrets_patch,
     validate_unsaved_data_connector,
-    validate_unsaved_global_data_connector,
 )
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
@@ -98,7 +99,9 @@ class DataConnectorsBP(CustomBlueprint):
             _: Request, user: base_models.APIUser, body: apispec.DataConnectorPost, validator: RCloneValidator
         ) -> JSONResponse:
             data_connector = validate_unsaved_data_connector(body, validator=validator)
-            result = await self.data_connector_repo.insert_data_connector(user=user, data_connector=data_connector)
+            result = await self.data_connector_repo.insert_data_connector(
+                user=user, data_connector=data_connector, validator=None
+            )
             return validated_json(
                 apispec.DataConnector,
                 self._dump_data_connector(result, validator=validator),
@@ -116,8 +119,10 @@ class DataConnectorsBP(CustomBlueprint):
         async def _post_global(
             _: Request, user: base_models.APIUser, body: apispec.GlobalDataConnectorPost, validator: RCloneValidator
         ) -> JSONResponse:
-            data_connector = await validate_unsaved_global_data_connector(body, validator=validator)
-            result = await self.data_connector_repo.insert_data_connector(user=user, data_connector=data_connector)
+            data_connector = await prevalidate_unsaved_global_data_connector(body, validator=validator)
+            result = await self.data_connector_repo.insert_data_connector(
+                user=user, data_connector=data_connector, validator=validator
+            )
             return validated_json(
                 apispec.DataConnector,
                 self._dump_data_connector(result, validator=validator),

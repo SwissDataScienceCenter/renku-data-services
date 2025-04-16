@@ -160,7 +160,7 @@ class DataConnectorMigrationTool:
         )
 
         data_connector = await self.data_connector_repo.insert_data_connector(
-            user=user, data_connector=unsaved_data_connector
+            user=user, data_connector=unsaved_data_connector, validator=None
         )
         if isinstance(data_connector, models.GlobalDataConnector):
             raise errors.ProgrammingError(message="Migration to global data connector should not happen.")
