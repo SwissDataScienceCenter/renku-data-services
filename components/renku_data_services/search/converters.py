@@ -96,13 +96,8 @@ def from_project(project: ProjectDocument) -> ProjectApi:
 
 def from_data_connector(dc: DataConnectorDocument) -> DataConnectorApi:
     """Creates an apispec data connector from a solr data connector document."""
-    p: ProjectApi | None = None
-    if dc.projectDetails is not None and dc.projectDetails.docs != []:
-        p = from_project(ProjectDocument.from_dict(dc.projectDetails.docs[0]))
-
     return DataConnectorApi(
         id=str(dc.id),
-        project=p,
         name=dc.name,
         slug=dc.slug.value,
         namespace=__namespace_details(dc),

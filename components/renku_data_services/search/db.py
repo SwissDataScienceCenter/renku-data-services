@@ -63,7 +63,6 @@ def _project_to_entity_doc(p: Project) -> ProjectDoc:
 def _dataconnector_to_entity_doc(dc: DataConnector) -> DataConnectorDoc:
     return DataConnectorDoc(
         id=dc.id,
-        projectId=dc.project.id if dc.project is not None else None,
         name=dc.name,
         storageType=dc.storage.storage_type,
         readonly=dc.storage.readonly,
