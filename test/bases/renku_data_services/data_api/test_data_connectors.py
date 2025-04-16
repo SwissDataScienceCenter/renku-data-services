@@ -885,6 +885,46 @@ async def test_patch_data_connector_slug(
 
 
 @pytest.mark.asyncio
+@pytest.mark.skip(reason="TODO: support patching")
+async def test_patch_global_data_connector(
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str], admin_headers: dict[str, str]
+) -> None:
+    doi = "10.5281/zenodo.13321077"
+    payload = {
+        "storage": {
+            "configuration": {"type": "doi", "doi": doi},
+            "source_path": "",
+            "target_path": "",
+        },
+    }
+
+    _, response = await sanic_client.post("/api/data/data_connectors/global", headers=user_headers, json=payload)
+
+    assert response.status_code == 201, response.text
+    assert response.json is not None
+    data_connector = response.json
+    data_connector_id = data_connector["id"]
+    assert data_connector.get("name") == "Brazilian Flora: Brazilian Flora DwCA"
+
+    # Check that a regular user cannot patch a global data connector
+    headers = merge_headers(user_headers, {"If-Match": data_connector["etag"]})
+    payload = {"name": "New name"}
+
+    _, response = await sanic_client.patch(
+        f"/api/data/data_connectors/{data_connector_id}", headers=headers, json=payload
+    )
+
+    assert response.status_code == 0, response.text
+
+    # Check that an admin user can delete a global data connector
+    _, response = await sanic_client.patch(
+        f"/api/data/data_connectors/{data_connector_id}", headers=admin_headers, json=payload
+    )
+
+    assert response.status_code == 0, response.text
+
+
+@pytest.mark.asyncio
 async def test_delete_data_connector(sanic_client: SanicASGITestClient, create_data_connector, user_headers) -> None:
     await create_data_connector("Data connector 1")
     data_connector = await create_data_connector("Data connector 2")
@@ -899,6 +939,42 @@ async def test_delete_data_connector(sanic_client: SanicASGITestClient, create_d
 
     assert response.status_code == 200, response.text
     assert {dc["name"] for dc in response.json} == {"Data connector 1", "Data connector 3"}
+
+
+@pytest.mark.asyncio
+async def test_delete_global_data_connector(
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str], admin_headers: dict[str, str]
+) -> None:
+    doi = "10.5281/zenodo.13321077"
+    payload = {
+        "storage": {
+            "configuration": {"type": "doi", "doi": doi},
+            "source_path": "",
+            "target_path": "",
+        },
+    }
+
+    _, response = await sanic_client.post("/api/data/data_connectors/global", headers=user_headers, json=payload)
+
+    assert response.status_code == 201, response.text
+    assert response.json is not None
+    data_connector = response.json
+    data_connector_id = data_connector["id"]
+
+    # Check that a regular user cannot delete a global data connector
+    _, response = await sanic_client.delete(f"/api/data/data_connectors/{data_connector_id}", headers=user_headers)
+
+    assert response.status_code == 404, response.text
+
+    # Check that an admin user can delete a global data connector
+    _, response = await sanic_client.delete(f"/api/data/data_connectors/{data_connector_id}", headers=admin_headers)
+
+    assert response.status_code == 204, response.text
+
+    _, response = await sanic_client.get("/api/data/data_connectors")
+
+    assert response.status_code == 200, response.text
+    assert {dc["name"] for dc in response.json} == set()
 
 
 @pytest.mark.asyncio
