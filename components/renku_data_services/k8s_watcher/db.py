@@ -5,92 +5,17 @@ from __future__ import annotations
 import contextlib
 import logging
 from collections.abc import AsyncIterable, Awaitable, Callable
-from dataclasses import dataclass
-from typing import Any, Self, cast
+from typing import Any
 
 import kr8s
 import sqlalchemy
-from box import Box
-from kr8s.asyncio import Api
-from kr8s.asyncio.objects import APIObject
 from sqlalchemy import bindparam, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.errors import errors
-from renku_data_services.k8s.models import ClusterId, K8sObject, K8sObjectMeta, ListFilter
+from renku_data_services.k8s.models import APIObjectInCluster, Cluster, ClusterId, K8sObject, K8sObjectMeta, ListFilter
 from renku_data_services.k8s_watcher.orm import K8sObjectORM
-
-
-@dataclass(eq=True, frozen=True)
-class Cluster:
-    """Representation of a k8s cluster."""
-
-    id: ClusterId
-    namespace: str
-    api: Api
-
-
-@dataclass
-class APIObjectInCluster:
-    """An kr8s k8s object from a specific cluster."""
-
-    obj: APIObject
-    cluster: ClusterId
-
-    @property
-    def user_id(self) -> str | None:
-        """Extract the user id from annotations."""
-        user_id = user_id_from_api_object(self.obj)
-        return user_id
-
-    @property
-    def meta(self) -> K8sObjectMeta:
-        """Extract the metadata from an api object."""
-        return K8sObjectMeta(
-            name=self.obj.name,
-            namespace=self.obj.namespace or "default",
-            cluster=self.cluster,
-            version=self.obj.version,
-            kind=self.obj.kind,
-            user_id=self.user_id,
-        )
-
-    def to_k8s_object(self) -> K8sObject:
-        """Convert the api object to a regular k8s object."""
-        if self.obj.name is None or self.obj.namespace is None:
-            raise errors.ProgrammingError()
-        return K8sObject(
-            name=self.obj.name,
-            namespace=self.obj.namespace,
-            kind=self.obj.kind,
-            version=self.obj.version,
-            manifest=Box(self.obj.to_dict()),
-            cluster=self.cluster,
-            user_id=self.user_id,
-        )
-
-    @classmethod
-    def from_k8s_object(cls, obj: K8sObject, api: Api | None = None) -> Self:
-        """Convert a regular k8s object to an api object."""
-
-        class _APIObj(APIObject):
-            kind = obj.meta.kind
-            version = obj.meta.version
-            singular = obj.meta.singular
-            plural = obj.meta.plural
-            endpoint = obj.meta.plural
-            namespaced = obj.meta.namespaced
-
-        return cls(
-            obj=_APIObj(
-                resource=obj.manifest,
-                namespace=obj.meta.namespace,
-                api=api,
-            ),
-            cluster=obj.cluster,
-        )
-
 
 type EventHandler = Callable[[APIObjectInCluster], Awaitable[None]]
 
@@ -334,14 +259,3 @@ class CachedK8sClient(K8sClient):
         results = self.cache.list(filter) if filter.kind.lower() in self.__kinds_to_cache else super().list(filter)
         async for res in results:
             yield res
-
-
-def user_id_from_api_object(obj: APIObject) -> str | None:
-    """Get the user id from an api object."""
-    match obj.kind.lower():
-        case "jupyterserver":
-            return cast(str, obj.metadata.labels["renku.io/userId"])
-        case "amaltheasession":
-            return cast(str, obj.metadata.labels["renku.io/safe-username"])
-        case _:
-            return None

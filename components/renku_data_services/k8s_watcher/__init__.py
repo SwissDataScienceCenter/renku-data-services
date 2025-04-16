@@ -8,13 +8,10 @@ import logging
 from asyncio import CancelledError, Task
 from datetime import timedelta
 
-from renku_data_services.k8s.models import ClusterId
+from renku_data_services.k8s.models import APIObjectInCluster, Cluster, ClusterId, user_id_from_api_object
 from renku_data_services.k8s_watcher.db import (
-    APIObjectInCluster,
-    Cluster,
     EventHandler,
     K8sDbCache,
-    user_id_from_api_object,
 )
 
 
