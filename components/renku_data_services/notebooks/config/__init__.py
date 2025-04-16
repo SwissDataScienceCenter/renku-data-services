@@ -11,9 +11,9 @@ from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.crc.models import ResourceClass
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.k8s.clients import K8sCoreClient, K8sSchedulingClient
+from renku_data_services.k8s.models import ClusterId
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.k8s_watcher.db import CachedK8sClient, Cluster, K8sDbCache
-from renku_data_services.k8s_watcher.models import ClusterId
 from renku_data_services.notebooks.api.classes.data_service import (
     CRCValidator,
     DummyCRCValidator,

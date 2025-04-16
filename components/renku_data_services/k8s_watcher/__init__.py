@@ -8,8 +8,8 @@ import logging
 from asyncio import CancelledError, Task
 from datetime import timedelta
 
+from renku_data_services.k8s.models import ClusterId
 from renku_data_services.k8s_watcher.db import APIObjectInCluster, Cluster, EventHandler
-from renku_data_services.k8s_watcher.models import ClusterId
 
 
 class K8sWatcher:

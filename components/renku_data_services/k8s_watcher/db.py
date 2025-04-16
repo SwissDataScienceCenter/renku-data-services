@@ -18,7 +18,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.errors import errors
-from renku_data_services.k8s_watcher.models import ClusterId, K8sObject, K8sObjectMeta, ListFilter
+from renku_data_services.k8s.models import ClusterId, K8sObject, K8sObjectMeta, ListFilter
 from renku_data_services.k8s_watcher.orm import K8sObjectORM
 
 
