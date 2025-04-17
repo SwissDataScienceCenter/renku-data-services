@@ -232,7 +232,7 @@ class K8sClient:
 
     def __get_cluster_or_die(self, cluster_id: ClusterId) -> Cluster:
         cluster = self.__clusters.get(cluster_id)
-        if not cluster:
+        if cluster is None:
             raise errors.MissingResourceError(
                 message=f"Could not find cluster with id {cluster_id} in the list of clusters."
             )
@@ -253,7 +253,7 @@ class K8sClient:
         If the patch is a dictionary then it is considered to be a rfc7386 json merge patch.
         """
         obj = await self._get(meta)
-        if not obj:
+        if obj is None:
             raise errors.MissingResourceError(message=f"The k8s resource with metadata {meta} cannot be found.")
         patch_type = "json" if isinstance(patch, list) else None
         await obj.obj.patch(patch, type=patch_type)
@@ -262,7 +262,7 @@ class K8sClient:
     async def delete(self, meta: K8sObjectMeta) -> None:
         """Delete a k8s object."""
         obj = await self._get(meta)
-        if not obj:
+        if obj is None:
             return None
         with contextlib.suppress(kr8s.NotFoundError):
             await obj.obj.delete(propagation_policy="Foreground")
@@ -273,7 +273,7 @@ class K8sClient:
     async def get(self, meta: K8sObjectMeta) -> K8sObject | None:
         """Get a specific k8s object, None is returned if the object does not exist."""
         obj = await self._get(meta)
-        if not obj:
+        if obj is None:
             return None
         return meta.with_manifest(obj.obj.to_dict())
 
@@ -281,11 +281,11 @@ class K8sClient:
         clusters = list(self.__clusters.values())
         if filter.cluster:
             single_cluster = self.__clusters.get(filter.cluster)
-            clusters = [single_cluster] if single_cluster else []
+            clusters = [single_cluster] if single_cluster is not None else []
         for cluster in clusters:
             if filter.namespace is not None and filter.namespace != cluster.namespace:
                 continue
-            names = [filter.name] if filter.name else []
+            names = [filter.name] if filter.name is not None else []
 
             try:
                 res = await cluster.api.async_get(
@@ -327,7 +327,7 @@ class CachedK8sClient(K8sClient):
         try:
             obj = await super().create(obj)
         except:
-            # if there was an error creating the k8s object, we delete it from the db again to now have ghost entries
+            # if there was an error creating the k8s object, we delete it from the db again to not have ghost entries
             if obj.meta.kind.lower() in self.__kinds_to_cache:
                 await self.cache.delete(obj)
             raise
@@ -352,8 +352,7 @@ class CachedK8sClient(K8sClient):
             res = await self.cache.get(meta)
         else:
             res = await super().get(meta)
-        if res is None:
-            return None
+
         return res
 
     async def get_api_object(self, meta: K8sObjectMeta) -> APIObjectInCluster | None:
@@ -361,10 +360,7 @@ class CachedK8sClient(K8sClient):
 
         Note: only use this if you actually need to do k8s operations.
         """
-        res = await super()._get(meta)
-        if res is None:
-            return None
-        return res
+        return await super()._get(meta)
 
     async def list(self, filter: ListFilter) -> AsyncIterable[K8sObject]:
         """List all k8s objects."""
