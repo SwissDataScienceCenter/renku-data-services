@@ -142,7 +142,9 @@ async def query(
         docs = list(map(converters.from_entity, solr_docs))
         return apispec.SearchResult(
             items=docs,
-            facets=apispec.FacetData(entityType=results.facets.get_counts(Fields.entity_type).to_simple_dict()),
+            facets=apispec.FacetData(
+                entityType=apispec.MapEntityTypeInt(results.facets.get_counts(Fields.entity_type).to_simple_dict())
+            ),
             pagingInfo=apispec.PageWithTotals(
                 page=apispec.PageDef(limit=limit, offset=offset),
                 totalPages=int(total_pages),

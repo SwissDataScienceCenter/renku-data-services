@@ -10,6 +10,10 @@ from renku_data_services.search.apispec import (
     SearchDataConnector as DataConnectorApi,
 )
 from renku_data_services.search.apispec import (
+    SearchEntity,
+    UserOrGroup,
+)
+from renku_data_services.search.apispec import (
     SearchProject as ProjectApi,
 )
 from renku_data_services.search.apispec import (
@@ -69,11 +73,11 @@ def __creator_details(e: ProjectDocument | DataConnectorDocument) -> UserApi | N
         return None
 
 
-def __namespace_details(d: ProjectDocument | DataConnectorDocument) -> UserApi | GroupApi | None:
+def __namespace_details(d: ProjectDocument | DataConnectorDocument) -> UserOrGroup | None:
     if d.namespaceDetails is not None and d.namespaceDetails.docs != []:
         e = EntityDocReader.from_dict(d.namespaceDetails.docs[0])
         if e is not None:
-            return cast(UserApi | GroupApi, from_entity(e))
+            return UserOrGroup(cast(UserApi | GroupApi, from_entity(e).root))
     return None
 
 
@@ -114,14 +118,14 @@ def from_data_connector(dc: DataConnectorDocument) -> DataConnectorApi:
 
 def from_entity(
     entity: GroupDocument | ProjectDocument | UserDocument | DataConnectorDocument,
-) -> UserApi | GroupApi | ProjectApi | DataConnectorApi:
+) -> SearchEntity:
     """Creates an apispec entity from a solr entity document."""
     match entity:
         case UserDocument() as d:
-            return from_user(d)
+            return SearchEntity(from_user(d))
         case GroupDocument() as d:
-            return from_group(d)
+            return SearchEntity(from_group(d))
         case ProjectDocument() as d:
-            return from_project(d)
+            return SearchEntity(from_project(d))
         case DataConnectorDocument() as d:
-            return from_data_connector(d)
+            return SearchEntity(from_data_connector(d))
