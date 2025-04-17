@@ -44,7 +44,7 @@ async def collect_system_metrics(app: Sanic, name: str) -> None:
 async def collect_system_metrics_task(app: Sanic) -> None:
     """Background task to collect metrics."""
     while True:
-        await collect_system_metrics(app, app.m.name)
+        await collect_system_metrics(app, app.name)
         await asyncio.sleep(5)
 
 

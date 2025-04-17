@@ -6,11 +6,10 @@ from os import environ
 from typing import TYPE_CHECKING, Any
 
 import sentry_sdk
-import uvloop
 from sanic import Request, Sanic
 from sanic.log import logger
 from sanic.response import BaseHTTPResponse
-from sanic.worker.loader import AppLoader
+from sanic.signals import Event
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
 from sentry_sdk.integrations.grpc import GRPCIntegration
 from sentry_sdk.integrations.sanic import SanicIntegration, _context_enter, _context_exit, _set_transaction
@@ -21,7 +20,7 @@ from renku_data_services.app_config import Config
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.data_api.app import register_all_handlers
-from renku_data_services.data_api.prometheus import collect_system_metrics, setup_app_metrics, setup_prometheus
+from renku_data_services.data_api.prometheus import collect_system_metrics, setup_prometheus
 from renku_data_services.errors.errors import (
     ForbiddenError,
     MissingResourceError,
@@ -38,14 +37,12 @@ if TYPE_CHECKING:
     import sentry_sdk._types
 
 
-async def _send_messages(app: Sanic) -> None:
-    config = Config.from_env()
+async def send_pending_events(app: Sanic, config: Config) -> None:
+    """Send messages to the message queue."""
+    logger.info("Sending events to message queue.")
     while True:
         try:
             await config.event_repo.send_pending_events()
-            # we need to collect metrics for this background process separately from the task we add to the
-            # server processes
-            await collect_system_metrics(app, "send_events_worker")
             await asyncio.sleep(1)
         except (asyncio.CancelledError, KeyboardInterrupt) as e:
             logger.warning(f"Exiting: {e}")
@@ -55,8 +52,9 @@ async def _send_messages(app: Sanic) -> None:
             raise
 
 
-async def _update_search(app: Sanic) -> None:
-    config = Config.from_env()
+async def update_search(app: Sanic, config: Config) -> None:
+    """Send updates to solr."""
+    logger.info("Sending updates to search")
     while True:
         try:
             async with DefaultSolrClient(config.solr_config) as client:
@@ -73,47 +71,15 @@ async def _update_search(app: Sanic) -> None:
             raise
 
 
-async def _solr_reindex(app: Sanic) -> None:
+async def solr_reindex(app: Sanic, config: Config) -> None:
     """Run a solr reindex of all data.
 
     This might be required after migrating the solr schema.
     """
-    config = Config.from_env()
+    logger.info("starting solr reindex")
     reprovision = config.search_reprovisioning
     admin = APIUser(is_admin=True)
     await reprovision.run_reprovision(admin)
-
-
-def send_pending_events(app_name: str) -> None:
-    """Send pending messages to redis."""
-    app = Sanic(app_name)
-    setup_app_metrics(app)
-
-    logger.info("running events sending loop.")
-
-    asyncio.set_event_loop(uvloop.new_event_loop())
-    asyncio.run(_send_messages(app))
-
-
-def update_search(app_name: str) -> None:
-    """Update the SOLR with data from the search staging table."""
-    app = Sanic(app_name)
-    setup_app_metrics(app)
-
-    logger.info("Running update search loop.")
-
-    asyncio.set_event_loop(uvloop.new_event_loop())
-    asyncio.run(_update_search(app))
-
-
-def solr_reindex(app_name: str) -> None:
-    """Runs a solr reindex."""
-    app = Sanic(app_name)
-    setup_app_metrics(app)
-
-    logger.info("Running SOLR reindex triggered by a migration")
-    asyncio.set_event_loop(uvloop.new_event_loop())
-    asyncio.run(_solr_reindex(app))
 
 
 def create_app() -> Sanic:
@@ -207,17 +173,19 @@ def create_app() -> Sanic:
         validator = RCloneValidator()
         app.ext.dependency(validator)
 
-    @app.main_process_ready
-    async def ready(app: Sanic) -> None:
+    @app.signal(Event.SERVER_INIT_AFTER)
+    async def ready(app: Sanic, loop: asyncio.AbstractEventLoop) -> None:
         """Application ready event handler."""
-        logger.info("starting events background job.")
-        app.manager.manage("SendEvents", send_pending_events, {"app_name": app.name}, transient=True)
-        app.manager.manage("UpdateSearch", update_search, {"app_name": app.name}, transient=True)
+        logger.info("Starting background tasks...")
+        app.add_task(send_pending_events(app, config), name="SendEvents")
+        app.add_task(update_search(app, config), name="UpdateSearch")
         if getattr(app.ctx, "solr_reindex", False):
-            app.manager.manage("SolrReindex", solr_reindex, {"app_name": app.name}, transient=True)
+            app.add_task(solr_reindex(app, config), name="SolrReindex")
 
     return app
 
+
+app = create_app()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="Renku Data Services")
@@ -226,10 +194,9 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--port", default=8000, type=int, help="Port to listen on")
     parser.add_argument("--debug", action="store_true", help="Enable Sanic debug mode")
     parser.add_argument("--fast", action="store_true", help="Enable Sanic fast mode")
+    parser.add_argument("--workers", default=1, type=int, help="The number of workers to use.")
     parser.add_argument("-d", "--dev", action="store_true", help="Enable Sanic development mode")
     parser.add_argument("--single-process", action="store_true", help="Do not use multiprocessing.")
     args: dict[str, Any] = vars(parser.parse_args())
-    loader = AppLoader(factory=create_app)
-    app = loader.load()
-    app.prepare(**args)
-    Sanic.serve(primary=app, app_loader=loader)
+    logger.info(f"The args for serving are: {args}")
+    app.run(**args)
