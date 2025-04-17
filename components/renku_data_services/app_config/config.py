@@ -277,6 +277,7 @@ class Config:
     server_options_file: Optional[str] = None
     server_defaults_file: Optional[str] = None
     async_oauth2_client_class: type[AsyncOAuth2Client] = AsyncOAuth2Client
+    core_svc_url: str | None = None
     _user_repo: UserRepository | None = field(default=None, repr=False, init=False)
     _rp_repo: ResourcePoolRepository | None = field(default=None, repr=False, init=False)
     _storage_repo: StorageRepository | None = field(default=None, repr=False, init=False)
@@ -611,6 +612,7 @@ class Config:
         kc_api: IKeycloakAPI
         secrets_service_public_key: PublicKeyTypes
         gitlab_url: str | None
+        core_svc_url = os.environ.get("CORE_SERVICE_URL")
 
         if os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true":
             encryption_key = secrets.token_bytes(32)
@@ -710,4 +712,5 @@ class Config:
             gitlab_url=gitlab_url,
             nb_config=nb_config,
             builds_config=builds_config,
+            core_svc_url=core_svc_url,
         )

@@ -117,6 +117,10 @@ class GitlabAPIProtocol(Protocol):
         """Get a list of projects of which the user is a member with a specific access level."""
         ...
 
+    async def get_project_url_from_path(self, user: APIUser, project_path: str) -> str | None:
+        """Get the project ID from the path i.e. from /group1/subgroup2/project3."""
+        ...
+
 
 class UserStore(Protocol):
     """The interface through which Keycloak or a similar application can be accessed."""

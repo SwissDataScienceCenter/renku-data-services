@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import unquote
 
 from sanic import HTTPResponse, Request
 from sanic.response import JSONResponse
@@ -12,6 +13,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services.authz.models import Member, Role, Visibility
 from renku_data_services.base_api.auth import (
     authenticate,
+    authenticate_2,
     only_authenticated,
     validate_path_user_id,
 )
@@ -27,6 +29,7 @@ from renku_data_services.project import apispec
 from renku_data_services.project import models as project_models
 from renku_data_services.project.core import (
     copy_project,
+    get_v1_project_info,
     validate_project_patch,
     validate_session_secret_slot_patch,
     validate_session_secrets_patch,
@@ -54,6 +57,9 @@ class ProjectsBP(CustomBlueprint):
     session_repo: SessionRepository
     data_connector_repo: DataConnectorRepository
     project_migration_repo: ProjectMigrationRepository
+    internal_gitlab_authenticator: base_models.Authenticator
+    gitlab_client: base_models.GitlabAPIProtocol
+    core_scv_url: str | None = None
 
     def get_all(self) -> BlueprintFactoryResponse:
         """List all projects."""
@@ -113,6 +119,25 @@ class ProjectsBP(CustomBlueprint):
             return validated_json(apispec.Project, self._dump_project(result), status=201)
 
         return "/renku_v1_projects/<v1_id:int>/migrations", ["POST"], _post_migration
+
+    def get_v1_project_by_path(self) -> BlueprintFactoryResponse:
+        """Get information about a v1 project from the path."""
+
+        @authenticate_2(self.authenticator, self.internal_gitlab_authenticator)
+        async def _get_v1_project_by_path(
+            _: Request, user: base_models.APIUser, internal_gitlab_user: base_models.APIUser, path: str
+        ) -> JSONResponse:
+            if self.core_scv_url is None:
+                raise errors.MissingResourceError(
+                    message="The core service url is not defined so we cannot get project information."
+                )
+            decoded_path = unquote(path)
+            output = await get_v1_project_info(
+                user, internal_gitlab_user, decoded_path, self.gitlab_client, self.core_scv_url
+            )
+            return validated_json(apispec.V1Project, output)
+
+        return "/renku_v1_projects/path/{path:str}", ["GET"], _get_v1_project_by_path
 
     def get_project_migration_info(self) -> BlueprintFactoryResponse:
         """Get project migration by project v2 id."""

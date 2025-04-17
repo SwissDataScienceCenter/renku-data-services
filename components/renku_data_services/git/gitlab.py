@@ -28,6 +28,14 @@ class GitlabAPI:
 
         self.gitlab_graphql_url = f"{gitlab_url}/api/graphql"
 
+    async def _query_gitlab_graphql(self, body: dict[str, Any], header: dict[str, Any]) -> dict[str, Any]:
+        async with httpx.AsyncClient(verify=get_ssl_context(), timeout=5) as client:
+            resp = await client.post(self.gitlab_graphql_url, json=body, headers=header, timeout=10)
+        if resp.status_code != 200:
+            raise errors.BaseError(message=f"Error querying Gitlab api {self.gitlab_graphql_url}: {resp.text}")
+        result = cast(dict[str, Any], resp.json())
+        return result
+
     async def filter_projects_by_access_level(
         self, user: APIUser, project_ids: list[str], min_access_level: GitlabAccessLevel
     ) -> list[str]:
@@ -65,18 +73,9 @@ class GitlabAPI:
             """
         }
 
-        async def _query_gitlab_graphql(body: dict[str, Any], header: dict[str, Any]) -> dict[str, Any]:
-            async with httpx.AsyncClient(verify=get_ssl_context(), timeout=5) as client:
-                resp = await client.post(self.gitlab_graphql_url, json=body, headers=header, timeout=10)
-            if resp.status_code != 200:
-                raise errors.BaseError(message=f"Error querying Gitlab api {self.gitlab_graphql_url}: {resp.text}")
-            result = cast(dict[str, Any], resp.json())
-
-            if "data" not in result or "projects" not in result["data"]:
-                raise errors.BaseError(message=f"Got unexpected response from Gitlab: {result}")
-            return result
-
-        resp_body = await _query_gitlab_graphql(body, header)
+        resp_body = await self._query_gitlab_graphql(body, header)
+        if "data" not in resp_body or "projects" not in resp_body["data"]:
+            raise errors.BaseError(message=f"Got unexpected response from Gitlab: {resp_body}")
         result: list[str] = []
 
         def _process_projects(
@@ -108,11 +107,27 @@ class GitlabAPI:
                 }}
                 """
             }
-            resp_body = await _query_gitlab_graphql(body, header)
+            resp_body = await self._query_gitlab_graphql(body, header)
+            if "data" not in resp_body or "projects" not in resp_body["data"]:
+                raise errors.BaseError(message=f"Got unexpected response from Gitlab: {resp_body}")
             page_info = resp_body["data"]["projects"]["pageInfo"]
             _process_projects(resp_body, min_access_level, result)
 
         return result
+
+    async def get_project_url_from_path(self, user: APIUser, project_path: str) -> str | None:
+        """Get the project ID from the path i.e. from /group1/subgroup2/project3."""
+        header = {"Content-Type": "application/json"}
+        if user.access_token:
+            header["Authorization"] = f"Bearer {user.access_token}"
+        body = {
+            "query": f'{{project(fullPath: "{project_path}") {{httpUrlToRepo}}}}',
+        }
+
+        resp_body = await self._query_gitlab_graphql(body, header)
+        if "data" not in resp_body or "project" not in resp_body["data"]:
+            raise errors.BaseError(message=f"Got unexpected response from Gitlab: {resp_body}")
+        return cast(str | None, resp_body["data"]["project"].get("httpUrlToRepo"))
 
 
 @dataclass(kw_only=True)
@@ -139,3 +154,7 @@ class DummyGitlabAPI:
             return []
         user_projects = self._store.get(user.full_name, {}).get(min_access_level, [])
         return [p for p in project_ids if p in user_projects]
+
+    async def get_project_url_from_path(self, user: APIUser, project_path: str) -> str | None:
+        """Get the project ID from the path i.e. from /group1/subgroup2/project3."""
+        raise NotImplementedError()

@@ -1,13 +1,16 @@
 """Business logic for projects."""
 
 from pathlib import PurePosixPath
-from urllib.parse import urlparse
+from typing import cast
+from urllib.parse import urljoin, urlparse
 
+import httpx
 from ulid import ULID
 
 from renku_data_services import errors
 from renku_data_services.authz.models import Visibility
 from renku_data_services.base_models import RESET, APIUser, ResetType, Slug
+from renku_data_services.base_models.core import GitlabAPIProtocol
 from renku_data_services.data_connectors.db import DataConnectorRepository
 from renku_data_services.project import apispec, models
 from renku_data_services.project.db import ProjectRepository
@@ -214,3 +217,51 @@ def _validate_session_launcher_secret_slot_filename(filename: str) -> None:
     filename_candidate = PurePosixPath(filename)
     if filename_candidate.name != filename:
         raise errors.ValidationError(message=f"Filename {filename} is not valid.")
+
+
+async def get_v1_project_info(
+    user: APIUser,
+    internal_gitlab_user: APIUser,
+    project_path: str,
+    gitlab_client: GitlabAPIProtocol,
+    core_svc_url: str,
+) -> dict[str, str | list[str] | int | None]:
+    """Request project information from the core service for a Renku v1 project."""
+    url = await gitlab_client.get_project_url_from_path(internal_gitlab_user, project_path)
+    if not url:
+        raise errors.MissingResourceError(
+            message=f"The Renku v1 project with path {project_path} cannot be found "
+            "in Gitlab or you do not have access to it"
+        )
+
+    body = {"git_url": url, "is_delayed": False, "migrate_project": False}
+    headers = {}
+    if user.access_token:
+        headers["Authorization"] = user.access_token
+    full_url = urljoin(core_svc_url + "/", "project.show")
+    async with httpx.AsyncClient() as clnt:
+        res = await clnt.post(full_url, json=body, headers=headers)
+    if res.status_code != 200:
+        raise errors.MissingResourceError(
+            message=f"The core service responded with an unexpected code {res.status_code} when getting "
+            f"information about project {project_path} and url {url}"
+        )
+    res_json = cast(dict[str, dict[str, str | int | list[str]]], res.json())
+    if res_json.get("error") is not None:
+        raise errors.MissingResourceError(
+            message=f"The core service responded with an error when getting "
+            f"information about project {project_path} and url {url}",
+            detail=cast(str | None, res_json.get("error", {}).get("userMessage")),
+        )
+
+    kws = res_json.get("result", {}).get("keywords")
+    desc = res_json.get("result", {}).get("description")
+    id = res_json.get("result", {}).get("id")
+    name = res_json.get("result", {}).get("name")
+    output = {
+        "name": name,
+        "id": id,
+        "keywords": kws,
+        "description": desc,
+    }
+    return output
