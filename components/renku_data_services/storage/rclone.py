@@ -115,7 +115,7 @@ class RCloneValidator:
 
     def asdict(self) -> list[dict[str, Any]]:
         """Return Schema as dict."""
-        return [provider.model_dump(exclude_none=True) for provider in self.providers.values()]
+        return [provider.model_dump(exclude_none=True, by_alias=True) for provider in self.providers.values()]
 
     def get_private_fields(
         self, configuration: Union["RCloneConfig", dict[str, Any]]
@@ -167,8 +167,8 @@ class RCloneValidator:
 class RCloneTriState(BaseModel):
     """Represents a Tristate of true|false|unset."""
 
-    value: bool = Field(alias="Value")
-    valid: bool = Field(alias="Valid")
+    value: bool = Field(validation_alias="Value")
+    valid: bool = Field(validation_alias="Valid")
 
 
 class RCloneExample(BaseModel):
@@ -178,31 +178,31 @@ class RCloneExample(BaseModel):
     be used, potentially further filtered by `provider` if a provider is selected.
     """
 
-    value: str = Field(alias="Value")
-    help: str = Field(alias="Help")
-    provider: str | None = Field(alias="Provider", default=None)
+    value: str = Field(validation_alias="Value")
+    help: str = Field(validation_alias="Help")
+    provider: str | None = Field(validation_alias="Provider", default=None)
 
 
 class RCloneOption(BaseModel):
     """Option for an RClone provider."""
 
-    name: str = Field(alias="Name")
-    help: str = Field(alias="Help")
-    provider: str | None = Field(alias="Provider", default=None)
-    default: str | int | bool | list[str] | RCloneTriState | None = Field(alias="Default")
-    value: str | int | bool | RCloneTriState | None = Field(alias="Value")
-    examples: list[RCloneExample] | None = Field(default=None, alias="Examples")
-    short_opt: str | None = Field(alias="ShortOpt", default=None)
-    hide: int = Field(alias="Hide")
-    required: bool = Field(alias="Required")
-    is_password: bool = Field(alias="IsPassword")
-    no_prefix: bool = Field(alias="NoPrefix")
-    advanced: bool = Field(alias="Advanced")
-    exclusive: bool = Field(alias="Exclusive")
-    sensitive: bool = Field(alias="Sensitive")
-    default_str: str = Field(alias="DefaultStr")
-    value_str: str = Field(alias="ValueStr")
-    type: str = Field(alias="Type")
+    name: str = Field(validation_alias="Name")
+    help: str = Field(validation_alias="Help")
+    provider: str | None = Field(validation_alias="Provider", default=None)
+    default: str | int | bool | list[str] | RCloneTriState | None = Field(validation_alias="Default")
+    value: str | int | bool | RCloneTriState | None = Field(validation_alias="Value")
+    examples: list[RCloneExample] | None = Field(default=None, validation_alias="Examples")
+    short_opt: str | None = Field(validation_alias="ShortOpt", default=None)
+    hide: int = Field(validation_alias="Hide")
+    required: bool = Field(validation_alias="Required")
+    is_password: bool = Field(validation_alias="IsPassword", serialization_alias="ispassword")
+    no_prefix: bool = Field(validation_alias="NoPrefix")
+    advanced: bool = Field(validation_alias="Advanced")
+    exclusive: bool = Field(validation_alias="Exclusive")
+    sensitive: bool = Field(validation_alias="Sensitive")
+    default_str: str = Field(validation_alias="DefaultStr")
+    value_str: str = Field(validation_alias="ValueStr")
+    type: str = Field(validation_alias="Type")
 
     @property
     def is_sensitive(self) -> bool:
@@ -269,14 +269,14 @@ class RCloneOption(BaseModel):
 class RCloneProviderSchema(BaseModel):
     """Schema for an RClone provider."""
 
-    name: str = Field(alias="Name")
-    description: str = Field(alias="Description")
-    prefix: str = Field(alias="Prefix")
-    options: list[RCloneOption] = Field(alias="Options")
-    command_help: list[dict[str, Any]] | None = Field(alias="CommandHelp")
-    aliases: list[str] | None = Field(alias="Aliases")
-    hide: bool = Field(alias="Hide")
-    metadata_info: dict[str, Any] | None = Field(alias="MetadataInfo")
+    name: str = Field(validation_alias="Name")
+    description: str = Field(validation_alias="Description")
+    prefix: str = Field(validation_alias="Prefix")
+    options: list[RCloneOption] = Field(validation_alias="Options")
+    command_help: list[dict[str, Any]] | None = Field(validation_alias="CommandHelp")
+    aliases: list[str] | None = Field(validation_alias="Aliases")
+    hide: bool = Field(validation_alias="Hide")
+    metadata_info: dict[str, Any] | None = Field(validation_alias="MetadataInfo")
 
     @property
     def required_options(self) -> list[RCloneOption]:

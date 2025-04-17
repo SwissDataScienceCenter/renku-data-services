@@ -410,6 +410,9 @@ components:
               provider:
                 type: string
                 description: The provider this value is applicable for. Empty if valid for all providers.
+            required:
+              - value
+              - help
         required:
           type: boolean
           description: whether the option is required or not
