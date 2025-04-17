@@ -37,6 +37,8 @@ class Fields:
     namespace: Final[FieldName] = FieldName("namespace")
     content_all: Final[FieldName] = FieldName("content_all")
     deleted: Final[FieldName] = FieldName("deleted")
+    readonly: Final[FieldName] = FieldName("readonly")
+    storageType: Final[FieldName] = FieldName("storageType")
     # virtual score field
     score: Final[FieldName] = FieldName("score")
 
@@ -130,6 +132,14 @@ all_migrations: Final[list[SchemaMigration]] = [
     SchemaMigration(
         version=10,
         commands=[AddCommand(FieldTypes.boolean), AddCommand(Field.of(Fields.deleted, FieldTypes.boolean))],
+        requires_reindex=False,
+    ),
+    SchemaMigration(
+        version=11,
+        commands=[
+            AddCommand(Field.of(Fields.readonly, FieldTypes.boolean)),
+            AddCommand(Field.of(Fields.storageType, FieldTypes.string)),
+        ],
         requires_reindex=False,
     ),
 ]

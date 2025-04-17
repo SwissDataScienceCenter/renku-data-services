@@ -33,6 +33,8 @@ from renku_data_services.namespace.models import ProjectNamespace
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.models import Project
 from renku_data_services.project.orm import ProjectORM
+from renku_data_services.search.db import SearchUpdatesRepo
+from renku_data_services.search.decorators import update_search_document
 from renku_data_services.secrets import orm as secrets_schemas
 from renku_data_services.secrets.core import encrypt_user_secret
 from renku_data_services.secrets.models import SecretKind
@@ -49,11 +51,13 @@ class DataConnectorRepository:
         authz: Authz,
         project_repo: ProjectRepository,
         group_repo: GroupRepository,
+        search_updates_repo: SearchUpdatesRepo,
     ) -> None:
         self.session_maker = session_maker
         self.authz = authz
         self.project_repo = project_repo
         self.group_repo = group_repo
+        self.search_updates_repo = search_updates_repo
 
     async def get_data_connectors(
         self,
@@ -188,6 +192,7 @@ class DataConnectorRepository:
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.create, ResourceType.data_connector)
+    @update_search_document
     async def insert_data_connector(
         self,
         user: base_models.APIUser,
@@ -295,6 +300,7 @@ class DataConnectorRepository:
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.update, ResourceType.data_connector)
+    @update_search_document
     async def update_data_connector(
         self,
         user: base_models.APIUser,
@@ -416,6 +422,7 @@ class DataConnectorRepository:
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.delete, ResourceType.data_connector)
+    @update_search_document
     async def delete_data_connector(
         self,
         user: base_models.APIUser,

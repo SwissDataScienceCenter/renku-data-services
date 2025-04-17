@@ -5,7 +5,10 @@ from datetime import datetime
 
 from sanic.log import logger
 
+from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models.core import APIUser
+from renku_data_services.data_connectors.db import DataConnectorRepository
+from renku_data_services.data_connectors.models import DataConnector
 from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.message_queue.models import Reprovisioning
 from renku_data_services.namespace.db import GroupRepository
@@ -29,6 +32,7 @@ class SearchReprovision:
         user_repo: UserRepo,
         group_repo: GroupRepository,
         project_repo: ProjectRepository,
+        data_connector_repo: DataConnectorRepository,
     ) -> None:
         self._search_updates_repo = search_updates_repo
         self._reprovisioning_repo = reprovisioning_repo
@@ -36,11 +40,12 @@ class SearchReprovision:
         self._user_repo = user_repo
         self._group_repo = group_repo
         self._project_repo = project_repo
+        self._data_connector_repo = data_connector_repo
 
-    async def run_reprovision(self, requested_by: APIUser) -> None:
+    async def run_reprovision(self, requested_by: APIUser) -> int:
         """Start a reprovisioning if not already running."""
-        reprovision = await self._reprovisioning_repo.start()
-        await self.init_reprovision(requested_by, reprovision)
+        reprovision = await self.acquire_reprovision()
+        return await self.init_reprovision(requested_by, reprovision)
 
     async def acquire_reprovision(self) -> Reprovisioning:
         """Acquire a reprovisioning slot. Throws if already taken."""
@@ -54,7 +59,19 @@ class SearchReprovision:
         """Return the current reprovisioning lock."""
         return await self._reprovisioning_repo.get_active_reprovisioning()
 
-    async def init_reprovision(self, requested_by: APIUser, reprovisioning: Reprovisioning) -> None:
+    async def _get_all_data_connectors(self, user: APIUser, per_page: int = 20) -> AsyncGenerator[DataConnector, None]:
+        """Get all data connectors, retrieving `per_page` each time."""
+        preq = PaginationRequest(page=1, per_page=per_page)
+        result: tuple[list[DataConnector], int] | None = None
+        count: int = 0
+        while result is None or result[1] > count:
+            result = await self._data_connector_repo.get_data_connectors(user=user, pagination=preq)
+            count = count + len(result[0])
+            preq = PaginationRequest(page=preq.page + 1, per_page=per_page)
+            for dc in result[0]:
+                yield dc
+
+    async def init_reprovision(self, requested_by: APIUser, reprovisioning: Reprovisioning) -> int:
         """Initiates reprovisioning by inserting documents into the staging table.
 
         Deletes all renku entities in the solr core. Then it goes
@@ -68,6 +85,7 @@ class SearchReprovision:
             if c % 50 == 0:
                 logger.info(f"Inserted {c}. entities into staging table...")
 
+        counter = 0
         try:
             logger.info(f"Starting reprovisioning with ID {reprovisioning.id}")
             started = datetime.now()
@@ -75,7 +93,6 @@ class SearchReprovision:
             async with DefaultSolrClient(self._solr_config) as client:
                 await client.delete("_type:*")
 
-            counter = 0
             all_users = self._user_repo.get_all_users(requested_by=requested_by)
             counter = await self.__update_entities(all_users, "user", started, counter, log_counter)
             logger.info("Done adding user entities to search_updates table.")
@@ -88,17 +105,21 @@ class SearchReprovision:
             counter = await self.__update_entities(all_projects, "project", started, counter, log_counter)
             logger.info("Done adding project entities to search_updates table.")
 
-            logger.info(f"Inserted {counter} entities into the staging table.")
+            all_dcs = self._get_all_data_connectors(requested_by, per_page=20)
+            counter = await self.__update_entities(all_dcs, "data connector", started, counter, log_counter)
 
+            logger.info(f"Inserted {counter} entities into the staging table.")
         except Exception as e:
             logger.error("Error while reprovisioning entities!", exc_info=e)
             ## TODO error handling. skip or fail?
         finally:
             await self._reprovisioning_repo.stop()
 
+        return counter
+
     async def __update_entities(
         self,
-        iter: AsyncGenerator[Project | Group | UserInfo, None],
+        iter: AsyncGenerator[Project | Group | UserInfo | DataConnector, None],
         name: str,
         started: datetime,
         counter: int,
