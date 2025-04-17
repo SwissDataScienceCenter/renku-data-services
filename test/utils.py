@@ -270,7 +270,7 @@ class SanicReusableASGITestClient(SanicASGITestClient):
     The first two will drop all routes and server state before each request (!) and calculate all routes
     again and execute server start code again (!), whereas the latter only does that once per client, but
     isn't async. This can cost as much as 40% of test execution time.
-    This class is essentially a combination of SanicASGITestClient and ReuasbleClient.
+    This class is essentially a combination of SanicASGITestClient and ReusableClient.
     """
 
     set_up = False
