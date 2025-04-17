@@ -300,7 +300,7 @@ def validate_session_launcher_patch(
     disk_storage = RESET if "disk_storage" in data_dict and data_dict["disk_storage"] is None else patch.disk_storage
     env_variables = (
         RESET
-        if "env_variables" in data_dict and data_dict["env_variables"] is None
+        if "env_variables" in data_dict and (data_dict["env_variables"] is None or len(data_dict["env_variables"]) == 0)
         else models.EnvVar.from_apispec(patch.env_variables)
         if patch.env_variables
         else None
