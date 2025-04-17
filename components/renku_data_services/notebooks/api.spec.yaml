@@ -425,7 +425,7 @@ components:
       items:
         $ref: "#/components/schemas/EnvVarOverride"
     EnvVarOverride:
-      description: An environment variable override for the session pod
+      description: Override an env variable defined in the session launcher
       type: object
       properties:
         name:
@@ -886,7 +886,7 @@ components:
           type: integer
         cloudstorage:
           $ref: "#/components/schemas/SessionCloudStoragePostList"
-        env_variables:
+        env_variable_override:
           $ref: "#/components/schemas/EnvVariableOverrides"
       required:
         - launcher_id
