@@ -44,6 +44,7 @@ from renku_data_services.notebooks.crs import (
     Resources,
     SecretAsVolume,
     SecretAsVolumeItem,
+    SessionEnvItem,
     State,
 )
 from renku_data_services.notebooks.models import ExtraSecret
@@ -53,6 +54,7 @@ from renku_data_services.notebooks.utils import (
 )
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.models import Project, SessionSecret
+from renku_data_services.session.models import SessionLauncher
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.cryptography import get_encryption_key
 
@@ -309,6 +311,18 @@ async def request_dc_secret_creation(
                     "Please contact a Renku administrator.",
                     detail=res.text,
                 )
+
+
+def get_launcher_env_variables(launcher: SessionLauncher, body: apispec.SessionPostRequest) -> list[SessionEnvItem]:
+    """Get the environment variables from the launcher, with overrides from the request."""
+    output: list[SessionEnvItem] = []
+    env_overrides = {i.name: i.value for i in body.env_variable_overrides or []}
+    for env in launcher.env_variables or []:
+        if env.name in env_overrides:
+            output.append(SessionEnvItem(name=env.name, value=env_overrides[env.name]))
+        else:
+            output.append(SessionEnvItem(name=env.name, value=env.value))
+    return output
 
 
 async def request_session_secret_creation(

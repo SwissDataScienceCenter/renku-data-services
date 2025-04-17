@@ -1108,6 +1108,9 @@ async def test_starting_session_anonymous(
             "name": "test",
             "port": 8888,
         },
+        env_variables=[
+            {"name": "TEST_ENV_VAR", "value": "some-random-value-1234"},
+        ],
     )
     launcher_id = launcher["id"]
     project_id = project["id"]
