@@ -24,6 +24,22 @@ CR_CODEGEN_PARAMS := \
 	--allow-extra-fields \
 	--use-default-kwarg
 
+# A separate set of params without the --collaps-root-models option as
+# this causes a bug in the code generator related to list of unions.
+# https://github.com/koxudaxi/datamodel-code-generator/issues/1937
+SEARCH_CODEGEN_PARAMS := \
+    --input-file-type openapi \
+    --output-model-type pydantic_v2.BaseModel \
+    --use-double-quotes \
+    --target-python-version 3.13 \
+    --field-constraints \
+    --strict-nullable \
+    --set-default-enum-member \
+    --openapi-scopes schemas paths parameters \
+    --set-default-enum-member \
+    --use-one-literal-as-default \
+    --use-default
+
 .PHONY: all
 all: help
 
@@ -175,8 +191,10 @@ shipwright_schema:  ## Updates the Shipwright pydantic classes
 
 # Pattern rules
 
+API_SPEC_CODEGEN_PARAMS := ${CODEGEN_PARAMS}
 %/apispec.py: %/api.spec.yaml
-	poetry run datamodel-codegen --input $< --output $@ --base-class $(subst /,.,$(subst .py,_base.BaseAPISpec,$(subst components/,,$@))) ${CODEGEN_PARAMS}
+	$(if $(findstring /search/, $(<)), $(eval API_SPEC_CODEGEN_PARAMS=${SEARCH_CODEGEN_PARAMS}))
+	poetry run datamodel-codegen --input $< --output $@ --base-class $(subst /,.,$(subst .py,_base.BaseAPISpec,$(subst components/,,$@))) ${API_SPEC_CODEGEN_PARAMS}
 # If the only difference is the timestamp comment line, ignore it by
 # reverting to the checked in version. As the file timestamps is now
 # newer than the requirements these steps won't be re-triggered.
