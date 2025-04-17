@@ -1,0 +1,84 @@
+[project]
+name = "renku_data_service"
+version = "0.1.0"
+description = ""
+authors = [
+  { name = "Swiss Data Science Center", email = "contact@datascience.ch" },
+]
+license = ""
+requires-python = ">=3.13"
+dynamic = ["dependencies"]
+
+[tool.poetry]
+packages = [
+  { include = "renku_data_services/data_tasks", from = "../../bases" },
+  { include = "renku_data_services/authn", from = "../../components" },
+  { include = "renku_data_services/authz", from = "../../components" },
+  { include = "renku_data_services/base_api", from = "../../components" },
+  { include = "renku_data_services/base_models", from = "../../components" },
+  { include = "renku_data_services/base_orm", from = "../../components" },
+  { include = "renku_data_services/db_config", from = "../../components" },
+  { include = "renku_data_services/errors", from = "../../components" },
+  { include = "renku_data_services/git", from = "../../components" },
+  { include = "renku_data_services/namespace", from = "../../components" },
+  { include = "renku_data_services/platform", from = "../../components" },
+  { include = "renku_data_services/project", from = "../../components" },
+  { include = "renku_data_services/storage", from = "../../components" },
+  { include = "renku_data_services/users", from = "../../components" },
+  { include = "renku_data_services/utils", from = "../../components" },
+  { include = "renku_data_services/data_connectors", from = "../../components" },
+  # Note: poetry poly does not detect the migrations as dependencies, but they are. Don't remove these!
+  { include = "renku_data_services/migrations", from = "../../components" },
+  { include = "renku_data_services/solr", from = "../../components" },
+  { include = "renku_data_services/search", from = "../../components" },
+]
+
+[tool.poetry.dependencies]
+python = "^3.13"
+sanic = { extras = ["ext"], version = "^24.12.0" }
+pydantic = { extras = ["email"], version = "^2.10.6" }
+datamodel-code-generator = "^0.24.2"
+sqlalchemy = { extras = ["asyncio"], version = "^2.0.38" }
+alembic = "^1.14.1"
+asyncpg = "^0.30.0"
+pyjwt = { extras = ["crypto"], version = "^2.10.1" }
+tenacity = "^9.0.0"
+httpx = "<0.29"
+kubernetes = "^31.0.0"
+python-ulid = "^3.0.0"
+python-gitlab = "^5.6.0"
+psycopg = { version = "^3.2.3", extras = ["binary"] }
+urllib3 = "^2.3.0"
+deepmerge = "^2.0"
+authlib = "^1.5.0"
+redis = "^5.2.1"
+dataclasses-avroschema = "^0.65.8"
+undictify = "^0.11.3"
+prometheus-sanic = "^3.0.0"
+sentry-sdk = { version = "^2.22.0", extras = ["sanic"] }
+authzed = "^1.20.0"
+# see https://github.com/sanic-org/sanic/issues/2828 for setuptools dependency, remove when not needed anymore
+setuptools = { version = "^75.8.2" }
+aiofile = "^3.9.0"
+# Not a direct dependency, it is needed by authzed. Was causing things to crash at startup beacuse of
+# google.protobuf.runtime_version.VersionError:
+# Detected incompatible Protobuf Gencode/Runtime versions when loading authzed/api/v1/core.proto: gencode 5.28.2 runtime 5.27.3.
+protobuf = "^5.29.3"
+cryptography = "^44.0.1"
+kubernetes-asyncio = "^32.0.0"
+marshmallow = "^3.26.1"
+escapism = "^1.0.1"
+kr8s = "^0.18.1"
+python-box="^7.0.1"
+werkzeug = "^3.1.3"
+toml = "^0.10.2"
+parsy = "^2.1"
+sanic-ext = "^23.12.0"
+
+[tool.poetry.group.dev.dependencies]
+pyavro-gen = "^0.3.3"
+fakeredis = "^2.26.2"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
