@@ -886,7 +886,7 @@ components:
           type: integer
         cloudstorage:
           $ref: "#/components/schemas/SessionCloudStoragePostList"
-        env_variable_override:
+        env_variable_overrides:
           $ref: "#/components/schemas/EnvVariableOverrides"
       required:
         - launcher_id

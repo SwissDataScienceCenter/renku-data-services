@@ -316,14 +316,13 @@ async def request_dc_secret_creation(
 def get_launcher_env_variables(launcher: SessionLauncher, body: apispec.SessionPostRequest) -> list[SessionEnvItem]:
     """Get the environment variables from the launcher, with overrides from the request."""
     output: list[SessionEnvItem] = []
-    env_overrides = {i.name: i.value for i in body.env_variables or []}
+    env_overrides = {i.name: i.value for i in body.env_variable_overrides or []}
     for env in launcher.env_variables or []:
         if env.name in env_overrides:
             output.append(SessionEnvItem(name=env.name, value=env_overrides[env.name]))
         else:
             output.append(SessionEnvItem(name=env.name, value=env.value))
     return output
-
 
 
 async def request_session_secret_creation(
