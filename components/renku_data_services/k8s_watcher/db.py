@@ -27,7 +27,7 @@ class K8sDbCache:
             .where(K8sObjectORM.name == meta.name)
             .where(K8sObjectORM.namespace == meta.namespace)
             .where(K8sObjectORM.cluster == meta.cluster)
-            .where(K8sObjectORM.kind == meta.kind.lower())
+            .where(K8sObjectORM.kind == meta.singular)
             .where(K8sObjectORM.version == meta.version)
         )
         if meta.user_id is not None:
@@ -52,7 +52,7 @@ class K8sDbCache:
             obj_orm = K8sObjectORM(
                 name=obj.name,
                 namespace=obj.namespace or "default",
-                kind=obj.kind.lower(),
+                kind=obj.singular,
                 version=obj.version,
                 manifest=obj.manifest.to_dict(),
                 cluster=obj.cluster,

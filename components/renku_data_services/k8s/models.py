@@ -203,7 +203,7 @@ class APIObjectInCluster:
 
 def user_id_from_api_object(obj: APIObject) -> str | None:
     """Get the user id from an api object."""
-    match obj.kind.lower():
+    match obj.singular:
         case "jupyterserver":
             return cast(str, obj.metadata.labels["renku.io/userId"])
         case "amaltheasession":
