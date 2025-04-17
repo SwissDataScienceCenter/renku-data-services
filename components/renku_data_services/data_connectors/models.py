@@ -18,7 +18,7 @@ from renku_data_services.namespace.models import GroupNamespace, ProjectNamespac
 from renku_data_services.utils.etag import compute_etag_from_fields
 
 if TYPE_CHECKING:
-    from renku_data_services.storage.rclone import RCloneOption
+    from renku_data_services.data_connectors.apispec import RCloneOption
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -113,6 +113,7 @@ class DataConnectorPatch:
 class CloudStorageCoreWithSensitiveFields(CloudStorageCore):
     """Remote storage configuration model with sensitive fields."""
 
+    # sensitive_fields: list["RCloneOption"]
     sensitive_fields: list["RCloneOption"]
 
 

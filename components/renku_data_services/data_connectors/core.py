@@ -3,6 +3,8 @@
 from dataclasses import asdict
 from typing import Any
 
+from pydantic import ValidationError as PydanticValidationError
+
 from renku_data_services import base_models, errors
 from renku_data_services.authz.models import Visibility
 from renku_data_services.base_models.core import (
@@ -18,9 +20,21 @@ def dump_storage_with_sensitive_fields(
     storage: models.CloudStorageCore, validator: RCloneValidator
 ) -> models.CloudStorageCoreWithSensitiveFields:
     """Add sensitive fields to a storage configuration."""
-    return models.CloudStorageCoreWithSensitiveFields(
-        sensitive_fields=list(validator.get_private_fields(storage.configuration)), **asdict(storage)
-    )
+    try:
+        body = models.CloudStorageCoreWithSensitiveFields(
+            sensitive_fields=[
+                apispec.RCloneOption.model_validate(option.model_dump(exclude_none=True, by_alias=True))
+                for option in validator.get_private_fields(storage.configuration)
+            ],
+            **asdict(storage),
+        )
+    except PydanticValidationError as err:
+        parts = [".".join(str(i) for i in field["loc"]) + ": " + field["msg"] for field in err.errors()]
+        message = (
+            f"The server could not construct a valid response. Errors found in the following fields: {', '.join(parts)}"
+        )
+        raise errors.ProgrammingError(message=message) from err
+    return body
 
 
 def validate_unsaved_storage(
