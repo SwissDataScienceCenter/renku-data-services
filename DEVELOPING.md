@@ -34,6 +34,7 @@ Within components, there are the following modules:
 * *k8s*: Kubernetes client code
 * *message_queue*: Redis streams messaging code
 * *migrations*: Database migrations
+* *metrics*: Store metrics data in a staging table
 * *namespace*: Code for handling namespaces (user/groups)
 * *platform*: Renku platform configuration code
 * *project*: Code for Project entities

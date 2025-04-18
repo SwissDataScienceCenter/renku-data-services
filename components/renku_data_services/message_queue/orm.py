@@ -1,4 +1,4 @@
-"""SQLAlchemy schemas for the CRC database."""
+"""SQLAlchemy schemas for the message queue database."""
 
 import base64
 import json

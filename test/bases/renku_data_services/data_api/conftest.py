@@ -260,7 +260,7 @@ async def sanic_client_with_solr(sanic_client: SanicASGITestClient, app_config) 
 @pytest_asyncio.fixture
 async def create_project(sanic_client, user_headers, admin_headers, regular_user, admin_user):
     async def create_project_helper(
-        name: str, admin: bool = False, members: list[dict[str, str]] = None, **payload
+        name: str, admin: bool = False, members: list[dict[str, str]] = None, sanic_client=sanic_client, **payload
     ) -> dict[str, Any]:
         headers = admin_headers if admin else user_headers
         user = admin_user if admin else regular_user
