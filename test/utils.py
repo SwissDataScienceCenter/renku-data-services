@@ -21,7 +21,6 @@ from renku_data_services import errors
 from renku_data_services.app_config.config import (
     BuildsConfig,
     Config,
-    MetricsConfig,
     PosthogConfig,
     SentryConfig,
     TrustedProxiesConfig,
@@ -213,7 +212,6 @@ class TestAppConfig(Config):
         message_queue = RedisQueue(redis)
         nb_config = NotebooksConfig.from_env(db)
         builds_config = BuildsConfig.from_env(prefix)
-        metrics_config = MetricsConfig.from_env(prefix)
         posthog = PosthogConfig.from_env(prefix)
 
         return cls(
@@ -238,7 +236,6 @@ class TestAppConfig(Config):
             authz_config=AuthzConfigStack.from_env(),
             nb_config=nb_config,
             builds_config=builds_config,
-            metrics_config=metrics_config,
             posthog=posthog,
         )
 

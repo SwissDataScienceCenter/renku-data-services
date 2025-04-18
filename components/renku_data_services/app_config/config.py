@@ -136,22 +136,10 @@ class SentryConfig:
 
 
 @dataclass
-class MetricsConfig:
-    """Configuration for metrics."""
-
-    enabled: bool
-
-    @classmethod
-    def from_env(cls, prefix: str = "") -> "MetricsConfig":
-        """Create metrics config from environment variables."""
-        enabled = os.environ.get(f"{prefix}METRICS_ENABLED", "false").lower() == "true"
-        return cls(enabled)
-
-
-@dataclass
 class PosthogConfig:
     """Configuration for posthog."""
 
+    enabled: bool
     api_key: str
     host: str
     environment: str
@@ -159,11 +147,12 @@ class PosthogConfig:
     @classmethod
     def from_env(cls, prefix: str = "") -> "PosthogConfig":
         """Create posthog config from environment variables."""
+        enabled = os.environ.get(f"{prefix}POSTHOG_ENABLED", "false").lower() == "true"
         api_key = os.environ.get(f"{prefix}POSTHOG_API_KEY", "")
         host = os.environ.get(f"{prefix}POSTHOG_HOST", "")
         environment = os.environ.get(f"{prefix}POSTHOG_ENVIRONMENT", "development")
 
-        return cls(api_key, host, environment)
+        return cls(enabled, api_key, host, environment)
 
 
 @dataclass
@@ -294,7 +283,6 @@ class Config:
     gitlab_url: str | None
     nb_config: NotebooksConfig
     builds_config: BuildsConfig
-    metrics_config: MetricsConfig
     posthog: PosthogConfig
 
     secrets_service_public_key: rsa.RSAPublicKey
@@ -639,7 +627,7 @@ class Config:
     def metrics(self) -> StagingMetricsService:
         """The metrics service interface."""
         if not self._metrics:
-            self._metrics = StagingMetricsService(enabled=self.metrics_config.enabled, metrics_repo=self.metrics_repo)
+            self._metrics = StagingMetricsService(enabled=self.posthog.enabled, metrics_repo=self.metrics_repo)
         return self._metrics
 
     @classmethod
@@ -738,7 +726,6 @@ class Config:
         message_queue = RedisQueue(redis)
         nb_config = NotebooksConfig.from_env(db)
         builds_config = BuildsConfig.from_env(prefix, k8s_namespace)
-        metrics_config = MetricsConfig.from_env(prefix)
         posthog = PosthogConfig.from_env(prefix)
 
         return cls(
@@ -763,6 +750,5 @@ class Config:
             gitlab_url=gitlab_url,
             nb_config=nb_config,
             builds_config=builds_config,
-            metrics_config=metrics_config,
             posthog=posthog,
         )
