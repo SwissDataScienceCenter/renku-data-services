@@ -411,7 +411,9 @@ def test_env_variable_validation():
 
 
 @pytest.mark.asyncio
-async def test_post_session_launcher(sanic_client, admin_headers, create_project, create_resource_pool) -> None:
+async def test_post_session_launcher(
+    sanic_client, admin_headers, create_project, create_resource_pool, app_config
+) -> None:
     project = await create_project("Some project")
 
     resource_pool = await create_resource_pool(admin=True)
@@ -447,6 +449,7 @@ async def test_post_session_launcher(sanic_client, admin_headers, create_project
     assert res.json.get("resource_class_id") == resource_pool["classes"][0]["id"]
     assert res.json.get("disk_storage") == 2
     assert res.json.get("env_variables") == [{"name": "KEY_NUMBER_1", "value": "a value"}]
+    app_config.metrics.session_launcher_created.assert_called_once()
 
 
 @pytest.mark.asyncio
