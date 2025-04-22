@@ -21,27 +21,19 @@ async def main() -> None:
     """Data tasks entry point."""
     config = Config.from_env()
     configure_logging()
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger("renku_data_services.data_tasks.main")
 
     tm = TaskManager(config.max_retry_wait)
     logger.info("Tasks starting...")
     tm.start_all(all_tasks(config))
 
     while True:
-        await asyncio.sleep(300)
+        await asyncio.sleep(config.main_tick_interval)
+        tasks = tm.current_tasks()
+        tasks.sort(key=lambda e: e.name)
+        lines = "\n".join([f"- {e.name}: since {e.started} ({e.restarts} restarts)" for e in tasks])
+        logger.info(f"********* Tasks ********\n{lines}")
 
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-
-## TODO or some ideas
-##
-## - tests…
-## - add a sanic handler to be able to do some basic controlling:
-##   - cancellation, manual restarts
-##   - getting list of currently running tasks
-##   - trigger a coordinated shutdown
-## - log every tick interval (300s) the current state
-## - configure more stuff and implement from_env
-## - implement real task, like event sending or search updates

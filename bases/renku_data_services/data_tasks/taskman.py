@@ -128,6 +128,10 @@ class TaskManager:
         self.__running_tasks.update({name: ctx})
         t.add_done_callback(lambda tt: self.__remove_running(tt.get_name()))
 
+    def current_tasks(self) -> list[TaskView]:
+        """Return a list of currently running tasks."""
+        return [e.to_view() for e in self.__running_tasks.values()]
+
     def get_task_view(self, name: str) -> TaskView | None:
         """Return information about a currently running task."""
         t = self.__running_tasks.get(name)
