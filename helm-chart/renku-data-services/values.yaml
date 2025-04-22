@@ -2,6 +2,10 @@ dataService:
   image:
     repository: renku/renku-data-service
     tag:
+  dataTasks:
+    image:
+      repository: renku/renku-data-tasks
+      tag:
   backgroundJobs:
     image:
       repository: renku/data-service-background-jobs

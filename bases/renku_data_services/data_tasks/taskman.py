@@ -5,13 +5,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+import sys
 from asyncio.tasks import Task
 from collections.abc import Callable, Coroutine, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, final
-
-from py import sys
 
 logger = logging.getLogger(__name__)
 

@@ -1,5 +1,5 @@
 [project]
-name = "renku_data_service"
+name = "renku_data_tasks"
 version = "0.1.0"
 description = ""
 authors = [
