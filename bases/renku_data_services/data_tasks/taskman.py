@@ -4,15 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 from asyncio.tasks import Task
 from collections.abc import Callable, Coroutine, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, final
 
+from py import sys
+
 logger = logging.getLogger(__name__)
 
 type TaskFactory = Callable[[], Coroutine[Any, Any, None]]
+"""A function creating a coroutine."""
 
 
 @final
@@ -21,6 +25,11 @@ class TaskDefininion:
 
     def __init__(self, defs: dict[str, TaskFactory]) -> None:
         self.__task_defs: dict[str, TaskFactory] = defs
+
+    @classmethod
+    def single(cls, name: str, tf: TaskFactory) -> TaskDefininion:
+        """Create a TaskDefinition for the given single task."""
+        return TaskDefininion({name: tf})
 
     @property
     def tasks(self) -> Iterator[tuple[str, TaskFactory]]:
@@ -34,8 +43,18 @@ class TaskDefininion:
 
 @final
 @dataclass
-class TaskContext:
+class TaskView:
     """Information about a running task."""
+
+    name: str
+    started: datetime
+    restarts: int
+
+
+@final
+@dataclass
+class _TaskContext:
+    """Information (internal) about a running task."""
 
     name: str
     task: Task[None]
@@ -46,23 +65,51 @@ class TaskContext:
         """Increments the restart counter."""
         self.restarts = self.restarts + 1
 
-    @property
-    def running_time(self) -> timedelta:
+    def running_time(self, ref: datetime = datetime.now()) -> timedelta:
         """Return the time the task is running."""
-        return datetime.now() - self.started
+        return ref - self.started
+
+    def to_view(self) -> TaskView:
+        """Convert this into a view object."""
+        return TaskView(self.name, self.started, self.restarts)
+
+
+@final
+class TaskJoin:
+    """Used to wait for a task to finish."""
+
+    def __init__(self, tm: TaskManager, name: str) -> None:
+        self.__task_manager = tm
+        self.__task_name = name
+
+    def get_view(self) -> TaskView | None:
+        """Return the current task view."""
+        return self.__task_manager.get_task_view(self.__task_name)
+
+    async def join(self, max_wait: float) -> None:
+        """Wait for this task to finish execution."""
+        tv = self.get_view()
+        counter: int = 0
+        max_count: int = sys.maxsize if max_wait <= 0 else math.ceil(max_wait / 0.1)
+        while tv is not None:
+            await asyncio.sleep(0.1)
+            tv = self.get_view()
+            counter += 1
+            if counter >= max_count:
+                raise TimeoutError(f"Task is still running, after {max_wait}s")
 
 
 @final
 class TaskManager:
-    """State containing currently running tasks associated by their name."""
+    """Maintains state for currently running tasks associated by their name."""
 
     def __init__(self, max_retry_wait: int) -> None:
-        self.__running_tasks: dict[str, TaskContext] = {}
+        self.__running_tasks: dict[str, _TaskContext] = {}
         self.__max_retry_wait = max_retry_wait
 
-    def start_all(self, task_defs: TaskDefininion) -> None:
+    def start_all(self, task_defs: TaskDefininion, start_time: datetime = datetime.now()) -> None:
         """Registers all tasks."""
-        now = datetime.now()
+        now = start_time
         for name, tf in task_defs.tasks:
             self.start(name, tf, now)
 
@@ -77,23 +124,36 @@ class TaskManager:
         wt = self.__wrap_task(name, tf)
         logger.info(f"{name}: Starting...")
         t = asyncio.create_task(wt, name=name)
-        ctx = TaskContext(name=name, task=t, started=now, restarts=0)
+        ctx = _TaskContext(name=name, task=t, started=now, restarts=0)
         self.__running_tasks.update({name: ctx})
         t.add_done_callback(lambda tt: self.__remove_running(tt.get_name()))
 
-    def cancel(self, name: str) -> bool:
+    def get_task_view(self, name: str) -> TaskView | None:
+        """Return information about a currently running task."""
+        t = self.__running_tasks.get(name)
+        if t is not None:
+            return t.to_view()
+        else:
+            return None
+
+    def get_task_join(self, name: str) -> TaskJoin:
+        """Returns a TaskJoin object for the given task."""
+        return TaskJoin(self, name)
+
+    def cancel(self, name: str) -> TaskJoin | None:
         """Cancel the task with the given name.
 
-        Return true if the task is currently running and requested to
-        cancel, false if there is no task with the given name.
+        Return a `TaskJoin` object if the task is currently running
+        and requested to cancel, `None` if there is no task with the
+        given name.
         """
         t = self.__running_tasks.get(name)
         if t is None:
-            return False
+            return None
         else:
             logger.info(f"{t.name}: cancelling task")
             t.task.cancel()
-            return True
+            return self.get_task_join(name)
 
     def __remove_running(self, name: str) -> None:
         v = self.__running_tasks.pop(name, None)
@@ -108,7 +168,7 @@ class TaskManager:
                 await tf()
                 ctx = self.__running_tasks.get(name)
                 if ctx is not None:
-                    logger.info(f"{name}: Finished in {ctx.running_time.seconds}s")
+                    logger.info(f"{name}: Finished in {ctx.running_time().seconds}s")
                 break
             except Exception as e:
                 ctx = self.__running_tasks.get(name)
@@ -117,7 +177,7 @@ class TaskManager:
                     restarts = ctx.restarts
                     ctx.inc_restarts()
 
-                secs = min(pow(2, restarts), self.__max_retry_wait)
+                secs = min(max(0, pow(2, restarts) - 1), self.__max_retry_wait)
                 logger.error(
                     f"{name}: Failed with {e}. Restarting it in {secs} seconds for the {restarts + 1}. time.",
                     exc_info=e,
