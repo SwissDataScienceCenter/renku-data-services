@@ -42,6 +42,7 @@ packages = [
   { include = "renku_data_services/data_connectors", from = "components" },
   { include = "renku_data_services/solr", from = "components" },
   { include = "renku_data_services/search", from = "components" },
+  { include = "renku_data_services/metrics", from = "components" },
 ]
 
 [tool.poetry.dependencies]
@@ -88,6 +89,7 @@ protobuf = "^5.29.3"
 poetry = "^2.1.1"
 parsy = "^2.1"
 sanic-ext = "^24.12.0"
+posthog = "^3.21.0"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.8.3"
@@ -272,6 +274,7 @@ module = [
   "escapism.*",
   "kr8s.*",
   "parsy.*",
+  "posthog.*",
 ]
 ignore_missing_imports = true
 

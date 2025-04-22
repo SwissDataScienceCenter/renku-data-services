@@ -134,6 +134,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         session_repo=config.session_repo,
         data_connector_repo=config.data_connector_repo,
         project_migration_repo=config.project_migration_repo,
+        metrics=config.metrics,
     )
     project_session_secrets = ProjectSessionSecretBP(
         name="project_session_secrets",
@@ -146,6 +147,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         url_prefix=url_prefix,
         authenticator=config.authenticator,
         group_repo=config.group_repo,
+        metrics=config.metrics,
     )
     session_environments = EnvironmentsBP(
         name="session_environments",
@@ -158,6 +160,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         url_prefix=url_prefix,
         session_repo=config.session_repo,
         authenticator=config.authenticator,
+        metrics=config.metrics,
     )
     builds = (
         BuildsBP(
@@ -214,6 +217,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         data_connector_repo=config.data_connector_repo,
         data_connector_secret_repo=config.data_connector_secret_repo,
         internal_gitlab_authenticator=config.gitlab_authenticator,
+        metrics=config.metrics,
     )
     platform_config = PlatformConfigBP(
         name="platform_config",
@@ -254,6 +258,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         data_connector_repo=config.data_connector_repo,
         data_connector_secret_repo=config.data_connector_secret_repo,
         authenticator=config.authenticator,
+        metrics=config.metrics,
     )
     app.blueprint(
         [

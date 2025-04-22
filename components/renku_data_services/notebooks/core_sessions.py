@@ -21,6 +21,7 @@ from yaml import safe_dump
 
 from renku_data_services.base_models import APIUser
 from renku_data_services.base_models.core import AnonymousAPIUser, AuthenticatedAPIUser
+from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.crc.models import GpuKind, ResourceClass, ResourcePool
 from renku_data_services.data_connectors.models import DataConnectorSecret, DataConnectorWithSecrets
@@ -475,6 +476,7 @@ async def patch_session(
     internal_gitlab_user: APIUser,
     rp_repo: ResourcePoolRepository,
     project_repo: ProjectRepository,
+    metrics: MetricsService,
 ) -> AmaltheaSessionV1Alpha1:
     """Patch an Amalthea session."""
     session = await nb_config.k8s_v2_client.get_session(session_id, user.id)
@@ -499,6 +501,7 @@ async def patch_session(
         # Session is being hibernated
         patch.spec.hibernated = True
         is_getting_hibernated = True
+        await metrics.session_hibernated(user, metadata={"session_id": session_id})
     elif (
         body.state is not None
         and body.state.value.lower() == State.Running.value.lower()
@@ -506,6 +509,7 @@ async def patch_session(
     ):
         # Session is being resumed
         patch.spec.hibernated = False
+        await metrics.session_resumed(user, metadata={"session_id": session_id})
 
     # Resource class
     if body.resource_class_id is not None:

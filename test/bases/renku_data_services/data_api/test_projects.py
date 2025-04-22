@@ -81,6 +81,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
     assert "template_id" not in project or project["template_id"] is None
     assert project["is_template"] is False
     assert project["secrets_mount_directory"] == "/etc/renku_secrets"
+    app_config.metrics.project_created.assert_called_once()
     project_id = project["id"]
 
     events = await app_config.event_repo.get_pending_events()
