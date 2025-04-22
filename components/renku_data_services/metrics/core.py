@@ -84,3 +84,11 @@ class StagingMetricsService(MetricsService):
     async def search_queried(self, user: APIUser) -> None:
         """Store search queried event in staging table."""
         await self._store_event(MetricsEvent.search_queried, user)
+
+    async def user_requested_session_launch(self, user: APIUser, metadata: dict[str, str | int]) -> None:
+        """Send event about user requesting session launch."""
+        await self._store_event(MetricsEvent.user_requested_session_launch, user, metadata)
+
+    async def user_requested_session_resume(self, user: APIUser, metadata: dict[str, str | int]) -> None:
+        """Send event about user requesting session resume."""
+        await self._store_event(MetricsEvent.user_requested_session_resume, user, metadata)

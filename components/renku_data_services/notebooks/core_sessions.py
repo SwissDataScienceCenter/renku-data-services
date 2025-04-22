@@ -472,6 +472,7 @@ async def patch_session(
     ):
         # Session is being resumed
         patch.spec.hibernated = False
+        await metrics.user_requested_session_resume(user, metadata={"session_id": session_id})
 
     # Resource class
     if body.resource_class_id is not None:

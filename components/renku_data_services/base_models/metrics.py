@@ -22,6 +22,8 @@ class MetricsEvent(StrEnum):
     session_resumed = "session_resumed"
     session_started = "session_started"
     session_stopped = "session_stopped"
+    user_requested_session_launch = "user_requested_session_launch"
+    user_requested_session_resume = "user_requested_session_resume"
 
 
 class MetricsService(Protocol):
@@ -79,4 +81,12 @@ class MetricsService(Protocol):
 
     async def search_queried(self, user: APIUser) -> None:
         """Send search queried event to metrics."""
+        ...
+
+    async def user_requested_session_launch(self, user: APIUser, metadata: dict[str, str | int]) -> None:
+        """Send event about user requesting session launch."""
+        ...
+
+    async def user_requested_session_resume(self, user: APIUser, metadata: dict[str, str | int]) -> None:
+        """Send event about user requesting session resume."""
         ...
