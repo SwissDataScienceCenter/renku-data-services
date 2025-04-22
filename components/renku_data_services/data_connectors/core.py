@@ -1,6 +1,8 @@
 """Business logic for data connectors."""
 
+import re
 from dataclasses import asdict
+from html.parser import HTMLParser
 from typing import Any
 
 from pydantic import ValidationError as PydanticValidationError
@@ -174,7 +176,7 @@ async def validate_unsaved_global_data_connector(
     # keywords: list[str] = []
     if metadata is not None:
         name = metadata.name or name
-        description = metadata.description
+        description = _html_to_text(metadata.description)
         # keywords = metadata.keywords
 
     # Fix metadata if needed
@@ -277,3 +279,37 @@ def validate_data_connector_secrets_patch(
         )
         for secret in put.root
     ]
+
+
+def _html_to_text(html: str) -> str:
+    """Returns the text content of an html snippet."""
+    try:
+        f = _HTMLToText()
+        f.feed(html)
+        content = f.text
+
+        # Cleanup whitespace characters
+        content = content.strip()
+        content = content.strip("\n")
+        content = re.sub(" ( )+", " ", content)
+        content = re.sub("\n\n(\n)+", "\n\n", content)
+        content = re.sub("\n( )+", "\n", content)
+
+        return content
+    except Exception:
+        return html
+
+
+class _HTMLToText(HTMLParser):
+    """Parses HTML into text content."""
+
+    def __init__(self, *, convert_charrefs: bool = True) -> None:
+        super().__init__(convert_charrefs=convert_charrefs)
+        self._text = ""
+
+    @property
+    def text(self) -> str:
+        return self._text
+
+    def handle_data(self, data: str) -> None:
+        self._text += data

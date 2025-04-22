@@ -7,6 +7,7 @@ from sanic_testing.testing import SanicASGITestClient
 
 from renku_data_services.authz.models import Visibility
 from renku_data_services.base_models.core import NamespacePath, ProjectPath
+from renku_data_services.data_connectors import core
 from renku_data_services.namespace.models import NamespaceKind
 from renku_data_services.users.models import UserInfo
 from test.bases.renku_data_services.data_api.utils import merge_headers
@@ -2244,3 +2245,14 @@ async def test_move_data_connector(
             # The user, the source and the destination namespace
             expected_namespaces = 3
     assert len(response.json) == expected_namespaces
+
+
+def test_description_cleanup() -> None:
+    description_html = """<h1>A description</h1>
+    <p>Some more text...</p>
+    """
+
+    description_text = core._html_to_text(description_html)
+
+    expected = """A description\nSome more text..."""
+    assert description_text == expected
