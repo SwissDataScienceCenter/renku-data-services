@@ -97,8 +97,17 @@ async def test_post_data_connector(sanic_client: SanicASGITestClient, regular_us
     "doi", ["10.5281/zenodo.13321077", "doi:10.5281/zenodo.13321077", "https://doi.org/10.5281/zenodo.13321077"]
 )
 async def test_post_global_data_connector(
-    sanic_client: SanicASGITestClient, user_headers: dict[str, str], doi: str
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str], monkeypatch: "MonkeyPatch", doi: str
 ) -> None:
+    # The DOI resolver seems to block requests from GitHub action runners, so we mock its response
+    metadata = RCloneDOIMetadata(
+        DOI="10.5281/zenodo.13321077",
+        URL="https://doi.org/10.5281/zenodo.13321077",
+        metadataURL="https://zenodo.org/api/records/15211353",
+        provider="zenodo",
+    )
+    _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
+
     payload = {
         "storage": {
             "configuration": {"type": "doi", "doi": doi},
@@ -145,23 +154,13 @@ async def test_post_global_data_connector_dataverse(
     sanic_client: SanicASGITestClient, user_headers: dict[str, str], monkeypatch: "MonkeyPatch"
 ) -> None:
     # The DOI resolver seems to block requests from GitHub action runners, so we mock its response
-    validator = sanic_client.sanic_app.ctx._dependencies.r_clone_validator
-    _orig_get_doi_metadata = validator.get_doi_metadata
-
-    async def _mock_get_doi_metadata(*args, **kwargs) -> RCloneDOIMetadata:
-        metadata = await _orig_get_doi_metadata(*args, **kwargs)
-        if metadata is not None:
-            return metadata
-
-        warnings.warn("Could not retrieve DOI metadata, returning saved one")
-        return RCloneDOIMetadata(
-            DOI="10.7910/DVN/2SA6SN",
-            URL="https://doi.org/10.7910/DVN/2SA6SN",
-            metadataURL="https://dataverse.harvard.edu/api/datasets/:persistentId/?persistentId=doi%3A10.7910%2FDVN%2F2SA6SN",
-            provider="dataverse",
-        )
-
-    monkeypatch.setattr(validator, "get_doi_metadata", _mock_get_doi_metadata)
+    metadata = RCloneDOIMetadata(
+        DOI="10.7910/DVN/2SA6SN",
+        URL="https://doi.org/10.7910/DVN/2SA6SN",
+        metadataURL="https://dataverse.harvard.edu/api/datasets/:persistentId/?persistentId=doi%3A10.7910%2FDVN%2F2SA6SN",
+        provider="dataverse",
+    )
+    _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
 
     doi = "10.7910/DVN/2SA6SN"
     payload = {
@@ -227,8 +226,17 @@ async def test_post_global_data_connector_invalid_doi(
 
 @pytest.mark.asyncio
 async def test_post_global_data_connector_no_duplicates(
-    sanic_client: SanicASGITestClient, user_headers: dict[str, str]
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str], monkeypatch: "MonkeyPatch"
 ) -> None:
+    # The DOI resolver seems to block requests from GitHub action runners, so we mock its response
+    metadata = RCloneDOIMetadata(
+        DOI="10.5281/zenodo.13321077",
+        URL="https://doi.org/10.5281/zenodo.13321077",
+        metadataURL="https://zenodo.org/api/records/15211353",
+        provider="zenodo",
+    )
+    _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
+
     doi = "10.5281/zenodo.13321077"
     payload = {
         "storage": {
@@ -910,8 +918,20 @@ async def test_patch_data_connector_slug(
 
 @pytest.mark.asyncio
 async def test_patch_global_data_connector(
-    sanic_client: SanicASGITestClient, user_headers: dict[str, str], admin_headers: dict[str, str]
+    sanic_client: SanicASGITestClient,
+    user_headers: dict[str, str],
+    admin_headers: dict[str, str],
+    monkeypatch: "MonkeyPatch",
 ) -> None:
+    # The DOI resolver seems to block requests from GitHub action runners, so we mock its response
+    metadata = RCloneDOIMetadata(
+        DOI="10.5281/zenodo.13321077",
+        URL="https://doi.org/10.5281/zenodo.13321077",
+        metadataURL="https://zenodo.org/api/records/15211353",
+        provider="zenodo",
+    )
+    _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
+
     doi = "10.5281/zenodo.13321077"
     payload = {
         "storage": {
@@ -980,8 +1000,20 @@ async def test_delete_data_connector(sanic_client: SanicASGITestClient, create_d
 
 @pytest.mark.asyncio
 async def test_delete_global_data_connector(
-    sanic_client: SanicASGITestClient, user_headers: dict[str, str], admin_headers: dict[str, str]
+    sanic_client: SanicASGITestClient,
+    user_headers: dict[str, str],
+    admin_headers: dict[str, str],
+    monkeypatch: "MonkeyPatch",
 ) -> None:
+    # The DOI resolver seems to block requests from GitHub action runners, so we mock its response
+    metadata = RCloneDOIMetadata(
+        DOI="10.5281/zenodo.13321077",
+        URL="https://doi.org/10.5281/zenodo.13321077",
+        metadataURL="https://zenodo.org/api/records/15211353",
+        provider="zenodo",
+    )
+    _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
+
     doi = "10.5281/zenodo.13321077"
     payload = {
         "storage": {
@@ -2280,3 +2312,22 @@ def test_description_cleanup() -> None:
 
     expected = """A description\nSome more text..."""
     assert description_text == expected
+
+
+def _mock_get_doi_metadata(metadata: RCloneDOIMetadata, sanic_client: SanicASGITestClient, monkeypatch: "MonkeyPatch"):
+    """Mock the RCloneValidator.get_doi_metadata method."""
+
+    # The DOI resolver seems to block requests from GitHub action runners, so we mock its response
+    validator = sanic_client.sanic_app.ctx._dependencies.r_clone_validator
+    _orig_get_doi_metadata = validator.get_doi_metadata
+
+    async def _mock_get_doi_metadata(*args, **kwargs) -> RCloneDOIMetadata:
+        doi_metadata = await _orig_get_doi_metadata(*args, **kwargs)
+        if doi_metadata is not None:
+            assert doi_metadata == metadata
+            return doi_metadata
+
+        warnings.warn("Could not retrieve DOI metadata, returning saved one")
+        return metadata
+
+    monkeypatch.setattr(validator, "get_doi_metadata", _mock_get_doi_metadata)
