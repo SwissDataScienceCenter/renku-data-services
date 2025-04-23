@@ -401,11 +401,50 @@ jobs:
         continue-on-error: true
         with:
           image: ${{ steps.meta-k8s-watcher.outputs.tags}}
-          args: --file=./projects/k8s_watcher/Dockerfile --severity-threshold=high --sarif-file-output=bj.sarif
+          args: --file=./projects/k8s_watcher/Dockerfile --severity-threshold=high --sarif-file-output=k8sw.sarif
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
       - name: Upload Snyk report
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: bj.sarif
+          sarif_file: k8sw.sarif
           category: snyk_k8s-watcher
+      - name: Docker meta data tasks
+        id: meta-data-tasks
+        uses: docker/metadata-action@v5
+        with:
+          # list of Docker images to use as base name for tags
+          images: |
+            renku/data-service-data-tasks
+          # generate Docker tags based on the following events/attributes
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+      - name: Build and push data tasks
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./projects/renku_data_tasks/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta-data-tasks.outputs.tags }}
+          labels: ${{ steps.meta-data-tasks.outputs.labels }}
+          cache-from: type=registry,ref=renku/data-service-data-tasks:buildcache
+          cache-to: type=registry,ref=renku/data-service-data-tasks:buildcache,mode=max
+          provenance: false
+      - name: Scan data tasks image
+        uses: snyk/actions/docker@master
+        continue-on-error: true
+        with:
+          image: ${{ steps.meta-data-tasks.outputs.tags}}
+          args: --file=./projects/renku_data_tasks/Dockerfile --severity-threshold=high --sarif-file-output=rdt.sarif
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      - name: Upload Snyk report
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: rdt.sarif
+          category: snyk_renku-data-tasks
