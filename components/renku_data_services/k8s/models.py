@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, NewType
+from typing import Any, NewType, Self, cast
 
 from box import Box
+from kr8s._api import Api
+from kr8s._objects import APIObject
+
+from renku_data_services.errors import errors
 
 ClusterId = NewType("ClusterId", str)
 
@@ -125,3 +129,84 @@ class ListFilter:
     version: str | None = None
     label_selector: dict[str, str] | None = None
     user_id: str | None = None
+
+
+@dataclass(eq=True, frozen=True)
+class Cluster:
+    """Representation of a k8s cluster."""
+
+    id: ClusterId
+    namespace: str
+    api: Api
+
+
+@dataclass
+class APIObjectInCluster:
+    """An kr8s k8s object from a specific cluster."""
+
+    obj: APIObject
+    cluster: ClusterId
+
+    @property
+    def user_id(self) -> str | None:
+        """Extract the user id from annotations."""
+        user_id = user_id_from_api_object(self.obj)
+        return user_id
+
+    @property
+    def meta(self) -> K8sObjectMeta:
+        """Extract the metadata from an api object."""
+        return K8sObjectMeta(
+            name=self.obj.name,
+            namespace=self.obj.namespace or "default",
+            cluster=self.cluster,
+            version=self.obj.version,
+            kind=self.obj.kind,
+            user_id=self.user_id,
+        )
+
+    def to_k8s_object(self) -> K8sObject:
+        """Convert the api object to a regular k8s object."""
+        if self.obj.name is None or self.obj.namespace is None:
+            raise errors.ProgrammingError()
+        return K8sObject(
+            name=self.obj.name,
+            namespace=self.obj.namespace,
+            kind=self.obj.kind,
+            version=self.obj.version,
+            manifest=Box(self.obj.to_dict()),
+            cluster=self.cluster,
+            user_id=self.user_id,
+        )
+
+    @classmethod
+    def from_k8s_object(cls, obj: K8sObject, api: Api | None = None) -> Self:
+        """Convert a regular k8s object to an api object."""
+
+        class _APIObj(APIObject):
+            kind = obj.meta.kind
+            version = obj.meta.version
+            singular = obj.meta.singular
+            plural = obj.meta.plural
+            endpoint = obj.meta.plural
+            namespaced = obj.meta.namespaced
+
+        return cls(
+            obj=_APIObj(
+                resource=obj.manifest,
+                namespace=obj.meta.namespace,
+                api=api,
+            ),
+            cluster=obj.cluster,
+        )
+
+
+def user_id_from_api_object(obj: APIObject) -> str | None:
+    """Get the user id from an api object."""
+    match obj.singular:
+        case "jupyterserver":
+            return cast(str, obj.metadata.labels["renku.io/userId"])
+        case "amaltheasession":
+            return cast(str, obj.metadata.labels["renku.io/safe-username"])
+        case _:
+            return None

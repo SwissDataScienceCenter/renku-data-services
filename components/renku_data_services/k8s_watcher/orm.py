@@ -12,7 +12,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_co
 from ulid import ULID
 
 from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
-from renku_data_services.k8s_watcher.models import ClusterId, K8sObject
+from renku_data_services.k8s.models import ClusterId, K8sObject
 from renku_data_services.utils.sqlalchemy import ULIDType
 
 
