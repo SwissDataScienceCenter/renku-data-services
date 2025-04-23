@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import contextlib
-import json
 import multiprocessing.synchronize
 from collections.abc import AsyncIterable
 from copy import deepcopy
@@ -265,28 +264,18 @@ class K8sClusterClient:
     async def create(self, obj: K8sObject) -> K8sObject:
         """Create the k8s object."""
 
-        # FIXME: LSA: I don't know why I I have to copy this code instead of calling the function, but it just won't
-        #        work otherwise.
+        api_obj = obj.to_api_object(self.__cluster.api)
 
-        # api_obj = obj.to_api_object(self.__cluster.api)
-        #
-        # await api_obj.create()
-        # return obj.meta.with_manifest(api_obj.to_dict())
-
-        async with self.__cluster.api.call_api(
-            "POST",
-            version=obj.version,
-            url=obj.endpoint,
-            namespace=self.__cluster.namespace,
-            data=json.dumps(obj.to_api_object(self.__cluster.api).raw),
-        ) as resp:
-            return obj.meta.with_manifest(resp.json())
+        await api_obj.create()
+        # if refresh isn't called, status and timestamp will be blank
+        await api_obj.refresh()
+        return obj.meta.with_manifest(api_obj.to_dict())
 
     async def patch(self, meta: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
         """Patch a k8s object.
 
         If the patch is a list we assume that we have a rfc6902 json patch like
-        `[{ "op": "add", "path": "/a/b/c", "value": [ "foo", "bar" ] }]`.
+        `[{ "op": "add", "path": "/a/b/c", "value": [ "foo" "bar" ] }]`.
         If the patch is a dictionary then it is considered to be a rfc7386 json merge patch.
         """
         obj = await self.__get_api_object(meta.to_list_filter())
@@ -294,6 +283,9 @@ class K8sClusterClient:
             raise errors.MissingResourceError(message=f"The k8s resource with metadata {meta} cannot be found.")
         patch_type = "json" if isinstance(patch, list) else None
         await obj.obj.patch(patch, type=patch_type)
+        # if refresh isn't called, status and timestamp will be blank
+        await obj.obj.refresh()
+
         return meta.with_manifest(obj.obj.to_dict())
 
     async def delete(self, meta: K8sObjectMeta) -> None:
