@@ -265,6 +265,7 @@ class K8sClusterClient:
         """Create the k8s object."""
 
         api_obj = obj.to_api_object(self.__cluster.api)
+
         await api_obj.create()
         # if refresh isn't called, status and timestamp will be blank
         await api_obj.refresh()
