@@ -1,5 +1,6 @@
+import warnings
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 from httpx import Response
@@ -9,8 +10,12 @@ from renku_data_services.authz.models import Visibility
 from renku_data_services.base_models.core import NamespacePath, ProjectPath
 from renku_data_services.data_connectors import core
 from renku_data_services.namespace.models import NamespaceKind
+from renku_data_services.storage.rclone import RCloneDOIMetadata
 from renku_data_services.users.models import UserInfo
 from test.bases.renku_data_services.data_api.utils import merge_headers
+
+if TYPE_CHECKING:
+    from pytest import MonkeyPatch
 
 
 async def create_data_connector(
@@ -137,8 +142,27 @@ async def test_post_global_data_connector(
 
 @pytest.mark.asyncio
 async def test_post_global_data_connector_dataverse(
-    sanic_client: SanicASGITestClient, user_headers: dict[str, str]
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str], monkeypatch: "MonkeyPatch"
 ) -> None:
+    # The DOI resolver seems to block requests from GitHub action runners, so we mock its response
+    validator = sanic_client.sanic_app.ctx._dependencies.r_clone_validator
+    _orig_get_doi_metadata = validator.get_doi_metadata
+
+    async def _mock_get_doi_metadata(*args, **kwargs) -> RCloneDOIMetadata:
+        metadata = await _orig_get_doi_metadata(*args, **kwargs)
+        if metadata is not None:
+            return metadata
+
+        warnings.warn("Could not retrieve DOI metadata, returning saved one")
+        return RCloneDOIMetadata(
+            DOI="10.7910/DVN/2SA6SN",
+            URL="https://doi.org/10.7910/DVN/2SA6SN",
+            metadataURL="https://dataverse.harvard.edu/api/datasets/:persistentId/?persistentId=doi%3A10.7910%2FDVN%2F2SA6SN",
+            provider="dataverse",
+        )
+
+    monkeypatch.setattr(validator, "get_doi_metadata", _mock_get_doi_metadata)
+
     doi = "10.7910/DVN/2SA6SN"
     payload = {
         "storage": {
@@ -163,11 +187,7 @@ async def test_post_global_data_connector_dataverse(
     assert storage.get("readonly") is True
     assert data_connector.get("visibility") == "public"
     assert data_connector.get("description") is not None
-    assert set(data_connector.get("keywords")) == {
-        "dataset metadata",
-        "dataverse",
-        "metadata blocks",
-    }
+    assert set(data_connector.get("keywords")) == {"dataset metadata", "dataverse", "metadata blocks"}
 
 
 @pytest.mark.asyncio
