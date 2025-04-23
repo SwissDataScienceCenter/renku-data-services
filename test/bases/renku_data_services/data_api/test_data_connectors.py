@@ -117,7 +117,7 @@ async def test_post_global_data_connector(
     assert storage.get("readonly") is True
     assert data_connector.get("visibility") == "public"
     assert data_connector.get("description") is not None
-    assert set(data_connector.get("keywords")) == set()
+    assert set(data_connector.get("keywords")) == {"active"}
 
     # Check that we can retrieve the data connector
     _, response = await sanic_client.get(f"/api/data/data_connectors/{data_connector['id']}", headers=user_headers)
@@ -163,7 +163,11 @@ async def test_post_global_data_connector_dataverse(
     assert storage.get("readonly") is True
     assert data_connector.get("visibility") == "public"
     assert data_connector.get("description") is not None
-    assert set(data_connector.get("keywords")) == set()
+    assert set(data_connector.get("keywords")) == {
+        "dataset metadata",
+        "dataverse",
+        "metadata blocks",
+    }
 
 
 @pytest.mark.asyncio

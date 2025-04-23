@@ -1,5 +1,6 @@
 """Business logic for data connectors."""
 
+import contextlib
 import re
 from dataclasses import asdict
 from html.parser import HTMLParser
@@ -172,23 +173,24 @@ async def validate_unsaved_global_data_connector(
 
     name = data_connector.name
     description = ""
-    # TODO: handle keywords (see https://github.com/SwissDataScienceCenter/renku-data-services/pull/810)
-    # keywords: list[str] = []
+    keywords: list[str] = []
     if metadata is not None:
         name = metadata.name or name
         description = _html_to_text(metadata.description)
-        # keywords = metadata.keywords
+        keywords = metadata.keywords
 
     # Fix metadata if needed
     if len(name) > 99:
         name = f"{name[:96]}..."
     if len(description) > 500:
         description = f"{description[:497]}..."
-    # fixed_keywords: list[str] = []
-    # for word in keywords:
-    #     for kw in word.strip().split(","):
-    #         fixed_keywords.append(kw.strip())
-    # keywords = fixed_keywords
+    fixed_keywords: list[str] = []
+    for word in keywords:
+        for kw in word.strip().split(","):
+            # TODO: handle more keywords (see https://github.com/SwissDataScienceCenter/renku-data-services/pull/810)
+            with contextlib.suppress(PydanticValidationError):
+                fixed_keywords.append(apispec.Keyword.model_validate(kw.strip()).root)
+    keywords = fixed_keywords
 
     return models.UnsavedGlobalDataConnector(
         name=name,
@@ -197,7 +199,7 @@ async def validate_unsaved_global_data_connector(
         created_by="",
         storage=storage,
         description=description or None,
-        keywords=[],
+        keywords=keywords,
     )
 
 
