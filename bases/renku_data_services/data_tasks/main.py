@@ -40,7 +40,10 @@ class TcpHandler:
         await writer.drain()
         while True:
             data = await reader.read(100)
-            message = data.decode().strip().lower()
+            try:
+                message = data.decode().strip().lower()
+            except Exception:
+                message = ""
             match message:
                 case "info":
                     for t in self.__task_manager.current_tasks():
@@ -48,10 +51,13 @@ class TcpHandler:
                         await writer.drain()
 
                 case _:
-                    writer.write(b"good bye\r\n")
-                    await writer.drain()
-                    writer.close()
-                    await writer.wait_closed()
+                    try:
+                        writer.write(b"good bye\r\n")
+                        await writer.drain()
+                        writer.close()
+                        await writer.wait_closed()
+                    except Exception:
+                        pass  # nosec B110
                     break
 
 
