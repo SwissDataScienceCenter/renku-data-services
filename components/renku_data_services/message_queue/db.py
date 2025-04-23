@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
 
-from sanic.log import logger
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
@@ -14,6 +14,8 @@ from renku_data_services import errors
 from renku_data_services.message_queue import orm as schemas
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.models import Event, Reprovisioning
+
+logger = logging.getLogger(__name__)
 
 
 class EventRepository:

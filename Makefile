@@ -152,8 +152,8 @@ debug:  ## Debug the sanic server
 	DUMMY_STORES=true poetry run python -Xfrozen_modules=off -m debugpy --listen 0.0.0.0:5678 --wait-for-client -m sanic renku_data_services.data_api.main:create_app --debug --single-process --port 8000 --host 0.0.0.0
 
 .PHONY: run-tasks
-run-tasks:  ## Run the sanic server
-	DUMMY_STORES=true poetry run python bases/renku_data_services/data_tasks/main.py --dev --debug
+run-tasks:  ## Run the data tasks
+	DUMMY_STORES=true poetry run python bases/renku_data_services/data_tasks/main.py
 
 
 # From the operator sdk Makefile
