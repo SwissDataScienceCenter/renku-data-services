@@ -27,10 +27,6 @@ async def main() -> None:
     logger.info("Tasks starting...")
     tm.start_all(all_tasks(config))
 
-    # create file for liveness probe
-    with open("/tmp/cache_ready", "w") as f:  # nosec B108
-        f.write("ready")
-
     while True:
         await asyncio.sleep(config.main_tick_interval)
         tasks = tm.current_tasks()
