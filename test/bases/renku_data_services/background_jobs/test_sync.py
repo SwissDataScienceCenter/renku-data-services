@@ -91,6 +91,7 @@ def get_app_configs(db_instance: DBConfig, authz_instance: AuthzConfig):
             authz=Authz(authz_instance),
             group_repo=group_repo,
             project_repo=project_repo,
+            search_updates_repo=search_updates_repo,
         )
         data_connector_migration_tool = DataConnectorMigrationTool(
             session_maker=db_instance.async_session_maker,

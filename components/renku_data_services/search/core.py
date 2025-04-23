@@ -22,7 +22,7 @@ from renku_data_services.search.solr_user_query import (
     UserRole,
 )
 from renku_data_services.search.user_query import Nel, UserQuery
-from renku_data_services.solr.entity_documents import EntityDocReader, Group, Project, User
+from renku_data_services.solr.entity_documents import DataConnector, EntityDocReader, Group, Project, User
 from renku_data_services.solr.entity_schema import Fields
 from renku_data_services.solr.solr_client import (
     DefaultSolrClient,
@@ -49,6 +49,7 @@ async def update_solr(search_updates_repo: SearchUpdatesRepo, solr_client: SolrC
             docs: list[SolrDocument] = [RawDocument(e.payload) for e in entries]
             result = await solr_client.upsert(docs)
             if result == "VersionConflict":
+                logger.error(f"There was a version conflict updating search entities: {docs}")
                 await search_updates_repo.mark_reset(ids)
                 await asyncio.sleep(1)
             else:
@@ -136,12 +137,14 @@ async def query(
         if results.response.num_found % limit != 0:
             total_pages += 1
 
-        solr_docs: list[Group | Project | User] = results.response.read_to(EntityDocReader.from_dict)
+        solr_docs: list[Group | Project | DataConnector | User] = results.response.read_to(EntityDocReader.from_dict)
 
         docs = list(map(converters.from_entity, solr_docs))
         return apispec.SearchResult(
             items=docs,
-            facets=apispec.FacetData(entityType=results.facets.get_counts(Fields.entity_type).to_simple_dict()),
+            facets=apispec.FacetData(
+                entityType=apispec.MapEntityTypeInt(results.facets.get_counts(Fields.entity_type).to_simple_dict())
+            ),
             pagingInfo=apispec.PageWithTotals(
                 page=apispec.PageDef(limit=limit, offset=offset),
                 totalPages=int(total_pages),

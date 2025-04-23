@@ -380,6 +380,23 @@ class DeleteDynamicFieldCommand(SchemaCommand):
 
 @dataclass
 @final
+class DeleteCopyFieldCommand(SchemaCommand):
+    """Delete a copy field rule."""
+
+    source: FieldName
+    dest: FieldName
+
+    def command_name(self) -> str:
+        """Return the command name."""
+        return "delete-copy-field"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the dict representation for this schema command."""
+        return {"source": self.source, "dest": self.dest}
+
+
+@dataclass
+@final
 class SchemaCommandList:
     """A list of `SchemaCommand`s that provide a to_json method as expected by the solr schema api."""
 

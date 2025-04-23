@@ -413,6 +413,7 @@ class Config:
                 user_repo=self.kc_user_repo,
                 group_repo=self.group_repo,
                 project_repo=self.project_repo,
+                data_connector_repo=self.data_connector_repo,
             )
         return self._search_reprovisioning
 
@@ -575,6 +576,7 @@ class Config:
                 authz=self.authz,
                 project_repo=self.project_repo,
                 group_repo=self.group_repo,
+                search_updates_repo=self.search_updates_repo,
             )
         return self._data_connector_repo
 

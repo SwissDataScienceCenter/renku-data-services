@@ -45,6 +45,7 @@ class EntityType(StrEnum):
     project = "Project"
     user = "User"
     group = "Group"
+    dataconnector = "DataConnector"
 
     @property
     def to_resource_type(self) -> ResourceType:
@@ -56,6 +57,8 @@ class EntityType(StrEnum):
                 return ResourceType.user
             case EntityType.group:
                 return ResourceType.group
+            case EntityType.dataconnector:
+                return ResourceType.data_connector
 
 
 class EntityDoc(BaseModel, ABC, frozen=True):
@@ -188,11 +191,63 @@ class Project(EntityDoc, frozen=True):
         return Project.model_validate(d)
 
 
+class DataConnector(EntityDoc, frozen=True):
+    """Represents a renku data connector in SOLR."""
+
+    id: ULID
+    name: str
+    storageType: str
+    readonly: bool
+    slug: Annotated[Slug, BeforeValidator(_str_to_slug)]
+    visibility: Visibility
+    createdBy: str
+    creationDate: datetime
+    description: str | None = None
+    keywords: list[str] = Field(default_factory=list)
+    namespaceDetails: ResponseBody | None = None
+    creatorDetails: ResponseBody | None = None
+
+    @property
+    def entity_type(self) -> EntityType:
+        """Return the type of this entity."""
+        return EntityType.dataconnector
+
+    @field_serializer("namespace", when_used="always")
+    def __serialize_namespace(self, namespace: Slug) -> str:
+        return namespace.value
+
+    @field_serializer("id", when_used="always")
+    def __serialize_id(self, id: ULID) -> str:
+        return str(id)
+
+    @field_serializer("slug", when_used="always")
+    def __serialize_slug(self, slug: Slug) -> str:
+        return slug.value
+
+    @field_serializer("visibility", when_used="always")
+    def __serialize_visibilty(self, visibility: Visibility) -> str:
+        return visibility.value
+
+    @field_serializer("creationDate", when_used="always")
+    def __serialize_creation_date(self, creationDate: datetime) -> str:
+        return creationDate.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    @field_validator("creationDate")
+    @classmethod
+    def _add_tzinfo(cls, v: datetime) -> datetime:
+        return v.replace(tzinfo=UTC)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> DataConnector:
+        """Create a Project from a dictionary."""
+        return DataConnector.model_validate(d)
+
+
 class EntityDocReader:
     """Reads dicts into one of the entity document classes."""
 
     @classmethod
-    def from_dict(cls, doc: dict[str, Any]) -> User | Project | Group | None:
+    def from_dict(cls, doc: dict[str, Any]) -> User | Project | Group | DataConnector | None:
         """Reads dicts into one of the entity document classes."""
         dt = doc.get(Fields.entity_type)
         if dt is None:
@@ -206,3 +261,5 @@ class EntityDocReader:
                     return User.from_dict(doc)
                 case EntityType.group:
                     return Group.from_dict(doc)
+                case EntityType.dataconnector:
+                    return DataConnector.from_dict(doc)
