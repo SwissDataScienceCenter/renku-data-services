@@ -23,6 +23,7 @@ from renku_data_services.notebooks.constants import JUPYTER_SESSION_KIND, JUPYTE
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
 from renku_data_services.notebooks.errors.programming import ProgrammingError
 from renku_data_services.notebooks.util.kubernetes_ import find_env_var
+from renku_data_services.notebooks.util.retries import retry_with_exponential_backoff_async
 
 DEFAULT_K8S_CLUSTER: ClusterId = ClusterId("renkulab")
 sanitizer = kubernetes.client.ApiClient().sanitize_for_serialization
@@ -246,6 +247,15 @@ class NotebookK8sClient(Generic[_SessionType]):
                 manifest=Box(manifest.model_dump(exclude_none=True, mode="json")),
             )
         )
+
+        # NOTE: We wait for the cache to sync with the newly created server
+        # With this we wait for the cache to catch up before we return a result.
+        def _check_ready(obj: K8sObject | None) -> bool:
+            return obj is None or obj.manifest.metadata.get("creationTimestamp") is None
+
+        refreshed_session = await retry_with_exponential_backoff_async(_check_ready)(self.client.get)(session.meta)
+        if refreshed_session is not None:
+            session = refreshed_session
 
         return self.session_type.model_validate(session.manifest)
 
