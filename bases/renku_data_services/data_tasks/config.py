@@ -19,16 +19,23 @@ class Config:
     redis_config: RedisConfig
     max_retry_wait: int
     main_tick_interval: int
+    tcp_host: str
+    tcp_port: int
 
     @classmethod
     def from_env(cls, prefix: str = "") -> Config:
         """Creates a config object from environment variables."""
 
-        dummy_stores = os.environ.get(f"{prefix}DUMMY_STORES", "false").lower() == "true"
+        def env(key: str, default: str) -> str:
+            return os.environ.get(f"{prefix}{key}", default)
 
-        max_retry = int(os.environ.get(f"{prefix}MAX_RETRY_WAIT", "120"))
-        main_tick = int(os.environ.get(f"{prefix}MAIN_TICK_INTERVAL", "300"))
+        dummy_stores = env("DUMMY_STORES", "false").lower() == "true"
+
+        max_retry = int(env("MAX_RETRY_WAIT", "120"))
+        main_tick = int(env("MAIN_TICK_INTERVAL", "300"))
         solr_config = SolrClientConfig.from_env(prefix)
+        tcp_host = env("TCP_HOST", "127.0.0.1")
+        tcp_port = int(env("TCP_PORT", "8001"))
 
         redis = RedisConfig.fake() if dummy_stores else RedisConfig.from_env(prefix)
         return Config(
@@ -37,4 +44,6 @@ class Config:
             main_tick_interval=main_tick,
             solr_config=solr_config,
             redis_config=redis,
+            tcp_host=tcp_host,
+            tcp_port=tcp_port,
         )
