@@ -6,7 +6,12 @@ from typing import Concatenate, ParamSpec, Protocol, TypeVar, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from renku_data_services.data_connectors.models import DataConnector, DataConnectorUpdate, DeletedDataConnector
+from renku_data_services.data_connectors.models import (
+    DataConnector,
+    DataConnectorUpdate,
+    DeletedDataConnector,
+    GlobalDataConnector,
+)
 from renku_data_services.errors import errors
 from renku_data_services.namespace.models import DeletedGroup, Group
 from renku_data_services.project.models import DeletedProject, Project, ProjectUpdate
@@ -75,6 +80,9 @@ def update_search_document(
                 await self.search_updates_repo.upsert(record)
 
             case DataConnector() as dc:
+                await self.search_updates_repo.upsert(dc)
+
+            case GlobalDataConnector() as dc:
                 await self.search_updates_repo.upsert(dc)
 
             case DataConnectorUpdate() as dc:
