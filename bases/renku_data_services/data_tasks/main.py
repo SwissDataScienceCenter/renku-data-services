@@ -33,6 +33,7 @@ async def main() -> None:
     config = Config.from_env()
     configure_logging()
     logger = logging.getLogger("renku_data_services.data_tasks.main")
+    logger.info(f"Config: {config}")
 
     tm = TaskManager(config.max_retry_wait)
     internal_tasks = TaskDefininion({"_log_tasks": lambda: log_tasks(logger, tm, config.main_tick_interval)})
