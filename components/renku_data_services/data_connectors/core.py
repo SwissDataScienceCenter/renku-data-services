@@ -141,7 +141,6 @@ async def prevalidate_unsaved_global_data_connector(
 async def validate_unsaved_global_data_connector(
     data_connector: models.UnsavedGlobalDataConnector,
     validator: RCloneValidator,
-    # body: apispec.GlobalDataConnectorPost, validator: RCloneValidator
 ) -> models.UnsavedGlobalDataConnector:
     """Validate an unsaved data connector."""
 

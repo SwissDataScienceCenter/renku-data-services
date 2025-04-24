@@ -28,7 +28,6 @@ from renku_data_services.base_models.validation import validate_and_dump, valida
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors.core import (
     dump_storage_with_sensitive_fields,
-    # validate_unsaved_global_data_connector,
     prevalidate_unsaved_global_data_connector,
     validate_data_connector_patch,
     validate_data_connector_secrets_patch,
@@ -470,7 +469,6 @@ class DataConnectorsBP(CustomBlueprint):
                 name=data_connector.name,
                 slug=data_connector.slug,
                 storage=storage,
-                # secrets=,
                 creation_date=data_connector.creation_date,
                 created_by=data_connector.created_by,
                 visibility=data_connector.visibility.value,
