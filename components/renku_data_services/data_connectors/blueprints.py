@@ -98,7 +98,9 @@ class DataConnectorsBP(CustomBlueprint):
             _: Request, user: base_models.APIUser, body: apispec.DataConnectorPost, validator: RCloneValidator
         ) -> JSONResponse:
             data_connector = validate_unsaved_data_connector(body, validator=validator)
-            result = await self.data_connector_repo.insert_data_connector(user=user, data_connector=data_connector)
+            result = await self.data_connector_repo.insert_namespaced_data_connector(
+                user=user, data_connector=data_connector
+            )
             return validated_json(
                 apispec.DataConnector,
                 self._dump_data_connector(result, validator=validator),

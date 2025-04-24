@@ -226,7 +226,7 @@ class DataConnectorRepository:
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.create, ResourceType.data_connector)
     @update_search_document
-    async def insert_data_connector(
+    async def _insert_data_connector(
         self,
         user: base_models.APIUser,
         data_connector: models.UnsavedDataConnector | models.UnsavedGlobalDataConnector,
@@ -349,6 +349,20 @@ class DataConnectorRepository:
         return data_connector_orm.dump()
 
     @with_db_transaction
+    async def insert_namespaced_data_connector(
+        self,
+        user: base_models.APIUser,
+        data_connector: models.UnsavedDataConnector,
+        *,
+        session: AsyncSession | None = None,
+    ) -> models.DataConnector:
+        """Insert a new namespaced data connector entry."""
+        dc = await self._insert_data_connector(user=user, data_connector=data_connector, session=session)
+        if not isinstance(dc, models.DataConnector):
+            raise errors.ProgrammingError(message=f"Expected to get a namespaced data connector ('{dc.id}')")
+        return dc
+
+    @with_db_transaction
     async def insert_global_data_connector(
         self,
         user: base_models.APIUser,
@@ -381,7 +395,7 @@ class DataConnectorRepository:
                 data_connector=data_connector, validator=validator
             )
 
-        dc = await self.insert_data_connector(user=user, data_connector=data_connector, session=session)
+        dc = await self._insert_data_connector(user=user, data_connector=data_connector, session=session)
         if not isinstance(dc, models.GlobalDataConnector):
             raise errors.ProgrammingError(message=f"Expected to get a global data connector ('{dc.id}')")
         return dc, True

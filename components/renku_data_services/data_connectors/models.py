@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 from ulid import ULID
 
@@ -39,7 +39,7 @@ class BaseDataConnector:
     name: str
     slug: str
     visibility: Visibility
-    created_by: str | None = None
+    created_by: str
     creation_date: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime | None = field(default=None)
     description: str | None = None
@@ -83,7 +83,7 @@ class GlobalDataConnector(BaseDataConnector):
     """Global data connector model."""
 
     id: ULID
-    namespace: None = None
+    namespace: Final[None] = field(default=None, init=False)
     updated_at: datetime
 
     @property
@@ -134,7 +134,6 @@ class DataConnectorPatch:
 class CloudStorageCoreWithSensitiveFields(CloudStorageCore):
     """Remote storage configuration model with sensitive fields."""
 
-    # sensitive_fields: list["RCloneOption"]
     sensitive_fields: list["RCloneOption"]
 
 
