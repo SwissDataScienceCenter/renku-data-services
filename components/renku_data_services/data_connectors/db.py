@@ -385,6 +385,11 @@ class DataConnectorRepository:
             dc = existing_global_dc.dump()
             if not isinstance(dc, models.GlobalDataConnector):
                 raise errors.ProgrammingError(message=f"Expected to get a global data connector ('{dc.id}')")
+            authorized = await self.authz.has_permission(user, ResourceType.data_connector, dc.id, Scope.READ)
+            if not authorized:
+                raise errors.MissingResourceError(
+                    message=f"Data connector with id '{dc.id}' does not exist or you do not have access to it."
+                )
             return dc, False
 
         # Fully validate a global data connector before inserting
