@@ -142,7 +142,6 @@ class RCloneValidator:
             config = "\n".join(f"{k}={v}" for k, v in obscured_config.items())
             f.write(f"[temp]\n{config}")
             f.close()
-            # go run rclone.go --config ./test_config.toml backend title lease:
             proc = await asyncio.create_subprocess_exec(
                 "rclone",
                 "backend",
