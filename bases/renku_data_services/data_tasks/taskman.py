@@ -41,7 +41,7 @@ class TaskDefininion:
 
 
 @final
-@dataclass
+@dataclass(frozen=True)
 class TaskView:
     """Information about a running task."""
 
@@ -63,6 +63,10 @@ class _TaskContext:
     def inc_restarts(self) -> None:
         """Increments the restart counter."""
         self.restarts = self.restarts + 1
+
+    def reset_restarts(self) -> None:
+        """Resets the restarts counter to 0."""
+        self.restarts = 0
 
     def running_time(self, ref: datetime = datetime.now()) -> timedelta:
         """Return the time the task is running."""
@@ -143,6 +147,12 @@ class TaskManager:
         """Returns a TaskJoin object for the given task."""
         return TaskJoin(self, name)
 
+    def reset_restarts(self, name: str) -> None:
+        """Resets the restarts counter to 0."""
+        tc = self.__running_tasks.get(name)
+        if tc is not None:
+            tc.reset_restarts()
+
     def cancel(self, name: str) -> TaskJoin | None:
         """Cancel the task with the given name.
 
@@ -180,7 +190,7 @@ class TaskManager:
                     restarts = ctx.restarts
                     ctx.inc_restarts()
 
-                secs = min(max(0, pow(2, restarts) - 1), self.__max_retry_wait)
+                secs = min(pow(2, restarts), self.__max_retry_wait)
                 logger.error(
                     f"{name}: Failed with {e}. Restarting it in {secs} seconds for the {restarts + 1}. time.",
                     exc_info=e,

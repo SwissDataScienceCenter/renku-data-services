@@ -2,11 +2,11 @@
 
 import asyncio
 import logging
-from asyncio.streams import StreamReader, StreamWriter
 
 from renku_data_services.data_tasks.config import Config
 from renku_data_services.data_tasks.task_defs import all_tasks
 from renku_data_services.data_tasks.taskman import TaskDefininion, TaskManager
+from renku_data_services.data_tasks.tcp_handler import TcpHandler
 
 
 def configure_logging() -> None:
@@ -26,39 +26,6 @@ async def log_tasks(logger: logging.Logger, tm: TaskManager, interval: int) -> N
         tasks.sort(key=lambda e: e.name)
         lines = "\n".join([f"- {e.name}: since {e.started} ({e.restarts} restarts)" for e in tasks])
         logger.info(f"********* Tasks ********\n{lines}")
-
-
-class TcpHandler:
-    """Handles the simple tcp connection."""
-
-    def __init__(self, tm: TaskManager) -> None:
-        self.__task_manager = tm
-
-    async def run(self, reader: StreamReader, writer: StreamWriter) -> None:
-        """Handles a tcp connection."""
-        writer.write(b"Hello, write `info` for task list, other to quit\r\n")
-        await writer.drain()
-        while True:
-            data = await reader.read(100)
-            try:
-                message = data.decode().strip().lower()
-            except Exception:
-                message = ""
-            match message:
-                case "info":
-                    for t in self.__task_manager.current_tasks():
-                        writer.write(str.encode(f"- {t.name}: since {t.started} ({t.restarts} restarts)\r\n"))
-                        await writer.drain()
-
-                case _:
-                    try:
-                        writer.write(b"good bye\r\n")
-                        await writer.drain()
-                        writer.close()
-                        await writer.wait_closed()
-                    except Exception:
-                        pass  # nosec B110
-                    break
 
 
 async def main() -> None:
