@@ -232,6 +232,15 @@ def validate_data_connector_patch(
     validator: RCloneValidator,
 ) -> models.DataConnectorPatch:
     """Validate the update to a data connector."""
+    if isinstance(data_connector, models.GlobalDataConnector) and patch.namespace is not None:
+        raise errors.ValidationError(message="Assigning a namespace to a global data connector is not supported")
+    if (
+        isinstance(data_connector, models.GlobalDataConnector)
+        and patch.slug is not None
+        and patch.slug != data_connector.slug
+    ):
+        raise errors.ValidationError(message="Updating the slug of a global data connector is not supported")
+
     slugs = patch.namespace.split("/") if patch.namespace else []
     path: NamespacePath | ProjectPath | None
     if len(slugs) == 0:

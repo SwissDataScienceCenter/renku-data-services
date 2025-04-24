@@ -270,6 +270,7 @@ def _is_allowed_on_resource(
                 | DeletedGroup
                 | Namespace
                 | DataConnector
+                | GlobalDataConnector
                 | DeletedDataConnector
                 | None
             ) = None
@@ -281,7 +282,7 @@ def _is_allowed_on_resource(
                 case ResourceType.user_namespace if isinstance(potential_resource, Namespace):
                     resource = potential_resource
                 case ResourceType.data_connector if isinstance(
-                    potential_resource, (DataConnector, DeletedDataConnector)
+                    potential_resource, (DataConnector, GlobalDataConnector, DeletedDataConnector)
                 ):
                     resource = potential_resource
                 case _:
@@ -688,6 +689,10 @@ class Authz:
                             authz_change.extend(await db_repo.authz._update_data_connector_visibility(user, result.new))
                         if result.old.namespace != result.new.namespace:
                             user = _extract_user_from_args(*func_args, **func_kwargs)
+                            if isinstance(result.new, GlobalDataConnector):
+                                raise errors.ValidationError(
+                                    message=f"Updating the namespace of a global data connector is not supported ('{result.new.id}')"  # noqa E501
+                                )
                             authz_change.extend(await db_repo.authz._update_data_connector_namespace(user, result.new))
                     case AuthzOperation.delete_link, ResourceType.data_connector if result is None:
                         # NOTE: This means that the link does not exist in the first place so nothing was deleted
@@ -1803,7 +1808,7 @@ class Authz:
     async def _update_data_connector_namespace(
         self,
         user: base_models.APIUser,
-        data_connector: DataConnector | GlobalDataConnector,
+        data_connector: DataConnector,
         *,
         zed_token: ZedToken | None = None,
     ) -> _AuthzChange:
