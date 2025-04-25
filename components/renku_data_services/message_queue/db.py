@@ -64,10 +64,13 @@ class EventRepository:
 
                 for event in events_orm:
                     try:
-                        await self.message_queue.send_message(event.dump())
-                        logger.info(f"Event sent: {event.id}")
+                        logger.info(f"--- try sending {event.id}")
+                        ed = event.dump()
+                        logger.info(f"---     attempt to send event dump for: {ed.queue}")
+                        await self.message_queue.send_message(ed)
+                        logger.info(f"---     Event sent: {event.id}")
                         await session.delete(event)  # this has to be done in the same transaction to not get a deadlock
-                        logger.info(f"Event deleted: {event.id}")
+                        logger.info(f"---     Event deleted: {event.id}")
                     except Exception as e:
                         logger.warning(f"Couldn't send event {event.id}: {event.payload} on queue {event.queue}: {e}")
 
