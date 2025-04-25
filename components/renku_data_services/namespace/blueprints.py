@@ -7,7 +7,7 @@ from sanic.response import JSONResponse
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
-from renku_data_services.authz.models import Role, UnsavedMember
+from renku_data_services.authz.models import Change, Role, UnsavedMember
 from renku_data_services.base_api.auth import authenticate, only_authenticated, validate_path_user_id
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_body_root_model, validate_query
@@ -138,7 +138,10 @@ class GroupsBP(CustomBlueprint):
                 slug=slug,
                 members=members,
             )
-            await self.metrics.group_member_added(user)
+
+            if any(m.change == Change.ADD for m in res):
+                await self.metrics.group_member_added(user)
+
             return validated_json(
                 apispec.GroupMemberPatchRequestList,
                 [

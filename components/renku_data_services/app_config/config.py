@@ -683,7 +683,7 @@ class Config:
                 UnsavedUserInfo(id="user1", first_name="user1", last_name="doe", email="user1@doe.com"),
                 UnsavedUserInfo(id="user2", first_name="user2", last_name="doe", email="user2@doe.com"),
             ]
-            kc_api = DummyKeycloakAPI(users=[i._to_keycloak_dict() for i in dummy_users])
+            kc_api = DummyKeycloakAPI(users=[i.to_keycloak_dict() for i in dummy_users])
             redis = RedisConfig.fake()
             gitlab_url = None
         else:

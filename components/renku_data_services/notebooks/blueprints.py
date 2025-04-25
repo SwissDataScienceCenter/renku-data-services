@@ -463,7 +463,8 @@ class NotebooksNewBP(CustomBlueprint):
                 except Exception:
                     await self.nb_config.k8s_v2_client.delete_session(server_name, user.id)
                     raise
-            await self.metrics.session_started(
+
+            await self.metrics.user_requested_session_launch(
                 user=user,
                 metadata={
                     "cpu": int(resource_class.cpu * 1000),
@@ -476,7 +477,6 @@ class NotebooksNewBP(CustomBlueprint):
                     "session_id": server_name,
                 },
             )
-
             return json(manifest.as_apispec().model_dump(mode="json", exclude_none=True), 201)
 
         return "/sessions", ["POST"], _handler

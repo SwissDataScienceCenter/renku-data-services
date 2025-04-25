@@ -15,9 +15,13 @@ from box import Box
 from kr8s._api import Api
 from kr8s.asyncio.objects import APIObject
 
+from renku_data_services.base_models.core import APIUser, InternalServiceAdmin, ServiceAdminId
+from renku_data_services.base_models.metrics import MetricsService
+from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.errors import errors
 from renku_data_services.k8s.models import Cluster, ClusterId, K8sObject, K8sObjectMeta
 from renku_data_services.k8s_watcher.db import K8sDbCache
+from renku_data_services.notebooks.crs import State
 
 
 @dataclass
@@ -75,6 +79,8 @@ class APIObjectInCluster:
 
 
 type EventHandler = Callable[[APIObjectInCluster, str], Awaitable[None]]
+
+k8s_watcher_admin_user = InternalServiceAdmin(id=ServiceAdminId.k8s_watcher)
 
 
 class K8sWatcher:
@@ -145,10 +151,65 @@ class K8sWatcher:
                     continue
 
 
-def k8s_object_handler(cache: K8sDbCache) -> EventHandler:
+async def collect_metrics(
+    previous_obj: K8sObject | None,
+    new_obj: APIObjectInCluster,
+    user_id: str,
+    metrics: MetricsService,
+    rp_repo: ResourcePoolRepository,
+) -> None:
+    """Track product metrics."""
+    user = APIUser(id=user_id)
+
+    if (
+        previous_obj is not None
+        and previous_obj.manifest.metadata.get("deletionTimestamp") is None
+        and new_obj.obj.metadata.get("deletionTimestamp") is not None
+    ):
+        # session stopping
+        await metrics.session_stopped(user=user, metadata={"session_id": new_obj.meta.name})
+    else:
+        previous_state = previous_obj.manifest.get("status", {}).get("state", None) if previous_obj else None
+        match new_obj.obj.status.state:
+            case State.Running.value if previous_state is None or previous_state == State.NotReady.value:
+                # session starting
+                resource_class_id = int(new_obj.obj.metadata.annotations.get("renku.io/resource_class_id"))
+                resource_pool = await rp_repo.get_resource_pool_from_class(k8s_watcher_admin_user, resource_class_id)
+                resource_class = await rp_repo.get_resource_class(k8s_watcher_admin_user, resource_class_id)
+
+                await metrics.session_started(
+                    user=user,
+                    metadata={
+                        "cpu": int(resource_class.cpu * 1000),
+                        "memory": resource_class.memory,
+                        "gpu": resource_class.gpu,
+                        "storage": new_obj.obj.spec.session.storage.size,
+                        "resource_class_id": resource_class_id,
+                        "resource_pool_id": resource_pool.id or "",
+                        "resource_class_name": f"{resource_pool.name}.{resource_class.name}",
+                        "session_id": new_obj.meta.name,
+                    },
+                )
+            case State.Running.value | State.NotReady.value if previous_state == State.Hibernated.value:
+                # session resumed
+                await metrics.session_resumed(user, metadata={"session_id": new_obj.meta.name})
+            case State.Hibernated.value if (previous_state != State.Hibernated.value):
+                # session hibernated
+                await metrics.session_hibernated(user=user, metadata={"session_id": new_obj.meta.name})
+            case _:
+                pass
+
+
+def k8s_object_handler(cache: K8sDbCache, metrics: MetricsService, rp_repo: ResourcePoolRepository) -> EventHandler:
     """Listens and to k8s events and updates the cache."""
 
     async def handler(obj: APIObjectInCluster, event_type: str) -> None:
+        existing = await cache.get(obj.meta)
+        if obj.user_id is not None:
+            try:
+                await collect_metrics(existing, obj, obj.user_id, metrics, rp_repo)
+            except Exception as e:
+                logging.error("failed to track product metrics", exc_info=e)
         if event_type == "DELETED":
             await cache.delete(obj.meta)
             return

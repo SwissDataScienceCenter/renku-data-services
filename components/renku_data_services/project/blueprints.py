@@ -9,7 +9,7 @@ from sanic_ext import validate
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
-from renku_data_services.authz.models import Member, Role, Visibility
+from renku_data_services.authz.models import Change, Member, Role, Visibility
 from renku_data_services.base_api.auth import (
     authenticate,
     only_authenticated,
@@ -325,8 +325,11 @@ class ProjectsBP(CustomBlueprint):
             _: Request, user: base_models.APIUser, project_id: ULID, body: apispec.ProjectMemberListPatchRequest
         ) -> HTTPResponse:
             members = [Member(Role(i.role.value), i.id, project_id) for i in body.root]
-            await self.project_member_repo.update_members(user, project_id, members)
-            await self.metrics.project_member_added(user)
+            result = await self.project_member_repo.update_members(user, project_id, members)
+
+            if any(c.change == Change.ADD for c in result):
+                await self.metrics.project_member_added(user)
+
             return HTTPResponse(status=200)
 
         return "/projects/<project_id:ulid>/members", ["PATCH"], _update_members
