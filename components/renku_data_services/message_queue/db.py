@@ -56,7 +56,6 @@ class EventRepository:
                 events_orm = result.all()
 
                 new_events_count = len(events_orm)
-                logger.info(f"Got {new_events_count} events to send to redis")
                 if new_events_count == 0:
                     break
 
@@ -64,13 +63,8 @@ class EventRepository:
 
                 for event in events_orm:
                     try:
-                        logger.info(f"--- try sending {event.id}")
-                        ed = event.dump()
-                        logger.info(f"---     attempt to send event dump for: {ed.queue}")
-                        await self.message_queue.send_message(ed)
-                        logger.info(f"---     Event sent: {event.id}")
+                        await self.message_queue.send_message(event.dump())
                         await session.delete(event)  # this has to be done in the same transaction to not get a deadlock
-                        logger.info(f"---     Event deleted: {event.id}")
                     except Exception as e:
                         logger.warning(f"Couldn't send event {event.id}: {event.payload} on queue {event.queue}: {e}")
 
