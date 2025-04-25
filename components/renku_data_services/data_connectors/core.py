@@ -127,6 +127,9 @@ async def prevalidate_unsaved_global_data_connector(
     doi_uri = f"doi:{rclone_metadata.doi}"
     slug = base_models.Slug.from_name(doi_uri).value
 
+    # Override provider in storage config
+    storage.configuration["provider"] = rclone_metadata.provider
+
     return models.UnsavedGlobalDataConnector(
         name=doi_uri,
         slug=slug,
