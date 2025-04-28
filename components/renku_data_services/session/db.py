@@ -1003,14 +1003,6 @@ class SessionRepository:
             # TODO: move this to its own method where build parameters determine args
             environment = build.environment
             environment.container_image = build.result_image
-            environment.default_url = "/"
-            environment.port = 8888
-            environment.mount_directory = PurePosixPath("/home/ubuntu/work")
-            environment.working_directory = PurePosixPath("/home/ubuntu/work")
-            environment.uid = 1000
-            environment.gid = 1000
-            environment.command = ["bash"]
-            environment.args = ["/entrypoint.sh"]
 
         await session.flush()
         await session.refresh(build)
