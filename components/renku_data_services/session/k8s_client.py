@@ -184,7 +184,11 @@ class ShipwrightClient:
                     spec=crs.BuildSpec(
                         source=crs.GitSource(git=crs.Git(url=params.git_repository)),
                         strategy=crs.Strategy(kind="BuildStrategy", name=params.build_strategy_name),
-                        paramValues=[crs.ParamValue(name="frontend", value=params.frontend)],
+                        paramValues=[
+                            crs.ParamValue(name="frontend", value=params.frontend),
+                            crs.ParamValue(name="run-image", value=params.run_image),
+                            crs.ParamValue(name="builder-image", value=params.build_image),
+                        ],
                         output=crs.BuildOutput(
                             image=params.output_image,
                             pushSecret=params.push_secret_name,

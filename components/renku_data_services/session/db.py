@@ -1063,6 +1063,7 @@ class SessionRepository:
             name=build.k8s_name,
             git_repository=git_repository,
             build_image=constants.BUILD_BUILDER_IMAGE,
+            run_image=constants.BUILD_RUN_IMAGE,
             output_image=output_image,
             build_strategy_name=build_strategy_name,
             push_secret_name=push_secret_name,
