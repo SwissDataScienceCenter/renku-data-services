@@ -51,14 +51,55 @@ spec:
           value: $(params.platform-api-version)
         - name: BP_RENKU_FRONTENDS
           value: $(params.frontend)
+        - name: PARAM_PROCESS_TYPE
+          value: $(params.process-type)
+        - name: PARAM_SOURCE_CONTEXT
+          value: $(params.shp-source-context)
+        - name: PARAM_OUTPUT_IMAGE
+          value: $(params.shp-output-image)
+        - name: PARAM_RUN_IMAGE
+          value: $(params.run-image)
       command:
-        - /cnb/lifecycle/creator
+        - /bin/bash
       args:
-        - "-app=$(params.shp-source-context)"
-        - "-report=/tmp/report.toml"
-        - "-process-type=$(params.process-type)"
-        - "-run-image=$(params.run-image)"
-        - "$(params.shp-output-image)"
+        - -c
+        - |
+          set -euo pipefail
+
+          echo "> Processing environment variables..."
+          ENV_DIR="/platform/env"
+
+          envs=($(env))
+
+          # Denying the creation of non required files from system environments.
+          # The creation of a file named PATH (corresponding to PATH system environment)
+          # caused failure for python source during pip install (https://github.com/Azure-Samples/python-docs-hello-world)
+          block_list=("PATH" "HOSTNAME" "PWD" "_" "SHLVL" "HOME" "")
+
+          for env in "${envs[@]}"; do
+            blocked=false
+
+            IFS='=' read -r key value string <<< "$env"
+
+            for str in "${block_list[@]}"; do
+              if [[ "$key" == "$str" ]]; then
+                blocked=true
+                break
+              fi
+            done
+
+            if [ "$blocked" == "false" ]; then
+              path="${ENV_DIR}/${key}"
+              echo -n "$value" > "$path"
+            fi
+          done
+
+          /cnb/lifecycle/creator \
+            -app=${PARAM_SOURCE_CONTEXT} \
+            -report=/tmp/report.toml \
+            -process-type=${PARAM_PROCESS_TYPE} \
+            -run-image=${PARAM_RUN_IMAGE} \
+            ${PARAM_OUTPUT_IMAGE}
       volumeMounts:
         - mountPath: /platform/env
           name: platform-env
