@@ -74,8 +74,18 @@ class CustomErrorHandler(ErrorHandler):
                 formatted_exception = exception
             case ValidationError():
                 extra_exception = None if exception.extra is None else exception.extra["exception"]
-                if extra_exception:
-                    formatted_exception = errors.ValidationError(message=exception.message)
+                match extra_exception:
+                    case TypeError():
+                        formatted_exception = errors.ValidationError(
+                            message="The validation failed because the provided input has the wrong type"
+                        )
+                    case PydanticValidationError():
+                        parts = [
+                            ".".join(str(i) for i in field["loc"]) + ": " + field["msg"]
+                            for field in extra_exception.errors()
+                        ]
+                        message = f"There are errors in the following fields, {', '.join(parts)}"
+                        formatted_exception = errors.ValidationError(message=message)
             case SanicException():
                 message = exception.message
                 if message == "" or message is None:

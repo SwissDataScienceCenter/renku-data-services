@@ -44,6 +44,7 @@ from renku_data_services.notebooks.crs import (
     Resources,
     SecretAsVolume,
     SecretAsVolumeItem,
+    SessionEnvItem,
     State,
 )
 from renku_data_services.notebooks.models import ExtraSecret
@@ -53,6 +54,7 @@ from renku_data_services.notebooks.utils import (
 )
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.models import Project, SessionSecret
+from renku_data_services.session.models import SessionLauncher
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.cryptography import get_encryption_key
 
@@ -309,6 +311,29 @@ async def request_dc_secret_creation(
                     "Please contact a Renku administrator.",
                     detail=res.text,
                 )
+
+
+def get_launcher_env_variables(launcher: SessionLauncher, body: apispec.SessionPostRequest) -> list[SessionEnvItem]:
+    """Get the environment variables from the launcher, with overrides from the request."""
+    output: list[SessionEnvItem] = []
+    env_overrides = {i.name: i.value for i in body.env_variable_overrides or []}
+    for env in launcher.env_variables or []:
+        if env.name in env_overrides:
+            output.append(SessionEnvItem(name=env.name, value=env_overrides[env.name]))
+        else:
+            output.append(SessionEnvItem(name=env.name, value=env.value))
+    return output
+
+
+def verify_launcher_env_variable_overrides(launcher: SessionLauncher, body: apispec.SessionPostRequest) -> None:
+    """Raise an error if there are env variables that are not defined in the launcher."""
+    env_overrides = {i.name: i.value for i in body.env_variable_overrides or []}
+    known_env_names = {i.name for i in launcher.env_variables or []}
+    unknown_env_names = set(env_overrides.keys()) - known_env_names
+    if unknown_env_names:
+        message = f"""The following environment variables are not defined in the session launcher: {unknown_env_names}.
+            Please remove them from the launch request or add them to the session launcher."""
+        raise errors.ValidationError(message=message)
 
 
 async def request_session_secret_creation(

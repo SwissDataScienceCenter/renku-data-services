@@ -33,11 +33,13 @@ from renku_data_services.notebooks.core_sessions import (
     get_extra_containers,
     get_extra_init_containers,
     get_gitlab_image_pull_secret,
+    get_launcher_env_variables,
     patch_session,
     request_dc_secret_creation,
     request_session_secret_creation,
     requires_image_pull_secret,
     resources_from_resource_class,
+    verify_launcher_env_variable_overrides,
 )
 from renku_data_services.notebooks.crs import (
     AmaltheaSessionSpec,
@@ -377,6 +379,8 @@ class NotebooksNewBP(CustomBlueprint):
 
             secrets_to_create.append(auth_secret)
 
+            # Raise an error if there are invalid environment variables in the request body
+            verify_launcher_env_variable_overrides(launcher, body)
             env = [
                 SessionEnvItem(name="RENKU_BASE_URL_PATH", value=base_server_path),
                 SessionEnvItem(name="RENKU_BASE_URL", value=base_server_url),
@@ -386,12 +390,9 @@ class NotebooksNewBP(CustomBlueprint):
                 SessionEnvItem(name="RENKU_SESSION_PORT", value=f"{environment.port}"),
                 SessionEnvItem(name="RENKU_WORKING_DIR", value=work_dir.as_posix()),
             ]
-            if launcher.env_variables:
-                env.extend(
-                    SessionEnvItem(name=env_var.name, value=env_var.value)
-                    for env_var in launcher.env_variables
-                    if env_var.value
-                )
+            launcher_env_variables = get_launcher_env_variables(launcher, body)
+            if launcher_env_variables:
+                env.extend(launcher_env_variables)
 
             manifest = AmaltheaSessionV1Alpha1(
                 metadata=Metadata(name=server_name, annotations=annotations),
