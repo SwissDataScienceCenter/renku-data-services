@@ -316,6 +316,7 @@ class ShipwrightBuildRunParamsV2:
     output_image: str
     build_strategy_name: str
     push_secret_name: str
+    run_image: str
     frontend: str = FrontendVariant.vscodium.value
     build_image: str | None = None
     retention_after_failed: timedelta | None = None

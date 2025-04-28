@@ -13,9 +13,12 @@ spec:
         The process to execute at launch time
         https://buildpacks.io/docs/for-buildpack-authors/how-to/write-buildpacks/specify-launch-processes/
       default: "bash"
+    - name: run-image
+      description: The image to use as the base for all session images built with this strategy
+      default: "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/base-image:0.0.1"
     - name: builder-image
-      default: olevski90/selector:0.0.1-test2
       description: The buildpack builder image to use
+      default: paketobuildpacks/builder-jammy-buildpackless-full
     - name: procfile
       description: |
         Define entrypoints
@@ -46,7 +49,7 @@ spec:
       env:
         - name: CNB_PLATFORM_API
           value: $(params.platform-api-version)
-        - name: BP_REQUIRES
+        - name: BP_RENKU_FRONTENDS
           value: $(params.frontend)
       command:
         - /cnb/lifecycle/creator
@@ -54,6 +57,7 @@ spec:
         - "-app=$(params.shp-source-context)"
         - "-report=/tmp/report.toml"
         - "-process-type=$(params.process-type)"
+        - "-run-image=$(params.run-image)"
         - "$(params.shp-output-image)"
       volumeMounts:
         - mountPath: /platform/env
