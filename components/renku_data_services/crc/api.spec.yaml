@@ -1264,6 +1264,7 @@ components:
             default_storage: 2
             default: false
         name: "resource pool name"
+        cluster_id: "change-me"
     ResourcePoolPatch:
       type: object
       additionalProperties: false
@@ -1293,6 +1294,7 @@ components:
             cpu: 4.5
             max_storage: 10000
         name: "resource pool name"
+        cluster_id: "4QZ886777NTN8GHQ551GSVAXSA"
     ResourcePoolPut:
       type: object
       additionalProperties: false
@@ -1336,6 +1338,7 @@ components:
             max_storage: 10000
             id: 2
         name: "resource pool name"
+        cluster_id: "4QZ886777NTN8GHQ551GSVAXSA"
     ResourcePoolWithId:
       type: object
       additionalProperties: false
@@ -1384,6 +1387,7 @@ components:
             id: 2
         name: "resource pool name"
         id: 1
+        cluster_id: "4QZ886777NTN8GHQ551GSVAXSA"
     ResourcePoolWithIdFiltered:
       type: object
       additionalProperties: false
@@ -1435,7 +1439,7 @@ components:
             id: 2
             matching: true
         name: "resource pool name"
-        id: 1
+        cluster_id: "4QZ886777NTN8GHQ551GSVAXSA"
     ResourcePoolsWithId:
       type: array
       items:
