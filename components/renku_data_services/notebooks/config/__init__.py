@@ -14,6 +14,8 @@ from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.crc.models import ResourceClass
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.k8s.clients import (
+    DummyCoreClient,
+    DummySchedulingClient,
     K8sClusterClientsPool,
     K8sCoreClient,
     K8sSchedulingClient,
@@ -175,15 +177,18 @@ class NotebooksConfig:
         crc_validator: CRCValidatorProto
         git_provider_helper: GitProviderHelperProto
         k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
-        quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
-        rp_repo = ResourcePoolRepository(db_config.async_session_maker, quota_repo)
+
         if dummy_stores:
+            quota_repo = QuotaRepository(DummyCoreClient({}, {}), DummySchedulingClient({}), namespace=k8s_namespace)
+            rp_repo = ResourcePoolRepository(db_config.async_session_maker, quota_repo)
             crc_validator = DummyCRCValidator()
             sessions_config = _SessionConfig._for_testing()
             git_provider_helper = DummyGitProviderHelper()
             git_config = _GitConfig("http://not.specified", "registry.not.specified")
             kr8s_api = Kr8sApiStack()  # type: ignore[assignment]
         else:
+            quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
+            rp_repo = ResourcePoolRepository(db_config.async_session_maker, quota_repo)
             crc_validator = CRCValidator(rp_repo)
             sessions_config = _SessionConfig.from_env()
             git_config = _GitConfig.from_env()
