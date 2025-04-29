@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, nullcontext
 from datetime import UTC, datetime
+from operator import contains
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
@@ -412,12 +413,12 @@ class SessionRepository:
                     created_by_id=user.id,
                     description=f"Generated environment for {launcher.name}",
                     container_image="image:unknown-at-the-moment",  # TODO: This should come from the build
-                    default_url="/lab",  # TODO: This should come from the build
-                    port=8888,  # TODO: This should come from the build
-                    working_directory=None,  # TODO: This should come from the build
-                    mount_directory=None,  # TODO: This should come from the build
-                    uid=1000,  # TODO: This should come from the build
-                    gid=1000,  # TODO: This should come from the build
+                    default_url=constants.DEFAULT_URLS.get(launcher.environment.frontend_variant, "/"),
+                    port=constants.BUILD_PORT,  # TODO: This should come from the build
+                    working_directory=constants.BUILD_WORKING_DIRECTORY,  # TODO: This should come from the build
+                    mount_directory=constants.BUILD_MOUNT_DIRECTORY,  # TODO: This should come from the build
+                    uid=constants.BUILD_UID,  # TODO: This should come from the build
+                    gid=constants.BUILD_GID,  # TODO: This should come from the build
                     environment_kind=models.EnvironmentKind.CUSTOM,
                     command=None,  # TODO: This should come from the build
                     args=None,  # TODO: This should come from the build
