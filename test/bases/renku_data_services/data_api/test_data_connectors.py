@@ -127,7 +127,7 @@ async def test_post_global_data_connector(
     storage = data_connector["storage"]
     assert storage.get("storage_type") == "doi"
     assert storage.get("source_path") == "/"
-    assert storage.get("target_path") == "doi-10.5281-zenodo.13321077"
+    assert storage.get("target_path") == "brazilian-flora-brazilian-flor-doi-10.5281-zenodo.13321077"
     assert storage.get("readonly") is True
     assert data_connector.get("visibility") == "public"
     assert data_connector.get("description") is not None
@@ -182,7 +182,7 @@ async def test_post_global_data_connector_dataverse(
     storage = data_connector["storage"]
     assert storage.get("storage_type") == "doi"
     assert storage.get("source_path") == "/"
-    assert storage.get("target_path") == "doi-10.7910-dvn-2sa6sn"
+    assert storage.get("target_path") == "dataset-metadata-of-known-data-doi-10.7910-dvn-2sa6sn"
     assert storage.get("readonly") is True
     assert data_connector.get("visibility") == "public"
     assert data_connector.get("description") is not None

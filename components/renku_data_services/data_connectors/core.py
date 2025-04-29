@@ -154,15 +154,6 @@ async def validate_unsaved_global_data_connector(
             message="The provided storage configuration is not currently working", detail=connection_result.error
         )
 
-    # Override source_path and target_path
-    storage = models.CloudStorageCore(
-        storage_type=data_connector.storage.storage_type,
-        configuration=data_connector.storage.configuration,
-        source_path="/",
-        target_path=data_connector.slug,
-        readonly=data_connector.storage.readonly,
-    )
-
     # Fetch DOI metadata
     rclone_metadata = await validator.get_doi_metadata(configuration=data_connector.storage.configuration)
     if rclone_metadata is None:
@@ -191,6 +182,21 @@ async def validate_unsaved_global_data_connector(
             with contextlib.suppress(PydanticValidationError):
                 fixed_keywords.append(apispec.Keyword.model_validate(kw.strip()).root)
     keywords = fixed_keywords
+
+    # Assign user-friendly target_path if possible
+    target_path = data_connector.slug
+    with contextlib.suppress(errors.ValidationError):
+        name_slug = base_models.Slug.from_name(name).value
+        target_path = base_models.Slug.from_name(f"{name_slug[:30]}-{target_path}").value
+
+    # Override source_path and target_path
+    storage = models.CloudStorageCore(
+        storage_type=data_connector.storage.storage_type,
+        configuration=data_connector.storage.configuration,
+        source_path="/",
+        target_path=target_path,
+        readonly=data_connector.storage.readonly,
+    )
 
     return models.UnsavedGlobalDataConnector(
         name=name,
