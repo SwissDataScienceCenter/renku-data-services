@@ -13,7 +13,7 @@ from typing import Self, cast
 
 from box import Box
 from kr8s._api import Api
-from kr8s._objects import APIObject
+from kr8s.asyncio.objects import APIObject
 
 from renku_data_services.errors import errors
 from renku_data_services.k8s.models import Cluster, ClusterId, K8sObject, K8sObjectMeta
