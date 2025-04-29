@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import AsyncIterable, Callable
 
 import sqlalchemy
@@ -28,15 +27,13 @@ class K8sDbCache:
             .where(K8sObjectORM.name == meta.name)
             .where(K8sObjectORM.namespace == meta.namespace)
             .where(K8sObjectORM.cluster == meta.cluster)
-            .where(K8sObjectORM.kind == meta.kind)
+            .where(K8sObjectORM.kind == meta.singular)
             .where(K8sObjectORM.version == meta.version)
         )
         if meta.user_id is not None:
             stmt = stmt.where(K8sObjectORM.user_id == meta.user_id)
-        logging.warning(f"getting resourceuu{meta}")
 
         obj_orm = await session.scalar(stmt)
-        logging.warning(f"got resource from db: {obj_orm}")
         return obj_orm
 
     async def upsert(self, obj: K8sObject) -> None:

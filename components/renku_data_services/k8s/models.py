@@ -7,7 +7,7 @@ from typing import Any, NewType
 
 from box import Box
 from kr8s._api import Api
-from kr8s.objects import APIObject
+from kr8s.asyncio.objects import APIObject
 
 ClusterId = NewType("ClusterId", str)
 
