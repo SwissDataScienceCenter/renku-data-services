@@ -124,16 +124,11 @@ class RCloneValidator:
         provider = self.get_provider(configuration)
         return provider.get_private_fields(configuration)
 
-    async def get_doi_metadata(
-        self, configuration: Union["RCloneConfig", dict[str, Any]]
-    ) -> "RCloneDOIMetadata | None":
+    async def get_doi_metadata(self, configuration: Union["RCloneConfig", dict[str, Any]]) -> "RCloneDOIMetadata":
         """Returns the metadata of a DOI remote."""
-        try:
-            provider = self.get_provider(configuration)
-            if provider.name != "doi":
-                return None
-        except errors.ValidationError:
-            return None
+        provider = self.get_provider(configuration)
+        if provider.name != "doi":
+            raise errors.ValidationError(message="Configuration is not of type DOI")
 
         # Obscure configuration and transform if needed
         obscured_config = await self.obscure_config(configuration)
@@ -152,15 +147,15 @@ class RCloneValidator:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, _ = await proc.communicate()
+            stdout, stderr = await proc.communicate()
             success = proc.returncode == 0
         if success:
-            try:
-                metadata = RCloneDOIMetadata.model_validate_json(stdout.decode().strip())
-                return metadata
-            except ValidationError:
-                return None
-        return None
+            metadata = RCloneDOIMetadata.model_validate_json(stdout.decode().strip())
+            return metadata
+        raise errors.ValidationError(
+            message=f"Could not resolve DOI {configuration.get("doi", "<unknown>")} or the hosting platform is not supported",  # noqa E501
+            detail=f"Reason: {stderr.decode().strip()}",
+        )
 
     @staticmethod
     def transform_polybox_switchdriver_config(

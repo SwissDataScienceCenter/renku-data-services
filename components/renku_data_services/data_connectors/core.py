@@ -121,8 +121,6 @@ async def prevalidate_unsaved_global_data_connector(
         raise errors.ValidationError(message="Global data connectors must be read-only")
 
     rclone_metadata = await validator.get_doi_metadata(configuration=storage.configuration)
-    if rclone_metadata is None:
-        raise errors.ValidationError(message=f"Could not resolve DOI {storage.configuration.get("doi", "<unknown>")}")
 
     doi_uri = f"doi:{rclone_metadata.doi}"
     slug = base_models.Slug.from_name(doi_uri).value
