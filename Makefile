@@ -214,3 +214,11 @@ devcontainer_rebuild:
 .PHONY: devcontainer_exec
 devcontainer_exec: devcontainer_up
 	devcontainer exec --container-id renku-data-services_devcontainer-data_service-1 -- bash
+
+.PHONY: lock
+lock:
+	poetry lock $(ARGS)
+	poetry -C projects/renku_data_service lock $(ARGS)
+	poetry -C projects/secrets_storage lock $(ARGS)
+	poetry -C projects/background_jobs lock $(ARGS)
+	poetry -C projects/k8s_watcher lock $(ARGS)
