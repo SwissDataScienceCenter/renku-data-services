@@ -20,7 +20,6 @@ from renku_data_services.app_config import Config
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.data_api.app import register_all_handlers
-from renku_data_services.data_api.posthog import start_metrics_task
 from renku_data_services.data_api.prometheus import setup_app_metrics, setup_prometheus
 from renku_data_services.errors.errors import (
     ForbiddenError,
@@ -155,9 +154,6 @@ def create_app() -> Sanic:
         logger.info("starting events background job.")
         if getattr(app.ctx, "solr_reindex", False):
             app.manager.manage("SolrReindex", solr_reindex, {"app_name": app.name}, transient=True)
-
-        logger.info("Starting metrics background task.")
-        app.manager.manage("StartMetricsProcessing", start_metrics_task, {}, transient=True)
 
     return app
 

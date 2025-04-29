@@ -1,7 +1,7 @@
 """create staging table for metrics
 
 Revision ID: ee719a5fabf6
-Revises: 0c205e28f053
+Revises: 1d2f64a405aa
 Create Date: 2025-03-28 13:59:48.127757
 
 """
@@ -14,7 +14,7 @@ from renku_data_services.utils.sqlalchemy import ULIDType
 
 # revision identifiers, used by Alembic.
 revision = "ee719a5fabf6"
-down_revision = "0c205e28f053"
+down_revision = "1d2f64a405aa"
 branch_labels = ("metrics",)
 depends_on = None
 

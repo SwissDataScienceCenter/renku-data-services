@@ -140,19 +140,13 @@ class PosthogConfig:
     """Configuration for posthog."""
 
     enabled: bool
-    api_key: str
-    host: str
-    environment: str
 
     @classmethod
     def from_env(cls, prefix: str = "") -> "PosthogConfig":
         """Create posthog config from environment variables."""
         enabled = os.environ.get(f"{prefix}POSTHOG_ENABLED", "false").lower() == "true"
-        api_key = os.environ.get(f"{prefix}POSTHOG_API_KEY", "")
-        host = os.environ.get(f"{prefix}POSTHOG_HOST", "")
-        environment = os.environ.get(f"{prefix}POSTHOG_ENVIRONMENT", "development")
 
-        return cls(enabled, api_key, host, environment)
+        return cls(enabled)
 
 
 @dataclass
