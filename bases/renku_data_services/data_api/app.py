@@ -60,7 +60,7 @@ def _patched_validate_body(
         raise ValidationError(
             f"Invalid request body: {model.__name__}. Error: {e}",
             extra={"exception": e},
-        ) from None
+        ) from e
 
 
 def register_all_handlers(app: Sanic, config: Config) -> Sanic:
