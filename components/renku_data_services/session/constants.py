@@ -13,9 +13,9 @@ BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX: Final[str] = "harbor.dev.renku.ch/renku-build
 BUILD_OUTPUT_IMAGE_NAME: Final[str] = "renku-build"
 """The container image name created from Renku builds."""
 
-BUILD_BUILDER_IMAGE: Final[str] = "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/selector:1563a52"
+BUILD_BUILDER_IMAGE: Final[str] = "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/selector:0.0.2"
 
-BUILD_RUN_IMAGE: Final[str] = "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/base-image:0.0.1"
+BUILD_RUN_IMAGE: Final[str] = "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/base-image:0.0.2"
 
 BUILD_DEFAULT_BUILD_STRATEGY_NAME: Final[str] = "renku-buildpacks-v2"
 """The name of the default build strategy."""

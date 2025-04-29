@@ -15,10 +15,10 @@ spec:
       default: "bash"
     - name: run-image
       description: The image to use as the base for all session images built with this strategy
-      default: "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/base-image:0.0.1"
+      default: "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/base-image:0.0.2"
     - name: builder-image
       description: The buildpack builder image to use
-      default: paketobuildpacks/builder-jammy-buildpackless-full
+      default: "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/selector:0.0.2"
     - name: procfile
       description: |
         Define entrypoints
