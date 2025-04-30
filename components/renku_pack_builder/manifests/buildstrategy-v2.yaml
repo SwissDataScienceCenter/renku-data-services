@@ -8,11 +8,6 @@ spec:
     - name: platform-api-version
       description: The referenced version is the minimum version that all relevant buildpack implementations support.
       default: "0.12"
-    - name: process-type
-      description: |
-        The process to execute at launch time
-        https://buildpacks.io/docs/for-buildpack-authors/how-to/write-buildpacks/specify-launch-processes/
-      default: "bash"
     - name: run-image
       description: The image to use as the base for all session images built with this strategy
       default: "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/base-image:0.0.2"
@@ -31,8 +26,6 @@ spec:
           value: $(params.platform-api-version)
         - name: BP_RENKU_FRONTENDS
           value: $(params.frontend)
-        - name: PARAM_PROCESS_TYPE
-          value: $(params.process-type)
         - name: PARAM_SOURCE_CONTEXT
           value: $(params.shp-source-context)
         - name: PARAM_OUTPUT_IMAGE
@@ -77,7 +70,6 @@ spec:
           /cnb/lifecycle/creator \
             -app=${PARAM_SOURCE_CONTEXT} \
             -report=/tmp/report.toml \
-            -process-type=${PARAM_PROCESS_TYPE} \
             -run-image=${PARAM_RUN_IMAGE} \
             ${PARAM_OUTPUT_IMAGE}
       volumeMounts:
