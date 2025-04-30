@@ -19,30 +19,10 @@ spec:
     - name: builder-image
       description: The buildpack builder image to use
       default: "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/selector:0.0.2"
-    - name: procfile
-      description: |
-        Define entrypoints
-      default: |
-        bash: /bin/bash
     - name: frontend
       description: Which frontend should be used in the image. Either "jupyterlab" or "vscodium".
       default: vscodium
   steps:
-    - name: prep-procfile
-      image: alpine
-      imagePullPolicy: IfNotPresent
-      command: ["/bin/sh", "-c"]
-      args: ["echo \"$(params.procfile)\" > $(params.shp-source-context)/Procfile"]
-      volumeMounts:
-        - mountPath: /platform/env
-          name: platform-env
-      resources:
-        limits:
-          cpu: 500m
-          memory: 1Gi
-        requests:
-          cpu: 250m
-          memory: 65Mi
     - name: build-and-push
       image: $(params.builder-image)
       imagePullPolicy: IfNotPresent
