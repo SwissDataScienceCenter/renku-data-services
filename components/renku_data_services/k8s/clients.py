@@ -317,19 +317,19 @@ class K8SCachedClusterClient(K8sClusterClient):
 
     def __init__(self, cluster: Cluster, cache: K8sDbCache, kinds_to_cache: list[str]) -> None:
         super().__init__(cluster)
-        self.cache = cache
+        self.__cache = cache
         self.__kinds_to_cache = set(k.lower() for k in kinds_to_cache)
 
     async def create(self, obj: K8sObject) -> K8sObject:
         """Create the k8s object."""
         if obj.meta.singular in self.__kinds_to_cache:
-            await self.cache.upsert(obj)
+            await self.__cache.upsert(obj)
         try:
             obj = await super().create(obj)
         except:
             # if there was an error creating the k8s object, we delete it from the db again to not have ghost entries
             if obj.meta.singular in self.__kinds_to_cache:
-                await self.cache.delete(obj)
+                await self.__cache.delete(obj)
             raise
         return obj
 
@@ -337,19 +337,19 @@ class K8SCachedClusterClient(K8sClusterClient):
         """Patch a k8s object."""
         obj = await super().patch(meta, patch)
         if meta.singular in self.__kinds_to_cache:
-            await self.cache.upsert(obj)
+            await self.__cache.upsert(obj)
         return obj
 
     async def delete(self, meta: K8sObjectMeta) -> None:
         """Delete a k8s object."""
         await super().delete(meta)
         if meta.singular in self.__kinds_to_cache:
-            await self.cache.delete(meta)
+            await self.__cache.delete(meta)
 
     async def get(self, meta: K8sObjectMeta) -> K8sObject | None:
         """Get a specific k8s object, None is returned if the object does not exist."""
         if meta.singular in self.__kinds_to_cache:
-            res = await self.cache.get(meta)
+            res = await self.__cache.get(meta)
         else:
             res = await super().get(meta)
 
@@ -357,7 +357,7 @@ class K8SCachedClusterClient(K8sClusterClient):
 
     async def list(self, _filter: K8sObjectFilter) -> AsyncIterable[K8sObject]:
         """List all k8s objects."""
-        results = self.cache.list(_filter) if _filter.kind.lower() in self.__kinds_to_cache else super().list(_filter)
+        results = self.__cache.list(_filter) if _filter.kind.lower() in self.__kinds_to_cache else super().list(_filter)
         async for res in results:
             yield res
 

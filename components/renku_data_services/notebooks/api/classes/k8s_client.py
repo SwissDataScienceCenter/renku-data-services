@@ -57,12 +57,12 @@ class NotebookK8sClient(Generic[_SessionType]):
         session_api_version: str,
         username_label: str,
     ) -> None:
-        self.client = client
-        self.rp_repo = rp_repo
-        self.session_type: type[_SessionType] = session_type
-        self.session_kind = session_kind
-        self.session_api_version = session_api_version
-        self.username_label = username_label
+        self.__client = client
+        self.__rp_repo = rp_repo
+        self.__session_type: type[_SessionType] = session_type
+        self.__session_kind = session_kind
+        self.__session_api_version = session_api_version
+        self.__username_label = username_label
 
     @staticmethod
     def _get_statefulset_token_patches(sts: StatefulSet, renku_tokens: RenkuTokens) -> list[dict[str, str]]:
@@ -157,7 +157,7 @@ class NotebookK8sClient(Generic[_SessionType]):
         """Get a specific object, None is returned if it does not exist."""
         objects = [
             o
-            async for o in self.client.list(
+            async for o in self.__client.list(
                 K8sObjectFilter(
                     kind=kind,
                     version=version,
@@ -173,7 +173,7 @@ class NotebookK8sClient(Generic[_SessionType]):
 
     def namespace(self) -> str:
         """Current namespace of the main cluster."""
-        return self.client.cluster_by_id(self.cluster_id()).namespace
+        return self.__client.cluster_by_id(self.cluster_id()).namespace
 
     @staticmethod
     def cluster_id() -> ClusterId:
@@ -187,7 +187,7 @@ class NotebookK8sClient(Generic[_SessionType]):
 
         if class_id is not None:
             try:
-                rp = await self.rp_repo.get_resource_pool_from_class(api_user, class_id)
+                rp = await self.__rp_repo.get_resource_pool_from_class(api_user, class_id)
                 if rp.cluster is not None:
                     name = rp.cluster.config_name
             except errors.MissingResourceError:
@@ -197,29 +197,29 @@ class NotebookK8sClient(Generic[_SessionType]):
 
     async def cluster_by_class_id(self, class_id: int | None, api_user: APIUser) -> Cluster:
         """Return the cluster associated with the given resource class id."""
-        return self.client.cluster_by_name(await self.cluster_name_by_class_id(class_id, api_user))
+        return self.__client.cluster_by_name(await self.cluster_name_by_class_id(class_id, api_user))
 
     async def list_sessions(self, safe_username: str) -> list[_SessionType]:
         """Get a list of sessions that belong to a user."""
         return [
-            self.session_type.model_validate(s.manifest)
-            async for s in self.client.list(
+            self.__session_type.model_validate(s.manifest)
+            async for s in self.__client.list(
                 K8sObjectFilter(
-                    kind=self.session_kind,
-                    version=self.session_api_version,
+                    kind=self.__session_kind,
+                    version=self.__session_api_version,
                     user_id=safe_username,
-                    label_selector={self.username_label: safe_username},
+                    label_selector={self.__username_label: safe_username},
                 )
             )
         ]
 
     async def get_session(self, name: str, safe_username: str) -> _SessionType | None:
         """Get a specific session, None is returned if the session does not exist."""
-        session = await self._get(name, self.session_kind, self.session_api_version, safe_username)
+        session = await self._get(name, self.__session_kind, self.__session_api_version, safe_username)
 
         if session is None:
             return None
-        return self.session_type.model_validate(session.manifest)
+        return self.__session_type.model_validate(session.manifest)
 
     async def create_session(self, manifest: _SessionType, api_user: APIUser) -> _SessionType:
         """Launch a user session."""
@@ -235,14 +235,14 @@ class NotebookK8sClient(Generic[_SessionType]):
 
         cluster = await self.cluster_by_class_id(manifest.resource_class_id(), api_user)
 
-        manifest.metadata.labels[self.username_label] = api_user.id
-        session = await self.client.create(
+        manifest.metadata.labels[self.__username_label] = api_user.id
+        session = await self.__client.create(
             K8sObject(
                 name=session_name,
                 namespace=cluster.namespace,
                 cluster=cluster.id,
-                kind=self.session_kind,
-                version=self.session_api_version,
+                kind=self.__session_kind,
+                version=self.__session_api_version,
                 user_id=api_user.id,
                 manifest=Box(manifest.model_dump(exclude_none=True, mode="json")),
             )
@@ -253,30 +253,30 @@ class NotebookK8sClient(Generic[_SessionType]):
         def _check_ready(obj: K8sObject | None) -> bool:
             return obj is None or obj.manifest.metadata.get("creationTimestamp") is None
 
-        refreshed_session = await retry_with_exponential_backoff_async(_check_ready)(self.client.get)(session.meta)
+        refreshed_session = await retry_with_exponential_backoff_async(_check_ready)(self.__client.get)(session.meta)
         if refreshed_session is not None:
             session = refreshed_session
 
-        return self.session_type.model_validate(session.manifest)
+        return self.__session_type.model_validate(session.manifest)
 
     async def patch_session(
         self, session_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> _SessionType:
         """Patch a session."""
-        session = await self._get(session_name, self.session_kind, self.session_api_version, safe_username)
+        session = await self._get(session_name, self.__session_kind, self.__session_api_version, safe_username)
         if session is None:
             raise errors.MissingResourceError(
                 message=f"Cannot find session {session_name} for user {safe_username} in order to patch it."
             )
 
-        result = await self.client.patch(session, patch)
-        return self.session_type.model_validate(result.manifest)
+        result = await self.__client.patch(session, patch)
+        return self.__session_type.model_validate(result.manifest)
 
     async def delete_session(self, session_name: str, safe_username: str) -> None:
         """Delete the session."""
-        session = await self._get(session_name, self.session_kind, self.session_api_version, safe_username)
+        session = await self._get(session_name, self.__session_kind, self.__session_api_version, safe_username)
         if session is not None:
-            await self.client.delete(session)
+            await self.__client.delete(session)
 
     async def get_statefulset(self, session_name: str, safe_username: str) -> StatefulSet | None:
         """Return the statefulset for the given user session."""
@@ -284,7 +284,7 @@ class NotebookK8sClient(Generic[_SessionType]):
         if statefulset is None:
             return None
 
-        cluster = self.client.cluster_by_id(statefulset.cluster)
+        cluster = self.__client.cluster_by_id(statefulset.cluster)
         if cluster is None:
             return None
 
@@ -348,7 +348,7 @@ class NotebookK8sClient(Generic[_SessionType]):
         if result is None:
             return logs
 
-        cluster = self.client.cluster_by_id(result.cluster)
+        cluster = self.__client.cluster_by_id(result.cluster)
         if cluster is None:
             return logs
 
@@ -380,7 +380,7 @@ class NotebookK8sClient(Generic[_SessionType]):
         if result is None:
             return
 
-        cluster = self.client.cluster_by_id(result.cluster)
+        cluster = self.__client.cluster_by_id(result.cluster)
         if cluster is None:
             return
 
@@ -427,7 +427,7 @@ class NotebookK8sClient(Generic[_SessionType]):
             manifest=Box(sanitizer(secret)),
         )
         try:
-            result = await self.client.create(secret_obj)
+            result = await self.__client.create(secret_obj)
         except ServerError as err:
             if err.response and err.response.status_code == 409:
                 annotations: Box | None = secret_obj.manifest.metadata.get("annotations")
@@ -454,7 +454,7 @@ class NotebookK8sClient(Generic[_SessionType]):
                         "value": labels.to_dict() if labels is not None else {},
                     },
                 ]
-                result = await self.client.patch(secret_obj, patches)
+                result = await self.__client.patch(secret_obj, patches)
             else:
                 raise
         return V1Secret(
@@ -466,7 +466,7 @@ class NotebookK8sClient(Generic[_SessionType]):
 
     async def delete_secret(self, name: str) -> None:
         """Delete a secret."""
-        return await self.client.delete(
+        return await self.__client.delete(
             # TODO: LSA Does not break current code, but bad, as it may be different based on the cluster
             K8sObjectMeta(
                 name=name,
@@ -480,7 +480,7 @@ class NotebookK8sClient(Generic[_SessionType]):
     async def patch_secret(self, name: str, patch: dict[str, Any] | list[dict[str, Any]]) -> None:
         """Patch a secret."""
         # TODO: LSA Does not break current code, but bad, as it may be different based on the cluster
-        result = await self.client.get(
+        result = await self.__client.get(
             K8sObjectMeta(
                 name=name,
                 namespace=self.namespace(),
