@@ -282,7 +282,6 @@ class K8sClusterClient:
             raise errors.MissingResourceError(message=f"The k8s resource with metadata {meta} cannot be found.")
         patch_type = "json" if isinstance(patch, list) else None
         await obj.obj.patch(patch, type=patch_type)
-        # if refresh isn't called, status and timestamp will be blank
         await obj.obj.refresh()
 
         return meta.with_manifest(obj.obj.to_dict())
