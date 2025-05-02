@@ -3082,11 +3082,10 @@
     "Options": [
       {
         "Name": "doi",
+        "FieldName": "",
         "Help": "The DOI or the doi.org URL.",
-        "Provider": "",
         "Default": "",
         "Value": null,
-        "ShortOpt": "",
         "Hide": 0,
         "Required": true,
         "IsPassword": false,
@@ -3100,33 +3099,45 @@
       },
       {
         "Name": "provider",
+        "FieldName": "",
         "Help": "DOI provider.\n\nThe DOI provider can be set when rclone does not automatically recognize a supported DOI provider.",
-        "Provider": "",
         "Default": "",
         "Value": null,
         "Examples": [
           {
             "Value": "auto",
-            "Help": "Auto-detect provider",
-            "Provider": ""
+            "Help": "Auto-detect provider"
           },
           {
             "Value": "zenodo",
-            "Help": "Zenodo",
-            "Provider": ""
+            "Help": "Zenodo"
           },
           {
             "Value": "dataverse",
-            "Help": "Dataverse",
-            "Provider": ""
+            "Help": "Dataverse"
           },
           {
             "Value": "invenio",
-            "Help": "Invenio",
-            "Provider": ""
+            "Help": "Invenio"
           }
         ],
-        "ShortOpt": "",
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "",
+        "ValueStr": "",
+        "Type": "string"
+      },
+      {
+        "Name": "description",
+        "FieldName": "",
+        "Help": "Description of the remote.",
+        "Default": "",
+        "Value": null,
         "Hide": 0,
         "Required": false,
         "IsPassword": false,
@@ -3143,19 +3154,7 @@
       {
         "Name": "metadata",
         "Short": "Show metadata about the DOI.",
-        "Long": "This command returns the JSON representation of the DOI.\n\n    rclone backend medatadata doi: \n\nIt returns a JSON object representing the DOI.\n",
-        "Opts": null
-      },
-      {
-        "Name": "title",
-        "Short": "Show the DOI title if available.",
-        "Long": "This command returns the DOI title.\n\n    rclone backend title doi: \n\nIt returns a string representing the DOI title.\n",
-        "Opts": null
-      },
-      {
-        "Name": "provider",
-        "Short": "Show the DOI provider.",
-        "Long": "This command returns the DOI provider.\n\n    rclone backend provider doi: \n\nThis command can be used to update the rclone.conf file for faster operations with the doi backend\nas auto-detection for the provider can be avoided.\n\nIt returns a string representing the DOI provider.\n",
+        "Long": "This command returns a JSON object with some information about the DOI.\n\n    rclone backend medatadata doi: \n\nIt returns a JSON object representing metadata about the DOI.\n",
         "Opts": null
       },
       {
