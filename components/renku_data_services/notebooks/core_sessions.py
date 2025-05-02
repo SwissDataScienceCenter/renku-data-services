@@ -230,7 +230,7 @@ async def get_data_sources(
             mount_folder_try = f"{mount_folder}-{len(mount_points[mount_folder])}"
             if mount_folder_try not in mount_points:
                 logger.warning(
-                    f"Re-assigning data connector {str(dc.data_connector.id)} to mount point '{mount_folder}'"
+                    f"Re-assigning data connector {str(dc.data_connector.id)} to mount point '{mount_folder_try}'"
                 )
                 # We also keep track of the original mount point here
                 folders = mount_points[mount_folder]
@@ -242,7 +242,7 @@ async def get_data_sources(
                 mount_folder_try = f"{mount_folder}-{suffix}"
                 if mount_folder_try not in mount_points:
                     logger.warning(
-                        f"Re-assigning data connector {str(dc.data_connector.id)} to mount point '{mount_folder}'"
+                        f"Re-assigning data connector {str(dc.data_connector.id)} to mount point '{mount_folder_try}'"
                     )
                     # We also keep track of the original mount point here
                     folders = mount_points[mount_folder]
@@ -258,9 +258,7 @@ async def get_data_sources(
         mount_points[mount_folder] = folders
         dcs[str(dc.data_connector.id)] = RCloneStorage(
             source_path=dc.data_connector.storage.source_path,
-            mount_folder=dc.data_connector.storage.target_path
-            if PurePosixPath(dc.data_connector.storage.target_path).is_absolute()
-            else (work_dir / dc.data_connector.storage.target_path).as_posix(),
+            mount_folder=mount_folder,
             configuration=dc.data_connector.storage.configuration,
             readonly=dc.data_connector.storage.readonly,
             name=dc.data_connector.name,
