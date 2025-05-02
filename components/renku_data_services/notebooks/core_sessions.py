@@ -219,13 +219,78 @@ async def get_data_sources(
     secrets: list[ExtraSecret] = []
     dcs: dict[str, RCloneStorage] = {}
     dcs_secrets: dict[str, list[DataConnectorSecret]] = {}
-    mount_points: dict[str, list[ULID]] = {}
+    # mount_points: dict[str, list[ULID]] = {}
     async for dc in data_connectors_stream:
         mount_folder = (
             dc.data_connector.storage.target_path
             if PurePosixPath(dc.data_connector.storage.target_path).is_absolute()
             else (work_dir / dc.data_connector.storage.target_path).as_posix()
         )
+        # if mount_folder in mount_points:
+        #     mount_folder_try = f"{mount_folder}-{len(mount_points[mount_folder])}"
+        #     if mount_folder_try not in mount_points:
+        #         logger.warning(
+        #             f"Re-assigning data connector {str(dc.data_connector.id)} to mount point '{mount_folder_try}'"
+        #         )
+        #         # We also keep track of the original mount point here
+        #         folders = mount_points[mount_folder]
+        #         folders.append(dc.data_connector.id)
+        #         mount_points[mount_folder] = folders
+        #         mount_folder = mount_folder_try
+        #     else:
+        #         suffix = "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(4)])  # nosec B311 # noqa E501
+        #         mount_folder_try = f"{mount_folder}-{suffix}"
+        #         if mount_folder_try not in mount_points:
+        #             logger.warning(
+        #                 f"Re-assigning data connector {str(dc.data_connector.id)} to mount point '{mount_folder_try}'"
+        #             )
+        #             # We also keep track of the original mount point here
+        #             folders = mount_points[mount_folder]
+        #             folders.append(dc.data_connector.id)
+        #             mount_points[mount_folder] = folders
+        #             mount_folder = mount_folder_try
+        #         else:
+        #             raise errors.ValidationError(
+        #                 message=f"Could not start session because two or more data connectors share the same mount point '{mount_folder}'"  # noqa E501
+        #             )
+        # folders = mount_points.get(mount_folder, [])
+        # folders.append(dc.data_connector.id)
+        # mount_points[mount_folder] = folders
+        dcs[str(dc.data_connector.id)] = RCloneStorage(
+            source_path=dc.data_connector.storage.source_path,
+            mount_folder=mount_folder,
+            configuration=dc.data_connector.storage.configuration,
+            readonly=dc.data_connector.storage.readonly,
+            name=dc.data_connector.name,
+            secrets={str(secret.secret_id): secret.name for secret in dc.secrets},
+            storage_class=nb_config.cloud_storage.storage_class,
+        )
+        if len(dc.secrets) > 0:
+            dcs_secrets[str(dc.data_connector.id)] = dc.secrets
+    # logger.warning(f"mount_points = {mount_points}")
+    if isinstance(user, AuthenticatedAPIUser) and len(dcs_secrets) > 0:
+        secret_key = await user_repo.get_or_create_user_secret_key(user)
+        user_secret_key = get_encryption_key(secret_key.encode(), user.id.encode()).decode("utf-8")
+    # NOTE: Check the cloud storage overrides from the request body and if any match
+    # then overwrite the projects cloud storages
+    # NOTE: Cloud storages in the session launch request body that are not from the DB will cause a 404 error
+    # NOTE: Overriding the configuration when a saved secret is there will cause a 422 error
+
+    mount_points: dict[str, list[ULID]] = {}
+
+    for csr in cloud_storage_overrides:
+        csr_id = csr.storage_id
+        if csr_id not in dcs:
+            raise errors.MissingResourceError(
+                message=f"You have requested a cloud storage with ID {csr_id} which does not exist "
+                "or you dont have access to.",
+                quiet=True,
+            )
+        if csr.target_path is not None and not PurePosixPath(csr.target_path).is_absolute():
+            csr.target_path = (work_dir / csr.target_path).as_posix()
+        dcs[csr_id] = dcs[csr_id].with_override(csr)
+
+        mount_folder = dcs[csr_id].mount_folder
         if mount_folder in mount_points:
             mount_folder_try = f"{mount_folder}-{len(mount_points[mount_folder])}"
             if mount_folder_try not in mount_points:
@@ -256,36 +321,13 @@ async def get_data_sources(
         folders = mount_points.get(mount_folder, [])
         folders.append(dc.data_connector.id)
         mount_points[mount_folder] = folders
-        dcs[str(dc.data_connector.id)] = RCloneStorage(
-            source_path=dc.data_connector.storage.source_path,
-            mount_folder=mount_folder,
-            configuration=dc.data_connector.storage.configuration,
-            readonly=dc.data_connector.storage.readonly,
-            name=dc.data_connector.name,
-            secrets={str(secret.secret_id): secret.name for secret in dc.secrets},
-            storage_class=nb_config.cloud_storage.storage_class,
+
+        dcs[csr_id] = dcs[csr_id].with_override(
+            override=apispec.SessionCloudStoragePost(storage_id=csr_id, target_path=mount_folder)
         )
-        if len(dc.secrets) > 0:
-            dcs_secrets[str(dc.data_connector.id)] = dc.secrets
+
     logger.warning(f"mount_points = {mount_points}")
-    if isinstance(user, AuthenticatedAPIUser) and len(dcs_secrets) > 0:
-        secret_key = await user_repo.get_or_create_user_secret_key(user)
-        user_secret_key = get_encryption_key(secret_key.encode(), user.id.encode()).decode("utf-8")
-    # NOTE: Check the cloud storage overrides from the request body and if any match
-    # then overwrite the projects cloud storages
-    # NOTE: Cloud storages in the session launch request body that are not from the DB will cause a 404 error
-    # NOTE: Overriding the configuration when a saved secret is there will cause a 422 error
-    for csr in cloud_storage_overrides:
-        csr_id = csr.storage_id
-        if csr_id not in dcs:
-            raise errors.MissingResourceError(
-                message=f"You have requested a cloud storage with ID {csr_id} which does not exist "
-                "or you dont have access to.",
-                quiet=True,
-            )
-        if csr.target_path is not None and not PurePosixPath(csr.target_path).is_absolute():
-            csr.target_path = (work_dir / csr.target_path).as_posix()
-        dcs[csr_id] = dcs[csr_id].with_override(csr)
+
     for cs_id, cs in dcs.items():
         secret_name = f"{server_name}-ds-{cs_id.lower()}"
         secret_key_needed = len(dcs_secrets.get(cs_id, [])) > 0
