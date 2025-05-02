@@ -3,6 +3,8 @@
 import base64
 import json
 import os
+import random
+import string
 from collections.abc import AsyncIterator
 from datetime import timedelta
 from pathlib import PurePosixPath
@@ -13,6 +15,7 @@ import httpx
 from kubernetes.client import V1ObjectMeta, V1Secret
 from kubernetes.utils.duration import format_duration
 from sanic import Request
+from sanic.log import logger
 from toml import dumps
 from ulid import ULID
 from yaml import safe_dump
@@ -224,10 +227,33 @@ async def get_data_sources(
             else (work_dir / dc.data_connector.storage.target_path).as_posix()
         )
         if mount_folder in mount_points:
-            raise errors.ValidationError(
-                message=f"Could not start session because of mount point clash: {mount_folder}"
-            )
-        folders = mount_points.get(str(dc.data_connector.id), [])
+            mount_folder_try = f"{mount_folder}-{len(mount_points[mount_folder])}"
+            if mount_folder_try not in mount_points:
+                logger.warning(
+                    f"Re-assigning data connector {str(dc.data_connector.id)} to mount point '{mount_folder}'"
+                )
+                # We also keep track of the original mount point here
+                folders = mount_points[mount_folder]
+                folders.append(dc.data_connector.id)
+                mount_points[mount_folder] = folders
+                mount_folder = mount_folder_try
+            else:
+                suffix = "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(4)])  # nosec B311
+                mount_folder_try = f"{mount_folder}-{suffix}"
+                if mount_folder_try not in mount_points:
+                    logger.warning(
+                        f"Re-assigning data connector {str(dc.data_connector.id)} to mount point '{mount_folder}'"
+                    )
+                    # We also keep track of the original mount point here
+                    folders = mount_points[mount_folder]
+                    folders.append(dc.data_connector.id)
+                    mount_points[mount_folder] = folders
+                    mount_folder = mount_folder_try
+                else:
+                    raise errors.ValidationError(
+                        message=f"Could not start session because two or more data connectors share the same mount point '{mount_folder}'"  # noqa E501
+                    )
+        folders = mount_points.get(mount_folder, [])
         folders.append(dc.data_connector.id)
         mount_points[mount_folder] = folders
         dcs[str(dc.data_connector.id)] = RCloneStorage(
@@ -243,6 +269,7 @@ async def get_data_sources(
         )
         if len(dc.secrets) > 0:
             dcs_secrets[str(dc.data_connector.id)] = dc.secrets
+    logger.warning(f"mount_points = {mount_points}")
     if isinstance(user, AuthenticatedAPIUser) and len(dcs_secrets) > 0:
         secret_key = await user_repo.get_or_create_user_secret_key(user)
         user_secret_key = get_encryption_key(secret_key.encode(), user.id.encode()).decode("utf-8")
