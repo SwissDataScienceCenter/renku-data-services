@@ -1,5 +1,5 @@
 ARG RCLONE_IMAGE_REPOSITORY="ghcr.io/swissdatasciencecenter/rclone"
-ARG RCLONE_IMAGE_TAG="sha-a1647a7"
+ARG RCLONE_IMAGE_TAG="sha-7975d7a"
 FROM ${RCLONE_IMAGE_REPOSITORY}:${RCLONE_IMAGE_TAG} AS rclone
 
 FROM python:3.13-bookworm AS builder
