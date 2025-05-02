@@ -14,6 +14,7 @@ from kubernetes.client import V1ObjectMeta, V1Secret
 from kubernetes.utils.duration import format_duration
 from sanic import Request
 from toml import dumps
+from ulid import ULID
 from yaml import safe_dump
 
 from renku_data_services.base_models import APIUser
@@ -215,7 +216,7 @@ async def get_data_sources(
     secrets: list[ExtraSecret] = []
     dcs: dict[str, RCloneStorage] = {}
     dcs_secrets: dict[str, list[DataConnectorSecret]] = {}
-    mount_points: dict[str, list[str]] = {}
+    mount_points: dict[str, list[ULID]] = {}
     async for dc in data_connectors_stream:
         mount_folder = (
             dc.data_connector.storage.target_path
@@ -227,8 +228,8 @@ async def get_data_sources(
                 message=f"Could not start session because of mount point clash: {mount_folder}"
             )
         folders = mount_points.get(str(dc.data_connector.id), [])
-        folders.append(mount_folder)
-        mount_points[str(dc.data_connector.id)] = folders
+        folders.append(dc.data_connector.id)
+        mount_points[mount_folder] = folders
         dcs[str(dc.data_connector.id)] = RCloneStorage(
             source_path=dc.data_connector.storage.source_path,
             mount_folder=dc.data_connector.storage.target_path
