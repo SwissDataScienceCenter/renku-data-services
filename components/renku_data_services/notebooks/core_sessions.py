@@ -215,7 +215,20 @@ async def get_data_sources(
     secrets: list[ExtraSecret] = []
     dcs: dict[str, RCloneStorage] = {}
     dcs_secrets: dict[str, list[DataConnectorSecret]] = {}
+    mount_points: dict[str, list[str]] = {}
     async for dc in data_connectors_stream:
+        mount_folder = (
+            dc.data_connector.storage.target_path
+            if PurePosixPath(dc.data_connector.storage.target_path).is_absolute()
+            else (work_dir / dc.data_connector.storage.target_path).as_posix()
+        )
+        if mount_folder in mount_points:
+            raise errors.ValidationError(
+                message=f"Could not start session because of mount point clash: {mount_folder}"
+            )
+        folders = mount_points.get(str(dc.data_connector.id), [])
+        folders.append(mount_folder)
+        mount_points[str(dc.data_connector.id)] = folders
         dcs[str(dc.data_connector.id)] = RCloneStorage(
             source_path=dc.data_connector.storage.source_path,
             mount_folder=dc.data_connector.storage.target_path
