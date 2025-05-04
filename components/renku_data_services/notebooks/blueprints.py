@@ -53,6 +53,8 @@ from renku_data_services.notebooks.crs import (
     Ingress,
     InitContainer,
     Metadata,
+    Quantity,
+    QuantityInt,
     ReconcileStrategy,
     Session,
     SessionEnvItem,
@@ -359,9 +361,21 @@ class NotebooksNewBP(CustomBlueprint):
                 "renku.io/resource_class_id": str(body.resource_class_id or default_resource_class.id),
             }
             if isinstance(user, AuthenticatedAPIUser):
-                auth_secret = await get_auth_secret_authenticated(self.nb_config, user, server_name)
+                auth_secret = get_auth_secret_authenticated(self.nb_config, user, server_name)
+                authentication = Authentication(
+                    enabled=True,
+                    type=AuthenticationType.oidc,
+                    secretRef=auth_secret.key_ref(),
+                    extraVolumeMounts=[auth_secret.volume_mount] if auth_secret.volume_mount else [],
+                )
             else:
-                auth_secret = await get_auth_secret_anonymous(self.nb_config, server_name, request)
+                auth_secret = get_auth_secret_anonymous(self.nb_config, server_name, request)
+                authentication = Authentication(
+                    enabled=True,
+                    type=AuthenticationType.token,
+                    secretRef=auth_secret.key_ref("auth"),
+                    extraVolumeMounts=[auth_secret.volume_mount] if auth_secret.volume_mount else [],
+                )
             if auth_secret.volume:
                 extra_volumes.append(auth_secret.volume)
 
@@ -411,7 +425,7 @@ class NotebooksNewBP(CustomBlueprint):
                         port=environment.port,
                         storage=Storage(
                             className=self.nb_config.sessions.storage.pvs_storage_class,
-                            size=str(body.disk_storage) + "G",
+                            size=Quantity(str(body.disk_storage) + "G"),
                             mountPath=storage_mount.as_posix(),
                         ),
                         workingDir=work_dir.as_posix(),
@@ -421,7 +435,8 @@ class NotebooksNewBP(CustomBlueprint):
                         extraVolumeMounts=extra_volume_mounts,
                         command=environment.command,
                         args=environment.args,
-                        shmSize="1G",
+                        shmSize=Quantity("1G"),
+                        stripURLPath=environment.strip_path_prefix,
                         env=env,
                     ),
                     ingress=Ingress(
@@ -437,14 +452,7 @@ class NotebooksNewBP(CustomBlueprint):
                     initContainers=extra_init_containers,
                     extraVolumes=extra_volumes,
                     culling=get_culling(resource_pool, self.nb_config),
-                    authentication=Authentication(
-                        enabled=True,
-                        type=AuthenticationType.oauth2proxy
-                        if isinstance(user, AuthenticatedAPIUser)
-                        else AuthenticationType.token,
-                        secretRef=auth_secret.key_ref("auth"),
-                        extraVolumeMounts=[auth_secret.volume_mount] if auth_secret.volume_mount else [],
-                    ),
+                    authentication=authentication,
                     dataSources=data_sources,
                     tolerations=tolerations_from_resource_class(
                         resource_class, self.nb_config.sessions.tolerations_model
