@@ -14,7 +14,6 @@ from renku_data_services.base_api.auth import authenticate, authenticate_2
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser, Authenticator
 from renku_data_services.crc.db import ResourcePoolRepository
-from renku_data_services.crc.models import GpuKind
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
     DataConnectorSecretRepository,
@@ -34,10 +33,13 @@ from renku_data_services.notebooks.core_sessions import (
     get_extra_containers,
     get_extra_init_containers,
     get_gitlab_image_pull_secret,
+    get_launcher_env_variables,
     patch_session,
     request_dc_secret_creation,
     request_session_secret_creation,
     requires_image_pull_secret,
+    resources_from_resource_class,
+    verify_launcher_env_variable_overrides,
 )
 from renku_data_services.notebooks.crs import (
     AmaltheaSessionSpec,
@@ -54,7 +56,6 @@ from renku_data_services.notebooks.crs import (
     Quantity,
     QuantityInt,
     ReconcileStrategy,
-    Resources,
     Session,
     SessionEnvItem,
     Storage,
@@ -359,15 +360,6 @@ class NotebooksNewBP(CustomBlueprint):
                 "renku.io/launcher_id": body.launcher_id,
                 "renku.io/resource_class_id": str(body.resource_class_id or default_resource_class.id),
             }
-            requests: dict[str, Quantity | QuantityInt] = {
-                "cpu": Quantity(str(round(resource_class.cpu * 1000)) + "m"),
-                "memory": Quantity(f"{resource_class.memory}Gi"),
-            }
-            limits: dict[str, Quantity | QuantityInt] = {"memory": Quantity(f"{resource_class.memory}Gi")}
-            if resource_class.gpu > 0:
-                gpu_name = GpuKind.NVIDIA.value + "/gpu"
-                requests[gpu_name] = QuantityInt(resource_class.gpu)
-                limits[gpu_name] = QuantityInt(resource_class.gpu)
             if isinstance(user, AuthenticatedAPIUser):
                 auth_secret = get_auth_secret_authenticated(self.nb_config, user, server_name)
                 authentication = Authentication(
@@ -401,6 +393,21 @@ class NotebooksNewBP(CustomBlueprint):
 
             secrets_to_create.append(auth_secret)
 
+            # Raise an error if there are invalid environment variables in the request body
+            verify_launcher_env_variable_overrides(launcher, body)
+            env = [
+                SessionEnvItem(name="RENKU_BASE_URL_PATH", value=base_server_path),
+                SessionEnvItem(name="RENKU_BASE_URL", value=base_server_url),
+                SessionEnvItem(name="RENKU_MOUNT_DIR", value=storage_mount.as_posix()),
+                SessionEnvItem(name="RENKU_SESSION", value="1"),
+                SessionEnvItem(name="RENKU_SESSION_IP", value="0.0.0.0"),  # nosec B104
+                SessionEnvItem(name="RENKU_SESSION_PORT", value=f"{environment.port}"),
+                SessionEnvItem(name="RENKU_WORKING_DIR", value=work_dir.as_posix()),
+            ]
+            launcher_env_variables = get_launcher_env_variables(launcher, body)
+            if launcher_env_variables:
+                env.extend(launcher_env_variables)
+
             manifest = AmaltheaSessionV1Alpha1(
                 metadata=Metadata(name=server_name, annotations=annotations),
                 spec=AmaltheaSessionSpec(
@@ -424,21 +431,13 @@ class NotebooksNewBP(CustomBlueprint):
                         workingDir=work_dir.as_posix(),
                         runAsUser=environment.uid,
                         runAsGroup=environment.gid,
-                        resources=Resources(requests=requests, limits=limits if len(limits) > 0 else None),
+                        resources=resources_from_resource_class(resource_class),
                         extraVolumeMounts=extra_volume_mounts,
                         command=environment.command,
                         args=environment.args,
                         shmSize=Quantity("1G"),
                         stripURLPath=environment.strip_path_prefix,
-                        env=[
-                            SessionEnvItem(name="RENKU_BASE_URL_PATH", value=base_server_path),
-                            SessionEnvItem(name="RENKU_BASE_URL", value=base_server_url),
-                            SessionEnvItem(name="RENKU_MOUNT_DIR", value=storage_mount.as_posix()),
-                            SessionEnvItem(name="RENKU_SESSION", value="1"),
-                            SessionEnvItem(name="RENKU_SESSION_IP", value="0.0.0.0"),  # nosec B104
-                            SessionEnvItem(name="RENKU_SESSION_PORT", value=f"{environment.port}"),
-                            SessionEnvItem(name="RENKU_WORKING_DIR", value=work_dir.as_posix()),
-                        ],
+                        env=env,
                     ),
                     ingress=Ingress(
                         host=self.nb_config.sessions.ingress.host,

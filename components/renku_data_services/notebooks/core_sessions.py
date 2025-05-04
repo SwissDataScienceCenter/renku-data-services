@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 import httpx
 from kubernetes.client import V1ObjectMeta, V1Secret
+from kubernetes.utils.duration import format_duration
 from sanic import Request
 from yaml import safe_dump
 
@@ -21,6 +22,7 @@ from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec
 from renku_data_services.notebooks.api.amalthea_patches import git_proxy, init_containers
 from renku_data_services.notebooks.api.classes.image import Image
+from renku_data_services.notebooks.api.classes.k8s_client import sanitize_for_serialization
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_data_services.notebooks.config import NotebooksConfig
@@ -38,6 +40,9 @@ from renku_data_services.notebooks.crs import (
     Quantity,
     QuantityInt,
     Resources,
+    SecretAsVolume,
+    SecretAsVolumeItem,
+    SessionEnvItem,
     State,
 )
 from renku_data_services.notebooks.models import ExtraSecret
@@ -47,6 +52,7 @@ from renku_data_services.notebooks.utils import (
 )
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.models import Project, SessionSecret
+from renku_data_services.session.models import SessionLauncher
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.cryptography import get_encryption_key
 
@@ -63,8 +69,8 @@ async def get_extra_init_containers(
 ) -> tuple[list[InitContainer], list[ExtraVolume]]:
     """Get all extra init containers that should be added to an amalthea session."""
     cert_init, cert_vols = init_containers.certificates_container(nb_config)
-    session_init_containers = [InitContainer.model_validate(nb_config.k8s_v2_client.sanitize(cert_init))]
-    extra_volumes = [ExtraVolume.model_validate(nb_config.k8s_v2_client.sanitize(volume)) for volume in cert_vols]
+    session_init_containers = [InitContainer.model_validate(sanitize_for_serialization(cert_init))]
+    extra_volumes = [ExtraVolume.model_validate(sanitize_for_serialization(volume)) for volume in cert_vols]
     git_clone = await init_containers.git_clone_container_v2(
         user=user,
         config=nb_config,
@@ -92,7 +98,7 @@ async def get_extra_containers(
         user=user, config=nb_config, repositories=repositories, git_providers=git_providers
     )
     if git_proxy_container:
-        conts.append(ExtraContainer.model_validate(nb_config.k8s_v2_client.sanitize(git_proxy_container)))
+        conts.append(ExtraContainer.model_validate(sanitize_for_serialization(git_proxy_container)))
     return conts
 
 
@@ -277,6 +283,29 @@ async def request_dc_secret_creation(
                 )
 
 
+def get_launcher_env_variables(launcher: SessionLauncher, body: apispec.SessionPostRequest) -> list[SessionEnvItem]:
+    """Get the environment variables from the launcher, with overrides from the request."""
+    output: list[SessionEnvItem] = []
+    env_overrides = {i.name: i.value for i in body.env_variable_overrides or []}
+    for env in launcher.env_variables or []:
+        if env.name in env_overrides:
+            output.append(SessionEnvItem(name=env.name, value=env_overrides[env.name]))
+        else:
+            output.append(SessionEnvItem(name=env.name, value=env.value))
+    return output
+
+
+def verify_launcher_env_variable_overrides(launcher: SessionLauncher, body: apispec.SessionPostRequest) -> None:
+    """Raise an error if there are env variables that are not defined in the launcher."""
+    env_overrides = {i.name: i.value for i in body.env_variable_overrides or []}
+    known_env_names = {i.name for i in launcher.env_variables or []}
+    unknown_env_names = set(env_overrides.keys()) - known_env_names
+    if unknown_env_names:
+        message = f"""The following environment variables are not defined in the session launcher: {unknown_env_names}.
+            Please remove them from the launch request or add them to the session launcher."""
+        raise errors.ValidationError(message=message)
+
+
 async def request_session_secret_creation(
     user: AuthenticatedAPIUser | AnonymousAPIUser,
     nb_config: NotebooksConfig,
@@ -326,7 +355,7 @@ def resources_from_resource_class(resource_class: ResourceClass) -> Resources:
         "cpu": Quantity(str(round(resource_class.cpu * 1000)) + "m"),
         "memory": Quantity(f"{resource_class.memory}Gi"),
     }
-    limits: MutableMapping[str, Quantity | QuantityInt] = {}
+    limits: MutableMapping[str, Quantity | QuantityInt] = {"memory": Quantity(f"{resource_class.memory}Gi")}
     if resource_class.gpu > 0:
         gpu_name = GpuKind.NVIDIA.value + "/gpu"
         requests[gpu_name] = QuantityInt(resource_class.gpu)

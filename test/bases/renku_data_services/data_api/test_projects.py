@@ -7,12 +7,13 @@ from typing import Any
 
 import pytest
 from httpx import Response
+from sanic_testing.testing import SanicASGITestClient
 from sqlalchemy import select
 from syrupy.filters import props
 from ulid import ULID
 
-from components.renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
 from renku_data_services.app_config.config import Config
+from renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
 from renku_data_services.message_queue.avro_models.io.renku.events.v2.member_role import MemberRole
 from renku_data_services.message_queue.models import deserialize_binary
 from renku_data_services.users.models import UserInfo
@@ -1349,6 +1350,7 @@ async def test_project_copy_creates_new_custom_environment_instance(
         },
         resource_class_id=resource_pool["classes"][0]["id"],
         disk_storage=42,
+        env_variables=[{"name": "KEY_NUMBER_1", "value": "a value"}],
     )
 
     await asyncio.sleep(1)
@@ -1482,6 +1484,49 @@ async def test_project_copy_includes_data_connector_links(
     assert data_connector_links[0]["project_id"] == data_connector_links[1]["project_id"] == project_id
     # NOTE: Check that new data connector links are created
     assert {d["id"] for d in data_connector_links} != {link_1["id"], link_2["id"]}
+
+
+@pytest.mark.asyncio
+async def test_project_copy_includes_public_data_connector_links_owned_by_others(
+    sanic_client: SanicASGITestClient,
+    user_headers: dict[str, str],
+    regular_user: UserInfo,
+    member_1_headers: dict[str, str],
+    member_1_user: UserInfo,
+    member_2_headers: dict[str, str],
+    member_2_user: UserInfo,
+    create_project,
+    create_project_copy,
+    create_data_connector,
+    link_data_connector,
+) -> None:
+    project = await create_project("Project", visibility="public")
+    project_id = project["id"]
+    dc1 = await create_data_connector("dc1", member_1_user, member_1_headers, visibility="public")
+    dc2 = await create_data_connector("dc2", member_1_user, member_1_headers, visibility="public")
+    assert "id" in dc1
+    assert "id" in dc2
+    link1_res = await link_data_connector(project_id, dc1["id"], user_headers)
+    link2_res = await link_data_connector(project_id, dc2["id"], user_headers)
+    link1 = link1_res.json
+    link2 = link2_res.json
+
+    copy_project = await create_project_copy(
+        project_id,
+        member_2_user.namespace.path.serialize(),
+        "Copy Project",
+        user=member_2_user,
+    )
+    project_copy_id = copy_project["id"]
+    _, response = await sanic_client.get(
+        f"/api/data/projects/{project_copy_id}/data_connector_links", headers=member_2_headers
+    )
+    assert response.status_code == 200, response.text
+    data_connector_links = response.json
+    assert {d["data_connector_id"] for d in data_connector_links} == {dc1["id"], dc2["id"]}
+    assert data_connector_links[0]["project_id"] == data_connector_links[1]["project_id"] == project_copy_id
+    # NOTE: Check that new data connector links are created
+    assert {d["id"] for d in data_connector_links} != {link1["id"], link2["id"]}
 
 
 @pytest.mark.asyncio

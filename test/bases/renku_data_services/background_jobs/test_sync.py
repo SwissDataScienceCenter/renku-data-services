@@ -19,11 +19,11 @@ from authzed.api.v1 import (
 )
 from ulid import ULID
 
-from bases.renku_data_services.background_jobs.config import SyncConfig
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.authz.authz import Authz, ResourceType, _AuthzConverter, _Relation
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.authz.models import Role, UnsavedMember
+from renku_data_services.background_jobs.config import SyncConfig
 from renku_data_services.background_jobs.core import (
     bootstrap_user_namespaces,
     fix_mismatched_project_namespace_ids,
@@ -91,6 +91,7 @@ def get_app_configs(db_instance: DBConfig, authz_instance: AuthzConfig):
             authz=Authz(authz_instance),
             group_repo=group_repo,
             project_repo=project_repo,
+            search_updates_repo=search_updates_repo,
         )
         data_connector_migration_tool = DataConnectorMigrationTool(
             session_maker=db_instance.async_session_maker,

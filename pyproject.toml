@@ -76,6 +76,7 @@ cryptography = "^44.0.1"
 # see https://github.com/sanic-org/sanic/issues/2828 for setuptools dependency, remove when not needed anymore
 setuptools = { version = "^75.8.2" }
 kr8s = "^0.18.1"
+python-box = "^7.0.1"
 werkzeug = "^3.1.3"
 toml = "^0.10.2"
 aiofiles = "^24.1.0"
@@ -84,6 +85,8 @@ aiofiles = "^24.1.0"
 # Detected incompatible Protobuf Gencode/Runtime versions when loading authzed/api/v1/core.proto: gencode 5.28.2 runtime 5.27.3.
 protobuf = "^5.29.3"
 poetry = "^2.1.1"
+parsy = "^2.1"
+sanic-ext = "^24.12.0"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.8.3"
@@ -146,6 +149,8 @@ select = [
   "UP",
   # flake8-simplify
   "SIM",
+  # unused-noqa https://docs.astral.sh/ruff/rules/unused-noqa/
+  "RUF100",
 ]
 ignore = [
   "D105",
@@ -240,6 +245,7 @@ module = [
   "renku_data_services.notebooks.cr_jupyter_server",
   "renku_data_services.platform.apispec",
   "renku_data_services.message_queue.apispec",
+  "renku_data_services.search.apispec",
 ]
 ignore_errors = true
 
@@ -264,6 +270,7 @@ module = [
   "urllib3.*",
   "escapism.*",
   "kr8s.*",
+  "parsy.*",
 ]
 ignore_missing_imports = true
 

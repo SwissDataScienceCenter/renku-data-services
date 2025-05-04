@@ -79,6 +79,7 @@ class SyncConfig:
             authz=Authz(authz_config),
             project_repo=project_repo,
             group_repo=group_repo,
+            search_updates_repo=search_updates_repo,
         )
         data_connector_migration_tool = DataConnectorMigrationTool(
             session_maker=session_maker,

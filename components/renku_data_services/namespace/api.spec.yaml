@@ -365,7 +365,7 @@ components:
         name:
           $ref: "#/components/schemas/NamespaceName"
         slug:
-          $ref: "#/components/schemas/Slug"
+          $ref: "#/components/schemas/SlugResponse"
         creation_date:
           $ref: "#/components/schemas/CreationDate"
         created_by:
@@ -435,13 +435,11 @@ components:
       # - cannot contain uppercase characters
       pattern: '^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-z0-9][a-z0-9\-_.]*$'
       example: "a-slug-example"
-    OneOrTwoSlugs:
-      description: A command-line/url friendly name for a single slug or two slugs separated by /
+    SlugResponse:
+      description: A command-line/url friendly name for a namespace
       type: string
       minLength: 1
-      maxLength: 200
-      pattern: '^(?!.*\.git$|.*\.atom$|.*[\-._][\-._].*)[a-z0-9][a-z0-9\-_.]*(?<!\.git)(?<!\.atom)(?:/[a-z0-9][a-z0-9\-_.]*){0,1}$'
-      example: "user1/project-1"
+      example: "a-slug-example"
     CreationDate:
       description: The date and time the resource was created (in UTC and ISO-8601 format)
       type: string
@@ -546,7 +544,7 @@ components:
         name:
           $ref: "#/components/schemas/NamespaceName"
         slug:
-          $ref: "#/components/schemas/Slug"
+          $ref: "#/components/schemas/SlugResponse"
         creation_date:
           $ref: "#/components/schemas/CreationDate"
         created_by:
@@ -554,7 +552,7 @@ components:
         namespace_kind:
           $ref: "#/components/schemas/NamespaceKind"
         path:
-          $ref: "#/components/schemas/OneOrTwoSlugs"
+          $ref: "#/components/schemas/SlugResponse"
       required:
         - "id"
         - "namespace_kind"

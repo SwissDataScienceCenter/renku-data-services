@@ -14,6 +14,12 @@ from ulid import ULID
 
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec
+from renku_data_services.notebooks.constants import (
+    AMALTHEA_SESSION_KIND,
+    AMALTHEA_SESSION_VERSION,
+    JUPYTER_SESSION_KIND,
+    JUPYTER_SESSION_VERSION,
+)
 from renku_data_services.notebooks.cr_amalthea_session import (
     Affinity,
     Authentication,
@@ -127,8 +133,8 @@ class ComputeResources(BaseModel):
 class JupyterServerV1Alpha1(_JSModel):
     """Jupyter server CRD."""
 
-    kind: str = "JupyterServer"
-    apiVersion: str = "amalthea.dev/v1alpha1"
+    kind: str = JUPYTER_SESSION_KIND
+    apiVersion: str = JUPYTER_SESSION_VERSION
     metadata: Metadata
 
     def get_compute_resources(self) -> ComputeResources:
@@ -143,8 +149,8 @@ class JupyterServerV1Alpha1(_JSModel):
 class AmaltheaSessionV1Alpha1(_ASModel):
     """Amalthea session CRD."""
 
-    kind: str = "AmaltheaSession"
-    apiVersion: str = "amalthea.dev/v1alpha1"
+    kind: str = AMALTHEA_SESSION_KIND
+    apiVersion: str = AMALTHEA_SESSION_VERSION
     # Here we overwrite the default from ASModel because it is too weakly typed
     metadata: Metadata  # type: ignore[assignment]
     spec: AmaltheaSessionSpec | None = None
@@ -364,10 +370,10 @@ class Culling(_Culling):
             return None
         if isinstance(val, timedelta):
             return val
-        if isinstance(val, str) and re.match("^[0-9]{6,}s$", val) is not None:
+        if isinstance(val, str):
             # NOTE: parse_duration below can only deal with numbers of up to 5 digits
             # so it will parse 10000s but not 100000s - this is a limitation inherited from k8s' go library.
-            return timedelta(seconds=int(val[:-1]))
+            return safe_parse_duration(val)
         return cast(timedelta, parse_duration(val))
 
 
@@ -389,3 +395,27 @@ class AmaltheaSessionSpec(_AmaltheaSessionSpec):
 
     session: Session
     culling: Culling | None = None
+
+
+def safe_parse_duration(val: Any) -> timedelta:
+    """Required because parse_duration from k8s can only deal with values with up to 5 digits.
+
+    Values with 1 unit only (like seconds) and high values will cause things to fail.
+    For example `parse_duration("1210500s")` will raise ValueError whereas `parse_duration("100s")` will be fine.
+    This does not make the whole thing 100% foolproof but it eliminates errors like the above which
+    we have seen in production.
+    """
+    m = re.match(r"^([0-9]+)(h|m|s|ms)$", str(val))
+    if m is not None:
+        num = m.group(1)
+        unit = m.group(2)
+        match unit:
+            case "h":
+                return timedelta(hours=float(num))
+            case "m":
+                return timedelta(minutes=float(num))
+            case "s":
+                return timedelta(seconds=float(num))
+            case "ms":
+                return timedelta(microseconds=float(num))
+    return cast(timedelta, parse_duration(val))

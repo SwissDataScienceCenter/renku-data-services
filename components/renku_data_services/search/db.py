@@ -11,13 +11,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
 from renku_data_services.base_models.core import Slug
+from renku_data_services.data_connectors.models import DataConnector
 from renku_data_services.namespace.models import Group
 from renku_data_services.project.models import Project
 from renku_data_services.search.models import DeleteDoc, Entity
 from renku_data_services.search.orm import RecordState, SearchUpdatesORM
+from renku_data_services.solr.entity_documents import DataConnector as DataConnectorDoc
 from renku_data_services.solr.entity_documents import Group as GroupDoc
 from renku_data_services.solr.entity_documents import Project as ProjectDoc
 from renku_data_services.solr.entity_documents import User as UserDoc
+from renku_data_services.solr.solr_client import DocVersions
 from renku_data_services.users.models import UserInfo
 
 
@@ -27,11 +30,18 @@ def _user_to_entity_doc(user: UserInfo) -> UserDoc:
         id=user.id,
         firstName=user.first_name,
         lastName=user.last_name,
+        version=DocVersions.off(),
     )
 
 
 def _group_to_entity_doc(group: Group) -> GroupDoc:
-    return GroupDoc(namespace=Slug.from_name(group.slug), id=group.id, name=group.name, description=group.description)
+    return GroupDoc(
+        namespace=Slug.from_name(group.slug),
+        id=group.id,
+        name=group.name,
+        description=group.description,
+        version=DocVersions.off(),
+    )
 
 
 def _project_to_entity_doc(p: Project) -> ProjectDoc:
@@ -46,6 +56,24 @@ def _project_to_entity_doc(p: Project) -> ProjectDoc:
         repositories=p.repositories,
         description=p.description,
         keywords=p.keywords if p.keywords is not None else [],
+        version=DocVersions.off(),
+    )
+
+
+def _dataconnector_to_entity_doc(dc: DataConnector) -> DataConnectorDoc:
+    return DataConnectorDoc(
+        id=dc.id,
+        name=dc.name,
+        storageType=dc.storage.storage_type,
+        readonly=dc.storage.readonly,
+        slug=Slug.from_name(dc.slug),
+        visibility=dc.visibility,
+        createdBy=dc.created_by,
+        creationDate=dc.creation_date,
+        namespace=dc.namespace.path.first,
+        description=dc.description,
+        keywords=dc.keywords if dc.keywords is not None else [],
+        version=DocVersions.off(),
     )
 
 
@@ -91,6 +119,16 @@ class SearchUpdatesRepo:
                     "created_at": started,
                     "payload": json.dumps(dp.to_dict()),
                 }
+
+            case DataConnector() as d:
+                dc = _dataconnector_to_entity_doc(d)
+                return {
+                    "entity_id": str(dc.id),
+                    "entity_type": "DataConnector",
+                    "created_at": started,
+                    "payload": json.dumps(dc.to_dict()),
+                }
+
             case DeleteDoc() as d:
                 return {
                     "entity_id": d.id,
@@ -102,7 +140,7 @@ class SearchUpdatesRepo:
     async def upsert(self, entity: Entity, started_at: datetime | None = None) -> ULID:
         """Add entity documents to the staging table.
 
-        If a user already exists, it is updated.
+        If an entity with same id already exists, it is updated.
         """
         started = started_at if started_at is not None else datetime.now()
         params = self.__make_params(entity, started)

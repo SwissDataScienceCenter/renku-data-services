@@ -1,15 +1,22 @@
 """Models for sessions."""
 
+import typing
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 from pathlib import PurePosixPath
+from typing import TYPE_CHECKING
 
 from ulid import ULID
 
 from renku_data_services import errors
 from renku_data_services.base_models.core import ResetType
 from renku_data_services.session import crs
+
+if TYPE_CHECKING:
+    from renku_data_services.session import apispec
+
+from .constants import ENV_VARIABLE_NAME_MATCHER, ENV_VARIABLE_REGEX
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -144,6 +151,55 @@ class EnvironmentPatch:
     strip_path_prefix: bool | None = None
 
 
+# TODO: Verify that these limits are compatible with k8s
+MAX_NUMBER_ENV_VARIABLES: typing.Final[int] = 32
+MAX_LENGTH_ENV_VARIABLES_NAME: typing.Final[int] = 256
+MAX_LENGTH_ENV_VARIABLES_VALUE: typing.Final[int] = 1000
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class EnvVar:
+    """Model for an environment variable."""
+
+    name: str
+    value: str | None = None
+
+    @classmethod
+    def from_dict(cls, env_dict: dict[str, str | None]) -> list["EnvVar"]:
+        """Create a list of EnvVar instances from a dictionary."""
+        return [cls(name=name, value=value) for name, value in env_dict.items()]
+
+    @classmethod
+    def from_apispec(cls, env_variables: list["apispec.EnvVar"]) -> list["EnvVar"]:
+        """Create a list of EnvVar instances from apispec objects."""
+        return [cls(name=env_var.name, value=env_var.value) for env_var in env_variables]
+
+    @classmethod
+    def to_dict(cls, env_variables: list["EnvVar"]) -> dict[str, str | None]:
+        """Convert to dict."""
+        return {var.name: var.value for var in env_variables}
+
+    def __post_init__(self) -> None:
+        error_msgs: list[str] = []
+        if len(self.name) > MAX_LENGTH_ENV_VARIABLES_NAME:
+            error_msgs.append(
+                f"Env variable name '{self.name}' is longer than {MAX_LENGTH_ENV_VARIABLES_NAME} characters."
+            )
+        if self.name.upper().startswith("RENKU"):
+            error_msgs.append(f"Env variable name '{self.name}' should not start with 'RENKU'.")
+        if ENV_VARIABLE_NAME_MATCHER.match(self.name) is None:
+            error_msgs.append(f"Env variable name '{self.name}' must match the regex '{ENV_VARIABLE_REGEX}'.")
+        if self.value and len(self.value) > MAX_LENGTH_ENV_VARIABLES_VALUE:
+            error_msgs.append(
+                f"Env variable value for '{self.name}' is longer than {MAX_LENGTH_ENV_VARIABLES_VALUE} characters."
+            )
+
+        if error_msgs:
+            if len(error_msgs) == 1:
+                raise errors.ValidationError(message=error_msgs[0])
+            raise errors.ValidationError(message="\n".join(error_msgs))
+
+
 @dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedSessionLauncher:
     """Session launcher model that has not been persisted in the DB."""
@@ -153,6 +209,7 @@ class UnsavedSessionLauncher:
     description: str | None
     resource_class_id: int | None
     disk_storage: int | None
+    env_variables: list[EnvVar] | None
     environment: str | UnsavedEnvironment | UnsavedBuildParameters
     """When a string is passed for the environment it should be the ID of an existing environment."""
 
@@ -178,6 +235,7 @@ class SessionLauncherPatch:
     environment: str | EnvironmentPatch | UnsavedEnvironment | UnsavedBuildParameters | None = None
     resource_class_id: int | None | ResetType = None
     disk_storage: int | None | ResetType = None
+    env_variables: list[EnvVar] | None | ResetType = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

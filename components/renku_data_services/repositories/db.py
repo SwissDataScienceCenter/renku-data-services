@@ -4,6 +4,7 @@ from collections.abc import Callable
 from typing import Literal
 from urllib.parse import urlparse
 
+from authlib.integrations.httpx_client import OAuthError
 from httpx import AsyncClient as HttpClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -120,7 +121,15 @@ class GitRepositoriesRepository:
             headers = adapter.api_common_headers or dict()
             if etag:
                 headers["If-None-Match"] = etag
-            response = await oauth2_client.get(request_url, headers=headers)
+            try:
+                response = await oauth2_client.get(request_url, headers=headers)
+            except OAuthError as err:
+                if err.error == "bad_refresh_token":
+                    raise errors.InvalidTokenError(
+                        message="The refresh token for the repository has expired or is invalid.",
+                        detail=f"Please reconnect your integration for {repository_url} and try again.",
+                    )
+                raise
 
             if response.status_code == 304:
                 return "304"

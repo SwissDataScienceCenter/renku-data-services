@@ -36,6 +36,11 @@ import renku_data_services.search
 import renku_data_services.storage
 import renku_data_services.users
 from renku_data_services import errors
+from renku_data_services.app_config.server_options import (
+    ServerOptions,
+    ServerOptionsDefaults,
+    generate_default_resource_pool,
+)
 from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.authn.gitlab import GitlabAuthenticator
 from renku_data_services.authn.keycloak import KcUserStore, KeycloakAuthenticator
@@ -44,11 +49,6 @@ from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.crc import models
 from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
-from renku_data_services.data_api.server_options import (
-    ServerOptions,
-    ServerOptionsDefaults,
-    generate_default_resource_pool,
-)
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
     DataConnectorSecretRepository,
@@ -72,6 +72,7 @@ from renku_data_services.project.db import (
 )
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.search.db import SearchUpdatesRepo
+from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsRepo
 from renku_data_services.session import crs as session_crs
 from renku_data_services.session.db import SessionRepository
@@ -285,6 +286,7 @@ class Config:
     _event_repo: EventRepository | None = field(default=None, repr=False, init=False)
     _reprovisioning_repo: ReprovisioningRepository | None = field(default=None, repr=False, init=False)
     _search_updates_repo: SearchUpdatesRepo | None = field(default=None, repr=False, init=False)
+    _search_reprovisioning: SearchReprovision | None = field(default=None, repr=False, init=False)
     _session_repo: SessionRepository | None = field(default=None, repr=False, init=False)
     _user_preferences_repo: UserPreferencesRepository | None = field(default=None, repr=False, init=False)
     _kc_user_repo: KcUserRepo | None = field(default=None, repr=False, init=False)
@@ -399,6 +401,21 @@ class Config:
         if not self._search_updates_repo:
             self._search_updates_repo = SearchUpdatesRepo(session_maker=self.db.async_session_maker)
         return self._search_updates_repo
+
+    @property
+    def search_reprovisioning(self) -> SearchReprovision:
+        """The SearchReprovisioning class."""
+        if not self._search_reprovisioning:
+            self._search_reprovisioning = SearchReprovision(
+                search_updates_repo=self.search_updates_repo,
+                reprovisioning_repo=self.reprovisioning_repo,
+                solr_config=self.solr_config,
+                user_repo=self.kc_user_repo,
+                group_repo=self.group_repo,
+                project_repo=self.project_repo,
+                data_connector_repo=self.data_connector_repo,
+            )
+        return self._search_reprovisioning
 
     @property
     def project_repo(self) -> ProjectRepository:
@@ -559,6 +576,7 @@ class Config:
                 authz=self.authz,
                 project_repo=self.project_repo,
                 group_repo=self.group_repo,
+                search_updates_repo=self.search_updates_repo,
             )
         return self._data_connector_repo
 

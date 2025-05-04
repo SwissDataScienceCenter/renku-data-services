@@ -15,7 +15,7 @@ def run_migrations_for_app(name: str, revision: str = "heads") -> None:
     """Perform migrations for app `name`.
 
     From: https://alembic.sqlalchemy.org/en/latest/cookbook.html#programmatic-api-use-connection-sharing-with-asyncio
-    """  # noqa: E501
+    """
     cfg = get_alembic_config(name)
     command.upgrade(cfg, revision)
 

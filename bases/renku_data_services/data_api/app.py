@@ -1,6 +1,11 @@
 """Data service app."""
 
+from collections.abc import Callable
+from typing import Any
+
 from sanic import Sanic
+from sanic_ext.exceptions import ValidationError
+from sanic_ext.extras.validation.validators import VALIDATION_ERROR
 from ulid import ULID
 
 from renku_data_services import errors
@@ -25,6 +30,7 @@ from renku_data_services.platform.blueprints import PlatformConfigBP
 from renku_data_services.project.blueprints import ProjectsBP, ProjectSessionSecretBP
 from renku_data_services.repositories.blueprints import RepositoriesBP
 from renku_data_services.search.blueprints import SearchBP
+from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.session.blueprints import BuildsBP, EnvironmentsBP, SessionLaunchersBP
 from renku_data_services.storage.blueprints import StorageBP, StorageSchemaBP
 from renku_data_services.users.blueprints import KCUsersBP, UserPreferencesBP, UserSecretsBP
@@ -36,6 +42,25 @@ def str_to_slug(value: str) -> Slug:
         return Slug(value)
     except errors.ValidationError:
         raise ValueError("Couldn't parse slug")
+
+
+def _patched_validate_body(
+    validator: Callable[[type[Any], dict[str, Any]], Any],
+    model: type[Any],
+    body: dict[str, Any],
+) -> Any:
+    """Validate body method for monkey patching.
+
+    sanic_ext does not return contained exceptions as errors anymore, instead it returns a string.
+    This undoes that change.
+    """
+    try:
+        return validator(model, body)
+    except VALIDATION_ERROR as e:
+        raise ValidationError(
+            f"Invalid request body: {model.__name__}. Error: {e}",
+            extra={"exception": e},
+        ) from e
 
 
 def register_all_handlers(app: Sanic, config: Config) -> Sanic:
@@ -207,12 +232,16 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         name="search2",
         url_prefix=url_prefix,
         authenticator=config.authenticator,
-        reprovisioning_repo=config.reprovisioning_repo,
-        user_repo=config.kc_user_repo,
-        group_repo=config.group_repo,
+        search_reprovision=SearchReprovision(
+            search_updates_repo=config.search_updates_repo,
+            reprovisioning_repo=config.reprovisioning_repo,
+            solr_config=config.solr_config,
+            user_repo=config.kc_user_repo,
+            group_repo=config.group_repo,
+            project_repo=config.project_repo,
+            data_connector_repo=config.data_connector_repo,
+        ),
         solr_config=config.solr_config,
-        project_repo=config.project_repo,
-        search_updates_repo=config.search_updates_repo,
         authz=config.authz,
     )
     data_connectors = DataConnectorsBP(
@@ -253,6 +282,11 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
     )
     if builds is not None:
         app.blueprint(builds.blueprint())
+
+    # We need to patch sanic_extz as since version 24.12 they only send a string representation of errors
+    import sanic_ext.extras.validation.setup
+
+    sanic_ext.extras.validation.setup.validate_body = _patched_validate_body
 
     app.error_handler = CustomErrorHandler(apispec)
     app.config.OAS = False

@@ -15,11 +15,10 @@ from renku_data_services.base_models.core import (
     ProjectPath,
 )
 from renku_data_services.namespace.models import GroupNamespace, ProjectNamespace, UserNamespace
-from renku_data_services.project.models import Project
 from renku_data_services.utils.etag import compute_etag_from_fields
 
 if TYPE_CHECKING:
-    from renku_data_services.storage.rclone import RCloneOption
+    from renku_data_services.data_connectors.apispec import RCloneOption
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -55,7 +54,6 @@ class DataConnector(BaseDataConnector):
     id: ULID
     namespace: UserNamespace | GroupNamespace | ProjectNamespace
     updated_at: datetime
-    project: Project | None = None
 
     @property
     def etag(self) -> str:
@@ -115,6 +113,7 @@ class DataConnectorPatch:
 class CloudStorageCoreWithSensitiveFields(CloudStorageCore):
     """Remote storage configuration model with sensitive fields."""
 
+    # sensitive_fields: list["RCloneOption"]
     sensitive_fields: list["RCloneOption"]
 
 
