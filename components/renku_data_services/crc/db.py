@@ -7,7 +7,7 @@ it all in one place.
 """
 
 from asyncio import gather
-from collections.abc import Callable, Collection, Coroutine, Sequence
+from collections.abc import AsyncGenerator, Callable, Collection, Coroutine, Sequence
 from dataclasses import dataclass, field
 from functools import wraps
 from typing import Any, Concatenate, Optional, ParamSpec, TypeVar, cast
@@ -22,7 +22,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
-from renku_data_services.crc.models import Cluster, SavedCluster, UnsavedCluster
+from renku_data_services.crc.models import Cluster, UnsavedCluster
 from renku_data_services.crc.orm import ClusterORM
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.users.db import UserRepo
@@ -150,6 +150,10 @@ def _only_admins(
 
 class ResourcePoolRepository(_Base):
     """The adapter used for accessing resource pools with SQLAlchemy."""
+
+    def __init__(self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository):
+        super().__init__(session_maker, quotas_repo)
+        self._cluster_repo = ClusterRepository(session_maker=self.session_maker)
 
     async def initialize(self, async_connection_url: str, rp: models.ResourcePool) -> None:
         """Add the default resource pool if it does not already exist."""
@@ -401,12 +405,11 @@ class ResourcePoolRepository(_Base):
             new_classes_coroutines = []
             for key, val in kwargs.items():
                 match key:
-                    case "name" | "public" | "default" | "idle_threshold" | "hibernation_threshold":
+                    case "name" | "public" | "default" | "idle_threshold" | "hibernation_threshold" | "cluster_id":
                         setattr(rp, key, val)
                     case "cluster_id":
-                        if val is None:
-                            continue
-                        setattr(rp, key, val)
+                        cluster = await self._cluster_repo.select(api_user=api_user, cluster_id=kwargs["cluster_id"])
+                        new_rp_model = new_rp_model.update(cluster=cluster)
                     case "quota":
                         if val is None:
                             continue
@@ -870,23 +873,26 @@ class UserRepository(_Base):
 
 @dataclass
 class ClusterRepository:
-    """Repository for cluster descriptions."""
+    """Repository for cluster configurations."""
 
     session_maker: Callable[..., AsyncSession]
 
     @_only_admins
-    async def select_all(self, api_user: base_models.APIUser) -> list[Cluster]:
-        """Get cluster descriptions from the database."""
+    async def select_all(self, api_user: base_models.APIUser) -> AsyncGenerator[Cluster, Any]:
+        """Get cluster configurations from the database."""
 
-        async with self.session_maker() as session:
-            r = await session.scalars(select(ClusterORM))
-            clusters = r.fetchall()
+        # Work around typing issues... by using an inner function.
+        async def _f() -> AsyncGenerator[Cluster, Any]:
+            async with self.session_maker() as session:
+                clusters = await session.stream_scalars(select(ClusterORM))
+                async for cluster in clusters:
+                    yield cluster.dump()
 
-            return [c.to_cluster() for c in clusters]
+        return _f()
 
     @_only_admins
     async def select(self, api_user: base_models.APIUser, cluster_id: ULID) -> Cluster:
-        """Get cluster descriptions from the database."""
+        """Get cluster configurations from the database."""
 
         async with self.session_maker() as session:
             r = await session.scalars(select(ClusterORM).where(ClusterORM.id == cluster_id))
@@ -894,41 +900,40 @@ class ClusterRepository:
             if cluster is None:
                 raise errors.MissingResourceError(message=f"Cluster definition id='{cluster_id}' does not exist.")
 
-            return cluster.to_cluster()
+            return cluster.dump()
 
     @_only_admins
     async def insert(self, api_user: base_models.APIUser, cluster: UnsavedCluster) -> Cluster:
-        """Creates a new cluster description."""
+        """Creates a new cluster configuration."""
 
-        cluster_orm = ClusterORM.from_model(cluster)
+        cluster_orm = ClusterORM.load(cluster)
         async with self.session_maker() as session, session.begin():
             session.add(cluster_orm)
             await session.flush()
             await session.refresh(cluster_orm)
 
-            return cluster_orm.to_cluster()
+            return cluster_orm.dump()
 
     @_only_admins
-    async def update(self, api_user: base_models.APIUser, cluster: SavedCluster, cluster_id: ULID) -> Cluster:
-        """Updates a cluster description."""
+    async def update(self, api_user: base_models.APIUser, cluster: UnsavedCluster, cluster_id: ULID) -> Cluster:
+        """Updates a cluster configuration."""
 
         async with self.session_maker() as session, session.begin():
             saved_cluster = (await session.scalars(select(ClusterORM).where(ClusterORM.id == cluster_id))).one_or_none()
             if saved_cluster is None:
-                raise errors.MissingResourceError(message=f"Cluster definition id='{cluster.id}' does not exist.")
+                raise errors.MissingResourceError(message=f"Cluster definition id='{cluster_id}' does not exist.")
 
-            saved_cluster.id = cluster.id
             saved_cluster.name = cluster.name
             saved_cluster.config_name = cluster.config_name
 
             await session.flush()
             await session.refresh(saved_cluster)
 
-            return saved_cluster.to_cluster()
+            return saved_cluster.dump()
 
     @_only_admins
     async def delete(self, api_user: base_models.APIUser, cluster_id: ULID) -> None:
-        """Get cluster descriptions from the database."""
+        """Get cluster configurations from the database."""
 
         async with self.session_maker() as session, session.begin():
             r = await session.scalars(select(ClusterORM).where(ClusterORM.id == cluster_id))

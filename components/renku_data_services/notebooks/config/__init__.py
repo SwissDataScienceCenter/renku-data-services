@@ -153,6 +153,7 @@ class NotebooksConfig:
         crc_validator: CRCValidatorProto
         git_provider_helper: GitProviderHelperProto
         k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
+        kube_config_root = os.environ.get("K8S_CONFIGS_ROOT", "/secrets/kube_configs")
 
         if dummy_stores:
             quota_repo = QuotaRepository(DummyCoreClient({}, {}), DummySchedulingClient({}), namespace=k8s_namespace)
@@ -178,7 +179,9 @@ class NotebooksConfig:
         k8s_config = _K8sConfig.from_env()
         k8s_db_cache = K8sDbCache(db_config.async_session_maker)
         client = K8sClusterClientsPool(
-            clusters=_get_clusters("/secrets/kube_configs", namespace=k8s_config.renku_namespace, api=kr8s_api),
+            clusters=_get_clusters(
+                kube_conf_root_dir=kube_config_root, namespace=k8s_config.renku_namespace, api=kr8s_api
+            ),
             cache=k8s_db_cache,
             kinds_to_cache=[AMALTHEA_SESSION_KIND, JUPYTER_SESSION_KIND],
         )

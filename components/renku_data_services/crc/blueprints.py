@@ -15,7 +15,7 @@ from renku_data_services.base_api.misc import validate_body_root_model, validate
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.crc import apispec, models
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository, UserRepository
-from renku_data_services.crc.models import SavedCluster, UnsavedCluster
+from renku_data_services.crc.models import UnsavedCluster
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.models import UserInfo
@@ -583,7 +583,7 @@ class ClustersBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         async def _handler(_request: Request, user: base_models.APIUser) -> HTTPResponse:
-            clusters = await self.repo.select_all(user)
+            clusters = [c async for c in await self.repo.select_all(user)]
 
             return validated_json(apispec.ClustersWithId, clusters)
 
@@ -624,8 +624,7 @@ class ClustersBP(CustomBlueprint):
         async def _handler(
             _request: Request, user: base_models.APIUser, cluster_id: ULID, body: apispec.Cluster
         ) -> HTTPResponse:
-            # We allow the cluster_id to be modified. The operation might fail if the new id already exists in the DB.
-            cluster = SavedCluster(id=cluster_id, name=body.name, config_name=body.config_name)
+            cluster = UnsavedCluster(name=body.name, config_name=body.config_name)
             cluster = await self.repo.update(user, cluster, cluster_id)
 
             return validated_json(apispec.ClusterWithId, cluster, status=201)
@@ -641,13 +640,11 @@ class ClustersBP(CustomBlueprint):
         async def _handler(
             _request: Request, user: base_models.APIUser, cluster_id: ULID, body: apispec.ClusterPatch
         ) -> HTTPResponse:
-            # We allow the cluster_id to be modified. The operation might fail if the new id already exists in the DB.
             old = await self.repo.select(user, cluster_id)
 
-            id = ULID.from_str(body.id) if body.id is not None else cluster_id
             name = body.name if body.name is not None else old.name
             config_name = body.config_name if body.config_name is not None else old.config_name
-            cluster = SavedCluster(id=id, name=name, config_name=config_name)
+            cluster = UnsavedCluster(name=name, config_name=config_name)
 
             cluster = await self.repo.update(user, cluster, cluster_id)
 

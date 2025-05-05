@@ -1,5 +1,7 @@
 """Domain models for the application."""
 
+from __future__ import annotations
+
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
@@ -8,7 +10,8 @@ from uuid import uuid4
 
 from ulid import ULID
 
-from renku_data_services.errors import ValidationError, errors
+from renku_data_services import errors
+from renku_data_services.errors import ValidationError
 
 
 class ResourcesProtocol(Protocol):
@@ -74,7 +77,7 @@ class NodeAffinity:
     required_during_scheduling: bool = False
 
     @classmethod
-    def from_dict(cls, data: dict) -> "NodeAffinity":
+    def from_dict(cls, data: dict) -> NodeAffinity:
         """Create a node affinity from a dictionary."""
         return cls(**data)
 
@@ -108,7 +111,7 @@ class ResourceClass(ResourcesCompareMixin):
         object.__setattr__(self, "tolerations", sorted(self.tolerations))
 
     @classmethod
-    def from_dict(cls, data: dict) -> "ResourceClass":
+    def from_dict(cls, data: dict) -> ResourceClass:
         """Create the model from a plain dictionary."""
         node_affinities: list[NodeAffinity] = []
         tolerations: list[str] = []
@@ -127,11 +130,11 @@ class ResourceClass(ResourcesCompareMixin):
                 quota = data_quota.id
         return cls(**{**data, "tolerations": tolerations, "node_affinities": node_affinities, "quota": quota})
 
-    def is_quota_valid(self, quota: "Quota") -> bool:
+    def is_quota_valid(self, quota: Quota) -> bool:
         """Determine if a quota is compatible with the resource class."""
         return quota >= self
 
-    def update(self, **kwargs: dict) -> "ResourceClass":
+    def update(self, **kwargs: dict) -> ResourceClass:
         """Update a field of the resource class and return a new copy."""
         if not kwargs:
             return self
@@ -156,18 +159,18 @@ class Quota(ResourcesCompareMixin):
     id: Optional[str] = None
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Quota":
+    def from_dict(cls, data: dict) -> Quota:
         """Create the model from a plain dictionary."""
         gpu_kind = GpuKind.NVIDIA
         if "gpu_kind" in data:
             gpu_kind = data["gpu_kind"] if isinstance(data["gpu_kind"], GpuKind) else GpuKind[data["gpu_kind"]]
         return cls(**{**data, "gpu_kind": gpu_kind})
 
-    def is_resource_class_compatible(self, rc: "ResourceClass") -> bool:
+    def is_resource_class_compatible(self, rc: ResourceClass) -> bool:
         """Determine if a resource class is compatible with the quota."""
         return rc <= self
 
-    def generate_id(self) -> "Quota":
+    def generate_id(self) -> Quota:
         """Create a new quota with its ID set to an uuid."""
         if self.id is not None:
             return self
@@ -182,22 +185,13 @@ class Cluster:
     config_name: str
 
     @classmethod
-    def _check_keys(cls, keys: list[str], data: dict) -> None:
-        for key in keys:
-            if key not in data:
-                raise errors.ProgrammingError(
-                    message=f"Cannot build {cls.__name__} from dictionary: Missing field: '{key}'"
-                )
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "Cluster":
+    def from_dict(cls, data: dict) -> Cluster:
         """Instantiate a SavedCluster from the dictionary."""
-        cls._check_keys(["name", "config_name"], data)
 
         if "id" in data:
-            return SavedCluster(**{**data})
+            return SavedCluster(**data)
         else:
-            return UnsavedCluster(**{**data})
+            return UnsavedCluster(**data)
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -217,15 +211,14 @@ class ResourcePool:
     """Resource pool model."""
 
     name: str
-    classes: list["ResourceClass"]
-    quota: Optional[Quota] = None
-    id: Optional[int] = None
-    idle_threshold: Optional[int] = None
-    hibernation_threshold: Optional[int] = None
+    classes: list[ResourceClass]
+    quota: Quota | None = None
+    id: int | None = None
+    idle_threshold: int | None = None
+    hibernation_threshold: int | None = None
     default: bool = False
     public: bool = False
-    cluster_id: Optional[ULID] = None
-    cluster: Optional[Cluster] = None
+    cluster: Cluster | None = None
 
     def __post_init__(self) -> None:
         """Validate the resource pool after initialization."""
@@ -256,7 +249,7 @@ class ResourcePool:
         if len(default_classes) != 1:
             raise ValidationError(message="One default class is required in each resource pool.")
 
-    def set_quota(self, val: Quota) -> "ResourcePool":
+    def set_quota(self, val: Quota) -> ResourcePool:
         """Set the quota for a resource pool."""
         for cls in list(self.classes):
             if not val.is_resource_class_compatible(cls):
@@ -265,14 +258,14 @@ class ResourcePool:
                 )
         return self.from_dict({**asdict(self), "quota": val})
 
-    def update(self, **kwargs: Any) -> "ResourcePool":
+    def update(self, **kwargs: Any) -> ResourcePool:
         """Determine if an update to a resource pool is valid and if valid create new updated resource pool."""
         if self.default and "default" in kwargs and not kwargs["default"]:
             raise ValidationError(message="A default resource pool cannot be made non-default.")
         return ResourcePool.from_dict({**asdict(self), **kwargs})
 
     @classmethod
-    def from_dict(cls, data: dict) -> "ResourcePool":
+    def from_dict(cls, data: dict) -> ResourcePool:
         """Create the model from a plain dictionary."""
         cluster = None
         quota: Optional[Quota] = None
@@ -288,8 +281,16 @@ class ResourcePool:
         elif "classes" in data and isinstance(data["classes"], list):
             classes = [ResourceClass.from_dict(c) if isinstance(c, dict) else c for c in data["classes"]]
 
-        if "cluster" in data and isinstance(data["cluster"], Cluster):
-            cluster = Cluster.from_dict(data["cluster"]) if isinstance(data["cluster"], dict) else data["cluster"]
+        if "cluster" in data:
+            match data["cluster"]:
+                case dict():
+                    cluster = Cluster.from_dict(data["cluster"])
+                case Cluster():
+                    cluster = data["cluster"]
+                case None:
+                    cluster = None
+                case unknown:
+                    raise errors.ValidationError(message=f"Got unexpected cluster data {unknown} when creating model")
 
         return cls(
             name=data["name"],
@@ -300,7 +301,6 @@ class ResourcePool:
             public=data.get("public", False),
             idle_threshold=data.get("idle_threshold"),
             hibernation_threshold=data.get("hibernation_threshold"),
-            cluster_id=data.get("cluster_id"),
             cluster=cluster,
         )
 
