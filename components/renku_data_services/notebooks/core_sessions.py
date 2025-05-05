@@ -256,7 +256,6 @@ async def get_data_sources(
 
     # Handle potential duplicate target_path
     dcs = _deduplicate_target_paths(dcs)
-    logger.warning(f"DCS: {", ".join(dc_id +"->"+dc.mount_folder for dc_id, dc in dcs.items())}")
 
     for cs_id, cs in dcs.items():
         secret_name = f"{server_name}-ds-{cs_id.lower()}"
