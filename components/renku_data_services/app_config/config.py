@@ -55,8 +55,16 @@ from renku_data_services.data_connectors.db import (
 )
 from renku_data_services.db_config import DBConfig
 from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
-from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient, K8sCoreClient, K8sSchedulingClient
+from renku_data_services.k8s.clients import (
+    DummyCoreClient,
+    DummySchedulingClient,
+    K8sClusterClientsPool,
+    K8sCoreClient,
+    K8sSchedulingClient,
+)
+from renku_data_services.k8s.config import KubeConfigEnv
 from renku_data_services.k8s.quota import QuotaRepository
+from renku_data_services.k8s_watcher.db import K8sDbCache
 from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.message_queue.db import EventRepository, ReprovisioningRepository
 from renku_data_services.message_queue.interface import IMessageQueue
@@ -64,7 +72,8 @@ from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.metrics.core import StagingMetricsService
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
-from renku_data_services.notebooks.config import NotebooksConfig
+from renku_data_services.notebooks.config import NotebooksConfig, get_clusters
+from renku_data_services.notebooks.constants import AMALTHEA_SESSION_KIND, JUPYTER_SESSION_KIND
 from renku_data_services.platform.db import PlatformRepository
 from renku_data_services.project.db import (
     ProjectMemberRepository,
@@ -77,6 +86,7 @@ from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsRepo
 from renku_data_services.session import crs as session_crs
+from renku_data_services.session.constants import BUILD_RUN_KIND, TASK_RUN_KIND
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
 from renku_data_services.solr.solr_client import SolrClientConfig
@@ -182,7 +192,7 @@ class BuildsConfig:
     tolerations: list[session_crs.Toleration] | None = None
 
     @classmethod
-    def from_env(cls, prefix: str = "", namespace: str = "") -> "BuildsConfig":
+    def from_env(cls, db: DBConfig, prefix: str = "", namespace: str = "") -> "BuildsConfig":
         """Create a config from environment variables."""
         enabled = os.environ.get(f"{prefix}IMAGE_BUILDERS_ENABLED", "false").lower() == "true"
         build_output_image_prefix = os.environ.get(f"{prefix}BUILD_OUTPUT_IMAGE_PREFIX")
@@ -216,11 +226,18 @@ class BuildsConfig:
         elif not enabled:
             shipwright_client = None
         else:
-            # TODO: is there a reason to use a different cache URL here?
-            cache_url = os.environ["NB_AMALTHEA_V2__CACHE_URL"]
+            # NOTE: we need to get an async client as a sync client can't be used in an async way
+            # But all the config code is not async, so we need to drop into the running loop, if there is one
+            kr8s_api = KubeConfigEnv().api()
+            k8s_db_cache = K8sDbCache(db.async_session_maker)
+            client = K8sClusterClientsPool(
+                clusters=get_clusters("/secrets/kube_configs", namespace=namespace, api=kr8s_api),
+                cache=k8s_db_cache,
+                kinds_to_cache=[AMALTHEA_SESSION_KIND, JUPYTER_SESSION_KIND, BUILD_RUN_KIND, TASK_RUN_KIND],
+            )
             shipwright_client = ShipwrightClient(
+                client=client,
                 namespace=namespace,
-                cache_url=cache_url,
             )
 
         node_selector: dict[str, str] | None = None
@@ -730,7 +747,7 @@ class Config:
         trusted_proxies = TrustedProxiesConfig.from_env(prefix)
         message_queue = RedisQueue(redis)
         nb_config = NotebooksConfig.from_env(db)
-        builds_config = BuildsConfig.from_env(prefix, k8s_namespace)
+        builds_config = BuildsConfig.from_env(db, prefix, k8s_namespace)
         posthog = PosthogConfig.from_env(prefix)
 
         return cls(

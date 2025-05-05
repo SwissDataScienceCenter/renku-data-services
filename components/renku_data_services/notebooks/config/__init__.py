@@ -1,13 +1,10 @@
 """Base notebooks svc configuration."""
 
-import glob
 import os
 from dataclasses import dataclass, field
 from typing import Any, Optional, Protocol, Self
 
 import kr8s
-import yaml
-from sanic.log import logger
 
 from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ResourcePoolRepository
@@ -20,7 +17,7 @@ from renku_data_services.k8s.clients import (
     K8sCoreClient,
     K8sSchedulingClient,
 )
-from renku_data_services.k8s.models import Cluster, ClusterId
+from renku_data_services.k8s.config import KubeConfigEnv, get_clusters
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.k8s_watcher.db import K8sDbCache
 from renku_data_services.notebooks.api.classes.data_service import (
@@ -29,7 +26,7 @@ from renku_data_services.notebooks.api.classes.data_service import (
     DummyGitProviderHelper,
     GitProviderHelper,
 )
-from renku_data_services.notebooks.api.classes.k8s_client import DEFAULT_K8S_CLUSTER, NotebookK8sClient
+from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClient
 from renku_data_services.notebooks.api.classes.repository import GitProvider
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
 from renku_data_services.notebooks.config.dynamic import (
@@ -50,6 +47,7 @@ from renku_data_services.notebooks.constants import (
     JUPYTER_SESSION_VERSION,
 )
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
+from renku_data_services.session.constants import BUILD_RUN_KIND, TASK_RUN_KIND
 
 
 class CRCValidatorProto(Protocol):
@@ -174,16 +172,16 @@ class NotebooksConfig:
             )
             # NOTE: we need to get an async client as a sync client can't be used in an async way
             # But all the config code is not async, so we need to drop into the running loop, if there is one
-            kr8s_api = _KubeConfigEnv().api()
+            kr8s_api = KubeConfigEnv().api()
 
         k8s_config = _K8sConfig.from_env()
         k8s_db_cache = K8sDbCache(db_config.async_session_maker)
         client = K8sClusterClientsPool(
-            clusters=_get_clusters(
+            clusters=get_clusters(
                 kube_conf_root_dir=kube_config_root, namespace=k8s_config.renku_namespace, api=kr8s_api
             ),
             cache=k8s_db_cache,
-            kinds_to_cache=[AMALTHEA_SESSION_KIND, JUPYTER_SESSION_KIND],
+            kinds_to_cache=[AMALTHEA_SESSION_KIND, JUPYTER_SESSION_KIND, BUILD_RUN_KIND, TASK_RUN_KIND],
         )
         k8s_client = NotebookK8sClient(
             client=client,
@@ -224,96 +222,3 @@ class NotebooksConfig:
             k8s_db_cache=k8s_db_cache,
             _kr8s_api=kr8s_api,
         )
-
-
-class _KubeConfig:
-    def __init__(
-        self,
-        kubeconfig: str | None = None,
-        current_context_name: str | None = None,
-        ns: str | None = None,
-        sa: str | None = None,
-        url: str | None = None,
-    ) -> None:
-        self._kubeconfig = kubeconfig
-        self._ns = ns
-        self._current_context_name = current_context_name
-        self._sa = sa
-        self._url = url
-
-    def _sync_api(self) -> kr8s.Api | kr8s._AsyncApi:
-        return kr8s.api(
-            kubeconfig=self._kubeconfig,
-            namespace=self._ns,
-            context=self._current_context_name,
-        )
-
-    def _async_api(self) -> kr8s.asyncio.Api:
-        """Create an async api client from sync code.
-
-        Kr8s cannot return an AsyncAPI instance from sync code, and we can't easily make all our config code async,
-        so this method is a direct copy of the kr8s sync client code, just that it returns an async client.
-        """
-        ret = kr8s._async_utils.run_sync(kr8s.asyncio.api)(
-            url=self._url,
-            kubeconfig=self._kubeconfig,
-            serviceaccount=self._sa,
-            namespace=self._ns,
-            context=self._current_context_name,
-            _asyncio=True,  # This is the only line that is different from kr8s code
-        )
-        assert isinstance(ret, kr8s.asyncio.Api)
-        return ret
-
-    def api(self, _async: bool = True) -> kr8s.Api | kr8s._AsyncApi:
-        # Instantiate the Kr8s Api object based on the configuration
-        if _async:
-            return self._async_api()
-        else:
-            return self._sync_api()
-
-
-class _KubeConfigEnv(_KubeConfig):
-    def __init__(self) -> None:
-        super().__init__(ns=os.environ.get("K8S_NAMESPACE", "default"))
-
-
-class _KubeConfigYaml(_KubeConfig):
-    def __init__(self, kubeconfig: str) -> None:
-        super().__init__(kubeconfig=kubeconfig)
-
-        with open(kubeconfig) as stream:
-            _conf = yaml.safe_load(stream)
-
-        self._current_context_name = _conf.get("current-context", None)
-        if self._current_context_name is not None:
-            for context in _conf.get("contexts", []):
-                name = context.get("name", None)
-                inner = context.get("context", None)
-                if inner is not None and name is not None and name == self._current_context_name:
-                    self._ns = inner.get("namespace", None)
-                    break
-
-
-def _get_clusters(kube_conf_root_dir: str, namespace: str, api: kr8s.asyncio.Api) -> list[Cluster]:
-    clusters = [Cluster(id=DEFAULT_K8S_CLUSTER, namespace=namespace, api=api)]
-
-    if os.path.exists(kube_conf_root_dir):
-        for filename in glob.glob(pathname="*.yaml", root_dir=kube_conf_root_dir):
-            try:
-                kube_config = _KubeConfigYaml(filename)
-                cluster = Cluster(
-                    id=ClusterId(filename.removesuffix(".yaml")),
-                    namespace=kube_config.api().namespace,
-                    api=kube_config.api(),
-                )
-                clusters.append(cluster)
-                logger.info(f"Successfully loaded Kubernetes config: '{kube_conf_root_dir}/{filename}'")
-            except Exception as e:
-                logger.warning(
-                    f"Failed while loading '{kube_conf_root_dir}/{filename}', ignoring kube config. Error: {e}"
-                )
-    else:
-        logger.warning(f"Cannot open directory '{kube_conf_root_dir}', ignoring kube configs...")
-
-    return clusters
