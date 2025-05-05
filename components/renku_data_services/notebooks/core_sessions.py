@@ -256,6 +256,7 @@ async def get_data_sources(
 
     # Handle potential duplicate target_path
     dcs = _deduplicate_target_paths(dcs)
+    logger.warning(f"DCS: {", ".join(dc_id +"->"+dc.mount_folder for dc_id, dc in dcs.items())}")
 
     for cs_id, cs in dcs.items():
         secret_name = f"{server_name}-ds-{cs_id.lower()}"
@@ -590,13 +591,11 @@ def _deduplicate_target_paths(dcs: dict[str, RCloneStorage]) -> dict[str, RClone
         # 1. Try with a "-1", "-2", etc. suffix
         mount_folder_try = f"{mount_folder}-{len(mount_folders[mount_folder])}"
         if mount_folder_try not in mount_folders:
-            logger.warning(f"Re-assigning data connector {dc_id} to mount point '{mount_folder_try}'")
             return mount_folder
         # 2. Try with a random suffix
         suffix = "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(4)])  # nosec B311
         mount_folder_try = f"{mount_folder}-{suffix}"
         if mount_folder_try not in mount_folders:
-            logger.warning(f"Re-assigning data connector {dc_id} to mount point '{mount_folder_try}'")
             return mount_folder
         raise errors.ValidationError(
             message=f"Could not start session because two or more data connectors ({", ".join(mount_folders[mount_folder])}) share the same mount point '{mount_folder}'"  # noqa E501
@@ -607,6 +606,7 @@ def _deduplicate_target_paths(dcs: dict[str, RCloneStorage]) -> dict[str, RClone
         new_mount_folder = _find_mount_folder(dc_id, dc)
         # Keep track of the original mount folder here
         if new_mount_folder != original_mount_folder:
+            logger.warning(f"Re-assigning data connector {dc_id} to mount point '{new_mount_folder}'")
             dc_ids = mount_folders.get(original_mount_folder, [])
             dc_ids.append(dc_id)
             mount_folders[original_mount_folder] = dc_ids
