@@ -10,7 +10,7 @@ from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services.crc import models
-from renku_data_services.crc.models import Cluster, SavedCluster
+from renku_data_services.crc.models import Cluster
 from renku_data_services.errors import errors
 from renku_data_services.utils.sqlalchemy import ULIDType
 
@@ -144,12 +144,18 @@ class ClusterORM(BaseORM):
     name: Mapped[str] = mapped_column(String(40), unique=True, index=True)
     config_name: Mapped[str] = mapped_column(String(40), unique=True, index=True)
 
-    def to_cluster(self) -> SavedCluster:
+    def dump(self) -> models.Cluster:
         """Create a cluster model from the ORM object."""
-        return SavedCluster(id=self.id, name=self.name, config_name=self.config_name)
+        return Cluster.from_dict(
+            {
+                "id": self.id,
+                "name": self.name,
+                "config_name": self.config_name,
+            }
+        )
 
     @classmethod
-    def from_model(cls, cluster: Cluster) -> "ClusterORM":
+    def load(cls, cluster: models.Cluster) -> "ClusterORM":
         """Create an ORM object from the cluster model."""
         return ClusterORM(name=cluster.name, config_name=cluster.config_name)
 
@@ -189,6 +195,11 @@ class ResourcePoolORM(BaseORM):
         quota = None
         if isinstance(resource_pool.quota, models.Quota):
             quota = resource_pool.quota.id
+
+        cluster_id = None
+        if resource_pool.cluster is not None and isinstance(resource_pool.cluster, models.SavedCluster):
+            cluster_id = resource_pool.cluster.id
+
         return cls(
             name=resource_pool.name,
             quota=quota,
@@ -197,7 +208,7 @@ class ResourcePoolORM(BaseORM):
             hibernation_threshold=resource_pool.hibernation_threshold,
             public=resource_pool.public,
             default=resource_pool.default,
-            cluster_id=resource_pool.cluster_id,
+            cluster_id=cluster_id,
         )
 
     def dump(
@@ -216,7 +227,7 @@ class ResourcePoolORM(BaseORM):
                 f"The quota in the database {self.quota} and Kubernetes {quota} do not match. "
                 f"Using the quota {quota} in the response."
             )
-        cluster = None if self.cluster is None else self.cluster.to_cluster()
+        cluster = None if self.cluster is None else self.cluster.dump()
         return models.ResourcePool(
             id=self.id,
             name=self.name,
@@ -226,7 +237,6 @@ class ResourcePoolORM(BaseORM):
             hibernation_threshold=self.hibernation_threshold,
             public=self.public,
             default=self.default,
-            cluster_id=self.cluster_id,
             cluster=cluster,
         )
 

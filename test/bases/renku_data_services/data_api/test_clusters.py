@@ -8,12 +8,6 @@ cluster_payload = {
     "name": "test-cluster-post",
 }
 
-cluster_with_id_payload = {
-    "id": "0AD9NJBYME97DCQF9VZVA2M156",
-    "config_name": "a-filename-without-yaml-ext",
-    "name": "test-cluster",
-}
-
 
 @pytest.mark.parametrize(
     "expected_status_code,auth,url",
@@ -118,7 +112,7 @@ async def _clusters_request(
 
     assert res.status_code == expected_status_code, res.text
     if res.is_success and check_payload is not None:
-        assert res.json == check_payload, res.json
+        assert res.json == check_payload, f"\nRESULT: {res.json}\nEXPECT: {check_payload}\n"
 
 
 put_patch_common_test_inputs = [
@@ -129,25 +123,13 @@ put_patch_common_test_inputs = [
     (401, False, "XX", None),
     (422, True, "XX", None),
     (401, False, None, {"name": "new_name"}),
-    (201, True, None, {"name": "new_name", "config_name": "a-filename-without-yaml-ext"}),
+    (201, True, None, cluster_payload),
     (422, True, None, {"name": "new_name", "config_name": "a-filename-without-yaml-ext", "unknown_field": 42}),
-    (
-        422,
-        True,
-        None,
-        {"name": "new_name", "config_name": "a-filename-without-yaml-ext", "id": "ZZZZZZZZZZZZZZZZZZZZZZZZZZ"},
-    ),
+    (404, True, "ZZZZZZZZZZZZZZZZZZZZZZZZZZ", cluster_payload),
 ]
 
 
-@pytest.mark.parametrize(
-    "expected_status_code,auth,cluster_id,payload",
-    put_patch_common_test_inputs
-    + [
-        (422, True, "ZZZZZZZZZZZZZZZZZZZZZZZZZZ", cluster_with_id_payload),
-        (422, True, None, cluster_with_id_payload),
-    ],
-)
+@pytest.mark.parametrize("expected_status_code,auth,cluster_id,payload", put_patch_common_test_inputs)
 @pytest.mark.asyncio
 async def test_clusters_put(
     sanic_client: SanicASGITestClient,
@@ -160,14 +142,7 @@ async def test_clusters_put(
     await _clusters_request(sanic_client, "PUT", admin_headers, expected_status_code, auth, cluster_id, payload)
 
 
-@pytest.mark.parametrize(
-    "expected_status_code,auth,cluster_id,payload",
-    put_patch_common_test_inputs
-    + [
-        (404, True, "ZZZZZZZZZZZZZZZZZZZZZZZZZZ", cluster_with_id_payload),
-        (201, True, None, cluster_with_id_payload),
-    ],
-)
+@pytest.mark.parametrize("expected_status_code,auth,cluster_id,payload", put_patch_common_test_inputs)
 @pytest.mark.asyncio
 async def test_clusters_patch(
     sanic_client: SanicASGITestClient,

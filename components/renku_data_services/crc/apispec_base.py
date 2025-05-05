@@ -34,7 +34,7 @@ class BaseAPISpec(BaseModel):
     @field_validator("environment_id", mode="before", check_fields=False)
     @classmethod
     def serialize_environment_id(cls, environment_id: str | ULID | None) -> str | None:
-        """Custom serializer that can handle ULIDs."""
+        """Custom serializer that can handle the environment kind."""
         if environment_id is None:
             return None
         return str(environment_id)

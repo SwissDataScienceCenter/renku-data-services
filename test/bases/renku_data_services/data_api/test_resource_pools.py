@@ -1002,8 +1002,6 @@ resource_pool_payload = {
     "hibernation_threshold": 99999,
 }
 
-resource_pool_payload_cluster_id = deepcopy(resource_pool_payload)
-resource_pool_payload_cluster_id["cluster_id"] = "replace-me"
 cluster_payload = {
     "config_name": "a-filename-without-yaml-ext",
     "name": "test-cluster-post",
@@ -1076,7 +1074,6 @@ put_patch_common_test_inputs = [
     (422, True, 100, resource_pool_payload),
     (401, False, None, resource_pool_payload),
     (200, True, None, resource_pool_payload),
-    (200, True, None, resource_pool_payload_cluster_id),
 ]
 
 

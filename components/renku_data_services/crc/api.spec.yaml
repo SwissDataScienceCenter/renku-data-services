@@ -37,10 +37,10 @@ paths:
         - classes
   /clusters:
     get:
-      summary: Get all the cluster descriptions
+      summary: Get all the cluster configurations
       responses:
         "200":
-          description: The cluster descriptions
+          description: The cluster configurations
           content:
             "application/json":
               schema:
@@ -50,7 +50,7 @@ paths:
       tags:
         - clusters
     post:
-      summary: Create a new cluster description
+      summary: Create a new cluster configuration
       requestBody:
         required: true
         content:
@@ -59,7 +59,7 @@ paths:
               $ref: "#/components/schemas/Cluster"
       responses:
         "201":
-          description: The cluster descriptions was created
+          description: The cluster configuration was created
           content:
             "application/json":
               schema:
@@ -70,7 +70,7 @@ paths:
         - clusters
   /clusters/{cluster_id}:
     get:
-      summary: Get a cluster description
+      summary: Get a cluster configuration
       parameters:
         - in: path
           name: cluster_id
@@ -79,13 +79,13 @@ paths:
             $ref: "#/components/schemas/Ulid"
       responses:
         "200":
-          description: The cluster description
+          description: The cluster configuration
           content:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ClusterWithId"
         "404":
-          description: The cluster description does not exist
+          description: The cluster configuration does not exist
           content:
             "application/json":
               schema:
@@ -95,7 +95,7 @@ paths:
       tags:
         - clusters
     put:
-      summary: Update an existing cluster description
+      summary: Update an existing cluster configuration
       parameters:
         - in: path
           name: cluster_id
@@ -110,13 +110,13 @@ paths:
               $ref: "#/components/schemas/Cluster"
       responses:
         "200":
-          description: The cluster description
+          description: The cluster configuration
           content:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ClusterWithId"
         "404":
-          description: The cluster description does not exist
+          description: The cluster configuration does not exist
           content:
             "application/json":
               schema:
@@ -126,7 +126,7 @@ paths:
       tags:
         - clusters
     patch:
-      summary: Update specific fields of an existing cluster description
+      summary: Update specific fields of an existing cluster configuration
       parameters:
         - in: path
           name: cluster_id
@@ -141,13 +141,13 @@ paths:
               $ref: "#/components/schemas/ClusterPatch"
       responses:
         "200":
-          description: The cluster description
+          description: The cluster configuration
           content:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ClusterWithId"
         "404":
-          description: The cluster description does not exist
+          description: The cluster configuration does not exist
           content:
             "application/json":
               schema:
@@ -157,7 +157,7 @@ paths:
       tags:
         - clusters
     delete:
-      summary: Remove a cluster description
+      summary: Remove a cluster configuration
       parameters:
         - in: path
           name: cluster_id
@@ -166,7 +166,7 @@ paths:
             $ref: "#/components/schemas/Ulid"
       responses:
         "204":
-          description: The cluster description was removed or did not exist in the first place
+          description: The cluster configuration was removed or did not exist in the first place
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -977,7 +977,7 @@ components:
         name:
           $ref: "#/components/schemas/Name"
         config_name:
-          $ref: "#/components/schemas/Name"
+          $ref: "#/components/schemas/ConfigName"
       required: [ "name", "config_name" ]
     ClusterPatch:
       type: object
@@ -987,8 +987,6 @@ components:
           $ref: "#/components/schemas/Name"
         config_name:
           $ref: "#/components/schemas/Name"
-        id:
-          $ref: "#/components/schemas/Ulid"
     ClusterWithId:
       type: object
       additionalProperties: false
@@ -1608,6 +1606,12 @@ components:
     Name:
       type: string
       description: A name for a specific resource
+      minLength: 5
+      example: "the name of a resource"
+    ConfigName:
+      type: string
+      description: |
+        The name of the Kube Configuration to use to connect to the remote cluster. This is currently used to find a file named `<KubeConfigRoot>/<ConfigName>.yaml`
       minLength: 5
       example: "the name of a resource"
     DefaultFlag:
