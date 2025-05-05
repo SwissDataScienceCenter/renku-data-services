@@ -17,7 +17,6 @@ from kubernetes.utils.duration import format_duration
 from sanic import Request
 from sanic.log import logger
 from toml import dumps
-from ulid import ULID
 from yaml import safe_dump
 
 from renku_data_services.base_models import APIUser
@@ -243,9 +242,6 @@ async def get_data_sources(
     # then overwrite the projects cloud storages
     # NOTE: Cloud storages in the session launch request body that are not from the DB will cause a 404 error
     # NOTE: Overriding the configuration when a saved secret is there will cause a 422 error
-
-    mount_points: dict[str, list[ULID]] = {}
-
     for csr in cloud_storage_overrides:
         csr_id = csr.storage_id
         if csr_id not in dcs:
@@ -258,43 +254,8 @@ async def get_data_sources(
             csr.target_path = (work_dir / csr.target_path).as_posix()
         dcs[csr_id] = dcs[csr_id].with_override(csr)
 
-        mount_folder = dcs[csr_id].mount_folder
-        if mount_folder in mount_points:
-            mount_folder_try = f"{mount_folder}-{len(mount_points[mount_folder])}"
-            if mount_folder_try not in mount_points:
-                logger.warning(
-                    f"Re-assigning data connector {str(dc.data_connector.id)} to mount point '{mount_folder_try}'"
-                )
-                # We also keep track of the original mount point here
-                folders = mount_points[mount_folder]
-                folders.append(dc.data_connector.id)
-                mount_points[mount_folder] = folders
-                mount_folder = mount_folder_try
-            else:
-                suffix = "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(4)])  # nosec B311
-                mount_folder_try = f"{mount_folder}-{suffix}"
-                if mount_folder_try not in mount_points:
-                    logger.warning(
-                        f"Re-assigning data connector {str(dc.data_connector.id)} to mount point '{mount_folder_try}'"
-                    )
-                    # We also keep track of the original mount point here
-                    folders = mount_points[mount_folder]
-                    folders.append(dc.data_connector.id)
-                    mount_points[mount_folder] = folders
-                    mount_folder = mount_folder_try
-                else:
-                    raise errors.ValidationError(
-                        message=f"Could not start session because two or more data connectors share the same mount point '{mount_folder}'"  # noqa E501
-                    )
-        folders = mount_points.get(mount_folder, [])
-        folders.append(dc.data_connector.id)
-        mount_points[mount_folder] = folders
-
-        dcs[csr_id] = dcs[csr_id].with_override(
-            override=apispec.SessionCloudStoragePost(storage_id=csr_id, target_path=mount_folder)
-        )
-
-    logger.warning(f"mount_points = {mount_points}")
+    # Handle potential duplicate target_path
+    dcs = _deduplicate_target_paths(dcs)
 
     for cs_id, cs in dcs.items():
         secret_name = f"{server_name}-ds-{cs_id.lower()}"
@@ -611,3 +572,50 @@ async def patch_session(
         return session
 
     return await nb_config.k8s_v2_client.patch_server(session_id, user.id, patch_serialized)
+
+
+def _deduplicate_target_paths(dcs: dict[str, RCloneStorage]) -> dict[str, RCloneStorage]:
+    """Ensures that the target paths for all storages are unique.
+
+    This method will attempt to de-duplicate the target_path for all items passed in,
+    and raise an error if it fails to generate unique target_path.
+    """
+    result_dcs: dict[str, RCloneStorage] = {}
+    mount_folders: dict[str, list[str]] = {}
+
+    def _find_mount_folder(dc_id: str, dc: RCloneStorage) -> str:
+        mount_folder = dc.mount_folder
+        if mount_folder not in mount_folders:
+            return mount_folder
+        # 1. Try with a "-1", "-2", etc. suffix
+        mount_folder_try = f"{mount_folder}-{len(mount_folders[mount_folder])}"
+        if mount_folder_try not in mount_folders:
+            logger.warning(f"Re-assigning data connector {dc_id} to mount point '{mount_folder_try}'")
+            return mount_folder
+        # 2. Try with a random suffix
+        suffix = "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(4)])  # nosec B311
+        mount_folder_try = f"{mount_folder}-{suffix}"
+        if mount_folder_try not in mount_folders:
+            logger.warning(f"Re-assigning data connector {dc_id} to mount point '{mount_folder_try}'")
+            return mount_folder
+        raise errors.ValidationError(
+            message=f"Could not start session because two or more data connectors ({", ".join(mount_folders[mount_folder])}) share the same mount point '{mount_folder}'"  # noqa E501
+        )
+
+    for dc_id, dc in dcs.items():
+        original_mount_folder = dc.mount_folder
+        new_mount_folder = _find_mount_folder(dc_id, dc)
+        # Keep track of the original mount folder here
+        if new_mount_folder != original_mount_folder:
+            dc_ids = mount_folders.get(original_mount_folder, [])
+            dc_ids.append(dc_id)
+            mount_folders[original_mount_folder] = dc_ids
+        # Keep track of the assigned mount folder here
+        dc_ids = mount_folders.get(new_mount_folder, [])
+        dc_ids.append(dc_id)
+        mount_folders[new_mount_folder] = dc_ids
+        result_dcs[dc_id] = dc.with_override(
+            override=apispec.SessionCloudStoragePost(storage_id=dc_id, target_path=new_mount_folder)
+        )
+
+    return result_dcs
