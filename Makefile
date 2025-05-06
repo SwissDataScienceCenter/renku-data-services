@@ -227,3 +227,4 @@ lock:
 	poetry -C projects/secrets_storage lock $(ARGS)
 	poetry -C projects/background_jobs lock $(ARGS)
 	poetry -C projects/k8s_watcher lock $(ARGS)
+	poetry -C projects/renku_data_tasks lock $(ARGS)
