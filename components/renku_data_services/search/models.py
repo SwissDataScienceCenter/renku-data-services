@@ -7,7 +7,7 @@ from typing import Any
 from pydantic import BaseModel
 from ulid import ULID
 
-from renku_data_services.data_connectors.models import DataConnector
+from renku_data_services.data_connectors.models import DataConnector, GlobalDataConnector
 from renku_data_services.namespace.models import Group
 from renku_data_services.project.models import Project
 from renku_data_services.users.models import UserInfo
@@ -49,4 +49,4 @@ class DeleteDoc(BaseModel):
         return DeleteDoc(id=str(id), entity_type="DataConnector")
 
 
-Entity = UserInfo | Group | Project | DataConnector | DeleteDoc
+Entity = UserInfo | Group | Project | DataConnector | GlobalDataConnector | DeleteDoc
