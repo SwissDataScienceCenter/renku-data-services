@@ -3,6 +3,8 @@
 import base64
 import json
 import os
+import random
+import string
 from collections.abc import AsyncIterator
 from datetime import timedelta
 from pathlib import PurePosixPath
@@ -13,6 +15,7 @@ import httpx
 from kubernetes.client import V1ObjectMeta, V1Secret
 from kubernetes.utils.duration import format_duration
 from sanic import Request
+from sanic.log import logger
 from toml import dumps
 from yaml import safe_dump
 
@@ -217,11 +220,14 @@ async def get_data_sources(
     dcs: dict[str, RCloneStorage] = {}
     dcs_secrets: dict[str, list[DataConnectorSecret]] = {}
     async for dc in data_connectors_stream:
+        mount_folder = (
+            dc.data_connector.storage.target_path
+            if PurePosixPath(dc.data_connector.storage.target_path).is_absolute()
+            else (work_dir / dc.data_connector.storage.target_path).as_posix()
+        )
         dcs[str(dc.data_connector.id)] = RCloneStorage(
             source_path=dc.data_connector.storage.source_path,
-            mount_folder=dc.data_connector.storage.target_path
-            if PurePosixPath(dc.data_connector.storage.target_path).is_absolute()
-            else (work_dir / dc.data_connector.storage.target_path).as_posix(),
+            mount_folder=mount_folder,
             configuration=dc.data_connector.storage.configuration,
             readonly=dc.data_connector.storage.readonly,
             name=dc.data_connector.name,
@@ -248,6 +254,10 @@ async def get_data_sources(
         if csr.target_path is not None and not PurePosixPath(csr.target_path).is_absolute():
             csr.target_path = (work_dir / csr.target_path).as_posix()
         dcs[csr_id] = dcs[csr_id].with_override(csr)
+
+    # Handle potential duplicate target_path
+    dcs = _deduplicate_target_paths(dcs)
+
     for cs_id, cs in dcs.items():
         secret_name = f"{server_name}-ds-{cs_id.lower()}"
         secret_key_needed = len(dcs_secrets.get(cs_id, [])) > 0
@@ -563,3 +573,49 @@ async def patch_session(
         return session
 
     return await nb_config.k8s_v2_client.patch_session(session_id, user.id, patch_serialized)
+
+
+def _deduplicate_target_paths(dcs: dict[str, RCloneStorage]) -> dict[str, RCloneStorage]:
+    """Ensures that the target paths for all storages are unique.
+
+    This method will attempt to de-duplicate the target_path for all items passed in,
+    and raise an error if it fails to generate unique target_path.
+    """
+    result_dcs: dict[str, RCloneStorage] = {}
+    mount_folders: dict[str, list[str]] = {}
+
+    def _find_mount_folder(dc: RCloneStorage) -> str:
+        mount_folder = dc.mount_folder
+        if mount_folder not in mount_folders:
+            return mount_folder
+        # 1. Try with a "-1", "-2", etc. suffix
+        mount_folder_try = f"{mount_folder}-{len(mount_folders[mount_folder])}"
+        if mount_folder_try not in mount_folders:
+            return mount_folder_try
+        # 2. Try with a random suffix
+        suffix = "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(4)])  # nosec B311
+        mount_folder_try = f"{mount_folder}-{suffix}"
+        if mount_folder_try not in mount_folders:
+            return mount_folder_try
+        raise errors.ValidationError(
+            message=f"Could not start session because two or more data connectors ({", ".join(mount_folders[mount_folder])}) share the same mount point '{mount_folder}'"  # noqa E501
+        )
+
+    for dc_id, dc in dcs.items():
+        original_mount_folder = dc.mount_folder
+        new_mount_folder = _find_mount_folder(dc)
+        # Keep track of the original mount folder here
+        if new_mount_folder != original_mount_folder:
+            logger.warning(f"Re-assigning data connector {dc_id} to mount point '{new_mount_folder}'")
+            dc_ids = mount_folders.get(original_mount_folder, [])
+            dc_ids.append(dc_id)
+            mount_folders[original_mount_folder] = dc_ids
+        # Keep track of the assigned mount folder here
+        dc_ids = mount_folders.get(new_mount_folder, [])
+        dc_ids.append(dc_id)
+        mount_folders[new_mount_folder] = dc_ids
+        result_dcs[dc_id] = dc.with_override(
+            override=apispec.SessionCloudStoragePost(storage_id=dc_id, target_path=new_mount_folder)
+        )
+
+    return result_dcs
