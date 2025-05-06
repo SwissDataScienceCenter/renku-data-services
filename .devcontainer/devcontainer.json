@@ -36,7 +36,10 @@
 		},
 		"./solr": {},
 		"ghcr.io/devcontainers/features/go:1": {},
-		"./rclone": {}
+		"./rclone": {
+			"rclone_repository": "https://github.com/SwissDataScienceCenter/rclone.git",
+			"rclone_ref": "v1.69.1+renku-1"
+		}
 	},
 	"overrideFeatureInstallOrder": [
 		"ghcr.io/devcontainers-extra/features/poetry",
