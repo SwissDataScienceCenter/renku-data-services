@@ -10,7 +10,7 @@ from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services.crc import models
-from renku_data_services.crc.models import Cluster
+from renku_data_services.crc.models import SavedCluster
 from renku_data_services.errors import errors
 from renku_data_services.utils.sqlalchemy import ULIDType
 
@@ -144,15 +144,9 @@ class ClusterORM(BaseORM):
     name: Mapped[str] = mapped_column(String(40), unique=True, index=True)
     config_name: Mapped[str] = mapped_column(String(40), unique=True, index=True)
 
-    def dump(self) -> models.Cluster:
+    def dump(self) -> models.SavedCluster:
         """Create a cluster model from the ORM object."""
-        return Cluster.from_dict(
-            {
-                "id": self.id,
-                "name": self.name,
-                "config_name": self.config_name,
-            }
-        )
+        return SavedCluster(id=self.id, name=self.name, config_name=self.config_name)
 
     @classmethod
     def load(cls, cluster: models.Cluster) -> "ClusterORM":

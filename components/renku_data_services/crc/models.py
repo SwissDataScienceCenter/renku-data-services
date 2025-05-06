@@ -186,7 +186,7 @@ class Cluster:
 
     @classmethod
     def from_dict(cls, data: dict) -> Cluster:
-        """Instantiate a SavedCluster from the dictionary."""
+        """Instantiate a Cluster from the dictionary."""
 
         if "id" in data:
             return SavedCluster(**data)
@@ -218,7 +218,7 @@ class ResourcePool:
     hibernation_threshold: int | None = None
     default: bool = False
     public: bool = False
-    cluster: Cluster | None = None
+    cluster: SavedCluster | None = None
 
     def __post_init__(self) -> None:
         """Validate the resource pool after initialization."""
@@ -267,8 +267,8 @@ class ResourcePool:
     @classmethod
     def from_dict(cls, data: dict) -> ResourcePool:
         """Create the model from a plain dictionary."""
-        cluster = None
-        quota: Optional[Quota] = None
+        cluster: SavedCluster | None = None
+        quota: Quota | None = None
         classes: list[ResourceClass] = []
 
         if "quota" in data and isinstance(data["quota"], dict):
@@ -284,8 +284,8 @@ class ResourcePool:
         if "cluster" in data:
             match data["cluster"]:
                 case dict():
-                    cluster = Cluster.from_dict(data["cluster"])
-                case Cluster():
+                    cluster = SavedCluster(**data["cluster"])
+                case SavedCluster():
                     cluster = data["cluster"]
                 case None:
                     cluster = None

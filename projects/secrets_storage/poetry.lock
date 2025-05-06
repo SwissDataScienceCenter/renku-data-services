@@ -772,21 +772,6 @@ files = [
 ]
 
 [[package]]
-name = "expiringdict"
-version = "1.2.2"
-description = "Dictionary with auto-expiring values for caching purposes"
-optional = false
-python-versions = "*"
-groups = ["main"]
-files = [
-    {file = "expiringdict-1.2.2-py3-none-any.whl", hash = "sha256:09a5d20bc361163e6432a874edd3179676e935eb81b925eccef48d409a8a45e8"},
-    {file = "expiringdict-1.2.2.tar.gz", hash = "sha256:300fb92a7e98f15b05cf9a856c1415b3bc4f2e132be07daa326da6414c23ee09"},
-]
-
-[package.extras]
-tests = ["coverage", "coveralls", "dill", "mock", "nose"]
-
-[[package]]
 name = "factory-boy"
 version = "3.3.3"
 description = "A versatile test fixtures replacement based on thoughtbot's factory_bot for Ruby."
@@ -3214,4 +3199,4 @@ h11 = ">=0.9.0,<1"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.13"
-content-hash = "7045b1c08ef76c59424f05644bf71e215e8cb748f19794b37fc76303ca25c4e8"
+content-hash = "e3bfb864ab0bba65a25a3418b4667383384072256b426cab8ad8f8acde14de01"

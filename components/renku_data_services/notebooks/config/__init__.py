@@ -3,7 +3,7 @@
 import glob
 import os
 from dataclasses import dataclass, field
-from typing import Any, Optional, Protocol, Self, Union
+from typing import Any, Optional, Protocol, Self
 
 import kr8s
 import yaml
@@ -232,16 +232,16 @@ class _KubeConfig:
         kubeconfig: str | None = None,
         current_context_name: str | None = None,
         ns: str | None = None,
-        sc: str | None = None,
+        sa: str | None = None,
         url: str | None = None,
     ) -> None:
         self._kubeconfig = kubeconfig
         self._ns = ns
         self._current_context_name = current_context_name
-        self._sc = sc
+        self._sa = sa
         self._url = url
 
-    def _sync_api(self) -> Union[kr8s.Api, kr8s._AsyncApi]:
+    def _sync_api(self) -> kr8s.Api | kr8s._AsyncApi:
         return kr8s.api(
             kubeconfig=self._kubeconfig,
             namespace=self._ns,
@@ -257,7 +257,7 @@ class _KubeConfig:
         ret = kr8s._async_utils.run_sync(kr8s.asyncio.api)(
             url=self._url,
             kubeconfig=self._kubeconfig,
-            serviceaccount=self._sc,
+            serviceaccount=self._sa,
             namespace=self._ns,
             context=self._current_context_name,
             _asyncio=True,  # This is the only line that is different from kr8s code
@@ -265,7 +265,7 @@ class _KubeConfig:
         assert isinstance(ret, kr8s.asyncio.Api)
         return ret
 
-    def api(self, _async: bool = True) -> Union[kr8s.Api, kr8s._AsyncApi]:
+    def api(self, _async: bool = True) -> kr8s.Api | kr8s._AsyncApi:
         # Instantiate the Kr8s Api object based on the configuration
         if _async:
             return self._async_api()
@@ -283,11 +283,11 @@ class _KubeConfigYaml(_KubeConfig):
         super().__init__(kubeconfig=kubeconfig)
 
         with open(kubeconfig) as stream:
-            self._conf = yaml.safe_load(stream)
+            _conf = yaml.safe_load(stream)
 
-        self._current_context_name = self._conf.get("current-context", None)
+        self._current_context_name = _conf.get("current-context", None)
         if self._current_context_name is not None:
-            for context in self._conf.get("contexts", []):
+            for context in _conf.get("contexts", []):
                 name = context.get("name", None)
                 inner = context.get("context", None)
                 if inner is not None and name is not None and name == self._current_context_name:

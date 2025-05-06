@@ -22,7 +22,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
-from renku_data_services.crc.models import Cluster, UnsavedCluster
+from renku_data_services.crc.models import Cluster, SavedCluster, UnsavedCluster
 from renku_data_services.crc.orm import ClusterORM
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.users.db import UserRepo
@@ -405,10 +405,16 @@ class ResourcePoolRepository(_Base):
             new_classes_coroutines = []
             for key, val in kwargs.items():
                 match key:
-                    case "name" | "public" | "default" | "idle_threshold" | "hibernation_threshold" | "cluster_id":
+                    case "name" | "public" | "default" | "idle_threshold" | "hibernation_threshold":
                         setattr(rp, key, val)
                     case "cluster_id":
-                        cluster = await self._cluster_repo.select(api_user=api_user, cluster_id=kwargs["cluster_id"])
+                        cluster_id = val
+                        cluster = None
+
+                        if cluster_id is not None:
+                            cluster = await self._cluster_repo.select(api_user=api_user, cluster_id=cluster_id)
+
+                        rp.cluster_id = cluster_id
                         new_rp_model = new_rp_model.update(cluster=cluster)
                     case "quota":
                         if val is None:
@@ -891,7 +897,7 @@ class ClusterRepository:
         return _f()
 
     @_only_admins
-    async def select(self, api_user: base_models.APIUser, cluster_id: ULID) -> Cluster:
+    async def select(self, api_user: base_models.APIUser, cluster_id: ULID) -> SavedCluster:
         """Get cluster configurations from the database."""
 
         async with self.session_maker() as session:

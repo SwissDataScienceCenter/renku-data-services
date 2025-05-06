@@ -87,7 +87,6 @@ protobuf = "^5.29.3"
 poetry = "^2.1.1"
 parsy = "^2.1"
 sanic-ext = "^24.12.0"
-expiringdict = "^1.2.2"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.8.3"
@@ -272,7 +271,6 @@ module = [
   "escapism.*",
   "kr8s.*",
   "parsy.*",
-  "expiringdict.*",
 ]
 ignore_missing_imports = true
 

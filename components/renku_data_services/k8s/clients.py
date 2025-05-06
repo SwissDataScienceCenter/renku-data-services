@@ -380,16 +380,6 @@ class K8sClusterClientsPool:
         """Return a cluster by its id."""
         return self.__get_client_or_die(cluster_id).get_cluster()
 
-    def cluster_by_name(self, cluster_name: str) -> Cluster:
-        """Return a cluster by its name."""
-        for k, v in self.__clients.items():
-            if str(k) == cluster_name:
-                return v.get_cluster()
-
-        raise errors.MissingResourceError(
-            message=f"Could not find cluster with name {cluster_name} in the list of clusters."
-        )
-
     async def create(self, obj: K8sObject) -> K8sObject:
         """Create the k8s object."""
         return await self.__get_client_or_die(obj.cluster).create(obj)

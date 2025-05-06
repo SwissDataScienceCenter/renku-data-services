@@ -9,6 +9,7 @@ from box import Box
 from kr8s._api import Api
 from kr8s.asyncio.objects import APIObject
 
+# LSA Not enough time: Adapt this to be an alias to ULID
 ClusterId = NewType("ClusterId", str)
 
 

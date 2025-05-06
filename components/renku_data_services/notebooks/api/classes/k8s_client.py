@@ -180,24 +180,19 @@ class NotebookK8sClient(Generic[_SessionType]):
         """Cluster id of the main cluster."""
         return DEFAULT_K8S_CLUSTER
 
-    async def cluster_name_by_class_id(self, class_id: int | None, api_user: APIUser) -> str:
-        """Retrieve the cluster name given the resource class id."""
-        # If the config_name is not set or not found, fall back on the default cluster.
-        name = str(self.cluster_id())
+    async def cluster_by_class_id(self, class_id: int | None, api_user: APIUser) -> Cluster:
+        """Return the cluster associated with the given resource class id."""
+        cluster_id = self.cluster_id()
 
         if class_id is not None:
             try:
                 rp = await self.__rp_repo.get_resource_pool_from_class(api_user, class_id)
                 if rp.cluster is not None:
-                    name = rp.cluster.config_name
+                    cluster_id = ClusterId(str(rp.cluster.id))
             except errors.MissingResourceError:
                 pass
 
-        return name
-
-    async def cluster_by_class_id(self, class_id: int | None, api_user: APIUser) -> Cluster:
-        """Return the cluster associated with the given resource class id."""
-        return self.__client.cluster_by_name(await self.cluster_name_by_class_id(class_id, api_user))
+        return self.__client.cluster_by_id(cluster_id)
 
     async def list_sessions(self, safe_username: str) -> list[_SessionType]:
         """Get a list of sessions that belong to a user."""

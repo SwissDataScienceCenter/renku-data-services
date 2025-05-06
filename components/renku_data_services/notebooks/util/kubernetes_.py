@@ -31,13 +31,13 @@ from renku_data_services.notebooks.crs import Patch, PatchType
 
 
 def renku_1_make_server_name(
-    safe_username: str, namespace: str, project: str, branch: str, commit_sha: str, cluster_name: str
+    safe_username: str, namespace: str, project: str, branch: str, commit_sha: str, cluster_id: str
 ) -> str:
     """Form a unique server name for Renku 1.0 sessions.
 
     This is used in naming all the k8s resources created by amalthea.
     """
-    server_string_for_hashing = f"{safe_username}-{namespace}-{project}-{branch}-{commit_sha}-{cluster_name}"
+    server_string_for_hashing = f"{safe_username}-{namespace}-{project}-{branch}-{commit_sha}-{cluster_id}"
     server_hash = md5(server_string_for_hashing.encode(), usedforsecurity=False).hexdigest().lower()
     prefix = _make_server_name_prefix(safe_username)
     # NOTE: A K8s object name can only contain lowercase alphanumeric characters, hyphens, or dots.
@@ -55,7 +55,7 @@ def renku_1_make_server_name(
 
 
 def renku_2_make_server_name(
-    user: AuthenticatedAPIUser | AnonymousAPIUser, project_id: str, launcher_id: str, cluster_name: str
+    user: AuthenticatedAPIUser | AnonymousAPIUser, project_id: str, launcher_id: str, cluster_id: str
 ) -> str:
     """Form a unique server name for Renku 2.0 sessions.
 
@@ -65,7 +65,7 @@ def renku_2_make_server_name(
     safe_username = safe_username.lower()
     safe_username = re.sub(r"[^a-z0-9-]", "-", safe_username)
     prefix = _make_server_name_prefix(safe_username)
-    server_string_for_hashing = f"{user.id}-{project_id}-{launcher_id}-{cluster_name}"
+    server_string_for_hashing = f"{user.id}-{project_id}-{launcher_id}-{cluster_id}"
     server_hash = md5(server_string_for_hashing.encode(), usedforsecurity=False).hexdigest().lower()
     # NOTE: A K8s object name can only contain lowercase alphanumeric characters, hyphens, or dots.
     # Must be no more than 63 characters because the name is used to create a k8s Service and Services

@@ -341,6 +341,7 @@ async def launch_notebook_helper(
 
     # Add annotation for old and new notebooks
     is_image_private = False
+    using_default_image = False
     if image:
         # A specific image was requested
         parsed_image = Image.from_path(image)
@@ -355,6 +356,7 @@ async def launch_notebook_helper(
             image_repo = image_repo.with_oauth2_token(internal_gitlab_user.access_token)
             image_exists_privately = await image_repo.image_exists(parsed_image)
         if not image_exists_privately and not image_exists_publicly:
+            using_default_image = True
             image = nb_config.sessions.default_image
             parsed_image = Image.from_path(image)
         if image_exists_privately:
@@ -499,6 +501,7 @@ async def launch_notebook_helper(
         k8s_client=nb_config.k8s_client,
         workspace_mount_path=mount_path,
         work_dir=server_work_dir,
+        using_default_image=using_default_image,
         is_image_private=is_image_private,
         repositories=[Repository.from_dict(r.model_dump()) for r in repositories],
         config=nb_config,
@@ -580,7 +583,7 @@ async def launch_notebook(
 ) -> tuple[UserServerManifest, int]:
     """Starts a server using the old operator."""
 
-    cluster_name = await config.k8s_client.cluster_name_by_class_id(launch_request.resource_class_id, user)
+    cluster = await config.k8s_client.cluster_by_class_id(launch_request.resource_class_id, user)
 
     if isinstance(user, AnonymousAPIUser):
         safe_username = escapism.escape(user.id, escape_char="-").lower()
@@ -592,7 +595,7 @@ async def launch_notebook(
         launch_request.project,
         launch_request.branch,
         launch_request.commit_sha,
-        cluster_name,
+        cluster.id,
     )
     project_slug = f"{launch_request.namespace}/{launch_request.project}"
     gitlab_client = NotebooksGitlabClient(config.git.url, internal_gitlab_user.access_token)

@@ -49,6 +49,7 @@ class UserServer(ABC):
         work_dir: PurePosixPath,
         config: NotebooksConfig,
         internal_gitlab_user: APIUser,
+        using_default_image: bool = False,
         is_image_private: bool = False,
         repositories: list[Repository] | None = None,
         host: str | None = None,
@@ -61,6 +62,7 @@ class UserServer(ABC):
         self.server_options = server_options
         self.environment_variables = environment_variables
         self.user_secrets = user_secrets
+        self.using_default_image = using_default_image
         self.workspace_mount_path = workspace_mount_path
         self.work_dir = work_dir
         self.cloudstorage = cloudstorage
@@ -395,6 +397,7 @@ class Renku1UserServer(UserServer):
         config: NotebooksConfig,
         gitlab_project: Project | None,
         internal_gitlab_user: APIUser,
+        using_default_image: bool = False,
         is_image_private: bool = False,
         host: str | None = None,
         **_: dict,  # Required to ignore unused arguments, among which repositories
@@ -421,6 +424,7 @@ class Renku1UserServer(UserServer):
             k8s_client=k8s_client,
             workspace_mount_path=workspace_mount_path,
             work_dir=work_dir,
+            using_default_image=using_default_image,
             is_image_private=is_image_private,
             repositories=repositories,
             host=host,
