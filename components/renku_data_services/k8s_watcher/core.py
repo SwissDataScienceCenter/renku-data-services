@@ -74,7 +74,7 @@ class APIObjectInCluster:
         )
 
 
-type EventHandler = Callable[[APIObjectInCluster], Awaitable[None]]
+type EventHandler = Callable[[APIObjectInCluster, str], Awaitable[None]]
 
 
 class K8sWatcher:
@@ -90,8 +90,8 @@ class K8sWatcher:
         while True:
             try:
                 watch = cluster.api.async_watch(kind=kind, namespace=cluster.namespace)
-                async for _, obj in watch:
-                    await self.__handler(APIObjectInCluster(obj, cluster.id))
+                async for event_type, obj in watch:
+                    await self.__handler(APIObjectInCluster(obj, cluster.id), event_type)
                     # in some cases, the kr8s loop above just never yields, especially if there's exceptions which
                     # can bypass async scheduling. This sleep here is as a last line of defence so this code does not
                     # execute indefinitely and prevent another resource kind from being watched.
@@ -148,9 +148,8 @@ class K8sWatcher:
 def k8s_object_handler(cache: K8sDbCache) -> EventHandler:
     """Listens and to k8s events and updates the cache."""
 
-    async def handler(obj: APIObjectInCluster) -> None:
-        if obj.obj.metadata.get("deletionTimestamp"):
-            # The object is being deleted
+    async def handler(obj: APIObjectInCluster, event_type: str) -> None:
+        if event_type == "DELETED":
             await cache.delete(obj.meta)
             return
         k8s_object = obj.to_k8s_object()
