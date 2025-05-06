@@ -90,9 +90,12 @@ class ProjectsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_authenticated
         async def _get_all_migrations(_: Request, user: base_models.APIUser) -> JSONResponse:
-            project_migrations = await self.project_migration_repo.get_project_migrations(user=user)
+            project_migrations = self.project_migration_repo.get_project_migrations(user=user)
 
-            migrations_list = [self._dump_project_migration(p) for p in project_migrations]
+            migrations_list = []
+            async for migration in project_migrations:
+                migrations_list.append(self._dump_project_migration(migration))
+
             return validated_json(apispec.ProjectMigrationList, migrations_list)
 
         return "/renku_v1_projects/migrations", ["GET"], _get_all_migrations

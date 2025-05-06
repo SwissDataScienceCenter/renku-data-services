@@ -1031,10 +1031,6 @@ components:
             description: A flag to filter projects where the user is a direct member.
             type: boolean
             default: false
-    ProjectMigrationGetQuery:
-      description: Query params for project migration get request
-      allOf:
-        - $ref: "#/components/schemas/PaginationRequest"
     ProjectMigrationList:
       description: A list of project migrations
       type: array

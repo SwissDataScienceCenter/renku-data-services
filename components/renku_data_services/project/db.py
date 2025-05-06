@@ -928,16 +928,15 @@ class ProjectMigrationRepository:
     async def get_project_migrations(
         self,
         user: base_models.APIUser,
-    ) -> list[models.ProjectMigrationInfo]:
+    ) -> AsyncGenerator[models.ProjectMigrationInfo, None]:
         """Get all project migrations from the database."""
         project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
 
         async with self.session_maker() as session:
-            stmt = select(schemas.ProjectMigrationsORM)
-            stmt = stmt.where(schemas.ProjectMigrationsORM.project_id.in_(project_ids))
-            result = await session.scalars(stmt)
-            project_migrations_orm = result.all()
-            return [p.dump() for p in project_migrations_orm]
+            stmt = select(schemas.ProjectMigrationsORM).where(schemas.ProjectMigrationsORM.project_id.in_(project_ids))
+            result = await session.stream_scalars(stmt)
+            async for migration in result:
+                yield migration.dump()
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.create, ResourceType.project)
