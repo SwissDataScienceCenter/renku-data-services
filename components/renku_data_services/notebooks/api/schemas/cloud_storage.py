@@ -1,5 +1,6 @@
 """Schema for cloudstorage config."""
 
+import json
 from configparser import ConfigParser
 from io import StringIO
 from pathlib import PurePosixPath
@@ -161,6 +162,7 @@ class RCloneStorage(ICloudStorageRequest):
             "remotePath": self.source_path,
             "configData": self.config_string(self.name or base_name),
         }
+        string_data.update(self.mount_options())
         # NOTE: in Renku v1 this function is not directly called so the base name
         # comes from the user_secret_key property on the class instance
         if self.user_secret_key:
@@ -283,6 +285,25 @@ class RCloneStorage(ICloudStorageRequest):
             storage_class=self.storage_class,
             user_secret_key=self.user_secret_key,
         )
+
+    def mount_options(self) -> dict[str, str]:
+        """Returns extra mount options for this storage."""
+        if not self.configuration:
+            raise ValidationError("Missing configuration for cloud storage")
+
+        vfs_options: dict[str, Any] = dict()
+        mount_options: dict[str, Any] = dict()
+        storage_type = self.configuration.get("type", "")
+        if storage_type == "doi":
+            vfs_options["CacheMode"] = "full"
+            mount_options["AttrTimeout"] = "41s"
+
+        options: dict[str, str] = dict()
+        if vfs_options:
+            options["vfsOpt"] = json.dumps(vfs_options)
+        if mount_options:
+            options["mountOpt"] = json.dumps(mount_options)
+        return options
 
     def __repr__(self) -> str:
         """Override to make sure no secrets or sensitive configuration gets printed in logs."""
