@@ -4,7 +4,7 @@ import asyncio
 
 import renku_data_services.search.core as search_core
 from renku_data_services.data_tasks.config import Config
-from renku_data_services.data_tasks.taskman import TaskDefininion
+from renku_data_services.data_tasks.taskman import TaskDefininions
 from renku_data_services.message_queue.db import EventRepository
 from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.search.db import SearchUpdatesRepo
@@ -28,7 +28,7 @@ async def send_pending_redis_events(cfg: Config) -> None:
         await asyncio.sleep(1)
 
 
-def all_tasks(cfg: Config) -> TaskDefininion:
+def all_tasks(cfg: Config) -> TaskDefininions:
     """A dict of task factories to be managed in main."""
     # Impl. note: We pass the entire config to the coroutines, because
     # should such a task fail it will be restarted, which means the
@@ -37,7 +37,7 @@ def all_tasks(cfg: Config) -> TaskDefininion:
     # repositories or other services (and they are not stateless) we
     # might capture this state and possibly won't recover by
     # re-entering the coroutine.
-    return TaskDefininion(
+    return TaskDefininions(
         {
             "update_search": lambda: update_search(cfg),
             "send_pending_events": lambda: send_pending_redis_events(cfg),

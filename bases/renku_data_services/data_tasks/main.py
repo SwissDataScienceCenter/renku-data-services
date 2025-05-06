@@ -3,9 +3,11 @@
 import asyncio
 import logging
 
+import uvloop
+
 from renku_data_services.data_tasks.config import Config
 from renku_data_services.data_tasks.task_defs import all_tasks
-from renku_data_services.data_tasks.taskman import TaskDefininion, TaskManager
+from renku_data_services.data_tasks.taskman import TaskDefininions, TaskManager
 from renku_data_services.data_tasks.tcp_handler import TcpHandler
 
 
@@ -35,8 +37,8 @@ async def main() -> None:
     logger = logging.getLogger("renku_data_services.data_tasks.main")
     logger.info(f"Config: {config}")
 
-    tm = TaskManager(config.max_retry_wait)
-    internal_tasks = TaskDefininion({"_log_tasks": lambda: log_tasks(logger, tm, config.main_tick_interval)})
+    tm = TaskManager(config.max_retry_wait_seconds)
+    internal_tasks = TaskDefininions({"_log_tasks": lambda: log_tasks(logger, tm, config.main_log_interval_seconds)})
     logger.info("Tasks starting...")
     tm.start_all(all_tasks(config).merge(internal_tasks))
 
@@ -48,5 +50,4 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
-    print("Main ended")
+    uvloop.run(main())

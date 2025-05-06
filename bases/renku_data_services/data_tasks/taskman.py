@@ -19,25 +19,25 @@ type TaskFactory = Callable[[], Coroutine[Any, Any, None]]
 
 
 @final
-class TaskDefininion:
+class TaskDefininions:
     """Task definitions."""
 
     def __init__(self, defs: dict[str, TaskFactory]) -> None:
-        self.__task_defs: dict[str, TaskFactory] = defs
+        self.__task_defs = defs
 
     @classmethod
-    def single(cls, name: str, tf: TaskFactory) -> TaskDefininion:
+    def single(cls, name: str, tf: TaskFactory) -> TaskDefininions:
         """Create a TaskDefinition for the given single task."""
-        return TaskDefininion({name: tf})
+        return TaskDefininions({name: tf})
 
     @property
     def tasks(self) -> Iterator[tuple[str, TaskFactory]]:
         """Return the set of tasks."""
         return iter(self.__task_defs.items())
 
-    def merge(self, other: TaskDefininion) -> TaskDefininion:
+    def merge(self, other: TaskDefininions) -> TaskDefininions:
         """Create a new definition merging this with other."""
-        return TaskDefininion(self.__task_defs | other.__task_defs)
+        return TaskDefininions(self.__task_defs | other.__task_defs)
 
 
 @final
@@ -106,11 +106,11 @@ class TaskJoin:
 class TaskManager:
     """Maintains state for currently running tasks associated by their name."""
 
-    def __init__(self, max_retry_wait: int) -> None:
+    def __init__(self, max_retry_wait_seconds: int) -> None:
         self.__running_tasks: dict[str, _TaskContext] = {}
-        self.__max_retry_wait = max_retry_wait
+        self.__max_retry_wait_seconds = max_retry_wait_seconds
 
-    def start_all(self, task_defs: TaskDefininion, start_time: datetime = datetime.now()) -> None:
+    def start_all(self, task_defs: TaskDefininions, start_time: datetime = datetime.now()) -> None:
         """Registers all tasks."""
         now = start_time
         for name, tf in task_defs.tasks:
@@ -190,7 +190,7 @@ class TaskManager:
                     restarts = ctx.restarts
                     ctx.inc_restarts()
 
-                secs = min(pow(2, restarts), self.__max_retry_wait)
+                secs = min(pow(2, restarts), self.__max_retry_wait_seconds)
                 logger.error(
                     f"{name}: Failed with {e}. Restarting it in {secs} seconds for the {restarts + 1}. time.",
                     exc_info=e,

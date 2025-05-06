@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from renku_data_services.data_tasks.taskman import TaskDefininion, TaskManager, _TaskContext
+from renku_data_services.data_tasks.taskman import TaskDefininions, TaskManager, _TaskContext
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ async def task2(wait_time: float, body: Callable[[], Any] = lambda: logger.info(
 
 
 def test_task_definition() -> None:
-    td = TaskDefininion({"test1": lambda: task1(1)})
+    td = TaskDefininions({"test1": lambda: task1(1)})
     tds = list(td.tasks)
     assert len(tds) == 1
     for name, tf in td.tasks:
@@ -71,9 +71,9 @@ async def cancel(tm: TaskManager, name: str, max_wait: float) -> None:
 
 @pytest.mark.asyncio
 async def test_simple_task_run() -> None:
-    tm = TaskManager(max_retry_wait=10)
+    tm = TaskManager(max_retry_wait_seconds=10)
     state = State()
-    td = TaskDefininion.single("task1", lambda: task1(0.5, state.inc))
+    td = TaskDefininions.single("task1", lambda: task1(0.5, state.inc))
     tm.start_all(td)
     assert tm.get_task_view("task1") is not None
     await tm.get_task_join("task1").join(max_wait=1)
@@ -83,9 +83,9 @@ async def test_simple_task_run() -> None:
 
 @pytest.mark.asyncio
 async def test_infinite_task() -> None:
-    tm = TaskManager(max_retry_wait=10)
+    tm = TaskManager(max_retry_wait_seconds=10)
     state = State()
-    td = TaskDefininion.single("task", lambda: task2(0.1, state.inc))
+    td = TaskDefininions.single("task", lambda: task2(0.1, state.inc))
     tm.start_all(td)
     assert tm.get_task_view("task") is not None
     await asyncio.sleep(0.5)
@@ -96,9 +96,9 @@ async def test_infinite_task() -> None:
 
 @pytest.mark.asyncio
 async def test_retry_on_error() -> None:
-    tm = TaskManager(max_retry_wait=1)
+    tm = TaskManager(max_retry_wait_seconds=1)
     state = State(throw_on=2)
-    td = TaskDefininion.single("task", lambda: task2(0.1, state.inc))
+    td = TaskDefininions.single("task", lambda: task2(0.1, state.inc))
     tm.start_all(td)
     await asyncio.sleep(2)
     assert tm.get_task_view("task") is not None
@@ -111,9 +111,9 @@ async def test_retry_on_error() -> None:
 
 @pytest.mark.asyncio
 async def test_task_cancel() -> None:
-    tm = TaskManager(max_retry_wait=1)
+    tm = TaskManager(max_retry_wait_seconds=1)
     state = State()
-    td = TaskDefininion.single("task", lambda: task2(0.1, state.inc))
+    td = TaskDefininions.single("task", lambda: task2(0.1, state.inc))
     tm.start_all(td)
     await asyncio.sleep(0.5)
     assert tm.get_task_view("task") is not None

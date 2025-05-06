@@ -17,8 +17,8 @@ class Config:
     db_config: DBConfig
     solr_config: SolrClientConfig
     redis_config: RedisConfig
-    max_retry_wait: int
-    main_tick_interval: int
+    max_retry_wait_seconds: int
+    main_log_interval_seconds: int
     tcp_host: str
     tcp_port: int
 
@@ -31,8 +31,8 @@ class Config:
 
         dummy_stores = env("DUMMY_STORES", "false").lower() == "true"
 
-        max_retry = int(env("MAX_RETRY_WAIT", "120"))
-        main_tick = int(env("MAIN_TICK_INTERVAL", "300"))
+        max_retry = int(env("MAX_RETRY_WAIT_SECONDS", "120"))
+        main_tick = int(env("MAIN_LOG_INTERVAL_SECONDS", "300"))
         solr_config = SolrClientConfig.from_env(prefix)
         tcp_host = env("TCP_HOST", "127.0.0.1")
         tcp_port = int(env("TCP_PORT", "8001"))
@@ -40,8 +40,8 @@ class Config:
         redis = RedisConfig.fake() if dummy_stores else RedisConfig.from_env(prefix)
         return Config(
             db_config=DBConfig.from_env(prefix),
-            max_retry_wait=max_retry,
-            main_tick_interval=main_tick,
+            max_retry_wait_seconds=max_retry,
+            main_log_interval_seconds=main_tick,
             solr_config=solr_config,
             redis_config=redis,
             tcp_host=tcp_host,
