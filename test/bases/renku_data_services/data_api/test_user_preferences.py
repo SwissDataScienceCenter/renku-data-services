@@ -177,6 +177,7 @@ async def test_add_user_preferences_dismiss_projects_migration_banner(
     assert res.json.get("user_id") == api_user.id
     assert res.json.get("pinned_projects") == {"project_slugs": []}
     assert res.json.get("dismiss_project_migration_banner")
+    assert res.json.get("dismiss_project_migration_banner") is not None
 
     _, res = await sanic_client.delete(
         "/api/data/user/preferences/dismiss_project_migration_banner",
