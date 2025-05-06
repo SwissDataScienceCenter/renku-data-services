@@ -4,9 +4,15 @@ import functools
 from collections.abc import Awaitable, Callable
 from typing import Concatenate, ParamSpec, Protocol, TypeVar, cast
 
+from sanic.log import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from renku_data_services.data_connectors.models import DataConnector, DataConnectorUpdate, DeletedDataConnector
+from renku_data_services.data_connectors.models import (
+    DataConnector,
+    DataConnectorUpdate,
+    DeletedDataConnector,
+    GlobalDataConnector,
+)
 from renku_data_services.errors import errors
 from renku_data_services.namespace.models import DeletedGroup, Group
 from renku_data_services.project.models import DeletedProject, Project, ProjectUpdate
@@ -77,7 +83,17 @@ def update_search_document(
             case DataConnector() as dc:
                 await self.search_updates_repo.upsert(dc)
 
-            case DataConnectorUpdate() as dc:
+            case GlobalDataConnector() as dc:
+                # TODO: handle global data connectors
+                # await self.search_updates_repo.upsert(dc)
+                pass
+
+            case DataConnectorUpdate() as dc if isinstance(dc.new, GlobalDataConnector):
+                # TODO: handle global data connectors
+                # await self.search_updates_repo.upsert(dc.new)
+                pass
+
+            case DataConnectorUpdate() as dc if isinstance(dc.new, DataConnector):
                 await self.search_updates_repo.upsert(dc.new)
 
             case DeletedDataConnector() as dc:
@@ -90,6 +106,12 @@ def update_search_document(
                         users = cast(list[UserInfo], els)
                         for u in users:
                             await self.search_updates_repo.upsert(u)
+
+            case _:
+                error = errors.ProgrammingError(
+                    message=f"Encountered unhandled search document of type '{result.__class__.__name__}'"
+                )
+                logger.error(error)
 
         return result
 

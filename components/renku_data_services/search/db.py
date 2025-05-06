@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
 from renku_data_services.base_models.core import Slug
-from renku_data_services.data_connectors.models import DataConnector
+from renku_data_services.data_connectors.models import DataConnector, GlobalDataConnector
 from renku_data_services.namespace.models import Group
 from renku_data_services.project.models import Project
 from renku_data_services.search.models import DeleteDoc, Entity
@@ -77,6 +77,23 @@ def _dataconnector_to_entity_doc(dc: DataConnector) -> DataConnectorDoc:
     )
 
 
+def _global_dataconnector_to_entity_doc(dc: GlobalDataConnector) -> DataConnectorDoc:
+    return DataConnectorDoc(
+        id=dc.id,
+        name=dc.name,
+        storageType=dc.storage.storage_type,
+        readonly=dc.storage.readonly,
+        slug=Slug.from_name(dc.slug),
+        visibility=dc.visibility,
+        createdBy=dc.created_by,
+        creationDate=dc.creation_date,
+        namespace=Slug.from_name("GLOBAL"),
+        description=dc.description,
+        keywords=dc.keywords if dc.keywords is not None else [],
+        version=DocVersions.off(),
+    )
+
+
 class SearchUpdatesRepo:
     """Db operations for the search updates table.
 
@@ -122,6 +139,15 @@ class SearchUpdatesRepo:
 
             case DataConnector() as d:
                 dc = _dataconnector_to_entity_doc(d)
+                return {
+                    "entity_id": str(dc.id),
+                    "entity_type": "DataConnector",
+                    "created_at": started,
+                    "payload": json.dumps(dc.to_dict()),
+                }
+
+            case GlobalDataConnector() as d:
+                dc = _global_dataconnector_to_entity_doc(d)
                 return {
                     "entity_id": str(dc.id),
                     "entity_type": "DataConnector",
