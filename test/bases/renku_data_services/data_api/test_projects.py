@@ -180,12 +180,12 @@ async def test_create_project_with_invalid_visibility(sanic_client, user_headers
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("keyword", ["invalid chars '", "Nön English"])
-async def test_create_project_with_invalid_keywords(sanic_client, user_headers, keyword) -> None:
+async def test_create_project_with_invalid_keywords(sanic_client, user_headers) -> None:
+    keyword = "this keyword is way too long........................................................................"
     _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json={"keywords": [keyword]})
 
     assert response.status_code == 422, response.text
-    assert "String should match pattern '^[A-Za-z0-9\\s\\-_.]*$'" in response.json["error"]["message"]
+    assert "String should have at most 99 characters" in response.json["error"]["message"]
 
 
 @pytest.mark.asyncio

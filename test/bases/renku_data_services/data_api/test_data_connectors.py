@@ -357,16 +357,14 @@ async def test_post_data_connector_with_invalid_visibility(sanic_client: SanicAS
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("keyword", ["invalid chars '", "Nön English"])
-async def test_post_data_connector_with_invalid_keywords(
-    sanic_client: SanicASGITestClient, user_headers, keyword
-) -> None:
+async def test_post_data_connector_with_invalid_keywords(sanic_client: SanicASGITestClient, user_headers) -> None:
+    keyword = "this keyword is way too long........................................................................"
     payload = {"keywords": [keyword]}
 
     _, response = await sanic_client.post("/api/data/data_connectors", headers=user_headers, json=payload)
 
     assert response.status_code == 422, response.text
-    assert "String should match pattern '^[A-Za-z0-9\\s\\-_.]*$'" in response.json["error"]["message"]
+    assert "String should have at most 99 characters" in response.json["error"]["message"]
 
 
 @pytest.mark.asyncio

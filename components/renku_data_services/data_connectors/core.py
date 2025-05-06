@@ -178,7 +178,6 @@ async def validate_unsaved_global_data_connector(
     fixed_keywords: list[str] = []
     for word in keywords:
         for kw in word.strip().split(","):
-            # TODO: handle more keywords (see https://github.com/SwissDataScienceCenter/renku-data-services/pull/810)
             with contextlib.suppress(PydanticValidationError):
                 fixed_keywords.append(apispec.Keyword.model_validate(kw.strip()).root)
     keywords = fixed_keywords

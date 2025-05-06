@@ -853,7 +853,6 @@ components:
       type: string
       minLength: 1
       maxLength: 99
-      pattern: '^[A-Za-z0-9\s\-_.]*$'
     KeywordsList:
       description: Project keywords
       type: array
