@@ -28,7 +28,7 @@ from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec
 from renku_data_services.notebooks.api.amalthea_patches import git_proxy, init_containers
 from renku_data_services.notebooks.api.classes.image import Image
-from renku_data_services.notebooks.api.classes.k8s_client import sanitize_for_serialization
+from renku_data_services.notebooks.api.classes.k8s_client import sanitizer
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_data_services.notebooks.config import NotebooksConfig
@@ -74,8 +74,8 @@ async def get_extra_init_containers(
 ) -> tuple[list[InitContainer], list[ExtraVolume]]:
     """Get all extra init containers that should be added to an amalthea session."""
     cert_init, cert_vols = init_containers.certificates_container(nb_config)
-    session_init_containers = [InitContainer.model_validate(sanitize_for_serialization(cert_init))]
-    extra_volumes = [ExtraVolume.model_validate(sanitize_for_serialization(volume)) for volume in cert_vols]
+    session_init_containers = [InitContainer.model_validate(sanitizer(cert_init))]
+    extra_volumes = [ExtraVolume.model_validate(sanitizer(volume)) for volume in cert_vols]
     git_clone = await init_containers.git_clone_container_v2(
         user=user,
         config=nb_config,
@@ -103,7 +103,7 @@ async def get_extra_containers(
         user=user, config=nb_config, repositories=repositories, git_providers=git_providers
     )
     if git_proxy_container:
-        conts.append(ExtraContainer.model_validate(sanitize_for_serialization(git_proxy_container)))
+        conts.append(ExtraContainer.model_validate(sanitizer(git_proxy_container)))
     return conts
 
 
@@ -162,16 +162,17 @@ async def get_auth_secret_anonymous(nb_config: NotebooksConfig, server_name: str
             "in order to launch an anonymous session."
         )
     # NOTE: Amalthea looks for the token value first in the cookie and then in the authorization header
-    secret_data = {}
-    secret_data["auth"] = safe_dump(
-        {
-            "authproxy": {
-                "token": session_id,
-                "cookie_key": nb_config.session_id_cookie_name,
-                "verbose": True,
+    secret_data = {
+        "auth": safe_dump(
+            {
+                "authproxy": {
+                    "token": session_id,
+                    "cookie_key": nb_config.session_id_cookie_name,
+                    "verbose": True,
+                }
             }
-        }
-    )
+        )
+    }
     secret = V1Secret(metadata=V1ObjectMeta(name=server_name), string_data=secret_data)
     return ExtraSecret(secret)
 
@@ -181,7 +182,7 @@ def get_gitlab_image_pull_secret(
 ) -> ExtraSecret:
     """Create a Kubernetes secret for private GitLab registry authentication."""
 
-    preferred_namespace = nb_config.k8s_client.preferred_namespace
+    k8s_namespace = nb_config.k8s_client.namespace
 
     registry_secret = {
         "auths": {
@@ -196,7 +197,7 @@ def get_gitlab_image_pull_secret(
 
     secret_data = {".dockerconfigjson": registry_secret}
     secret = V1Secret(
-        metadata=V1ObjectMeta(name=image_pull_secret_name, namespace=preferred_namespace),
+        metadata=V1ObjectMeta(name=image_pull_secret_name, namespace=k8s_namespace),
         string_data=secret_data,
         type="kubernetes.io/dockerconfigjson",
     )
@@ -270,7 +271,7 @@ async def get_data_sources(
         secret = ExtraSecret(
             cs.secret(
                 secret_name,
-                nb_config.k8s_client.preferred_namespace,
+                nb_config.k8s_client.namespace(),
                 user_secret_key=user_secret_key if secret_key_needed else None,
             )
         )
@@ -307,7 +308,7 @@ async def request_dc_secret_creation(
             continue
         request_data = {
             "name": f"{manifest.metadata.name}-ds-{s_id.lower()}-secrets",
-            "namespace": nb_config.k8s_v2_client.preferred_namespace,
+            "namespace": nb_config.k8s_v2_client.namespace(),
             "secret_ids": [str(secret.secret_id) for secret in secrets],
             "owner_references": [owner_reference],
             "key_mapping": {str(secret.secret_id): secret.name for secret in secrets},
@@ -371,7 +372,7 @@ async def request_session_secret_creation(
         key_mapping[secret_id].append(s.secret_slot.filename)
     request_data = {
         "name": f"{manifest.metadata.name}-secrets",
-        "namespace": nb_config.k8s_v2_client.preferred_namespace,
+        "namespace": nb_config.k8s_v2_client.namespace(),
         "secret_ids": [str(s.secret_id) for s in session_secrets],
         "owner_references": [owner_reference],
         "key_mapping": key_mapping,
@@ -476,7 +477,7 @@ async def patch_session(
     project_repo: ProjectRepository,
 ) -> AmaltheaSessionV1Alpha1:
     """Patch an Amalthea session."""
-    session = await nb_config.k8s_v2_client.get_server(session_id, user.id)
+    session = await nb_config.k8s_v2_client.get_session(session_id, user.id)
     if session is None:
         raise errors.MissingResourceError(message=f"The session with ID {session_id} does not exist", quiet=True)
     if session.spec is None:
@@ -532,7 +533,7 @@ async def patch_session(
     # If the session is being hibernated we do not need to patch anything else that is
     # not specifically called for in the request body, we can refresh things when the user resumes.
     if is_getting_hibernated:
-        return await nb_config.k8s_v2_client.patch_server(session_id, user.id, patch.to_rfc7386())
+        return await nb_config.k8s_v2_client.patch_session(session_id, user.id, patch.to_rfc7386())
 
     # Patching the extra containers (includes the git proxy)
     git_providers = await nb_config.git_provider_helper.get_providers(user)
@@ -571,7 +572,7 @@ async def patch_session(
     if len(patch_serialized) == 0:
         return session
 
-    return await nb_config.k8s_v2_client.patch_server(session_id, user.id, patch_serialized)
+    return await nb_config.k8s_v2_client.patch_session(session_id, user.id, patch_serialized)
 
 
 def _deduplicate_target_paths(dcs: dict[str, RCloneStorage]) -> dict[str, RCloneStorage]:

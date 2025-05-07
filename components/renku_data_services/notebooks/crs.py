@@ -127,6 +127,15 @@ class JupyterServerV1Alpha1(_JSModel):
         resource_requests["storage"] = self.spec.storage.size
         return ComputeResources.model_validate(resource_requests)
 
+    def resource_class_id(self) -> int:
+        """Get the resource class from the annotations."""
+        if "renku.io/resourceClassId" not in self.metadata.annotations:
+            raise errors.ProgrammingError(
+                message=f"The session with name {self.metadata.name} is missing its renku.io/resourceClassId annotation"
+            )
+        i = int(self.metadata.annotations["renku.io/resourceClassId"])
+        return i
+
 
 class AmaltheaSessionV1Alpha1(_ASModel):
     """Amalthea session CRD."""
@@ -164,7 +173,6 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             )
         return cast(ULID, ULID.from_str(self.metadata.annotations["renku.io/launcher_id"]))
 
-    @property
     def resource_class_id(self) -> int:
         """Get the resource class from the annotations."""
         if "renku.io/resource_class_id" not in self.metadata.annotations:
@@ -257,7 +265,7 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             url=url,
             project_id=str(self.project_id),
             launcher_id=str(self.launcher_id),
-            resource_class_id=self.resource_class_id,
+            resource_class_id=self.resource_class_id(),
         )
 
     @property

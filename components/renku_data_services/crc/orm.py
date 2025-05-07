@@ -6,10 +6,13 @@ from typing import Optional
 from sqlalchemy import BigInteger, Column, Identity, Integer, MetaData, String, Table
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
+from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services.crc import models
+from renku_data_services.crc.models import SavedCluster
 from renku_data_services.errors import errors
+from renku_data_services.utils.sqlalchemy import ULIDType
 
 metadata_obj = MetaData(schema="resource_pools")  # Has to match alembic ini section name
 
@@ -133,6 +136,24 @@ class ResourceClassORM(BaseORM):
         )
 
 
+class ClusterORM(BaseORM):
+    """Cluster definition."""
+
+    __tablename__ = "clusters"
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    name: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    config_name: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+
+    def dump(self) -> models.SavedCluster:
+        """Create a cluster model from the ORM object."""
+        return SavedCluster(id=self.id, name=self.name, config_name=self.config_name)
+
+    @classmethod
+    def load(cls, cluster: models.Cluster) -> "ClusterORM":
+        """Create an ORM object from the cluster model."""
+        return ClusterORM(name=cluster.name, config_name=cluster.config_name)
+
+
 class ResourcePoolORM(BaseORM):
     """Resource pool specifies a set of resource classes, users that can access them and a quota."""
 
@@ -157,6 +178,10 @@ class ResourcePoolORM(BaseORM):
     default: Mapped[bool] = mapped_column(default=False, index=True)
     public: Mapped[bool] = mapped_column(default=False, index=True)
     id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
+    cluster_id: Mapped[Optional[ULID]] = mapped_column(
+        ForeignKey(ClusterORM.id, ondelete="SET NULL"), default=None, index=True
+    )
+    cluster: Mapped[Optional[ClusterORM]] = relationship(viewonly=True, default=None, lazy="joined", init=False)
 
     @classmethod
     def load(cls, resource_pool: models.ResourcePool) -> "ResourcePoolORM":
@@ -164,6 +189,11 @@ class ResourcePoolORM(BaseORM):
         quota = None
         if isinstance(resource_pool.quota, models.Quota):
             quota = resource_pool.quota.id
+
+        cluster_id = None
+        if resource_pool.cluster is not None and isinstance(resource_pool.cluster, models.SavedCluster):
+            cluster_id = resource_pool.cluster.id
+
         return cls(
             name=resource_pool.name,
             quota=quota,
@@ -172,6 +202,7 @@ class ResourcePoolORM(BaseORM):
             hibernation_threshold=resource_pool.hibernation_threshold,
             public=resource_pool.public,
             default=resource_pool.default,
+            cluster_id=cluster_id,
         )
 
     def dump(
@@ -190,6 +221,7 @@ class ResourcePoolORM(BaseORM):
                 f"The quota in the database {self.quota} and Kubernetes {quota} do not match. "
                 f"Using the quota {quota} in the response."
             )
+        cluster = None if self.cluster is None else self.cluster.dump()
         return models.ResourcePool(
             id=self.id,
             name=self.name,
@@ -199,6 +231,7 @@ class ResourcePoolORM(BaseORM):
             hibernation_threshold=self.hibernation_threshold,
             public=self.public,
             default=self.default,
+            cluster=cluster,
         )
 
 

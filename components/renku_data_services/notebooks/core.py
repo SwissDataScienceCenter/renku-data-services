@@ -77,7 +77,7 @@ async def user_servers(
     """Returns a filtered list of servers for the given user."""
 
     servers = [
-        UserServerManifest(s, config.sessions.default_image) for s in await config.k8s_client.list_servers(user.id)
+        UserServerManifest(s, config.sessions.default_image) for s in await config.k8s_client.list_sessions(user.id)
     ]
     filtered_servers = {}
     ann_prefix = config.session_get_endpoint_annotations.renku_annotation_prefix
@@ -92,7 +92,7 @@ async def user_server(
 ) -> UserServerManifest:
     """Returns the requested server for the user."""
 
-    server = await config.k8s_client.get_server(server_name, user.id)
+    server = await config.k8s_client.get_session(server_name, user.id)
     if server is None:
         raise errors.MissingResourceError(message=f"The server {server_name} does not exist.")
     return UserServerManifest(server, config.sessions.default_image)
@@ -110,7 +110,7 @@ async def patch_server(
     if not config.sessions.storage.pvs_enabled:
         raise intermittent.PVDisabledError()
 
-    server = await config.k8s_client.get_server(server_name, user.id)
+    server = await config.k8s_client.get_session(server_name, user.id)
     if server is None:
         raise errors.MissingResourceError(message=f"The server with name {server_name} cannot be found")
     if server.spec is None:
@@ -162,8 +162,8 @@ async def patch_server(
                     "path": "/metadata/labels/renku.io~1quota",
                 }
             )
-        new_server = await config.k8s_client.patch_server(
-            server_name=server_name, safe_username=user.id, patch=js_patch
+        new_server = await config.k8s_client.patch_session(
+            session_name=server_name, safe_username=user.id, patch=js_patch
         )
         ss_patch: list[dict[str, Any]] = [
             {
@@ -172,7 +172,7 @@ async def patch_server(
                 "value": parsed_server_options.priority_class,
             }
         ]
-        await config.k8s_client.patch_statefulset(server_name=server_name, patch=ss_patch)
+        await config.k8s_client.patch_statefulset(session_name=server_name, safe_username=user.id, patch=ss_patch)
 
     if state == PatchServerStatusEnum.Hibernated:
         # NOTE: Do nothing if server is already hibernated
@@ -222,7 +222,7 @@ async def patch_server(
             },
         }
 
-        new_server = await config.k8s_client.patch_server(server_name=server_name, safe_username=user.id, patch=patch)
+        new_server = await config.k8s_client.patch_session(session_name=server_name, safe_username=user.id, patch=patch)
     elif state == PatchServerStatusEnum.Running:
         # NOTE: We clear hibernation annotations in Amalthea to avoid flickering in the UI (showing
         # the repository as dirty when resuming a session for a short period of time).
@@ -244,8 +244,8 @@ async def patch_server(
                 floor(user.access_token_expires_at.timestamp()) if user.access_token_expires_at is not None else -1
             ),
         )
-        await config.k8s_client.patch_tokens(server_name, renku_tokens, gitlab_token)
-        new_server = await config.k8s_client.patch_server(server_name=server_name, safe_username=user.id, patch=patch)
+        await config.k8s_client.patch_session_tokens(server_name, user.id, renku_tokens, gitlab_token)
+        new_server = await config.k8s_client.patch_session(session_name=server_name, safe_username=user.id, patch=patch)
 
     return UserServerManifest(new_server, config.sessions.default_image)
 
@@ -253,7 +253,7 @@ async def patch_server(
 async def stop_server(config: NotebooksConfig, user: AnonymousAPIUser | AuthenticatedAPIUser, server_name: str) -> None:
     """Stops / deletes the requested server."""
 
-    await config.k8s_client.delete_server(server_name, safe_username=user.id)
+    await config.k8s_client.delete_session(server_name, safe_username=user.id)
 
 
 def server_options(config: NotebooksConfig) -> dict:
@@ -272,8 +272,8 @@ async def server_logs(
 ) -> dict:
     """Returns the logs of the given server."""
 
-    return await config.k8s_client.get_server_logs(
-        server_name=server_name,
+    return await config.k8s_client.get_session_logs(
+        session_name=server_name,
         safe_username=user.id,
         max_log_lines=max_lines,
     )
@@ -319,15 +319,12 @@ async def launch_notebook_helper(
     lfs_auto_fetch: bool,
     cloudstorage: list[apispec.RCloneStorageRequest],
     server_options: ServerOptions | dict | None,
-    namespace: str | None,  # Renku 1.0
+    gl_namespace: str | None,  # Renku 1.0
     project: str | None,  # Renku 1.0
     branch: str | None,  # Renku 1.0
     commit_sha: str | None,  # Renku 1.0
-    notebook: str | None,  # Renku 1.0
     gl_project: GitlabProject | None,  # Renku 1.0
     gl_project_path: str | None,  # Renku 1.0
-    project_id: str | None,  # Renku 2.0
-    launcher_id: str | None,  # Renku 2.0
     repositories: list[apispec.LaunchNotebookRequestRepository] | None,  # Renku 2.0
     internal_gitlab_user: APIUser,
     user_repo: UserRepo,
@@ -335,7 +332,7 @@ async def launch_notebook_helper(
 ) -> tuple[UserServerManifest, int]:
     """Helper function to launch a Jupyter server."""
 
-    server = await nb_config.k8s_client.get_server(server_name, user.id)
+    server = await nb_config.k8s_client.get_session(server_name, user.id)
 
     if server:
         return UserServerManifest(server, nb_config.sessions.default_image, nb_config.sessions.storage.pvs_enabled), 200
@@ -484,16 +481,14 @@ async def launch_notebook_helper(
     if user_secrets:
         k8s_user_secret = K8sUserSecrets(f"{server_name}-secret", **user_secrets.model_dump())
 
+    # Renku 1-only parameters
     extra_kwargs: dict = dict(
         commit_sha=commit_sha,
         branch=branch,
         project=project,
-        namespace=namespace,
-        launcher_id=launcher_id,
-        project_id=project_id,
-        notebook=notebook,
-        internal_gitlab_user=internal_gitlab_user,  # Renku 1
-        gitlab_project=gl_project,  # Renku 1
+        gl_namespace=gl_namespace,
+        internal_gitlab_user=internal_gitlab_user,
+        gitlab_project=gl_project,
     )
     server = server_class(
         user=user,
@@ -535,7 +530,7 @@ async def launch_notebook_helper(
 
     async def create_secret(payload: dict[str, Any], type_message: str) -> None:
         async def _on_error(server_name: str, error_msg: str) -> None:
-            await nb_config.k8s_client.delete_server(server_name, safe_username=user.id)
+            await nb_config.k8s_client.delete_session(server_name, safe_username=user.id)
             raise RuntimeError(error_msg)
 
         try:
@@ -554,7 +549,7 @@ async def launch_notebook_helper(
     if k8s_user_secret is not None:
         request_data: dict[str, Any] = {
             "name": k8s_user_secret.name,
-            "namespace": server.k8s_client.preferred_namespace,
+            "namespace": server.k8s_namespace(),
             "secret_ids": [str(id_) for id_ in k8s_user_secret.user_secret_ids],
             "owner_references": [owner_reference],
         }
@@ -568,7 +563,7 @@ async def launch_notebook_helper(
                 base_name = f"{server_name}-ds-{icloud_storage}"
             request_data = {
                 "name": f"{base_name}-secrets",
-                "namespace": server.k8s_client.preferred_namespace,
+                "namespace": server.k8s_namespace(),
                 "secret_ids": list(cloud_storage.secrets.keys()),
                 "owner_references": [owner_reference],
                 "key_mapping": cloud_storage.secrets,
@@ -587,6 +582,9 @@ async def launch_notebook(
     storage_repo: StorageRepository,
 ) -> tuple[UserServerManifest, int]:
     """Starts a server using the old operator."""
+
+    cluster = await config.k8s_client.cluster_by_class_id(launch_request.resource_class_id, user)
+
     if isinstance(user, AnonymousAPIUser):
         safe_username = escapism.escape(user.id, escape_char="-").lower()
     else:
@@ -597,6 +595,7 @@ async def launch_notebook(
         launch_request.project,
         launch_request.branch,
         launch_request.commit_sha,
+        cluster.id,
     )
     project_slug = f"{launch_request.namespace}/{launch_request.project}"
     gitlab_client = NotebooksGitlabClient(config.git.url, internal_gitlab_user.access_token)
@@ -605,7 +604,7 @@ async def launch_notebook(
         raise errors.MissingResourceError(message=f"Cannot find gitlab project with slug {project_slug}")
     gl_project_path = gl_project.path
     server_class = Renku1UserServer
-    server_options = (
+    _server_options = (
         ServerOptions.from_server_options_request_schema(
             launch_request.serverOptions.model_dump(),
             config.server_options.default_url_default,
@@ -628,16 +627,13 @@ async def launch_notebook(
         default_url=launch_request.default_url,
         lfs_auto_fetch=launch_request.lfs_auto_fetch,
         cloudstorage=launch_request.cloudstorage,
-        server_options=server_options,
-        namespace=launch_request.namespace,
+        server_options=_server_options,
+        gl_namespace=launch_request.namespace,
         project=launch_request.project,
         branch=launch_request.branch,
         commit_sha=launch_request.commit_sha,
-        notebook=launch_request.notebook,
         gl_project=gl_project,
         gl_project_path=gl_project_path,
-        project_id=None,
-        launcher_id=None,
         repositories=None,
         internal_gitlab_user=internal_gitlab_user,
         user_repo=user_repo,

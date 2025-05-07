@@ -28,6 +28,7 @@ async def main(server: "UserServer") -> list[dict[str, Any]]:
     if gl_project_path:
         volume_mount["subPath"] = f"{gl_project_path}"
 
+    # noinspection PyListCreation
     patches = [
         {
             "type": "application/json-patch+json",
@@ -156,12 +157,12 @@ async def main(server: "UserServer") -> list[dict[str, Any]]:
                 {
                     "op": "add",
                     "path": "/statefulset/spec/template/spec/containers/1/args/-",
-                    "value": (f"--skip-auth-route=^/sessions/{server.server_name}/sidecar/health$"),
+                    "value": f"--skip-auth-route=^/sessions/{server.server_name}/sidecar/health$",
                 },
                 {
                     "op": "add",
                     "path": "/statefulset/spec/template/spec/containers/1/args/-",
-                    "value": (f"--skip-auth-route=^/sessions/{server.server_name}/sidecar/health/$"),
+                    "value": f"--skip-auth-route=^/sessions/{server.server_name}/sidecar/health/$",
                 },
                 {
                     "op": "add",
@@ -171,7 +172,7 @@ async def main(server: "UserServer") -> list[dict[str, Any]]:
                 {
                     "op": "add",
                     "path": "/statefulset/spec/template/spec/containers/1/args/-",
-                    "value": (f"--skip-auth-route=^/sessions/{server.server_name}/sidecar/jsonrpc/map$"),
+                    "value": f"--skip-auth-route=^/sessions/{server.server_name}/sidecar/jsonrpc/map$",
                 },
                 {
                     "op": "add",
@@ -194,7 +195,7 @@ async def main(server: "UserServer") -> list[dict[str, Any]]:
                         "kind": "Service",
                         "metadata": {
                             "name": f"{server.server_name}-rpc-server",
-                            "namespace": server.k8s_client.preferred_namespace,
+                            "namespace": server.k8s_namespace(),
                         },
                         "spec": {
                             "ports": [

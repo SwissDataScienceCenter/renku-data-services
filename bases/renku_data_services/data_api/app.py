@@ -17,6 +17,7 @@ from renku_data_services.connected_services.blueprints import OAuth2ClientsBP, O
 from renku_data_services.crc import apispec
 from renku_data_services.crc.blueprints import (
     ClassesBP,
+    ClustersBP,
     QuotaBP,
     ResourcePoolsBP,
     ResourcePoolUsersBP,
@@ -105,6 +106,9 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         repo=config.user_repo,
         authenticator=config.authenticator,
         kc_user_repo=config.kc_user_repo,
+    )
+    clusters = ClustersBP(
+        name="clusters", url_prefix=url_prefix, repo=config.cluster_repo, authenticator=config.authenticator
     )
     storage = StorageBP(
         name="storage",
@@ -260,6 +264,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
             users.blueprint(),
             user_secrets.blueprint(),
             user_resource_pools.blueprint(),
+            clusters.blueprint(),
             storage.blueprint(),
             storage_schema.blueprint(),
             user_preferences.blueprint(),

@@ -1,4 +1,4 @@
-"""Patches the modify the jupyter container in the session."""
+"""Patches to modify the jupyter container in the session."""
 
 import base64
 import json
@@ -93,8 +93,7 @@ def env(server: "UserServer") -> list[dict[str, Any]]:
 
 def args() -> list[dict[str, Any]]:
     """Sets the arguments for running the jupyter container."""
-    patches = []
-    patches.append(
+    patches = [
         {
             "type": "application/json-patch+json",
             "patch": [
@@ -105,7 +104,7 @@ def args() -> list[dict[str, Any]]:
                 }
             ],
         }
-    )
+    ]
     return patches
 
 
@@ -138,7 +137,7 @@ def image_pull_secret(server: "UserServer", access_token: str | None) -> list[di
                             "kind": "Secret",
                             "metadata": {
                                 "name": image_pull_secret_name,
-                                "namespace": server._k8s_client.preferred_namespace,
+                                "namespace": server.k8s_namespace(),
                             },
                             "type": "kubernetes.io/dockerconfigjson",
                         },
