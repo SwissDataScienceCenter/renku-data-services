@@ -171,7 +171,12 @@ def content_all(text: str) -> SolrToken:
     """Search the content_all field with fuzzy searching each term."""
     terms: list[SolrToken] = list(map(lambda s: SolrToken(__escape_query(s) + "~"), re.split("\\s+", text)))
     terms_str = "(" + " ".join(terms) + ")"
-    return SolrToken(f"{Fields.content_all}:{terms_str}")
+    return SolrToken(
+        f"({Fields.content_all}:{terms_str} OR "
+        f"{Fields.name}:{terms_str} OR "
+        f"{Fields.first_name}:{terms_str} OR "
+        f"{Fields.last_name}:{terms_str})"
+    )
 
 
 def namespace_exists() -> SolrToken:
