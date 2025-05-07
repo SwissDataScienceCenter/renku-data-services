@@ -1,7 +1,7 @@
 """create the cluster table
 
 Revision ID: 1d2f64a405aa
-Revises: 0c205e28f053
+Revises: 8d67347dcbec
 Create Date: 2025-03-12 14:48:19.156390
 
 """
@@ -13,7 +13,7 @@ from renku_data_services.utils.sqlalchemy import ULIDType
 
 # revision identifiers, used by Alembic.
 revision = "1d2f64a405aa"
-down_revision = "0c205e28f053"
+down_revision = "8d67347dcbec"
 branch_labels = None
 depends_on = None
 
