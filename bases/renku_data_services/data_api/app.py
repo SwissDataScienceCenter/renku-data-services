@@ -251,6 +251,7 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         ),
         solr_config=config.solr_config,
         authz=config.authz,
+        metrics=config.metrics,
     )
     data_connectors = DataConnectorsBP(
         name="data_connectors",
