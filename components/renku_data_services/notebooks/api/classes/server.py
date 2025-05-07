@@ -92,8 +92,7 @@ class UserServer(ABC):
         self._git_providers: list[GitProvider] | None = None
         self._has_configured_git_providers = False
 
-    @property
-    def namespace(self) -> str:
+    def k8s_namespace(self) -> str:
         """Get the preferred namespace for a server."""
         return self._k8s_client.namespace()
 
@@ -383,6 +382,7 @@ class Renku1UserServer(UserServer):
         self,
         user: AnonymousAPIUser | AuthenticatedAPIUser,
         server_name: str,
+        gl_namespace: str,
         project: str,
         branch: str,
         commit_sha: str,
@@ -432,6 +432,7 @@ class Renku1UserServer(UserServer):
             internal_gitlab_user=internal_gitlab_user,
         )
 
+        self.gl_namespace = gl_namespace
         self.project = project
         self.branch = branch
         self.commit_sha = commit_sha
@@ -491,7 +492,7 @@ class Renku1UserServer(UserServer):
         annotations[f"{prefix}commit-sha"] = self.commit_sha
         annotations[f"{prefix}branch"] = self.branch
         annotations[f"{prefix}git-host"] = self.git_host
-        annotations[f"{prefix}namespace"] = self.namespace
+        annotations[f"{prefix}namespace"] = self.gl_namespace
         annotations[f"{prefix}projectName"] = self.project
         if self.gitlab_project is not None:
             annotations[f"{prefix}gitlabProjectId"] = str(self.gitlab_project.id)

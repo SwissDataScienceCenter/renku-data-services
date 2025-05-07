@@ -195,7 +195,7 @@ async def main(server: "UserServer") -> list[dict[str, Any]]:
                         "kind": "Service",
                         "metadata": {
                             "name": f"{server.server_name}-rpc-server",
-                            "namespace": server.namespace,
+                            "namespace": server.k8s_namespace(),
                         },
                         "spec": {
                             "ports": [

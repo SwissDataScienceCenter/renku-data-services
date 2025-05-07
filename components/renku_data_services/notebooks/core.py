@@ -319,7 +319,7 @@ async def launch_notebook_helper(
     lfs_auto_fetch: bool,
     cloudstorage: list[apispec.RCloneStorageRequest],
     server_options: ServerOptions | dict | None,
-    namespace: str | None,  # Renku 1.0
+    gl_namespace: str | None,  # Renku 1.0
     project: str | None,  # Renku 1.0
     branch: str | None,  # Renku 1.0
     commit_sha: str | None,  # Renku 1.0
@@ -486,7 +486,7 @@ async def launch_notebook_helper(
         commit_sha=commit_sha,
         branch=branch,
         project=project,
-        namespace=namespace,
+        gl_namespace=gl_namespace,
         internal_gitlab_user=internal_gitlab_user,
         gitlab_project=gl_project,
     )
@@ -549,7 +549,7 @@ async def launch_notebook_helper(
     if k8s_user_secret is not None:
         request_data: dict[str, Any] = {
             "name": k8s_user_secret.name,
-            "namespace": server.namespace,
+            "namespace": server.k8s_namespace(),
             "secret_ids": [str(id_) for id_ in k8s_user_secret.user_secret_ids],
             "owner_references": [owner_reference],
         }
@@ -563,7 +563,7 @@ async def launch_notebook_helper(
                 base_name = f"{server_name}-ds-{icloud_storage}"
             request_data = {
                 "name": f"{base_name}-secrets",
-                "namespace": server.namespace,
+                "namespace": server.k8s_namespace(),
                 "secret_ids": list(cloud_storage.secrets.keys()),
                 "owner_references": [owner_reference],
                 "key_mapping": cloud_storage.secrets,
@@ -628,7 +628,7 @@ async def launch_notebook(
         lfs_auto_fetch=launch_request.lfs_auto_fetch,
         cloudstorage=launch_request.cloudstorage,
         server_options=_server_options,
-        namespace=launch_request.namespace,
+        gl_namespace=launch_request.namespace,
         project=launch_request.project,
         branch=launch_request.branch,
         commit_sha=launch_request.commit_sha,
