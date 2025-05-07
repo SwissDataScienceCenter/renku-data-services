@@ -15,13 +15,12 @@ from sentry_sdk.integrations.asyncio import AsyncioIntegration
 from sentry_sdk.integrations.grpc import GRPCIntegration
 from sentry_sdk.integrations.sanic import SanicIntegration, _context_enter, _context_exit, _set_transaction
 
-import renku_data_services.search.core as search_core
 import renku_data_services.solr.entity_schema as entity_schema
 from renku_data_services.app_config import Config
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.data_api.app import register_all_handlers
-from renku_data_services.data_api.prometheus import collect_system_metrics, setup_app_metrics, setup_prometheus
+from renku_data_services.data_api.prometheus import setup_app_metrics, setup_prometheus
 from renku_data_services.errors.errors import (
     ForbiddenError,
     MissingResourceError,
@@ -29,48 +28,12 @@ from renku_data_services.errors.errors import (
     ValidationError,
 )
 from renku_data_services.migrations.core import run_migrations_for_app
-from renku_data_services.solr.solr_client import DefaultSolrClient
 from renku_data_services.solr.solr_migrate import SchemaMigrator
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.utils.middleware import validate_null_byte
 
 if TYPE_CHECKING:
     import sentry_sdk._types
-
-
-async def _send_messages(app: Sanic) -> None:
-    config = Config.from_env()
-    while True:
-        try:
-            await config.event_repo.send_pending_events()
-            # we need to collect metrics for this background process separately from the task we add to the
-            # server processes
-            await collect_system_metrics(app, "send_events_worker")
-            await asyncio.sleep(1)
-        except (asyncio.CancelledError, KeyboardInterrupt) as e:
-            logger.warning(f"Exiting: {e}")
-            return
-        except Exception as e:
-            logger.warning(f"Background task failed: {e}")
-            raise
-
-
-async def _update_search(app: Sanic) -> None:
-    config = Config.from_env()
-    while True:
-        try:
-            async with DefaultSolrClient(config.solr_config) as client:
-                await search_core.update_solr(config.search_updates_repo, client, 20)
-            # we need to collect metrics for this background process separately from the task we add to the
-            # server processes
-            await collect_system_metrics(app, "update_search_worker")
-            await asyncio.sleep(1)
-        except (asyncio.CancelledError, KeyboardInterrupt) as e:
-            logger.warning(f"Exiting: {e}")
-            return
-        except Exception as e:
-            logger.warning(f"Background task failed: {e}")
-            raise
 
 
 async def _solr_reindex(app: Sanic) -> None:
@@ -82,28 +45,6 @@ async def _solr_reindex(app: Sanic) -> None:
     reprovision = config.search_reprovisioning
     admin = APIUser(is_admin=True)
     await reprovision.run_reprovision(admin)
-
-
-def send_pending_events(app_name: str) -> None:
-    """Send pending messages to redis."""
-    app = Sanic(app_name)
-    setup_app_metrics(app)
-
-    logger.info("running events sending loop.")
-
-    asyncio.set_event_loop(uvloop.new_event_loop())
-    asyncio.run(_send_messages(app))
-
-
-def update_search(app_name: str) -> None:
-    """Update the SOLR with data from the search staging table."""
-    app = Sanic(app_name)
-    setup_app_metrics(app)
-
-    logger.info("Running update search loop.")
-
-    asyncio.set_event_loop(uvloop.new_event_loop())
-    asyncio.run(_update_search(app))
 
 
 def solr_reindex(app_name: str) -> None:
@@ -211,8 +152,6 @@ def create_app() -> Sanic:
     async def ready(app: Sanic) -> None:
         """Application ready event handler."""
         logger.info("starting events background job.")
-        app.manager.manage("SendEvents", send_pending_events, {"app_name": app.name}, transient=True)
-        app.manager.manage("UpdateSearch", update_search, {"app_name": app.name}, transient=True)
         if getattr(app.ctx, "solr_reindex", False):
             app.manager.manage("SolrReindex", solr_reindex, {"app_name": app.name}, transient=True)
 

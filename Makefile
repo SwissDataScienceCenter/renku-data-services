@@ -151,6 +151,11 @@ run:  ## Run the sanic server
 debug:  ## Debug the sanic server
 	DUMMY_STORES=true poetry run python -Xfrozen_modules=off -m debugpy --listen 0.0.0.0:5678 --wait-for-client -m sanic renku_data_services.data_api.main:create_app --debug --single-process --port 8000 --host 0.0.0.0
 
+.PHONY: run-tasks
+run-tasks:  ## Run the data tasks
+	DUMMY_STORES=true poetry run python bases/renku_data_services/data_tasks/main.py
+
+
 # From the operator sdk Makefile
 # The help target prints out all targets with their descriptions organized
 # beneath their categories. The categories are represented by '##@' and the
@@ -222,3 +227,4 @@ lock:
 	poetry -C projects/secrets_storage lock $(ARGS)
 	poetry -C projects/background_jobs lock $(ARGS)
 	poetry -C projects/k8s_watcher lock $(ARGS)
+	poetry -C projects/renku_data_tasks lock $(ARGS)

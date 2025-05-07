@@ -8,7 +8,7 @@ import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from types import TracebackType
 from typing import Any, Literal, NewType, Optional, Protocol, Self, final
@@ -36,7 +36,7 @@ class SolrUser:
     """User for authenticating at SOLR."""
 
     username: str
-    password: str
+    password: str = field(repr=False)
 
     def __str__(self) -> str:
         pstr = "***" if self.password != "" else ""  # nosec

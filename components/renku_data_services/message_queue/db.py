@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
 
-from sanic.log import logger
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
@@ -14,6 +14,8 @@ from renku_data_services import errors
 from renku_data_services.message_queue import orm as schemas
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.models import Event, Reprovisioning
+
+logger = logging.getLogger(__name__)
 
 
 class EventRepository:
@@ -62,10 +64,9 @@ class EventRepository:
                 for event in events_orm:
                     try:
                         await self.message_queue.send_message(event.dump())
-
                         await session.delete(event)  # this has to be done in the same transaction to not get a deadlock
                     except Exception as e:
-                        logger.warning(f"couldn't send event {event.payload} on queue {event.queue}: {e}")
+                        logger.warning(f"Couldn't send event {event.id}: {event.payload} on queue {event.queue}: {e}")
 
         if n_total_events > 0:
             logger.info(f"sent {n_total_events} events to the message queue")

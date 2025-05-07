@@ -1,10 +1,10 @@
 """Business logic for searching."""
 
 import asyncio
+import logging
 from datetime import UTC, datetime
 
 from authzed.api.v1 import AsyncClient as AuthzClient
-from sanic.log import logger
 
 import renku_data_services.search.apispec as apispec
 import renku_data_services.search.solr_token as st
@@ -34,6 +34,8 @@ from renku_data_services.solr.solr_client import (
     SolrQuery,
     SubQuery,
 )
+
+logger = logging.getLogger(__name__)
 
 
 async def update_solr(search_updates_repo: SearchUpdatesRepo, solr_client: SolrClient, batch_size: int) -> None:
