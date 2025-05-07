@@ -130,6 +130,9 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
         session_repo=config.session_repo,
         data_connector_repo=config.data_connector_repo,
         project_migration_repo=config.project_migration_repo,
+        core_scv_url=config.core_svc_url,
+        gitlab_client=config.gitlab_client,
+        internal_gitlab_authenticator=config.gitlab_authenticator,
     )
     project_session_secrets = ProjectSessionSecretBP(
         name="project_session_secrets",

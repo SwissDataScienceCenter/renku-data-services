@@ -201,6 +201,33 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - projects
+  /renku_v1_projects/path/{path}:
+    get:
+      summary: Try to get information about a v1 project from the core service. The path has to be url encoded.
+      parameters:
+        - in: path
+          name: path
+          required: true
+          description: The Gitlab path for the project.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: V1 Project keywords and description
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V1Project"
+        "404":
+          description: No corresponding project found in Gitlab
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - projects
   /namespaces/{namespace}/projects/{slug}:
     get:
       summary: Get a project by namespace and project slug
@@ -1159,6 +1186,26 @@ components:
       maxLength: 5000
       nullable: true
       example: My secret value
+    V1Project:
+      description: V1 Project properties
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        keywords:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+      example:
+        id: 1234
+        keywords: ["kw1", "kw2"]
+        description: This is a sample description for a project.
+        name: Some Project
     PaginationRequest:
       type: object
       additionalProperties: false
