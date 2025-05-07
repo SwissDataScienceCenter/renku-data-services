@@ -2124,6 +2124,71 @@
       'prefix': 'cloudinary',
     }),
     dict({
+      'description': 'DOI datasets',
+      'name': 'doi',
+      'options': list([
+        dict({
+          'advanced': False,
+          'default': '',
+          'default_str': '',
+          'exclusive': False,
+          'help': 'The DOI or the doi.org URL.',
+          'ispassword': False,
+          'name': 'doi',
+          'required': True,
+          'sensitive': False,
+          'type': 'string',
+        }),
+        dict({
+          'advanced': True,
+          'default': '',
+          'default_str': '',
+          'examples': list([
+            dict({
+              'help': 'Auto-detect provider',
+              'value': 'auto',
+            }),
+            dict({
+              'help': 'Zenodo',
+              'value': 'zenodo',
+            }),
+            dict({
+              'help': 'Dataverse',
+              'value': 'dataverse',
+            }),
+            dict({
+              'help': 'Invenio',
+              'value': 'invenio',
+            }),
+          ]),
+          'exclusive': False,
+          'help': '''
+            DOI provider.
+            
+            The DOI provider can be set when rclone does not automatically recognize a supported DOI provider.
+          ''',
+          'ispassword': False,
+          'name': 'provider',
+          'required': False,
+          'sensitive': False,
+          'type': 'string',
+        }),
+        dict({
+          'advanced': True,
+          'default': '',
+          'default_str': '',
+          'exclusive': False,
+          'help': 'Description of the remote.',
+          'ispassword': False,
+          'name': 'description',
+          'required': False,
+          'sensitive': False,
+          'type': 'string',
+        }),
+      ]),
+      'prefix': 'doi',
+    }),
+    dict({
       'description': 'Google Drive',
       'name': 'drive',
       'options': list([

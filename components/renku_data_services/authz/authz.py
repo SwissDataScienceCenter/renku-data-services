@@ -51,6 +51,7 @@ from renku_data_services.data_connectors.models import (
     DataConnectorToProjectLink,
     DataConnectorUpdate,
     DeletedDataConnector,
+    GlobalDataConnector,
 )
 from renku_data_services.errors import errors
 from renku_data_services.namespace.models import (
@@ -90,6 +91,7 @@ _AuthzChangeFuncResult = TypeVar(
     | UserInfo
     | DeletedUser
     | DataConnector
+    | GlobalDataConnector
     | DataConnectorUpdate
     | DeletedDataConnector
     | DataConnectorToProjectLink
@@ -268,6 +270,7 @@ def _is_allowed_on_resource(
                 | DeletedGroup
                 | Namespace
                 | DataConnector
+                | GlobalDataConnector
                 | DeletedDataConnector
                 | None
             ) = None
@@ -279,7 +282,7 @@ def _is_allowed_on_resource(
                 case ResourceType.user_namespace if isinstance(potential_resource, Namespace):
                     resource = potential_resource
                 case ResourceType.data_connector if isinstance(
-                    potential_resource, (DataConnector, DeletedDataConnector)
+                    potential_resource, (DataConnector, GlobalDataConnector, DeletedDataConnector)
                 ):
                     resource = potential_resource
                 case _:
@@ -671,6 +674,8 @@ class Authz:
                             authz_change.extend(db_repo.authz._add_user_namespace(res.namespace))
                     case AuthzOperation.create, ResourceType.data_connector if isinstance(result, DataConnector):
                         authz_change = db_repo.authz._add_data_connector(result)
+                    case AuthzOperation.create, ResourceType.data_connector if isinstance(result, GlobalDataConnector):
+                        authz_change = db_repo.authz._add_global_data_connector(result)
                     case AuthzOperation.delete, ResourceType.data_connector if result is None:
                         # NOTE: This means that the dc does not exist in the first place so nothing was deleted
                         pass
@@ -684,6 +689,10 @@ class Authz:
                             authz_change.extend(await db_repo.authz._update_data_connector_visibility(user, result.new))
                         if result.old.namespace != result.new.namespace:
                             user = _extract_user_from_args(*func_args, **func_kwargs)
+                            if isinstance(result.new, GlobalDataConnector):
+                                raise errors.ValidationError(
+                                    message=f"Updating the namespace of a global data connector is not supported ('{result.new.id}')"  # noqa E501
+                                )
                             authz_change.extend(await db_repo.authz._update_data_connector_namespace(user, result.new))
                     case AuthzOperation.delete_link, ResourceType.data_connector if result is None:
                         # NOTE: This means that the link does not exist in the first place so nothing was deleted
@@ -1609,6 +1618,42 @@ class Authz:
         )
         return _AuthzChange(apply=apply, undo=undo)
 
+    def _add_global_data_connector(self, data_connector: GlobalDataConnector) -> _AuthzChange:
+        """Create the new global data connector and associated resources and relations in the DB."""
+        data_connector_res = _AuthzConverter.data_connector(data_connector.id)
+
+        all_users = SubjectReference(object=_AuthzConverter.all_users())
+        all_anon_users = SubjectReference(object=_AuthzConverter.anonymous_users())
+        data_connector_in_platform = Relationship(
+            resource=data_connector_res,
+            relation=_Relation.data_connector_platform,
+            subject=SubjectReference(object=self._platform),
+        )
+        relationships = [data_connector_in_platform]
+        if data_connector.visibility == Visibility.PUBLIC:
+            all_users_are_viewers = Relationship(
+                resource=data_connector_res,
+                relation=_Relation.public_viewer.value,
+                subject=all_users,
+            )
+            all_anon_users_are_viewers = Relationship(
+                resource=data_connector_res,
+                relation=_Relation.public_viewer.value,
+                subject=all_anon_users,
+            )
+            relationships.extend([all_users_are_viewers, all_anon_users_are_viewers])
+        apply = WriteRelationshipsRequest(
+            updates=[
+                RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=i) for i in relationships
+            ]
+        )
+        undo = WriteRelationshipsRequest(
+            updates=[
+                RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=i) for i in relationships
+            ]
+        )
+        return _AuthzChange(apply=apply, undo=undo)
+
     @_is_allowed_on_resource(Scope.DELETE, ResourceType.data_connector)
     async def _remove_data_connector(
         self, user: base_models.APIUser, data_connector: DeletedDataConnector, *, zed_token: ZedToken | None = None
@@ -1667,7 +1712,11 @@ class Authz:
     # NOTE changing visibility is the same access level as removal
     @_is_allowed_on_resource(Scope.DELETE, ResourceType.data_connector)
     async def _update_data_connector_visibility(
-        self, user: base_models.APIUser, data_connector: DataConnector, *, zed_token: ZedToken | None = None
+        self,
+        user: base_models.APIUser,
+        data_connector: DataConnector | GlobalDataConnector,
+        *,
+        zed_token: ZedToken | None = None,
     ) -> _AuthzChange:
         """Update the visibility of the data connector in the authorization database."""
         data_connector_id_str = str(data_connector.id)
@@ -1757,7 +1806,11 @@ class Authz:
     # NOTE changing namespace is the same access level as removal
     @_is_allowed_on_resource(Scope.DELETE, ResourceType.data_connector)
     async def _update_data_connector_namespace(
-        self, user: base_models.APIUser, data_connector: DataConnector, *, zed_token: ZedToken | None = None
+        self,
+        user: base_models.APIUser,
+        data_connector: DataConnector,
+        *,
+        zed_token: ZedToken | None = None,
     ) -> _AuthzChange:
         """Update the namespace of the data connector in the authorization database."""
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
