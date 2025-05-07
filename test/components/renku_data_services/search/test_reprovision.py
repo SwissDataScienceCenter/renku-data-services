@@ -93,7 +93,7 @@ async def make_data_connectors(setup: Setup, count: int = 10) -> list[DataConnec
                 storage_type="s3", configuration={}, source_path="a", target_path="b", readonly=True
             ),
         )
-        dc = await setup.data_connector_repo.insert_data_connector(admin, dc)
+        dc = await setup.data_connector_repo.insert_namespaced_data_connector(admin, dc)
         result.append(dc)
     assert len(result) == count
     result.sort(key=lambda e: e.id)

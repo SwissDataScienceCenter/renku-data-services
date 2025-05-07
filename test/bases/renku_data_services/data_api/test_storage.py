@@ -636,3 +636,11 @@ async def test_storage_schema_patches(storage_test_client, snapshot) -> None:
     assert any(s["prefix"] == "polybox" for s in schema)
     assert any(s["prefix"] == "switchDrive" for s in schema)
     assert schema == snapshot
+
+
+@pytest.mark.asyncio
+async def test_storage_validate_connection_supports_doi(storage_test_client) -> None:
+    storage_test_client, _ = storage_test_client
+    payload = {"configuration": {"type": "doi", "doi": "10.5281/zenodo.15174623"}, "source_path": ""}
+    _, res = await storage_test_client.post("/api/data/storage_schema/test_connection", json=payload)
+    assert res.status_code == 204, res.text

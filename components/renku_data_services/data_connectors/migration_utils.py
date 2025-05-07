@@ -159,7 +159,7 @@ class DataConnectorMigrationTool:
             storage=unsaved_storage,
         )
 
-        data_connector = await self.data_connector_repo.insert_data_connector(
+        data_connector = await self.data_connector_repo.insert_namespaced_data_connector(
             user=user, data_connector=unsaved_data_connector
         )
         return data_connector
