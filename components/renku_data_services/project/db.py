@@ -925,6 +925,19 @@ class ProjectMigrationRepository:
         self.event_repo: EventRepository = event_repo
         self.session_repo = session_repo
 
+    async def get_project_migrations(
+        self,
+        user: base_models.APIUser,
+    ) -> AsyncGenerator[models.ProjectMigrationInfo, None]:
+        """Get all project migrations from the database."""
+        project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
+
+        async with self.session_maker() as session:
+            stmt = select(schemas.ProjectMigrationsORM).where(schemas.ProjectMigrationsORM.project_id.in_(project_ids))
+            result = await session.stream_scalars(stmt)
+            async for migration in result:
+                yield migration.dump()
+
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.create, ResourceType.project)
     @dispatch_message(avro_schema_v2.ProjectCreated)

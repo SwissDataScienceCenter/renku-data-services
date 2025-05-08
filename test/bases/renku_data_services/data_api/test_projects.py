@@ -1902,3 +1902,8 @@ async def test_migrate_v1_project(
     migrated_project = response.json
     assert migrated_project["v1_id"] == v1_id
     assert migrated_project["project_id"] == project_id
+
+    _, response = await sanic_client.get("/api/data/renku_v1_projects/migrations", headers=user_headers)
+    assert response.status_code == 200, response.text
+    migrated_projects = response.json
+    assert {project_migration["v1_id"] for project_migration in migrated_projects} == {1122}
