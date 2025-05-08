@@ -521,13 +521,11 @@ async def patch_session(
         patch.spec.session.resources = resources_from_resource_class(rc)
         # Tolerations
         tolerations = tolerations_from_resource_class(rc, nb_config.sessions.tolerations_model)
-        if tolerations:
-            patch.spec.tolerations = tolerations
+        patch.spec.tolerations = tolerations
         # Affinities
         patch.spec.affinity = node_affinity_from_resource_class(rc, nb_config.sessions.affinity_model)
         # Priority class (if a quota is being used)
-        if rc.quota:
-            patch.spec.priorityClassName = rc.quota
+        patch.spec.priorityClassName = rc.quota
         patch.spec.culling = get_culling(rp, nb_config)
 
     # If the session is being hibernated we do not need to patch anything else that is

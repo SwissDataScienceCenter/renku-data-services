@@ -211,7 +211,14 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             total_containers += self.status.containerCounts.total or 0
 
         if self.status.state in [State.Running, State.Hibernated, State.Failed]:
-            state = apispec.State3(self.status.state.value.lower())
+            # Amalthea is sometimes slow when (un)hibernating and still shows the old status, so we patch it here
+            # so the client sees the correct state
+            if not self.spec.hibernated and self.status.state == State.Hibernated:
+                state = apispec.State3.starting
+            elif self.spec.hibernated and self.status.state == State.Running:
+                state = apispec.State3.hibernated
+            else:
+                state = apispec.State3(self.status.state.value.lower())
         elif self.status.state == State.RunningDegraded:
             state = apispec.State3.running
         elif self.status.state == State.NotReady and self.metadata.deletionTimestamp is not None:

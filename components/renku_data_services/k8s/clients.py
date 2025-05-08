@@ -274,7 +274,7 @@ class K8sClusterClient:
         """Patch a k8s object.
 
         If the patch is a list we assume that we have a rfc6902 json patch like
-        `[{ "op": "add", "path": "/a/b/c", "value": [ "foo" "bar" ] }]`.
+        `[{ "op": "add", "path": "/a/b/c", "value": [ "foo", "bar" ] }]`.
         If the patch is a dictionary then it is considered to be a rfc7386 json merge patch.
         """
         obj = await self.__get_api_object(meta.to_filter())
@@ -282,7 +282,6 @@ class K8sClusterClient:
             raise errors.MissingResourceError(message=f"The k8s resource with metadata {meta} cannot be found.")
         patch_type = "json" if isinstance(patch, list) else None
         await obj.obj.patch(patch, type=patch_type)
-        # if refresh isn't called, status and timestamp will be blank
         await obj.obj.refresh()
 
         return meta.with_manifest(obj.obj.to_dict())
