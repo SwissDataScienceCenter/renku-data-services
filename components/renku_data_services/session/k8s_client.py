@@ -279,9 +279,9 @@ class ShipwrightClient:
         pod_name = taskrun.status.podName if taskrun.status else None
         if not pod_name:
             raise errors.MissingResourceError(message=f"The buildrun {buildrun_name} has no pod to retrieve logs from.")
-        return await self.get_pod_logs(name=pod_name, max_log_lines=max_log_lines)
+        return await self._get_pod_logs(name=pod_name, max_log_lines=max_log_lines)
 
-    async def get_pod_logs(self, name: str, max_log_lines: int | None = None) -> dict[str, str]:
+    async def _get_pod_logs(self, name: str, max_log_lines: int | None = None) -> dict[str, str]:
         """Get the logs of all containers in a given pod."""
         result = await self.client.get(
             K8sObjectMeta(name=name, namespace=self.namespace, cluster=self.cluster_id(), kind="Pod", version="v1")

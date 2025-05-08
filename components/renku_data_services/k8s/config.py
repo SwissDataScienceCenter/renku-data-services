@@ -12,7 +12,7 @@ from renku_data_services.k8s.models import Cluster, ClusterId
 
 
 class KubeConfig:
-    """Wrapper around kub config to get a kr8s api."""
+    """Wrapper around kube config to get a kr8s api."""
 
     def __init__(
         self,
@@ -25,7 +25,7 @@ class KubeConfig:
         self._kubeconfig = kubeconfig
         self._ns = ns
         self._current_context_name = current_context_name
-        self._sc = sa
+        self._sa = sa
         self._url = url
 
     def _sync_api(self) -> kr8s.Api | kr8s._AsyncApi:
@@ -44,7 +44,7 @@ class KubeConfig:
         ret = kr8s._async_utils.run_sync(kr8s.asyncio.api)(
             url=self._url,
             kubeconfig=self._kubeconfig,
-            serviceaccount=self._sc,
+            serviceaccount=self._sa,
             namespace=self._ns,
             context=self._current_context_name,
             _asyncio=True,  # This is the only line that is different from kr8s code
