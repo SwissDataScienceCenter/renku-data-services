@@ -11,17 +11,19 @@ from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 from ulid import ULID
 
+import renku_data_services.search.core as search_core
 from renku_data_services.app_config.config import Config
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.authz.authz import _AuthzConverter
 from renku_data_services.base_models import Slug
-from renku_data_services.base_models.core import NamespacePath
+from renku_data_services.base_models.core import APIUser, NamespacePath
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.namespace.models import UserNamespace
 from renku_data_services.secrets.config import Config as SecretsConfig
 from renku_data_services.secrets_storage_api.app import register_all_handlers as register_secrets_handlers
 from renku_data_services.solr import entity_schema
+from renku_data_services.solr.solr_client import DefaultSolrClient
 from renku_data_services.solr.solr_migrate import SchemaMigrator
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
@@ -258,9 +260,47 @@ async def sanic_client_with_solr(sanic_client: SanicASGITestClient, app_config) 
 
 
 @pytest_asyncio.fixture
+async def search_reprovision(app_config_instance: Config, search_push_updates):
+    async def search_reprovision_helper() -> None:
+        user = APIUser(is_admin=True)
+        await app_config_instance.search_reprovisioning.run_reprovision(user)
+        await search_push_updates(clear_index=False)
+
+    return search_reprovision_helper
+
+
+@pytest_asyncio.fixture
+async def search_push_updates(app_config_instance: Config):
+    async def search_push_updates_helper(clear_index: bool = True) -> None:
+        async with DefaultSolrClient(app_config_instance.solr_config) as client:
+            if clear_index:
+                await client.delete("*:*")
+            await search_core.update_solr(app_config_instance.search_updates_repo, client, 10)
+
+    return search_push_updates_helper
+
+
+@pytest_asyncio.fixture
+async def search_query(sanic_client_with_solr):
+    async def search_query_helper(query_str: str, headers: dict | None = None) -> dict[str, Any]:
+        _, response = await sanic_client_with_solr.get(
+            "/api/data/search/query", params={"q": query_str}, headers=headers or {}
+        )
+        assert response.status_code == 200, response.text
+        return response.json
+
+    return search_query_helper
+
+
+@pytest_asyncio.fixture
 async def create_project(sanic_client, user_headers, admin_headers, regular_user, admin_user):
     async def create_project_helper(
-        name: str, admin: bool = False, members: list[dict[str, str]] = None, sanic_client=sanic_client, **payload
+        name: str,
+        admin: bool = False,
+        members: list[dict[str, str]] = [],
+        description: str | None = None,
+        sanic_client=sanic_client,
+        **payload,
     ) -> dict[str, Any]:
         headers = admin_headers if admin else user_headers
         user = admin_user if admin else regular_user
@@ -269,6 +309,8 @@ async def create_project(sanic_client, user_headers, admin_headers, regular_user
             payload.update({"name": name})
         if "namespace" not in payload:
             payload.update({"namespace": f"{user.first_name}.{user.last_name}".lower()})
+        if "description" not in payload and description is not None:
+            payload.update({"description": description})
 
         _, response = await sanic_client.post("/api/data/projects", headers=headers, json=payload)
 
