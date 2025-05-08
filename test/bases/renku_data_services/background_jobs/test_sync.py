@@ -135,7 +135,7 @@ def get_app_configs(db_instance: DBConfig, authz_instance: AuthzConfig):
 def get_kc_users(updates: list[UserInfo]) -> list[dict[str, Any]]:
     output: list[dict[str, Any]] = []
     for update in updates:
-        output.append(update._to_keycloak_dict())
+        output.append(update.to_keycloak_dict())
     return output
 
 

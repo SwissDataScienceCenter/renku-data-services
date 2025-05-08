@@ -24,6 +24,7 @@ from renku_data_services.base_models.core import (
     ProjectPath,
     Slug,
 )
+from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors.core import (
@@ -48,6 +49,7 @@ class DataConnectorsBP(CustomBlueprint):
     data_connector_repo: DataConnectorRepository
     data_connector_secret_repo: DataConnectorSecretRepository
     authenticator: base_models.Authenticator
+    metrics: MetricsService
 
     def get_all(self) -> BlueprintFactoryResponse:
         """List data connectors."""
@@ -101,6 +103,7 @@ class DataConnectorsBP(CustomBlueprint):
             result = await self.data_connector_repo.insert_namespaced_data_connector(
                 user=user, data_connector=data_connector
             )
+            await self.metrics.data_connector_created(user)
             return validated_json(
                 apispec.DataConnector,
                 self._dump_data_connector(result, validator=validator),
@@ -338,6 +341,7 @@ class DataConnectorsBP(CustomBlueprint):
                 project_id=ULID.from_str(body.project_id),
             )
             link = await self.data_connector_repo.insert_link(user=user, link=unsaved_link)
+            await self.metrics.data_connector_linked(user)
             return validated_json(
                 apispec.DataConnectorToProjectLink, self._dump_data_connector_to_project_link(link), status=201
             )

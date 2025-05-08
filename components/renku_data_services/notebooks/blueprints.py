@@ -12,6 +12,7 @@ from renku_data_services import base_models
 from renku_data_services.base_api.auth import authenticate, authenticate_2
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser, Authenticator
+from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
@@ -238,6 +239,7 @@ class NotebooksNewBP(CustomBlueprint):
     user_repo: UserRepo
     data_connector_repo: DataConnectorRepository
     data_connector_secret_repo: DataConnectorSecretRepository
+    metrics: MetricsService
 
     def start(self) -> BlueprintFactoryResponse:
         """Start a session with the new operator."""
@@ -462,6 +464,19 @@ class NotebooksNewBP(CustomBlueprint):
                     await self.nb_config.k8s_v2_client.delete_session(server_name, user.id)
                     raise
 
+            await self.metrics.user_requested_session_launch(
+                user=user,
+                metadata={
+                    "cpu": int(resource_class.cpu * 1000),
+                    "memory": resource_class.memory,
+                    "gpu": resource_class.gpu,
+                    "storage": body.disk_storage,
+                    "resource_class_id": resource_class.id,
+                    "resource_pool_id": resource_pool.id or "",
+                    "resource_class_name": f"{resource_pool.name}.{resource_class.name}",
+                    "session_id": server_name,
+                },
+            )
             return json(manifest.as_apispec().model_dump(mode="json", exclude_none=True), 201)
 
         return "/sessions", ["POST"], _handler
@@ -497,6 +512,7 @@ class NotebooksNewBP(CustomBlueprint):
         @authenticate(self.authenticator)
         async def _handler(_: Request, user: AuthenticatedAPIUser | AnonymousAPIUser, session_id: str) -> HTTPResponse:
             await self.nb_config.k8s_v2_client.delete_session(session_id, user.id)
+            await self.metrics.session_stopped(user, metadata={"session_id": session_id})
             return empty()
 
         return "/sessions/<session_id>", ["DELETE"], _handler
@@ -521,6 +537,7 @@ class NotebooksNewBP(CustomBlueprint):
                 internal_gitlab_user,
                 rp_repo=self.rp_repo,
                 project_repo=self.project_repo,
+                metrics=self.metrics,
             )
             return json(new_session.as_apispec().model_dump(exclude_none=True, mode="json"))
 

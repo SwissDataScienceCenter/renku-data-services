@@ -256,7 +256,7 @@ class TestNotebooks(ClusterRequired):
         # sleep to give amalthea a chance to create the CRDs, otherwise the watcher can error out
         await asyncio.sleep(1)
         watcher = K8sWatcher(
-            handler=k8s_object_handler(app_config.nb_config.k8s_db_cache),
+            handler=k8s_object_handler(app_config.nb_config.k8s_db_cache, app_config.metrics, app_config.rp_repo),
             clusters={c.id: c for c in clusters},
             kinds=[JUPYTER_SESSION_KIND],
         )
