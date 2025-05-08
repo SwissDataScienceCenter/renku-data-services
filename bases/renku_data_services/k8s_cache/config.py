@@ -90,8 +90,9 @@ class Config:
         k8s_config = _K8sConfig.from_env()
         metrics_config = _MetricsConfig.from_env(prefix)
 
-        # we only need the quota repo to create the resource pool repo to get resource classes and pools for metrics.
-        # so we use the dummy clients here as we don't actually access k8s, just the db.
+        # NOTE: We only need the QuotaRepository to instantiate the ResourcePoolRepository which is used to get
+        # the resource class and pool information for metrics. We don't need quota information for metrics at all
+        # so we use the dummy client for quotas here as we don't actually access k8s, just the db.
         quota_repo = QuotaRepository(
             DummyCoreClient({}, {}), DummySchedulingClient({}), namespace=k8s_config.renku_namespace
         )

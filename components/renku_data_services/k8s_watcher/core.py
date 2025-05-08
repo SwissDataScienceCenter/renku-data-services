@@ -154,6 +154,7 @@ class K8sWatcher:
 async def collect_metrics(
     previous_obj: K8sObject | None,
     new_obj: APIObjectInCluster,
+    event_type: str,
     user_id: str,
     metrics: MetricsService,
     rp_repo: ResourcePoolRepository,
@@ -161,43 +162,39 @@ async def collect_metrics(
     """Track product metrics."""
     user = APIUser(id=user_id)
 
-    if (
-        previous_obj is not None
-        and previous_obj.manifest.metadata.get("deletionTimestamp") is None
-        and new_obj.obj.metadata.get("deletionTimestamp") is not None
-    ):
+    if event_type == "DELETED":
         # session stopping
         await metrics.session_stopped(user=user, metadata={"session_id": new_obj.meta.name})
-    else:
-        previous_state = previous_obj.manifest.get("status", {}).get("state", None) if previous_obj else None
-        match new_obj.obj.status.state:
-            case State.Running.value if previous_state is None or previous_state == State.NotReady.value:
-                # session starting
-                resource_class_id = int(new_obj.obj.metadata.annotations.get("renku.io/resource_class_id"))
-                resource_pool = await rp_repo.get_resource_pool_from_class(k8s_watcher_admin_user, resource_class_id)
-                resource_class = await rp_repo.get_resource_class(k8s_watcher_admin_user, resource_class_id)
+        return
+    previous_state = previous_obj.manifest.get("status", {}).get("state", None) if previous_obj else None
+    match new_obj.obj.status.state:
+        case State.Running.value if previous_state is None or previous_state == State.NotReady.value:
+            # session starting
+            resource_class_id = int(new_obj.obj.metadata.annotations.get("renku.io/resource_class_id"))
+            resource_pool = await rp_repo.get_resource_pool_from_class(k8s_watcher_admin_user, resource_class_id)
+            resource_class = await rp_repo.get_resource_class(k8s_watcher_admin_user, resource_class_id)
 
-                await metrics.session_started(
-                    user=user,
-                    metadata={
-                        "cpu": int(resource_class.cpu * 1000),
-                        "memory": resource_class.memory,
-                        "gpu": resource_class.gpu,
-                        "storage": new_obj.obj.spec.session.storage.size,
-                        "resource_class_id": resource_class_id,
-                        "resource_pool_id": resource_pool.id or "",
-                        "resource_class_name": f"{resource_pool.name}.{resource_class.name}",
-                        "session_id": new_obj.meta.name,
-                    },
-                )
-            case State.Running.value | State.NotReady.value if previous_state == State.Hibernated.value:
-                # session resumed
-                await metrics.session_resumed(user, metadata={"session_id": new_obj.meta.name})
-            case State.Hibernated.value if (previous_state != State.Hibernated.value):
-                # session hibernated
-                await metrics.session_hibernated(user=user, metadata={"session_id": new_obj.meta.name})
-            case _:
-                pass
+            await metrics.session_started(
+                user=user,
+                metadata={
+                    "cpu": int(resource_class.cpu * 1000),
+                    "memory": resource_class.memory,
+                    "gpu": resource_class.gpu,
+                    "storage": new_obj.obj.spec.session.storage.size,
+                    "resource_class_id": resource_class_id,
+                    "resource_pool_id": resource_pool.id or "",
+                    "resource_class_name": f"{resource_pool.name}.{resource_class.name}",
+                    "session_id": new_obj.meta.name,
+                },
+            )
+        case State.Running.value | State.NotReady.value if previous_state == State.Hibernated.value:
+            # session resumed
+            await metrics.session_resumed(user, metadata={"session_id": new_obj.meta.name})
+        case State.Hibernated.value if (previous_state != State.Hibernated.value):
+            # session hibernated
+            await metrics.session_hibernated(user=user, metadata={"session_id": new_obj.meta.name})
+        case _:
+            pass
 
 
 def k8s_object_handler(cache: K8sDbCache, metrics: MetricsService, rp_repo: ResourcePoolRepository) -> EventHandler:
@@ -207,7 +204,7 @@ def k8s_object_handler(cache: K8sDbCache, metrics: MetricsService, rp_repo: Reso
         existing = await cache.get(obj.meta)
         if obj.user_id is not None:
             try:
-                await collect_metrics(existing, obj, obj.user_id, metrics, rp_repo)
+                await collect_metrics(existing, obj, event_type, obj.user_id, metrics, rp_repo)
             except Exception as e:
                 logging.error("failed to track product metrics", exc_info=e)
         if event_type == "DELETED":
