@@ -31,8 +31,9 @@ async def test_distance(search_reprovision, create_project, search_query) -> Non
 @pytest.mark.asyncio
 async def test_name_over_description(create_project, create_group, search_reprovision, search_query) -> None:
     """Name field more weight than others."""
-    await create_project("project bike z", visibility="public", description="hello world")
+    await create_project("bike project z", visibility="public", description="hello world")
     await create_project("project hoar z", visibility="public", description="hello bike bike world")
+    await create_group("bike group")
     await search_reprovision()
 
     result = await search_query("bike")

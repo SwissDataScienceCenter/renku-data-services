@@ -657,7 +657,7 @@ class DefaultSolrClient(SolrClient):
     async def query_raw(self, query: SolrQuery) -> Response:
         """Query documents and return the http response."""
         try:
-            return await self.delegate.post("/query", params={"wt": "json", "defType": "edismax", "qf":"name^20.0 firstName^15 lastName^15 content_all^0.5"}, json=query.to_dict())
+            return await self.delegate.post("/query", params={"wt": "json", "defType": "edismax", "qf":"name^30.0 firstName^15 lastName^15 content_all^0.5"}, json=query.to_dict())
         except ConnectError as e:
             raise SolrClientConnectException(e)
 
