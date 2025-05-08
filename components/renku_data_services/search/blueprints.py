@@ -11,6 +11,7 @@ from renku_data_services.authz.authz import Authz
 from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_query
+from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.search.apispec import SearchQuery
 from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.search.user_query_parser import QueryParser
@@ -25,6 +26,7 @@ class SearchBP(CustomBlueprint):
     solr_config: SolrClientConfig
     search_reprovision: SearchReprovision
     authz: Authz
+    metrics: MetricsService
 
     def post(self) -> BlueprintFactoryResponse:
         """Start a new reprovisioning."""
@@ -76,6 +78,7 @@ class SearchBP(CustomBlueprint):
             offset = (query.page - 1) * per_page
             uq = QueryParser.parse(query.q)
             result = await core.query(self.authz.client, self.solr_config, uq, user, per_page, offset)
+            await self.metrics.search_queried(user)
             return json(
                 result.model_dump(by_alias=True, exclude_none=True, mode="json"),
                 headers={

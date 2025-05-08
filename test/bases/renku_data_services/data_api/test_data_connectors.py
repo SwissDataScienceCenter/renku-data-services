@@ -38,7 +38,9 @@ async def create_data_connector(
 
 
 @pytest.mark.asyncio
-async def test_post_data_connector(sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers) -> None:
+async def test_post_data_connector(
+    sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers, app_config
+) -> None:
     payload = {
         "name": "My data connector",
         "slug": "my-data-connector",
@@ -75,6 +77,7 @@ async def test_post_data_connector(sanic_client: SanicASGITestClient, regular_us
     assert data_connector.get("visibility") == "public"
     assert data_connector.get("description") == "A data connector"
     assert set(data_connector.get("keywords")) == {"keyword 1", "keyword.2", "keyword-3", "KEYWORD_4"}
+    app_config.metrics.data_connector_created.assert_called_once()
 
     # Check that we can retrieve the data connector
     _, response = await sanic_client.get(f"/api/data/data_connectors/{data_connector['id']}", headers=user_headers)
@@ -1202,6 +1205,7 @@ async def test_post_data_connector_project_link_public_data_connector(
     user_headers,
     member_1_headers,
     member_1_user,
+    app_config,
 ) -> None:
     data_connector = await create_data_connector(
         "Data connector 1", user=member_1_user, headers=member_1_headers, visibility="public"
@@ -1227,6 +1231,7 @@ async def test_post_data_connector_project_link_public_data_connector(
     assert link.get("data_connector_id") == data_connector_id
     assert link.get("project_id") == project_id
     assert link.get("created_by") == "user"
+    app_config.metrics.data_connector_linked.assert_called_once()
 
 
 @pytest.mark.asyncio

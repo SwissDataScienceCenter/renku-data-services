@@ -11,11 +11,32 @@ from renku_data_services.solr.solr_client import SolrClientConfig
 
 
 @dataclass
+class PosthogConfig:
+    """Configuration for posthog."""
+
+    enabled: bool
+    api_key: str
+    host: str
+    environment: str
+
+    @classmethod
+    def from_env(cls, prefix: str = "") -> PosthogConfig:
+        """Create posthog config from environment variables."""
+        enabled = os.environ.get(f"{prefix}POSTHOG_ENABLED", "false").lower() == "true"
+        api_key = os.environ.get(f"{prefix}POSTHOG_API_KEY", "")
+        host = os.environ.get(f"{prefix}POSTHOG_HOST", "")
+        environment = os.environ.get(f"{prefix}POSTHOG_ENVIRONMENT", "development")
+
+        return cls(enabled, api_key, host, environment)
+
+
+@dataclass
 class Config:
     """Configuration for data tasks."""
 
     db_config: DBConfig
     solr_config: SolrClientConfig
+    posthog_config: PosthogConfig
     redis_config: RedisConfig
     max_retry_wait_seconds: int
     main_log_interval_seconds: int
@@ -34,6 +55,7 @@ class Config:
         max_retry = int(env("MAX_RETRY_WAIT_SECONDS", "120"))
         main_tick = int(env("MAIN_LOG_INTERVAL_SECONDS", "300"))
         solr_config = SolrClientConfig.from_env(prefix)
+        posthog_config = PosthogConfig.from_env(prefix)
         tcp_host = env("TCP_HOST", "127.0.0.1")
         tcp_port = int(env("TCP_PORT", "8001"))
 
@@ -43,6 +65,7 @@ class Config:
             max_retry_wait_seconds=max_retry,
             main_log_interval_seconds=main_tick,
             solr_config=solr_config,
+            posthog_config=posthog_config,
             redis_config=redis,
             tcp_host=tcp_host,
             tcp_port=tcp_port,

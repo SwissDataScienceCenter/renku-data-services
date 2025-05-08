@@ -61,6 +61,8 @@ from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.message_queue.db import EventRepository, ReprovisioningRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.redis_queue import RedisQueue
+from renku_data_services.metrics.core import StagingMetricsService
+from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.platform.db import PlatformRepository
@@ -131,6 +133,20 @@ class SentryConfig:
         sample_rate = float(os.environ.get(f"{prefix}SENTRY_SAMPLE_RATE", "0.2"))
 
         return cls(enabled, dsn=dsn, environment=environment, sample_rate=sample_rate)
+
+
+@dataclass
+class PosthogConfig:
+    """Configuration for posthog."""
+
+    enabled: bool
+
+    @classmethod
+    def from_env(cls, prefix: str = "") -> "PosthogConfig":
+        """Create posthog config from environment variables."""
+        enabled = os.environ.get(f"{prefix}POSTHOG_ENABLED", "false").lower() == "true"
+
+        return cls(enabled)
 
 
 @dataclass
@@ -261,6 +277,7 @@ class Config:
     gitlab_url: str | None
     nb_config: NotebooksConfig
     builds_config: BuildsConfig
+    posthog: PosthogConfig
 
     secrets_service_public_key: rsa.RSAPublicKey
     """The public key of the secrets service, used to encrypt user secrets that only it can decrypt."""
@@ -300,6 +317,8 @@ class Config:
     _data_connector_repo: DataConnectorRepository | None = field(default=None, repr=False, init=False)
     _data_connector_secret_repo: DataConnectorSecretRepository | None = field(default=None, repr=False, init=False)
     _cluster_repo: ClusterRepository | None = field(default=None, repr=False, init=False)
+    _metrics_repo: MetricsRepository | None = field(default=None, repr=False, init=False)
+    _metrics: StagingMetricsService | None = field(default=None, repr=False, init=False)
 
     @staticmethod
     @functools.cache
@@ -352,7 +371,7 @@ class Config:
 
     @property
     def user_repo(self) -> UserRepository:
-        """The DB adapter for users of resoure pools and classes."""
+        """The DB adapter for users of resource pools and classes."""
         if not self._user_repo:
             self._user_repo = UserRepository(
                 session_maker=self.db.async_session_maker, quotas_repo=self.quota_repo, user_repo=self.kc_user_repo
@@ -602,6 +621,20 @@ class Config:
 
         return self._cluster_repo
 
+    @property
+    def metrics_repo(self) -> MetricsRepository:
+        """The DB adapter for metrics."""
+        if not self._metrics_repo:
+            self._metrics_repo = MetricsRepository(session_maker=self.db.async_session_maker)
+        return self._metrics_repo
+
+    @property
+    def metrics(self) -> StagingMetricsService:
+        """The metrics service interface."""
+        if not self._metrics:
+            self._metrics = StagingMetricsService(enabled=self.posthog.enabled, metrics_repo=self.metrics_repo)
+        return self._metrics
+
     @classmethod
     def from_env(cls, prefix: str = "") -> "Config":
         """Create a config from environment variables."""
@@ -644,7 +677,7 @@ class Config:
                 UnsavedUserInfo(id="user1", first_name="user1", last_name="doe", email="user1@doe.com"),
                 UnsavedUserInfo(id="user2", first_name="user2", last_name="doe", email="user2@doe.com"),
             ]
-            kc_api = DummyKeycloakAPI(users=[i._to_keycloak_dict() for i in dummy_users])
+            kc_api = DummyKeycloakAPI(users=[i.to_keycloak_dict() for i in dummy_users])
             redis = RedisConfig.fake()
             gitlab_url = None
         else:
@@ -698,6 +731,7 @@ class Config:
         message_queue = RedisQueue(redis)
         nb_config = NotebooksConfig.from_env(db)
         builds_config = BuildsConfig.from_env(prefix, k8s_namespace)
+        posthog = PosthogConfig.from_env(prefix)
 
         return cls(
             version=version,
@@ -721,4 +755,5 @@ class Config:
             gitlab_url=gitlab_url,
             nb_config=nb_config,
             builds_config=builds_config,
+            posthog=posthog,
         )

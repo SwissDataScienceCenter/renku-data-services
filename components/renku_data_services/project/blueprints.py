@@ -9,7 +9,7 @@ from sanic_ext import validate
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
-from renku_data_services.authz.models import Member, Role, Visibility
+from renku_data_services.authz.models import Change, Member, Role, Visibility
 from renku_data_services.base_api.auth import (
     authenticate,
     only_authenticated,
@@ -20,6 +20,7 @@ from renku_data_services.base_api.etag import extract_if_none_match, if_match_re
 from renku_data_services.base_api.misc import validate_body_root_model, validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.base_models.core import Slug
+from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
 from renku_data_services.data_connectors.db import DataConnectorRepository
 from renku_data_services.errors import errors
@@ -54,6 +55,7 @@ class ProjectsBP(CustomBlueprint):
     session_repo: SessionRepository
     data_connector_repo: DataConnectorRepository
     project_migration_repo: ProjectMigrationRepository
+    metrics: MetricsService
 
     def get_all(self) -> BlueprintFactoryResponse:
         """List all projects."""
@@ -80,6 +82,9 @@ class ProjectsBP(CustomBlueprint):
         async def _post(_: Request, user: base_models.APIUser, body: apispec.ProjectPost) -> JSONResponse:
             new_project = validate_unsaved_project(body, created_by=user.id or "")
             result = await self.project_repo.insert_project(user, new_project)
+            await self.metrics.project_created(user)
+            if len(result.repositories) > 0:
+                await self.metrics.code_repo_linked_to_project(user)
             return validated_json(apispec.Project, self._dump_project(result), status=201)
 
         return "/projects", ["POST"], _post
@@ -290,6 +295,8 @@ class ProjectsBP(CustomBlueprint):
                     message="Expected the result of a project update to be ProjectUpdate but instead "
                     f"got {type(project_update)}"
                 )
+            if len(project_update.new.repositories) > len(project_update.old.repositories):
+                await self.metrics.code_repo_linked_to_project(user)
 
             updated_project = project_update.new
             return validated_json(apispec.Project, self._dump_project(updated_project))
@@ -334,7 +341,11 @@ class ProjectsBP(CustomBlueprint):
             _: Request, user: base_models.APIUser, project_id: ULID, body: apispec.ProjectMemberListPatchRequest
         ) -> HTTPResponse:
             members = [Member(Role(i.role.value), i.id, project_id) for i in body.root]
-            await self.project_member_repo.update_members(user, project_id, members)
+            result = await self.project_member_repo.update_members(user, project_id, members)
+
+            if any(c.change == Change.ADD for c in result):
+                await self.metrics.project_member_added(user)
+
             return HTTPResponse(status=200)
 
         return "/projects/<project_id:ulid>/members", ["PATCH"], _update_members
