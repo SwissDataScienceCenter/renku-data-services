@@ -533,8 +533,8 @@ components:
       enum:
         - general
         - storage
-    DismissBannerProjectMigration:
-      description: Is project migration banned dismissed
+    ShowProjectMigrationBanner:
+      description: Should display project migration banner
       type: boolean
     UserPreferences:
       type: object
@@ -545,8 +545,8 @@ components:
           $ref: "#/components/schemas/UserId"
         pinned_projects:
           $ref: "#/components/schemas/PinnedProjects"
-        dismiss_project_migration_banner:
-          $ref: "#/components/schemas/DismissBannerProjectMigration"
+        show_project_migration_banner:
+          $ref: "#/components/schemas/ShowProjectMigrationBanner"
       required: ["user_id", "pinned_projects"]
     PinnedProjects:
       type: object

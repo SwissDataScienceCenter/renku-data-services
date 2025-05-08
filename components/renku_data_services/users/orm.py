@@ -79,8 +79,8 @@ class UserPreferencesORM(BaseORM):
     pinned_projects: Mapped[dict[str, Any]] = mapped_column("pinned_projects", JSONVariant)
     """Pinned projects."""
 
-    dismiss_project_migration_banner: Mapped[bool] = mapped_column("dismiss_project_migration_banner", Boolean)
-    """Dismiss project migration banner."""
+    show_project_migration_banner: Mapped[bool] = mapped_column("show_project_migration_banner", Boolean)
+    """Show project migration banner."""
 
     @classmethod
     def load(cls, user_preferences: UserPreferences) -> "UserPreferencesORM":
@@ -88,7 +88,7 @@ class UserPreferencesORM(BaseORM):
         return cls(
             user_id=user_preferences.user_id,
             pinned_projects=user_preferences.pinned_projects.model_dump(),
-            dismiss_project_migration_banner=user_preferences.dismiss_project_migration_banner,
+            show_project_migration_banner=user_preferences.show_project_migration_banner,
         )
 
     def dump(self) -> UserPreferences:
@@ -96,5 +96,5 @@ class UserPreferencesORM(BaseORM):
         return UserPreferences(
             user_id=self.user_id,
             pinned_projects=PinnedProjects.from_dict(self.pinned_projects),
-            dismiss_project_migration_banner=self.dismiss_project_migration_banner,
+            show_project_migration_banner=self.show_project_migration_banner,
         )

@@ -413,7 +413,6 @@ class UserPreferencesRepository:
                 new_preferences = UserPreferences(
                     user_id=cast(str, requested_by.id),
                     pinned_projects=PinnedProjects(project_slugs=[project_slug]),
-                    dismiss_project_migration_banner=False,
                 )
                 user_preferences = UserPreferencesORM.load(new_preferences)
                 session.add(user_preferences)
@@ -473,16 +472,14 @@ class UserPreferencesRepository:
             )
             user_preferences_orm = result.one_or_none()
             if user_preferences_orm is None:
-                new_project_slugs: list[str] = []
-                pinned_projects = PinnedProjects(project_slugs=new_project_slugs).model_dump()
                 user_preferences_orm = UserPreferencesORM(
                     user_id=cast(str, requested_by.id),
-                    pinned_projects=pinned_projects,
-                    dismiss_project_migration_banner=True,
+                    pinned_projects={"project_slugs": []},
+                    show_project_migration_banner=False,
                 )
                 session.add(user_preferences_orm)
             else:
-                user_preferences_orm.dismiss_project_migration_banner = True
+                user_preferences_orm.show_project_migration_banner = False
 
             await session.flush()
             await session.refresh(user_preferences_orm)
@@ -498,5 +495,5 @@ class UserPreferencesRepository:
             if user_preferences is None:
                 raise errors.MissingResourceError(message="Preferences not found for user.", quiet=True)
 
-            user_preferences.dismiss_project_migration_banner = False
+            user_preferences.show_project_migration_banner = True
             return user_preferences.dump()
