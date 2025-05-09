@@ -245,7 +245,7 @@ class K8sClusterClient:
 
         try:
             res = await self.__cluster.api.async_get(
-                f"{_filter.kind}.{_filter.version}",
+                _filter.fully_qualified_kind,
                 *names,
                 label_selector=_filter.label_selector,
                 namespace=_filter.namespace,
