@@ -32,6 +32,16 @@ def _str_to_slug(value: Any) -> Slug:
     raise errors.ValidationError(message="converting to slug in solr documents was not successful")
 
 
+def _str_to_slug_none(value: Any) -> Slug | None:
+    if value is None:
+        return None
+    elif isinstance(value, str):
+        return Slug.from_name(value)
+    elif isinstance(value, Slug):
+        return value
+    raise errors.ValidationError(message="converting to slug in solr documents was not successful")
+
+
 def _str_to_visibility_public(value: Any) -> Literal[Visibility.PUBLIC]:
     if isinstance(value, str) and value.lower() == "public":
         return Visibility.PUBLIC
@@ -61,10 +71,9 @@ class EntityType(StrEnum):
                 return ResourceType.data_connector
 
 
-class EntityDoc(BaseModel, ABC, frozen=True):
-    """Base class for entity document models."""
+class GlobalEntityDoc(BaseModel, ABC, frozen=True):
+    """Base class for an entity without a namespace."""
 
-    namespace: Annotated[Slug, BeforeValidator(_str_to_slug)]
     version: DocVersion = Field(
         serialization_alias="_version_",
         validation_alias=AliasChoices("version", "_version_"),
@@ -88,6 +97,12 @@ class EntityDoc(BaseModel, ABC, frozen=True):
     def reset_solr_fields(self) -> Self:
         """Resets fields that are filled by solr when querying."""
         return self.model_copy(update={"version": DocVersions.not_exists(), "score": None})
+
+
+class EntityDoc(GlobalEntityDoc, ABC, frozen=True):
+    """Base class for entity document models."""
+
+    namespace: Annotated[Slug, BeforeValidator(_str_to_slug)]
 
 
 class User(EntityDoc, frozen=True):
@@ -191,10 +206,11 @@ class Project(EntityDoc, frozen=True):
         return Project.model_validate(d)
 
 
-class DataConnector(EntityDoc, frozen=True):
-    """Represents a renku data connector in SOLR."""
+class DataConnector(GlobalEntityDoc, frozen=True):
+    """Represents a global or non-global renku data connector in SOLR."""
 
     id: ULID
+    namespace: Annotated[Slug | None, BeforeValidator(_str_to_slug_none)] = None
     name: str
     storageType: str
     readonly: bool
