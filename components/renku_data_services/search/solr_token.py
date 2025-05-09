@@ -101,8 +101,11 @@ def field_is_any(field: FieldName, value: Nel[SolrToken]) -> SolrToken:
         vs = fold_or(value.to_list())
         return field_is(field, SolrToken(f"({vs})"))
 
+
 def type_is(et: EntityType) -> SolrToken:
+    """Search for the type field."""
     return field_is(Fields.entity_type, from_entity_type(et))
+
 
 def fold_and(tokens: list[SolrToken]) -> SolrToken:
     """Combine multiple solr query parts with AND."""
