@@ -101,6 +101,8 @@ def field_is_any(field: FieldName, value: Nel[SolrToken]) -> SolrToken:
         vs = fold_or(value.to_list())
         return field_is(field, SolrToken(f"({vs})"))
 
+def type_is(et: EntityType) -> SolrToken:
+    return field_is(Fields.entity_type, from_entity_type(et))
 
 def fold_and(tokens: list[SolrToken]) -> SolrToken:
     """Combine multiple solr query parts with AND."""
@@ -176,7 +178,7 @@ def content_all(text: str) -> SolrToken:
 
 def namespace_exists() -> SolrToken:
     """Query part requiring an existing namespace field."""
-    return field_exists(Fields.namespace)
+    return fold_or([field_exists(Fields.namespace), type_is(EntityType.dataconnector)])
 
 
 def created_by_exists() -> SolrToken:
