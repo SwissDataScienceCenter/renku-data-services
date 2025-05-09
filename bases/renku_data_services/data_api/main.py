@@ -115,13 +115,13 @@ def create_app() -> Sanic:
         if request.method == "HEAD":
             response.body = None
 
-    @app.main_process_start
+    @app.before_server_start
     async def do_migrations(_: Sanic) -> None:
         logger.info("running migrations")
         run_migrations_for_app("common")
         await config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
 
-    @app.main_process_start
+    @app.before_server_start
     async def do_solr_migrations(app: Sanic) -> None:
         logger.info(f"Running SOLR migrations at: {config.solr_config}")
         migrator = SchemaMigrator(config.solr_config)
@@ -137,7 +137,7 @@ def create_app() -> Sanic:
         validator = RCloneValidator()
         app.ext.dependency(validator)
 
-    @app.main_process_ready
+    @app.after_server_start
     async def do_solr_reindex(app: Sanic) -> None:
         """Reindex solr if needed."""
         if not getattr(app.ctx, "solr_reindex", False):
