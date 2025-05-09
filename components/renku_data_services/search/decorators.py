@@ -84,16 +84,9 @@ def update_search_document(
                 await self.search_updates_repo.upsert(dc)
 
             case GlobalDataConnector() as dc:
-                # TODO: handle global data connectors
-                # await self.search_updates_repo.upsert(dc)
-                pass
+                await self.search_updates_repo.upsert(dc)
 
-            case DataConnectorUpdate() as dc if isinstance(dc.new, GlobalDataConnector):
-                # TODO: handle global data connectors
-                # await self.search_updates_repo.upsert(dc.new)
-                pass
-
-            case DataConnectorUpdate() as dc if isinstance(dc.new, DataConnector):
+            case DataConnectorUpdate() as dc:
                 await self.search_updates_repo.upsert(dc.new)
 
             case DeletedDataConnector() as dc:
