@@ -1,7 +1,7 @@
 """add dismmiss migration banner user preference
 
 Revision ID: 042eeb50cd8e
-Revises: 0c205e28f053
+Revises: ee719a5fabf6
 Create Date: 2025-04-03 08:14:23.416178
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "042eeb50cd8e"
-down_revision = "0c205e28f053"
+down_revision = "ee719a5fabf6"
 branch_labels = None
 depends_on = None
 
