@@ -29,6 +29,25 @@ BUILD_RUN_DEFAULT_RETENTION_AFTER_SUCCEEDED: Final[timedelta] = timedelta(minute
 BUILD_RUN_DEFAULT_TIMEOUT: Final[timedelta] = timedelta(hours=1)
 """The default timeout for build after which they get cancelled."""
 
+BUILD_RUN_KIND: Final[str] = "BuildRun"
+"""K8s kind of build runs."""
+
+BUILD_RUN_VERSION: Final[str] = "shipwright.io/v1beta1"
+"""K8s version of build runs."""
+
+TASK_RUN_KIND: Final[str] = "TaskRun"
+"""K8s kind of task runs."""
+
+TASK_RUN_VERSION: Final[str] = "tekton.dev/v1"
+"""K8s version of task runs."""
+
+DUMMY_TASK_RUN_USER_ID: Final[str] = "DummyTaskRunUser"
+"""The user id to use for TaskRuns in the k8s cache.
+
+Note: we can't curently propagate labels to TaskRuns through shipwright, so we just use a dummy user id for all of them.
+This might change if shipwright SHIP-0034 gets implemented.
+"""
+
 # see https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap03.html#tag_03_235
 ENV_VARIABLE_REGEX: Final[str] = r"^[a-zA-Z_][a-zA-Z0-9_]*$"
 """The regex to validate environment variable names.

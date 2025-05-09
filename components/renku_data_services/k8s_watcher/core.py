@@ -22,6 +22,7 @@ from renku_data_services.errors import errors
 from renku_data_services.k8s.models import Cluster, ClusterId, K8sObject, K8sObjectMeta
 from renku_data_services.k8s_watcher.db import K8sDbCache
 from renku_data_services.notebooks.crs import State
+from renku_data_services.session.constants import DUMMY_TASK_RUN_USER_ID
 
 
 @dataclass
@@ -39,6 +40,11 @@ class APIObjectInCluster:
                 return cast(str, self.obj.metadata.labels["renku.io/userId"])
             case "amaltheasession":
                 return cast(str, self.obj.metadata.labels["renku.io/safe-username"])
+            case "buildrun":
+                return cast(str, self.obj.metadata.labels["renku.io/safe-username"])
+
+            case "taskrun":
+                return DUMMY_TASK_RUN_USER_ID
             case _:
                 return None
 
