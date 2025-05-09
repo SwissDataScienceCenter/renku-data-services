@@ -387,7 +387,8 @@ class ProjectsGetParametersQuery(BaseAPISpec):
 
 
 class RenkuV1ProjectsMigrationsGetParametersQuery(BaseAPISpec):
-    params: Optional[ProjectMigrationGetQuery] = None
+    """This class no longer includes any parameters."""
+    pass
 
 
 class Project(BaseAPISpec):
