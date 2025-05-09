@@ -339,7 +339,7 @@ class ResourcePoolRepository(_Base):
         """Get a specific resource class by its ID."""
         classes = await self.get_classes(api_user, id)
         if len(classes) == 0:
-            raise errors.MissingResourceError(message=f"The resource class with ID {id} cannot be found", quiet=True)
+            raise errors.MissingResourceError(message=f"The resource class with ID {id} cannot be found")
         return classes[0]
 
     @_only_admins

@@ -79,6 +79,7 @@ class MissingResourceError(BaseError):
     code: int = 1404
     status_code: int = 404
     message: str = "The requested resource does not exist or cannot be found"
+    quiet: bool = True
 
 
 @dataclass

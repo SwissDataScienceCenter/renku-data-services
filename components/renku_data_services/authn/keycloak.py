@@ -71,9 +71,7 @@ class KeycloakAuthenticator(Authenticator):
             # misconfiguration most often rather than from the user having done something so we surface them.
             raise
         except jwt.InvalidTokenError:
-            raise errors.UnauthorizedError(
-                message="Your credentials are invalid or expired, please log in again.", quiet=True
-            )
+            raise errors.InvalidTokenError(message="Your credentials are invalid or expired, please log in again.")
 
     async def authenticate(
         self, access_token: str, request: Request
@@ -92,9 +90,7 @@ class KeycloakAuthenticator(Authenticator):
             id = parsed.get("sub")
             email = parsed.get("email")
             if id is None or email is None:
-                raise errors.UnauthorizedError(
-                    message="Your credentials are invalid or expired, please log in again.", quiet=True
-                )
+                raise errors.UnauthorizedError(message="Your credentials are invalid or expired, please log in again.")
             user = base_models.AuthenticatedAPIUser(
                 is_admin=is_admin,
                 id=id,
