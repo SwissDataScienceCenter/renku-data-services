@@ -131,7 +131,9 @@ def test_created_by_exists() -> None:
 
 
 def test_namespace_exists() -> None:
-    assert st.namespace_exists() == st.field_exists(Fields.namespace)
+    assert st.namespace_exists() == st.fold_or(
+        [st.field_exists(Fields.namespace), st.type_is(EntityType.dataconnector)]
+    )
 
 
 def test_content_all() -> None:
