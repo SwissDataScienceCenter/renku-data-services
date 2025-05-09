@@ -1,31 +1,31 @@
 # serializer version: 1
 # name: test_get_user_preferences[valid_add_pinned_project_payload0]
   dict({
-    'dismiss_project_migration_banner': False,
     'pinned_projects': dict({
       'project_slugs': list([
         'user.1/first-project',
       ]),
     }),
+    'show_project_migration_banner': True,
   })
 # ---
 # name: test_get_user_preferences[valid_add_pinned_project_payload1]
   dict({
-    'dismiss_project_migration_banner': False,
     'pinned_projects': dict({
       'project_slugs': list([
         'john-doe-1/my-project-1',
       ]),
     }),
+    'show_project_migration_banner': True,
   })
 # ---
 # name: test_get_user_preferences[valid_add_pinned_project_payload2]
   dict({
-    'dismiss_project_migration_banner': False,
     'pinned_projects': dict({
       'project_slugs': list([
         'a-1-2-3/b-1-2-3',
       ]),
     }),
+    'show_project_migration_banner': True,
   })
 # ---
