@@ -196,7 +196,7 @@ class NotebookK8sClient(Generic[_SessionType]):
 
     async def list_sessions(self, safe_username: str) -> list[_SessionType]:
         """Get a list of sessions that belong to a user."""
-        return [
+        sessions = [
             self.__session_type.model_validate(s.manifest)
             async for s in self.__client.list(
                 K8sObjectFilter(
@@ -207,6 +207,7 @@ class NotebookK8sClient(Generic[_SessionType]):
                 )
             )
         ]
+        return sorted(sessions, key=lambda sess: sess.metadata.name)
 
     async def get_session(self, name: str, safe_username: str) -> _SessionType | None:
         """Get a specific session, None is returned if the session does not exist."""
