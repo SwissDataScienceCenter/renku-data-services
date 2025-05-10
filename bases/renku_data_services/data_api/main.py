@@ -3,14 +3,12 @@
 import argparse
 import asyncio
 from os import environ
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 import sentry_sdk
-import uvloop
 from sanic import Request, Sanic
 from sanic.log import logger
 from sanic.response import BaseHTTPResponse
-from sanic.worker.loader import AppLoader
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
 from sentry_sdk.integrations.grpc import GRPCIntegration
 from sentry_sdk.integrations.sanic import SanicIntegration, _context_enter, _context_exit, _set_transaction
@@ -20,7 +18,7 @@ from renku_data_services.app_config import Config
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.data_api.app import register_all_handlers
-from renku_data_services.data_api.prometheus import setup_app_metrics, setup_prometheus
+from renku_data_services.data_api.prometheus import setup_prometheus
 from renku_data_services.errors.errors import (
     ForbiddenError,
     MissingResourceError,
@@ -36,25 +34,15 @@ if TYPE_CHECKING:
     import sentry_sdk._types
 
 
-async def _solr_reindex(app: Sanic) -> None:
+async def solr_reindex(config: Config) -> None:
     """Run a solr reindex of all data.
 
     This might be required after migrating the solr schema.
     """
-    config = Config.from_env()
+    logger.info("starting SOLR reindexing.")
     reprovision = config.search_reprovisioning
     admin = APIUser(is_admin=True)
     await reprovision.run_reprovision(admin)
-
-
-def solr_reindex(app_name: str) -> None:
-    """Runs a solr reindex."""
-    app = Sanic(app_name)
-    setup_app_metrics(app)
-
-    logger.info("Running SOLR reindex triggered by a migration")
-    asyncio.set_event_loop(uvloop.new_event_loop())
-    asyncio.run(_solr_reindex(app))
 
 
 def create_app() -> Sanic:
@@ -127,13 +115,13 @@ def create_app() -> Sanic:
         if request.method == "HEAD":
             response.body = None
 
-    @app.main_process_start
+    @app.before_server_start
     async def do_migrations(_: Sanic) -> None:
         logger.info("running migrations")
         run_migrations_for_app("common")
         await config.rp_repo.initialize(config.db.conn_url(async_client=False), config.default_resource_pool)
 
-    @app.main_process_start
+    @app.before_server_start
     async def do_solr_migrations(app: Sanic) -> None:
         logger.info(f"Running SOLR migrations at: {config.solr_config}")
         migrator = SchemaMigrator(config.solr_config)
@@ -145,18 +133,21 @@ def create_app() -> Sanic:
 
     @app.before_server_start
     async def setup_rclone_validator(app: Sanic) -> None:
+        logger.info("Setting up rclone validator")
         validator = RCloneValidator()
         app.ext.dependency(validator)
 
-    @app.main_process_ready
-    async def ready(app: Sanic) -> None:
-        """Application ready event handler."""
-        logger.info("starting events background job.")
-        if getattr(app.ctx, "solr_reindex", False):
-            app.manager.manage("SolrReindex", solr_reindex, {"app_name": app.name}, transient=True)
+    @app.after_server_start
+    async def do_solr_reindex(app: Sanic) -> None:
+        """Reindex solr if needed."""
+        if not getattr(app.ctx, "solr_reindex", False):
+            return
+        app.add_task(solr_reindex(config), name="solr_reindex")
 
     return app
 
+
+sanic_app: Final[Sanic] = create_app()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="Renku Data Services")
@@ -165,10 +156,8 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--port", default=8000, type=int, help="Port to listen on")
     parser.add_argument("--debug", action="store_true", help="Enable Sanic debug mode")
     parser.add_argument("--fast", action="store_true", help="Enable Sanic fast mode")
+    parser.add_argument("--workers", default=1, type=int, help="The number of workers to use.")
     parser.add_argument("-d", "--dev", action="store_true", help="Enable Sanic development mode")
     parser.add_argument("--single-process", action="store_true", help="Do not use multiprocessing.")
     args: dict[str, Any] = vars(parser.parse_args())
-    loader = AppLoader(factory=create_app)
-    app = loader.load()
-    app.prepare(**args)
-    Sanic.serve(primary=app, app_loader=loader)
+    sanic_app.run(**args)
