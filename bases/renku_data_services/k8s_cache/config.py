@@ -39,12 +39,26 @@ class _MetricsConfig:
 
 
 @dataclass
+class _ImageBuilderConfig:
+    """Configuration for image builders."""
+
+    enabled: bool
+
+    @classmethod
+    def from_env(cls, prefix: str = "") -> "_ImageBuilderConfig":
+        """Load values from environment variables."""
+        enabled = os.environ.get(f"{prefix}IMAGE_BUILDERS_ENABLED", "false").lower() == "true"
+        return cls(enabled=enabled)
+
+
+@dataclass
 class Config:
     """K8s cache config."""
 
     db: DBConfig
     k8s: _K8sConfig
     metrics_config: _MetricsConfig
+    image_builders: _ImageBuilderConfig
     quota_repo: QuotaRepository
     _k8s_cache: K8sDbCache | None = None
     _metrics_repo: MetricsRepository | None = field(default=None, repr=False, init=False)
@@ -96,5 +110,12 @@ class Config:
         quota_repo = QuotaRepository(
             DummyCoreClient({}, {}), DummySchedulingClient({}), namespace=k8s_config.renku_namespace
         )
+        image_builders = _ImageBuilderConfig.from_env(prefix)
 
-        return cls(db=db, k8s=k8s_config, metrics_config=metrics_config, quota_repo=quota_repo)
+        return cls(
+            db=db,
+            k8s=k8s_config,
+            metrics_config=metrics_config,
+            quota_repo=quota_repo,
+            image_builders=image_builders,
+        )
