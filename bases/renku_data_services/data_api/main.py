@@ -148,6 +148,13 @@ def create_app() -> Sanic:
         validator = RCloneValidator()
         app.ext.dependency(validator)
 
+    @app.before_server_start
+    async def start_k8s_cache_synchronization(app: Sanic) -> None:
+        sync_coroutines = config.nb_config.k8s_client.get_synchronization_coroutines()
+        if config.builds_config.enabled and config.builds_config.shipwright_client is not None:
+            sync_coroutines.extend(config.builds_config.shipwright_client.client.get_synchronization_coroutines())
+        app.add_task(asyncio.gather(*sync_coroutines), name="k8s_cache_sync")
+
     @app.main_process_ready
     async def ready(app: Sanic) -> None:
         """Application ready event handler."""

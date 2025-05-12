@@ -6,13 +6,15 @@ from datetime import datetime
 from typing import Any
 
 from box import Box
-from sqlalchemy import DateTime, MetaData, String, func, text
+from sqlalchemy import ColumnElement, DateTime, MetaData, String, func, text
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.hybrid import Comparator, hybrid_property
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 from ulid import ULID
 
 from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
-from renku_data_services.k8s.models import ClusterId, K8sObject
+from renku_data_services.errors import errors
+from renku_data_services.k8s.models import GVK, ClusterId, K8sObject
 from renku_data_services.utils.sqlalchemy import ULIDType
 
 
@@ -21,6 +23,23 @@ class BaseORM(MappedAsDataclass, DeclarativeBase):
 
     metadata = MetaData(schema="common")
     registry = COMMON_ORM_REGISTRY
+
+
+class CaseInsensitiveComparator(Comparator[str]):
+    """Enables case insensitive comparison of strings.
+
+    See https://docs.sqlalchemy.org/en/20/orm/extensions/hybrid.html#building-custom-comparators.
+    """
+
+    def __eq__(self, other: Any) -> ColumnElement[bool]:  # type: ignore[override]
+        return func.lower(self.__clause_element__()) == func.lower(other)
+
+
+class CaseInsensitiveNullableComparator(Comparator[str | None]):
+    """Enables case insensitive comparison of nullable string fields."""
+
+    def __eq__(self, other: Any) -> ColumnElement[bool]:  # type: ignore[override]
+        return func.lower(self.__clause_element__()) == func.lower(other)
 
 
 class K8sObjectORM(BaseORM):
@@ -55,10 +74,45 @@ class K8sObjectORM(BaseORM):
     )
     manifest: Mapped[dict[str, Any]] = mapped_column("manifest", JSONB)
     deleted: Mapped[bool] = mapped_column(default=False, init=False, index=True)
+    group: Mapped[str | None] = mapped_column(index=True, nullable=True)
     version: Mapped[str] = mapped_column(index=True)
     kind: Mapped[str] = mapped_column(index=True)
     cluster: Mapped[str] = mapped_column(index=True)
     user_id: Mapped[str] = mapped_column(String(), index=True)
+
+    @hybrid_property
+    def group_insensitive(self) -> str | None:
+        """Case insensitive version of group."""
+        if self.group:
+            return self.group.lower()
+        return None
+
+    @hybrid_property
+    def kind_insensitive(self) -> str:
+        """Case insensitive version of kind."""
+        return self.kind.lower()
+
+    @hybrid_property
+    def version_insensitive(self) -> str:
+        """Case insensitive version of version."""
+        return self.version.lower()
+
+    @group_insensitive.inplace.comparator
+    @classmethod
+    def _group_insensitive_comparator(cls) -> CaseInsensitiveNullableComparator:
+        if cls.group is None:
+            raise errors.ProgrammingError(message="Cannot compare group with = if group is None")
+        return CaseInsensitiveNullableComparator(cls.group)
+
+    @kind_insensitive.inplace.comparator
+    @classmethod
+    def _kind_insensitive_comparator(cls) -> CaseInsensitiveComparator:
+        return CaseInsensitiveComparator(cls.kind)
+
+    @version_insensitive.inplace.comparator
+    @classmethod
+    def _version_insensitive_comparator(cls) -> CaseInsensitiveComparator:
+        return CaseInsensitiveComparator(cls.version)
 
     def dump(self) -> K8sObject:
         """Convert to a k8s object."""
@@ -66,8 +120,7 @@ class K8sObjectORM(BaseORM):
             name=self.name,
             namespace=self.namespace,
             cluster=ClusterId(self.cluster),
-            kind=self.kind,
-            version=self.version,
+            gvk=GVK(group=self.group, version=self.version, kind=self.kind),
             manifest=Box(self.manifest),
             user_id=self.user_id,
         )

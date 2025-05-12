@@ -9,16 +9,14 @@ from kr8s.asyncio.objects import APIObject, Pod
 from renku_data_services import errors
 from renku_data_services.errors.errors import CannotStartBuildError
 from renku_data_services.k8s.clients import K8sClusterClientsPool
-from renku_data_services.k8s.models import ClusterId, K8sObjectFilter, K8sObjectMeta
+from renku_data_services.k8s.models import GVK, ClusterId, K8sObjectFilter, K8sObjectMeta
 from renku_data_services.notebooks.api.classes.k8s_client import DEFAULT_K8S_CLUSTER
 from renku_data_services.notebooks.util.retries import retry_with_exponential_backoff_async
 from renku_data_services.session import crs, models
 from renku_data_services.session.constants import (
-    BUILD_RUN_KIND,
-    BUILD_RUN_VERSION,
+    BUILD_RUN_GVK,
     DUMMY_TASK_RUN_USER_ID,
-    TASK_RUN_KIND,
-    TASK_RUN_VERSION,
+    TASK_RUN_GVK,
 )
 from renku_data_services.session.crs import BuildRun, TaskRun
 
@@ -27,8 +25,8 @@ from renku_data_services.session.crs import BuildRun, TaskRun
 class ShipwrightBuildRunV1Beta1Kr8s(APIObject):
     """Spec for Shipwright BuildRuns used by the k8s client."""
 
-    kind: str = BUILD_RUN_KIND
-    version: str = BUILD_RUN_VERSION
+    kind: str = BUILD_RUN_GVK.kind
+    version: str = BUILD_RUN_GVK.group_version
     namespaced: bool = True
     plural: str = "buildruns"
     singular: str = "buildrun"
@@ -40,8 +38,8 @@ class ShipwrightBuildRunV1Beta1Kr8s(APIObject):
 class TektonTaskRunV1Kr8s(APIObject):
     """Spec for Tekton TaskRuns used by the k8s client."""
 
-    kind: str = TASK_RUN_KIND
-    version: str = TASK_RUN_VERSION
+    kind: str = TASK_RUN_GVK.kind
+    version: str = TASK_RUN_GVK.group_version
     namespaced: bool = True
     plural: str = "taskruns"
     singular: str = "taskrun"
@@ -70,9 +68,7 @@ class ShipwrightClient:
 
     async def list_build_runs(self, user_id: str) -> AsyncIterable[BuildRun]:
         """Get a list of Shipwright BuildRuns."""
-        builds = self.client.list(
-            K8sObjectFilter(namespace=self.namespace, kind=BUILD_RUN_KIND, version=BUILD_RUN_VERSION, user_id=user_id)
-        )
+        builds = self.client.list(K8sObjectFilter(namespace=self.namespace, gvk=BUILD_RUN_GVK, user_id=user_id))
         async for build in builds:
             yield BuildRun.model_validate(build.manifest.to_dict())
         return
@@ -84,8 +80,7 @@ class ShipwrightClient:
                 name=name,
                 namespace=self.namespace,
                 cluster=self.cluster_id(),
-                kind=BUILD_RUN_KIND,
-                version=BUILD_RUN_VERSION,
+                gvk=BUILD_RUN_GVK,
                 user_id=user_id,
             )
         )
@@ -103,8 +98,7 @@ class ShipwrightClient:
                 name=build_run_name,
                 namespace=self.namespace,
                 cluster=self.cluster_id(),
-                kind=BUILD_RUN_KIND,
-                version=BUILD_RUN_VERSION,
+                gvk=BUILD_RUN_GVK,
                 user_id=user_id,
             ).with_manifest(manifest=manifest.model_dump(exclude_none=True, mode="json"))
         )
@@ -122,8 +116,7 @@ class ShipwrightClient:
                 name=name,
                 namespace=self.namespace,
                 cluster=self.cluster_id(),
-                kind=BUILD_RUN_KIND,
-                version=BUILD_RUN_VERSION,
+                gvk=BUILD_RUN_GVK,
                 user_id=user_id,
             )
         )
@@ -135,8 +128,7 @@ class ShipwrightClient:
                 name=name,
                 namespace=self.namespace,
                 cluster=self.cluster_id(),
-                kind=BUILD_RUN_KIND,
-                version=BUILD_RUN_VERSION,
+                gvk=BUILD_RUN_GVK,
                 user_id=user_id,
             ),
             patch={"spec": {"state": "BuildRunCanceled"}},
@@ -153,8 +145,7 @@ class ShipwrightClient:
                 name=name,
                 namespace=self.namespace,
                 cluster=self.cluster_id(),
-                kind=TASK_RUN_KIND,
-                version=TASK_RUN_VERSION,
+                gvk=TASK_RUN_GVK,
                 user_id=DUMMY_TASK_RUN_USER_ID,
             )
         )
@@ -284,7 +275,9 @@ class ShipwrightClient:
     async def _get_pod_logs(self, name: str, max_log_lines: int | None = None) -> dict[str, str]:
         """Get the logs of all containers in a given pod."""
         result = await self.client.get(
-            K8sObjectMeta(name=name, namespace=self.namespace, cluster=self.cluster_id(), kind="Pod", version="v1")
+            K8sObjectMeta(
+                name=name, namespace=self.namespace, cluster=self.cluster_id(), gvk=GVK(kind="Pod", version="v1")
+            )
         )
         logs: dict[str, str] = {}
         if result is None:

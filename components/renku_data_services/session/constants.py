@@ -5,6 +5,8 @@ from datetime import timedelta
 from re import Pattern
 from typing import Final
 
+from renku_data_services.k8s.models import GVK
+
 BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX: Final[str] = "harbor.dev.renku.ch/renku-builds/"
 """The default container image prefix for Renku builds."""
 
@@ -29,17 +31,9 @@ BUILD_RUN_DEFAULT_RETENTION_AFTER_SUCCEEDED: Final[timedelta] = timedelta(minute
 BUILD_RUN_DEFAULT_TIMEOUT: Final[timedelta] = timedelta(hours=1)
 """The default timeout for build after which they get cancelled."""
 
-BUILD_RUN_KIND: Final[str] = "BuildRun"
-"""K8s kind of build runs."""
+BUILD_RUN_GVK: Final[GVK] = GVK(group="shipwright.io", version="v1beta1", kind="BuildRun")
 
-BUILD_RUN_VERSION: Final[str] = "shipwright.io/v1beta1"
-"""K8s version of build runs."""
-
-TASK_RUN_KIND: Final[str] = "TaskRun"
-"""K8s kind of task runs."""
-
-TASK_RUN_VERSION: Final[str] = "tekton.dev/v1"
-"""K8s version of task runs."""
+TASK_RUN_GVK: Final[GVK] = GVK(group="tekton.dev", version="v1", kind="TaskRun")
 
 DUMMY_TASK_RUN_USER_ID: Final[str] = "DummyTaskRunUser"
 """The user id to use for TaskRuns in the k8s cache.

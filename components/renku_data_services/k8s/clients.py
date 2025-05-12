@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import multiprocessing.synchronize
-from collections.abc import AsyncIterable
+from collections.abc import AsyncIterable, Awaitable
 from copy import deepcopy
 from multiprocessing import Lock
 from multiprocessing.synchronize import Lock as LockType
@@ -19,7 +19,7 @@ from kubernetes.config.incluster_config import SERVICE_CERT_FILENAME, SERVICE_TO
 
 from renku_data_services.errors import errors
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface, K8sSchedudlingClientInterface
-from renku_data_services.k8s.models import Cluster, ClusterId, K8sObject, K8sObjectFilter, K8sObjectMeta
+from renku_data_services.k8s.models import GVK, Cluster, ClusterId, K8sObject, K8sObjectFilter, K8sObjectMeta
 from renku_data_services.k8s_watcher import K8sDbCache
 from renku_data_services.k8s_watcher.core import APIObjectInCluster
 
@@ -246,7 +246,7 @@ class K8sClusterClient:
 
         try:
             res = await self.__cluster.api.async_get(
-                _filter.fully_qualified_kind,
+                _filter.gvk.kr8s_kind,
                 *names,
                 label_selector=_filter.label_selector,
                 namespace=_filter.namespace,
@@ -315,42 +315,43 @@ class K8SCachedClusterClient(K8sClusterClient):
     Provides access to a cache for listing and reading resources but fallback to the cluster for other operations.
     """
 
-    def __init__(self, cluster: Cluster, cache: K8sDbCache, kinds_to_cache: list[str]) -> None:
+    def __init__(self, cluster: Cluster, cache: K8sDbCache, kinds_to_cache: list[GVK]) -> None:
         super().__init__(cluster)
         self.__cache = cache
-        self.__kinds_to_cache = set(k.lower() for k in kinds_to_cache)
+        self.__kinds_to_cache = set(kinds_to_cache)
         self.__sync_period_seconds = 1800
-        self.__sync_task = asyncio.create_task(self.__periodic_sync())
 
     async def __sync(self) -> None:
         """Upsert K8s objects in the cache and remove deleted objects from the cache."""
         for kind in self.__kinds_to_cache:
-            fltr = K8sObjectFilter(kind=kind, namespace=self.get_cluster().namespace)
+            fltr = K8sObjectFilter(gvk=kind, namespace=self.get_cluster().namespace)
             # Upsert new / updated objects
+            objects_in_k8s: dict[str, K8sObject] = {}
             async for obj in super().list(fltr):
+                objects_in_k8s[obj.name] = obj
                 await self.__cache.upsert(obj)
             # Remove objects that have been deleted from k8s but are still in cache
             async for cache_obj in self.__cache.list(fltr):
-                k8s_obj = await super().get(cache_obj.meta)
-                if k8s_obj is not None:
-                    # Object is still present in k8s
+                cache_obj_is_in_k8s = objects_in_k8s.get(cache_obj.name) is not None
+                if cache_obj_is_in_k8s:
                     continue
                 await self.__cache.delete(cache_obj.meta)
 
-    async def __periodic_sync(self) -> None:
+    async def periodic_sync(self) -> None:
+        """Periodically sync the cache with the K8s cluster."""
         while True:
             await self.__sync()
             await asyncio.sleep(self.__sync_period_seconds)
 
     async def create(self, obj: K8sObject) -> K8sObject:
         """Create the k8s object."""
-        if obj.meta.singular in self.__kinds_to_cache:
+        if obj.meta.gvk in self.__kinds_to_cache:
             await self.__cache.upsert(obj)
         try:
             obj = await super().create(obj)
         except:
             # if there was an error creating the k8s object, we delete it from the db again to not have ghost entries
-            if obj.meta.singular in self.__kinds_to_cache:
+            if obj.meta.gvk in self.__kinds_to_cache:
                 await self.__cache.delete(obj)
             raise
         return obj
@@ -358,19 +359,19 @@ class K8SCachedClusterClient(K8sClusterClient):
     async def patch(self, meta: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
         """Patch a k8s object."""
         obj = await super().patch(meta, patch)
-        if meta.singular in self.__kinds_to_cache:
+        if meta.gvk in self.__kinds_to_cache:
             await self.__cache.upsert(obj)
         return obj
 
     async def delete(self, meta: K8sObjectMeta) -> None:
         """Delete a k8s object."""
         await super().delete(meta)
-        if meta.singular in self.__kinds_to_cache:
+        if meta.gvk in self.__kinds_to_cache:
             await self.__cache.delete(meta)
 
     async def get(self, meta: K8sObjectMeta) -> K8sObject | None:
         """Get a specific k8s object, None is returned if the object does not exist."""
-        if meta.singular in self.__kinds_to_cache:
+        if meta.gvk in self.__kinds_to_cache:
             res = await self.__cache.get(meta)
         else:
             res = await super().get(meta)
@@ -379,7 +380,7 @@ class K8SCachedClusterClient(K8sClusterClient):
 
     async def list(self, _filter: K8sObjectFilter) -> AsyncIterable[K8sObject]:
         """List all k8s objects."""
-        results = self.__cache.list(_filter) if _filter.kind.lower() in self.__kinds_to_cache else super().list(_filter)
+        results = self.__cache.list(_filter) if _filter.gvk in self.__kinds_to_cache else super().list(_filter)
         async for res in results:
             yield res
 
@@ -387,7 +388,7 @@ class K8SCachedClusterClient(K8sClusterClient):
 class K8sClusterClientsPool:
     """A wrapper around a kr8s k8s client, acts on all resources over many clusters."""
 
-    def __init__(self, clusters: list[Cluster], cache: K8sDbCache, kinds_to_cache: list[str]) -> None:
+    def __init__(self, clusters: list[Cluster], cache: K8sDbCache, kinds_to_cache: list[GVK]) -> None:
         self.__clients = {c.id: K8SCachedClusterClient(c, cache, kinds_to_cache) for c in clusters}
 
     def __get_client_or_die(self, cluster_id: ClusterId) -> K8sClusterClient:
@@ -397,6 +398,10 @@ class K8sClusterClientsPool:
                 message=f"Could not find cluster with id {cluster_id} in the list of clusters."
             )
         return cluster_client
+
+    def get_synchronization_coroutines(self) -> list[Awaitable[None]]:
+        """Get the tasks to run the cache synchronization, the task is not scheduled unless it is awaited."""
+        return [c.periodic_sync() for c in self.__clients.values()]
 
     def cluster_by_id(self, cluster_id: ClusterId) -> Cluster:
         """Return a cluster by its id."""

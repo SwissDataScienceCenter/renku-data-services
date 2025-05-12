@@ -2,6 +2,7 @@
 
 import base64
 import json
+from collections.abc import Awaitable
 from contextlib import suppress
 from typing import Any, Generic, Optional, TypeVar, cast
 
@@ -17,10 +18,10 @@ from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.errors import errors
 from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
-from renku_data_services.k8s.models import Cluster, ClusterId, K8sObject, K8sObjectFilter, K8sObjectMeta
+from renku_data_services.k8s.models import GVK, Cluster, ClusterId, K8sObject, K8sObjectFilter, K8sObjectMeta
 from renku_data_services.k8s_watcher.core import APIObjectInCluster
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
-from renku_data_services.notebooks.constants import JUPYTER_SESSION_KIND, JUPYTER_SESSION_VERSION
+from renku_data_services.notebooks.constants import JUPYTER_SESSION_GVK
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
 from renku_data_services.notebooks.errors.programming import ProgrammingError
 from renku_data_services.notebooks.util.kubernetes_ import find_env_var
@@ -33,8 +34,8 @@ sanitizer = kubernetes.client.ApiClient().sanitize_for_serialization
 class JupyterServerV1Alpha1Kr8s(APIObject):
     """Spec for jupyter servers used by the k8s client."""
 
-    kind: str = JUPYTER_SESSION_KIND
-    version: str = JUPYTER_SESSION_VERSION
+    kind: str = JUPYTER_SESSION_GVK.kind
+    version: str = JUPYTER_SESSION_GVK.group_version
     namespaced: bool = True
     plural: str = "jupyterservers"
     singular: str = "jupyterserver"
@@ -53,15 +54,13 @@ class NotebookK8sClient(Generic[_SessionType]):
         client: K8sClusterClientsPool,
         rp_repo: ResourcePoolRepository,
         session_type: type[_SessionType],
-        session_kind: str,
-        session_api_version: str,
         username_label: str,
+        gvk: GVK,
     ) -> None:
         self.__client = client
         self.__rp_repo = rp_repo
         self.__session_type: type[_SessionType] = session_type
-        self.__session_kind = session_kind
-        self.__session_api_version = session_api_version
+        self.__session_gvk = gvk
         self.__username_label = username_label
 
     @staticmethod
@@ -153,14 +152,17 @@ class NotebookK8sClient(Generic[_SessionType]):
 
         return patches
 
-    async def _get(self, name: str, kind: str, version: str, safe_username: str | None) -> K8sObject | None:
+    def get_synchronization_coroutines(self) -> list[Awaitable[None]]:
+        """Get the tasks to run the cache synchronization, the task is not scheduled unless it is awaited."""
+        return self.__client.get_synchronization_coroutines()
+
+    async def _get(self, name: str, gvk: GVK, safe_username: str | None) -> K8sObject | None:
         """Get a specific object, None is returned if it does not exist."""
         objects = [
             o
             async for o in self.__client.list(
                 K8sObjectFilter(
-                    kind=kind,
-                    version=version,
+                    gvk=gvk,
                     user_id=safe_username,
                     name=name,
                 )
@@ -200,8 +202,7 @@ class NotebookK8sClient(Generic[_SessionType]):
             self.__session_type.model_validate(s.manifest)
             async for s in self.__client.list(
                 K8sObjectFilter(
-                    kind=self.__session_kind,
-                    version=self.__session_api_version,
+                    gvk=self.__session_gvk,
                     user_id=safe_username,
                     label_selector={self.__username_label: safe_username},
                 )
@@ -211,7 +212,7 @@ class NotebookK8sClient(Generic[_SessionType]):
 
     async def get_session(self, name: str, safe_username: str) -> _SessionType | None:
         """Get a specific session, None is returned if the session does not exist."""
-        session = await self._get(name, self.__session_kind, self.__session_api_version, safe_username)
+        session = await self._get(name, self.__session_gvk, safe_username)
 
         if session is None:
             return None
@@ -237,8 +238,7 @@ class NotebookK8sClient(Generic[_SessionType]):
                 name=session_name,
                 namespace=cluster.namespace,
                 cluster=cluster.id,
-                kind=self.__session_kind,
-                version=self.__session_api_version,
+                gvk=self.__session_gvk,
                 user_id=api_user.id,
                 manifest=Box(manifest.model_dump(exclude_none=True, mode="json")),
             )
@@ -259,7 +259,7 @@ class NotebookK8sClient(Generic[_SessionType]):
         self, session_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
     ) -> _SessionType:
         """Patch a session."""
-        session = await self._get(session_name, self.__session_kind, self.__session_api_version, safe_username)
+        session = await self._get(session_name, self.__session_gvk, safe_username)
         if session is None:
             raise errors.MissingResourceError(
                 message=f"Cannot find session {session_name} for user {safe_username} in order to patch it."
@@ -270,13 +270,13 @@ class NotebookK8sClient(Generic[_SessionType]):
 
     async def delete_session(self, session_name: str, safe_username: str) -> None:
         """Delete the session."""
-        session = await self._get(session_name, self.__session_kind, self.__session_api_version, safe_username)
+        session = await self._get(session_name, self.__session_gvk, safe_username)
         if session is not None:
             await self.__client.delete(session)
 
     async def get_statefulset(self, session_name: str, safe_username: str) -> StatefulSet | None:
         """Return the statefulset for the given user session."""
-        statefulset = await self._get(session_name, StatefulSet.kind, StatefulSet.version, safe_username)
+        statefulset = await self._get(session_name, GVK.from_kr8s_object(StatefulSet), safe_username)
         if statefulset is None:
             return None
 
@@ -338,7 +338,7 @@ class NotebookK8sClient(Generic[_SessionType]):
                 message=f"Cannot find session {session_name} for user {safe_username} to retrieve logs."
             )
         pod_name = f"{session_name}-0"
-        result = await self._get(pod_name, Pod.kind, Pod.version, None)
+        result = await self._get(pod_name, GVK.from_kr8s_object(Pod), None)
 
         logs: dict[str, str] = {}
         if result is None:
@@ -372,7 +372,7 @@ class NotebookK8sClient(Generic[_SessionType]):
     async def patch_image_pull_secret(self, session_name: str, gitlab_token: GitlabToken, safe_username: str) -> None:
         """Patch the image pull secret used in a Renku session."""
         secret_name = f"{session_name}-image-secret"
-        result = await self._get(secret_name, Secret.kind, Secret.version, safe_username)
+        result = await self._get(secret_name, GVK.from_kr8s_object(Secret), safe_username)
         if result is None:
             return
 
@@ -418,8 +418,7 @@ class NotebookK8sClient(Generic[_SessionType]):
             name=secret.metadata.name,
             namespace=self.namespace(),
             cluster=self.cluster_id(),
-            kind=Secret.kind,
-            version=Secret.version,
+            gvk=GVK(kind=Secret.kind, version=Secret.version),
             manifest=Box(sanitizer(secret)),
         )
         try:
@@ -468,8 +467,7 @@ class NotebookK8sClient(Generic[_SessionType]):
                 name=name,
                 namespace=self.namespace(),
                 cluster=self.cluster_id(),
-                kind=Secret.kind,
-                version=Secret.version,
+                gvk=GVK(kind=Secret.kind, version=Secret.version),
             )
         )
 
@@ -481,8 +479,7 @@ class NotebookK8sClient(Generic[_SessionType]):
                 name=name,
                 namespace=self.namespace(),
                 cluster=self.cluster_id(),
-                kind=Secret.kind,
-                version=Secret.version,
+                gvk=GVK(kind=Secret.kind, version=Secret.version),
             )
         )
         if result is None:

@@ -40,14 +40,9 @@ from renku_data_services.notebooks.config.dynamic import (
     _UserSecrets,
 )
 from renku_data_services.notebooks.config.static import _ServersGetEndpointAnnotations
-from renku_data_services.notebooks.constants import (
-    AMALTHEA_SESSION_KIND,
-    AMALTHEA_SESSION_VERSION,
-    JUPYTER_SESSION_KIND,
-    JUPYTER_SESSION_VERSION,
-)
+from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
-from renku_data_services.session.constants import BUILD_RUN_KIND, TASK_RUN_KIND
+from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 
 
 class CRCValidatorProto(Protocol):
@@ -181,14 +176,13 @@ class NotebooksConfig:
                 kube_conf_root_dir=kube_config_root, namespace=k8s_config.renku_namespace, api=kr8s_api
             ),
             cache=k8s_db_cache,
-            kinds_to_cache=[AMALTHEA_SESSION_KIND, JUPYTER_SESSION_KIND, BUILD_RUN_KIND, TASK_RUN_KIND],
+            kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
         )
         k8s_client = NotebookK8sClient(
             client=client,
             rp_repo=rp_repo,
             session_type=JupyterServerV1Alpha1,
-            session_kind=JUPYTER_SESSION_KIND,
-            session_api_version=JUPYTER_SESSION_VERSION,
+            gvk=JUPYTER_SESSION_GVK,
             username_label="renku.io/userId",
         )
         k8s_v2_client = NotebookK8sClient(
@@ -196,8 +190,7 @@ class NotebooksConfig:
             rp_repo=rp_repo,
             # NOTE: v2 sessions have no userId label, the safe-username label is the keycloak user ID
             session_type=AmaltheaSessionV1Alpha1,
-            session_kind=AMALTHEA_SESSION_KIND,
-            session_api_version=AMALTHEA_SESSION_VERSION,
+            gvk=AMALTHEA_SESSION_GVK,
             username_label="renku.io/safe-username",
         )
         return cls(

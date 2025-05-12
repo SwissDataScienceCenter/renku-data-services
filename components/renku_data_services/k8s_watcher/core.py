@@ -19,7 +19,7 @@ from renku_data_services.base_models.core import APIUser, InternalServiceAdmin, 
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.errors import errors
-from renku_data_services.k8s.models import Cluster, ClusterId, K8sObject, K8sObjectMeta
+from renku_data_services.k8s.models import GVK, Cluster, ClusterId, K8sObject, K8sObjectMeta
 from renku_data_services.k8s_watcher.db import K8sDbCache
 from renku_data_services.notebooks.crs import State
 from renku_data_services.session.constants import DUMMY_TASK_RUN_USER_ID
@@ -55,8 +55,7 @@ class APIObjectInCluster:
             name=self.obj.name,
             namespace=self.obj.namespace or "default",
             cluster=self.cluster,
-            version=self.obj.version,
-            kind=self.obj.kind,
+            gvk=GVK.from_kr8s_object(self.obj),
             user_id=self.user_id,
         )
 
@@ -67,8 +66,7 @@ class APIObjectInCluster:
         return K8sObject(
             name=self.obj.name,
             namespace=self.obj.namespace,
-            kind=self.obj.kind,
-            version=self.obj.version,
+            gvk=GVK.from_kr8s_object(self.obj),
             manifest=Box(self.obj.to_dict()),
             cluster=self.cluster,
             user_id=self.user_id,
@@ -92,16 +90,16 @@ k8s_watcher_admin_user = InternalServiceAdmin(id=ServiceAdminId.k8s_watcher)
 class K8sWatcher:
     """Watch k8s events and call the handler with every event."""
 
-    def __init__(self, handler: EventHandler, clusters: dict[ClusterId, Cluster], kinds: list[str]) -> None:
+    def __init__(self, handler: EventHandler, clusters: dict[ClusterId, Cluster], kinds: list[GVK]) -> None:
         self.__handler = handler
         self.__tasks: dict[ClusterId, list[Task]] | None = None
         self.__kinds = kinds
         self.__clusters = clusters
 
-    async def __watch_kind(self, kind: str, cluster: Cluster) -> None:
+    async def __watch_kind(self, kind: GVK, cluster: Cluster) -> None:
         while True:
             try:
-                watch = cluster.api.async_watch(kind=kind, namespace=cluster.namespace)
+                watch = cluster.api.async_watch(kind=kind.kr8s_kind, namespace=cluster.namespace)
                 async for event_type, obj in watch:
                     await self.__handler(APIObjectInCluster(obj, cluster.id), event_type)
                     # in some cases, the kr8s loop above just never yields, especially if there's exceptions which
@@ -196,7 +194,7 @@ async def collect_metrics(
         case State.Running.value | State.NotReady.value if previous_state == State.Hibernated.value:
             # session resumed
             await metrics.session_resumed(user, metadata={"session_id": new_obj.meta.name})
-        case State.Hibernated.value if (previous_state != State.Hibernated.value):
+        case State.Hibernated.value if previous_state != State.Hibernated.value:
             # session hibernated
             await metrics.session_hibernated(user=user, metadata={"session_id": new_obj.meta.name})
         case _:

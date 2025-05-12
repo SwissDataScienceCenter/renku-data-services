@@ -73,7 +73,7 @@ from renku_data_services.metrics.core import StagingMetricsService
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.notebooks.config import NotebooksConfig, get_clusters
-from renku_data_services.notebooks.constants import AMALTHEA_SESSION_KIND, JUPYTER_SESSION_KIND
+from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
 from renku_data_services.platform.db import PlatformRepository
 from renku_data_services.project.db import (
     ProjectMemberRepository,
@@ -86,7 +86,7 @@ from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsRepo
 from renku_data_services.session import crs as session_crs
-from renku_data_services.session.constants import BUILD_RUN_KIND, TASK_RUN_KIND
+from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
 from renku_data_services.solr.solr_client import SolrClientConfig
@@ -233,7 +233,7 @@ class BuildsConfig:
             client = K8sClusterClientsPool(
                 clusters=get_clusters("/secrets/kube_configs", namespace=namespace, api=kr8s_api),
                 cache=k8s_db_cache,
-                kinds_to_cache=[AMALTHEA_SESSION_KIND, JUPYTER_SESSION_KIND, BUILD_RUN_KIND, TASK_RUN_KIND],
+                kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
             )
             shipwright_client = ShipwrightClient(
                 client=client,

@@ -11,12 +11,7 @@ from ulid import ULID
 
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec
-from renku_data_services.notebooks.constants import (
-    AMALTHEA_SESSION_KIND,
-    AMALTHEA_SESSION_VERSION,
-    JUPYTER_SESSION_KIND,
-    JUPYTER_SESSION_VERSION,
-)
+from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
 from renku_data_services.notebooks.cr_amalthea_session import (
     Affinity,
     Authentication,
@@ -115,8 +110,8 @@ class ComputeResources(BaseModel):
 class JupyterServerV1Alpha1(_JSModel):
     """Jupyter server CRD."""
 
-    kind: str = JUPYTER_SESSION_KIND
-    apiVersion: str = JUPYTER_SESSION_VERSION
+    kind: str = JUPYTER_SESSION_GVK.kind
+    apiVersion: str = JUPYTER_SESSION_GVK.group_version
     metadata: Metadata
 
     def get_compute_resources(self) -> ComputeResources:
@@ -140,8 +135,8 @@ class JupyterServerV1Alpha1(_JSModel):
 class AmaltheaSessionV1Alpha1(_ASModel):
     """Amalthea session CRD."""
 
-    kind: str = AMALTHEA_SESSION_KIND
-    apiVersion: str = AMALTHEA_SESSION_VERSION
+    kind: str = AMALTHEA_SESSION_GVK.kind
+    apiVersion: str = AMALTHEA_SESSION_GVK.group_version
     # Here we overwrite the default from ASModel because it is too weakly typed
     metadata: Metadata  # type: ignore[assignment]
 
