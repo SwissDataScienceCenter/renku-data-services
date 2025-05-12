@@ -78,7 +78,7 @@ aiofile = "^3.9.0"
 # Detected incompatible Protobuf Gencode/Runtime versions when loading authzed/api/v1/core.proto: gencode 5.28.2 runtime 5.27.3.
 protobuf = "^5.29.3"
 escapism = "^1.0.1"
-kr8s = "^0.18.1"
+kr8s = "^0.20.7"
 python-box = "^7.0.1"
 marshmallow = "^3.26.1"
 toml = "^0.10.2"
