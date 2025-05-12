@@ -26,15 +26,21 @@ async def main() -> None:
     kr8s_api = await kr8s.asyncio.api()
     clusters = [Cluster(id=ClusterId("renkulab"), namespace=config.k8s.renku_namespace, api=kr8s_api)]
 
+    kinds = [
+        f"{AMALTHEA_SESSION_KIND}.{AMALTHEA_SESSION_VERSION}",
+        f"{JUPYTER_SESSION_KIND}.{JUPYTER_SESSION_VERSION}",
+    ]
+    if config.image_builders.enabled:
+        kinds.extend(
+            [
+                f"{BUILD_RUN_KIND}.{BUILD_RUN_VERSION}",
+                f"{TASK_RUN_KIND}.{TASK_RUN_VERSION}",
+            ]
+        )
     watcher = K8sWatcher(
         handler=k8s_object_handler(config.k8s_cache, config.metrics, rp_repo=config.rp_repo),
         clusters={c.id: c for c in clusters},
-        kinds=[
-            f"{AMALTHEA_SESSION_KIND}.{AMALTHEA_SESSION_VERSION}",
-            f"{JUPYTER_SESSION_KIND}.{JUPYTER_SESSION_VERSION}",
-            f"{BUILD_RUN_KIND}.{BUILD_RUN_VERSION}",
-            f"{TASK_RUN_KIND}.{TASK_RUN_VERSION}",
-        ],
+        kinds=kinds,
     )
     await watcher.start()
     logging.info("started watching resources")
