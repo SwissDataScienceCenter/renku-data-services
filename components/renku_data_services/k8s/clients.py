@@ -259,12 +259,11 @@ class K8sClusterClient:
                 label_selector=_filter.label_selector,
                 namespace=_filter.namespace,
             )
+
         except (kr8s.ServerError, kr8s.APITimeoutError):
             return
 
-        if not isinstance(res, list):
-            res = [res]
-        for r in res:
+        async for r in res:
             yield self.__cluster.with_api_object(r)
 
     async def __get_api_object(self, meta: K8sObjectFilter) -> APIObjectInCluster | None:
@@ -312,8 +311,7 @@ class K8sClusterClient:
 
     async def list(self, _filter: K8sObjectFilter) -> AsyncIterable[K8sObject]:
         """List all k8s objects."""
-        results = self.__list(_filter)
-        async for r in results:
+        async for r in self.__list(_filter):
             yield r.to_k8s_object()
 
 
