@@ -30,12 +30,12 @@ from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClie
 from renku_data_services.notebooks.api.classes.repository import GitProvider
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
 from renku_data_services.notebooks.config.dynamic import (
+    ServerOptionsConfig,
     _CloudStorage,
     _GitConfig,
     _K8sConfig,
     _parse_str_as_bool,
     _SentryConfig,
-    _ServerOptionsConfig,
     _SessionConfig,
     _UserSecrets,
 )
@@ -108,7 +108,7 @@ class Kr8sApiStack:
 class NotebooksConfig:
     """The notebooks configuration."""
 
-    server_options: _ServerOptionsConfig
+    server_options: ServerOptionsConfig
     sessions: _SessionConfig
     sentry: _SentryConfig
     git: _GitConfig
@@ -142,7 +142,7 @@ class NotebooksConfig:
         git_config: _GitConfig
         kr8s_api: kr8s.asyncio.Api
         data_service_url = os.environ.get("NB_DATA_SERVICE_URL", "http://127.0.0.1:8000")
-        server_options = _ServerOptionsConfig.from_env()
+        server_options = ServerOptionsConfig.from_env()
         crc_validator: CRCValidatorProto
         git_provider_helper: GitProviderHelperProto
         k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")

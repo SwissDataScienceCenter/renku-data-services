@@ -54,14 +54,14 @@ class SolrClientConfig:
     timeout: int = 600
 
     @classmethod
-    def from_env(cls, prefix: str = "") -> SolrClientConfig:
+    def from_env(cls) -> SolrClientConfig:
         """Create a configuration from environment variables."""
-        url = os.environ[f"{prefix}SOLR_URL"]
-        core = os.environ.get(f"{prefix}SOLR_CORE", "renku-search")
-        username = os.environ.get(f"{prefix}SOLR_USER")
-        password = os.environ.get(f"{prefix}SOLR_PASSWORD")
+        url = os.environ["SOLR_URL"]
+        core = os.environ.get("SOLR_CORE", "renku-search")
+        username = os.environ.get("SOLR_USER")
+        password = os.environ.get("SOLR_PASSWORD")
 
-        tstr = os.environ.get(f"{prefix}SOLR_REQUEST_TIMEOUT", "600")
+        tstr = os.environ.get("SOLR_REQUEST_TIMEOUT", "600")
         try:
             timeout = int(tstr) if tstr is not None else 600
         except ValueError:

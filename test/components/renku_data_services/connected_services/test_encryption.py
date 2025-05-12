@@ -3,7 +3,7 @@
 import pytest
 from sqlalchemy import select
 
-from renku_data_services.app_config import Config
+from renku_data_services.app_config import Wiring
 from renku_data_services.base_models import APIUser
 from renku_data_services.connected_services import apispec
 from renku_data_services.connected_services import orm as schemas
@@ -13,7 +13,7 @@ from renku_data_services.utils.cryptography import decrypt_string
 
 @pytest.mark.asyncio
 async def test_token_encryption(
-    app_config_instance: Config,
+    app_config_instance: Wiring,
 ) -> None:
     run_migrations_for_app("common")
     connected_services_repo = app_config_instance.connected_services_repo
@@ -36,7 +36,7 @@ async def test_token_encryption(
 
 
 @pytest.mark.asyncio
-async def test_client_secret_encryption(app_config_instance: Config, admin_user: APIUser) -> None:
+async def test_client_secret_encryption(app_config_instance: Wiring, admin_user: APIUser) -> None:
     run_migrations_for_app("common")
     connected_services_repo = app_config_instance.connected_services_repo
     new_client = apispec.ProviderPost(

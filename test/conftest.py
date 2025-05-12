@@ -24,10 +24,10 @@ from pytest_postgresql.janitor import DatabaseJanitor
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
-from renku_data_services.app_config import Config
+from renku_data_services.app_config import Wiring
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.db_config.config import DBConfig
-from renku_data_services.secrets.config import Config as SecretsConfig
+from renku_data_services.secrets.config import Wiring as SecretsConfig
 from renku_data_services.solr import entity_schema
 from renku_data_services.solr.solr_client import SolrClientConfig
 from renku_data_services.solr.solr_migrate import SchemaMigrator
@@ -194,7 +194,7 @@ async def dummy_users():
 @pytest_asyncio.fixture(scope="session")
 async def app_config(
     authz_setup, monkeysession, worker_id, secrets_key_pair, dummy_users
-) -> AsyncGenerator[Config, None]:
+) -> AsyncGenerator[Wiring, None]:
     monkeysession.setenv("DUMMY_STORES", "true")
     monkeysession.setenv("MAX_PINNED_PROJECTS", "5")
     monkeysession.setenv("NB_SERVER_OPTIONS__DEFAULTS_PATH", "server_defaults.json")
@@ -208,7 +208,7 @@ async def app_config(
 
 
 @pytest_asyncio.fixture
-async def app_config_instance(app_config, db_instance, authz_instance) -> AsyncGenerator[Config, None]:
+async def app_config_instance(app_config, db_instance, authz_instance) -> AsyncGenerator[Wiring, None]:
     app_config.metrics.reset_mock()
     yield app_config
 
@@ -216,7 +216,7 @@ async def app_config_instance(app_config, db_instance, authz_instance) -> AsyncG
 @pytest_asyncio.fixture
 async def secrets_storage_app_config(
     db_config: DBConfig, secrets_key_pair, monkeypatch, tmp_path
-) -> AsyncGenerator[Config, None]:
+) -> AsyncGenerator[Wiring, None]:
     encryption_key_path = tmp_path / "encryption-key"
     encryption_key_path.write_bytes(secrets.token_bytes(32))
 

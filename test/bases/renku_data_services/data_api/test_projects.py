@@ -12,7 +12,7 @@ from sqlalchemy import select
 from syrupy.filters import props
 from ulid import ULID
 
-from renku_data_services.app_config.config import Config
+from renku_data_services.app_config.config import Wiring
 from renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
 from renku_data_services.message_queue.avro_models.io.renku.events.v2.member_role import MemberRole
 from renku_data_services.message_queue.models import deserialize_binary
@@ -939,7 +939,7 @@ async def test_add_project_members(
 
 
 @pytest.mark.asyncio
-async def test_delete_project_members(create_project, sanic_client, user_headers, app_config: Config) -> None:
+async def test_delete_project_members(create_project, sanic_client, user_headers, app_config: Wiring) -> None:
     project = await create_project("Project 1")
     project_id = project["id"]
 
@@ -1152,7 +1152,7 @@ async def test_get_project_permissions_cascading_from_group(
 
 @pytest.mark.asyncio
 async def test_project_slug_case(
-    app_config: Config,
+    app_config: Wiring,
     create_project,
     create_group,
     sanic_client,
@@ -1182,7 +1182,7 @@ async def test_project_slug_case(
     assert res.status_code == 422
     # Change the slug of the project to be upper case in the DB
     uppercase_slug = "NEW_project_SLUG"
-    async with app_config.db.async_session_maker() as session, session.begin():
+    async with app_config.config.db.async_session_maker() as session, session.begin():
         stmt = select(ProjectORM).where(ProjectORM.id == project_id)
         proj_orm = await session.scalar(stmt)
         assert proj_orm is not None

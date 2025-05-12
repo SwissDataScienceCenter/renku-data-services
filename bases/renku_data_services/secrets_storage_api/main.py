@@ -10,18 +10,18 @@ from sanic import Sanic
 from sanic.worker.loader import AppLoader
 
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
-from renku_data_services.secrets.config import Config
+from renku_data_services.secrets.config import Wiring
 from renku_data_services.secrets.core import rotate_encryption_keys
 from renku_data_services.secrets_storage_api.app import register_all_handlers
 
 
 def create_app() -> Sanic:
     """Create a Sanic application."""
-    config = Config.from_env()
-    app = Sanic(config.app_name)
+    wiring = Wiring.from_env()
+    app = Sanic(wiring.config.app_name)
     if "COVERAGE_RUN" in environ:
         app.config.TOUCHUP = False
-    app = register_all_handlers(app, config)
+    app = register_all_handlers(app, wiring)
 
     @app.main_process_start
     def main_process_start(app: Sanic) -> None:
@@ -32,7 +32,7 @@ def create_app() -> Sanic:
 
     async def rotate_encryption_key_listener(app: Sanic) -> None:
         """Rotate RSA private key."""
-        if config.previous_secrets_service_private_key is None:
+        if wiring.config.secrets.previous_private_key is None:
             return
 
         lock = app.shared_ctx.rotation_lock.acquire(block=False)
@@ -43,9 +43,9 @@ def create_app() -> Sanic:
         try:
             await rotate_encryption_keys(
                 InternalServiceAdmin(id=ServiceAdminId.secrets_rotation),
-                config.secrets_service_private_key,
-                config.previous_secrets_service_private_key,
-                config.user_secrets_repo,
+                wiring.config.secrets.private_key,
+                wiring.config.secrets.previous_private_key,
+                wiring.user_secrets_repo,
             )
         finally:
             app.shared_ctx.rotation_lock.release()

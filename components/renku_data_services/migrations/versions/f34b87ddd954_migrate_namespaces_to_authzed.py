@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.orm import Session
 
-from renku_data_services.app_config.config import Config as AppConfig
+from renku_data_services.app_config.config import Wiring as AppConfig
 from renku_data_services.message_queue.avro_models.io.renku.events import v2
 from renku_data_services.message_queue.converters import EventConverter
 from renku_data_services.message_queue.models import Event

@@ -7,7 +7,7 @@ from hypothesis import strategies as st
 from pydantic import ValidationError
 
 from renku_data_services import errors
-from renku_data_services.app_config import Config
+from renku_data_services.app_config import Wiring
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.migrations.core import run_migrations_for_app
 from test.components.renku_data_services.storage_models.hypothesis import (
@@ -34,7 +34,7 @@ def user():
 @pytest.mark.asyncio
 async def test_storage_insert_get(
     storage: dict[str, Any],
-    app_config_instance: Config,
+    app_config_instance: Wiring,
     user: APIUser,
 ) -> None:
     run_migrations_for_app("common")
@@ -50,7 +50,7 @@ async def test_storage_update_path(
     storage: dict[str, Any],
     new_source_path: str,
     new_target_path: str,
-    app_config_instance: Config,
+    app_config_instance: Wiring,
     user: APIUser,
 ) -> None:
     run_migrations_for_app("common")
@@ -75,7 +75,7 @@ async def test_storage_update_path(
 async def test_storage_update_config(
     storage: dict[str, Any],
     new_config: dict[str, Any],
-    app_config_instance: Config,
+    app_config_instance: Wiring,
     user: APIUser,
 ) -> None:
     run_migrations_for_app("common")
@@ -98,7 +98,7 @@ async def test_storage_update_config(
 @pytest.mark.asyncio
 async def test_storage_delete(
     storage: dict[str, Any],
-    app_config_instance: Config,
+    app_config_instance: Wiring,
     user: APIUser,
 ) -> None:
     run_migrations_for_app("common")

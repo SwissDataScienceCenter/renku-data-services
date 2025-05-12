@@ -15,14 +15,14 @@ from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 async def config_dummy_fixture(monkeypatch):
     monkeypatch.setenv("DUMMY_STORES", "true")
     monkeypatch.setenv("VERSION", "9.9.9")
-    yield conf.Config.from_env()
+    yield conf.Wiring.from_env()
     # NOTE: _async_engine is a class variable and it persist across tests because pytest loads
     # all things once at the beginning of hte tests. So we reset it here so that it does not affect
     # subsequent tests.
     await DBConfig.dispose_connection()
 
 
-def test_config_dummy(config_dummy_fixture: conf.Config) -> None:
+def test_config_dummy(config_dummy_fixture: conf.Wiring) -> None:
     config = config_dummy_fixture
     assert config.authenticator is not None
     assert isinstance(config.authenticator, DummyAuthenticator)
@@ -69,7 +69,7 @@ async def config_no_dummy_fixture(monkeypatch, secrets_key_pair, tmp_path):
 
     monkeypatch.setattr(conf, "KeycloakAPI", patch_kc_api)
 
-    yield conf.Config.from_env()
+    yield conf.Wiring.from_env()
     # NOTE: _async_engine is a class variable and it persist across tests because pytest loads
     # all things once at the beginning of hte tests. So we reset it here so that it does not affect
     # subsequent tests.
@@ -77,7 +77,7 @@ async def config_no_dummy_fixture(monkeypatch, secrets_key_pair, tmp_path):
 
 
 @pytest.mark.skip(reason="Re-enable when the k8s cluster for CI is fully setup")  # TODO: address in followup PR
-def test_config_no_dummy(config_no_dummy_fixture: conf.Config) -> None:
+def test_config_no_dummy(config_no_dummy_fixture: conf.Wiring) -> None:
     config = config_no_dummy_fixture
     assert config.authenticator is not None
     assert config.storage_repo is not None

@@ -9,7 +9,7 @@ from sanic_ext.extras.validation.validators import VALIDATION_ERROR
 from ulid import ULID
 
 from renku_data_services import errors
-from renku_data_services.app_config import Config
+from renku_data_services.app_config import Wiring
 from renku_data_services.base_api.error_handler import CustomErrorHandler
 from renku_data_services.base_api.misc import MiscBP
 from renku_data_services.base_models.core import Slug
@@ -64,7 +64,7 @@ def _patched_validate_body(
         ) from e
 
 
-def register_all_handlers(app: Sanic, config: Config) -> Sanic:
+def register_all_handlers(app: Sanic, wiring: Wiring) -> Sanic:
     """Register all handlers on the application."""
     # WARNING: The regex is not actually used in most cases, instead the conversion function must raise a ValueError
     app.router.register_pattern("ulid", ULID.from_str, r"^[0-7][0-9A-HJKMNP-TV-Z]{25}$")
@@ -74,192 +74,192 @@ def register_all_handlers(app: Sanic, config: Config) -> Sanic:
     resource_pools = ResourcePoolsBP(
         name="resource_pools",
         url_prefix=url_prefix,
-        rp_repo=config.rp_repo,
-        authenticator=config.authenticator,
-        user_repo=config.user_repo,
+        rp_repo=wiring.rp_repo,
+        authenticator=wiring.authenticator,
+        user_repo=wiring.user_repo,
     )
-    classes = ClassesBP(name="classes", url_prefix=url_prefix, repo=config.rp_repo, authenticator=config.authenticator)
+    classes = ClassesBP(name="classes", url_prefix=url_prefix, repo=wiring.rp_repo, authenticator=wiring.authenticator)
     quota = QuotaBP(
         name="quota",
         url_prefix=url_prefix,
-        rp_repo=config.rp_repo,
-        authenticator=config.authenticator,
-        quota_repo=config.quota_repo,
+        rp_repo=wiring.rp_repo,
+        authenticator=wiring.authenticator,
+        quota_repo=wiring.quota_repo,
     )
-    users = KCUsersBP(name="users", url_prefix=url_prefix, repo=config.kc_user_repo, authenticator=config.authenticator)
+    users = KCUsersBP(name="users", url_prefix=url_prefix, repo=wiring.kc_user_repo, authenticator=wiring.authenticator)
     user_secrets = UserSecretsBP(
         name="user_secrets",
         url_prefix=url_prefix,
-        secret_repo=config.user_secrets_repo,
-        authenticator=config.authenticator,
+        secret_repo=wiring.user_secrets_repo,
+        authenticator=wiring.authenticator,
     )
     resource_pools_users = ResourcePoolUsersBP(
         name="resource_pool_users",
         url_prefix=url_prefix,
-        repo=config.user_repo,
-        authenticator=config.authenticator,
-        kc_user_repo=config.kc_user_repo,
+        repo=wiring.user_repo,
+        authenticator=wiring.authenticator,
+        kc_user_repo=wiring.kc_user_repo,
     )
     user_resource_pools = UserResourcePoolsBP(
         name="user_resource_pools",
         url_prefix=url_prefix,
-        repo=config.user_repo,
-        authenticator=config.authenticator,
-        kc_user_repo=config.kc_user_repo,
+        repo=wiring.user_repo,
+        authenticator=wiring.authenticator,
+        kc_user_repo=wiring.kc_user_repo,
     )
     clusters = ClustersBP(
-        name="clusters", url_prefix=url_prefix, repo=config.cluster_repo, authenticator=config.authenticator
+        name="clusters", url_prefix=url_prefix, repo=wiring.cluster_repo, authenticator=wiring.authenticator
     )
     storage = StorageBP(
         name="storage",
         url_prefix=url_prefix,
-        storage_repo=config.storage_repo,
-        authenticator=config.gitlab_authenticator,
+        storage_repo=wiring.storage_repo,
+        authenticator=wiring.gitlab_authenticator,
     )
     storage_schema = StorageSchemaBP(name="storage_schema", url_prefix=url_prefix)
     user_preferences = UserPreferencesBP(
         name="user_preferences",
         url_prefix=url_prefix,
-        user_preferences_repo=config.user_preferences_repo,
-        authenticator=config.authenticator,
+        user_preferences_repo=wiring.user_preferences_repo,
+        authenticator=wiring.authenticator,
     )
-    misc = MiscBP(name="misc", url_prefix=url_prefix, apispec=config.spec, version=config.version)
+    misc = MiscBP(name="misc", url_prefix=url_prefix, apispec=wiring.spec, version=wiring.version)
     project = ProjectsBP(
         name="projects",
         url_prefix=url_prefix,
-        project_repo=config.project_repo,
-        project_member_repo=config.project_member_repo,
-        authenticator=config.authenticator,
-        user_repo=config.kc_user_repo,
-        session_repo=config.session_repo,
-        data_connector_repo=config.data_connector_repo,
-        project_migration_repo=config.project_migration_repo,
-        metrics=config.metrics,
+        project_repo=wiring.project_repo,
+        project_member_repo=wiring.project_member_repo,
+        authenticator=wiring.authenticator,
+        user_repo=wiring.kc_user_repo,
+        session_repo=wiring.session_repo,
+        data_connector_repo=wiring.data_connector_repo,
+        project_migration_repo=wiring.project_migration_repo,
+        metrics=wiring.metrics,
     )
     project_session_secrets = ProjectSessionSecretBP(
         name="project_session_secrets",
         url_prefix=url_prefix,
-        session_secret_repo=config.project_session_secret_repo,
-        authenticator=config.authenticator,
+        session_secret_repo=wiring.project_session_secret_repo,
+        authenticator=wiring.authenticator,
     )
     group = GroupsBP(
         name="groups",
         url_prefix=url_prefix,
-        authenticator=config.authenticator,
-        group_repo=config.group_repo,
-        metrics=config.metrics,
+        authenticator=wiring.authenticator,
+        group_repo=wiring.group_repo,
+        metrics=wiring.metrics,
     )
     session_environments = EnvironmentsBP(
         name="session_environments",
         url_prefix=url_prefix,
-        session_repo=config.session_repo,
-        authenticator=config.authenticator,
+        session_repo=wiring.session_repo,
+        authenticator=wiring.authenticator,
     )
     session_launchers = SessionLaunchersBP(
         name="sessions_launchers",
         url_prefix=url_prefix,
-        session_repo=config.session_repo,
-        authenticator=config.authenticator,
-        metrics=config.metrics,
+        session_repo=wiring.session_repo,
+        authenticator=wiring.authenticator,
+        metrics=wiring.metrics,
     )
     builds = (
         BuildsBP(
             name="builds",
             url_prefix=url_prefix,
-            session_repo=config.session_repo,
-            authenticator=config.authenticator,
+            session_repo=wiring.session_repo,
+            authenticator=wiring.authenticator,
         )
-        if config.builds_config.enabled
+        if wiring.config.builds.enabled
         else None
     )
     oauth2_clients = OAuth2ClientsBP(
         name="oauth2_clients",
         url_prefix=url_prefix,
-        connected_services_repo=config.connected_services_repo,
-        authenticator=config.authenticator,
+        connected_services_repo=wiring.connected_services_repo,
+        authenticator=wiring.authenticator,
     )
     oauth2_connections = OAuth2ConnectionsBP(
         name="oauth2_connections",
         url_prefix=url_prefix,
-        connected_services_repo=config.connected_services_repo,
-        authenticator=config.authenticator,
-        internal_gitlab_authenticator=config.gitlab_authenticator,
+        connected_services_repo=wiring.connected_services_repo,
+        authenticator=wiring.authenticator,
+        internal_gitlab_authenticator=wiring.gitlab_authenticator,
     )
     repositories = RepositoriesBP(
         name="repositories",
         url_prefix=url_prefix,
-        git_repositories_repo=config.git_repositories_repo,
-        authenticator=config.authenticator,
-        internal_gitlab_authenticator=config.gitlab_authenticator,
+        git_repositories_repo=wiring.git_repositories_repo,
+        authenticator=wiring.authenticator,
+        internal_gitlab_authenticator=wiring.gitlab_authenticator,
     )
     notebooks = NotebooksBP(
         name="notebooks_old",
         url_prefix=url_prefix,
-        authenticator=config.authenticator,
-        nb_config=config.nb_config,
-        internal_gitlab_authenticator=config.gitlab_authenticator,
-        git_repo=config.git_repositories_repo,
-        rp_repo=config.rp_repo,
-        user_repo=config.kc_user_repo,
-        storage_repo=config.storage_repo,
+        authenticator=wiring.authenticator,
+        nb_config=wiring.nb_config,
+        internal_gitlab_authenticator=wiring.gitlab_authenticator,
+        git_repo=wiring.git_repositories_repo,
+        rp_repo=wiring.rp_repo,
+        user_repo=wiring.kc_user_repo,
+        storage_repo=wiring.storage_repo,
     )
     notebooks_new = NotebooksNewBP(
         name="notebooks",
         url_prefix=url_prefix,
-        authenticator=config.authenticator,
-        nb_config=config.nb_config,
-        project_repo=config.project_repo,
-        project_session_secret_repo=config.project_session_secret_repo,
-        session_repo=config.session_repo,
-        storage_repo=config.storage_repo,
-        rp_repo=config.rp_repo,
-        user_repo=config.kc_user_repo,
-        data_connector_repo=config.data_connector_repo,
-        data_connector_secret_repo=config.data_connector_secret_repo,
-        internal_gitlab_authenticator=config.gitlab_authenticator,
-        metrics=config.metrics,
+        authenticator=wiring.authenticator,
+        nb_config=wiring.nb_config,
+        project_repo=wiring.project_repo,
+        project_session_secret_repo=wiring.project_session_secret_repo,
+        session_repo=wiring.session_repo,
+        storage_repo=wiring.storage_repo,
+        rp_repo=wiring.rp_repo,
+        user_repo=wiring.kc_user_repo,
+        data_connector_repo=wiring.data_connector_repo,
+        data_connector_secret_repo=wiring.data_connector_secret_repo,
+        internal_gitlab_authenticator=wiring.gitlab_authenticator,
+        metrics=wiring.metrics,
     )
     platform_config = PlatformConfigBP(
         name="platform_config",
         url_prefix=url_prefix,
-        platform_repo=config.platform_repo,
-        authenticator=config.authenticator,
+        platform_repo=wiring.platform_repo,
+        authenticator=wiring.authenticator,
     )
     message_queue = MessageQueueBP(
         name="search",
         url_prefix=url_prefix,
-        authenticator=config.authenticator,
-        session_maker=config.db.async_session_maker,
-        reprovisioning_repo=config.reprovisioning_repo,
-        user_repo=config.kc_user_repo,
-        group_repo=config.group_repo,
-        project_repo=config.project_repo,
-        authz=config.authz,
+        authenticator=wiring.authenticator,
+        session_maker=wiring.config.db.async_session_maker,
+        reprovisioning_repo=wiring.reprovisioning_repo,
+        user_repo=wiring.kc_user_repo,
+        group_repo=wiring.group_repo,
+        project_repo=wiring.project_repo,
+        authz=wiring.authz,
     )
     search = SearchBP(
         name="search2",
         url_prefix=url_prefix,
-        authenticator=config.authenticator,
+        authenticator=wiring.authenticator,
         search_reprovision=SearchReprovision(
-            search_updates_repo=config.search_updates_repo,
-            reprovisioning_repo=config.reprovisioning_repo,
-            solr_config=config.solr_config,
-            user_repo=config.kc_user_repo,
-            group_repo=config.group_repo,
-            project_repo=config.project_repo,
-            data_connector_repo=config.data_connector_repo,
+            search_updates_repo=wiring.search_updates_repo,
+            reprovisioning_repo=wiring.reprovisioning_repo,
+            solr_config=wiring.config.solr,
+            user_repo=wiring.kc_user_repo,
+            group_repo=wiring.group_repo,
+            project_repo=wiring.project_repo,
+            data_connector_repo=wiring.data_connector_repo,
         ),
-        solr_config=config.solr_config,
-        authz=config.authz,
-        metrics=config.metrics,
+        solr_config=wiring.config.solr,
+        authz=wiring.authz,
+        metrics=wiring.metrics,
     )
     data_connectors = DataConnectorsBP(
         name="data_connectors",
         url_prefix=url_prefix,
-        data_connector_repo=config.data_connector_repo,
-        data_connector_secret_repo=config.data_connector_secret_repo,
-        authenticator=config.authenticator,
-        metrics=config.metrics,
+        data_connector_repo=wiring.data_connector_repo,
+        data_connector_secret_repo=wiring.data_connector_secret_repo,
+        authenticator=wiring.authenticator,
+        metrics=wiring.metrics,
     )
     app.blueprint(
         [

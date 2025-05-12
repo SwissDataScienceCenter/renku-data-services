@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
-from renku_data_services.app_config import Config
+from renku_data_services.app_config import Wiring
 from renku_data_services.crc import models
 from renku_data_services.migrations.core import run_migrations_for_app
 from test.components.renku_data_services.crc_models.hypothesis import (
@@ -26,7 +26,7 @@ from test.utils import create_rp, remove_id_from_user, sort_rp_classes
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_pool_insert_get(
-    rp: models.ResourcePool, app_config_instance: Config, admin_user: base_models.APIUser
+    rp: models.ResourcePool, app_config_instance: Wiring, admin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp = None
@@ -45,7 +45,7 @@ async def test_resource_pool_insert_get(
 @pytest.mark.asyncio
 async def test_resource_pool_update_name(
     rp: models.ResourcePool,
-    app_config_instance: Config,
+    app_config_instance: Wiring,
     new_name: str,
     admin_user: base_models.APIUser,
 ) -> None:
@@ -72,7 +72,7 @@ async def test_resource_pool_update_name(
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_pool_update_quota(
-    rp: models.ResourcePool, app_config_instance: Config, admin_user: base_models.APIUser
+    rp: models.ResourcePool, app_config_instance: Wiring, admin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     pool_repo = app_config_instance.rp_repo
@@ -103,7 +103,7 @@ async def test_resource_pool_update_quota(
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_pool_update_classes(
-    rp: models.ResourcePool, app_config_instance: Config, data, admin_user: base_models.APIUser
+    rp: models.ResourcePool, app_config_instance: Wiring, data, admin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp = None
@@ -146,7 +146,7 @@ async def test_resource_pool_update_classes(
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_get_classes(
-    rp: models.ResourcePool, app_config_instance: Config, admin_user: base_models.APIUser
+    rp: models.ResourcePool, app_config_instance: Wiring, admin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp = None
@@ -167,7 +167,7 @@ async def test_get_classes(
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_get_class_by_id(
-    rp: models.ResourcePool, app_config_instance: Config, admin_user: base_models.APIUser
+    rp: models.ResourcePool, app_config_instance: Wiring, admin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp = None
@@ -191,7 +191,7 @@ async def test_get_class_by_id(
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_get_class_by_name(
-    rp: models.ResourcePool, app_config_instance: Config, admin_user: base_models.APIUser
+    rp: models.ResourcePool, app_config_instance: Wiring, admin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp = None
@@ -215,7 +215,7 @@ async def test_get_class_by_name(
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_pool_delete(
-    rp: models.ResourcePool, app_config_instance: Config, admin_user: base_models.APIUser
+    rp: models.ResourcePool, app_config_instance: Wiring, admin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     pool_repo = app_config_instance.rp_repo
@@ -235,7 +235,7 @@ async def test_resource_pool_delete(
 async def test_resource_class_create(
     rc: models.ResourceClass,
     rp: models.ResourcePool,
-    app_config_instance: Config,
+    app_config_instance: Wiring,
     admin_user: base_models.APIUser,
 ) -> None:
     run_migrations_for_app("common")
@@ -267,7 +267,7 @@ async def test_resource_class_create(
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_class_delete(
-    rp: models.ResourcePool, app_config_instance: Config, admin_user: base_models.APIUser
+    rp: models.ResourcePool, app_config_instance: Wiring, admin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp = None
@@ -302,7 +302,7 @@ async def test_resource_class_delete(
 @pytest.mark.asyncio
 async def test_resource_class_update(
     rp: models.ResourcePool,
-    app_config_instance: Config,
+    app_config_instance: Wiring,
     admin_user: base_models.APIUser,
     rc_update: dict,
 ) -> None:
@@ -351,7 +351,7 @@ async def test_resource_class_update(
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_lookup_rp_by_name(
-    rp: models.ResourcePool, app_config_instance: Config, admin_user: base_models.APIUser
+    rp: models.ResourcePool, app_config_instance: Wiring, admin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp = None
@@ -373,7 +373,7 @@ async def test_lookup_rp_by_name(
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_insert_class_in_nonexisting_rp(
-    app_config_instance: Config, rc: models.ResourceClass, admin_user: base_models.APIUser
+    app_config_instance: Wiring, rc: models.ResourceClass, admin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     with pytest.raises(errors.MissingResourceError):
@@ -386,7 +386,7 @@ async def test_insert_class_in_nonexisting_rp(
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_update_quota_in_nonexisting_rp(
-    app_config_instance: Config, new_quota_id: str, admin_user: base_models.APIUser
+    app_config_instance: Wiring, new_quota_id: str, admin_user: base_models.APIUser
 ) -> None:
     run_migrations_for_app("common")
     with pytest.raises(errors.MissingResourceError):
@@ -401,7 +401,7 @@ async def test_resource_pools_access_control(
     private_rp: models.ResourcePool,
     admin_user: base_models.APIUser,
     loggedin_user: base_models.APIUser,
-    app_config_instance: Config,
+    app_config_instance: Wiring,
 ) -> None:
     run_migrations_for_app("common")
     inserted_public_rp = None
@@ -444,7 +444,7 @@ async def test_classes_filtering(
     rp1: models.ResourcePool,
     rp2: models.ResourcePool,
     admin_user: base_models.APIUser,
-    app_config_instance: Config,
+    app_config_instance: Wiring,
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp1 = None

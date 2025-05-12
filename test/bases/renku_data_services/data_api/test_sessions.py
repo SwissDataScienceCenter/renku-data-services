@@ -9,7 +9,7 @@ from sanic_testing.testing import SanicASGITestClient, TestingResponse
 from syrupy.filters import props
 
 from renku_data_services import errors
-from renku_data_services.app_config.config import Config
+from renku_data_services.app_config.config import Wiring
 from renku_data_services.crc.apispec import ResourcePool
 from renku_data_services.session.models import EnvVar
 from renku_data_services.users.models import UserInfo
@@ -20,7 +20,7 @@ def launch_session(
     sanic_client: SanicASGITestClient,
     user_headers: dict,
     regular_user: UserInfo,
-    app_config: Config,
+    app_config: Wiring,
     request: FixtureRequest,
     event_loop: AbstractEventLoop,
 ):
@@ -1084,7 +1084,7 @@ async def test_starting_session_anonymous(
     create_project,
     create_session_launcher,
     user_headers,
-    app_config: Config,
+    app_config: Wiring,
     admin_headers,
     launch_session,
     anonymous_user_headers,

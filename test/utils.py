@@ -20,10 +20,10 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.app_config.config import (
     BuildsConfig,
-    Config,
     PosthogConfig,
     SentryConfig,
     TrustedProxiesConfig,
+    Wiring,
 )
 from renku_data_services.app_config.server_options import (
     ServerOptions,
@@ -161,11 +161,11 @@ class NonCachingAuthz(Authz):
 
 
 @dataclass
-class TestAppConfig(Config):
+class TestAppConfig(Wiring):
     """Test class that can handle isolated dbs and authz instances."""
 
     @classmethod
-    def from_env(cls, dummy_users: list[user_preferences_models.UnsavedUserInfo], prefix: str = "") -> "Config":
+    def from_env(cls, dummy_users: list[user_preferences_models.UnsavedUserInfo], prefix: str = "") -> "Wiring":
         """Create a config from environment variables."""
 
         user_store: base_models.UserStore

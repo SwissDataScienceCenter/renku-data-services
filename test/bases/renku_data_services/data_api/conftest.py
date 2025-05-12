@@ -12,7 +12,7 @@ from sanic_testing.testing import SanicASGITestClient
 from ulid import ULID
 
 import renku_data_services.search.core as search_core
-from renku_data_services.app_config.config import Config
+from renku_data_services.app_config.config import Wiring
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.authz.authz import _AuthzConverter
 from renku_data_services.base_models import Slug
@@ -20,7 +20,7 @@ from renku_data_services.base_models.core import APIUser, NamespacePath
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.namespace.models import UserNamespace
-from renku_data_services.secrets.config import Config as SecretsConfig
+from renku_data_services.secrets.config import Wiring as SecretsConfig
 from renku_data_services.secrets_storage_api.app import register_all_handlers as register_secrets_handlers
 from renku_data_services.solr import entity_schema
 from renku_data_services.solr.solr_client import DefaultSolrClient
@@ -201,7 +201,7 @@ def headers_from_user(
 
 @pytest_asyncio.fixture
 async def bootstrap_admins(
-    sanic_client_with_migrations, app_config_instance: Config, event_loop, admin_user: UserInfo
+    sanic_client_with_migrations, app_config_instance: Wiring, event_loop, admin_user: UserInfo
 ) -> None:
     authz = app_config_instance.authz
     rels: list[RelationshipUpdate] = []
@@ -216,7 +216,7 @@ async def bootstrap_admins(
 
 
 @pytest_asyncio.fixture(scope="session")
-async def sanic_app_no_migrations(app_config: Config, users: list[UserInfo], admin_user: UserInfo) -> Sanic:
+async def sanic_app_no_migrations(app_config: Wiring, users: list[UserInfo], admin_user: UserInfo) -> Sanic:
     app_config.kc_api = DummyKeycloakAPI(users=get_kc_users(users), user_roles={admin_user.id: ["renku-admin"]})
     app = Sanic(app_config.app_name)
     app = register_all_handlers(app, app_config)
@@ -253,14 +253,14 @@ async def sanic_client(
 
 @pytest_asyncio.fixture
 async def sanic_client_with_solr(sanic_client: SanicASGITestClient, app_config) -> SanicASGITestClient:
-    migrator = SchemaMigrator(app_config.solr_config)
+    migrator = SchemaMigrator(app_config.config.solr)
     await migrator.migrate(entity_schema.all_migrations)
 
     return sanic_client
 
 
 @pytest_asyncio.fixture
-async def search_reprovision(app_config_instance: Config, search_push_updates):
+async def search_reprovision(app_config_instance: Wiring, search_push_updates):
     async def search_reprovision_helper() -> None:
         user = APIUser(is_admin=True)
         await app_config_instance.search_reprovisioning.run_reprovision(user)
@@ -270,7 +270,7 @@ async def search_reprovision(app_config_instance: Config, search_push_updates):
 
 
 @pytest_asyncio.fixture
-async def search_push_updates(app_config_instance: Config):
+async def search_push_updates(app_config_instance: Wiring):
     async def search_push_updates_helper(clear_index: bool = True) -> None:
         async with DefaultSolrClient(app_config_instance.solr_config) as client:
             if clear_index:

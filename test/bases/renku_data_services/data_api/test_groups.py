@@ -4,7 +4,7 @@ from datetime import datetime
 import pytest
 from sanic_testing.testing import SanicASGITestClient
 
-from renku_data_services.app_config.config import Config
+from renku_data_services.app_config.config import Wiring
 from renku_data_services.authz.models import Role, Visibility
 from renku_data_services.message_queue.avro_models.io.renku.events.v2 import (
     GroupAdded,
@@ -21,7 +21,7 @@ from test.bases.renku_data_services.data_api.utils import merge_headers
 
 @pytest.mark.asyncio
 async def test_group_creation_basic(
-    sanic_client: SanicASGITestClient, user_headers: dict[str, str], app_config: Config
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str], app_config: Wiring
 ) -> None:
     await app_config.search_updates_repo.clear_all()
     payload = {
@@ -131,7 +131,7 @@ async def test_get_single_group(sanic_client, user_headers) -> None:
 
 @pytest.mark.asyncio
 async def test_group_patch_delete(
-    sanic_client: SanicASGITestClient, user_headers: dict[str, str], app_config: Config
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str], app_config: Wiring
 ) -> None:
     payload = {
         "name": "GroupOther",
@@ -207,7 +207,7 @@ async def test_group_patch_delete(
 
 @pytest.mark.asyncio
 async def test_group_members(
-    sanic_client: SanicASGITestClient, user_headers: dict[str, str], app_config: Config
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str], app_config: Wiring
 ) -> None:
     payload = {
         "name": "Group1",
@@ -256,7 +256,7 @@ async def test_removing_single_group_owner_not_allowed(
     sanic_client: SanicASGITestClient,
     user_headers: dict[str, str],
     member_1_headers: dict[str, str],
-    app_config: Config,
+    app_config: Wiring,
 ) -> None:
     payload = {
         "name": "Group1",
@@ -347,7 +347,7 @@ async def test_cannot_change_role_for_last_group_owner(
     sanic_client: SanicASGITestClient,
     user_headers: dict[str, str],
     regular_user: UserInfo,
-    app_config: Config,
+    app_config: Wiring,
     member_1_headers: dict[str, str],
 ) -> None:
     payload = {
