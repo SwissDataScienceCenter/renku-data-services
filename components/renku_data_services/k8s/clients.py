@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import multiprocessing.synchronize
 from collections.abc import AsyncIterable
@@ -318,6 +319,28 @@ class K8SCachedClusterClient(K8sClusterClient):
         super().__init__(cluster)
         self.__cache = cache
         self.__kinds_to_cache = set(k.lower() for k in kinds_to_cache)
+        self.__sync_period_seconds = 1800
+        self.__sync_task = asyncio.create_task(self.__periodic_sync())
+
+    async def __sync(self) -> None:
+        """Upsert K8s objects in the cache and remove deleted objects from the cache."""
+        for kind in self.__kinds_to_cache:
+            fltr = K8sObjectFilter(kind=kind, namespace=self.get_cluster().namespace)
+            # Upsert new / updated objects
+            async for obj in super().list(fltr):
+                await self.__cache.upsert(obj)
+            # Remove objects that have been deleted from k8s but are still in cache
+            async for cache_obj in self.__cache.list(fltr):
+                k8s_obj = await super().get(cache_obj.meta)
+                if k8s_obj is not None:
+                    # Object is still present in k8s
+                    continue
+                await self.__cache.delete(cache_obj.meta)
+
+    async def __periodic_sync(self) -> None:
+        while True:
+            await self.__sync()
+            await asyncio.sleep(self.__sync_period_seconds)
 
     async def create(self, obj: K8sObject) -> K8sObject:
         """Create the k8s object."""
