@@ -140,8 +140,26 @@ class K8sObjectFilter:
     namespace: str | None = None
     cluster: ClusterId | None = None
     version: str | None = None
+    """Version should be of the form 'group/version', e.g. 'shipwright.io/v1' or 'core/v1'"""
+
     label_selector: dict[str, str] | None = None
     user_id: str | None = None
+
+    @property
+    def fully_qualified_kind(self) -> str:
+        """Returns the fully qualified kind string for this filter.
+
+        Note: This exists because kr8s has some methods where it only allows you to specify 'kind' and then has
+        weird logic to split that. This method is essentially the reverse of the kr8s logic so we can hand it a
+        string it will accept.
+        """
+        if not self.version:
+            return self.kind
+        if "/" in self.version:
+            # e.g. buildrun.shipwright.io/v1beta1
+            return f"{self.kind}.{self.version}"
+        # e.g. pod/v1
+        return f"{self.kind}/{self.version}"
 
 
 @dataclass(eq=True, frozen=True)

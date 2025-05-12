@@ -16,6 +16,7 @@ from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.errors import errors
 from renku_data_services.k8s.clients import K8sClusterClientsPool
+from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
 from renku_data_services.k8s.models import Cluster, ClusterId, K8sObject, K8sObjectFilter, K8sObjectMeta
 from renku_data_services.k8s_watcher.core import APIObjectInCluster
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
@@ -25,7 +26,6 @@ from renku_data_services.notebooks.errors.programming import ProgrammingError
 from renku_data_services.notebooks.util.kubernetes_ import find_env_var
 from renku_data_services.notebooks.util.retries import retry_with_exponential_backoff_async
 
-DEFAULT_K8S_CLUSTER: ClusterId = ClusterId("renkulab")
 sanitizer = kubernetes.client.ApiClient().sanitize_for_serialization
 
 
