@@ -1623,14 +1623,14 @@ dev = ["build (==1.2.2.post1)", "coverage (==7.5.4) ; python_version < \"3.9\"",
 
 [[package]]
 name = "kr8s"
-version = "0.18.1"
+version = "0.20.7"
 description = "A Kubernetes API library"
 optional = false
-python-versions = ">=3.8"
+python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "kr8s-0.18.1-py3-none-any.whl", hash = "sha256:192d659c70c7650e7641c3c69a656ac16e51672118468eef8224ea60009932c4"},
-    {file = "kr8s-0.18.1.tar.gz", hash = "sha256:73c864c108e2f5159faab8dba9833011d586918f4520dfc64594df7b7907493f"},
+    {file = "kr8s-0.20.7-py3-none-any.whl", hash = "sha256:e489b97ff513c167f427f479ad5420c78adffd1a6ce5033b079109374200c0c6"},
+    {file = "kr8s-0.20.7.tar.gz", hash = "sha256:ac45e966beea0f6f92f635b3e61e64b8e27962b4825d77b814a663e819a8ec16"},
 ]
 
 [package.dependencies]
@@ -1638,7 +1638,7 @@ anyio = ">=3.7.0"
 asyncache = ">=0.3.1"
 cryptography = ">=35"
 httpx = ">=0.24.1"
-httpx-ws = ">=0.5.2"
+httpx-ws = ">=0.7.0"
 python-box = ">=7.0.1"
 python-jsonpath = ">=0.7.1"
 pyyaml = ">=6.0"
@@ -3726,4 +3726,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.13"
-content-hash = "7e48eabf93721227486f0ed5e3799cf72177f909208cd76370d5bba9e844158a"
+content-hash = "72dea6e74b945f0fbf77a91d4e62ce0bc3ff7d80552e25820a9c6d42ba8fe710"
