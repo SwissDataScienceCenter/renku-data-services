@@ -748,6 +748,9 @@ class SessionRepository:
     async def get_build(self, user: base_models.APIUser, build_id: ULID) -> models.Build:
         """Get a specific build."""
 
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
         async with self.session_maker() as session, session.begin():
             stmt = select(schemas.BuildORM).where(schemas.BuildORM.id == build_id)
             result = await session.scalars(stmt)
@@ -764,12 +767,15 @@ class SessionRepository:
                 raise errors.MissingResourceError(message=not_found_message)
 
             # Check and refresh the status of in-progress builds
-            await self._refresh_build(build=build, session=session)
+            await self._refresh_build(build=build, session=session, user_id=user.id)
 
             return build.dump()
 
     async def get_environment_builds(self, user: base_models.APIUser, environment_id: ULID) -> list[models.Build]:
         """Get all builds from a session environment."""
+
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session, session.begin():
             environment = await session.scalar(
@@ -798,7 +804,7 @@ class SessionRepository:
 
             # Check and refresh the status of in-progress builds
             for build in builds:
-                await self._refresh_build(build=build, session=session)
+                await self._refresh_build(build=build, session=session, user_id=user.id)
 
             return [build.dump() for build in builds]
 
@@ -843,7 +849,7 @@ class SessionRepository:
                 .order_by(schemas.BuildORM.id.desc())
             )
             async for item in in_progress_builds:
-                await self._refresh_build(build=item, session=session)
+                await self._refresh_build(build=item, session=session, user_id=user.id)
                 if item.status == models.BuildStatus.in_progress:
                     raise errors.ConflictError(
                         message=f"Session environment with id '{build.environment_id}' already has a build in progress."
@@ -864,7 +870,7 @@ class SessionRepository:
             params = self._get_buildrun_params(
                 user=user, build=result, build_parameters=build_parameters, launcher=launcher
             )
-            await self.shipwright_client.create_image_build(params=params)
+            await self.shipwright_client.create_image_build(params=params, user_id=user.id)
         else:
             logger.error("Shipwright client is None")
 
@@ -891,7 +897,7 @@ class SessionRepository:
                 raise errors.MissingResourceError(message=not_found_message)
 
             # Check and refresh the status of in-progress builds
-            await self._refresh_build(build=build, session=session)
+            await self._refresh_build(build=build, session=session, user_id=user.id)
 
             if build.status == models.BuildStatus.succeeded or build.status == models.BuildStatus.failed:
                 raise errors.ValidationError(
@@ -908,7 +914,7 @@ class SessionRepository:
         build_model = build.dump()
 
         if self.shipwright_client is not None:
-            await self.shipwright_client.cancel_build_run(name=build_model.k8s_name)
+            await self.shipwright_client.cancel_build_run(name=build_model.k8s_name, user_id=user.id)
         else:
             logger.error("Shipwright client is None")
 
@@ -956,10 +962,10 @@ class SessionRepository:
             raise errors.MissingResourceError(message=f"Build with id '{build_id}' does not have logs.")
 
         return await self.shipwright_client.get_image_build_logs(
-            buildrun_name=build_model.k8s_name, max_log_lines=max_log_lines
+            buildrun_name=build_model.k8s_name, user_id=user.id, max_log_lines=max_log_lines
         )
 
-    async def _refresh_build(self, build: schemas.BuildORM, session: AsyncSession) -> None:
+    async def _refresh_build(self, build: schemas.BuildORM, session: AsyncSession, user_id: str) -> None:
         """Refresh the status of a build by querying Shipwright."""
         if build.status != models.BuildStatus.in_progress:
             return
@@ -970,7 +976,9 @@ class SessionRepository:
             return
 
         # TODO: consider how we can parallelize calls to `shipwright_client` for refreshes.
-        status_update = await self.shipwright_client.update_image_build_status(buildrun_name=build.dump().k8s_name)
+        status_update = await self.shipwright_client.update_image_build_status(
+            buildrun_name=build.dump().k8s_name, user_id=user_id
+        )
 
         if status_update.update is None:
             return
