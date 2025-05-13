@@ -3,12 +3,12 @@
 import pytest
 from sanic_testing.testing import SanicASGITestClient
 
-from renku_data_services.app_config import Wiring
+from renku_data_services.app_config import DependencyManager
 from test.bases.renku_data_services.data_api.utils import merge_headers
 
 
 @pytest.mark.asyncio
-async def test_get_platform_config(app_config: Wiring, sanic_client: SanicASGITestClient) -> None:
+async def test_get_platform_config(app_config: DependencyManager, sanic_client: SanicASGITestClient) -> None:
     _, res = await sanic_client.get("/api/data/platform/config")
 
     assert res.status_code == 200, res.text

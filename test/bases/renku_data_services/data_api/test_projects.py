@@ -12,7 +12,7 @@ from sqlalchemy import select
 from syrupy.filters import props
 from ulid import ULID
 
-from renku_data_services.app_config.config import Wiring
+from renku_data_services.app_config.config import DependencyManager
 from renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
 from renku_data_services.message_queue.avro_models.io.renku.events.v2.member_role import MemberRole
 from renku_data_services.message_queue.models import deserialize_binary
@@ -939,7 +939,9 @@ async def test_add_project_members(
 
 
 @pytest.mark.asyncio
-async def test_delete_project_members(create_project, sanic_client, user_headers, app_config: Wiring) -> None:
+async def test_delete_project_members(
+    create_project, sanic_client, user_headers, app_config: DependencyManager
+) -> None:
     project = await create_project("Project 1")
     project_id = project["id"]
 
@@ -1152,7 +1154,7 @@ async def test_get_project_permissions_cascading_from_group(
 
 @pytest.mark.asyncio
 async def test_project_slug_case(
-    app_config: Wiring,
+    app_config: DependencyManager,
     create_project,
     create_group,
     sanic_client,

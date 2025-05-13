@@ -7,7 +7,7 @@ from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 from syrupy.filters import props
 
-from renku_data_services.app_config import Wiring
+from renku_data_services.app_config import DependencyManager
 from renku_data_services.authn.dummy import DummyAuthenticator
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.migrations.core import run_migrations_for_app
@@ -34,7 +34,7 @@ def valid_storage_payload() -> dict[str, Any]:
 
 
 @pytest_asyncio.fixture(scope="session")
-async def storage_test_client_setup(app_config: Wiring) -> SanicASGITestClient:
+async def storage_test_client_setup(app_config: DependencyManager) -> SanicASGITestClient:
     gitlab_auth = DummyAuthenticator()
     app_config.gitlab_authenticator = gitlab_auth
     app = Sanic(app_config.app_name)
@@ -48,7 +48,7 @@ async def storage_test_client_setup(app_config: Wiring) -> SanicASGITestClient:
 @pytest_asyncio.fixture
 async def storage_test_client(
     storage_test_client_setup,
-    app_config_instance: Wiring,
+    app_config_instance: DependencyManager,
 ) -> SanicASGITestClient:
     run_migrations_for_app("common")
     yield storage_test_client_setup

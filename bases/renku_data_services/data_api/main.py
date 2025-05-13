@@ -16,10 +16,10 @@ from sentry_sdk.integrations.grpc import GRPCIntegration
 from sentry_sdk.integrations.sanic import SanicIntegration, _context_enter, _context_exit, _set_transaction
 
 import renku_data_services.solr.entity_schema as entity_schema
-from renku_data_services.app_config import Wiring
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.data_api.app import register_all_handlers
+from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_api.prometheus import setup_app_metrics, setup_prometheus
 from renku_data_services.errors.errors import (
     ForbiddenError,
@@ -41,7 +41,7 @@ async def _solr_reindex(app: Sanic) -> None:
 
     This might be required after migrating the solr schema.
     """
-    config = Wiring.from_env()
+    config = DependencyManager.from_env()
     reprovision = config.search_reprovisioning
     admin = APIUser(is_admin=True)
     await reprovision.run_reprovision(admin)
@@ -59,8 +59,8 @@ def solr_reindex(app_name: str) -> None:
 
 def create_app() -> Sanic:
     """Create a Sanic application."""
-    wiring = Wiring.from_env()
-    app = Sanic(wiring.app_name)
+    dependency_manager = DependencyManager.from_env()
+    app = Sanic(dependency_manager.app_name)
 
     if "COVERAGE_RUN" in environ:
         app.config.TOUCHUP = False
@@ -68,11 +68,13 @@ def create_app() -> Sanic:
         # specified below with the main_process_start decorator do not run.
         run_migrations_for_app("common")
         asyncio.run(
-            wiring.rp_repo.initialize(wiring.config.db.conn_url(async_client=False), wiring.default_resource_pool)
+            dependency_manager.rp_repo.initialize(
+                dependency_manager.config.db.conn_url(async_client=False), dependency_manager.default_resource_pool
+            )
         )
-        asyncio.run(wiring.kc_user_repo.initialize(wiring.kc_api))
-        asyncio.run(sync_admins_from_keycloak(wiring.kc_api, wiring.authz))
-    if wiring.config.sentry.enabled:
+        asyncio.run(dependency_manager.kc_user_repo.initialize(dependency_manager.kc_api))
+        asyncio.run(sync_admins_from_keycloak(dependency_manager.kc_api, dependency_manager.authz))
+    if dependency_manager.config.sentry.enabled:
         logger.info("enabling sentry")
 
         def filter_error(
@@ -87,15 +89,15 @@ def create_app() -> Sanic:
         @app.before_server_start
         async def setup_sentry(_: Sanic) -> None:
             sentry_sdk.init(
-                dsn=wiring.config.sentry.dsn,
-                environment=wiring.config.sentry.environment,
+                dsn=dependency_manager.config.sentry.dsn,
+                environment=dependency_manager.config.sentry.environment,
                 integrations=[
                     AsyncioIntegration(),
                     SanicIntegration(unsampled_statuses={404, 403, 401}),
                     GRPCIntegration(),
                 ],
-                enable_tracing=wiring.config.sentry.sample_rate > 0,
-                traces_sample_rate=wiring.config.sentry.sample_rate,
+                enable_tracing=dependency_manager.config.sentry.sample_rate > 0,
+                traces_sample_rate=dependency_manager.config.sentry.sample_rate,
                 before_send=filter_error,
                 in_app_include=["renku_data_services"],
             )
@@ -105,14 +107,17 @@ def create_app() -> Sanic:
         app.signal("http.lifecycle.request")(_context_enter)
         app.signal("http.lifecycle.response")(_context_exit)
         app.signal("http.routing.after")(_set_transaction)
-    if wiring.config.trusted_proxies.proxies_count is not None and wiring.config.trusted_proxies.proxies_count > 0:
-        app.config.PROXIES_COUNT = wiring.config.trusted_proxies.proxies_count
+    if (
+        dependency_manager.config.trusted_proxies.proxies_count is not None
+        and dependency_manager.config.trusted_proxies.proxies_count > 0
+    ):
+        app.config.PROXIES_COUNT = dependency_manager.config.trusted_proxies.proxies_count
     logger.info(f"PROXIES_COUNT = {app.config.PROXIES_COUNT}")
-    if wiring.config.trusted_proxies.real_ip_header:
-        app.config.REAL_IP_HEADER = wiring.config.trusted_proxies.real_ip_header
+    if dependency_manager.config.trusted_proxies.real_ip_header:
+        app.config.REAL_IP_HEADER = dependency_manager.config.trusted_proxies.real_ip_header
     logger.info(f"REAL_IP_HEADER = {app.config.REAL_IP_HEADER}")
 
-    app = register_all_handlers(app, wiring)
+    app = register_all_handlers(app, dependency_manager)
     setup_prometheus(app)
 
     if environ.get("CORS_ALLOW_ALL_ORIGINS", "false").lower() == "true":
@@ -133,12 +138,14 @@ def create_app() -> Sanic:
     async def do_migrations(_: Sanic) -> None:
         logger.info("running migrations")
         run_migrations_for_app("common")
-        await wiring.rp_repo.initialize(wiring.config.db.conn_url(async_client=False), wiring.default_resource_pool)
+        await dependency_manager.rp_repo.initialize(
+            dependency_manager.config.db.conn_url(async_client=False), dependency_manager.default_resource_pool
+        )
 
     @app.main_process_start
     async def do_solr_migrations(app: Sanic) -> None:
-        logger.info(f"Running SOLR migrations at: {wiring.config.solr}")
-        migrator = SchemaMigrator(wiring.config.solr)
+        logger.info(f"Running SOLR migrations at: {dependency_manager.config.solr}")
+        migrator = SchemaMigrator(dependency_manager.config.solr)
         await migrator.ensure_core()
         result = await migrator.migrate(entity_schema.all_migrations)
         # starting background tasks can only be done in `main_process_ready`

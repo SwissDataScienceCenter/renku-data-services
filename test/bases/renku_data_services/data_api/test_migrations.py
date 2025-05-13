@@ -15,7 +15,7 @@ from sqlalchemy.sql import bindparam
 from ulid import ULID
 
 from renku_data_services import errors
-from renku_data_services.app_config.config import Wiring
+from renku_data_services.app_config.config import DependencyManager
 from renku_data_services.base_models.core import Slug
 from renku_data_services.message_queue.avro_models.io.renku.events import v2
 from renku_data_services.message_queue.models import deserialize_binary
@@ -38,7 +38,7 @@ async def test_unique_migration_head() -> None:
 
 @pytest.mark.asyncio
 async def test_upgrade_downgrade_cycle(
-    app_config_instance: Wiring,
+    app_config_instance: DependencyManager,
     sanic_client_no_migrations: SanicASGITestClient,
     admin_headers: dict,
     admin_user: UserInfo,
@@ -74,7 +74,7 @@ async def test_upgrade_downgrade_cycle(
 @pytest.mark.asyncio
 async def test_migration_to_f34b87ddd954(
     sanic_client_no_migrations: SanicASGITestClient,
-    app_config_instance: Wiring,
+    app_config_instance: DependencyManager,
     user_headers: dict,
     admin_headers: dict,
 ) -> None:
@@ -116,7 +116,9 @@ async def test_migration_to_f34b87ddd954(
 
 
 @pytest.mark.asyncio
-async def test_migration_to_1ef98b967767_and_086eb60b42c8(app_config_instance: Wiring, admin_user: UserInfo) -> None:
+async def test_migration_to_1ef98b967767_and_086eb60b42c8(
+    app_config_instance: DependencyManager, admin_user: UserInfo
+) -> None:
     """Tests the migration of the session launchers."""
     run_migrations_for_app("common", "b8cbd62e85b9")
 
@@ -269,7 +271,7 @@ async def test_migration_to_1ef98b967767_and_086eb60b42c8(app_config_instance: W
 
 @pytest.mark.asyncio
 async def test_migration_create_global_envs(
-    app_config_instance: Wiring,
+    app_config_instance: DependencyManager,
     sanic_client_no_migrations: SanicASGITestClient,
     admin_headers: dict,
     admin_user: UserInfo,
@@ -284,7 +286,7 @@ async def test_migration_create_global_envs(
 
 
 @pytest.mark.asyncio
-async def test_migration_to_75c83dd9d619(app_config_instance: Wiring, admin_user: UserInfo) -> None:
+async def test_migration_to_75c83dd9d619(app_config_instance: DependencyManager, admin_user: UserInfo) -> None:
     """Tests the migration for copying session environments of copied projects."""
 
     async def insert_project(session: AsyncSession, payload: dict[str, Any]) -> None:
@@ -580,7 +582,7 @@ async def _generate_user_namespaces(session: AsyncSession) -> list[UserInfo]:
 
 
 @pytest.mark.asyncio
-async def test_migration_to_dcb9648c3c15(app_config_instance: Wiring, admin_user: UserInfo) -> None:
+async def test_migration_to_dcb9648c3c15(app_config_instance: DependencyManager, admin_user: UserInfo) -> None:
     run_migrations_for_app("common", "042eeb50cd8e")
     async with app_config_instance.config.db.async_session_maker() as session, session.begin():
         await session.execute(
