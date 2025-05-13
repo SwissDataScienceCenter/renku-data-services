@@ -13,7 +13,7 @@ from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface, K8
 
 @dataclass
 class QuotaRepository:
-    """Adapter for CRUD operations on resource quotas and prioirty classes in k8s."""
+    """Adapter for CRUD operations on resource quotas and priority classes in k8s."""
 
     core_client: K8sCoreClientInterface
     scheduling_client: K8sSchedudlingClientInterface
@@ -101,7 +101,7 @@ class QuotaRepository:
                 global_default=False,
                 value=100,
                 preemption_policy="Never",
-                description="Renku resource quota prioirty class",
+                description="Renku resource quota priority class",
                 metadata=client.V1ObjectMeta(**metadata),
             ),
         )
@@ -130,7 +130,7 @@ class QuotaRepository:
         except client.ApiException as e:
             if e.status == 404:
                 # NOTE: The priorityclass is an owner of the resource quota so when the priority class is deleted the
-                # resource quota is also deleted. Also we dont care if the thing we are trying to delete is not there
+                # resource quota is also deleted. Also, we don't care if the thing we are trying to delete is not there
                 # we have the desired state so we can just go on.
                 return
             raise
