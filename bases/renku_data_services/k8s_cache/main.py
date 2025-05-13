@@ -28,6 +28,7 @@ async def main() -> None:
         handler=k8s_object_handler(config.k8s_cache, config.metrics, rp_repo=config.rp_repo),
         clusters={c.id: c for c in clusters},
         kinds=kinds,
+        db_cache=config.k8s_cache,
     )
     await watcher.start()
     logging.info("started watching resources")

@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 import contextlib
 import multiprocessing.synchronize
-from collections.abc import AsyncIterable, Awaitable
+from collections.abc import AsyncIterable
 from copy import deepcopy
 from multiprocessing import Lock
 from multiprocessing.synchronize import Lock as LockType
@@ -319,29 +318,6 @@ class K8SCachedClusterClient(K8sClusterClient):
         super().__init__(cluster)
         self.__cache = cache
         self.__kinds_to_cache = set(kinds_to_cache)
-        self.__sync_period_seconds = 1800
-
-    async def __sync(self) -> None:
-        """Upsert K8s objects in the cache and remove deleted objects from the cache."""
-        for kind in self.__kinds_to_cache:
-            fltr = K8sObjectFilter(gvk=kind, namespace=self.get_cluster().namespace)
-            # Upsert new / updated objects
-            objects_in_k8s: dict[str, K8sObject] = {}
-            async for obj in super().list(fltr):
-                objects_in_k8s[obj.name] = obj
-                await self.__cache.upsert(obj)
-            # Remove objects that have been deleted from k8s but are still in cache
-            async for cache_obj in self.__cache.list(fltr):
-                cache_obj_is_in_k8s = objects_in_k8s.get(cache_obj.name) is not None
-                if cache_obj_is_in_k8s:
-                    continue
-                await self.__cache.delete(cache_obj.meta)
-
-    async def periodic_sync(self) -> None:
-        """Periodically sync the cache with the K8s cluster."""
-        while True:
-            await self.__sync()
-            await asyncio.sleep(self.__sync_period_seconds)
 
     async def create(self, obj: K8sObject) -> K8sObject:
         """Create the k8s object."""
@@ -398,10 +374,6 @@ class K8sClusterClientsPool:
                 message=f"Could not find cluster with id {cluster_id} in the list of clusters."
             )
         return cluster_client
-
-    def get_synchronization_coroutines(self) -> list[Awaitable[None]]:
-        """Get the tasks to run the cache synchronization, the task is not scheduled unless it is awaited."""
-        return [c.periodic_sync() for c in self.__clients.values()]
 
     def cluster_by_id(self, cluster_id: ClusterId) -> Cluster:
         """Return a cluster by its id."""

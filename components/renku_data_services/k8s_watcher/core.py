@@ -8,7 +8,7 @@ import logging
 from asyncio import CancelledError, Task
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Self, cast
 
 from box import Box
@@ -19,7 +19,8 @@ from renku_data_services.base_models.core import APIUser, InternalServiceAdmin, 
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.errors import errors
-from renku_data_services.k8s.models import GVK, Cluster, ClusterId, K8sObject, K8sObjectMeta
+from renku_data_services.k8s.clients import K8sClusterClient
+from renku_data_services.k8s.models import GVK, Cluster, ClusterId, K8sObject, K8sObjectFilter, K8sObjectMeta
 from renku_data_services.k8s_watcher.db import K8sDbCache
 from renku_data_services.notebooks.crs import State
 from renku_data_services.session.constants import DUMMY_TASK_RUN_USER_ID
@@ -83,6 +84,7 @@ class APIObjectInCluster:
 
 
 type EventHandler = Callable[[APIObjectInCluster, str], Awaitable[None]]
+type SyncFunc = Callable[[], Awaitable[None]]
 
 k8s_watcher_admin_user = InternalServiceAdmin(id=ServiceAdminId.k8s_watcher)
 
@@ -90,15 +92,46 @@ k8s_watcher_admin_user = InternalServiceAdmin(id=ServiceAdminId.k8s_watcher)
 class K8sWatcher:
     """Watch k8s events and call the handler with every event."""
 
-    def __init__(self, handler: EventHandler, clusters: dict[ClusterId, Cluster], kinds: list[GVK]) -> None:
+    def __init__(
+        self,
+        handler: EventHandler,
+        clusters: dict[ClusterId, Cluster],
+        kinds: list[GVK],
+        db_cache: K8sDbCache,
+    ) -> None:
         self.__handler = handler
         self.__tasks: dict[ClusterId, list[Task]] | None = None
         self.__kinds = kinds
         self.__clusters = clusters
+        self.__sync_period_seconds = 1800
+        self.__cache = db_cache
+
+    async def __sync(self) -> None:
+        """Upsert K8s objects in the cache and remove deleted objects from the cache."""
+        for kind in self.__kinds:
+            for cluster in self.__clusters.values():
+                clnt = K8sClusterClient(cluster)
+                fltr = K8sObjectFilter(gvk=kind, namespace=cluster.namespace)
+                # Upsert new / updated objects
+                objects_in_k8s: dict[str, K8sObject] = {}
+                async for obj in clnt.list(fltr):
+                    objects_in_k8s[obj.name] = obj
+                    await self.__cache.upsert(obj)
+                # Remove objects that have been deleted from k8s but are still in cache
+                async for cache_obj in self.__cache.list(fltr):
+                    cache_obj_is_in_k8s = objects_in_k8s.get(cache_obj.name) is not None
+                    if cache_obj_is_in_k8s:
+                        continue
+                    await self.__cache.delete(cache_obj.meta)
 
     async def __watch_kind(self, kind: GVK, cluster: Cluster) -> None:
+        last_sync: datetime | None = None
         while True:
             try:
+                if last_sync is None or (datetime.now() - last_sync).total_seconds() >= self.__sync_period_seconds:
+                    logging.info("Starting full k8s cache sync")
+                    await self.__sync()
+                    last_sync = datetime.now()
                 watch = cluster.api.async_watch(kind=kind.kr8s_kind, namespace=cluster.namespace)
                 async for event_type, obj in watch:
                     await self.__handler(APIObjectInCluster(obj, cluster.id), event_type)

@@ -2,7 +2,6 @@
 
 import base64
 import json
-from collections.abc import Awaitable
 from contextlib import suppress
 from typing import Any, Generic, Optional, TypeVar, cast
 
@@ -151,10 +150,6 @@ class NotebookK8sClient(Generic[_SessionType]):
             )
 
         return patches
-
-    def get_synchronization_coroutines(self) -> list[Awaitable[None]]:
-        """Get the tasks to run the cache synchronization, the task is not scheduled unless it is awaited."""
-        return self.__client.get_synchronization_coroutines()
 
     async def _get(self, name: str, gvk: GVK, safe_username: str | None) -> K8sObject | None:
         """Get a specific object, None is returned if it does not exist."""
