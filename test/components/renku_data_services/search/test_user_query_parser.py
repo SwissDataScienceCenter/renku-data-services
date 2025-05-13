@@ -1,6 +1,8 @@
 """Tests for the query parser."""
 
 import datetime
+import random
+import string
 
 import pytest
 from parsy import ParseError
@@ -221,10 +223,17 @@ def test_query() -> None:
     assert QueryParser.parse(qstr) == q
     assert q.render() == qstr
 
-    # TODO any random string must parse successfully
-    # rlen = random.randint(0, 50)
-    # rstr = "".join(random.choices(string.printable, k=rlen))
-    # pp.query.parse(rstr)
+
+def test_invalid_query() -> None:
+    result = QueryParser.parse("type:uu:ue:")
+    assert result == UserQuery([Text("type:uu:ue:")])
+
+
+def test_random_query() -> None:
+    """Any random string must parse successfully."""
+    rlen = random.randint(0, 50)
+    rstr = "".join(random.choices(string.printable, k=rlen))
+    QueryParser.parse(rstr)
 
 
 def test_string_basic() -> None:
