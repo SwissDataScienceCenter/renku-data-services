@@ -7,84 +7,23 @@ import contextlib
 import logging
 from asyncio import CancelledError, Task
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
-from datetime import timedelta
-from typing import Self, cast
-
-from box import Box
-from kr8s._api import Api
-from kr8s.asyncio.objects import APIObject
+from datetime import datetime, timedelta
+from typing import TYPE_CHECKING
 
 from renku_data_services.base_models.core import APIUser, InternalServiceAdmin, ServiceAdminId
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.crc.db import ResourcePoolRepository
-from renku_data_services.errors import errors
-from renku_data_services.k8s.models import Cluster, ClusterId, K8sObject, K8sObjectMeta
+from renku_data_services.k8s.clients import K8sClusterClient
+from renku_data_services.k8s.models import GVK, K8sObject, K8sObjectFilter
 from renku_data_services.k8s_watcher.db import K8sDbCache
 from renku_data_services.notebooks.crs import State
-from renku_data_services.session.constants import DUMMY_TASK_RUN_USER_ID
 
-
-@dataclass
-class APIObjectInCluster:
-    """A kr8s k8s object from a specific cluster."""
-
-    obj: APIObject
-    cluster: ClusterId
-
-    @property
-    def user_id(self) -> str | None:
-        """Extract the user id from annotations."""
-        match self.obj.singular:
-            case "jupyterserver":
-                return cast(str, self.obj.metadata.labels["renku.io/userId"])
-            case "amaltheasession":
-                return cast(str, self.obj.metadata.labels["renku.io/safe-username"])
-            case "buildrun":
-                return cast(str, self.obj.metadata.labels["renku.io/safe-username"])
-
-            case "taskrun":
-                return DUMMY_TASK_RUN_USER_ID
-            case _:
-                return None
-
-    @property
-    def meta(self) -> K8sObjectMeta:
-        """Extract the metadata from an api object."""
-        return K8sObjectMeta(
-            name=self.obj.name,
-            namespace=self.obj.namespace or "default",
-            cluster=self.cluster,
-            version=self.obj.version,
-            kind=self.obj.kind,
-            user_id=self.user_id,
-        )
-
-    def to_k8s_object(self) -> K8sObject:
-        """Convert the api object to a regular k8s object."""
-        if self.obj.name is None or self.obj.namespace is None:
-            raise errors.ProgrammingError()
-        return K8sObject(
-            name=self.obj.name,
-            namespace=self.obj.namespace,
-            kind=self.obj.kind,
-            version=self.obj.version,
-            manifest=Box(self.obj.to_dict()),
-            cluster=self.cluster,
-            user_id=self.user_id,
-        )
-
-    @classmethod
-    def from_k8s_object(cls, obj: K8sObject, api: Api) -> Self:
-        """Convert a regular k8s object to an api object."""
-
-        return cls(
-            obj=obj.to_api_object(api),
-            cluster=obj.cluster,
-        )
+if TYPE_CHECKING:
+    from renku_data_services.k8s.models import APIObjectInCluster, Cluster, ClusterId
 
 
 type EventHandler = Callable[[APIObjectInCluster, str], Awaitable[None]]
+type SyncFunc = Callable[[], Awaitable[None]]
 
 k8s_watcher_admin_user = InternalServiceAdmin(id=ServiceAdminId.k8s_watcher)
 
@@ -92,18 +31,49 @@ k8s_watcher_admin_user = InternalServiceAdmin(id=ServiceAdminId.k8s_watcher)
 class K8sWatcher:
     """Watch k8s events and call the handler with every event."""
 
-    def __init__(self, handler: EventHandler, clusters: dict[ClusterId, Cluster], kinds: list[str]) -> None:
+    def __init__(
+        self,
+        handler: EventHandler,
+        clusters: dict[ClusterId, Cluster],
+        kinds: list[GVK],
+        db_cache: K8sDbCache,
+    ) -> None:
         self.__handler = handler
         self.__tasks: dict[ClusterId, list[Task]] | None = None
         self.__kinds = kinds
         self.__clusters = clusters
+        self.__sync_period_seconds = 1800
+        self.__cache = db_cache
 
-    async def __watch_kind(self, kind: str, cluster: Cluster) -> None:
+    async def __sync(self) -> None:
+        """Upsert K8s objects in the cache and remove deleted objects from the cache."""
+        for kind in self.__kinds:
+            for cluster in self.__clusters.values():
+                clnt = K8sClusterClient(cluster)
+                fltr = K8sObjectFilter(gvk=kind, namespace=cluster.namespace)
+                # Upsert new / updated objects
+                objects_in_k8s: dict[str, K8sObject] = {}
+                async for obj in clnt.list(fltr):
+                    objects_in_k8s[obj.name] = obj
+                    await self.__cache.upsert(obj)
+                # Remove objects that have been deleted from k8s but are still in cache
+                async for cache_obj in self.__cache.list(fltr):
+                    cache_obj_is_in_k8s = objects_in_k8s.get(cache_obj.name) is not None
+                    if cache_obj_is_in_k8s:
+                        continue
+                    await self.__cache.delete(cache_obj.meta)
+
+    async def __watch_kind(self, kind: GVK, cluster: Cluster) -> None:
+        last_sync: datetime | None = None
         while True:
             try:
-                watch = cluster.api.async_watch(kind=kind, namespace=cluster.namespace)
+                if last_sync is None or (datetime.now() - last_sync).total_seconds() >= self.__sync_period_seconds:
+                    logging.info("Starting full k8s cache sync")
+                    await self.__sync()
+                    last_sync = datetime.now()
+                watch = cluster.api.async_watch(kind=kind.kr8s_kind, namespace=cluster.namespace)
                 async for event_type, obj in watch:
-                    await self.__handler(APIObjectInCluster(obj, cluster.id), event_type)
+                    await self.__handler(cluster.with_api_object(obj), event_type)
                     # in some cases, the kr8s loop above just never yields, especially if there's exceptions which
                     # can bypass async scheduling. This sleep here is as a last line of defence so this code does not
                     # execute indefinitely and prevent another resource kind from being watched.
@@ -196,7 +166,7 @@ async def collect_metrics(
         case State.Running.value | State.NotReady.value if previous_state == State.Hibernated.value:
             # session resumed
             await metrics.session_resumed(user, metadata={"session_id": new_obj.meta.name})
-        case State.Hibernated.value if (previous_state != State.Hibernated.value):
+        case State.Hibernated.value if previous_state != State.Hibernated.value:
             # session hibernated
             await metrics.session_hibernated(user=user, metadata={"session_id": new_obj.meta.name})
         case _:

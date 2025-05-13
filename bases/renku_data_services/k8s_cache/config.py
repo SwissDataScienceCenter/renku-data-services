@@ -9,7 +9,7 @@ from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
-from renku_data_services.k8s_watcher.db import K8sDbCache
+from renku_data_services.k8s_watcher import K8sDbCache
 from renku_data_services.metrics.core import StagingMetricsService
 from renku_data_services.metrics.db import MetricsRepository
 

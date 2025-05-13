@@ -30,7 +30,7 @@ from renku_data_services.notebooks.api.schemas.server_options import ServerOptio
 from renku_data_services.notebooks.api.schemas.servers_get import NotebookResponse
 from renku_data_services.notebooks.api.schemas.servers_patch import PatchServerStatusEnum
 from renku_data_services.notebooks.config import NotebooksConfig
-from renku_data_services.notebooks.constants import JUPYTER_SESSION_KIND, JUPYTER_SESSION_VERSION
+from renku_data_services.notebooks.constants import JUPYTER_SESSION_GVK
 from renku_data_services.notebooks.errors import intermittent
 from renku_data_services.notebooks.errors import user as user_errors
 from renku_data_services.notebooks.util import repository
@@ -408,14 +408,13 @@ async def launch_notebook_helper(
             requested_server_options = server_options
         else:
             raise errors.ProgrammingError(
-                message="Got an unexpected type of server options when " f"launching sessions: {type(server_options)}"
+                message=f"Got an unexpected type of server options when launching sessions: {type(server_options)}"
             )
         # The old style API was used, try to find a matching class from the CRC service
         parsed_server_options = await nb_config.crc_validator.find_acceptable_class(user, requested_server_options)
         if parsed_server_options is None:
             raise user_errors.UserInputError(
-                message="Cannot find suitable server options based on your request and "
-                "the available resource classes.",
+                message="Cannot find suitable server options based on your request and the available resource classes.",
                 detail="You are receiving this error because you are using the old API for "
                 "selecting resources. Updating to the new API which includes specifying only "
                 "a specific resource class ID and storage is preferred and more convenient.",
@@ -522,8 +521,8 @@ async def launch_notebook_helper(
     logger.debug(f"Server {server.server_name} has been started")
 
     owner_reference = {
-        "apiVersion": JUPYTER_SESSION_VERSION,
-        "kind": JUPYTER_SESSION_KIND,
+        "apiVersion": JUPYTER_SESSION_GVK.group_version,
+        "kind": JUPYTER_SESSION_GVK.kind,
         "name": server.server_name,
         "uid": manifest.metadata.uid,
     }
