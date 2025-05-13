@@ -77,6 +77,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         rp_repo=dm.rp_repo,
         authenticator=dm.authenticator,
         user_repo=dm.user_repo,
+        cluster_repo=dm.cluster_repo,
     )
     classes = ClassesBP(name="classes", url_prefix=url_prefix, repo=dm.rp_repo, authenticator=dm.authenticator)
     quota = QuotaBP(

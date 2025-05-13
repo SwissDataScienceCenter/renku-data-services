@@ -95,7 +95,7 @@ def get_clusters(kube_conf_root_dir: str, namespace: str, api: kr8s.asyncio.Api)
     if os.path.exists(kube_conf_root_dir):
         for filename in glob.glob(pathname="*.yaml", root_dir=kube_conf_root_dir):
             try:
-                kube_config = KubeConfigYaml(filename)
+                kube_config = KubeConfigYaml(f"{kube_conf_root_dir}/{filename}")
                 cluster = Cluster(
                     id=ClusterId(filename.removesuffix(".yaml")),
                     namespace=kube_config.api().namespace,
