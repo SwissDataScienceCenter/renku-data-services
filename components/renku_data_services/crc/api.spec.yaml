@@ -1223,7 +1223,7 @@ components:
       additionalProperties: false
       properties:
         quota:
-          $ref: "#/components/schemas/Quota"
+          $ref: "#/components/schemas/QuotaWithOptionalId"
         classes:
           $ref: "#/components/schemas/ResourceClasses"
         name:
@@ -1530,6 +1530,24 @@ components:
         memory: 1000
         id: 518c7d27-b5db-4aee-855f-f4638aded2d4
       required: ["cpu", "memory", "gpu", "id"]
+    QuotaWithOptionalId:
+      type: object
+      additionalProperties: false
+      properties:
+        cpu:
+          $ref: "#/components/schemas/Cpu"
+        memory:
+          $ref: "#/components/schemas/Memory"
+        gpu:
+          $ref: "#/components/schemas/Gpu"
+        id:
+          $ref: "#/components/schemas/Name"
+      example:
+        gpu: 0
+        cpu: 100
+        memory: 1000
+        id: 518c7d27-b5db-4aee-855f-f4638aded2d4
+      required: ["cpu", "memory", "gpu"]
     Version:
       type: object
       properties:

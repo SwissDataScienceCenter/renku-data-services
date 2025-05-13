@@ -53,7 +53,7 @@ class K8sWatcher:
     async def __sync(self, cluster: Cluster, kind: GVK) -> None:
         """Upsert K8s objects in the cache and remove deleted objects from the cache."""
         clnt = K8sClusterClient(cluster)
-        fltr = K8sObjectFilter(gvk=kind, namespace=cluster.namespace)
+        fltr = K8sObjectFilter(gvk=kind, cluster=cluster.id, namespace=cluster.namespace)
         # Upsert new / updated objects
         objects_in_k8s: dict[str, K8sObject] = {}
         async for obj in clnt.list(fltr):

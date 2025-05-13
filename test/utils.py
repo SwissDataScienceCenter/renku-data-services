@@ -406,12 +406,6 @@ class SanicReusableASGITestClient(SanicASGITestClient):
         return None, response  # type: ignore
 
 
-def remove_id_from_quota(quota: rp_models.Quota) -> rp_models.Quota:
-    kwargs = asdict(quota)
-    kwargs["id"] = None
-    return rp_models.Quota(**kwargs)
-
-
 def remove_id_from_rc(rc: rp_models.ResourceClass) -> rp_models.ResourceClass:
     kwargs = asdict(rc)
     kwargs["id"] = None
@@ -424,8 +418,6 @@ def remove_quota_from_rc(rc: rp_models.ResourceClass) -> rp_models.ResourceClass
 
 def remove_id_from_rp(rp: rp_models.ResourcePool) -> rp_models.ResourcePool:
     quota = rp.quota
-    if isinstance(quota, rp_models.Quota):
-        quota = remove_id_from_quota(quota)
     classes = [remove_quota_from_rc(remove_id_from_rc(rc)) for rc in rp.classes]
     return rp_models.ResourcePool(
         name=rp.name,
