@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, NewType, Self
+from typing import Any, NewType, Self, cast
 
 from box import Box
 from kr8s._api import Api
 from kr8s.asyncio.objects import APIObject
+
+from renku_data_services.errors import errors
+from renku_data_services.k8s.constants import DUMMY_TASK_RUN_USER_ID
 
 # LSA Not enough time: Adapt this to be an alias to ULID
 ClusterId = NewType("ClusterId", str)
@@ -130,6 +133,10 @@ class Cluster:
     namespace: str
     api: Api
 
+    def with_api_object(self, obj: APIObject) -> APIObjectInCluster:
+        """Create an API object associated with the cluster."""
+        return APIObjectInCluster(obj, self.id)
+
 
 @dataclass(kw_only=True, frozen=True)
 class GVK:
@@ -174,4 +181,61 @@ class GVK:
             kind=kr8s_obj.kind,
             group=grp,
             version=version,
+        )
+
+
+@dataclass
+class APIObjectInCluster:
+    """A kr8s k8s object from a specific cluster."""
+
+    obj: APIObject
+    cluster: ClusterId
+
+    @property
+    def user_id(self) -> str | None:
+        """Extract the user id from annotations."""
+        match self.obj.singular:
+            case "jupyterserver":
+                return cast(str, self.obj.metadata.labels["renku.io/userId"])
+            case "amaltheasession":
+                return cast(str, self.obj.metadata.labels["renku.io/safe-username"])
+            case "buildrun":
+                return cast(str, self.obj.metadata.labels["renku.io/safe-username"])
+
+            case "taskrun":
+                return DUMMY_TASK_RUN_USER_ID
+            case _:
+                return None
+
+    @property
+    def meta(self) -> K8sObjectMeta:
+        """Extract the metadata from an api object."""
+        return K8sObjectMeta(
+            name=self.obj.name,
+            namespace=self.obj.namespace or "default",
+            cluster=self.cluster,
+            gvk=GVK.from_kr8s_object(self.obj),
+            user_id=self.user_id,
+        )
+
+    def to_k8s_object(self) -> K8sObject:
+        """Convert the api object to a regular k8s object."""
+        if self.obj.name is None or self.obj.namespace is None:
+            raise errors.ProgrammingError()
+        return K8sObject(
+            name=self.obj.name,
+            namespace=self.obj.namespace,
+            gvk=GVK.from_kr8s_object(self.obj),
+            manifest=Box(self.obj.to_dict()),
+            cluster=self.cluster,
+            user_id=self.user_id,
+        )
+
+    @classmethod
+    def from_k8s_object(cls, obj: K8sObject, api: Api) -> Self:
+        """Convert a regular k8s object to an api object."""
+
+        return cls(
+            obj=obj.to_api_object(api),
+            cluster=obj.cluster,
         )

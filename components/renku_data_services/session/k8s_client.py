@@ -1,6 +1,7 @@
 """An abstraction over the kr8s kubernetes client and the k8s-watcher."""
 
 from collections.abc import AsyncIterable
+from typing import TYPE_CHECKING
 
 import httpx
 from kr8s import NotFoundError, ServerError
@@ -8,7 +9,6 @@ from kr8s.asyncio.objects import APIObject, Pod
 
 from renku_data_services import errors
 from renku_data_services.errors.errors import CannotStartBuildError
-from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.models import GVK, ClusterId, K8sObjectFilter, K8sObjectMeta
 from renku_data_services.notebooks.api.classes.k8s_client import DEFAULT_K8S_CLUSTER
 from renku_data_services.notebooks.util.retries import retry_with_exponential_backoff_async
@@ -19,6 +19,9 @@ from renku_data_services.session.constants import (
     TASK_RUN_GVK,
 )
 from renku_data_services.session.crs import BuildRun, TaskRun
+
+if TYPE_CHECKING:
+    from renku_data_services.k8s.clients import K8sClusterClientsPool
 
 
 # NOTE The type ignore below is because the kr8s library has no type stubs, they claim pyright better handles type hints
@@ -55,7 +58,7 @@ class ShipwrightClient:
 
     def __init__(
         self,
-        client: K8sClusterClientsPool,
+        client: "K8sClusterClientsPool",
         namespace: str,
     ) -> None:
         self.client = client

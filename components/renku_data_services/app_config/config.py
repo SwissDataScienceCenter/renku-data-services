@@ -64,7 +64,7 @@ from renku_data_services.k8s.clients import (
 )
 from renku_data_services.k8s.config import KubeConfigEnv
 from renku_data_services.k8s.quota import QuotaRepository
-from renku_data_services.k8s_watcher.db import K8sDbCache
+from renku_data_services.k8s_watcher import K8sDbCache
 from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.message_queue.db import EventRepository, ReprovisioningRepository
 from renku_data_services.message_queue.interface import IMessageQueue

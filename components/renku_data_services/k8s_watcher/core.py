@@ -7,80 +7,19 @@ import contextlib
 import logging
 from asyncio import CancelledError, Task
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Self, cast
-
-from box import Box
-from kr8s._api import Api
-from kr8s.asyncio.objects import APIObject
+from typing import TYPE_CHECKING
 
 from renku_data_services.base_models.core import APIUser, InternalServiceAdmin, ServiceAdminId
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.crc.db import ResourcePoolRepository
-from renku_data_services.errors import errors
 from renku_data_services.k8s.clients import K8sClusterClient
-from renku_data_services.k8s.models import GVK, Cluster, ClusterId, K8sObject, K8sObjectFilter, K8sObjectMeta
+from renku_data_services.k8s.models import GVK, K8sObject, K8sObjectFilter
 from renku_data_services.k8s_watcher.db import K8sDbCache
 from renku_data_services.notebooks.crs import State
-from renku_data_services.session.constants import DUMMY_TASK_RUN_USER_ID
 
-
-@dataclass
-class APIObjectInCluster:
-    """A kr8s k8s object from a specific cluster."""
-
-    obj: APIObject
-    cluster: ClusterId
-
-    @property
-    def user_id(self) -> str | None:
-        """Extract the user id from annotations."""
-        match self.obj.singular:
-            case "jupyterserver":
-                return cast(str, self.obj.metadata.labels["renku.io/userId"])
-            case "amaltheasession":
-                return cast(str, self.obj.metadata.labels["renku.io/safe-username"])
-            case "buildrun":
-                return cast(str, self.obj.metadata.labels["renku.io/safe-username"])
-
-            case "taskrun":
-                return DUMMY_TASK_RUN_USER_ID
-            case _:
-                return None
-
-    @property
-    def meta(self) -> K8sObjectMeta:
-        """Extract the metadata from an api object."""
-        return K8sObjectMeta(
-            name=self.obj.name,
-            namespace=self.obj.namespace or "default",
-            cluster=self.cluster,
-            gvk=GVK.from_kr8s_object(self.obj),
-            user_id=self.user_id,
-        )
-
-    def to_k8s_object(self) -> K8sObject:
-        """Convert the api object to a regular k8s object."""
-        if self.obj.name is None or self.obj.namespace is None:
-            raise errors.ProgrammingError()
-        return K8sObject(
-            name=self.obj.name,
-            namespace=self.obj.namespace,
-            gvk=GVK.from_kr8s_object(self.obj),
-            manifest=Box(self.obj.to_dict()),
-            cluster=self.cluster,
-            user_id=self.user_id,
-        )
-
-    @classmethod
-    def from_k8s_object(cls, obj: K8sObject, api: Api) -> Self:
-        """Convert a regular k8s object to an api object."""
-
-        return cls(
-            obj=obj.to_api_object(api),
-            cluster=obj.cluster,
-        )
+if TYPE_CHECKING:
+    from renku_data_services.k8s.models import APIObjectInCluster, Cluster, ClusterId
 
 
 type EventHandler = Callable[[APIObjectInCluster, str], Awaitable[None]]
@@ -134,7 +73,7 @@ class K8sWatcher:
                     last_sync = datetime.now()
                 watch = cluster.api.async_watch(kind=kind.kr8s_kind, namespace=cluster.namespace)
                 async for event_type, obj in watch:
-                    await self.__handler(APIObjectInCluster(obj, cluster.id), event_type)
+                    await self.__handler(cluster.with_api_object(obj), event_type)
                     # in some cases, the kr8s loop above just never yields, especially if there's exceptions which
                     # can bypass async scheduling. This sleep here is as a last line of defence so this code does not
                     # execute indefinitely and prevent another resource kind from being watched.

@@ -3,7 +3,7 @@
 import base64
 import json
 from contextlib import suppress
-from typing import Any, Generic, Optional, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Generic, Optional, TypeVar, cast
 
 import httpx
 import kubernetes
@@ -15,16 +15,17 @@ from kubernetes.client import V1Secret
 from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.errors import errors
-from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
 from renku_data_services.k8s.models import GVK, Cluster, ClusterId, K8sObject, K8sObjectFilter, K8sObjectMeta
-from renku_data_services.k8s_watcher.core import APIObjectInCluster
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
 from renku_data_services.notebooks.constants import JUPYTER_SESSION_GVK
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
 from renku_data_services.notebooks.errors.programming import ProgrammingError
 from renku_data_services.notebooks.util.kubernetes_ import find_env_var
 from renku_data_services.notebooks.util.retries import retry_with_exponential_backoff_async
+
+if TYPE_CHECKING:
+    from renku_data_services.k8s.clients import K8sClusterClientsPool
 
 sanitizer = kubernetes.client.ApiClient().sanitize_for_serialization
 
@@ -50,7 +51,7 @@ class NotebookK8sClient(Generic[_SessionType]):
 
     def __init__(
         self,
-        client: K8sClusterClientsPool,
+        client: "K8sClusterClientsPool",
         rp_repo: ResourcePoolRepository,
         session_type: type[_SessionType],
         username_label: str,
@@ -279,8 +280,9 @@ class NotebookK8sClient(Generic[_SessionType]):
         if cluster is None:
             return None
 
-        api_obj_in_cluster = APIObjectInCluster.from_k8s_object(statefulset, cluster.api)
-        return StatefulSet(resource=api_obj_in_cluster.obj, namespace=statefulset.meta.namespace, api=cluster.api)
+        return StatefulSet(
+            resource=statefulset.to_api_object(cluster.api), namespace=statefulset.meta.namespace, api=cluster.api
+        )
 
     async def patch_statefulset(
         self, session_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
@@ -343,8 +345,7 @@ class NotebookK8sClient(Generic[_SessionType]):
         if cluster is None:
             return logs
 
-        obj = APIObjectInCluster.from_k8s_object(result, cluster.api)
-        pod = Pod(resource=obj.obj, namespace=obj.obj.namespace, api=cluster.api)
+        pod = Pod(resource=result.to_api_object(cluster.api), namespace=result.namespace, api=cluster.api)
 
         containers = [container.name for container in pod.spec.containers + pod.spec.get("initContainers", [])]
         for container in containers:
@@ -375,8 +376,7 @@ class NotebookK8sClient(Generic[_SessionType]):
         if cluster is None:
             return
 
-        api_obj_in_cluster = APIObjectInCluster.from_k8s_object(result, cluster.api)
-        secret = Secret(resource=api_obj_in_cluster.obj, namespace=api_obj_in_cluster.obj.namespace, api=cluster.api)
+        secret = Secret(resource=result.to_api_object(cluster.api), namespace=result.namespace, api=cluster.api)
 
         secret_data = secret.data.to_dict()
         old_docker_config = json.loads(base64.b64decode(secret_data[".dockerconfigjson"]).decode())

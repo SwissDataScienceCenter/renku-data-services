@@ -8,7 +8,7 @@ from collections.abc import AsyncIterable
 from copy import deepcopy
 from multiprocessing import Lock
 from multiprocessing.synchronize import Lock as LockType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 import kr8s
@@ -18,9 +18,18 @@ from kubernetes.config.incluster_config import SERVICE_CERT_FILENAME, SERVICE_TO
 
 from renku_data_services.errors import errors
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface, K8sSchedudlingClientInterface
-from renku_data_services.k8s.models import GVK, Cluster, ClusterId, K8sObject, K8sObjectFilter, K8sObjectMeta
-from renku_data_services.k8s_watcher import K8sDbCache
-from renku_data_services.k8s_watcher.core import APIObjectInCluster
+
+if TYPE_CHECKING:
+    from renku_data_services.k8s.models import (
+        GVK,
+        APIObjectInCluster,
+        Cluster,
+        ClusterId,
+        K8sObject,
+        K8sObjectFilter,
+        K8sObjectMeta,
+    )
+    from renku_data_services.k8s_watcher import K8sDbCache
 
 
 class K8sCoreClient(K8sCoreClientInterface):  # pragma:nocover
@@ -256,7 +265,7 @@ class K8sClusterClient:
         if not isinstance(res, list):
             res = [res]
         for r in res:
-            yield APIObjectInCluster(r, self.__cluster.id)
+            yield self.__cluster.with_api_object(r)
 
     async def __get_api_object(self, meta: K8sObjectFilter) -> APIObjectInCluster | None:
         return await anext(aiter(self.__list(meta)), None)
