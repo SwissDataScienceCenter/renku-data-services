@@ -47,3 +47,4 @@ USER $USER_UID:$USER_GID
 WORKDIR /app
 COPY --from=builder /app/env ./env
 ENTRYPOINT ["tini", "-g", "--", "env/bin/python", "-m", "renku_data_services.data_api.main"]
+CMD ["--single-process"]
