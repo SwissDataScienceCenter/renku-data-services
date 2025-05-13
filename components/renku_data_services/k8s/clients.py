@@ -253,18 +253,17 @@ class K8sClusterClient:
         names = [_filter.name] if _filter.name is not None else []
 
         try:
-            res = await self.__cluster.api.async_get(
+            res = self.__cluster.api.async_get(
                 _filter.gvk.kr8s_kind,
                 *names,
                 label_selector=_filter.label_selector,
                 namespace=_filter.namespace,
             )
+            async for r in res:
+                yield self.__cluster.with_api_object(r)
 
         except (kr8s.ServerError, kr8s.APITimeoutError):
             return
-
-        async for r in res:
-            yield self.__cluster.with_api_object(r)
 
     async def __get_api_object(self, meta: K8sObjectFilter) -> APIObjectInCluster | None:
         return await anext(aiter(self.__list(meta)), None)
