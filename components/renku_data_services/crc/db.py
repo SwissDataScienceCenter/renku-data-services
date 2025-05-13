@@ -8,7 +8,7 @@ it all in one place.
 
 from asyncio import gather
 from collections.abc import AsyncGenerator, Callable, Collection, Coroutine, Sequence
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from functools import wraps
 from typing import Any, Concatenate, Optional, ParamSpec, TypeVar, cast
 
@@ -153,7 +153,7 @@ class ResourcePoolRepository(_Base):
 
     def __init__(self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository):
         super().__init__(session_maker, quotas_repo)
-        self._cluster_repo = ClusterRepository(session_maker=self.session_maker)
+        self.__cluster_repo = ClusterRepository(session_maker=self.session_maker)
 
     async def initialize(self, async_connection_url: str, rp: models.ResourcePool) -> None:
         """Add the default resource pool if it does not already exist."""
@@ -282,14 +282,15 @@ class ResourcePoolRepository(_Base):
     ) -> models.ResourcePool:
         """Insert resource pool into database."""
         quota = None
-        if resource_pool.quota:
+        if resource_pool.quota is not None:
             for rc in resource_pool.classes:
                 if not resource_pool.quota.is_resource_class_compatible(rc):
                     raise errors.ValidationError(
                         message=f"The quota {quota} is not compatible with resource class {rc}"
                     )
-            quota = self.quotas_repo.create_quota(resource_pool.quota)
+            quota = self.quotas_repo.create_quota(models.Quota.from_dict(asdict(resource_pool.quota)))
             resource_pool = resource_pool.set_quota(quota)
+
         orm = schemas.ResourcePoolORM.load(resource_pool)
         async with self.session_maker() as session, session.begin():
             if orm.idle_threshold == 0:
@@ -412,7 +413,9 @@ class ResourcePoolRepository(_Base):
                         cluster = None
 
                         if cluster_id is not None:
-                            cluster = await self._cluster_repo.select(api_user=api_user, cluster_id=cluster_id)
+                            cluster = await self.__cluster_repo.select(
+                                api_user=api_user, cluster_id=ULID.from_str(cluster_id)
+                            )
 
                         rp.cluster_id = cluster_id
                         new_rp_model = new_rp_model.update(cluster=cluster)
@@ -425,23 +428,28 @@ class ResourcePoolRepository(_Base):
                         # 2. a quota exists and can only be updated, not replaced (the ids, if provided, must match)
 
                         new_id = val.get("id")
-
-                        if quota and quota.id is not None and new_id is not None and quota.id != new_id:
-                            raise errors.ValidationError(
-                                message="The ID of an existing quota cannot be updated, "
-                                f"please remove the ID field from the request or use ID {quota.id}."
-                            )
+                        quota_id = quota.id if quota is not None else None
 
                         # the id must match for update
-                        if quota:
-                            val["id"] = quota.id or new_id
+                        match (quota_id, new_id):
+                            case (None, _):
+                                pass
+                            case (quota_id, None):
+                                val["id"] = quota_id
+                            case (quota_id, new_id):
+                                if quota_id != new_id:
+                                    raise errors.ValidationError(
+                                        message="The ID of an existing quota cannot be updated, "
+                                        f"please remove the ID field from the request or use ID {quota_id}."
+                                    )
 
                         new_quota = models.Quota.from_dict(val)
 
-                        if new_id or quota:
-                            new_quota = self.quotas_repo.update_quota(new_quota)
-                        else:
+                        if new_id is None and quota is None:
                             new_quota = self.quotas_repo.create_quota(new_quota)
+                        else:
+                            new_quota = self.quotas_repo.update_quota(new_quota)
+
                         rp.quota = new_quota.id
                         new_rp_model = new_rp_model.update(quota=new_quota)
                     case "classes":

@@ -193,7 +193,7 @@ class ResourcePoolORM(BaseORM):
             quota = resource_pool.quota.id
 
         cluster_id = None
-        if resource_pool.cluster is not None and isinstance(resource_pool.cluster, models.SavedCluster):
+        if resource_pool.cluster is not None:
             cluster_id = resource_pool.cluster.id
 
         return cls(
