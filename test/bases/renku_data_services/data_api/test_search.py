@@ -1,5 +1,7 @@
 import pytest
 
+from renku_data_services.solr.entity_documents import EntityType
+
 
 @pytest.mark.asyncio
 async def test_projects(search_reprovision, create_project, search_query) -> None:
@@ -26,3 +28,27 @@ async def test_distance(search_reprovision, create_project, search_query) -> Non
     result = await search_query("mike type:project")
     assert len(result["items"]) == 1
     assert result["items"][0]["name"] == "Project Bike Z"
+
+
+@pytest.mark.asyncio
+async def test_search_by_entity_type(
+    create_project, create_group, create_data_connector, user_headers, search_query, search_reprovision
+) -> None:
+    await create_project("Project Mine")
+    await create_group("Group Wine")
+    await create_data_connector("Data Zine", visibility="public")
+    await search_reprovision()
+
+    result = await search_query("", headers=user_headers)
+    items = result["items"]
+    types = set([e["type"] for e in items])
+    assert types == set(["Project", "Group", "User", "DataConnector"])
+
+    for field in EntityType._member_map_.values():
+        qstr = [f"type:{field.value}", f"type:{field.value.upper()}", f"type:{field.value.lower()}"]
+        for q in qstr:
+            result = await search_query(q, headers=user_headers)
+            items = result["items"]
+            assert len(items) >= 1, f"Invalid results for query '{q}': {items}"
+            for item in items:
+                assert item["type"] == field.value

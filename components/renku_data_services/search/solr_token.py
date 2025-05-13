@@ -54,7 +54,7 @@ def from_visibility(v: Visibility) -> SolrToken:
 
 def from_entity_type(et: EntityType) -> SolrToken:
     """Create a solr query value for an entity type."""
-    return SolrToken(et.value.capitalize())
+    return SolrToken(et.value)
 
 
 def from_datetime(dt: datetime) -> SolrToken:
