@@ -78,9 +78,7 @@ class SessionRepository:
         new_environment: models.UnsavedEnvironment,
     ) -> schemas.EnvironmentORM:
         if user.id is None:
-            raise errors.UnauthorizedError(
-                message="You have to be authenticated to insert an environment in the DB.", quiet=True
-            )
+            raise errors.UnauthorizedError(message="You have to be authenticated to insert an environment in the DB.")
         environment = schemas.EnvironmentORM(
             name=new_environment.name,
             created_by_id=user.id,
@@ -110,9 +108,7 @@ class SessionRepository:
         environment: models.Environment,
     ) -> schemas.EnvironmentORM:
         if user.id is None:
-            raise errors.UnauthorizedError(
-                message="You have to be authenticated to insert an environment in the DB.", quiet=True
-            )
+            raise errors.UnauthorizedError(message="You have to be authenticated to insert an environment in the DB.")
         new_environment = schemas.EnvironmentORM(
             name=environment.name,
             created_by_id=user.id,
@@ -156,9 +152,7 @@ class SessionRepository:
         new_build_parameters_environment: models.UnsavedBuildParameters,
     ) -> schemas.EnvironmentORM:
         if user.id is None:
-            raise errors.UnauthorizedError(
-                message="You have to be authenticated to insert an environment in the DB.", quiet=True
-            )
+            raise errors.UnauthorizedError(message="You have to be authenticated to insert an environment in the DB.")
         build_parameters_orm = schemas.BuildParametersORM(
             builder_variant=new_build_parameters_environment.builder_variant,
             frontend_variant=new_build_parameters_environment.frontend_variant,
