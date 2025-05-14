@@ -102,7 +102,7 @@ class GlobalEntityDoc(BaseModel, ABC, frozen=True):
 class EntityDoc(GlobalEntityDoc, ABC, frozen=True):
     """Base class for entity document models."""
 
-    namespace: Annotated[Slug, BeforeValidator(_str_to_slug)]
+    namespace: str
 
 
 class User(EntityDoc, frozen=True):
@@ -117,10 +117,6 @@ class User(EntityDoc, frozen=True):
     def entity_type(self) -> EntityType:
         """Return the type of this entity."""
         return EntityType.user
-
-    @field_serializer("namespace", when_used="always")
-    def __serialize_namespace(self, namespace: Slug) -> str:
-        return namespace.value
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> User:
@@ -144,10 +140,6 @@ class Group(EntityDoc, frozen=True):
     @field_serializer("id", when_used="always")
     def __serialize_id(self, id: ULID) -> str:
         return str(id)
-
-    @field_serializer("namespace", when_used="always")
-    def __serialize_namespace(self, namespace: Slug) -> str:
-        return namespace.value
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> Group:
@@ -174,10 +166,6 @@ class Project(EntityDoc, frozen=True):
     def entity_type(self) -> EntityType:
         """Return the type of this entity."""
         return EntityType.project
-
-    @field_serializer("namespace", when_used="always")
-    def __serialize_namespace(self, namespace: Slug) -> str:
-        return namespace.value
 
     @field_serializer("id", when_used="always")
     def __serialize_id(self, id: ULID) -> str:
@@ -210,7 +198,7 @@ class DataConnector(GlobalEntityDoc, frozen=True):
     """Represents a global or non-global renku data connector in SOLR."""
 
     id: ULID
-    namespace: Annotated[Slug | None, BeforeValidator(_str_to_slug_none)] = None
+    namespace: str | None = None
     name: str
     storageType: str
     readonly: bool
@@ -227,10 +215,6 @@ class DataConnector(GlobalEntityDoc, frozen=True):
     def entity_type(self) -> EntityType:
         """Return the type of this entity."""
         return EntityType.dataconnector
-
-    @field_serializer("namespace", when_used="always")
-    def __serialize_namespace(self, namespace: Slug) -> str:
-        return namespace.value
 
     @field_serializer("id", when_used="always")
     def __serialize_id(self, id: ULID) -> str:

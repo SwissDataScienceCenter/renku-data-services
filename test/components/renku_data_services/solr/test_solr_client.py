@@ -4,7 +4,6 @@ import string
 
 import pytest
 
-from renku_data_services.base_models.core import Slug
 from renku_data_services.solr.entity_documents import Group, Project, User
 from renku_data_services.solr.entity_schema import Fields, FieldTypes
 from renku_data_services.solr.solr_client import (
@@ -40,7 +39,7 @@ def assert_upsert_result(r: UpsertResponse):
 
 
 def test_serialize_document():
-    d = User(id="one", namespace=Slug("one"), version=DocVersions.not_exists())
+    d = User(id="one", namespace="one", version=DocVersions.not_exists())
     djson = '{"id":"one", "namespace":"one", "_version_": -1}'
     nd = User.model_validate_json(djson)
     assert nd == d

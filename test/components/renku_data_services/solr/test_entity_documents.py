@@ -6,9 +6,9 @@ from renku_data_services.authz.models import Visibility
 from renku_data_services.base_models.core import Slug
 from renku_data_services.solr.entity_documents import DataConnector, Group, Project, User
 
-user_jan_ullrich = User(id="abc-def", firstName="Jan", lastName="Ullrich", namespace=Slug("janu"))
-user_tadej_pogacar = User(id="hij-klm", firstName="Tadej", lastName="Pogačar", namespace=Slug("tadejp"))
-group_team = Group(id=ULID(), name="The Team", namespace=Slug("the-team"), description="A group consisting of a team")
+user_jan_ullrich = User(id="abc-def", firstName="Jan", lastName="Ullrich", namespace="janu")
+user_tadej_pogacar = User(id="hij-klm", firstName="Tadej", lastName="Pogačar", namespace="tadejp")
+group_team = Group(id=ULID(), name="The Team", namespace="the-team", description="A group consisting of a team")
 project_ai_stuff = Project(
     id=ULID(),
     name="AI stuff",
