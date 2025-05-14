@@ -8,7 +8,7 @@ it all in one place.
 
 from asyncio import gather
 from collections.abc import AsyncGenerator, Callable, Collection, Coroutine, Sequence
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from functools import wraps
 from typing import Any, Concatenate, Optional, ParamSpec, TypeVar, cast
 
@@ -288,7 +288,7 @@ class ResourcePoolRepository(_Base):
                     raise errors.ValidationError(
                         message=f"The quota {quota} is not compatible with resource class {rc}"
                     )
-            quota = self.quotas_repo.create_quota(resource_pool.quota)
+            quota = self.quotas_repo.create_quota(models.Quota.from_dict(asdict(resource_pool.quota)))
             resource_pool = resource_pool.set_quota(quota)
         orm = schemas.ResourcePoolORM.load(resource_pool)
         async with self.session_maker() as session, session.begin():
@@ -425,23 +425,28 @@ class ResourcePoolRepository(_Base):
                         # 2. a quota exists and can only be updated, not replaced (the ids, if provided, must match)
 
                         new_id = val.get("id")
-
-                        if quota and quota.id is not None and new_id is not None and quota.id != new_id:
-                            raise errors.ValidationError(
-                                message="The ID of an existing quota cannot be updated, "
-                                f"please remove the ID field from the request or use ID {quota.id}."
-                            )
+                        quota_id = quota.id if quota is not None else None
 
                         # the id must match for update
-                        if quota:
-                            val["id"] = quota.id or new_id
+                        match (quota_id, new_id):
+                            case (None, _):
+                                pass
+                            case (quota_id, None):
+                                val["id"] = quota_id
+                            case (quota_id, new_id):
+                                if quota_id != new_id:
+                                    raise errors.ValidationError(
+                                        message="The ID of an existing quota cannot be updated, "
+                                        f"please remove the ID field from the request or use ID {quota_id}."
+                                    )
 
                         new_quota = models.Quota.from_dict(val)
 
-                        if new_id or quota:
-                            new_quota = self.quotas_repo.update_quota(new_quota)
-                        else:
+                        if new_id is None and quota is None:
                             new_quota = self.quotas_repo.create_quota(new_quota)
+                        else:
+                            new_quota = self.quotas_repo.update_quota(new_quota)
+
                         rp.quota = new_quota.id
                         new_rp_model = new_rp_model.update(quota=new_quota)
                     case "classes":

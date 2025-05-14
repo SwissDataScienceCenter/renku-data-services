@@ -91,9 +91,7 @@ class QuotaRepository:
 
     def create_quota(self, quota: models.Quota) -> models.Quota:
         """Create a resource quota and priority class."""
-        if quota.id:
-            raise errors.BaseError(message=f"Cannot create a quota with a preset id - {quota.id}.")
-        quota = quota.generate_id()
+
         metadata = {"labels": {self._label_name: self._label_value}, "name": quota.id}
         quota_manifest = self._quota_to_manifest(quota)
         pc: client.V1PriorityClass = self.scheduling_client.create_priority_class(
@@ -137,8 +135,7 @@ class QuotaRepository:
 
     def update_quota(self, quota: models.Quota) -> models.Quota:
         """Update a specific resource quota."""
-        if not quota.id:
-            quota = quota.generate_id()
+
         quota_manifest = self._quota_to_manifest(quota)
         self.core_client.patch_namespaced_resource_quota(name=quota.id, namespace=self.namespace, body=quota_manifest)
         return quota
