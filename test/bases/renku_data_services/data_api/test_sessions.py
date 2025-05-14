@@ -35,7 +35,9 @@ def launch_session(
         session_id: str = res.json.get("name", "unknown")
 
         def cleanup():
-            event_loop.run_until_complete(app_manager.nb_config.k8s_v2_client.delete_session(session_id, user.id))
+            event_loop.run_until_complete(
+                app_manager.config.nb_config.k8s_v2_client.delete_session(session_id, user.id)
+            )
 
         # request.addfinalizer(cleanup)
         return res

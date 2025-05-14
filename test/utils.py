@@ -24,7 +24,6 @@ from renku_data_services.git.gitlab import DummyGitlabAPI
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.message_queue.redis_queue import RedisQueue
-from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.storage import models as storage_models
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users import models as user_preferences_models
@@ -150,14 +149,13 @@ class TestDependencyManager(DependencyManager):
         cls, dummy_users: list[user_preferences_models.UnsavedUserInfo], prefix: str = ""
     ) -> "DependencyManager":
         """Create a config from environment variables."""
-
-        config = AppConfig.from_env()
+        db = DBConfigStack.from_env()
+        config = AppConfig.from_env(db)
         user_store: base_models.UserStore
         authenticator: base_models.Authenticator
         gitlab_authenticator: base_models.Authenticator
         gitlab_client: base_models.GitlabAPIProtocol
         k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
-        config.db = DBConfigStack.from_env()
         config.authz_config = AuthzConfigStack.from_env()
         kc_api: IKeycloakAPI
         gitlab_url: str | None
@@ -172,7 +170,6 @@ class TestDependencyManager(DependencyManager):
         gitlab_url = None
 
         message_queue = RedisQueue(config.redis)
-        nb_config = NotebooksConfig.from_env(config.db)
 
         return cls(
             config=config,
@@ -184,7 +181,6 @@ class TestDependencyManager(DependencyManager):
             kc_api=kc_api,
             message_queue=message_queue,
             gitlab_url=gitlab_url,
-            nb_config=nb_config,
         )
 
     def __post_init__(self) -> None:

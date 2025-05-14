@@ -238,28 +238,30 @@ class TestNotebooks(ClusterRequired):
     def amalthea(self, cluster, app_manager) -> Generator[None, None]:
         if cluster is not None:
             setup_amalthea("amalthea-js", "amalthea", "0.12.2", cluster)
-        app_manager.nb_config._kr8s_api.push(asyncio.run(kr8s.asyncio.api()))
+        app_manager.config.nb_config._kr8s_api.push(asyncio.run(kr8s.asyncio.api()))
 
         yield
-        app_manager.nb_config._kr8s_api.pop()
+        app_manager.config.nb_config._kr8s_api.pop()
 
     @pytest_asyncio.fixture(scope="class", autouse=True)
     async def k8s_watcher(self, amalthea, app_manager) -> AsyncGenerator[None, None]:
         clusters = [
             Cluster(
                 id=ClusterId("renkulab"),
-                namespace=app_manager.nb_config.k8s.renku_namespace,
-                api=app_manager.nb_config._kr8s_api.current,
+                namespace=app_manager.config.nb_config.k8s.renku_namespace,
+                api=app_manager.config.nb_config._kr8s_api.current,
             )
         ]
 
         # sleep to give amalthea a chance to create the CRDs, otherwise the watcher can error out
         await asyncio.sleep(1)
         watcher = K8sWatcher(
-            handler=k8s_object_handler(app_manager.nb_config.k8s_db_cache, app_manager.metrics, app_manager.rp_repo),
+            handler=k8s_object_handler(
+                app_manager.config.nb_config.k8s_db_cache, app_manager.metrics, app_manager.rp_repo
+            ),
             clusters={c.id: c for c in clusters},
             kinds=[JUPYTER_SESSION_GVK],
-            db_cache=app_manager.nb_config.k8s_db_cache,
+            db_cache=app_manager.config.nb_config.k8s_db_cache,
         )
         asyncio.create_task(watcher.start())
         yield

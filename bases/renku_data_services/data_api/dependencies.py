@@ -54,7 +54,7 @@ from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.metrics.core import StagingMetricsService
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
-from renku_data_services.notebooks.config import NotebooksConfig, get_clusters
+from renku_data_services.notebooks.config import get_clusters
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
 from renku_data_services.platform.db import PlatformRepository
 from renku_data_services.project.db import (
@@ -118,7 +118,6 @@ class DependencyManager:
     kc_api: IKeycloakAPI
     message_queue: IMessageQueue
     gitlab_url: str | None
-    nb_config: NotebooksConfig
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
@@ -545,7 +544,6 @@ class DependencyManager:
             )
 
         message_queue = RedisQueue(config.redis)
-        nb_config = NotebooksConfig.from_env(config.db)
 
         return cls(
             config,
@@ -557,5 +555,4 @@ class DependencyManager:
             kc_api=kc_api,
             message_queue=message_queue,
             gitlab_url=gitlab_url,
-            nb_config=nb_config,
         )
