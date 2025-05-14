@@ -183,7 +183,7 @@ def get_gitlab_image_pull_secret(
 ) -> ExtraSecret:
     """Create a Kubernetes secret for private GitLab registry authentication."""
 
-    k8s_namespace = nb_config.k8s_client.namespace
+    k8s_namespace = nb_config.k8s_client.namespace()
 
     registry_secret = {
         "auths": {
@@ -597,7 +597,7 @@ def _deduplicate_target_paths(dcs: dict[str, RCloneStorage]) -> dict[str, RClone
         if mount_folder_try not in mount_folders:
             return mount_folder_try
         raise errors.ValidationError(
-            message=f"Could not start session because two or more data connectors ({", ".join(mount_folders[mount_folder])}) share the same mount point '{mount_folder}'"  # noqa E501
+            message=f"Could not start session because two or more data connectors ({', '.join(mount_folders[mount_folder])}) share the same mount point '{mount_folder}'"  # noqa E501
         )
 
     for dc_id, dc in dcs.items():
