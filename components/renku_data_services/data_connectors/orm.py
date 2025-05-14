@@ -71,8 +71,8 @@ class DataConnectorORM(BaseORM):
     )
     """Slug of the data connector."""
 
-    global_slug: Mapped[str | None] = mapped_column(String(99), index=True, nullable=True, default=None, unique=True)
-    """Slug for global data connectors."""
+    # global_slug: Mapped[str | None] = mapped_column(String(99), index=True, nullable=True, default=None, unique=True)
+    # """Slug for global data connectors."""
 
     readonly: Mapped[bool] = mapped_column("readonly", Boolean(), default=True)
     """Whether this storage should be mounted readonly or not """
