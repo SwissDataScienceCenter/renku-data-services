@@ -156,7 +156,7 @@ class ShipwrightClient:
             return task
         return TaskRun.model_validate(task.manifest.to_dict())
 
-    async def create_image_build(self, params: models.ShipwrightBuildRunParams, user_id: str) -> None:
+    async def create_image_build(self, params: models.ShipwrightBuildRunParamsV2, user_id: str) -> None:
         """Create a new BuildRun in Shipwright to support a newly created build."""
         metadata = crs.Metadata(name=params.name)
         if params.annotations:
