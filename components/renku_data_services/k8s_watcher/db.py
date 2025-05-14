@@ -27,9 +27,15 @@ class K8sDbCache:
             .where(K8sObjectORM.name == meta.name)
             .where(K8sObjectORM.namespace == meta.namespace)
             .where(K8sObjectORM.cluster == meta.cluster)
-            .where(K8sObjectORM.kind == meta.singular)
-            .where(K8sObjectORM.version == meta.version)
+            .where(K8sObjectORM.kind_insensitive == meta.gvk.kind)
+            .where(K8sObjectORM.version_insensitive == meta.gvk.version)
+            .where(K8sObjectORM.group == meta.gvk.group)
         )
+        if meta.gvk.group is None:
+            stmt = stmt.where(K8sObjectORM.group.is_(None))
+        else:
+            stmt = stmt.where(K8sObjectORM.group_insensitive == meta.gvk.group)
+
         if meta.user_id is not None:
             stmt = stmt.where(K8sObjectORM.user_id == meta.user_id)
 
@@ -50,8 +56,9 @@ class K8sDbCache:
             obj_orm = K8sObjectORM(
                 name=obj.name,
                 namespace=obj.namespace or "default",
-                kind=obj.singular,
-                version=obj.version,
+                group=obj.meta.gvk.group,
+                kind=obj.meta.gvk.kind,
+                version=obj.meta.gvk.version,
                 manifest=obj.manifest.to_dict(),
                 cluster=obj.cluster,
                 user_id=obj.user_id,
@@ -89,10 +96,12 @@ class K8sDbCache:
                 stmt = stmt.where(K8sObjectORM.namespace == _filter.namespace)
             if _filter.cluster:
                 stmt = stmt.where(K8sObjectORM.cluster == _filter.cluster)
-            if _filter.kind:
-                stmt = stmt.where(K8sObjectORM.kind == _filter.kind.lower())
-            if _filter.version:
-                stmt = stmt.where(K8sObjectORM.version == _filter.version)
+            if _filter.gvk:
+                stmt = stmt.where(K8sObjectORM.kind_insensitive == _filter.gvk.kind).where(
+                    K8sObjectORM.version_insensitive == _filter.gvk.version
+                )
+                if _filter.gvk.group is not None:
+                    stmt = stmt.where(K8sObjectORM.group_insensitive == _filter.gvk.group)
             if _filter.user_id:
                 stmt = stmt.where(K8sObjectORM.user_id == _filter.user_id)
             if _filter.label_selector:

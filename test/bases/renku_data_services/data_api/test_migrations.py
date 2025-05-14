@@ -577,3 +577,33 @@ async def _generate_user_namespaces(session: AsyncSession) -> list[UserInfo]:
         output.append(user.dump())
 
     return output
+
+
+@pytest.mark.asyncio
+async def test_migration_to_dcb9648c3c15(app_config_instance: Config, admin_user: UserInfo) -> None:
+    run_migrations_for_app("common", "042eeb50cd8e")
+    async with app_config_instance.db.async_session_maker() as session, session.begin():
+        await session.execute(
+            sa.text(
+                "INSERT into "
+                "common.k8s_objects(name, namespace, manifest, deleted, kind, version, cluster, user_id) "
+                "VALUES ('name_pod', 'ns', '{}', FALSE, 'pod', 'v1', 'cluster', 'user_id')"
+            )
+        )
+        await session.execute(
+            sa.text(
+                "INSERT into "
+                "common.k8s_objects(name, namespace, manifest, deleted, kind, version, cluster, user_id) "
+                "VALUES ('name_js', 'ns', '{}', FALSE, 'jupyterserver', 'amalthea.dev/v1alpha1', 'cluster', 'user_id')"
+            )
+        )
+    run_migrations_for_app("common", "dcb9648c3c15")
+    async with app_config_instance.db.async_session_maker() as session, session.begin():
+        k8s_objs = (await session.execute(sa.text('SELECT "group", version, kind FROM common.k8s_objects'))).all()
+    assert len(k8s_objs) == 2
+    assert k8s_objs[0].tuple()[0] is None
+    assert k8s_objs[0].tuple()[1] == "v1"
+    assert k8s_objs[0].tuple()[2] == "pod"
+    assert k8s_objs[1].tuple()[0] == "amalthea.dev"
+    assert k8s_objs[1].tuple()[1] == "v1alpha1"
+    assert k8s_objs[1].tuple()[2] == "jupyterserver"
