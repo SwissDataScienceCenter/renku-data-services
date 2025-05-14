@@ -183,7 +183,7 @@ def get_gitlab_image_pull_secret(
 ) -> ExtraSecret:
     """Create a Kubernetes secret for private GitLab registry authentication."""
 
-    k8s_namespace = nb_config.k8s_client.namespace
+    k8s_namespace = nb_config.k8s_client.namespace()
 
     registry_secret = {
         "auths": {
