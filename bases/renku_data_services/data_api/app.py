@@ -121,7 +121,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         user_preferences_repo=dm.user_preferences_repo,
         authenticator=dm.authenticator,
     )
-    misc = MiscBP(name="misc", url_prefix=url_prefix, apispec=dm.spec, version=dm.version)
+    misc = MiscBP(name="misc", url_prefix=url_prefix, apispec=dm.spec, version=dm.config.version)
     project = ProjectsBP(
         name="projects",
         url_prefix=url_prefix,

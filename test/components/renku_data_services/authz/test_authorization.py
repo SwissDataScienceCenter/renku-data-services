@@ -8,11 +8,11 @@ from authzed.api.v1 import (
 )
 from ulid import ULID
 
-from renku_data_services.app_config import DependencyManager
 from renku_data_services.authz.authz import _AuthzConverter
 from renku_data_services.authz.models import Member, Role, Scope, Visibility
 from renku_data_services.base_models import APIUser
 from renku_data_services.base_models.core import NamespacePath, ResourceType
+from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.errors import errors
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.namespace.models import UserNamespace
@@ -26,9 +26,9 @@ regular_user2 = APIUser(is_admin=False, id="user2-id", access_token="some-token2
 
 
 @pytest_asyncio.fixture
-async def bootstrap_admins(app_config_instance: DependencyManager, event_loop) -> None:
+async def bootstrap_admins(app_manager_instance: DependencyManager, event_loop) -> None:
     run_migrations_for_app("common")
-    authz = app_config_instance.authz
+    authz = app_manager_instance.authz
     admins = [admin_user]
     rels: list[RelationshipUpdate] = []
     for admin in admins:
@@ -46,11 +46,11 @@ async def bootstrap_admins(app_config_instance: DependencyManager, event_loop) -
 @pytest.mark.asyncio
 @pytest.mark.parametrize("public_project", [True, False])
 async def test_adding_deleting_project(
-    app_config_instance: DependencyManager, bootstrap_admins, public_project: bool
+    app_manager_instance: DependencyManager, bootstrap_admins, public_project: bool
 ) -> None:
     project_owner = regular_user1
     assert project_owner.id
-    authz = app_config_instance.authz
+    authz = app_manager_instance.authz
     project_id = ULID()
     project = Project(
         id=project_id,
@@ -97,12 +97,12 @@ async def test_adding_deleting_project(
 @pytest.mark.parametrize("public_project", [True, False])
 @pytest.mark.parametrize("granted_role", [Role.VIEWER, Role.EDITOR, Role.OWNER])
 async def test_granting_access(
-    app_config_instance: DependencyManager, bootstrap_admins, public_project: bool, granted_role: Role
+    app_manager_instance: DependencyManager, bootstrap_admins, public_project: bool, granted_role: Role
 ) -> None:
     project_owner = regular_user1
     assert project_owner.id
     assert regular_user2.id
-    authz = app_config_instance.authz
+    authz = app_manager_instance.authz
     project_id = ULID()
     project = Project(
         id=project_id,
@@ -143,12 +143,12 @@ async def test_granting_access(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("public_project", [True, False])
 async def test_listing_users_with_access(
-    app_config_instance: DependencyManager, public_project: bool, bootstrap_admins
+    app_manager_instance: DependencyManager, public_project: bool, bootstrap_admins
 ) -> None:
     project_owner = regular_user1
     assert project_owner.id
     assert regular_user2.id
-    authz = app_config_instance.authz
+    authz = app_manager_instance.authz
     project1_id = ULID()
     project1 = Project(
         id=project1_id,
@@ -190,8 +190,8 @@ async def test_listing_users_with_access(
 
 
 @pytest.mark.asyncio
-async def test_listing_projects_with_access(app_config_instance: DependencyManager, bootstrap_admins) -> None:
-    authz = app_config_instance.authz
+async def test_listing_projects_with_access(app_manager_instance: DependencyManager, bootstrap_admins) -> None:
+    authz = app_manager_instance.authz
     public_project_id = ULID()
     private_project_id1 = ULID()
     private_project_id2 = ULID()
@@ -311,8 +311,8 @@ async def test_listing_projects_with_access(app_config_instance: DependencyManag
 
 
 @pytest.mark.asyncio
-async def test_listing_non_public_projects(app_config_instance: DependencyManager, bootstrap_admins) -> None:
-    authz = app_config_instance.authz
+async def test_listing_non_public_projects(app_manager_instance: DependencyManager, bootstrap_admins) -> None:
+    authz = app_manager_instance.authz
     public_project_id = ULID()
     private_project_id1 = ULID()
     private_project_id2 = ULID()

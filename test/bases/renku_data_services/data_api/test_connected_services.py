@@ -8,18 +8,18 @@ import pytest_asyncio
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 
-from renku_data_services.app_config import DependencyManager
 from renku_data_services.connected_services.dummy_async_oauth2_client import DummyAsyncOAuth2Client
 from renku_data_services.data_api.app import register_all_handlers
+from renku_data_services.data_api.dependencies import DependencyManager
 from test.utils import SanicReusableASGITestClient
 
 
 @pytest_asyncio.fixture
-async def oauth2_test_client(app_config: DependencyManager) -> SanicASGITestClient:
-    app_config.async_oauth2_client_class = DummyAsyncOAuth2Client
-    app_config.connected_services_repo.async_oauth2_client_class = DummyAsyncOAuth2Client
-    app = Sanic(app_config.app_name)
-    app = register_all_handlers(app, app_config)
+async def oauth2_test_client(app_manager: DependencyManager) -> SanicASGITestClient:
+    app_manager.async_oauth2_client_class = DummyAsyncOAuth2Client
+    app_manager.connected_services_repo.async_oauth2_client_class = DummyAsyncOAuth2Client
+    app = Sanic(app_manager.app_name)
+    app = register_all_handlers(app, app_manager)
     async with SanicReusableASGITestClient(app) as client:
         yield client
 

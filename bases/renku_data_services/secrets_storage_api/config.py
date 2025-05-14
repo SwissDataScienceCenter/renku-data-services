@@ -41,4 +41,4 @@ class Config:
         if not dummy_stores:
             KeycloakConfig.from_env()
 
-        return cls(db=db, secrets=secrets_config, version=version, keycloak=keycloak)
+        return cls(db=db, secrets=secrets_config, version=version, keycloak=keycloak, dummy_stores=dummy_stores)

@@ -9,8 +9,8 @@ from sanic_testing.testing import SanicASGITestClient, TestingResponse
 from syrupy.filters import props
 
 from renku_data_services import errors
-from renku_data_services.app_config.config import DependencyManager
 from renku_data_services.crc.apispec import ResourcePool
+from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.session.models import EnvVar
 from renku_data_services.users.models import UserInfo
 
@@ -20,7 +20,7 @@ def launch_session(
     sanic_client: SanicASGITestClient,
     user_headers: dict,
     regular_user: UserInfo,
-    app_config: DependencyManager,
+    app_manager: DependencyManager,
     request: FixtureRequest,
     event_loop: AbstractEventLoop,
 ):
@@ -35,7 +35,7 @@ def launch_session(
         session_id: str = res.json.get("name", "unknown")
 
         def cleanup():
-            event_loop.run_until_complete(app_config.nb_config.k8s_v2_client.delete_session(session_id, user.id))
+            event_loop.run_until_complete(app_manager.nb_config.k8s_v2_client.delete_session(session_id, user.id))
 
         # request.addfinalizer(cleanup)
         return res
@@ -412,7 +412,7 @@ def test_env_variable_validation():
 
 @pytest.mark.asyncio
 async def test_post_session_launcher(
-    sanic_client, admin_headers, create_project, create_resource_pool, app_config
+    sanic_client, admin_headers, create_project, create_resource_pool, app_manager
 ) -> None:
     project = await create_project("Some project")
 
@@ -449,7 +449,7 @@ async def test_post_session_launcher(
     assert res.json.get("resource_class_id") == resource_pool["classes"][0]["id"]
     assert res.json.get("disk_storage") == 2
     assert res.json.get("env_variables") == [{"name": "KEY_NUMBER_1", "value": "a value"}]
-    app_config.metrics.session_launcher_created.assert_called_once()
+    app_manager.metrics.session_launcher_created.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -1084,14 +1084,14 @@ async def test_starting_session_anonymous(
     create_project,
     create_session_launcher,
     user_headers,
-    app_config: DependencyManager,
+    app_manager: DependencyManager,
     admin_headers,
     launch_session,
     anonymous_user_headers,
 ) -> None:
     _, res = await sanic_client.post(
         "/api/data/resource_pools",
-        json=ResourcePool.model_validate(app_config.default_resource_pool, from_attributes=True).model_dump(
+        json=ResourcePool.model_validate(app_manager.default_resource_pool, from_attributes=True).model_dump(
             mode="json", exclude_none=True
         ),
         headers=admin_headers,

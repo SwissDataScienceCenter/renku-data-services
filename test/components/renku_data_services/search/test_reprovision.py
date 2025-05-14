@@ -46,13 +46,13 @@ class Setup:
     search_reprovision: SearchReprovision
 
 
-def make_setup(app_config_instance, solr_config) -> Setup:
+def make_setup(app_manager_instance, solr_config) -> Setup:
     run_migrations_for_app("common")
     mq = NoneMessageQueue()
-    sess = app_config_instance.db.async_session_maker
+    sess = app_manager_instance.config.db.async_session_maker
     events = EventRepository(sess, mq)
     search_updates = SearchUpdatesRepo(sess)
-    authz = Authz(app_config_instance.authz_config)
+    authz = Authz(app_manager_instance.authz_config)
     gr = GroupRepository(sess, events, authz, mq, search_updates)
     ur = UserRepo(sess, mq, events, gr, search_updates, None, authz)
     pr = ProjectRepository(sess, mq, events, gr, search_updates, authz)
@@ -138,8 +138,8 @@ async def get_all_connectors(setup: Setup, per_page: int) -> list[DataConnector]
 
 
 @pytest.mark.asyncio
-async def test_get_data_connectors(app_config_instance) -> None:
-    setup = make_setup(app_config_instance, solr_config={})
+async def test_get_data_connectors(app_manager_instance) -> None:
+    setup = make_setup(app_manager_instance, solr_config={})
     inserted_dcs = await make_data_connectors(setup, 10)
 
     dcs = await get_all_connectors(setup, per_page=20)
@@ -156,8 +156,8 @@ async def test_get_data_connectors(app_config_instance) -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_reprovision(app_config_instance, solr_search) -> None:
-    setup = make_setup(app_config_instance, solr_search)
+async def test_run_reprovision(app_manager_instance, solr_search) -> None:
+    setup = make_setup(app_manager_instance, solr_search)
     dcs = await make_data_connectors(setup, 5)
     groups = await make_groups(setup, 4)
     projects = await make_projects(setup, 3)

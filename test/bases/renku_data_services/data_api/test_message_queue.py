@@ -28,7 +28,7 @@ def _reprovisioning(sanic_client, user_headers):
 
 @pytest.mark.asyncio
 async def test_message_queue_reprovisioning(
-    sanic_client, app_config, create_project, create_group, admin_headers, project_members, _reprovisioning
+    sanic_client, app_manager, create_project, create_group, admin_headers, project_members, _reprovisioning
 ) -> None:
     await create_project("Project 1")
     await create_project("Project 2", visibility="public")
@@ -39,10 +39,10 @@ async def test_message_queue_reprovisioning(
     await create_group("Group 2", admin=True)
     await create_group("Group 3", members=project_members)
 
-    events = await app_config.event_repo.get_pending_events()
+    events = await app_manager.event_repo.get_pending_events()
 
     # NOTE: Clear all events before reprovisioning
-    await app_config.event_repo.delete_all_events()
+    await app_manager.event_repo.delete_all_events()
 
     _, response = await sanic_client.post("/api/data/message_queue/reprovision", headers=admin_headers)
 
@@ -52,7 +52,7 @@ async def test_message_queue_reprovisioning(
 
     await _reprovisioning()
 
-    reprovisioning_events = await app_config.event_repo.get_pending_events()
+    reprovisioning_events = await app_manager.event_repo.get_pending_events()
 
     events_before = {dataclass_to_str(deserialize_event(e)) for e in events}
     events_after = {dataclass_to_str(deserialize_event(e)) for e in reprovisioning_events[1:-1]}

@@ -7,7 +7,7 @@ import secrets
 import socket
 import stat
 import subprocess
-from collections.abc import AsyncGenerator, Iterator
+from collections.abc import AsyncGenerator
 from distutils.dir_util import copy_tree
 from multiprocessing import Lock
 from pathlib import Path
@@ -24,15 +24,15 @@ from pytest_postgresql.janitor import DatabaseJanitor
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
-from renku_data_services.app_config import DependencyManager
 from renku_data_services.authz.config import AuthzConfig
+from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.db_config.config import DBConfig
-from renku_data_services.secrets.config import DependencyManager as SecretsConfig
+from renku_data_services.secrets_storage_api.dependencies import DependencyManager as SecretsDependencyManager
 from renku_data_services.solr import entity_schema
 from renku_data_services.solr.solr_client import SolrClientConfig
 from renku_data_services.solr.solr_migrate import SchemaMigrator
 from renku_data_services.users import models as user_preferences_models
-from test.utils import TestAppConfig
+from test.utils import TestDependencyManager
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +123,7 @@ async def db_config(monkeypatch, worker_id, authz_setup) -> AsyncGenerator[DBCon
 
 
 @pytest_asyncio.fixture
-async def db_instance(monkeysession, worker_id, app_config, event_loop) -> AsyncGenerator[DBConfig, None]:
+async def db_instance(monkeysession, worker_id, app_manager, event_loop) -> AsyncGenerator[DBConfig, None]:
     db_name = "R_" + str(ULID()).lower() + "_" + worker_id
     user = os.getenv("DB_USER", "renku")
     host = os.getenv("DB_HOST", "127.0.0.1")
@@ -142,17 +142,17 @@ async def db_instance(monkeysession, worker_id, app_config, event_loop) -> Async
         template_dbname="renku_template",
     ):
         db = DBConfig.from_env()
-        app_config.db.push(db)
+        app_manager.config.db.push(db)
         yield db
-        await app_config.db.pop()
+        await app_manager.config.db.pop()
 
 
 @pytest_asyncio.fixture
-async def authz_instance(app_config, monkeypatch) -> Iterator[AuthzConfig]:
+async def authz_instance(app_manager: DependencyManager, monkeypatch) -> AsyncGenerator[AuthzConfig]:
     monkeypatch.setenv("AUTHZ_DB_KEY", f"renku-{uuid4().hex}")
-    app_config.authz_config.push(AuthzConfig.from_env())
-    yield app_config.authz_config
-    app_config.authz_config.pop()
+    app_manager.authz_config.push(AuthzConfig.from_env())
+    yield app_manager.authz_config
+    app_manager.authz_config.pop()
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -192,7 +192,7 @@ async def dummy_users():
 
 
 @pytest_asyncio.fixture(scope="session")
-async def app_config(
+async def app_manager(
     authz_setup, monkeysession, worker_id, secrets_key_pair, dummy_users
 ) -> AsyncGenerator[DependencyManager, None]:
     monkeysession.setenv("DUMMY_STORES", "true")
@@ -200,23 +200,23 @@ async def app_config(
     monkeysession.setenv("NB_SERVER_OPTIONS__DEFAULTS_PATH", "server_defaults.json")
     monkeysession.setenv("NB_SERVER_OPTIONS__UI_CHOICES_PATH", "server_options.json")
 
-    config = TestAppConfig.from_env(dummy_users)
+    dm = TestDependencyManager.from_env(dummy_users)
 
     app_name = "app_" + str(ULID()).lower() + "_" + worker_id
-    config.app_name = app_name
-    yield config
+    dm.app_name = app_name
+    yield dm
 
 
 @pytest_asyncio.fixture
-async def app_config_instance(app_config, db_instance, authz_instance) -> AsyncGenerator[DependencyManager, None]:
-    app_config.metrics.reset_mock()
-    yield app_config
+async def app_manager_instance(app_manager, db_instance, authz_instance) -> AsyncGenerator[DependencyManager, None]:
+    app_manager.metrics.reset_mock()
+    yield app_manager
 
 
 @pytest_asyncio.fixture
-async def secrets_storage_app_config(
+async def secrets_storage_app_manager(
     db_config: DBConfig, secrets_key_pair, monkeypatch, tmp_path
-) -> AsyncGenerator[DependencyManager, None]:
+) -> AsyncGenerator[SecretsDependencyManager, None]:
     encryption_key_path = tmp_path / "encryption-key"
     encryption_key_path.write_bytes(secrets.token_bytes(32))
 
@@ -225,8 +225,8 @@ async def secrets_storage_app_config(
     monkeypatch.setenv("DB_NAME", db_config.db_name)
     monkeypatch.setenv("MAX_PINNED_PROJECTS", "5")
 
-    config = SecretsConfig.from_env()
-    yield config
+    dm = SecretsDependencyManager.from_env()
+    yield dm
 
 
 @pytest_asyncio.fixture
@@ -365,7 +365,7 @@ def solr_config(solr_core, solr_bin_path):
 
 
 @pytest_asyncio.fixture()
-async def solr_search(solr_config, app_config):
+async def solr_search(solr_config, app_manager):
     migrator = SchemaMigrator(solr_config)
     result = await migrator.migrate(entity_schema.all_migrations)
     assert result.migrations_run == len(entity_schema.all_migrations)
