@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Optional
 
-from sqlalchemy import JSON, Boolean, DateTime, Identity, Integer, LargeBinary, MetaData, String
+from sqlalchemy import JSON, Boolean, DateTime, Identity, Integer, LargeBinary, MetaData, String, true
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 
@@ -79,7 +79,11 @@ class UserPreferencesORM(BaseORM):
     pinned_projects: Mapped[dict[str, Any]] = mapped_column("pinned_projects", JSONVariant)
     """Pinned projects."""
 
-    show_project_migration_banner: Mapped[bool] = mapped_column("show_project_migration_banner", Boolean)
+    show_project_migration_banner: Mapped[bool] = mapped_column(
+        "show_project_migration_banner",
+        Boolean,
+        server_default=true(),
+    )
     """Show project migration banner."""
 
     @classmethod
