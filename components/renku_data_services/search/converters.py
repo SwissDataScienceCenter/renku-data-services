@@ -51,7 +51,7 @@ def from_visibility(v: Visibility) -> VisibilityApi:
 def from_user(user: UserDocument) -> UserApi:
     """Creates an apispec user from a solr user document."""
     return UserApi(
-        id=user.id, namespace=user.namespace.value, firstName=user.firstName, lastName=user.lastName, score=user.score
+        id=user.id, namespace=user.namespace, firstName=user.firstName, lastName=user.lastName, score=user.score
     )
 
 
@@ -60,7 +60,7 @@ def from_group(group: GroupDocument) -> GroupApi:
     return GroupApi(
         id=str(group.id),
         name=group.name,
-        namespace=group.namespace.value,
+        namespace=group.namespace,
         description=group.description,
         score=group.score,
     )

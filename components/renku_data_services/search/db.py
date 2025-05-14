@@ -26,7 +26,7 @@ from renku_data_services.users.models import UserInfo
 
 def _user_to_entity_doc(user: UserInfo) -> UserDoc:
     return UserDoc(
-        namespace=user.namespace.path.first,
+        namespace=user.namespace.path.serialize(),
         id=user.id,
         firstName=user.first_name,
         lastName=user.last_name,
@@ -36,7 +36,7 @@ def _user_to_entity_doc(user: UserInfo) -> UserDoc:
 
 def _group_to_entity_doc(group: Group) -> GroupDoc:
     return GroupDoc(
-        namespace=Slug.from_name(group.slug),
+        namespace=group.slug,
         id=group.id,
         name=group.name,
         description=group.description,
@@ -46,7 +46,7 @@ def _group_to_entity_doc(group: Group) -> GroupDoc:
 
 def _project_to_entity_doc(p: Project) -> ProjectDoc:
     return ProjectDoc(
-        namespace=p.namespace.path.first,
+        namespace=p.namespace.path.serialize(),
         id=p.id,
         name=p.name,
         slug=Slug.from_name(p.slug),
@@ -61,7 +61,7 @@ def _project_to_entity_doc(p: Project) -> ProjectDoc:
 
 
 def _dataconnector_to_entity_doc(dc: DataConnector | GlobalDataConnector) -> DataConnectorDoc:
-    ns = dc.namespace.path.first if isinstance(dc, DataConnector) else None
+    ns = dc.namespace.path.serialize() if isinstance(dc, DataConnector) else None
     return DataConnectorDoc(
         id=dc.id,
         name=dc.name,
