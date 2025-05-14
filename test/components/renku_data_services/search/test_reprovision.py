@@ -52,7 +52,7 @@ def make_setup(app_manager_instance, solr_config) -> Setup:
     sess = app_manager_instance.config.db.async_session_maker
     events = EventRepository(sess, mq)
     search_updates = SearchUpdatesRepo(sess)
-    authz = Authz(app_manager_instance.authz_config)
+    authz = Authz(app_manager_instance.config.authz_config)
     gr = GroupRepository(sess, events, authz, mq, search_updates)
     ur = UserRepo(sess, mq, events, gr, search_updates, None, authz)
     pr = ProjectRepository(sess, mq, events, gr, search_updates, authz)

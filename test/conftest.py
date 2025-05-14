@@ -150,9 +150,9 @@ async def db_instance(monkeysession, worker_id, app_manager, event_loop) -> Asyn
 @pytest_asyncio.fixture
 async def authz_instance(app_manager: DependencyManager, monkeypatch) -> AsyncGenerator[AuthzConfig]:
     monkeypatch.setenv("AUTHZ_DB_KEY", f"renku-{uuid4().hex}")
-    app_manager.authz_config.push(AuthzConfig.from_env())
-    yield app_manager.authz_config
-    app_manager.authz_config.pop()
+    app_manager.config.authz_config.push(AuthzConfig.from_env())
+    yield app_manager.config.authz_config
+    app_manager.config.authz_config.pop()
 
 
 @pytest_asyncio.fixture(scope="session")

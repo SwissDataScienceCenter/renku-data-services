@@ -24,7 +24,6 @@ from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.authn.gitlab import GitlabAuthenticator
 from renku_data_services.authn.keycloak import KcUserStore, KeycloakAuthenticator
 from renku_data_services.authz.authz import Authz
-from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.crc import models as crc_models
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository, UserRepository
@@ -121,7 +120,6 @@ class DependencyManager:
     gitlab_url: str | None
     nb_config: NotebooksConfig
 
-    authz_config: AuthzConfig = field(default_factory=lambda: AuthzConfig.from_env())
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
     default_resource_pool_file: str | None = None
@@ -204,7 +202,7 @@ class DependencyManager:
                 defaults = ServerOptionsDefaults.model_validate(safe_load(f))
             self.default_resource_pool = generate_default_resource_pool(options, defaults)
 
-        self.authz = Authz(self.authz_config)
+        self.authz = Authz(self.config.authz_config)
 
     @property
     def user_repo(self) -> UserRepository:

@@ -158,7 +158,7 @@ class TestDependencyManager(DependencyManager):
         gitlab_client: base_models.GitlabAPIProtocol
         k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
         config.db = DBConfigStack.from_env()
-        authz_config = AuthzConfigStack.from_env()
+        config.authz_config = AuthzConfigStack.from_env()
         kc_api: IKeycloakAPI
         gitlab_url: str | None
 
@@ -184,14 +184,13 @@ class TestDependencyManager(DependencyManager):
             kc_api=kc_api,
             message_queue=message_queue,
             gitlab_url=gitlab_url,
-            authz_config=authz_config,
             nb_config=nb_config,
         )
 
     def __post_init__(self) -> None:
         self.spec = self.load_apispec()
 
-        self.authz = NonCachingAuthz(self.authz_config)
+        self.authz = NonCachingAuthz(self.config.authz_config)
         self._metrics_mock = MagicMock(spec=MetricsService)
 
     @property

@@ -6,6 +6,7 @@ from typing import Self
 
 from renku_data_services import errors
 from renku_data_services.app_config.config import KeycloakConfig, PosthogConfig, SentryConfig, TrustedProxiesConfig
+from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.notebooks.config.dynamic import ServerOptionsConfig
@@ -27,6 +28,7 @@ class Config:
     sentry: SentryConfig
     posthog: PosthogConfig
     solr: SolrClientConfig
+    authz_config: AuthzConfig
     trusted_proxies: TrustedProxiesConfig
     redis: RedisConfig
     keycloak: KeycloakConfig | None
@@ -60,6 +62,7 @@ class Config:
             gitlab_url = os.environ.get("GITLAB_URL")
             if gitlab_url is None:
                 raise errors.ConfigurationError(message="Please provide the gitlab instance URL")
+        authz_config = AuthzConfig.from_env()
 
         return cls(
             version=version,
@@ -70,6 +73,7 @@ class Config:
             secrets=secrets,
             sentry=sentry,
             posthog=posthog,
+            authz_config=authz_config,
             solr=solr_config,
             trusted_proxies=trusted_proxies,
             redis=redis,
