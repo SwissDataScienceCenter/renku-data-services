@@ -548,10 +548,12 @@ async def patch_session(
     if extra_containers:
         patch.spec.extraContainers = extra_containers
 
+    # Patching the image pull secret
     if isinstance(user, AuthenticatedAPIUser) and internal_gitlab_user.access_token is not None:
         image = session.spec.session.image
         server_name = session.metadata.name
         needs_pull_secret = await requires_image_pull_secret(nb_config, image, internal_gitlab_user)
+        logger.info(f"Needs pull secret for image {image}: {needs_pull_secret}")
 
         if needs_pull_secret:
             image_pull_secret_name = f"{server_name}-image-secret"
@@ -560,14 +562,19 @@ async def patch_session(
             image_secret = get_gitlab_image_pull_secret(
                 nb_config, user, image_pull_secret_name, internal_gitlab_user.access_token
             )
-            if image_secret:
-                updated_secrets = [
-                    secret
-                    for secret in (session.spec.imagePullSecrets or [])
-                    if not secret.name.endswith("-image-secret")
-                ]
-                updated_secrets.append(ImagePullSecret(name=image_pull_secret_name, adopt=True))
-                patch.spec.imagePullSecrets = updated_secrets
+
+            if not image_secret:
+                logger.error(f"Failed to create image pull secret for {image_pull_secret_name}")
+                raise errors.ProgrammingError(
+                    message=f"Failed to create image pull secret for {image_pull_secret_name}"
+                )
+
+            updated_secrets = [
+                secret for secret in (session.spec.imagePullSecrets or []) if not secret.name.endswith("-image-secret")
+            ]
+            updated_secrets.append(ImagePullSecret(name=image_pull_secret_name, adopt=True))
+            patch.spec.imagePullSecrets = updated_secrets
+            logger.info(f"Updated imagePullSecrets: {updated_secrets}")
 
     patch_serialized = patch.to_rfc7386()
     if len(patch_serialized) == 0:
