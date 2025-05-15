@@ -2,12 +2,13 @@
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any
 
 from ulid import ULID
 
 from renku_data_services.authz.models import Visibility
 from renku_data_services.base_models.core import (
+    GLOBAL_NAMESPACE_PATH,
     DataConnectorInProjectPath,
     DataConnectorPath,
     DataConnectorSlug,
@@ -65,6 +66,10 @@ class DataConnector(BaseDataConnector):
         """The full path (i.e. sequence of slugs) for the data connector including group or user and/or project."""
         return self.namespace.path / DataConnectorSlug(self.slug)
 
+    def is_global(self) -> bool:
+        """Whether this data connector is global."""
+        return self.namespace.path == GLOBAL_NAMESPACE_PATH
+
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedDataConnector(BaseDataConnector):
@@ -77,26 +82,30 @@ class UnsavedDataConnector(BaseDataConnector):
         """The full path (i.e. sequence of slugs) for the data connector including group or user and/or project."""
         return self.namespace / DataConnectorSlug(self.slug)
 
-
-@dataclass(frozen=True, eq=True, kw_only=True)
-class GlobalDataConnector(BaseDataConnector):
-    """Global data connector model."""
-
-    id: ULID
-    namespace: Final[None] = field(default=None, init=False)
-    updated_at: datetime
-
-    @property
-    def etag(self) -> str:
-        """Entity tag value for this data connector object."""
-        return compute_etag_from_fields(self.updated_at)
+    def is_global(self) -> bool:
+        """Whether this data connector is global."""
+        return self.namespace == GLOBAL_NAMESPACE_PATH
 
 
-@dataclass(frozen=True, eq=True, kw_only=True)
-class UnsavedGlobalDataConnector(BaseDataConnector):
-    """Global data connector model."""
+# @dataclass(frozen=True, eq=True, kw_only=True)
+# class GlobalDataConnector(BaseDataConnector):
+#     """Global data connector model."""
 
-    namespace: None = None
+#     id: ULID
+#     namespace: Final[None] = field(default=None, init=False)
+#     updated_at: datetime
+
+#     @property
+#     def etag(self) -> str:
+#         """Entity tag value for this data connector object."""
+#         return compute_etag_from_fields(self.updated_at)
+
+
+# @dataclass(frozen=True, eq=True, kw_only=True)
+# class UnsavedGlobalDataConnector(BaseDataConnector):
+#     """Global data connector model."""
+
+#     namespace: None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -141,8 +150,8 @@ class CloudStorageCoreWithSensitiveFields(CloudStorageCore):
 class DataConnectorUpdate:
     """Information about the update of a data connector."""
 
-    old: DataConnector | GlobalDataConnector
-    new: DataConnector | GlobalDataConnector
+    old: DataConnector  # | GlobalDataConnector
+    new: DataConnector  # | GlobalDataConnector
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -194,5 +203,5 @@ class DataConnectorPermissions:
 class DataConnectorWithSecrets:
     """A data connector with its secrets."""
 
-    data_connector: DataConnector | GlobalDataConnector
+    data_connector: DataConnector  # | GlobalDataConnector
     secrets: list[DataConnectorSecret] = field(default_factory=list)
