@@ -181,7 +181,7 @@ class ResourcePoolORM(BaseORM):
     cluster_id: Mapped[Optional[ULID]] = mapped_column(
         ForeignKey(ClusterORM.id, ondelete="SET NULL"), default=None, index=True
     )
-    cluster: Mapped[Optional[ClusterORM]] = relationship(viewonly=True, default=None, lazy="joined", init=False)
+    cluster: Mapped[Optional[ClusterORM]] = relationship(viewonly=True, default=None, lazy="selectin", init=False)
 
     @classmethod
     def load(cls, resource_pool: models.ResourcePool) -> "ResourcePoolORM":
