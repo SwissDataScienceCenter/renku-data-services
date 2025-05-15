@@ -1742,8 +1742,6 @@ async def test_creating_dc_in_project_no_leak_to_othe_project(sanic_client, user
     }
     _, res = await sanic_client.post("/api/data/projects", headers=member_1_headers, json=payload)
     assert res.status_code == 201, res.text
-    bad_project = res.json
-    bad_project_path = f"{bad_project["namespace"]}/{bad_project["slug"]}"
 
     payload = {
         "name": "Project 1",
@@ -1767,9 +1765,12 @@ async def test_creating_dc_in_project_no_leak_to_othe_project(sanic_client, user
     }
     _, res = await sanic_client.post("/api/data/data_connectors", headers=user_headers, json=payload)
     assert res.status_code == 201, res.text
-    # Above line fails with:
-    #   AssertionError: {"error":{"code":1500,"message":"Mismatched project slug 'member-1.doe/project-1' and data connector namespace 'user.doe/project-1'"}}
-    assert res.json is None
+    assert res.json is not None
+    dc = res.json
+    assert dc.get("id") is not None
+    assert dc.get("name") == "My data connector"
+    assert dc.get("namespace") == project_path
+    assert dc.get("slug") == "my-dc"
 
 
 @pytest.mark.asyncio

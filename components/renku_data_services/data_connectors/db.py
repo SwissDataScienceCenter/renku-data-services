@@ -262,7 +262,7 @@ class DataConnectorRepository:
             )
             project_slug = await session.scalar(
                 select(ns_schemas.EntitySlugORM)
-                # .where(ns_schemas.EntitySlugORM.namespace_id == ns.id)
+                .where(ns_schemas.EntitySlugORM.namespace_id == ns.id)
                 .where(ns_schemas.EntitySlugORM.slug == data_connector.namespace.second.value.lower())
                 .where(ns_schemas.EntitySlugORM.project_id.is_not(None))
                 .where(ns_schemas.EntitySlugORM.data_connector_id.is_(None))
