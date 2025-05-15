@@ -1733,7 +1733,7 @@ async def test_creating_dc_in_project(sanic_client, user_headers) -> None:
 
 
 @pytest.mark.asyncio
-async def test_creating_dc_in_project_no_leak_to_othe_project(sanic_client, user_headers, member_1_headers) -> None:
+async def test_creating_dc_in_project_no_leak_to_other_project(sanic_client, user_headers, member_1_headers) -> None:
     # Create a project owned by member_1
     payload = {
         "name": "Project 1",
