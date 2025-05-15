@@ -4,6 +4,7 @@ import asyncio
 from dataclasses import asdict, dataclass
 
 from sanic import HTTPResponse, Request, empty, json
+from sanic.log import logger
 from sanic_ext import validate
 from ulid import ULID
 
@@ -51,6 +52,7 @@ class ResourcePoolsBP(CustomBlueprint):
         async def _post(_: Request, user: base_models.APIUser, body: apispec.ResourcePool) -> HTTPResponse:
             rp = models.ResourcePool.from_dict(body.model_dump(exclude_none=True))
             res = await self.rp_repo.insert_resource_pool(api_user=user, resource_pool=rp)
+            logger.warning(f"#### Adding resource pool from body {body} rp {rp} res {res}")
             return validated_json(apispec.ResourcePoolWithId, res, status=201)
 
         return "/resource_pools", ["POST"], _post

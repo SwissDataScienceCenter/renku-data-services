@@ -15,6 +15,7 @@ import kr8s
 from kubernetes import client, config
 from kubernetes.config.config_exception import ConfigException
 from kubernetes.config.incluster_config import SERVICE_CERT_FILENAME, SERVICE_TOKEN_FILENAME, InClusterConfigLoader
+from sanic.log import logger
 
 from renku_data_services.errors import errors
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface, K8sSchedudlingClientInterface
@@ -375,9 +376,11 @@ class K8sClusterClientsPool:
 
     def __init__(self, clusters: list[Cluster], cache: K8sDbCache, kinds_to_cache: list[GVK]) -> None:
         self.__clients = {c.id: K8SCachedClusterClient(c, cache, kinds_to_cache) for c in clusters}
+        logger.warning(f"#### Got {len(clusters)} clusters: {clusters}")
 
     def __get_client_or_die(self, cluster_id: ClusterId) -> K8sClusterClient:
         cluster_client = self.__clients.get(cluster_id)
+        logger.warning(f"#### cluster id {cluster_id} => {cluster_client}")
         if cluster_client is None:
             raise errors.MissingResourceError(
                 message=f"Could not find cluster with id {cluster_id} in the list of clusters."
