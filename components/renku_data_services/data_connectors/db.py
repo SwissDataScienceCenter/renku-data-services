@@ -262,12 +262,17 @@ class DataConnectorRepository:
             )
             project_slug = await session.scalar(
                 select(ns_schemas.EntitySlugORM)
+                # .where(ns_schemas.EntitySlugORM.namespace_id == ns.id)
                 .where(ns_schemas.EntitySlugORM.slug == data_connector.namespace.second.value.lower())
                 .where(ns_schemas.EntitySlugORM.project_id.is_not(None))
                 .where(ns_schemas.EntitySlugORM.data_connector_id.is_(None))
             )
             if not project_slug or not project_slug.project_id:
                 raise errors.MissingResourceError(message=error_msg)
+            if project_slug.dump_project_namespace().path != data_connector.namespace:
+                raise errors.ProgrammingError(
+                    message=f"Mismatched project slug '{project_slug.dump_project_namespace().path}' and data connector namespace '{data_connector.namespace}'"  # noqa E501
+                )
             project = await self.project_repo.get_project(user, project_slug.project_id)
             if not project:
                 raise errors.MissingResourceError(message=error_msg)

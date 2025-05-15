@@ -1733,6 +1733,46 @@ async def test_creating_dc_in_project(sanic_client, user_headers) -> None:
 
 
 @pytest.mark.asyncio
+async def test_creating_dc_in_project_no_leak_to_othe_project(sanic_client, user_headers, member_1_headers) -> None:
+    # Create a project owned by member_1
+    payload = {
+        "name": "Project 1",
+        "namespace": "member-1.doe",
+        "slug": "project-1",
+    }
+    _, res = await sanic_client.post("/api/data/projects", headers=member_1_headers, json=payload)
+    assert res.status_code == 201, res.text
+    bad_project = res.json
+    bad_project_path = f"{bad_project["namespace"]}/{bad_project["slug"]}"
+
+    payload = {
+        "name": "Project 1",
+        "namespace": "user.doe",
+        "slug": "project-1",
+    }
+    _, res = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
+    assert res.status_code == 201, res.text
+    project = res.json
+    project_path = f"{project["namespace"]}/{project["slug"]}"
+
+    payload = {
+        "name": "My data connector",
+        "namespace": project_path,
+        "slug": "my-dc",
+        "storage": {
+            "configuration": {"type": "s3", "endpoint": "http://s3.aws.com"},
+            "source_path": "giab",
+            "target_path": "giab",
+        },
+    }
+    _, res = await sanic_client.post("/api/data/data_connectors", headers=user_headers, json=payload)
+    assert res.status_code == 201, res.text
+    # Above line fails with:
+    #   AssertionError: {"error":{"code":1500,"message":"Mismatched project slug 'member-1.doe/project-1' and data connector namespace 'user.doe/project-1'"}}
+    assert res.json is None
+
+
+@pytest.mark.asyncio
 async def test_users_cannot_see_private_data_connectors_in_project(
     sanic_client,
     member_1_headers,
