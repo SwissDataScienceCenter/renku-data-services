@@ -14,14 +14,14 @@ from renku_data_services.utils.core import with_db_transaction
 
 
 @pytest.mark.asyncio
-async def test_queue_send(app_config_instance) -> None:
+async def test_queue_send(app_manager_instance) -> None:
     """Test that sending messages works."""
     run_migrations_for_app("common")
 
     class FakeRepo:
-        session_maker = app_config_instance.db.async_session_maker
-        event_repo = app_config_instance.event_repo
-        message_queue = app_config_instance.message_queue
+        session_maker = app_manager_instance.config.db.async_session_maker
+        event_repo = app_manager_instance.event_repo
+        message_queue = app_manager_instance.message_queue
 
         @with_db_transaction
         @dispatch_message(ProjectRemoved)
@@ -43,21 +43,21 @@ async def test_queue_send(app_config_instance) -> None:
     fakerepo = FakeRepo()
     await fakerepo.fake_db_method(some_arg="test")
 
-    events = await app_config_instance.redis.redis_connection.xrange(QUEUE_NAME)
+    events = await app_manager_instance.config.redis.redis_connection.xrange(QUEUE_NAME)
     assert len(events) == 0
-    pending_events = await app_config_instance.event_repo.get_pending_events()
+    pending_events = await app_manager_instance.event_repo.get_pending_events()
     assert len(pending_events) == 1
 
-    await app_config_instance.event_repo.send_pending_events()
+    await app_manager_instance.event_repo.send_pending_events()
 
-    events = await app_config_instance.redis.redis_connection.xrange(QUEUE_NAME)
+    events = await app_manager_instance.config.redis.redis_connection.xrange(QUEUE_NAME)
     assert len(events) == 1
-    pending_events = await app_config_instance.event_repo.get_pending_events()
+    pending_events = await app_manager_instance.event_repo.get_pending_events()
     assert len(pending_events) == 0
 
-    await app_config_instance.event_repo.send_pending_events()
+    await app_manager_instance.event_repo.send_pending_events()
 
-    events = await app_config_instance.redis.redis_connection.xrange(QUEUE_NAME)
+    events = await app_manager_instance.config.redis.redis_connection.xrange(QUEUE_NAME)
     assert len(events) == 1
-    pending_events = await app_config_instance.event_repo.get_pending_events()
+    pending_events = await app_manager_instance.event_repo.get_pending_events()
     assert len(pending_events) == 0

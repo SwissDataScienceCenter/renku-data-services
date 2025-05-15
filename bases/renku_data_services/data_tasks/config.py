@@ -20,12 +20,14 @@ class PosthogConfig:
     environment: str
 
     @classmethod
-    def from_env(cls, prefix: str = "") -> PosthogConfig:
+    def from_env(
+        cls,
+    ) -> PosthogConfig:
         """Create posthog config from environment variables."""
-        enabled = os.environ.get(f"{prefix}POSTHOG_ENABLED", "false").lower() == "true"
-        api_key = os.environ.get(f"{prefix}POSTHOG_API_KEY", "")
-        host = os.environ.get(f"{prefix}POSTHOG_HOST", "")
-        environment = os.environ.get(f"{prefix}POSTHOG_ENVIRONMENT", "development")
+        enabled = os.environ.get("POSTHOG_ENABLED", "false").lower() == "true"
+        api_key = os.environ.get("POSTHOG_API_KEY", "")
+        host = os.environ.get("POSTHOG_HOST", "")
+        environment = os.environ.get("POSTHOG_ENVIRONMENT", "development")
 
         return cls(enabled, api_key, host, environment)
 
@@ -47,21 +49,18 @@ class Config:
     def from_env(cls, prefix: str = "") -> Config:
         """Creates a config object from environment variables."""
 
-        def env(key: str, default: str) -> str:
-            return os.environ.get(f"{prefix}{key}", default)
+        dummy_stores = os.environ.get("DUMMY_STORES", "false").lower() == "true"
 
-        dummy_stores = env("DUMMY_STORES", "false").lower() == "true"
+        max_retry = int(os.environ.get("MAX_RETRY_WAIT_SECONDS", "120"))
+        main_tick = int(os.environ.get("MAIN_LOG_INTERVAL_SECONDS", "300"))
+        solr_config = SolrClientConfig.from_env()
+        posthog_config = PosthogConfig.from_env()
+        tcp_host = os.environ.get("TCP_HOST", "127.0.0.1")
+        tcp_port = int(os.environ.get("TCP_PORT", "8001"))
 
-        max_retry = int(env("MAX_RETRY_WAIT_SECONDS", "120"))
-        main_tick = int(env("MAIN_LOG_INTERVAL_SECONDS", "300"))
-        solr_config = SolrClientConfig.from_env(prefix)
-        posthog_config = PosthogConfig.from_env(prefix)
-        tcp_host = env("TCP_HOST", "127.0.0.1")
-        tcp_port = int(env("TCP_PORT", "8001"))
-
-        redis = RedisConfig.fake() if dummy_stores else RedisConfig.from_env(prefix)
+        redis = RedisConfig.fake() if dummy_stores else RedisConfig.from_env()
         return Config(
-            db_config=DBConfig.from_env(prefix),
+            db_config=DBConfig.from_env(),
             max_retry_wait_seconds=max_retry,
             main_log_interval_seconds=main_tick,
             solr_config=solr_config,

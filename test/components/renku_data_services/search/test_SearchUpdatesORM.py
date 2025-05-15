@@ -10,9 +10,9 @@ from renku_data_services.search.orm import SearchUpdatesORM
 
 
 @pytest.mark.asyncio
-async def test_insert_and_retrieve(app_config_instance):
+async def test_insert_and_retrieve(app_manager_instance):
     run_migrations_for_app("common")
-    async with app_config_instance.db.async_session_maker() as session:
+    async with app_manager_instance.config.db.async_session_maker() as session:
         async with session.begin():
             row = SearchUpdatesORM(entity_id="user47", entity_type="User", created_at=datetime.now(), payload={})
             session.add_all([row])

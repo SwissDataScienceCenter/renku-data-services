@@ -23,9 +23,9 @@ user_namespace = UserNamespace(
 
 
 @pytest.mark.asyncio
-async def test_data_connector_upsert(app_config_instance):
+async def test_data_connector_upsert(app_manager_instance):
     run_migrations_for_app("common")
-    repo = SearchUpdatesRepo(app_config_instance.db.async_session_maker)
+    repo = SearchUpdatesRepo(app_manager_instance.config.db.async_session_maker)
     dc = DataConnector(
         id=ULID(),
         name="mygreat dc",
@@ -44,9 +44,9 @@ async def test_data_connector_upsert(app_config_instance):
 
 
 @pytest.mark.asyncio
-async def test_delete_doc(app_config_instance):
+async def test_delete_doc(app_manager_instance):
     run_migrations_for_app("common")
-    repo = SearchUpdatesRepo(app_config_instance.db.async_session_maker)
+    repo = SearchUpdatesRepo(app_manager_instance.config.db.async_session_maker)
     doc = DeleteDoc.user("user1234")
     orm_id = await repo.upsert(doc)
     db_doc = await repo.find_by_id(orm_id)
@@ -56,9 +56,9 @@ async def test_delete_doc(app_config_instance):
 
 
 @pytest.mark.asyncio
-async def test_user_upsert(app_config_instance):
+async def test_user_upsert(app_manager_instance):
     run_migrations_for_app("common")
-    repo = SearchUpdatesRepo(app_config_instance.db.async_session_maker)
+    repo = SearchUpdatesRepo(app_manager_instance.config.db.async_session_maker)
     user = UserInfo(id="user123", first_name="Tadej", last_name="Pogacar", namespace=user_namespace)
     orm_id = await repo.upsert(user, started_at=None)
 
@@ -76,9 +76,9 @@ async def test_user_upsert(app_config_instance):
 
 
 @pytest.mark.asyncio
-async def test_user_insert_only(app_config_instance):
+async def test_user_insert_only(app_manager_instance):
     run_migrations_for_app("common")
-    repo = SearchUpdatesRepo(app_config_instance.db.async_session_maker)
+    repo = SearchUpdatesRepo(app_manager_instance.config.db.async_session_maker)
     user = UserInfo(id="user123", first_name="Tadej", last_name="Pogacar", namespace=user_namespace)
     orm_id = await repo.insert(user, started_at=None)
 
@@ -96,10 +96,10 @@ async def test_user_insert_only(app_config_instance):
     assert user.lastName == "Pogacar"
 
 
-async def test_select_next(app_config_instance):
+async def test_select_next(app_manager_instance):
     run_migrations_for_app("common")
 
-    repo = SearchUpdatesRepo(app_config_instance.db.async_session_maker)
+    repo = SearchUpdatesRepo(app_manager_instance.config.db.async_session_maker)
     user1 = UserInfo(id="user123", first_name="Tadej", last_name="Pogacar", namespace=user_namespace)
     id1 = await repo.insert(user1, started_at=None)
     user2 = UserInfo(id="user234", first_name="Greg", last_name="Lemond", namespace=user_namespace)
@@ -113,10 +113,10 @@ async def test_select_next(app_config_instance):
     assert len(records2) == 0
 
 
-async def test_mark_processed(app_config_instance):
+async def test_mark_processed(app_manager_instance):
     run_migrations_for_app("common")
 
-    repo = SearchUpdatesRepo(app_config_instance.db.async_session_maker)
+    repo = SearchUpdatesRepo(app_manager_instance.config.db.async_session_maker)
     user1 = UserInfo(id="user123", first_name="Tadej", last_name="Pogacar", namespace=user_namespace)
     await repo.insert(user1, started_at=None)
     user2 = UserInfo(id="user234", first_name="Greg", last_name="Lemond", namespace=user_namespace)
