@@ -30,6 +30,57 @@ dc_one = DataConnector(
     creationDate=datetime(year=2025, month=4, day=10, hour=16, minute=14, second=4),
     description="Bad data is filtered out.",
 )
+dc_global = DataConnector(
+    id=ULID(),
+    readonly=True,
+    storageType="s3",
+    namespace=None,
+    name="qq dc global",
+    slug=Slug("dc-global-1"),
+    visibility=Visibility.PUBLIC,
+    createdBy=user_jan_ullrich.id,
+    creationDate=datetime(year=2025, month=5, day=9, hour=11, minute=14, second=4),
+    description="This is for all of us.",
+)
+
+
+def test_dc_global_dict():
+    assert dc_global.to_dict() == {
+        "id": str(dc_global.id),
+        "slug": "dc-global-1",
+        "name": "qq dc global",
+        "readonly": True,
+        "storageType": "s3",
+        "createdBy": user_jan_ullrich.id,
+        "creationDate": "2025-05-09T11:14:04Z",
+        "description": "This is for all of us.",
+        "keywords": [],
+        "visibility": "public",
+        "_kind": "fullentity",
+        "_type": "DataConnector",
+        "_version_": -1,
+    }
+
+
+def test_read_dc_global_from_dict():
+    dc = DataConnector.from_dict(
+        {
+            "id": str(dc_global.id),
+            "slug": "dc-global-1",
+            "name": "qq dc global",
+            "readonly": True,
+            "storageType": "s3",
+            "createdBy": user_jan_ullrich.id,
+            "creationDate": "2025-05-09T11:14:04Z",
+            "description": "This is for all of us.",
+            "keywords": [],
+            "visibility": "public",
+            "_kind": "fullentity",
+            "_type": "DataConnector",
+            "_version_": -1,
+        }
+    )
+    assert dc == dc_global
 
 
 def test_dc_dict():
