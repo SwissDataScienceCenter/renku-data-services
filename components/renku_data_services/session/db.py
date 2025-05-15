@@ -78,7 +78,9 @@ class SessionRepository:
         new_environment: models.UnsavedEnvironment,
     ) -> schemas.EnvironmentORM:
         if user.id is None:
-            raise errors.UnauthorizedError(message="You have to be authenticated to insert an environment in the DB.")
+            raise errors.UnauthorizedError(
+                message="You have to be authenticated to insert an environment in the DB.", quiet=True
+            )
         environment = schemas.EnvironmentORM(
             name=new_environment.name,
             created_by_id=user.id,
@@ -108,7 +110,9 @@ class SessionRepository:
         environment: models.Environment,
     ) -> schemas.EnvironmentORM:
         if user.id is None:
-            raise errors.UnauthorizedError(message="You have to be authenticated to insert an environment in the DB.")
+            raise errors.UnauthorizedError(
+                message="You have to be authenticated to insert an environment in the DB.", quiet=True
+            )
         new_environment = schemas.EnvironmentORM(
             name=environment.name,
             created_by_id=user.id,
@@ -152,7 +156,9 @@ class SessionRepository:
         new_build_parameters_environment: models.UnsavedBuildParameters,
     ) -> schemas.EnvironmentORM:
         if user.id is None:
-            raise errors.UnauthorizedError(message="You have to be authenticated to insert an environment in the DB.")
+            raise errors.UnauthorizedError(
+                message="You have to be authenticated to insert an environment in the DB.", quiet=True
+            )
         build_parameters_orm = schemas.BuildParametersORM(
             builder_variant=new_build_parameters_environment.builder_variant,
             frontend_variant=new_build_parameters_environment.frontend_variant,
@@ -1007,7 +1013,7 @@ class SessionRepository:
         build: models.Build,
         build_parameters: models.BuildParameters,
         launcher: models.SessionLauncher | None,
-    ) -> models.ShipwrightBuildRunParamsV2:
+    ) -> models.ShipwrightBuildRunParams:
         """Derive the Shipwright BuildRun params from a Build instance and a BuildParameters instance."""
         if not user.is_authenticated or user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
@@ -1045,7 +1051,7 @@ class SessionRepository:
             annotations["renku.io/launcher_id"] = str(launcher.id)
             annotations["renku.io/project_id"] = str(launcher.project_id)
 
-        return models.ShipwrightBuildRunParamsV2(
+        return models.ShipwrightBuildRunParams(
             name=build.k8s_name,
             git_repository=git_repository,
             build_image=constants.BUILD_BUILDER_IMAGE,

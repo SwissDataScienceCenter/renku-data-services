@@ -305,13 +305,6 @@ class ShipwrightBuildRunParams:
     tolerations: list[crs.Toleration] | None = None
     labels: dict[str, str] | None = None
     annotations: dict[str, str] | None = None
-
-
-@dataclass(frozen=True, eq=True, kw_only=True)
-class ShipwrightBuildRunParamsV2(ShipwrightBuildRunParams):
-    """Model to represent the parameters used to create a new Shipwright BuildRun."""
-
-    output_image: str
     frontend: str = FrontendVariant.vscodium.value
     build_image: str | None = None
 
