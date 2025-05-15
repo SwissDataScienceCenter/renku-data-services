@@ -1733,6 +1733,47 @@ async def test_creating_dc_in_project(sanic_client, user_headers) -> None:
 
 
 @pytest.mark.asyncio
+async def test_creating_dc_in_project_no_leak_to_other_project(sanic_client, user_headers, member_1_headers) -> None:
+    # Create a project owned by member_1
+    payload = {
+        "name": "Project 1",
+        "namespace": "member-1.doe",
+        "slug": "project-1",
+    }
+    _, res = await sanic_client.post("/api/data/projects", headers=member_1_headers, json=payload)
+    assert res.status_code == 201, res.text
+
+    payload = {
+        "name": "Project 1",
+        "namespace": "user.doe",
+        "slug": "project-1",
+    }
+    _, res = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
+    assert res.status_code == 201, res.text
+    project = res.json
+    project_path = f"{project["namespace"]}/{project["slug"]}"
+
+    payload = {
+        "name": "My data connector",
+        "namespace": project_path,
+        "slug": "my-dc",
+        "storage": {
+            "configuration": {"type": "s3", "endpoint": "http://s3.aws.com"},
+            "source_path": "giab",
+            "target_path": "giab",
+        },
+    }
+    _, res = await sanic_client.post("/api/data/data_connectors", headers=user_headers, json=payload)
+    assert res.status_code == 201, res.text
+    assert res.json is not None
+    dc = res.json
+    assert dc.get("id") is not None
+    assert dc.get("name") == "My data connector"
+    assert dc.get("namespace") == project_path
+    assert dc.get("slug") == "my-dc"
+
+
+@pytest.mark.asyncio
 async def test_users_cannot_see_private_data_connectors_in_project(
     sanic_client,
     member_1_headers,
