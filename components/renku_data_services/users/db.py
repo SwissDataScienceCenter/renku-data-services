@@ -387,7 +387,7 @@ class UserPreferencesRepository:
             user_preferences = res.one_or_none()
 
             if user_preferences is None:
-                raise errors.MissingResourceError(message="Preferences not found for user.", quiet=True)
+                raise errors.MissingResourceError(message="Preferences not found for user.")
             return user_preferences.dump()
 
     @only_authenticated
@@ -449,7 +449,7 @@ class UserPreferencesRepository:
             user_preferences = res.one_or_none()
 
             if user_preferences is None:
-                raise errors.MissingResourceError(message="Preferences not found for user.", quiet=True)
+                raise errors.MissingResourceError(message="Preferences not found for user.")
 
             project_slugs: list[str]
             project_slugs = user_preferences.pinned_projects.get("project_slugs", [])

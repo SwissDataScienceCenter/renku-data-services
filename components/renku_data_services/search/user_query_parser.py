@@ -23,7 +23,6 @@ from renku_data_services.search.user_query import (
     CreatedByIs,
     DateTimeCalc,
     Field,
-    FieldTerm,
     Helper,
     IdIs,
     KeywordIs,
@@ -72,35 +71,42 @@ def _check_minute(m: int) -> Parser:
     return _check_range(m, 0, 59, "Expect a minute or second 0-59")
 
 
-def _create_datetime_calc(ref: PartialDateTime | RelativeDate, sep: str, days: int) -> DateTimeCalc:
+# Parser[DateTimeCalc]
+def _create_datetime_calc(args: tuple[PartialDateTime | RelativeDate, str, int]) -> Parser:
+    ref: PartialDateTime | RelativeDate = args[0]
+    sep: str = args[1]
+    days: int = args[2]
     match sep:
         case "+":
-            return DateTimeCalc(ref, days.__abs__(), False)
+            return success(DateTimeCalc(ref, days.__abs__(), False))
         case "-":
-            return DateTimeCalc(ref, days.__abs__() * -1, False)
+            return success(DateTimeCalc(ref, days.__abs__() * -1, False))
         case "/":
-            return DateTimeCalc(ref, days.__abs__(), True)
+            return success(DateTimeCalc(ref, days.__abs__(), True))
         case _:
-            raise
+            return fail(f"Invalid date-time separator: {sep}")
 
 
-def _make_field_term(field: str, values: Nel[str]) -> FieldTerm:
+# Parser[FieldTerm]
+def _make_field_term(args: tuple[str, Nel[str]]) -> Parser:
+    field: str = args[0]
+    values: Nel[str] = args[1]
     f = Field(field.lower())
     match f:
         case Field.fname:
-            return NameIs(values)
+            return success(NameIs(values))
         case Field.slug:
-            return SlugIs(values)
+            return success(SlugIs(values))
         case Field.id:
-            return IdIs(values)
+            return success(IdIs(values))
         case Field.keyword:
-            return KeywordIs(values)
+            return success(KeywordIs(values))
         case Field.namespace:
-            return NamespaceIs(values)
+            return success(NamespaceIs(values))
         case Field.created_by:
-            return CreatedByIs(values)
+            return success(CreatedByIs(values))
         case _:
-            raise Exception(f"invalid field name: {field}")
+            return fail(f"Invalid field name: {field}")
 
 
 class _DateTimeParser:
@@ -124,9 +130,7 @@ class _DateTimeParser:
 
     relative_date: Parser = from_enum(RelativeDate, lambda s: s.lower())
 
-    datetime_calc: Parser = seq(partial_datetime | relative_date, char_from("+-/"), ndays).combine(
-        _create_datetime_calc
-    )
+    datetime_calc: Parser = seq(partial_datetime | relative_date, char_from("+-/"), ndays).bind(_create_datetime_calc)
 
     datetime_ref: Parser = datetime_calc | partial_datetime | relative_date
 
@@ -175,7 +179,7 @@ class _ParsePrimitives:
         Created
     )
     role_is: Parser = string(Field.role.value, lambda s: s.lower()) >> is_equal >> role_nel.map(RoleIs)
-    term_is: Parser = seq(from_enum(Field, lambda s: s.lower()) << is_equal, string_values).combine(_make_field_term)
+    term_is: Parser = seq(from_enum(Field, lambda s: s.lower()) << is_equal, string_values).bind(_make_field_term)
 
     field_term: Parser = type_is | visibility_is | role_is | created | term_is
     free_text: Parser = test_char(lambda c: not c.isspace(), "string without spaces").at_least(1).concat().map(Text)

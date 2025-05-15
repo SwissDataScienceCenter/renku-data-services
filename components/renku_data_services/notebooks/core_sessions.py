@@ -183,7 +183,7 @@ def get_gitlab_image_pull_secret(
 ) -> ExtraSecret:
     """Create a Kubernetes secret for private GitLab registry authentication."""
 
-    k8s_namespace = nb_config.k8s_client.namespace
+    k8s_namespace = nb_config.k8s_client.namespace()
 
     registry_secret = {
         "auths": {
@@ -249,8 +249,7 @@ async def get_data_sources(
         if csr_id not in dcs:
             raise errors.MissingResourceError(
                 message=f"You have requested a cloud storage with ID {csr_id} which does not exist "
-                "or you dont have access to.",
-                quiet=True,
+                "or you dont have access to."
             )
         if csr.target_path is not None and not PurePosixPath(csr.target_path).is_absolute():
             csr.target_path = (work_dir / csr.target_path).as_posix()
@@ -481,7 +480,7 @@ async def patch_session(
     """Patch an Amalthea session."""
     session = await nb_config.k8s_v2_client.get_session(session_id, user.id)
     if session is None:
-        raise errors.MissingResourceError(message=f"The session with ID {session_id} does not exist", quiet=True)
+        raise errors.MissingResourceError(message=f"The session with ID {session_id} does not exist")
     if session.spec is None:
         raise errors.ProgrammingError(
             message=f"The session {session_id} being patched is missing the expected 'spec' field.", quiet=True
@@ -516,8 +515,7 @@ async def patch_session(
         rc = rp.get_resource_class(body.resource_class_id)
         if not rc:
             raise errors.MissingResourceError(
-                message=f"The resource class you requested with ID {body.resource_class_id} does not exist",
-                quiet=True,
+                message=f"The resource class you requested with ID {body.resource_class_id} does not exist"
             )
         if not patch.spec.session:
             patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()

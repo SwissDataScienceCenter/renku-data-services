@@ -241,16 +241,39 @@ jobs:
     needs:
       - test-main
       - test-schemathesis
+    strategy:
+      matrix:
+        include:
+          - service: "Data Service API"
+            image-name: renku/renku-data-service
+            dockerfile: ./projects/renku_data_service/Dockerfile
+            name: renku-data-services
+          - service: "Background Jobs"
+            image-name: renku/data-service-background-jobs
+            dockerfile: ./projects/background_jobs/Dockerfile
+            name: background-jobs
+          - service: "Secrets Storage"
+            image-name: renku/secrets-storage
+            dockerfile: ./projects/secrets_storage/Dockerfile
+            name: secrets-storage
+          - service: "K8s Watcher"
+            image-name: renku/data-service-k8s-watcher
+            dockerfile: ./projects/k8s_watcher/Dockerfile
+            name: k8s-watcher
+          - service: "Data Tasks"
+            image-name: renku/data-service-data-tasks
+            dockerfile: ./projects/renku_data_tasks/Dockerfile
+            name: data-tasks
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Docker meta data services
+      - name: Docker meta ${{ matrix.service }}
         id: meta
         uses: docker/metadata-action@v5
         with:
           # list of Docker images to use as base name for tags
           images: |
-            renku/renku-data-service
+            ${{ matrix.image-name }}
           # generate Docker tags based on the following events/attributes
           tags: |
             type=ref,event=branch
@@ -267,184 +290,28 @@ jobs:
         with:
           username: ${{ secrets.RENKU_DOCKER_USERNAME }}
           password: ${{ secrets.RENKU_DOCKER_PASSWORD }}
-      - name: Build and push data services
+      - name: Build and push ${{ matrix.service }}
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./projects/renku_data_service/Dockerfile
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=renku/renku-data-service:buildcache
-          cache-to: type=registry,ref=renku/renku-data-service:buildcache,mode=max
+          cache-from: type=registry,ref=${{ matrix.image-name }}:buildcache
+          cache-to: type=registry,ref=${{ matrix.image-name}}:buildcache,mode=max
           provenance: false
-      - name: Scan data services image
+      - name: Scan image ${{ matrix.service }}
         uses: snyk/actions/docker@master
         continue-on-error: true
         with:
           image: ${{ steps.meta.outputs.tags}}
-          args: --file=./projects/renku_data_service/Dockerfile --severity-threshold=high --sarif-file-output=rds.sarif
+          args: --file=${{ matrix.dockerfile }} --severity-threshold=high --sarif-file-output=${{ matrix.name }}.sarif
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
       - name: Upload Snyk report
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: rds.sarif
-          category: snyk_renku-data-services
-      - name: Docker meta background jobs
-        id: meta-background-jobs
-        uses: docker/metadata-action@v5
-        with:
-          # list of Docker images to use as base name for tags
-          images: |
-            renku/data-service-background-jobs
-          # generate Docker tags based on the following events/attributes
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha
-      - name: Build and push background jobs
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./projects/background_jobs/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta-background-jobs.outputs.tags }}
-          labels: ${{ steps.meta-background-jobs.outputs.labels }}
-          cache-from: type=registry,ref=renku/data-service-background-jobs:buildcache
-          cache-to: type=registry,ref=renku/data-service-background-jobs:buildcache,mode=max
-          provenance: false
-      - name: Scan background job image
-        uses: snyk/actions/docker@master
-        continue-on-error: true
-        with:
-          image: ${{ steps.meta-background-jobs.outputs.tags}}
-          args: --file=./projects/background_jobs/Dockerfile --severity-threshold=high --sarif-file-output=bj.sarif
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-      - name: Upload Snyk report
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: bj.sarif
-          category: snyk_background-jobs
-      - name: Docker meta secrets
-        id: meta-secrets-storage
-        uses: docker/metadata-action@v5
-        with:
-          # list of Docker images to use as base name for tags
-          images: |
-            renku/secrets-storage
-          # generate Docker tags based on the following events/attributes
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha
-      - name: Build and push secrets image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./projects/secrets_storage/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta-secrets-storage.outputs.tags }}
-          labels: ${{ steps.meta-secrets-storage.outputs.labels }}
-          cache-from: type=registry,ref=renku/secrets-storage:buildcache
-          cache-to: type=registry,ref=renku/secrets-storage:buildcache,mode=max
-          provenance: false
-      - name: Scan secrets image
-        uses: snyk/actions/docker@master
-        continue-on-error: true
-        with:
-          image: ${{ steps.meta-secrets-storage.outputs.tags}}
-          args: --file=./projects/secrets_storage/Dockerfile --severity-threshold=high --sarif-file-output=ss.sarif
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-      - name: Upload Snyk report
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: ss.sarif
-          category: snyk_secrets_storage
-      - name: Docker meta k8s watcher
-        id: meta-k8s-watcher
-        uses: docker/metadata-action@v5
-        with:
-          # list of Docker images to use as base name for tags
-          images: |
-            renku/data-service-k8s-watcher
-          # generate Docker tags based on the following events/attributes
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha
-      - name: Build and push k8s watcher
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./projects/k8s_watcher/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta-k8s-watcher.outputs.tags }}
-          labels: ${{ steps.meta-k8s-watcher.outputs.labels }}
-          cache-from: type=registry,ref=renku/data-service-k8s-watcher:buildcache
-          cache-to: type=registry,ref=renku/data-service-k8s-watcher:buildcache,mode=max
-          provenance: false
-      - name: Scan k8s watcher image
-        uses: snyk/actions/docker@master
-        continue-on-error: true
-        with:
-          image: ${{ steps.meta-k8s-watcher.outputs.tags}}
-          args: --file=./projects/k8s_watcher/Dockerfile --severity-threshold=high --sarif-file-output=k8sw.sarif
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-      - name: Upload Snyk report
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: k8sw.sarif
-          category: snyk_k8s-watcher
-      - name: Docker meta data tasks
-        id: meta-data-tasks
-        uses: docker/metadata-action@v5
-        with:
-          # list of Docker images to use as base name for tags
-          images: |
-            renku/data-service-data-tasks
-          # generate Docker tags based on the following events/attributes
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha
-      - name: Build and push data tasks
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./projects/renku_data_tasks/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta-data-tasks.outputs.tags }}
-          labels: ${{ steps.meta-data-tasks.outputs.labels }}
-          cache-from: type=registry,ref=renku/data-service-data-tasks:buildcache
-          cache-to: type=registry,ref=renku/data-service-data-tasks:buildcache,mode=max
-          provenance: false
-      - name: Scan data tasks image
-        uses: snyk/actions/docker@master
-        continue-on-error: true
-        with:
-          image: ${{ steps.meta-data-tasks.outputs.tags}}
-          args: --file=./projects/renku_data_tasks/Dockerfile --severity-threshold=high --sarif-file-output=rdt.sarif
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-      - name: Upload Snyk report
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: rdt.sarif
-          category: snyk_renku-data-tasks
+          sarif_file: ${{ matrix.name }}.sarif
+          category: snyk_${{ matrix.name }}
