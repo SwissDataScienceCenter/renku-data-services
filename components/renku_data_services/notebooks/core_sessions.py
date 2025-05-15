@@ -566,6 +566,8 @@ async def patch_session(
                 raise errors.ProgrammingError(
                     message=f"Failed to create image pull secret for {image_pull_secret_name}"
                 )
+            # Ensure the secret is created in the cluster
+            await nb_config.k8s_v2_client.create_secret(image_secret.secret)
 
             updated_secrets = [
                 secret for secret in (session.spec.imagePullSecrets or []) if not secret.name.endswith("-image-secret")
