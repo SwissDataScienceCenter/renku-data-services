@@ -551,7 +551,7 @@ async def patch_session(
         image = session.spec.session.image
         server_name = session.metadata.name
         needs_pull_secret = await requires_image_pull_secret(nb_config, image, internal_gitlab_user)
-        logger.info(f"Needs pull secret for image {image}: {needs_pull_secret}")
+        logger.info(f"Session with ID {session_id} needs pull secret for image {image}: {needs_pull_secret}")
 
         if needs_pull_secret:
             image_pull_secret_name = f"{server_name}-image-secret"
@@ -562,9 +562,11 @@ async def patch_session(
             )
 
             if not image_secret:
-                logger.error(f"Failed to create image pull secret for {image_pull_secret_name}")
+                logger.error(f"Failed to create image pull secret for session ID {session_id} with image {image}")
                 raise errors.ProgrammingError(
-                    message=f"Failed to create image pull secret for {image_pull_secret_name}"
+                    message=f"We cannot retrive credentials for your private image {image}. "
+                    "In order to resolve this problem, you can try to log out and back in "
+                    "and/or check that you still have permissions for the image repository."
                 )
             # Ensure the secret is created in the cluster
             await nb_config.k8s_v2_client.create_secret(image_secret.secret)
@@ -574,7 +576,6 @@ async def patch_session(
             ]
             updated_secrets.append(ImagePullSecret(name=image_pull_secret_name, adopt=True))
             patch.spec.imagePullSecrets = updated_secrets
-            logger.info(f"Updated imagePullSecrets: {updated_secrets}")
 
     patch_serialized = patch.to_rfc7386()
     if len(patch_serialized) == 0:
