@@ -7,7 +7,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, StrEnum
-from typing import ClassVar, Never, NewType, Optional, Protocol, Self, TypeVar, overload
+from typing import ClassVar, Final, Never, NewType, Optional, Protocol, Self, TypeVar, overload
 
 from sanic import Request
 
@@ -380,6 +380,13 @@ class DataConnectorInProjectPath(__NamespaceCommonMixin):
             )
         return cls(NamespaceSlug(slugs[0]), ProjectSlug(slugs[1]), DataConnectorSlug(slugs[2]))
 
+
+GLOBAL_NAMESPACE_SLUG_STR: Final[str] = "_global"
+"""The string value of the slug of the global namespace."""
+GLOBAL_NAMESPACE_SLUG: Final[NamespaceSlug] = NamespaceSlug(value=GLOBAL_NAMESPACE_SLUG_STR)
+"""The value of the slug of the global namespace."""
+GLOBAL_NAMESPACE_PATH: Final[NamespacePath] = NamespacePath(first=GLOBAL_NAMESPACE_SLUG)
+"""The value of the path of the global namespace."""
 
 AnyAPIUser = TypeVar("AnyAPIUser", bound=APIUser, covariant=True)
 
