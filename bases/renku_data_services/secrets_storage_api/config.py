@@ -39,6 +39,6 @@ class Config:
         version = os.environ.get("VERSION", "0.0.1")
         keycloak = None
         if not dummy_stores:
-            KeycloakConfig.from_env()
+            keycloak = KeycloakConfig.from_env()
 
         return cls(db=db, secrets=secrets_config, version=version, keycloak=keycloak, dummy_stores=dummy_stores)

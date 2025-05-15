@@ -99,7 +99,6 @@ async def test_post_data_connector(
 @pytest.mark.parametrize(
     "doi", ["10.5281/zenodo.15411010", "doi:10.5281/zenodo.15411010", "https://doi.org/10.5281/zenodo.15411010"]
 )
-@pytest.mark.skip("the dataset changed on zenodo and this test doesn't pass anymore")
 async def test_post_global_data_connector(
     sanic_client: SanicASGITestClient, user_headers: dict[str, str], monkeypatch: "MonkeyPatch", doi: str
 ) -> None:
@@ -229,7 +228,6 @@ async def test_post_global_data_connector_invalid_doi(
 
 
 @pytest.mark.asyncio
-@pytest.mark.skip("the dataset changed on zenodo and this test doesn't pass anymore")
 async def test_post_global_data_connector_no_duplicates(
     sanic_client: SanicASGITestClient, user_headers: dict[str, str], monkeypatch: "MonkeyPatch"
 ) -> None:
@@ -920,7 +918,6 @@ async def test_patch_data_connector_slug(
 
 
 @pytest.mark.asyncio
-@pytest.mark.skip("the dataset changed on zenodo and this test doesn't pass anymore")
 async def test_patch_global_data_connector(
     sanic_client: SanicASGITestClient,
     user_headers: dict[str, str],
@@ -997,7 +994,6 @@ async def test_delete_data_connector(sanic_client: SanicASGITestClient, create_d
 
 
 @pytest.mark.asyncio
-@pytest.mark.skip("the dataset changed on zenodo and this test doesn't pass anymore")
 async def test_delete_global_data_connector(
     sanic_client: SanicASGITestClient,
     user_headers: dict[str, str],

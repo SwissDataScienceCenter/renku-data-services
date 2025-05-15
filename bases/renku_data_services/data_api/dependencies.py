@@ -117,7 +117,6 @@ class DependencyManager:
     gitlab_client: base_models.GitlabAPIProtocol
     kc_api: IKeycloakAPI
     message_queue: IMessageQueue
-    gitlab_url: str | None
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
@@ -399,7 +398,7 @@ class DependencyManager:
                 session_maker=self.config.db.async_session_maker,
                 encryption_key=self.config.secrets.encryption_key,
                 async_oauth2_client_class=self.async_oauth2_client_class,
-                internal_gitlab_url=self.gitlab_url,
+                internal_gitlab_url=self.config.gitlab_url,
             )
         return self._connected_services_repo
 
@@ -410,7 +409,7 @@ class DependencyManager:
             self._git_repositories_repo = GitRepositoriesRepository(
                 session_maker=self.config.db.async_session_maker,
                 connected_services_repo=self.connected_services_repo,
-                internal_gitlab_url=self.gitlab_url,
+                internal_gitlab_url=self.config.gitlab_url,
             )
         return self._git_repositories_repo
 
@@ -504,7 +503,6 @@ class DependencyManager:
 
         config = Config.from_env()
         kc_api: IKeycloakAPI
-        gitlab_url: str | None
 
         if config.dummy_stores:
             authenticator = DummyAuthenticator()
@@ -520,7 +518,6 @@ class DependencyManager:
                 UnsavedUserInfo(id="user2", first_name="user2", last_name="doe", email="user2@doe.com"),
             ]
             kc_api = DummyKeycloakAPI(users=[i.to_keycloak_dict() for i in dummy_users])
-            gitlab_url = None
         else:
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=config.k8s_namespace)
             assert config.keycloak is not None
@@ -554,5 +551,4 @@ class DependencyManager:
             quota_repo=quota_repo,
             kc_api=kc_api,
             message_queue=message_queue,
-            gitlab_url=gitlab_url,
         )

@@ -158,7 +158,6 @@ class TestDependencyManager(DependencyManager):
         k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
         config.authz_config = AuthzConfigStack.from_env()
         kc_api: IKeycloakAPI
-        gitlab_url: str | None
 
         authenticator = DummyAuthenticator()
         gitlab_authenticator = DummyAuthenticator()
@@ -167,7 +166,6 @@ class TestDependencyManager(DependencyManager):
         user_store = DummyUserStore(user_always_exists=user_always_exists)
         gitlab_client = DummyGitlabAPI()
         kc_api = DummyKeycloakAPI(users=[i.to_keycloak_dict() for i in dummy_users])
-        gitlab_url = None
 
         message_queue = RedisQueue(config.redis)
 
@@ -180,7 +178,6 @@ class TestDependencyManager(DependencyManager):
             quota_repo=quota_repo,
             kc_api=kc_api,
             message_queue=message_queue,
-            gitlab_url=gitlab_url,
         )
 
     def __post_init__(self) -> None:
