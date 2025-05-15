@@ -23,9 +23,9 @@ user_namespace = UserNamespace(
 
 
 @pytest.mark.asyncio
-async def test_update_solr(app_config_instance, solr_search):
+async def test_update_solr(app_manager_instance, solr_search):
     run_migrations_for_app("common")
-    repo = SearchUpdatesRepo(app_config_instance.db.async_session_maker)
+    repo = SearchUpdatesRepo(app_manager_instance.config.db.async_session_maker)
 
     user = UserInfo(id="user123", first_name="Tadej", last_name="Pogacar", namespace=user_namespace)
     await repo.upsert(user, started_at=None)
@@ -55,9 +55,9 @@ async def test_update_solr(app_config_instance, solr_search):
 
 
 @pytest.mark.asyncio
-async def test_update_no_solr(app_config_instance):
+async def test_update_no_solr(app_manager_instance):
     run_migrations_for_app("common")
-    repo = SearchUpdatesRepo(app_config_instance.db.async_session_maker)
+    repo = SearchUpdatesRepo(app_manager_instance.config.db.async_session_maker)
 
     user = UserInfo(id="user123", first_name="Tadej", last_name="Pogacar", namespace=user_namespace)
     await repo.upsert(user, started_at=None)
@@ -74,7 +74,7 @@ async def test_update_no_solr(app_config_instance):
         except Exception as _:
             entities = await repo.select_next(10)
             assert len(entities) == 0
-            async with app_config_instance.db.async_session_maker() as session, session.begin():
+            async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
                 res = await session.scalars(sa.select(SearchUpdatesORM).order_by(SearchUpdatesORM.id))
                 states = [s.state for s in res.all()]
                 assert states == [RecordState.Failed, RecordState.Failed]

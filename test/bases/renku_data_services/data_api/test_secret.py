@@ -12,6 +12,7 @@ from ulid import ULID
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.secrets.core import rotate_encryption_keys, rotate_single_encryption_key
 from renku_data_services.secrets.models import Secret, SecretKind
+from renku_data_services.secrets_storage_api.dependencies import DependencyManager
 from renku_data_services.users import apispec
 from renku_data_services.utils.cryptography import (
     decrypt_rsa,
@@ -199,7 +200,7 @@ async def test_anonymous_users_cannot_create_secrets(sanic_client: SanicASGITest
 async def test_secret_encryption_decryption(
     sanic_client: SanicASGITestClient,
     secrets_sanic_client: SanicASGITestClient,
-    secrets_storage_app_config,
+    secrets_storage_app_manager,
     user_headers,
     create_secret,
 ) -> None:
@@ -225,8 +226,8 @@ async def test_secret_encryption_decryption(
 
     _, response = await secrets_sanic_client.post("/api/secrets/kubernetes", headers=user_headers, json=payload)
     assert response.status_code == 201
-    assert "test-secret" in secrets_storage_app_config.core_client.secrets
-    k8s_secret = secrets_storage_app_config.core_client.secrets["test-secret"].data
+    assert "test-secret" in secrets_storage_app_manager.core_client.secrets
+    k8s_secret = secrets_storage_app_manager.core_client.secrets["test-secret"].data
     assert k8s_secret.keys() == {"secret-1", "secret-2"}
 
     _, response = await sanic_client.get("/api/data/user/secret_key", headers=user_headers)
@@ -242,7 +243,7 @@ async def test_secret_encryption_decryption(
 async def test_secret_encryption_decryption_with_key_mapping(
     sanic_client: SanicASGITestClient,
     secrets_sanic_client: SanicASGITestClient,
-    secrets_storage_app_config,
+    secrets_storage_app_manager,
     user_headers,
     create_secret,
 ) -> None:
@@ -275,8 +276,8 @@ async def test_secret_encryption_decryption_with_key_mapping(
 
     _, response = await secrets_sanic_client.post("/api/secrets/kubernetes", headers=user_headers, json=payload)
     assert response.status_code == 201
-    assert "test-secret" in secrets_storage_app_config.core_client.secrets
-    k8s_secret = secrets_storage_app_config.core_client.secrets["test-secret"].data
+    assert "test-secret" in secrets_storage_app_manager.core_client.secrets
+    k8s_secret = secrets_storage_app_manager.core_client.secrets["test-secret"].data
     assert k8s_secret.keys() == {"access_key_id", "secret_access_key", "secret-3-one", "secret-3-two"}
 
     _, response = await sanic_client.get("/api/data/user/secret_key", headers=user_headers)
@@ -349,7 +350,9 @@ async def test_single_secret_rotation():
 
 
 @pytest.mark.asyncio
-async def test_secret_rotation(sanic_client, secrets_storage_app_config, create_secret, user_headers, users):
+async def test_secret_rotation(
+    sanic_client, secrets_storage_app_manager: DependencyManager, create_secret, user_headers, users
+):
     """Test rotating multiple secrets."""
 
     for i in range(10):
@@ -360,12 +363,12 @@ async def test_secret_rotation(sanic_client, secrets_storage_app_config, create_
     await rotate_encryption_keys(
         admin,
         new_key,
-        secrets_storage_app_config.secrets_service_private_key,
-        secrets_storage_app_config.user_secrets_repo,
+        secrets_storage_app_manager.config.secrets.private_key,
+        secrets_storage_app_manager.user_secrets_repo,
         batch_size=5,
     )
 
-    secrets = [s async for s in secrets_storage_app_config.user_secrets_repo.get_all_secrets_batched(admin, 100)]
+    secrets = [s async for s in secrets_storage_app_manager.user_secrets_repo.get_all_secrets_batched(admin, 100)]
     batch = secrets[0]
     assert len(batch) == 10
 
