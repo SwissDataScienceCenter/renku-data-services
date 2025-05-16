@@ -179,11 +179,6 @@ def content_all(text: str) -> SolrToken:
     return SolrToken(f"{Fields.content_all}:{terms_str}")
 
 
-def namespace_exists() -> SolrToken:
-    """Query part requiring an existing namespace field."""
-    return fold_or([field_exists(Fields.namespace), type_is(EntityType.dataconnector)])
-
-
 def created_by_exists() -> SolrToken:
     """Query part that requires an existing createdBy field for a project document."""
     return SolrToken("(createdBy:[* TO *] OR (*:* AND -_type:Project))")

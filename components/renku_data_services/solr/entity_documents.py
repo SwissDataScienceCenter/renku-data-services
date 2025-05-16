@@ -257,7 +257,7 @@ class DataConnector(EntityDoc, frozen=True):
         # I want to reuse the `"/".join(…)` to combine namespace + slug
         match ns:
             case Group() as g:
-                parent = NamespacePath(NamespaceSlug(g.slug.value))
+                parent: NamespacePath | ProjectPath | None = NamespacePath(NamespaceSlug(g.slug.value))
             case User() as u:
                 parent = NamespacePath(NamespaceSlug(u.slug.value))
             case Project() as p:
