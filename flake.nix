@@ -125,7 +125,7 @@
         basedpyright
         rclone
         (writeShellScriptBin "pg" ''
-          psql -h $DB_HOST -U dev renku
+          psql -h $DB_HOST -p $DB_PORT -U dev $DB_NAME
         ''
         )
         (writeShellScriptBin "pyfix" ''
