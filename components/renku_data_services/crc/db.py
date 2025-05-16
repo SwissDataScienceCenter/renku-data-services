@@ -282,7 +282,6 @@ class ResourcePoolRepository(_Base):
     ) -> models.ResourcePool:
         """Insert resource pool into database."""
         quota = None
-        cluster = None
         if resource_pool.quota is not None:
             for rc in resource_pool.classes:
                 if not resource_pool.quota.is_resource_class_compatible(rc):
@@ -291,10 +290,6 @@ class ResourcePoolRepository(_Base):
                     )
             quota = self.quotas_repo.create_quota(models.Quota.from_dict(asdict(resource_pool.quota)))
             resource_pool = resource_pool.set_quota(quota)
-        if resource_pool.cluster is not None:
-            cluster = self.__cluster_repo.select(resource_pool.cluster)
-
-        resource_pool = resource_pool.update(cluster=cluster)
 
         orm = schemas.ResourcePoolORM.load(resource_pool)
         async with self.session_maker() as session, session.begin():
