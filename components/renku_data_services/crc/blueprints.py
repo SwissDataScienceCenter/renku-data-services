@@ -56,10 +56,11 @@ class ResourcePoolsBP(CustomBlueprint):
                 cluster = await self.cluster_repo.select(api_user=user, cluster_id=ULID.from_str(body.cluster_id))
             rp = models.ResourcePool.from_dict({**body.model_dump(exclude_none=True), "cluster": cluster})
 
-            logger.warning(f"#### 1 Adding resource pool from \nbody {body}\n rp {rp}")
             res = await self.rp_repo.insert_resource_pool(api_user=user, resource_pool=rp)
             logger.warning(f"#### 2 Adding resource pool from \nbody {body}\n rp {rp}\n res {res}")
-            return validated_json(apispec.ResourcePoolWithId, res, status=201)
+            validated = validated_json(apispec.ResourcePoolWithId, res, status=201)
+            logger.warning(f"#### 3 Adding resource pool from \nbody {body}\n rp {rp}\n res {res}\n val {validated}")
+            return validated
 
         return "/resource_pools", ["POST"], _post
 
