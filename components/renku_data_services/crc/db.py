@@ -412,7 +412,9 @@ class ResourcePoolRepository(_Base):
                         cluster = None
 
                         if cluster_id is not None:
-                            cluster = await self._cluster_repo.select(api_user=api_user, cluster_id=cluster_id)
+                            cluster = await self._cluster_repo.select(
+                                api_user=api_user, cluster_id=ULID.from_str(cluster_id)
+                            )
 
                         rp.cluster_id = cluster_id
                         new_rp_model = new_rp_model.update(cluster=cluster)
