@@ -100,7 +100,7 @@ class Config:
     @classmethod
     def from_env(cls, prefix: str = "") -> "Config":
         """Create a config from environment variables."""
-        db = DBConfig.from_env(prefix)
+        db = DBConfig.from_env()
         k8s_config = _K8sConfig.from_env()
         metrics_config = _MetricsConfig.from_env(prefix)
 

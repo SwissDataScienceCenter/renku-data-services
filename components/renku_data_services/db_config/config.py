@@ -22,17 +22,17 @@ class DBConfig:
     _async_engine: ClassVar[AsyncEngine | None] = field(default=None, repr=False, init=False)
 
     @classmethod
-    def from_env(cls, prefix: str = "") -> "DBConfig":
+    def from_env(cls) -> "DBConfig":
         """Create a database configuration from environment variables."""
 
-        pg_host = os.environ.get(f"{prefix}DB_HOST")
-        pg_user = os.environ.get(f"{prefix}DB_USER")
-        pg_port = os.environ.get(f"{prefix}DB_PORT")
-        db_name = os.environ.get(f"{prefix}DB_NAME")
-        pg_password = os.environ.get(f"{prefix}DB_PASSWORD")
+        pg_host = os.environ.get("DB_HOST")
+        pg_user = os.environ.get("DB_USER")
+        pg_port = os.environ.get("DB_PORT")
+        db_name = os.environ.get("DB_NAME")
+        pg_password = os.environ.get("DB_PASSWORD")
         if pg_password is None:
             raise errors.ConfigurationError(
-                message=f"Please provide a database password in the '{prefix}DB_PASSWORD' environment variable."
+                message="Please provide a database password in the 'DB_PASSWORD' environment variable."
             )
         kwargs = {"host": pg_host, "password": pg_password, "port": pg_port, "db_name": db_name, "user": pg_user}
         config = cls(**{k: v for (k, v) in kwargs.items() if v is not None})

@@ -44,7 +44,9 @@ class CPUEnforcement(str, Enum):
 
 
 @dataclass
-class _ServerOptionsConfig:
+class ServerOptionsConfig:
+    """Config class for server options."""
+
     defaults: dict[str, str | bool | int | float] = field(init=False)
     ui_choices: dict[str, Any] = field(init=False)
     defaults_path: str = "/etc/renku-notebooks/server_options/server_defaults.json"
@@ -58,14 +60,17 @@ class _ServerOptionsConfig:
 
     @property
     def lfs_auto_fetch_default(self) -> bool:
+        """Whether lfs autofetch is enabled or not."""
         return str(self.defaults.get("lfs_auto_fetch", "false")).lower() == "true"
 
     @property
     def default_url_default(self) -> str:
+        """Default url (path) for session."""
         return str(self.defaults.get("defaultUrl", "/lab"))
 
     @classmethod
     def from_env(cls) -> Self:
+        """Load config from environment variables."""
         return cls(
             os.environ["NB_SERVER_OPTIONS__DEFAULTS_PATH"],
             os.environ["NB_SERVER_OPTIONS__UI_CHOICES_PATH"],
@@ -467,7 +472,7 @@ class _K8sConfig:
 
 @dataclass
 class _DynamicConfig:
-    server_options: _ServerOptionsConfig
+    server_options: ServerOptionsConfig
     sessions: _SessionConfig
     amalthea: _AmaltheaConfig
     sentry: _SentryConfig
@@ -480,7 +485,7 @@ class _DynamicConfig:
     @classmethod
     def from_env(cls) -> Self:
         return cls(
-            server_options=_ServerOptionsConfig.from_env(),
+            server_options=ServerOptionsConfig.from_env(),
             sessions=_SessionConfig.from_env(),
             amalthea=_AmaltheaConfig.from_env(),
             sentry=_SentryConfig.from_env("NB_SENTRY_"),
