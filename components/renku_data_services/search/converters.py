@@ -12,6 +12,7 @@ from renku_data_services.search.apispec import (
 from renku_data_services.search.apispec import (
     SearchEntity,
     UserOrGroup,
+    UserOrGroupOrProject,
 )
 from renku_data_services.search.apispec import (
     SearchProject as ProjectApi,
@@ -79,11 +80,19 @@ def __creator_details(e: ProjectDocument | DataConnectorDocument) -> UserApi | N
         return None
 
 
-def __namespace_details(d: ProjectDocument | DataConnectorDocument) -> UserOrGroup | None:
+def __namespace_details(d: ProjectDocument) -> UserOrGroup | None:
     if d.namespaceDetails is not None and d.namespaceDetails.docs != []:
         e = EntityDocReader.from_dict(d.namespaceDetails.docs[0])
         if e is not None:
             return UserOrGroup(cast(UserApi | GroupApi, from_entity(e).root))
+    return None
+
+
+def __namespace_details_dc(d: DataConnectorDocument) -> UserOrGroupOrProject | None:
+    if d.namespaceDetails is not None and d.namespaceDetails.docs != []:
+        e = EntityDocReader.from_dict(d.namespaceDetails.docs[0])
+        if e is not None:
+            return UserOrGroupOrProject(cast(UserApi | GroupApi | ProjectApi, from_entity(e).root))
     return None
 
 
@@ -112,7 +121,7 @@ def from_data_connector(dc: DataConnectorDocument) -> DataConnectorApi:
         name=dc.name,
         slug=dc.slug.value,
         path=dc.path,
-        namespace=__namespace_details(dc),
+        namespace=__namespace_details_dc(dc),
         visibility=from_visibility(dc.visibility),
         description=dc.description,
         createdBy=__creator_details(dc),

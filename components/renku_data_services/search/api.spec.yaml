@@ -347,7 +347,7 @@ components:
         path:
           type: string
         namespace:
-          $ref: '#/components/schemas/UserOrGroup'
+          $ref: '#/components/schemas/UserOrGroupOrProject'
         visibility:
           $ref: '#/components/schemas/Visibility'
         description:
@@ -446,6 +446,25 @@ components:
         mapping:
           Group: '#/components/schemas/Group'
           User: '#/components/schemas/User'
+    UserOrGroupOrProject:
+      title: UserOrGroupOrProject
+      examples:
+        - type: Group
+          id: 2CAF4C73F50D4514A041C9EDDB025A36
+          name: SDSC
+          namespace: SDSC
+          description: SDSC group
+          score: 1.1
+      oneOf:
+        - $ref: '#/components/schemas/Group'
+        - $ref: '#/components/schemas/User'
+        - $ref: '#/components/schemas/SearchProject'
+      discriminator:
+        propertyName: type
+        mapping:
+          Group: '#/components/schemas/Group'
+          User: '#/components/schemas/User'
+          Project: '#/components/schemas/SearchProject'
     Visibility:
       description: Project's visibility levels
       type: string
