@@ -60,6 +60,16 @@
       pkgs = nixpkgs.legacyPackages.${system};
       devshellToolsPkgs = devshell-tools.packages.${system};
 
+      rclone = pkgs.rclone.overrideAttrs (old: {
+        version = "v1.69.1";
+        src = pkgs.fetchFromGitHub {
+          owner = "SwissDataScienceCenter";
+          repo = "rclone";
+          rev = "v1.69.1+renku-1";
+          sha256 = "sha256-AaQnLRAyBSHZFXmpOnPl1Af04YesR+HZd/BVw4zNW+E=";
+        };
+      });
+
       poetrySettings = {
         LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
         POETRY_VIRTUALENVS_PREFER_ACTIVE_PYTHON = "true";
@@ -115,7 +125,7 @@
         basedpyright
         rclone
         (writeShellScriptBin "pg" ''
-          psql -h $DB_HOST -U dev renku
+          psql -h $DB_HOST -p $DB_PORT -U dev $DB_NAME
         ''
         )
         (writeShellScriptBin "pyfix" ''

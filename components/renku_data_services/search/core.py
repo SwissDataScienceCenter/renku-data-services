@@ -94,7 +94,6 @@ async def _renku_query(
         SolrQuery.query_all_fields(uq.query_str(), limit, offset)
         .with_sort(uq.sort)
         .add_filter(
-            st.namespace_exists(),
             st.created_by_exists(),
         )
         .add_filter(*role_constraint)
@@ -108,8 +107,8 @@ async def _renku_query(
         .add_sub_query(
             Fields.namespace_details,
             SubQuery(
-                query="{!terms f=namespace v=$row.namespace}",
-                filter="((_type:User OR _type:Group) AND _kind:fullentity)",
+                query="{!terms f=path v=$row.namespacePath}",
+                filter="(isNamespace:true AND _kind:fullentity)",
                 limit=1,
             ).with_all_fields(),
         )

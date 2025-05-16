@@ -4,10 +4,10 @@ import pytest
 from ulid import ULID
 
 from renku_data_services.authz.models import Visibility
-from renku_data_services.base_models.core import NamespacePath
+from renku_data_services.base_models.core import NamespacePath, NamespaceSlug, ProjectPath, ProjectSlug
 from renku_data_services.data_connectors.models import CloudStorageCore, DataConnector
 from renku_data_services.migrations.core import run_migrations_for_app
-from renku_data_services.namespace.models import UserNamespace
+from renku_data_services.namespace.models import ProjectNamespace, UserNamespace
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.models import DeleteDoc
 from renku_data_services.solr.entity_documents import DataConnector as DataConnectorDoc
@@ -20,6 +20,41 @@ user_namespace = UserNamespace(
     underlying_resource_id=str(ULID()),
     path=NamespacePath.from_strings("user"),
 )
+project_namespace = ProjectNamespace(
+    id=ULID(),
+    created_by="user_id_3",
+    path=ProjectPath(NamespaceSlug("hello-word"), ProjectSlug("project-1")),
+    underlying_resource_id=ULID(),
+)
+
+
+@pytest.mark.asyncio
+async def test_data_connector_within_project(app_manager_instance):
+    run_migrations_for_app("common")
+    repo = SearchUpdatesRepo(app_manager_instance.config.db.async_session_maker)
+    dc = DataConnector(
+        id=ULID(),
+        name="my greater dc",
+        storage=CloudStorageCore(
+            storage_type="s3", configuration={}, source_path="/a", target_path="/b", readonly=True
+        ),
+        slug="dc-2",
+        visibility=Visibility.PUBLIC,
+        created_by="user_id_3",
+        namespace=project_namespace,
+    )
+    orm_id = await repo.upsert(dc, started_at=None)
+    db_doc = await repo.find_by_id(orm_id)
+    if db_doc is None:
+        raise Exception("dataconnector not found")
+    dc_from_payload = DataConnectorDoc.from_dict(db_doc.payload)
+    assert dc.id == dc_from_payload.id
+    assert dc.name == dc_from_payload.name
+    assert dc.path.serialize() == dc_from_payload.path
+    assert dc.creation_date.replace(microsecond=0) == dc_from_payload.creationDate
+    assert dc.visibility == dc_from_payload.visibility
+    assert dc.slug == dc_from_payload.slug.value
+    assert dc.storage.storage_type == dc_from_payload.storageType
 
 
 @pytest.mark.asyncio
@@ -29,7 +64,9 @@ async def test_data_connector_upsert(app_manager_instance):
     dc = DataConnector(
         id=ULID(),
         name="mygreat dc",
-        storage=CloudStorageCore(storage_type="s3", configuration={}, source_path="", target_path="", readonly=True),
+        storage=CloudStorageCore(
+            storage_type="s3", configuration={}, source_path="/a", target_path="/b", readonly=True
+        ),
         slug="dc-1",
         visibility=Visibility.PUBLIC,
         created_by="userid_2",
@@ -39,8 +76,14 @@ async def test_data_connector_upsert(app_manager_instance):
     db_doc = await repo.find_by_id(orm_id)
     if db_doc is None:
         raise Exception("dataconnector not found")
-    dc = DataConnectorDoc.from_dict(db_doc.payload)
-    print(dc)
+    dc_from_payload = DataConnectorDoc.from_dict(db_doc.payload)
+    assert dc.id == dc_from_payload.id
+    assert dc.name == dc_from_payload.name
+    assert dc.path.serialize() == dc_from_payload.path
+    assert dc.creation_date.replace(microsecond=0) == dc_from_payload.creationDate
+    assert dc.visibility == dc_from_payload.visibility
+    assert dc.slug == dc_from_payload.slug.value
+    assert dc.storage.storage_type == dc_from_payload.storageType
 
 
 @pytest.mark.asyncio

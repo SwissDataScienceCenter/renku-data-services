@@ -39,6 +39,10 @@ class Fields:
     deleted: Final[FieldName] = FieldName("deleted")
     readonly: Final[FieldName] = FieldName("readonly")
     storageType: Final[FieldName] = FieldName("storageType")
+    path: Final[FieldName] = FieldName("path")
+    namespace_path: Final[FieldName] = FieldName("namespacePath")
+    is_namespace: Final[FieldName] = FieldName("isNamespace")
+
     # virtual score field
     score: Final[FieldName] = FieldName("score")
 
@@ -141,5 +145,14 @@ all_migrations: Final[list[SchemaMigration]] = [
             AddCommand(Field.of(Fields.storageType, FieldTypes.string)),
         ],
         requires_reindex=False,
+    ),
+    SchemaMigration(
+        version=12,
+        commands=[
+            AddCommand(Field.of(Fields.path, FieldTypes.id)),
+            AddCommand(Field.of(Fields.namespace_path, FieldTypes.id)),
+            AddCommand(Field.of(Fields.is_namespace, FieldTypes.boolean)),
+        ],
+        requires_reindex=True,
     ),
 ]

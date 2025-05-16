@@ -147,20 +147,25 @@ components:
           id: 2CAF4C73F50D4514A041C9EDDB025A36
           name: SDSC
           namespace: SDSC
+          path: sdsc
+          slug: sdsc
           description: SDSC group
           score: 1.1
       type: object
       required:
         - id
         - name
-        - namespace
+        - path
+        - slug
         - type
       properties:
         id:
           type: string
         name:
           type: string
-        namespace:
+        path:
+          type: string
+        slug:
           type: string
         description:
           type: string
@@ -218,11 +223,13 @@ components:
           id: 01HRA7AZ2Q234CDQWGA052F8MK
           name: renku
           slug: renku
+          path: user/renku
           namespace:
             type: Group
             id: 2CAF4C73F50D4514A041C9EDDB025A36
             name: SDSC
-            namespace: SDSC
+            path: sdsc
+            slug: sdsc
             description: SDSC group
             score: 1.1
           repositories:
@@ -232,7 +239,8 @@ components:
           createdBy:
             type: User
             id: 1CAF4C73F50D4514A041C9EDDB025A36
-            namespace: renku/renku
+            slug: albein
+            path: albein
             firstName: Albert
             lastName: Einstein
             score: 2.1
@@ -246,6 +254,7 @@ components:
         - id
         - name
         - slug
+        - path
         - visibility
         - creationDate
         - type
@@ -255,6 +264,8 @@ components:
         name:
           type: string
         slug:
+          type: string
+        path:
           type: string
         namespace:
           $ref: '#/components/schemas/UserOrGroup'
@@ -292,7 +303,8 @@ components:
             type: Group
             id: 2CAF4C73F50D4514A041C9EDDB025A36
             name: SDSC
-            namespace: SDSC
+            path: sdsc
+            slug: sdsc
             description: SDSC group
             score: 1.1
           visibility: public
@@ -300,7 +312,8 @@ components:
           createdBy:
             type: User
             id: 1CAF4C73F50D4514A041C9EDDB025A36
-            namespace: renku/renku
+            path: albein
+            slug: albein
             firstName: Albert
             lastName: Einstein
             score: 2.1
@@ -314,6 +327,7 @@ components:
         - id
         - name
         - slug
+        - path
         - visibility
         - creationDate
         - type
@@ -330,8 +344,10 @@ components:
           type: string
         slug:
           type: string
+        path:
+          type: string
         namespace:
-          $ref: '#/components/schemas/UserOrGroup'
+          $ref: '#/components/schemas/UserOrGroupOrProject'
         visibility:
           $ref: '#/components/schemas/Visibility'
         description:
@@ -385,7 +401,8 @@ components:
       examples:
         - type: User
           id: 1CAF4C73F50D4514A041C9EDDB025A36
-          namespace: renku/renku
+          path: albein
+          slug: albein
           firstName: Albert
           lastName: Einstein
           score: 2.1
@@ -393,10 +410,14 @@ components:
       required:
         - id
         - type
+        - path
+        - slug
       properties:
         id:
           type: string
-        namespace:
+        path:
+          type: string
+        slug:
           type: string
         firstName:
           type: string
@@ -425,6 +446,25 @@ components:
         mapping:
           Group: '#/components/schemas/Group'
           User: '#/components/schemas/User'
+    UserOrGroupOrProject:
+      title: UserOrGroupOrProject
+      examples:
+        - type: Group
+          id: 2CAF4C73F50D4514A041C9EDDB025A36
+          name: SDSC
+          namespace: SDSC
+          description: SDSC group
+          score: 1.1
+      oneOf:
+        - $ref: '#/components/schemas/Group'
+        - $ref: '#/components/schemas/User'
+        - $ref: '#/components/schemas/SearchProject'
+      discriminator:
+        propertyName: type
+        mapping:
+          Group: '#/components/schemas/Group'
+          User: '#/components/schemas/User'
+          Project: '#/components/schemas/SearchProject'
     Visibility:
       description: Project's visibility levels
       type: string
