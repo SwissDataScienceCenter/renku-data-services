@@ -11,6 +11,7 @@ from box import Box
 from kr8s import NotFoundError, ServerError
 from kr8s.asyncio.objects import APIObject, Pod, Secret, StatefulSet
 from kubernetes.client import V1Secret
+from sanic.log import logger
 
 from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ResourcePoolRepository
@@ -189,7 +190,7 @@ class NotebookK8sClient(Generic[_SessionType]):
                     cluster_id = ClusterId(str(rp.cluster.id))
             except errors.MissingResourceError:
                 pass
-
+        logger.warning(f"#### class id {class_id} => {cluster_id}")
         return self.__client.cluster_by_id(cluster_id)
 
     async def list_sessions(self, safe_username: str) -> list[_SessionType]:
@@ -222,7 +223,7 @@ class NotebookK8sClient(Generic[_SessionType]):
         session_name = manifest.metadata.name
 
         session = await self.get_session(session_name, api_user.id)
-        if session:
+        if session is not None:
             # NOTE: session already exists
             return session
 

@@ -50,7 +50,7 @@ class K8sWatcher:
         for kind in self.__kinds:
             for cluster in self.__clusters.values():
                 clnt = K8sClusterClient(cluster)
-                fltr = K8sObjectFilter(gvk=kind, namespace=cluster.namespace)
+                fltr = K8sObjectFilter(gvk=kind, namespace=cluster.namespace, cluster=cluster.id)
                 # Upsert new / updated objects
                 objects_in_k8s: dict[str, K8sObject] = {}
                 async for obj in clnt.list(fltr):

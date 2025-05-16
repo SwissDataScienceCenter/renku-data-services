@@ -4,6 +4,7 @@ import asyncio
 from dataclasses import asdict, dataclass
 
 from sanic import HTTPResponse, Request, empty, json
+from sanic.log import logger
 from sanic_ext import validate
 from ulid import ULID
 
@@ -27,6 +28,7 @@ class ResourcePoolsBP(CustomBlueprint):
 
     rp_repo: ResourcePoolRepository
     user_repo: UserRepository
+    cluster_repo: ClusterRepository
     authenticator: base_models.Authenticator
 
     def get_all(self) -> BlueprintFactoryResponse:
@@ -49,9 +51,16 @@ class ResourcePoolsBP(CustomBlueprint):
         @only_admins
         @validate(json=apispec.ResourcePool)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.ResourcePool) -> HTTPResponse:
-            rp = models.ResourcePool.from_dict(body.model_dump(exclude_none=True))
+            cluster = None
+            if body.cluster_id is not None:
+                cluster = await self.cluster_repo.select(api_user=user, cluster_id=ULID.from_str(body.cluster_id))
+            rp = models.ResourcePool.from_dict({**body.model_dump(exclude_none=True), "cluster": cluster})
+
             res = await self.rp_repo.insert_resource_pool(api_user=user, resource_pool=rp)
-            return validated_json(apispec.ResourcePoolWithId, res, status=201)
+            logger.warning(f"#### 2 Adding resource pool from \nbody {body}\n rp {rp}\n res {res}")
+            validated = validated_json(apispec.ResourcePoolWithId, res, status=201)
+            logger.warning(f"#### 3 Adding resource pool from \nbody {body}\n rp {rp}\n res {res}\n val {validated}")
+            return validated
 
         return "/resource_pools", ["POST"], _post
 
