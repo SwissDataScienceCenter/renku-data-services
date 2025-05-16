@@ -153,7 +153,7 @@ class ResourcePoolRepository(_Base):
 
     def __init__(self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository):
         super().__init__(session_maker, quotas_repo)
-        self._cluster_repo = ClusterRepository(session_maker=self.session_maker)
+        self.__cluster_repo = ClusterRepository(session_maker=self.session_maker)
 
     async def initialize(self, async_connection_url: str, rp: models.ResourcePool) -> None:
         """Add the default resource pool if it does not already exist."""
@@ -282,7 +282,8 @@ class ResourcePoolRepository(_Base):
     ) -> models.ResourcePool:
         """Insert resource pool into database."""
         quota = None
-        if resource_pool.quota:
+        cluster = None
+        if resource_pool.quota is not None:
             for rc in resource_pool.classes:
                 if not resource_pool.quota.is_resource_class_compatible(rc):
                     raise errors.ValidationError(
@@ -290,6 +291,9 @@ class ResourcePoolRepository(_Base):
                     )
             quota = self.quotas_repo.create_quota(models.Quota.from_dict(asdict(resource_pool.quota)))
             resource_pool = resource_pool.set_quota(quota)
+        if resource_pool.cluster is not None:
+            cluster = self.__cluster_repo.select(resource_pool.cluster)
+
         orm = schemas.ResourcePoolORM.load(resource_pool)
         async with self.session_maker() as session, session.begin():
             if orm.idle_threshold == 0:
@@ -412,7 +416,7 @@ class ResourcePoolRepository(_Base):
                         cluster = None
 
                         if cluster_id is not None:
-                            cluster = await self._cluster_repo.select(
+                            cluster = await self.__cluster_repo.select(
                                 api_user=api_user, cluster_id=ULID.from_str(cluster_id)
                             )
 
