@@ -294,6 +294,8 @@ class ResourcePoolRepository(_Base):
         if resource_pool.cluster is not None:
             cluster = self.__cluster_repo.select(resource_pool.cluster)
 
+        resource_pool = resource_pool.update(cluster=cluster)
+
         orm = schemas.ResourcePoolORM.load(resource_pool)
         async with self.session_maker() as session, session.begin():
             if orm.idle_threshold == 0:
