@@ -292,9 +292,7 @@ class ResourcePoolRepository(_Base):
             quota = self.quotas_repo.create_quota(models.Quota.from_dict(asdict(resource_pool.quota)))
             resource_pool = resource_pool.set_quota(quota)
 
-        logger.warning(f"#### before load rp {resource_pool}")
         orm = schemas.ResourcePoolORM.load(resource_pool)
-        logger.warning(f"#### ORM {orm}")
 
         async with self.session_maker() as session, session.begin():
             if orm.idle_threshold == 0:
@@ -310,6 +308,9 @@ class ResourcePoolRepository(_Base):
                         message="There can only be one default resource pool and one already exists."
                     )
             session.add(orm)
+            await session.flush()
+            await session.refresh(orm)
+
         return orm.dump(quota)
 
     async def get_classes(
