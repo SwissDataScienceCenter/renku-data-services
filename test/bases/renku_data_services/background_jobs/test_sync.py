@@ -17,12 +17,14 @@ from authzed.api.v1 import (
     SubjectReference,
     WriteRelationshipsRequest,
 )
+from renku_data_services import db_config
 from ulid import ULID
 
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.authz.authz import Authz, ResourceType, _AuthzConverter, _Relation
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.authz.models import Role, UnsavedMember
+from renku_data_services.background_jobs.dependencies import DependencyManager
 from renku_data_services.background_jobs.config import SyncConfig
 from renku_data_services.background_jobs.core import (
     bootstrap_user_namespaces,
@@ -64,17 +66,22 @@ def get_app_configs(db_instance: DBConfig, authz_instance: AuthzConfig):
     def _get_app_configs(
         kc_api: DummyKeycloakAPI, total_user_sync: bool = False
     ) -> tuple[
-        SyncConfig,
+        DependencyManager,
         UserRepo,
     ]:
         redis = RedisConfig.fake()
+        config = SyncConfig.from_env()
+        config.db = db_instance
+        config.redis = redis
+        dm = DependencyManager.from_env(config)
         message_queue = RedisQueue(redis)
+        authz = Authz(authz_instance)
         event_repo = EventRepository(db_instance.async_session_maker, message_queue=message_queue)
         search_updates_repo = SearchUpdatesRepo(db_instance.async_session_maker)
         group_repo = GroupRepository(
             session_maker=db_instance.async_session_maker,
             event_repo=event_repo,
-            group_authz=Authz(authz_instance),
+            group_authz=authz,
             message_queue=message_queue,
             search_updates_repo=search_updates_repo,
         )
@@ -83,12 +90,12 @@ def get_app_configs(db_instance: DBConfig, authz_instance: AuthzConfig):
             message_queue=message_queue,
             event_repo=event_repo,
             group_repo=group_repo,
-            authz=Authz(authz_instance),
+            authz=authz,
             search_updates_repo=search_updates_repo,
         )
         data_connector_repo = DataConnectorRepository(
             session_maker=db_instance.async_session_maker,
-            authz=Authz(authz_instance),
+            authz=authz,
             group_repo=group_repo,
             project_repo=project_repo,
             search_updates_repo=search_updates_repo,
@@ -97,7 +104,7 @@ def get_app_configs(db_instance: DBConfig, authz_instance: AuthzConfig):
             session_maker=db_instance.async_session_maker,
             data_connector_repo=data_connector_repo,
             project_repo=project_repo,
-            authz=Authz(authz_instance),
+            authz=authz,
         )
         user_repo = UserRepo(
             db_instance.async_session_maker,
@@ -105,7 +112,7 @@ def get_app_configs(db_instance: DBConfig, authz_instance: AuthzConfig):
             event_repo=event_repo,
             group_repo=group_repo,
             encryption_key=secrets.token_bytes(32),
-            authz=Authz(authz_instance),
+            authz=authz,
             search_updates_repo=search_updates_repo,
         )
         users_sync = UsersSync(
@@ -114,9 +121,9 @@ def get_app_configs(db_instance: DBConfig, authz_instance: AuthzConfig):
             event_repo=event_repo,
             group_repo=group_repo,
             user_repo=user_repo,
-            authz=Authz(authz_instance),
+            authz=authz,
         )
-        config = SyncConfig(
+        dm = DependencyManager(
             syncer=users_sync,
             kc_api=kc_api,
             authz_config=authz_instance,
@@ -127,7 +134,7 @@ def get_app_configs(db_instance: DBConfig, authz_instance: AuthzConfig):
             session_maker=db_instance.async_session_maker,
         )
         run_migrations_for_app("common")
-        return config, user_repo
+        return dm, user_repo
 
     yield _get_app_configs
 
