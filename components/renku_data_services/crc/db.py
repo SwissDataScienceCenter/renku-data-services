@@ -308,10 +308,11 @@ class ResourcePoolRepository(_Base):
                         message="There can only be one default resource pool and one already exists."
                     )
             session.add(orm)
+
             await session.flush()
             await session.refresh(orm)
-
-        return orm.dump(quota)
+            dump = orm.dump(quota)
+            return dump
 
     async def get_classes(
         self,
