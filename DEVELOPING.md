@@ -3,6 +3,10 @@
 This document details the structure of the code in this repository.
 For information on how to set up a dev environment and run code, consult the [readme](/README.md).
 
+### Coding guidelines
+
+These can be found in our [wiki](https://github.com/SwissDataScienceCenter/renku-data-services/wiki/Coding-guidelines).
+
 ### Architecture
 
 #### Polylith
