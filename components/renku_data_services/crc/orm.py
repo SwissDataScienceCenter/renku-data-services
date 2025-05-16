@@ -163,7 +163,10 @@ class ResourcePoolORM(BaseORM):
     name: Mapped[str] = mapped_column(String(40), index=True)
     quota: Mapped[Optional[str]] = mapped_column(String(63), index=True, default=None)
     users: Mapped[list["RPUserORM"]] = relationship(
-        secondary=resource_pools_users, back_populates="resource_pools", default_factory=list
+        secondary=resource_pools_users,
+        back_populates="resource_pools",
+        default_factory=list,
+        repr=False,
     )
     classes: Mapped[list["ResourceClassORM"]] = relationship(
         back_populates="resource_pool",
@@ -183,13 +186,13 @@ class ResourcePoolORM(BaseORM):
     cluster_id: Mapped[Optional[ULID]] = mapped_column(
         ForeignKey(ClusterORM.id, ondelete="SET NULL"), default=None, index=True
     )
-    cluster: Mapped[Optional[ClusterORM]] = relationship(viewonly=True, default=None, lazy="joined", init=False)
+    cluster: Mapped[Optional[ClusterORM]] = relationship(viewonly=True, default=None, lazy="selectin", init=False)
 
     @classmethod
     def load(cls, resource_pool: models.ResourcePool) -> "ResourcePoolORM":
         """Create an ORM object from the resource pool model."""
         quota = None
-        if isinstance(resource_pool.quota, models.Quota):
+        if resource_pool.quota is not None:
             quota = resource_pool.quota.id
 
         cluster_id = None
@@ -212,7 +215,7 @@ class ResourcePoolORM(BaseORM):
     ) -> models.ResourcePool:
         """Create a resource pool model from the ORM object and a quota."""
         classes: list[ResourceClassORM] = self.classes
-        if quota and quota.id != self.quota:
+        if quota is not None and quota.id != self.quota:
             raise errors.BaseError(
                 message="Unexpected error when dumping a resource pool ORM.",
                 detail=f"The quota name in the database {self.quota} and Kubernetes {quota.id} do not match.",
