@@ -35,9 +35,10 @@ class DependencyManager:
     session_maker: Callable[..., AsyncSession]
 
     @classmethod
-    def from_env(cls) -> "DependencyManager":
+    def from_env(cls, config: SyncConfig | None = None) -> "DependencyManager":
         """Generate a configuration from environment variables."""
-        config = SyncConfig.from_env()
+        if config is None:
+            config = SyncConfig.from_env()
         # NOTE: the pool here is not used to serve HTTP requests, it is only used in background jobs.
         # Therefore, we want to consume very few connections and we can wait for an available connection
         # much longer than the default 30 seconds. In our tests syncing 15 users times out with the default.
