@@ -50,6 +50,7 @@ class FrontendVariant(StrEnum):
     """The environment frontend choice."""
 
     vscodium = "vscodium"
+    jupyterlab = "jupyterlab"
 
 
 @dataclass(kw_only=True, frozen=True, eq=True)
@@ -304,6 +305,8 @@ class ShipwrightBuildRunParams:
     tolerations: list[crs.Toleration] | None = None
     labels: dict[str, str] | None = None
     annotations: dict[str, str] | None = None
+    frontend: str = FrontendVariant.vscodium.value
+    build_image: str | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

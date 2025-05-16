@@ -73,15 +73,17 @@
       'repository': 'https://github.com/some/repo',
     }),
     'container_image': 'image:unknown-at-the-moment',
-    'default_url': '/lab',
+    'default_url': '/',
     'description': 'Generated environment for Launcher',
     'environment_image_source': 'build',
     'environment_kind': 'CUSTOM',
     'gid': 1000,
     'is_archived': False,
+    'mount_directory': '/home/renku/work',
     'name': 'Launcher',
     'port': 8888,
     'uid': 1000,
+    'working_directory': '/home/renku/work',
   })
 # ---
 # name: test_project_copy_creates_new_build_and_environment_instances.2
