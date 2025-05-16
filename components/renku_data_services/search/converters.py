@@ -50,7 +50,14 @@ def from_visibility(v: Visibility) -> VisibilityApi:
 
 def from_user(user: UserDocument) -> UserApi:
     """Creates an apispec user from a solr user document."""
-    return UserApi(id=user.id, namespace=user.path, firstName=user.firstName, lastName=user.lastName, score=user.score)
+    return UserApi(
+        id=user.id,
+        slug=user.slug.value,
+        path=user.path,
+        firstName=user.firstName,
+        lastName=user.lastName,
+        score=user.score,
+    )
 
 
 def from_group(group: GroupDocument) -> GroupApi:
@@ -58,7 +65,8 @@ def from_group(group: GroupDocument) -> GroupApi:
     return GroupApi(
         id=str(group.id),
         name=group.name,
-        namespace=group.path,
+        slug=group.slug.value,
+        path=group.path,
         description=group.description,
         score=group.score,
     )
@@ -85,6 +93,7 @@ def from_project(project: ProjectDocument) -> ProjectApi:
         id=str(project.id),
         name=project.name,
         slug=project.slug.value,
+        path=project.path,
         namespace=__namespace_details(project),
         repositories=project.repositories,
         visibility=from_visibility(project.visibility),
@@ -102,6 +111,7 @@ def from_data_connector(dc: DataConnectorDocument) -> DataConnectorApi:
         id=str(dc.id),
         name=dc.name,
         slug=dc.slug.value,
+        path=dc.path,
         namespace=__namespace_details(dc),
         visibility=from_visibility(dc.visibility),
         description=dc.description,
