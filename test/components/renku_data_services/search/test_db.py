@@ -29,9 +29,9 @@ project_namespace = ProjectNamespace(
 
 
 @pytest.mark.asyncio
-async def test_data_connector_within_project(app_config_instance):
+async def test_data_connector_within_project(app_manager_instance):
     run_migrations_for_app("common")
-    repo = SearchUpdatesRepo(app_config_instance.db.async_session_maker)
+    repo = SearchUpdatesRepo(app_manager_instance.config.db.async_session_maker)
     dc = DataConnector(
         id=ULID(),
         name="my greater dc",
@@ -50,7 +50,7 @@ async def test_data_connector_within_project(app_config_instance):
     dc_from_payload = DataConnectorDoc.from_dict(db_doc.payload)
     assert dc.id == dc_from_payload.id
     assert dc.name == dc_from_payload.name
-    assert dc.namespace.path.serialize() == dc_from_payload.namespace
+    assert dc.path.serialize() == dc_from_payload.path
     assert dc.creation_date.replace(microsecond=0) == dc_from_payload.creationDate
     assert dc.visibility == dc_from_payload.visibility
     assert dc.slug == dc_from_payload.slug.value
@@ -79,7 +79,7 @@ async def test_data_connector_upsert(app_manager_instance):
     dc_from_payload = DataConnectorDoc.from_dict(db_doc.payload)
     assert dc.id == dc_from_payload.id
     assert dc.name == dc_from_payload.name
-    assert dc.namespace.path.serialize() == dc_from_payload.namespace
+    assert dc.path.serialize() == dc_from_payload.path
     assert dc.creation_date.replace(microsecond=0) == dc_from_payload.creationDate
     assert dc.visibility == dc_from_payload.visibility
     assert dc.slug == dc_from_payload.slug.value
