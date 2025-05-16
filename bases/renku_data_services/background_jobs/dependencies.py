@@ -16,7 +16,9 @@ from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.users.db import UserRepo, UsersSync
+from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
+from renku_data_services.users.models import UnsavedUserInfo
 
 
 @dataclass
@@ -94,13 +96,21 @@ class DependencyManager:
             user_repo=user_repo,
             authz=authz,
         )
-
-        kc_api = KeycloakAPI(
-            keycloak_url=config.keycloak.url,
-            client_id=config.keycloak.client_id,
-            client_secret=config.keycloak.client_secret,
-            realm=config.keycloak.realm,
-        )
+        kc_api: IKeycloakAPI
+        if config.dummy_stores:
+            dummy_users = [
+                UnsavedUserInfo(id="user1", first_name="user1", last_name="doe", email="user1@doe.com"),
+                UnsavedUserInfo(id="user2", first_name="user2", last_name="doe", email="user2@doe.com"),
+            ]
+            kc_api = DummyKeycloakAPI(users=[i.to_keycloak_dict() for i in dummy_users])
+        else:
+            assert config.keycloak is not None
+            kc_api = KeycloakAPI(
+                keycloak_url=config.keycloak.url,
+                client_id=config.keycloak.client_id,
+                client_secret=config.keycloak.client_secret,
+                realm=config.keycloak.realm,
+            )
         return cls(
             config=config,
             syncer=syncer,
