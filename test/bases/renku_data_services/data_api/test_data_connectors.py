@@ -97,16 +97,16 @@ async def test_post_data_connector(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "doi", ["10.5281/zenodo.15411010", "doi:10.5281/zenodo.15411010", "https://doi.org/10.5281/zenodo.15411010"]
+    "doi", ["10.5281/zenodo.2600782", "doi:10.5281/zenodo.2600782", "https://doi.org/10.5281/zenodo.2600782"]
 )
 async def test_post_global_data_connector(
     sanic_client: SanicASGITestClient, user_headers: dict[str, str], monkeypatch: "MonkeyPatch", doi: str
 ) -> None:
     # The DOI resolver seems to block requests from GitHub action runners, so we mock its response
     metadata = RCloneDOIMetadata(
-        DOI="10.5281/zenodo.15411010",
-        URL="https://doi.org/10.5281/zenodo.15411010",
-        metadataURL="https://zenodo.org/api/records/15411010",
+        DOI="10.5281/zenodo.2600782",
+        URL="https://doi.org/10.5281/zenodo.2600782",
+        metadataURL="https://zenodo.org/api/records/3542869",
         provider="zenodo",
     )
     _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
@@ -124,17 +124,17 @@ async def test_post_global_data_connector(
     assert response.status_code == 201, response.text
     assert response.json is not None
     data_connector = response.json
-    assert data_connector.get("name") == "Brazilian Flora: Brazilian Flora DwCA"
-    assert data_connector.get("slug") == "doi-10.5281-zenodo.15411010"
+    assert data_connector.get("name") == "SwissDataScienceCenter/renku-python: Version 0.7.2"
+    assert data_connector.get("slug") == "doi-10.5281-zenodo.2600782"
     assert data_connector.get("storage") is not None
     storage = data_connector["storage"]
     assert storage.get("storage_type") == "doi"
     assert storage.get("source_path") == "/"
-    assert storage.get("target_path") == "brazilian-flora-brazilian-flor-doi-10.5281-zenodo.15411010"
+    assert storage.get("target_path") == "swissdatasciencecenter-renku-p-doi-10.5281-zenodo.2600782"
     assert storage.get("readonly") is True
     assert data_connector.get("visibility") == "public"
     assert data_connector.get("description") is not None
-    assert set(data_connector.get("keywords")) == {"active"}
+    assert set(data_connector.get("keywords")) == set()
 
     # Check that we can retrieve the data connector
     _, response = await sanic_client.get(f"/api/data/data_connectors/{data_connector['id']}", headers=user_headers)
@@ -233,14 +233,14 @@ async def test_post_global_data_connector_no_duplicates(
 ) -> None:
     # The DOI resolver seems to block requests from GitHub action runners, so we mock its response
     metadata = RCloneDOIMetadata(
-        DOI="10.5281/zenodo.15411010",
-        URL="https://doi.org/10.5281/zenodo.15411010",
-        metadataURL="https://zenodo.org/api/records/15411010",
+        DOI="10.5281/zenodo.2600782",
+        URL="https://doi.org/10.5281/zenodo.2600782",
+        metadataURL="https://zenodo.org/api/records/3542869",
         provider="zenodo",
     )
     _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
 
-    doi = "10.5281/zenodo.15411010"
+    doi = "10.5281/zenodo.2600782"
     payload = {
         "storage": {
             "configuration": {"type": "doi", "doi": doi},
@@ -255,11 +255,11 @@ async def test_post_global_data_connector_no_duplicates(
     assert response.json is not None
     data_connector = response.json
     data_connector_id = data_connector["id"]
-    assert data_connector.get("name") == "Brazilian Flora: Brazilian Flora DwCA"
-    assert data_connector.get("slug") == "doi-10.5281-zenodo.15411010"
+    assert data_connector.get("name") == "SwissDataScienceCenter/renku-python: Version 0.7.2"
+    assert data_connector.get("slug") == "doi-10.5281-zenodo.2600782"
 
     # Check that posting the same DOI returns the same data connector ULID
-    doi = "https://doi.org/10.5281/zenodo.15411010"
+    doi = "https://doi.org/10.5281/zenodo.2600782"
     payload = {
         "storage": {
             "configuration": {"type": "doi", "doi": doi},
@@ -926,14 +926,14 @@ async def test_patch_global_data_connector(
 ) -> None:
     # The DOI resolver seems to block requests from GitHub action runners, so we mock its response
     metadata = RCloneDOIMetadata(
-        DOI="10.5281/zenodo.15411010",
-        URL="https://doi.org/10.5281/zenodo.15411010",
-        metadataURL="https://zenodo.org/api/records/15411010",
+        DOI="10.5281/zenodo.2600782",
+        URL="https://doi.org/10.5281/zenodo.2600782",
+        metadataURL="https://zenodo.org/api/records/3542869",
         provider="zenodo",
     )
     _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
 
-    doi = "10.5281/zenodo.15411010"
+    doi = "10.5281/zenodo.2600782"
     payload = {
         "storage": {
             "configuration": {"type": "doi", "doi": doi},
@@ -948,7 +948,7 @@ async def test_patch_global_data_connector(
     assert response.json is not None
     data_connector = response.json
     data_connector_id = data_connector["id"]
-    assert data_connector.get("name") == "Brazilian Flora: Brazilian Flora DwCA"
+    assert data_connector.get("name") == "SwissDataScienceCenter/renku-python: Version 0.7.2"
 
     # Check that a regular user cannot patch a global data connector
     headers = merge_headers(user_headers, {"If-Match": data_connector["etag"]})
@@ -1002,14 +1002,14 @@ async def test_delete_global_data_connector(
 ) -> None:
     # The DOI resolver seems to block requests from GitHub action runners, so we mock its response
     metadata = RCloneDOIMetadata(
-        DOI="10.5281/zenodo.15411010",
-        URL="https://doi.org/10.5281/zenodo.15411010",
-        metadataURL="https://zenodo.org/api/records/15411010",
+        DOI="10.5281/zenodo.2600782",
+        URL="https://doi.org/10.5281/zenodo.2600782",
+        metadataURL="https://zenodo.org/api/records/3542869",
         provider="zenodo",
     )
     _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
 
-    doi = "10.5281/zenodo.15411010"
+    doi = "10.5281/zenodo.2600782"
     payload = {
         "storage": {
             "configuration": {"type": "doi", "doi": doi},
