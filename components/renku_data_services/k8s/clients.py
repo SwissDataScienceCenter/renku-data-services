@@ -375,9 +375,7 @@ class K8sClusterClientsPool:
     """A wrapper around a kr8s k8s client, acts on all resources over many clusters."""
 
     def __init__(self, clusters: list[Cluster], cache: K8sDbCache, kinds_to_cache: list[GVK]) -> None:
-        # DEBUG: Bypass the cache for now
-        # self.__clients = {c.id: K8SCachedClusterClient(c, cache, kinds_to_cache) for c in clusters}
-        self.__clients = {c.id: K8sClusterClient(c) for c in clusters}
+        self.__clients = {c.id: K8SCachedClusterClient(c, cache, kinds_to_cache) for c in clusters}
         logger.warning(f"#### Got {len(clusters)} clusters: {clusters}")
 
     def __get_client_or_die(self, cluster_id: ClusterId) -> K8sClusterClient:
