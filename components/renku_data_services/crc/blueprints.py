@@ -57,7 +57,7 @@ class ResourcePoolsBP(CustomBlueprint):
             rp = models.ResourcePool.from_dict({**body.model_dump(exclude_none=True), "cluster": cluster})
 
             res = await self.rp_repo.insert_resource_pool(api_user=user, resource_pool=rp)
-            logger.warning(f"#### Adding resource pool from body {body} rp {rp} res {res}")
+            logger.warning(f"#### Adding resource pool from \nbody {body}\n rp {rp}\n res {res}")
             return validated_json(apispec.ResourcePoolWithId, res, status=201)
 
         return "/resource_pools", ["POST"], _post
