@@ -12,6 +12,7 @@ from dataclasses import asdict, dataclass, field
 from functools import wraps
 from typing import Any, Concatenate, Optional, ParamSpec, TypeVar, cast
 
+from sanic.log import logger
 from sqlalchemy import NullPool, delete, false, select, true
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import selectinload
@@ -291,7 +292,10 @@ class ResourcePoolRepository(_Base):
             quota = self.quotas_repo.create_quota(models.Quota.from_dict(asdict(resource_pool.quota)))
             resource_pool = resource_pool.set_quota(quota)
 
+        logger.warning(f"#### before load rp {resource_pool}")
         orm = schemas.ResourcePoolORM.load(resource_pool)
+        logger.warning(f"#### ORM {orm}")
+
         async with self.session_maker() as session, session.begin():
             if orm.idle_threshold == 0:
                 orm.idle_threshold = None
