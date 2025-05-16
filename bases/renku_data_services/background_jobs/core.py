@@ -16,9 +16,9 @@ from authzed.api.v1 import (
 )
 from ulid import ULID
 
-from renku_data_services.authz.authz import Authz, ResourceType, _AuthzConverter, _Relation
+from renku_data_services.authz.authz import ResourceType, _AuthzConverter, _Relation
 from renku_data_services.authz.models import Scope
-from renku_data_services.background_jobs.config import SyncConfig
+from renku_data_services.background_jobs.dependencies import DependencyManager
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.errors import errors
 from renku_data_services.message_queue.avro_models.io.renku.events import v2
@@ -26,15 +26,14 @@ from renku_data_services.message_queue.converters import EventConverter
 from renku_data_services.namespace.models import NamespaceKind
 
 
-async def generate_user_namespaces(config: SyncConfig) -> None:
+async def generate_user_namespaces(dm: DependencyManager) -> None:
     """Generate namespaces for users if there are none."""
-    await config.group_repo.generate_user_namespaces()
+    await dm.group_repo.generate_user_namespaces()
 
 
-async def sync_user_namespaces(config: SyncConfig) -> None:
+async def sync_user_namespaces(dm: DependencyManager) -> None:
     """Lists all user namespaces in the database and adds them to Authzed and the event queue."""
-    authz = Authz(config.authz_config)
-    user_namespaces = config.group_repo._get_user_namespaces()
+    user_namespaces = dm.group_repo._get_user_namespaces()
     logging.info("Start syncing user namespaces to the authorization DB and message queue")
     num_authz: int = 0
     num_events: int = 0
@@ -42,15 +41,15 @@ async def sync_user_namespaces(config: SyncConfig) -> None:
     async for user_namespace in user_namespaces:
         num_total += 1
         events = EventConverter.to_events(user_namespace, v2.UserAdded)
-        authz_change = authz._add_user_namespace(user_namespace.namespace)
-        session = config.session_maker()
+        authz_change = dm.authz._add_user_namespace(user_namespace.namespace)
+        session = dm.session_maker()
         tx = session.begin()
         await tx.start()
         try:
-            await authz.client.WriteRelationships(authz_change.apply)
+            await dm.authz.client.WriteRelationships(authz_change.apply)
             num_authz += 1
             for event in events:
-                await config.event_repo.store_event(session, event)
+                await dm.event_repo.store_event(session, event)
             num_events += 1
         except Exception as err:
             # NOTE: We do not rollback the authz changes here because it is OK if something is in Authz DB
@@ -65,11 +64,10 @@ async def sync_user_namespaces(config: SyncConfig) -> None:
     logging.info(f"Wrote to event queue database for {num_events}/{num_total} user namespaces")
 
 
-async def bootstrap_user_namespaces(config: SyncConfig) -> None:
+async def bootstrap_user_namespaces(dm: DependencyManager) -> None:
     """Synchronize user namespaces to the authorization database only if none are already present."""
-    authz = Authz(config.authz_config)
     rels = aiter(
-        authz.client.ReadRelationships(
+        dm.authz.client.ReadRelationships(
             ReadRelationshipsRequest(
                 relationship_filter=RelationshipFilter(
                     resource_type=ResourceType.user_namespace.value, optional_relation=_Relation.owner.value
@@ -87,14 +85,13 @@ async def bootstrap_user_namespaces(config: SyncConfig) -> None:
             "will not sync user namespaces to authorization."
         )
         return
-    await sync_user_namespaces(config)
+    await sync_user_namespaces(dm)
 
 
-async def fix_mismatched_project_namespace_ids(config: SyncConfig) -> None:
+async def fix_mismatched_project_namespace_ids(dm: DependencyManager) -> None:
     """Fixes a problem where the project namespace relationship for projects has the wrong group ID."""
     api_user = InternalServiceAdmin(id=ServiceAdminId.migrations)
-    authz = Authz(config.authz_config)
-    res = authz.client.ReadRelationships(
+    res = dm.authz.client.ReadRelationships(
         ReadRelationshipsRequest(
             consistency=Consistency(fully_consistent=True),
             relationship_filter=RelationshipFilter(
@@ -108,10 +105,10 @@ async def fix_mismatched_project_namespace_ids(config: SyncConfig) -> None:
         logging.info(f"Checking project namespace - group relation {rel} for correct group ID")
         project_id = rel.relationship.resource.object_id
         try:
-            project = await config.project_repo.get_project(api_user, project_id)
+            project = await dm.project_repo.get_project(api_user, project_id)
         except errors.MissingResourceError:
             logging.info(f"Couldn't find project {project_id}, deleting relation")
-            await authz.client.WriteRelationships(
+            await dm.authz.client.WriteRelationships(
                 WriteRelationshipsRequest(
                     updates=[
                         RelationshipUpdate(
@@ -132,7 +129,7 @@ async def fix_mismatched_project_namespace_ids(config: SyncConfig) -> None:
                 f"The project namespace ID in Authzed {authzed_group_id} "
                 f"does not match the expected group ID {correct_group_id}, correcting it..."
             )
-            await authz.client.WriteRelationships(
+            await dm.authz.client.WriteRelationships(
                 WriteRelationshipsRequest(
                     updates=[
                         RelationshipUpdate(
@@ -156,12 +153,11 @@ async def fix_mismatched_project_namespace_ids(config: SyncConfig) -> None:
             )
 
 
-async def migrate_groups_make_all_public(config: SyncConfig) -> None:
+async def migrate_groups_make_all_public(dm: DependencyManager) -> None:
     """Update existing groups to make them public."""
     logger = logging.getLogger("background_jobs").getChild(migrate_groups_make_all_public.__name__)
 
-    authz = Authz(config.authz_config)
-    all_groups = authz.client.ReadRelationships(
+    all_groups = dm.authz.client.ReadRelationships(
         ReadRelationshipsRequest(
             relationship_filter=RelationshipFilter(
                 resource_type=ResourceType.group.value,
@@ -175,7 +171,7 @@ async def migrate_groups_make_all_public(config: SyncConfig) -> None:
     logger.info(f"All groups = {len(all_group_ids)}")
     logger.info(f"All groups = {all_group_ids}")
 
-    public_groups = authz.client.LookupResources(
+    public_groups = dm.authz.client.LookupResources(
         LookupResourcesRequest(
             resource_object_type=ResourceType.group.value,
             permission=Scope.READ.value,
@@ -211,16 +207,15 @@ async def migrate_groups_make_all_public(config: SyncConfig) -> None:
                 for rel in [all_users_are_viewers, all_anon_users_are_viewers]
             ]
         )
-        await authz.client.WriteRelationships(authz_change)
+        await dm.authz.client.WriteRelationships(authz_change)
         logger.info(f"Made group {group_id} public")
 
 
-async def migrate_user_namespaces_make_all_public(config: SyncConfig) -> None:
+async def migrate_user_namespaces_make_all_public(dm: DependencyManager) -> None:
     """Update existing user namespaces to make them public."""
     logger = logging.getLogger("background_jobs").getChild(migrate_user_namespaces_make_all_public.__name__)
 
-    authz = Authz(config.authz_config)
-    all_user_namespaces = authz.client.ReadRelationships(
+    all_user_namespaces = dm.authz.client.ReadRelationships(
         ReadRelationshipsRequest(
             relationship_filter=RelationshipFilter(
                 resource_type=ResourceType.user_namespace.value,
@@ -234,7 +229,7 @@ async def migrate_user_namespaces_make_all_public(config: SyncConfig) -> None:
     logger.info(f"All user namespaces = {len(all_user_namespace_ids)}")
     logger.info(f"All user namespaces = {all_user_namespace_ids}")
 
-    public_user_namespaces = authz.client.LookupResources(
+    public_user_namespaces = dm.authz.client.LookupResources(
         LookupResourcesRequest(
             resource_object_type=ResourceType.user_namespace.value,
             permission=Scope.READ.value,
@@ -270,16 +265,16 @@ async def migrate_user_namespaces_make_all_public(config: SyncConfig) -> None:
                 for rel in [all_users_are_viewers, all_anon_users_are_viewers]
             ]
         )
-        await authz.client.WriteRelationships(authz_change)
+        await dm.authz.client.WriteRelationships(authz_change)
         logger.info(f"Made user namespace {ns_id} public")
 
 
-async def migrate_storages_v2_to_data_connectors(config: SyncConfig) -> list[BaseException]:
+async def migrate_storages_v2_to_data_connectors(dm: DependencyManager) -> list[BaseException]:
     """Move storages_v2 to data_connectors."""
     logger = logging.getLogger("background_jobs").getChild(migrate_storages_v2_to_data_connectors.__name__)
 
     api_user = InternalServiceAdmin(id=ServiceAdminId.migrations)
-    storages_v2 = await config.data_connector_migration_tool.get_storages_v2(requested_by=api_user)
+    storages_v2 = await dm.data_connector_migration_tool.get_storages_v2(requested_by=api_user)
 
     if not storages_v2:
         logger.info("Nothing to do.")
@@ -290,7 +285,7 @@ async def migrate_storages_v2_to_data_connectors(config: SyncConfig) -> list[Bas
     errors: list[BaseException] = []
     for storage in storages_v2:
         try:
-            data_connector = await config.data_connector_migration_tool.migrate_storage_v2(
+            data_connector = await dm.data_connector_migration_tool.migrate_storage_v2(
                 requested_by=api_user, storage=storage
             )
             logger.info(f"Migrated {storage.name} to {data_connector.namespace.path.serialize()}.")

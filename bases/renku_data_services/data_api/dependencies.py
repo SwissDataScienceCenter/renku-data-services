@@ -521,7 +521,7 @@ class DependencyManager:
         else:
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=config.k8s_namespace)
             assert config.keycloak is not None
-            oidc_disc_data = oidc_discovery(config.keycloak.keycloak_url, config.keycloak.keycloak_realm)
+            oidc_disc_data = oidc_discovery(config.keycloak.url, config.keycloak.realm)
             jwks_url = oidc_disc_data.get("jwks_uri")
             if jwks_url is None:
                 raise errors.ConfigurationError(
@@ -531,13 +531,13 @@ class DependencyManager:
             authenticator = KeycloakAuthenticator(jwks=jwks, algorithms=config.keycloak.algorithms)
             assert config.gitlab_url is not None
             gitlab_authenticator = GitlabAuthenticator(gitlab_url=config.gitlab_url)
-            user_store = KcUserStore(keycloak_url=config.keycloak.keycloak_url, realm=config.keycloak.keycloak_realm)
+            user_store = KcUserStore(keycloak_url=config.keycloak.url, realm=config.keycloak.realm)
             gitlab_client = GitlabAPI(gitlab_url=config.gitlab_url)
             kc_api = KeycloakAPI(
-                keycloak_url=config.keycloak.keycloak_url,
+                keycloak_url=config.keycloak.url,
                 client_id=config.keycloak.client_id,
                 client_secret=config.keycloak.client_secret,
-                realm=config.keycloak.keycloak_realm,
+                realm=config.keycloak.realm,
             )
 
         message_queue = RedisQueue(config.redis)

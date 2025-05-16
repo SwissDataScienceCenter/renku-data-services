@@ -44,7 +44,7 @@ class DependencyManager:
             core_client = DummyCoreClient({}, {})
         else:
             assert config.keycloak is not None
-            oidc_disc_data = oidc_discovery(config.keycloak.keycloak_url, config.keycloak.keycloak_realm)
+            oidc_disc_data = oidc_discovery(config.keycloak.url, config.keycloak.realm)
             jwks_url = oidc_disc_data.get("jwks_uri")
             if jwks_url is None:
                 raise errors.ConfigurationError(
