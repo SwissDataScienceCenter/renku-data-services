@@ -187,7 +187,7 @@ class ResourcePoolORM(BaseORM):
     def load(cls, resource_pool: models.ResourcePool) -> "ResourcePoolORM":
         """Create an ORM object from the resource pool model."""
         quota = None
-        if isinstance(resource_pool.quota, models.Quota):
+        if resource_pool.quota is not None:
             quota = resource_pool.quota.id
 
         cluster_id = None
