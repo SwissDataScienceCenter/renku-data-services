@@ -70,7 +70,7 @@ class K8sDbCache:
                 kind=obj.meta.gvk.kind,
                 version=obj.meta.gvk.version,
                 manifest=obj.manifest.to_dict(),
-                cluster=obj.cluster,
+                cluster=str(obj.cluster),
                 user_id=obj.user_id,
             )
             session.add(obj_orm)
