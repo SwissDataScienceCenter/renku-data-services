@@ -24,7 +24,7 @@ from renku_data_services.session import orm as schemas
 from renku_data_services.session.k8s_client import ShipwrightClient
 
 if TYPE_CHECKING:
-    from renku_data_services.app_config.config import BuildsConfig
+    from renku_data_services.session.config import BuildsConfig
 
 
 class SessionRepository:

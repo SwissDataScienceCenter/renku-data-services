@@ -36,13 +36,13 @@ class SyncConfig:
     session_maker: Callable[..., AsyncSession]
 
     @classmethod
-    def from_env(cls, prefix: str = "") -> "SyncConfig":
+    def from_env(cls) -> "SyncConfig":
         """Generate a configuration from environment variables."""
-        pg_host = os.environ.get(f"{prefix}DB_HOST", "localhost")
-        pg_user = os.environ.get(f"{prefix}DB_USER", "renku")
-        pg_port = os.environ.get(f"{prefix}DB_PORT", "5432")
-        db_name = os.environ.get(f"{prefix}DB_NAME", "renku")
-        pg_password = os.environ.get(f"{prefix}DB_PASSWORD")
+        pg_host = os.environ.get("DB_HOST", "localhost")
+        pg_user = os.environ.get("DB_USER", "renku")
+        pg_port = os.environ.get("DB_PORT", "5432")
+        db_name = os.environ.get("DB_NAME", "renku")
+        pg_password = os.environ.get("DB_PASSWORD")
         if pg_password is None:
             raise errors.ConfigurationError(
                 message="Please provide a database password in the 'DB_PASSWORD' environment variable."
@@ -53,7 +53,7 @@ class SyncConfig:
         # much longer than the default 30 seconds. In our tests syncing 15 users times out with the default.
         engine = create_async_engine(async_sqlalchemy_url, pool_size=4, max_overflow=0, pool_timeout=600)
         session_maker: Callable[..., AsyncSession] = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)  # type: ignore[call-overload]
-        redis = RedisConfig.from_env(prefix)
+        redis = RedisConfig.from_env()
         message_queue = RedisQueue(redis)
 
         authz_config = AuthzConfig.from_env()
@@ -104,10 +104,10 @@ class SyncConfig:
             user_repo=user_repo,
             authz=Authz(authz_config),
         )
-        keycloak_url = os.environ[f"{prefix}KEYCLOAK_URL"]
-        client_id = os.environ[f"{prefix}KEYCLOAK_CLIENT_ID"]
-        client_secret = os.environ[f"{prefix}KEYCLOAK_CLIENT_SECRET"]
-        realm = os.environ.get(f"{prefix}KEYCLOAK_REALM", "Renku")
+        keycloak_url = os.environ["KEYCLOAK_URL"]
+        client_id = os.environ["KEYCLOAK_CLIENT_ID"]
+        client_secret = os.environ["KEYCLOAK_CLIENT_SECRET"]
+        realm = os.environ.get("KEYCLOAK_REALM", "Renku")
         kc_api = KeycloakAPI(keycloak_url=keycloak_url, client_id=client_id, client_secret=client_secret, realm=realm)
         return cls(
             syncer,

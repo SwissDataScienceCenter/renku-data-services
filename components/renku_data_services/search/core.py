@@ -96,7 +96,6 @@ async def _renku_query(
         .add_filter(
             st.namespace_exists(),
             st.created_by_exists(),
-            "{!join from=namespace to=namespace}(_type:User OR _type:Group)",
         )
         .add_filter(*role_constraint)
         .with_facet(FacetTerms(name=Fields.entity_type, field=Fields.entity_type))

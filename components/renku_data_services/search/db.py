@@ -60,7 +60,8 @@ def _project_to_entity_doc(p: Project) -> ProjectDoc:
     )
 
 
-def _dataconnector_to_entity_doc(dc: DataConnector) -> DataConnectorDoc:
+def _dataconnector_to_entity_doc(dc: DataConnector | GlobalDataConnector) -> DataConnectorDoc:
+    ns = dc.namespace.path.first if isinstance(dc, DataConnector) else None
     return DataConnectorDoc(
         id=dc.id,
         name=dc.name,
@@ -70,24 +71,7 @@ def _dataconnector_to_entity_doc(dc: DataConnector) -> DataConnectorDoc:
         visibility=dc.visibility,
         createdBy=dc.created_by,
         creationDate=dc.creation_date,
-        namespace=dc.namespace.path.first,
-        description=dc.description,
-        keywords=dc.keywords if dc.keywords is not None else [],
-        version=DocVersions.off(),
-    )
-
-
-def _global_dataconnector_to_entity_doc(dc: GlobalDataConnector) -> DataConnectorDoc:
-    return DataConnectorDoc(
-        id=dc.id,
-        name=dc.name,
-        storageType=dc.storage.storage_type,
-        readonly=dc.storage.readonly,
-        slug=Slug.from_name(dc.slug),
-        visibility=dc.visibility,
-        createdBy=dc.created_by,
-        creationDate=dc.creation_date,
-        namespace=Slug.from_name("GLOBAL"),
+        namespace=ns,
         description=dc.description,
         keywords=dc.keywords if dc.keywords is not None else [],
         version=DocVersions.off(),
@@ -147,7 +131,7 @@ class SearchUpdatesRepo:
                 }
 
             case GlobalDataConnector() as d:
-                dc = _global_dataconnector_to_entity_doc(d)
+                dc = _dataconnector_to_entity_doc(d)
                 return {
                     "entity_id": str(dc.id),
                     "entity_type": "DataConnector",

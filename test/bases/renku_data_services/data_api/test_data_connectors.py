@@ -39,7 +39,7 @@ async def create_data_connector(
 
 @pytest.mark.asyncio
 async def test_post_data_connector(
-    sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers, app_config
+    sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers, app_manager
 ) -> None:
     payload = {
         "name": "My data connector",
@@ -77,7 +77,7 @@ async def test_post_data_connector(
     assert data_connector.get("visibility") == "public"
     assert data_connector.get("description") == "A data connector"
     assert set(data_connector.get("keywords")) == {"keyword 1", "keyword.2", "keyword-3", "KEYWORD_4"}
-    app_config.metrics.data_connector_created.assert_called_once()
+    app_manager.metrics.data_connector_created.assert_called_once()
 
     # Check that we can retrieve the data connector
     _, response = await sanic_client.get(f"/api/data/data_connectors/{data_connector['id']}", headers=user_headers)
@@ -97,16 +97,16 @@ async def test_post_data_connector(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "doi", ["10.5281/zenodo.13321077", "doi:10.5281/zenodo.13321077", "https://doi.org/10.5281/zenodo.13321077"]
+    "doi", ["10.5281/zenodo.15411010", "doi:10.5281/zenodo.15411010", "https://doi.org/10.5281/zenodo.15411010"]
 )
 async def test_post_global_data_connector(
     sanic_client: SanicASGITestClient, user_headers: dict[str, str], monkeypatch: "MonkeyPatch", doi: str
 ) -> None:
     # The DOI resolver seems to block requests from GitHub action runners, so we mock its response
     metadata = RCloneDOIMetadata(
-        DOI="10.5281/zenodo.13321077",
-        URL="https://doi.org/10.5281/zenodo.13321077",
-        metadataURL="https://zenodo.org/api/records/15211353",
+        DOI="10.5281/zenodo.15411010",
+        URL="https://doi.org/10.5281/zenodo.15411010",
+        metadataURL="https://zenodo.org/api/records/15411010",
         provider="zenodo",
     )
     _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
@@ -125,12 +125,12 @@ async def test_post_global_data_connector(
     assert response.json is not None
     data_connector = response.json
     assert data_connector.get("name") == "Brazilian Flora: Brazilian Flora DwCA"
-    assert data_connector.get("slug") == "doi-10.5281-zenodo.13321077"
+    assert data_connector.get("slug") == "doi-10.5281-zenodo.15411010"
     assert data_connector.get("storage") is not None
     storage = data_connector["storage"]
     assert storage.get("storage_type") == "doi"
     assert storage.get("source_path") == "/"
-    assert storage.get("target_path") == "brazilian-flora-brazilian-flor-doi-10.5281-zenodo.13321077"
+    assert storage.get("target_path") == "brazilian-flora-brazilian-flor-doi-10.5281-zenodo.15411010"
     assert storage.get("readonly") is True
     assert data_connector.get("visibility") == "public"
     assert data_connector.get("description") is not None
@@ -233,14 +233,14 @@ async def test_post_global_data_connector_no_duplicates(
 ) -> None:
     # The DOI resolver seems to block requests from GitHub action runners, so we mock its response
     metadata = RCloneDOIMetadata(
-        DOI="10.5281/zenodo.13321077",
-        URL="https://doi.org/10.5281/zenodo.13321077",
-        metadataURL="https://zenodo.org/api/records/15211353",
+        DOI="10.5281/zenodo.15411010",
+        URL="https://doi.org/10.5281/zenodo.15411010",
+        metadataURL="https://zenodo.org/api/records/15411010",
         provider="zenodo",
     )
     _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
 
-    doi = "10.5281/zenodo.13321077"
+    doi = "10.5281/zenodo.15411010"
     payload = {
         "storage": {
             "configuration": {"type": "doi", "doi": doi},
@@ -256,10 +256,10 @@ async def test_post_global_data_connector_no_duplicates(
     data_connector = response.json
     data_connector_id = data_connector["id"]
     assert data_connector.get("name") == "Brazilian Flora: Brazilian Flora DwCA"
-    assert data_connector.get("slug") == "doi-10.5281-zenodo.13321077"
+    assert data_connector.get("slug") == "doi-10.5281-zenodo.15411010"
 
     # Check that posting the same DOI returns the same data connector ULID
-    doi = "https://doi.org/10.5281/zenodo.13321077"
+    doi = "https://doi.org/10.5281/zenodo.15411010"
     payload = {
         "storage": {
             "configuration": {"type": "doi", "doi": doi},
@@ -926,14 +926,14 @@ async def test_patch_global_data_connector(
 ) -> None:
     # The DOI resolver seems to block requests from GitHub action runners, so we mock its response
     metadata = RCloneDOIMetadata(
-        DOI="10.5281/zenodo.13321077",
-        URL="https://doi.org/10.5281/zenodo.13321077",
-        metadataURL="https://zenodo.org/api/records/15211353",
+        DOI="10.5281/zenodo.15411010",
+        URL="https://doi.org/10.5281/zenodo.15411010",
+        metadataURL="https://zenodo.org/api/records/15411010",
         provider="zenodo",
     )
     _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
 
-    doi = "10.5281/zenodo.13321077"
+    doi = "10.5281/zenodo.15411010"
     payload = {
         "storage": {
             "configuration": {"type": "doi", "doi": doi},
@@ -1002,14 +1002,14 @@ async def test_delete_global_data_connector(
 ) -> None:
     # The DOI resolver seems to block requests from GitHub action runners, so we mock its response
     metadata = RCloneDOIMetadata(
-        DOI="10.5281/zenodo.13321077",
-        URL="https://doi.org/10.5281/zenodo.13321077",
-        metadataURL="https://zenodo.org/api/records/15211353",
+        DOI="10.5281/zenodo.15411010",
+        URL="https://doi.org/10.5281/zenodo.15411010",
+        metadataURL="https://zenodo.org/api/records/15411010",
         provider="zenodo",
     )
     _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
 
-    doi = "10.5281/zenodo.13321077"
+    doi = "10.5281/zenodo.15411010"
     payload = {
         "storage": {
             "configuration": {"type": "doi", "doi": doi},
@@ -1205,7 +1205,7 @@ async def test_post_data_connector_project_link_public_data_connector(
     user_headers,
     member_1_headers,
     member_1_user,
-    app_config,
+    app_manager,
 ) -> None:
     data_connector = await create_data_connector(
         "Data connector 1", user=member_1_user, headers=member_1_headers, visibility="public"
@@ -1231,7 +1231,7 @@ async def test_post_data_connector_project_link_public_data_connector(
     assert link.get("data_connector_id") == data_connector_id
     assert link.get("project_id") == project_id
     assert link.get("created_by") == "user"
-    app_config.metrics.data_connector_linked.assert_called_once()
+    app_manager.metrics.data_connector_linked.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -1730,6 +1730,47 @@ async def test_creating_dc_in_project(sanic_client, user_headers) -> None:
     assert response.status_code == 200, response.text
     assert len(response.json) == 1
     assert response.json[0]["namespace"] == dc_namespace
+
+
+@pytest.mark.asyncio
+async def test_creating_dc_in_project_no_leak_to_other_project(sanic_client, user_headers, member_1_headers) -> None:
+    # Create a project owned by member_1
+    payload = {
+        "name": "Project 1",
+        "namespace": "member-1.doe",
+        "slug": "project-1",
+    }
+    _, res = await sanic_client.post("/api/data/projects", headers=member_1_headers, json=payload)
+    assert res.status_code == 201, res.text
+
+    payload = {
+        "name": "Project 1",
+        "namespace": "user.doe",
+        "slug": "project-1",
+    }
+    _, res = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
+    assert res.status_code == 201, res.text
+    project = res.json
+    project_path = f"{project["namespace"]}/{project["slug"]}"
+
+    payload = {
+        "name": "My data connector",
+        "namespace": project_path,
+        "slug": "my-dc",
+        "storage": {
+            "configuration": {"type": "s3", "endpoint": "http://s3.aws.com"},
+            "source_path": "giab",
+            "target_path": "giab",
+        },
+    }
+    _, res = await sanic_client.post("/api/data/data_connectors", headers=user_headers, json=payload)
+    assert res.status_code == 201, res.text
+    assert res.json is not None
+    dc = res.json
+    assert dc.get("id") is not None
+    assert dc.get("name") == "My data connector"
+    assert dc.get("namespace") == project_path
+    assert dc.get("slug") == "my-dc"
 
 
 @pytest.mark.asyncio

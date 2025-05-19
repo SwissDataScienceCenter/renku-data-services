@@ -21,14 +21,14 @@ class RedisConfig:
     _connection: redis.Redis | None = None
 
     @classmethod
-    def from_env(cls, prefix: str = "") -> "RedisConfig":
+    def from_env(cls) -> "RedisConfig":
         """Create a config from environment variables."""
-        is_sentinel = os.environ.get(f"{prefix}REDIS_IS_SENTINEL", "false")
-        host = os.environ.get(f"{prefix}REDIS_HOST", "localhost")
-        port = os.environ.get(f"{prefix}REDIS_PORT", 6379)
-        database = os.environ.get(f"{prefix}REDIS_DATABASE", 0)
-        sentinel_master_set = os.environ.get(f"{prefix}REDIS_MASTER_SET", "mymaster")
-        password = os.environ.get(f"{prefix}REDIS_PASSWORD", "")
+        is_sentinel = os.environ.get("REDIS_IS_SENTINEL", "false")
+        host = os.environ.get("REDIS_HOST", "localhost")
+        port = os.environ.get("REDIS_PORT", 6379)
+        database = os.environ.get("REDIS_DATABASE", 0)
+        sentinel_master_set = os.environ.get("REDIS_MASTER_SET", "mymaster")
+        password = os.environ.get("REDIS_PASSWORD", "")
 
         return cls(
             host=host,
