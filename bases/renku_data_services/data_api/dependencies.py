@@ -117,38 +117,39 @@ class DependencyManager:
     gitlab_client: base_models.GitlabAPIProtocol
     kc_api: IKeycloakAPI
     message_queue: IMessageQueue
+    authz: Authz
+    user_repo: UserRepository
+    rp_repo: ResourcePoolRepository
+    storage_repo: StorageRepository
+    project_repo: ProjectRepository
+    project_migration_repo: ProjectMigrationRepository
+    group_repo: GroupRepository
+    event_repo: EventRepository
+    reprovisioning_repo: ReprovisioningRepository
+    search_updates_repo: SearchUpdatesRepo
+    search_reprovisioning: SearchReprovision
+    session_repo: SessionRepository
+    user_preferences_repo: UserPreferencesRepository
+    kc_user_repo: KcUserRepo
+    low_level_user_secrets_repo: LowLevelUserSecretsRepo
+    user_secrets_repo: UserSecretsRepo
+    project_member_repo: ProjectMemberRepository
+    project_session_secret_repo: ProjectSessionSecretRepository
+    connected_services_repo: ConnectedServicesRepository
+    git_repositories_repo: GitRepositoriesRepository
+    platform_repo: PlatformRepository
+    data_connector_repo: DataConnectorRepository
+    data_connector_secret_repo: DataConnectorSecretRepository
+    cluster_repo: ClusterRepository
+    metrics_repo: MetricsRepository
+    metrics: StagingMetricsService
+    shipwright_client: ShipwrightClient | None
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
     default_resource_pool_file: str | None = None
     default_resource_pool: crc_models.ResourcePool = default_resource_pool
     async_oauth2_client_class: type[AsyncOAuth2Client] = AsyncOAuth2Client
-    _user_repo: UserRepository | None = field(default=None, repr=False, init=False)
-    _rp_repo: ResourcePoolRepository | None = field(default=None, repr=False, init=False)
-    _storage_repo: StorageRepository | None = field(default=None, repr=False, init=False)
-    _project_repo: ProjectRepository | None = field(default=None, repr=False, init=False)
-    _project_migration_repo: ProjectMigrationRepository | None = field(default=None, repr=False, init=False)
-    _group_repo: GroupRepository | None = field(default=None, repr=False, init=False)
-    _event_repo: EventRepository | None = field(default=None, repr=False, init=False)
-    _reprovisioning_repo: ReprovisioningRepository | None = field(default=None, repr=False, init=False)
-    _search_updates_repo: SearchUpdatesRepo | None = field(default=None, repr=False, init=False)
-    _search_reprovisioning: SearchReprovision | None = field(default=None, repr=False, init=False)
-    _session_repo: SessionRepository | None = field(default=None, repr=False, init=False)
-    _user_preferences_repo: UserPreferencesRepository | None = field(default=None, repr=False, init=False)
-    _kc_user_repo: KcUserRepo | None = field(default=None, repr=False, init=False)
-    _low_level_user_secrets_repo: LowLevelUserSecretsRepo | None = field(default=None, repr=False, init=False)
-    _user_secrets_repo: UserSecretsRepo | None = field(default=None, repr=False, init=False)
-    _project_member_repo: ProjectMemberRepository | None = field(default=None, repr=False, init=False)
-    _project_session_secret_repo: ProjectSessionSecretRepository | None = field(default=None, repr=False, init=False)
-    _connected_services_repo: ConnectedServicesRepository | None = field(default=None, repr=False, init=False)
-    _git_repositories_repo: GitRepositoriesRepository | None = field(default=None, repr=False, init=False)
-    _platform_repo: PlatformRepository | None = field(default=None, repr=False, init=False)
-    _data_connector_repo: DataConnectorRepository | None = field(default=None, repr=False, init=False)
-    _data_connector_secret_repo: DataConnectorSecretRepository | None = field(default=None, repr=False, init=False)
-    _cluster_repo: ClusterRepository | None = field(default=None, repr=False, init=False)
-    _metrics_repo: MetricsRepository | None = field(default=None, repr=False, init=False)
-    _metrics: StagingMetricsService | None = field(default=None, repr=False, init=False)
-    _shipwright_client: ShipwrightClient | None = field(default=None, repr=False, init=False)
 
     @staticmethod
     @functools.cache
@@ -200,298 +201,6 @@ class DependencyManager:
                 defaults = ServerOptionsDefaults.model_validate(safe_load(f))
             self.default_resource_pool = generate_default_resource_pool(options, defaults)
 
-        self.authz = Authz(self.config.authz_config)
-
-    @property
-    def user_repo(self) -> UserRepository:
-        """The DB adapter for users of resource pools and classes."""
-        if not self._user_repo:
-            self._user_repo = UserRepository(
-                session_maker=self.config.db.async_session_maker,
-                quotas_repo=self.quota_repo,
-                user_repo=self.kc_user_repo,
-            )
-        return self._user_repo
-
-    @property
-    def rp_repo(self) -> ResourcePoolRepository:
-        """The DB adapter for resource pools."""
-        if not self._rp_repo:
-            self._rp_repo = ResourcePoolRepository(
-                session_maker=self.config.db.async_session_maker, quotas_repo=self.quota_repo
-            )
-        return self._rp_repo
-
-    @property
-    def storage_repo(self) -> StorageRepository:
-        """The DB adapter for V1 cloud storage configs."""
-        if not self._storage_repo:
-            self._storage_repo = StorageRepository(
-                session_maker=self.config.db.async_session_maker,
-                gitlab_client=self.gitlab_client,
-                user_repo=self.kc_user_repo,
-                secret_service_public_key=self.config.secrets.public_key,
-            )
-        return self._storage_repo
-
-    @property
-    def event_repo(self) -> EventRepository:
-        """The DB adapter for cloud event configs."""
-        if not self._event_repo:
-            self._event_repo = EventRepository(
-                session_maker=self.config.db.async_session_maker, message_queue=self.message_queue
-            )
-        return self._event_repo
-
-    @property
-    def reprovisioning_repo(self) -> ReprovisioningRepository:
-        """The DB adapter for reprovisioning."""
-        if not self._reprovisioning_repo:
-            self._reprovisioning_repo = ReprovisioningRepository(session_maker=self.config.db.async_session_maker)
-        return self._reprovisioning_repo
-
-    @property
-    def search_updates_repo(self) -> SearchUpdatesRepo:
-        """The DB adapter to the search_updates table."""
-        if not self._search_updates_repo:
-            self._search_updates_repo = SearchUpdatesRepo(session_maker=self.config.db.async_session_maker)
-        return self._search_updates_repo
-
-    @property
-    def search_reprovisioning(self) -> SearchReprovision:
-        """The SearchReprovisioning class."""
-        if not self._search_reprovisioning:
-            self._search_reprovisioning = SearchReprovision(
-                search_updates_repo=self.search_updates_repo,
-                reprovisioning_repo=self.reprovisioning_repo,
-                solr_config=self.config.solr,
-                user_repo=self.kc_user_repo,
-                group_repo=self.group_repo,
-                project_repo=self.project_repo,
-                data_connector_repo=self.data_connector_repo,
-            )
-        return self._search_reprovisioning
-
-    @property
-    def project_repo(self) -> ProjectRepository:
-        """The DB adapter for Renku native projects."""
-        if not self._project_repo:
-            self._project_repo = ProjectRepository(
-                session_maker=self.config.db.async_session_maker,
-                authz=self.authz,
-                message_queue=self.message_queue,
-                event_repo=self.event_repo,
-                group_repo=self.group_repo,
-                search_updates_repo=self.search_updates_repo,
-            )
-        return self._project_repo
-
-    @property
-    def project_migration_repo(self) -> ProjectMigrationRepository:
-        """The DB adapter for Renku native project migrations."""
-        if not self._project_migration_repo:
-            self._project_migration_repo = ProjectMigrationRepository(
-                session_maker=self.config.db.async_session_maker,
-                authz=self.authz,
-                message_queue=self.message_queue,
-                project_repo=self.project_repo,
-                event_repo=self.event_repo,
-                session_repo=self.session_repo,
-            )
-        return self._project_migration_repo
-
-    @property
-    def project_member_repo(self) -> ProjectMemberRepository:
-        """The DB adapter for Renku native projects members."""
-        if not self._project_member_repo:
-            self._project_member_repo = ProjectMemberRepository(
-                session_maker=self.config.db.async_session_maker,
-                authz=self.authz,
-                event_repo=self.event_repo,
-                message_queue=self.message_queue,
-            )
-        return self._project_member_repo
-
-    @property
-    def project_session_secret_repo(self) -> ProjectSessionSecretRepository:
-        """The DB adapter for session secrets on projects."""
-        if not self._project_session_secret_repo:
-            self._project_session_secret_repo = ProjectSessionSecretRepository(
-                session_maker=self.config.db.async_session_maker,
-                authz=self.authz,
-                user_repo=self.kc_user_repo,
-                secret_service_public_key=self.config.secrets.public_key,
-            )
-        return self._project_session_secret_repo
-
-    @property
-    def group_repo(self) -> GroupRepository:
-        """The DB adapter for Renku groups."""
-        if not self._group_repo:
-            self._group_repo = GroupRepository(
-                session_maker=self.config.db.async_session_maker,
-                event_repo=self.event_repo,
-                group_authz=self.authz,
-                message_queue=self.message_queue,
-                search_updates_repo=self.search_updates_repo,
-            )
-        return self._group_repo
-
-    @property
-    def session_repo(self) -> SessionRepository:
-        """The DB adapter for sessions."""
-        if not self._session_repo:
-            self._session_repo = SessionRepository(
-                session_maker=self.config.db.async_session_maker,
-                project_authz=self.authz,
-                resource_pools=self.rp_repo,
-                shipwright_client=self.shipwright_client,
-                builds_config=self.config.builds,
-            )
-        return self._session_repo
-
-    @property
-    def user_preferences_repo(self) -> UserPreferencesRepository:
-        """The DB adapter for user preferences."""
-        if not self._user_preferences_repo:
-            self._user_preferences_repo = UserPreferencesRepository(
-                session_maker=self.config.db.async_session_maker,
-                user_preferences_config=self.config.user_preferences,
-            )
-        return self._user_preferences_repo
-
-    @property
-    def kc_user_repo(self) -> KcUserRepo:
-        """The DB adapter for users."""
-        if not self._kc_user_repo:
-            self._kc_user_repo = KcUserRepo(
-                session_maker=self.config.db.async_session_maker,
-                message_queue=self.message_queue,
-                event_repo=self.event_repo,
-                group_repo=self.group_repo,
-                search_updates_repo=self.search_updates_repo,
-                encryption_key=self.config.secrets.encryption_key,
-                authz=self.authz,
-            )
-        return self._kc_user_repo
-
-    @property
-    def user_secrets_repo(self) -> UserSecretsRepo:
-        """The DB adapter for user secrets storage."""
-        if not self._user_secrets_repo:
-            low_level_user_secrets_repo = LowLevelUserSecretsRepo(
-                session_maker=self.config.db.async_session_maker,
-            )
-            self._user_secrets_repo = UserSecretsRepo(
-                session_maker=self.config.db.async_session_maker,
-                low_level_repo=low_level_user_secrets_repo,
-                user_repo=self.kc_user_repo,
-                secret_service_public_key=self.config.secrets.public_key,
-            )
-        return self._user_secrets_repo
-
-    @property
-    def connected_services_repo(self) -> ConnectedServicesRepository:
-        """The DB adapter for connected services."""
-        if not self._connected_services_repo:
-            self._connected_services_repo = ConnectedServicesRepository(
-                session_maker=self.config.db.async_session_maker,
-                encryption_key=self.config.secrets.encryption_key,
-                async_oauth2_client_class=self.async_oauth2_client_class,
-                internal_gitlab_url=self.config.gitlab_url,
-            )
-        return self._connected_services_repo
-
-    @property
-    def git_repositories_repo(self) -> GitRepositoriesRepository:
-        """The DB adapter for repositories."""
-        if not self._git_repositories_repo:
-            self._git_repositories_repo = GitRepositoriesRepository(
-                session_maker=self.config.db.async_session_maker,
-                connected_services_repo=self.connected_services_repo,
-                internal_gitlab_url=self.config.gitlab_url,
-            )
-        return self._git_repositories_repo
-
-    @property
-    def platform_repo(self) -> PlatformRepository:
-        """The DB adapter for the platform configuration."""
-        if not self._platform_repo:
-            self._platform_repo = PlatformRepository(
-                session_maker=self.config.db.async_session_maker,
-            )
-        return self._platform_repo
-
-    @property
-    def data_connector_repo(self) -> DataConnectorRepository:
-        """The DB adapter for data connectors."""
-        if not self._data_connector_repo:
-            self._data_connector_repo = DataConnectorRepository(
-                session_maker=self.config.db.async_session_maker,
-                authz=self.authz,
-                project_repo=self.project_repo,
-                group_repo=self.group_repo,
-                search_updates_repo=self.search_updates_repo,
-            )
-        return self._data_connector_repo
-
-    @property
-    def data_connector_secret_repo(self) -> DataConnectorSecretRepository:
-        """The DB adapter for data connector secrets."""
-        if not self._data_connector_secret_repo:
-            self._data_connector_secret_repo = DataConnectorSecretRepository(
-                session_maker=self.config.db.async_session_maker,
-                data_connector_repo=self.data_connector_repo,
-                user_repo=self.kc_user_repo,
-                secret_service_public_key=self.config.secrets.public_key,
-                authz=self.authz,
-            )
-        return self._data_connector_secret_repo
-
-    @property
-    def cluster_repo(self) -> ClusterRepository:
-        """The DB adapter for cluster descriptions."""
-        if not self._cluster_repo:
-            self._cluster_repo = ClusterRepository(session_maker=self.config.db.async_session_maker)
-
-        return self._cluster_repo
-
-    @property
-    def metrics_repo(self) -> MetricsRepository:
-        """The DB adapter for metrics."""
-        if not self._metrics_repo:
-            self._metrics_repo = MetricsRepository(session_maker=self.config.db.async_session_maker)
-        return self._metrics_repo
-
-    @property
-    def metrics(self) -> StagingMetricsService:
-        """The metrics service interface."""
-        if not self._metrics:
-            self._metrics = StagingMetricsService(enabled=self.config.posthog.enabled, metrics_repo=self.metrics_repo)
-        return self._metrics
-
-    @property
-    def shipwright_client(self) -> ShipwrightClient | None:
-        """The shipwright build client."""
-        if not self.config.builds.enabled or self.config.dummy_stores:
-            return None
-        if self._shipwright_client is None:
-            # NOTE: we need to get an async client as a sync client can't be used in an async way
-            # But all the config code is not async, so we need to drop into the running loop, if there is one
-            kr8s_api = KubeConfigEnv().api()
-            k8s_db_cache = K8sDbCache(self.config.db.async_session_maker)
-            client = K8sClusterClientsPool(
-                clusters=get_clusters("/secrets/kube_configs", namespace=self.config.k8s_namespace, api=kr8s_api),
-                cache=k8s_db_cache,
-                kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
-            )
-            self._shipwright_client = ShipwrightClient(
-                client=client,
-                namespace=self.config.k8s_namespace,
-            )
-
-        return self._shipwright_client
-
     @classmethod
     def from_env(cls) -> "DependencyManager":
         """Create a config from environment variables."""
@@ -500,6 +209,7 @@ class DependencyManager:
         authenticator: base_models.Authenticator
         gitlab_authenticator: base_models.Authenticator
         gitlab_client: base_models.GitlabAPIProtocol
+        shipwright_client: ShipwrightClient | None = None
 
         config = Config.from_env()
         kc_api: IKeycloakAPI
@@ -542,9 +252,143 @@ class DependencyManager:
                 client_secret=config.keycloak.client_secret,
                 realm=config.keycloak.realm,
             )
+            if config.builds.enabled:
+                # NOTE: we need to get an async client as a sync client can't be used in an async way
+                # But all the config code is not async, so we need to drop into the running loop, if there is one
+                kr8s_api = KubeConfigEnv().api()
+                k8s_db_cache = K8sDbCache(config.db.async_session_maker)
+                client = K8sClusterClientsPool(
+                    clusters=get_clusters("/secrets/kube_configs", namespace=config.k8s_namespace, api=kr8s_api),
+                    cache=k8s_db_cache,
+                    kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
+                )
+                shipwright_client = ShipwrightClient(
+                    client=client,
+                    namespace=config.k8s_namespace,
+                )
 
+        authz = Authz(config.authz_config)
         message_queue = RedisQueue(config.redis)
+        event_repo = EventRepository(session_maker=config.db.async_session_maker, message_queue=message_queue)
+        search_updates_repo = SearchUpdatesRepo(session_maker=config.db.async_session_maker)
+        group_repo = GroupRepository(
+            session_maker=config.db.async_session_maker,
+            event_repo=event_repo,
+            group_authz=authz,
+            message_queue=message_queue,
+            search_updates_repo=search_updates_repo,
+        )
+        kc_user_repo = KcUserRepo(
+            session_maker=config.db.async_session_maker,
+            message_queue=message_queue,
+            event_repo=event_repo,
+            group_repo=group_repo,
+            search_updates_repo=search_updates_repo,
+            encryption_key=config.secrets.encryption_key,
+            authz=authz,
+        )
 
+        user_repo = UserRepository(
+            session_maker=config.db.async_session_maker,
+            quotas_repo=quota_repo,
+            user_repo=kc_user_repo,
+        )
+        rp_repo = ResourcePoolRepository(session_maker=config.db.async_session_maker, quotas_repo=quota_repo)
+        storage_repo = StorageRepository(
+            session_maker=config.db.async_session_maker,
+            gitlab_client=gitlab_client,
+            user_repo=kc_user_repo,
+            secret_service_public_key=config.secrets.public_key,
+        )
+        reprovisioning_repo = ReprovisioningRepository(session_maker=config.db.async_session_maker)
+        project_repo = ProjectRepository(
+            session_maker=config.db.async_session_maker,
+            authz=authz,
+            message_queue=message_queue,
+            event_repo=event_repo,
+            group_repo=group_repo,
+            search_updates_repo=search_updates_repo,
+        )
+        session_repo = SessionRepository(
+            session_maker=config.db.async_session_maker,
+            project_authz=authz,
+            resource_pools=rp_repo,
+            shipwright_client=shipwright_client,
+            builds_config=config.builds,
+        )
+        project_migration_repo = ProjectMigrationRepository(
+            session_maker=config.db.async_session_maker,
+            authz=authz,
+            message_queue=message_queue,
+            project_repo=project_repo,
+            event_repo=event_repo,
+            session_repo=session_repo,
+        )
+        project_member_repo = ProjectMemberRepository(
+            session_maker=config.db.async_session_maker,
+            authz=authz,
+            event_repo=event_repo,
+            message_queue=message_queue,
+        )
+        project_session_secret_repo = ProjectSessionSecretRepository(
+            session_maker=config.db.async_session_maker,
+            authz=authz,
+            user_repo=kc_user_repo,
+            secret_service_public_key=config.secrets.public_key,
+        )
+        user_preferences_repo = UserPreferencesRepository(
+            session_maker=config.db.async_session_maker,
+            user_preferences_config=config.user_preferences,
+        )
+        low_level_user_secrets_repo = LowLevelUserSecretsRepo(
+            session_maker=config.db.async_session_maker,
+        )
+        user_secrets_repo = UserSecretsRepo(
+            session_maker=config.db.async_session_maker,
+            low_level_repo=low_level_user_secrets_repo,
+            user_repo=kc_user_repo,
+            secret_service_public_key=config.secrets.public_key,
+        )
+        connected_services_repo = ConnectedServicesRepository(
+            session_maker=config.db.async_session_maker,
+            encryption_key=config.secrets.encryption_key,
+            async_oauth2_client_class=cls.async_oauth2_client_class,
+            internal_gitlab_url=config.gitlab_url,
+        )
+        git_repositories_repo = GitRepositoriesRepository(
+            session_maker=config.db.async_session_maker,
+            connected_services_repo=connected_services_repo,
+            internal_gitlab_url=config.gitlab_url,
+        )
+        platform_repo = PlatformRepository(
+            session_maker=config.db.async_session_maker,
+        )
+        data_connector_repo = DataConnectorRepository(
+            session_maker=config.db.async_session_maker,
+            authz=authz,
+            project_repo=project_repo,
+            group_repo=group_repo,
+            search_updates_repo=search_updates_repo,
+        )
+        data_connector_secret_repo = DataConnectorSecretRepository(
+            session_maker=config.db.async_session_maker,
+            data_connector_repo=data_connector_repo,
+            user_repo=kc_user_repo,
+            secret_service_public_key=config.secrets.public_key,
+            authz=authz,
+        )
+        search_reprovisioning = SearchReprovision(
+            search_updates_repo=search_updates_repo,
+            reprovisioning_repo=reprovisioning_repo,
+            solr_config=config.solr,
+            user_repo=kc_user_repo,
+            group_repo=group_repo,
+            project_repo=project_repo,
+            data_connector_repo=data_connector_repo,
+        )
+        cluster_repo = ClusterRepository(session_maker=config.db.async_session_maker)
+        metrics_repo = MetricsRepository(session_maker=config.db.async_session_maker)
+        metrics = StagingMetricsService(enabled=config.posthog.enabled, metrics_repo=metrics_repo)
         return cls(
             config,
             authenticator=authenticator,
@@ -554,4 +398,31 @@ class DependencyManager:
             quota_repo=quota_repo,
             kc_api=kc_api,
             message_queue=message_queue,
+            user_repo=user_repo,
+            rp_repo=rp_repo,
+            storage_repo=storage_repo,
+            event_repo=event_repo,
+            reprovisioning_repo=reprovisioning_repo,
+            search_updates_repo=search_updates_repo,
+            search_reprovisioning=search_reprovisioning,
+            project_repo=project_repo,
+            project_migration_repo=project_migration_repo,
+            project_member_repo=project_member_repo,
+            project_session_secret_repo=project_session_secret_repo,
+            group_repo=group_repo,
+            session_repo=session_repo,
+            user_preferences_repo=user_preferences_repo,
+            kc_user_repo=kc_user_repo,
+            user_secrets_repo=user_secrets_repo,
+            connected_services_repo=connected_services_repo,
+            git_repositories_repo=git_repositories_repo,
+            platform_repo=platform_repo,
+            data_connector_repo=data_connector_repo,
+            data_connector_secret_repo=data_connector_secret_repo,
+            cluster_repo=cluster_repo,
+            metrics_repo=metrics_repo,
+            metrics=metrics,
+            shipwright_client=shipwright_client,
+            authz=authz,
+            low_level_user_secrets_repo=low_level_user_secrets_repo,
         )
