@@ -429,13 +429,13 @@ def remove_id_from_rc(rc: rp_models.ResourceClass) -> rp_models.ResourceClass:
 
 
 def remove_quota_from_rc(rc: rp_models.ResourceClass) -> rp_models.ResourceClass:
-    return rc.update(quota=None)
+    return rc.update(quota={})
 
 
-def remove_id_from_rp(rp: rp_models.ResourcePool) -> rp_models.ResourcePool:
+def remove_id_from_rp(rp: rp_models.ResourcePool) -> (rp_models.ResourcePool, rp_models.ResourcePool):
     quota = rp.quota
     classes = [remove_quota_from_rc(remove_id_from_rc(rc)) for rc in rp.classes]
-    return rp_models.ResourcePool(
+    rp = rp_models.ResourcePool(
         name=rp.name,
         id=None,
         quota=quota,
@@ -445,6 +445,17 @@ def remove_id_from_rp(rp: rp_models.ResourcePool) -> rp_models.ResourcePool:
         idle_threshold=rp.idle_threshold,
         hibernation_threshold=rp.hibernation_threshold,
     )
+    rp2 = rp_models.ResourcePool(
+        name=rp.name,
+        id=None,
+        quota=rp.quota,
+        classes=rp.classes,
+        default=rp.default,
+        public=rp.public,
+        idle_threshold=rp.idle_threshold,
+        hibernation_threshold=rp.hibernation_threshold,
+    )
+    return rp2, rp
 
 
 def remove_id_from_user(user: base_models.User) -> base_models.User:
@@ -461,12 +472,14 @@ async def create_rp(
     rp: rp_models.ResourcePool, repo: ResourcePoolRepository, api_user: base_models.APIUser
 ) -> rp_models.ResourcePool:
     inserted_rp = await repo.insert_resource_pool(api_user, rp)
+
     assert inserted_rp is not None
     assert inserted_rp.id is not None
     assert inserted_rp.quota is not None
     assert all([rc.id is not None for rc in inserted_rp.classes])
-    inserted_rp_no_ids = remove_id_from_rp(inserted_rp)
-    assert rp == inserted_rp_no_ids, f"resource pools do not match {rp} != {inserted_rp_no_ids}"
+    # LSA I don't know why but the constructor reverses the list order of classes in remove_id_from_rp
+    rp2, inserted_rp_no_ids = remove_id_from_rp(inserted_rp)
+    assert rp2 == inserted_rp_no_ids, f"resource pools do not match\n {rp2}\n!=\n {inserted_rp_no_ids}"
     retrieved_rps = await repo.get_resource_pools(api_user, inserted_rp.id)
     assert len(retrieved_rps) == 1
     assert inserted_rp.id == retrieved_rps[0].id
