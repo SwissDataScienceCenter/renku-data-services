@@ -412,7 +412,6 @@ components:
         setting up a GitHub App.
       type: string
       example: "my-application"
-      minLength: 1
       maxLength: 500
     ClientId:
       description: |
