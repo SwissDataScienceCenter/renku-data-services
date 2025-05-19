@@ -2,7 +2,7 @@
 
 ## Description
 
-Keep it short within 1 or 2 sentences.
+<!-- Keep it short within 1 or 2 sentences. -->
 
 ## User-Facing Changes
 
@@ -30,5 +30,5 @@ Keep it short within 1 or 2 sentences.
 
 # Internal/Miscellaneous
 
-Add a deploy string here or other things that are not relevant for the release notes
-or commit messages.
+<!-- Add a deploy string here or other things that are not relevant for the release notes
+or commit messages. -->
