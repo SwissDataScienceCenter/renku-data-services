@@ -78,7 +78,9 @@ class SessionRepository:
         new_environment: models.UnsavedEnvironment,
     ) -> schemas.EnvironmentORM:
         if user.id is None:
-            raise errors.UnauthorizedError(message="You have to be authenticated to insert an environment in the DB.")
+            raise errors.UnauthorizedError(
+                message="You have to be authenticated to insert an environment in the DB.", quiet=True
+            )
         environment = schemas.EnvironmentORM(
             name=new_environment.name,
             created_by_id=user.id,
@@ -108,7 +110,9 @@ class SessionRepository:
         environment: models.Environment,
     ) -> schemas.EnvironmentORM:
         if user.id is None:
-            raise errors.UnauthorizedError(message="You have to be authenticated to insert an environment in the DB.")
+            raise errors.UnauthorizedError(
+                message="You have to be authenticated to insert an environment in the DB.", quiet=True
+            )
         new_environment = schemas.EnvironmentORM(
             name=environment.name,
             created_by_id=user.id,
@@ -152,7 +156,9 @@ class SessionRepository:
         new_build_parameters_environment: models.UnsavedBuildParameters,
     ) -> schemas.EnvironmentORM:
         if user.id is None:
-            raise errors.UnauthorizedError(message="You have to be authenticated to insert an environment in the DB.")
+            raise errors.UnauthorizedError(
+                message="You have to be authenticated to insert an environment in the DB.", quiet=True
+            )
         build_parameters_orm = schemas.BuildParametersORM(
             builder_variant=new_build_parameters_environment.builder_variant,
             frontend_variant=new_build_parameters_environment.frontend_variant,
@@ -406,12 +412,12 @@ class SessionRepository:
                     created_by_id=user.id,
                     description=f"Generated environment for {launcher.name}",
                     container_image="image:unknown-at-the-moment",  # TODO: This should come from the build
-                    default_url="/lab",  # TODO: This should come from the build
-                    port=8888,  # TODO: This should come from the build
-                    working_directory=None,  # TODO: This should come from the build
-                    mount_directory=None,  # TODO: This should come from the build
-                    uid=1000,  # TODO: This should come from the build
-                    gid=1000,  # TODO: This should come from the build
+                    default_url=constants.DEFAULT_URLS.get(launcher.environment.frontend_variant, "/"),
+                    port=constants.BUILD_PORT,  # TODO: This should come from the build
+                    working_directory=constants.BUILD_WORKING_DIRECTORY,  # TODO: This should come from the build
+                    mount_directory=constants.BUILD_MOUNT_DIRECTORY,  # TODO: This should come from the build
+                    uid=constants.BUILD_UID,  # TODO: This should come from the build
+                    gid=constants.BUILD_GID,  # TODO: This should come from the build
                     environment_kind=models.EnvironmentKind.CUSTOM,
                     command=None,  # TODO: This should come from the build
                     args=None,  # TODO: This should come from the build
@@ -551,8 +557,7 @@ class SessionRepository:
             launcher = res.one_or_none()
             if launcher is None:
                 raise errors.MissingResourceError(
-                    message=f"Session launcher with id '{launcher_id}' does not "
-                    "exist or you do not have access to it."
+                    message=f"Session launcher with id '{launcher_id}' does not exist or you do not have access to it."
                 )
 
             authorized = await self.project_authz.has_permission(
@@ -998,14 +1003,6 @@ class SessionRepository:
             # TODO: move this to its own method where build parameters determine args
             environment = build.environment
             environment.container_image = build.result_image
-            environment.default_url = "/"
-            environment.port = 8888
-            environment.mount_directory = PurePosixPath("/home/ubuntu/work")
-            environment.working_directory = PurePosixPath("/home/ubuntu/work")
-            environment.uid = 1000
-            environment.gid = 1000
-            environment.command = ["bash"]
-            environment.args = ["/entrypoint.sh"]
 
         await session.flush()
         await session.refresh(build)
@@ -1022,9 +1019,6 @@ class SessionRepository:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
         git_repository = build_parameters.repository
-
-        # TODO: define the run image from `build_parameters`
-        run_image = self.builds_config.vscodium_python_run_image or constants.BUILD_VSCODIUM_PYTHON_DEFAULT_RUN_IMAGE
 
         output_image_prefix = (
             self.builds_config.build_output_image_prefix or constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
@@ -1060,7 +1054,8 @@ class SessionRepository:
         return models.ShipwrightBuildRunParams(
             name=build.k8s_name,
             git_repository=git_repository,
-            run_image=run_image,
+            build_image=constants.BUILD_BUILDER_IMAGE,
+            run_image=constants.BUILD_RUN_IMAGE,
             output_image=output_image,
             build_strategy_name=build_strategy_name,
             push_secret_name=push_secret_name,
@@ -1071,6 +1066,7 @@ class SessionRepository:
             tolerations=self.builds_config.tolerations,
             labels=labels,
             annotations=annotations,
+            frontend=build_parameters.frontend_variant,
         )
 
     async def _get_environment_authorization(
