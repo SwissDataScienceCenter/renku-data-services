@@ -1359,8 +1359,12 @@ components:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
           $ref: "#/components/schemas/HibernationThreshold"
-        cluster_id:
-          $ref: "#/components/schemas/Ulid"
+        cluster:
+          type: object
+          properties:
+            id:
+              $ref: "#/components/schemas/Ulid"
+          required: ["id"]
       required: ["classes", "name", "id", "public", "default"]
       example:
         quota:
