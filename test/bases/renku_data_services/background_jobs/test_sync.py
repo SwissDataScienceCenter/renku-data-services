@@ -1,6 +1,5 @@
 import json
 import re
-import secrets
 from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime
@@ -31,105 +30,39 @@ from renku_data_services.background_jobs.core import (
     migrate_storages_v2_to_data_connectors,
     migrate_user_namespaces_make_all_public,
 )
+from renku_data_services.background_jobs.dependencies import DependencyManager
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models import APIUser
 from renku_data_services.base_models.core import NamespacePath, Slug
-from renku_data_services.data_connectors.db import DataConnectorRepository
-from renku_data_services.data_connectors.migration_utils import DataConnectorMigrationTool
 from renku_data_services.db_config import DBConfig
 from renku_data_services.errors import errors
 from renku_data_services.message_queue.config import RedisConfig
-from renku_data_services.message_queue.db import EventRepository
-from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.namespace.apispec import (
     GroupPostRequest,
 )
-from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.namespace.models import UserNamespace
 from renku_data_services.namespace.orm import NamespaceORM
-from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.models import UnsavedProject
-from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.storage.models import UnsavedCloudStorage
 from renku_data_services.storage.orm import CloudStorageORM
-from renku_data_services.users.db import UserRepo, UsersSync
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import KeycloakAdminEvent, UnsavedUserInfo, UserInfo, UserInfoFieldUpdate
 from renku_data_services.users.orm import UserORM
 
 
 @pytest.fixture
-def get_app_configs(db_instance: DBConfig, authz_instance: AuthzConfig):
-    def _get_app_configs(
-        kc_api: DummyKeycloakAPI, total_user_sync: bool = False
-    ) -> tuple[
-        SyncConfig,
-        UserRepo,
-    ]:
+def get_app_manager(db_instance: DBConfig, authz_instance: AuthzConfig):
+    def _get_dependency_manager(kc_api: DummyKeycloakAPI, total_user_sync: bool = False) -> DependencyManager:
         redis = RedisConfig.fake()
-        message_queue = RedisQueue(redis)
-        event_repo = EventRepository(db_instance.async_session_maker, message_queue=message_queue)
-        search_updates_repo = SearchUpdatesRepo(db_instance.async_session_maker)
-        group_repo = GroupRepository(
-            session_maker=db_instance.async_session_maker,
-            event_repo=event_repo,
-            group_authz=Authz(authz_instance),
-            message_queue=message_queue,
-            search_updates_repo=search_updates_repo,
-        )
-        project_repo = ProjectRepository(
-            session_maker=db_instance.async_session_maker,
-            message_queue=message_queue,
-            event_repo=event_repo,
-            group_repo=group_repo,
-            authz=Authz(authz_instance),
-            search_updates_repo=search_updates_repo,
-        )
-        data_connector_repo = DataConnectorRepository(
-            session_maker=db_instance.async_session_maker,
-            authz=Authz(authz_instance),
-            group_repo=group_repo,
-            project_repo=project_repo,
-            search_updates_repo=search_updates_repo,
-        )
-        data_connector_migration_tool = DataConnectorMigrationTool(
-            session_maker=db_instance.async_session_maker,
-            data_connector_repo=data_connector_repo,
-            project_repo=project_repo,
-            authz=Authz(authz_instance),
-        )
-        user_repo = UserRepo(
-            db_instance.async_session_maker,
-            message_queue=message_queue,
-            event_repo=event_repo,
-            group_repo=group_repo,
-            encryption_key=secrets.token_bytes(32),
-            authz=Authz(authz_instance),
-            search_updates_repo=search_updates_repo,
-        )
-        users_sync = UsersSync(
-            db_instance.async_session_maker,
-            message_queue=message_queue,
-            event_repo=event_repo,
-            group_repo=group_repo,
-            user_repo=user_repo,
-            authz=Authz(authz_instance),
-        )
-        config = SyncConfig(
-            syncer=users_sync,
-            kc_api=kc_api,
-            authz_config=authz_instance,
-            group_repo=group_repo,
-            event_repo=event_repo,
-            project_repo=project_repo,
-            data_connector_migration_tool=data_connector_migration_tool,
-            session_maker=db_instance.async_session_maker,
-        )
+        config = SyncConfig.from_env()
+        config.db = db_instance
+        config.redis = redis
+        dm = DependencyManager.from_env(config)
         run_migrations_for_app("common")
-        return config, user_repo
+        return dm
 
-    yield _get_app_configs
+    yield _get_dependency_manager
 
 
 def get_kc_users(updates: list[UserInfo]) -> list[dict[str, Any]]:
@@ -233,9 +166,7 @@ def get_kc_roles(role_names: list[str]) -> dict[str, list[dict[str, Union[bool, 
 
 
 @pytest.mark.asyncio
-async def test_total_users_sync(
-    get_app_configs: Callable[..., tuple[SyncConfig, UserRepo]], admin_user: APIUser
-) -> None:
+async def test_total_users_sync(get_app_manager: Callable[..., DependencyManager], admin_user: APIUser) -> None:
     user1 = UserInfo(
         id="user-1-id",
         first_name="John",
@@ -275,11 +206,10 @@ async def test_total_users_sync(
     )
     user_roles = {admin_user.id: get_kc_roles(["renku-admin"])}
     kc_api = DummyKeycloakAPI(users=get_kc_users([user1, user2, admin_user_info]), user_roles=user_roles)
-    sync_config: SyncConfig
-    user_repo: UserRepo
-    sync_config, user_repo = get_app_configs(kc_api)
-    db_users = await user_repo.get_users(admin_user)
-    kc_users = [UserInfo.from_kc_user_payload(user) for user in sync_config.kc_api.get_users()]
+    dm = get_app_manager(kc_api)
+    dm.kc_api = kc_api
+    db_users = await dm.syncer.user_repo.get_users(admin_user)
+    kc_users = [UserInfo.from_kc_user_payload(user) for user in dm.kc_api.get_users()]
     kc_users.append(
         UnsavedUserInfo(
             id=admin_user.id,
@@ -290,30 +220,26 @@ async def test_total_users_sync(
     )
     assert set(u.id for u in kc_users) == set([user1.id, user2.id, admin_user_info.id])
     assert len(db_users) == 1  # listing users add the requesting user if not present
-    await sync_config.syncer.users_sync(kc_api)
-    db_users = await user_repo.get_users(admin_user)
+    await dm.syncer.users_sync(kc_api)
+    db_users = await dm.syncer.user_repo.get_users(admin_user)
     assert set(u.id for u in kc_users) == set(u.id for u in db_users)
     # Make sure doing users sync again does not change anything and works
-    await sync_config.syncer.users_sync(kc_api)
-    db_users = await user_repo.get_users(admin_user)
+    await dm.syncer.users_sync(kc_api)
+    db_users = await dm.syncer.user_repo.get_users(admin_user)
     assert set(u.id for u in kc_users) == set(u.id for u in db_users)
     # Make sure that the addition of the users resulted in the creation of namespaces
-    nss, _ = await sync_config.syncer.group_repo.get_namespaces(
-        user=APIUser(id=user1.id), pagination=PaginationRequest(1, 100)
-    )
+    nss, _ = await dm.syncer.group_repo.get_namespaces(user=APIUser(id=user1.id), pagination=PaginationRequest(1, 100))
     assert len(nss) == 1
     assert user1.email
     assert nss[0].path.serialize() == user1.email.split("@")[0]
-    nss, _ = await sync_config.syncer.group_repo.get_namespaces(
-        user=APIUser(id=user2.id), pagination=PaginationRequest(1, 100)
-    )
+    nss, _ = await dm.syncer.group_repo.get_namespaces(user=APIUser(id=user2.id), pagination=PaginationRequest(1, 100))
     assert len(nss) == 1
     assert user2.email
     assert nss[0].path.serialize() == user2.email.split("@")[0]
 
 
 @pytest.mark.asyncio
-async def test_user_events_update(get_app_configs, admin_user: APIUser) -> None:
+async def test_user_events_update(get_app_manager, admin_user: APIUser) -> None:
     kc_api = DummyKeycloakAPI()
     user1 = UserInfo(
         id="user-1-id",
@@ -341,15 +267,14 @@ async def test_user_events_update(get_app_configs, admin_user: APIUser) -> None:
         ),
     )
     kc_api.users = get_kc_users([user1])
-    sync_config: SyncConfig
-    user_repo: UserRepo
-    sync_config, user_repo = get_app_configs(kc_api)
-    db_users = await user_repo.get_users(admin_user)
-    kc_users = [UserInfo.from_kc_user_payload(user) for user in sync_config.kc_api.get_users()]
+    dm = get_app_manager(kc_api)
+    dm.kc_api = kc_api
+    db_users = await dm.syncer.user_repo.get_users(admin_user)
+    kc_users = [UserInfo.from_kc_user_payload(user) for user in dm.kc_api.get_users()]
     assert set(u.id for u in kc_users) == {user1.id}
     assert len(db_users) == 1  # listing users add the requesting user if not present
-    await sync_config.syncer.users_sync(kc_api)
-    db_users = await user_repo.get_users(admin_user)
+    await dm.syncer.users_sync(kc_api)
+    db_users = await dm.syncer.user_repo.get_users(admin_user)
     kc_users.append(admin_user_info)
     assert set(u.id for u in kc_users) == set(u.id for u in db_users)
     # Add update and create events
@@ -369,25 +294,23 @@ async def test_user_events_update(get_app_configs, admin_user: APIUser) -> None:
     user1_updated = UserInfo(**{**asdict(user1), "first_name": "Johnathan"})
     kc_api.user_events = get_kc_user_create_events([user2]) + get_kc_user_update_events([user1_update])
     # Process events and check if updates show up
-    await sync_config.syncer.events_sync(kc_api)
-    db_users = await user_repo.get_users(admin_user)
+    await dm.syncer.events_sync(kc_api)
+    db_users = await dm.syncer.user_repo.get_users(admin_user)
     assert set(u.id for u in db_users) == set(u.id for u in [user1_updated, user2, admin_user_info])
     # Ensure re-processing events does not break anything
     kc_api.user_events = get_kc_user_create_events([user2]) + get_kc_user_update_events([user1_update])
-    await sync_config.syncer.events_sync(kc_api)
-    db_users = await user_repo.get_users(admin_user)
+    await dm.syncer.events_sync(kc_api)
+    db_users = await dm.syncer.user_repo.get_users(admin_user)
     assert set(u.id for u in db_users) == set(u.id for u in [user1_updated, user2, admin_user_info])
     # Make sure that the addition of the user resulted in the creation of namespaces
-    nss, _ = await sync_config.syncer.group_repo.get_namespaces(
-        user=APIUser(id=user2.id), pagination=PaginationRequest(1, 100)
-    )
+    nss, _ = await dm.syncer.group_repo.get_namespaces(user=APIUser(id=user2.id), pagination=PaginationRequest(1, 100))
     assert len(nss) == 1
     assert user2.email
     assert nss[0].path.serialize() == user2.email.split("@")[0]
 
 
 @pytest.mark.asyncio
-async def test_admin_events(get_app_configs, admin_user: APIUser) -> None:
+async def test_admin_events(get_app_manager, admin_user: APIUser) -> None:
     kc_api = DummyKeycloakAPI()
     user1 = UserInfo(
         id="user-1-id",
@@ -427,22 +350,19 @@ async def test_admin_events(get_app_configs, admin_user: APIUser) -> None:
         ),
     )
     kc_api.users = get_kc_users([user1, user2, admin_user_info])
-    sync_config: SyncConfig
-    user_repo: UserRepo
-    sync_config, user_repo = get_app_configs(kc_api)
-    db_users = await user_repo.get_users(admin_user)
-    kc_users = [UserInfo.from_kc_user_payload(user) for user in sync_config.kc_api.get_users()]
+    dm = get_app_manager(kc_api)
+    dm.kc_api = kc_api
+    db_users = await dm.syncer.user_repo.get_users(admin_user)
+    kc_users = [UserInfo.from_kc_user_payload(user) for user in dm.kc_api.get_users()]
     assert set(u.id for u in kc_users) == set(u.id for u in [user1, user2, admin_user_info])
     assert len(db_users) == 1  # listing users add the requesting user if not present
-    await sync_config.syncer.users_sync(kc_api)
+    await dm.syncer.users_sync(kc_api)
     # Make sure that the addition of the users resulted in the creation of namespaces
-    nss, _ = await sync_config.syncer.group_repo.get_namespaces(
-        user=APIUser(id=user2.id), pagination=PaginationRequest(1, 100)
-    )
+    nss, _ = await dm.syncer.group_repo.get_namespaces(user=APIUser(id=user2.id), pagination=PaginationRequest(1, 100))
     assert len(nss) == 1
     assert user2.email
     assert nss[0].path.serialize() == user2.email.split("@")[0]
-    db_users = await user_repo.get_users(admin_user)
+    db_users = await dm.syncer.user_repo.get_users(admin_user)
     assert set(u.id for u in kc_users) == set(u.id for u in db_users)
     # Add admin events
     user1_updated = UserInfo(**{**asdict(user1), "last_name": "Renku"})
@@ -450,18 +370,16 @@ async def test_admin_events(get_app_configs, admin_user: APIUser) -> None:
         [(user2, KeycloakAdminEvent.DELETE), (user1_updated, KeycloakAdminEvent.UPDATE)]
     )
     # Process admin events
-    await sync_config.syncer.events_sync(kc_api)
-    db_users = await user_repo.get_users(admin_user)
+    await dm.syncer.events_sync(kc_api)
+    db_users = await dm.syncer.user_repo.get_users(admin_user)
     assert set(u.id for u in [user1_updated, admin_user_info]) == set(u.id for u in db_users)
     # Make sure that the removal of a user removes the namespace
-    nss, _ = await sync_config.syncer.group_repo.get_namespaces(
-        user=APIUser(id=user2.id), pagination=PaginationRequest(1, 100)
-    )
+    nss, _ = await dm.syncer.group_repo.get_namespaces(user=APIUser(id=user2.id), pagination=PaginationRequest(1, 100))
     assert len(nss) == 0
 
 
 @pytest.mark.asyncio
-async def test_events_update_error(get_app_configs, admin_user: APIUser) -> None:
+async def test_events_update_error(get_app_manager, admin_user: APIUser) -> None:
     kc_api = DummyKeycloakAPI()
     user1 = UserInfo(
         id="user-1-id",
@@ -501,11 +419,10 @@ async def test_events_update_error(get_app_configs, admin_user: APIUser) -> None
         ),
     )
     kc_api.users = get_kc_users([user1, user2])
-    sync_config: SyncConfig
-    user_repo: UserRepo
-    sync_config, user_repo = get_app_configs(kc_api)
-    db_users = await user_repo.get_users(admin_user)
-    kc_users = [UserInfo.from_kc_user_payload(user) for user in sync_config.kc_api.get_users()]
+    dm = get_app_manager(kc_api)
+    dm.kc_api = kc_api
+    db_users = await dm.syncer.user_repo.get_users(admin_user)
+    kc_users = [UserInfo.from_kc_user_payload(user) for user in dm.kc_api.get_users()]
     kc_users.append(admin_user_info)
     assert set(u.id for u in kc_users) == set(u.id for u in [user1, user2, admin_user_info])
     assert len(db_users) == 1  # listing users add the requesting user if not present
@@ -513,8 +430,8 @@ async def test_events_update_error(get_app_configs, admin_user: APIUser) -> None
     assert db_users[0].first_name == admin_user_info.first_name
     assert db_users[0].last_name == admin_user_info.last_name
     assert db_users[0].email == admin_user_info.email
-    await sync_config.syncer.users_sync(kc_api)
-    db_users = await user_repo.get_users(admin_user)
+    await dm.syncer.users_sync(kc_api)
+    db_users = await dm.syncer.user_repo.get_users(admin_user)
     assert set(u.id for u in kc_users) == set(u.id for u in db_users)
     # Add admin events
     user1_updated = UserInfo(**{**asdict(user1), "last_name": "Renku"})
@@ -526,21 +443,21 @@ async def test_events_update_error(get_app_configs, admin_user: APIUser) -> None
     )
     # Process admin events
     with pytest.raises(ValueError):
-        await sync_config.syncer.events_sync(kc_api)
-    db_users = await user_repo.get_users(admin_user)
+        await dm.syncer.events_sync(kc_api)
+    db_users = await dm.syncer.user_repo.get_users(admin_user)
     # An error occurs in processing an event or between events and none of the events are processed
     assert set(u.id for u in [user1, user2, admin_user_info]) == set(u.id for u in db_users)
     # Add admin events without error
     kc_api.admin_events = get_kc_admin_events([(user1_updated, KeycloakAdminEvent.UPDATE)]) + get_kc_admin_events(
         [(user2_updated, KeycloakAdminEvent.UPDATE)]
     )
-    await sync_config.syncer.events_sync(kc_api)
-    db_users = await user_repo.get_users(admin_user)
+    await dm.syncer.events_sync(kc_api)
+    db_users = await dm.syncer.user_repo.get_users(admin_user)
     assert set(u.id for u in [user1_updated, user2_updated, admin_user_info]) == set(u.id for u in db_users)
 
 
 @pytest.mark.asyncio
-async def test_removing_non_existent_user(get_app_configs, admin_user: APIUser) -> None:
+async def test_removing_non_existent_user(get_app_manager, admin_user: APIUser) -> None:
     kc_api = DummyKeycloakAPI()
     user1 = UserInfo(
         id="user-1-id",
@@ -580,27 +497,26 @@ async def test_removing_non_existent_user(get_app_configs, admin_user: APIUser) 
         ),
     )
     kc_api.users = get_kc_users([user1, admin_user_info])
-    sync_config: SyncConfig
-    user_repo: UserRepo
-    sync_config, user_repo = get_app_configs(kc_api)
-    db_users = await user_repo.get_users(admin_user)
-    kc_users = [UserInfo.from_kc_user_payload(user) for user in sync_config.kc_api.get_users()]
+    dm = get_app_manager(kc_api)
+    dm.kc_api = kc_api
+    db_users = await dm.syncer.user_repo.get_users(admin_user)
+    kc_users = [UserInfo.from_kc_user_payload(user) for user in dm.kc_api.get_users()]
     assert set(u.id for u in kc_users) == set(u.id for u in [user1, admin_user_info])
     assert len(db_users) == 1
-    await sync_config.syncer.users_sync(kc_api)
-    db_users = await user_repo.get_users(admin_user)
+    await dm.syncer.users_sync(kc_api)
+    db_users = await dm.syncer.user_repo.get_users(admin_user)
     assert set(u.id for u in kc_users) == set(u.id for u in db_users)
     # Add admin events
     kc_api.admin_events = get_kc_admin_events([(non_existent_user, KeycloakAdminEvent.DELETE)])
     # Process events
-    await sync_config.syncer.events_sync(kc_api)
-    db_users = await user_repo.get_users(admin_user)
+    await dm.syncer.events_sync(kc_api)
+    db_users = await dm.syncer.user_repo.get_users(admin_user)
     assert set(u.id for u in db_users) == set(u.id for u in [user1, admin_user_info])
 
 
 @pytest.mark.asyncio
 async def test_avoiding_namespace_slug_duplicates(
-    get_app_configs: Callable[..., tuple[SyncConfig, UserRepo]], admin_user: APIUser
+    get_app_manager: Callable[..., DependencyManager], admin_user: APIUser
 ) -> None:
     kc_api = DummyKeycloakAPI()
     num_users = 10
@@ -633,14 +549,15 @@ async def test_avoiding_namespace_slug_duplicates(
         ),
     )
     kc_api.users = get_kc_users(users + [admin_user_info])
-    sync_config, _ = get_app_configs(kc_api)
+    dm = get_app_manager(kc_api)
+    dm.kc_api = kc_api
     original_count = 0
     enumerated_count = 0
     random_count = 0
-    await sync_config.syncer.users_sync(kc_api)
+    await dm.syncer.users_sync(kc_api)
     for user in users:
         api_user = APIUser(id=user.id)
-        nss, _ = await sync_config.syncer.group_repo.get_namespaces(api_user, PaginationRequest(1, 100))
+        nss, _ = await dm.syncer.group_repo.get_namespaces(api_user, PaginationRequest(1, 100))
         assert len(nss) == 1
         ns = nss[0]
         assert user.email
@@ -657,7 +574,7 @@ async def test_avoiding_namespace_slug_duplicates(
 
 
 @pytest.mark.asyncio
-async def test_authz_admin_sync(get_app_configs, admin_user: APIUser) -> None:
+async def test_authz_admin_sync(get_app_manager, admin_user: APIUser) -> None:
     kc_api = DummyKeycloakAPI()
     user1 = UserInfo(
         id="user-1-id",
@@ -686,27 +603,25 @@ async def test_authz_admin_sync(get_app_configs, admin_user: APIUser) -> None:
     )
     kc_api.users = get_kc_users([user1, admin_user_info])
     kc_api.user_roles = {admin_user_info.id: ["renku-admin"]}
-    sync_config: SyncConfig
-    user_repo: UserRepo
-    sync_config, user_repo = get_app_configs(kc_api)
-    authz = Authz(sync_config.authz_config)
-    db_users = await user_repo.get_users(admin_user)
-    kc_users = [UserInfo.from_kc_user_payload(user) for user in sync_config.kc_api.get_users()]
-    await sync_config.syncer.users_sync(kc_api)
-    await sync_admins_from_keycloak(kc_api, authz)
-    db_users = await user_repo.get_users(admin_user)
+    dm = get_app_manager(kc_api)
+    dm.kc_api = kc_api
+    db_users = await dm.syncer.user_repo.get_users(admin_user)
+    kc_users = [UserInfo.from_kc_user_payload(user) for user in dm.kc_api.get_users()]
+    await dm.syncer.users_sync(kc_api)
+    await sync_admins_from_keycloak(kc_api, dm.authz)
+    db_users = await dm.syncer.user_repo.get_users(admin_user)
     assert set(u.id for u in kc_users) == set(u.id for u in db_users)
-    authz_admin_ids = await authz._get_admin_user_ids()
+    authz_admin_ids = await dm.authz._get_admin_user_ids()
     assert set(authz_admin_ids) == {admin_user_info.id}
     # Make user1 admin
     kc_api.user_roles[user1.id] = ["renku-admin"]
-    await sync_admins_from_keycloak(kc_api, authz)
-    authz_admin_ids = await authz._get_admin_user_ids()
+    await sync_admins_from_keycloak(kc_api, dm.authz)
+    authz_admin_ids = await dm.authz._get_admin_user_ids()
     assert set(authz_admin_ids) == {admin_user_info.id, user1.id}
     # Remove original admin
     kc_api.user_roles.pop(admin_user_info.id)
-    await sync_admins_from_keycloak(kc_api, authz)
-    authz_admin_ids = await authz._get_admin_user_ids()
+    await sync_admins_from_keycloak(kc_api, dm.authz)
+    authz_admin_ids = await dm.authz._get_admin_user_ids()
     assert set(authz_admin_ids) == {user1.id}
 
 
@@ -724,7 +639,7 @@ async def get_user_namespace_ids_in_authz(authz: Authz) -> set[str]:
 
 
 @pytest.mark.asyncio
-async def test_bootstraping_user_namespaces(get_app_configs, admin_user: APIUser):
+async def test_bootstraping_user_namespaces(get_app_manager, admin_user: APIUser):
     kc_api = DummyKeycloakAPI()
     user1 = UserInfo(
         id="user-1-id",
@@ -752,11 +667,10 @@ async def test_bootstraping_user_namespaces(get_app_configs, admin_user: APIUser
     )
     assert admin_user.id
     kc_api.users = get_kc_users([user1, user2])
-    sync_config: SyncConfig
-    sync_config, _ = get_app_configs(kc_api)
-    authz = Authz(sync_config.authz_config)
+    dm = get_app_manager(kc_api)
+    dm.kc_api = kc_api
     db_user_namespace_ids: set[ULID] = set()
-    async with sync_config.session_maker() as session, session.begin():
+    async with dm.session_maker() as session, session.begin():
         for user in [user1, user2]:
             user_orm = UserORM(
                 user.id,
@@ -768,16 +682,16 @@ async def test_bootstraping_user_namespaces(get_app_configs, admin_user: APIUser
             session.add(user_orm)
             await session.flush()
             db_user_namespace_ids.add(user_orm.namespace.id)
-    authz_user_namespace_ids = await get_user_namespace_ids_in_authz(authz)
+    authz_user_namespace_ids = await get_user_namespace_ids_in_authz(dm.authz)
     assert len(authz_user_namespace_ids) == 0
-    await bootstrap_user_namespaces(sync_config)
-    authz_user_namespace_ids = await get_user_namespace_ids_in_authz(authz)
+    await bootstrap_user_namespaces(dm)
+    authz_user_namespace_ids = await get_user_namespace_ids_in_authz(dm.authz)
     assert db_user_namespace_ids == authz_user_namespace_ids
 
 
 @pytest.mark.asyncio
 async def test_fixing_project_group_namespace_relations(
-    get_app_configs: Callable[..., tuple[SyncConfig, UserRepo]], admin_user: APIUser
+    get_app_manager: Callable[..., DependencyManager], admin_user: APIUser
 ):
     admin_user_info = UserInfo(
         id=admin_user.id,
@@ -819,20 +733,20 @@ async def test_fixing_project_group_namespace_relations(
     user2_api = APIUser(is_admin=False, id=user2.id, access_token="access_token")
     user_roles = {admin_user.id: get_kc_roles(["renku-admin"])}
     kc_api = DummyKeycloakAPI(users=get_kc_users([admin_user_info, user1, user2]), user_roles=user_roles)
-    sync_config, user_repo = get_app_configs(kc_api)
+    dm = get_app_manager(kc_api)
+    dm.kc_api = kc_api
     # Sync users
-    await sync_config.syncer.users_sync(kc_api)
-    authz = Authz(sync_config.authz_config)
+    await dm.syncer.users_sync(kc_api)
     # Create group
     group_payload = GroupPostRequest(name="group1", slug="group1", description=None)
-    group = await sync_config.group_repo.insert_group(user1_api, group_payload)
+    group = await dm.group_repo.insert_group(user1_api, group_payload)
     # Create project
     project_payload = UnsavedProject(
         name="project1", slug="project1", namespace="group1", created_by=user1.id, visibility="private"
     )
-    project = await sync_config.project_repo.insert_project(user1_api, project_payload)
+    project = await dm.project_repo.insert_project(user1_api, project_payload)
     # Write the wrong group ID
-    await authz.client.WriteRelationships(
+    await dm.authz.client.WriteRelationships(
         WriteRelationshipsRequest(
             updates=[
                 RelationshipUpdate(
@@ -855,18 +769,16 @@ async def test_fixing_project_group_namespace_relations(
         )
     )
     # Add group member
-    await sync_config.group_repo.update_group_members(user1_api, Slug("group1"), [UnsavedMember(Role.VIEWER, user2.id)])
+    await dm.group_repo.update_group_members(user1_api, Slug("group1"), [UnsavedMember(Role.VIEWER, user2.id)])
     with pytest.raises(errors.MissingResourceError):
-        await sync_config.project_repo.get_project(user2_api, project.id)
-    await fix_mismatched_project_namespace_ids(sync_config)
+        await dm.project_repo.get_project(user2_api, project.id)
+    await fix_mismatched_project_namespace_ids(dm)
     # After the fix you can read the project
-    await sync_config.project_repo.get_project(user2_api, project.id)
+    await dm.project_repo.get_project(user2_api, project.id)
 
 
 @pytest.mark.asyncio
-async def test_migrate_groups_make_all_public(
-    get_app_configs: Callable[..., tuple[SyncConfig, UserRepo]], admin_user: APIUser
-):
+async def test_migrate_groups_make_all_public(get_app_manager: Callable[..., DependencyManager], admin_user: APIUser):
     admin_user_info = UserInfo(
         id=admin_user.id,
         first_name=admin_user.first_name,
@@ -895,15 +807,15 @@ async def test_migrate_groups_make_all_public(
     anon_user_api = APIUser(is_admin=False)
     user_roles = {admin_user.id: get_kc_roles(["renku-admin"])}
     kc_api = DummyKeycloakAPI(users=get_kc_users([admin_user_info, user]), user_roles=user_roles)
-    sync_config, _ = get_app_configs(kc_api)
+    dm = get_app_manager(kc_api)
+    dm.kc_api = kc_api
     # Sync users
-    await sync_config.syncer.users_sync(kc_api)
-    authz = Authz(sync_config.authz_config)
+    await dm.syncer.users_sync(kc_api)
     # Create group
     group_payload = GroupPostRequest(name="group1", slug="group1", description=None)
-    group = await sync_config.group_repo.insert_group(user_api, group_payload)
+    group = await dm.group_repo.insert_group(user_api, group_payload)
     # Remove the public viewer relations
-    await authz.client.DeleteRelationships(
+    await dm.authz.client.DeleteRelationships(
         DeleteRelationshipsRequest(
             relationship_filter=RelationshipFilter(
                 resource_type=ResourceType.group.value, optional_relation=_Relation.public_viewer.value
@@ -912,12 +824,12 @@ async def test_migrate_groups_make_all_public(
     )
 
     with pytest.raises(errors.MissingResourceError):
-        group_members = await sync_config.group_repo.get_group_members(user=anon_user_api, slug=Slug(group.slug))
+        group_members = await dm.group_repo.get_group_members(user=anon_user_api, slug=Slug(group.slug))
 
-    await migrate_groups_make_all_public(sync_config)
+    await migrate_groups_make_all_public(dm)
 
     # After the migration, the group is public
-    group_members = await sync_config.group_repo.get_group_members(user=anon_user_api, slug=Slug(group.slug))
+    group_members = await dm.group_repo.get_group_members(user=anon_user_api, slug=Slug(group.slug))
     assert len(group_members) == 1
     assert group_members[0].id == "user-1-id"
     assert group_members[0].role.value == "owner"
@@ -925,7 +837,7 @@ async def test_migrate_groups_make_all_public(
 
 @pytest.mark.asyncio
 async def test_migrate_user_namespaces_make_all_public(
-    get_app_configs: Callable[..., tuple[SyncConfig, UserRepo]], admin_user: APIUser
+    get_app_manager: Callable[..., DependencyManager], admin_user: APIUser
 ):
     admin_user_info = UserInfo(
         id=admin_user.id,
@@ -954,12 +866,12 @@ async def test_migrate_user_namespaces_make_all_public(
     anon_user_api = APIUser(is_admin=False)
     user_roles = {admin_user.id: get_kc_roles(["renku-admin"])}
     kc_api = DummyKeycloakAPI(users=get_kc_users([admin_user_info, user]), user_roles=user_roles)
-    sync_config, _ = get_app_configs(kc_api)
+    dm = get_app_manager(kc_api)
+    dm.kc_api = kc_api
     # Sync users
-    await sync_config.syncer.users_sync(kc_api)
-    authz = Authz(sync_config.authz_config)
+    await dm.syncer.users_sync(kc_api)
     # Remove the public viewer relations
-    await authz.client.DeleteRelationships(
+    await dm.authz.client.DeleteRelationships(
         DeleteRelationshipsRequest(
             relationship_filter=RelationshipFilter(
                 resource_type=ResourceType.user_namespace.value, optional_relation=_Relation.public_viewer.value
@@ -968,19 +880,19 @@ async def test_migrate_user_namespaces_make_all_public(
     )
 
     with pytest.raises(errors.MissingResourceError):
-        await sync_config.group_repo.get_namespace_by_slug(user=anon_user_api, slug=Slug("john.doe"))
+        await dm.group_repo.get_namespace_by_slug(user=anon_user_api, slug=Slug("john.doe"))
 
-    await migrate_user_namespaces_make_all_public(sync_config)
+    await migrate_user_namespaces_make_all_public(dm)
 
     # After the migration, the user namespace is public
-    ns = await sync_config.group_repo.get_namespace_by_slug(user=anon_user_api, slug=Slug("john.doe"))
+    ns = await dm.group_repo.get_namespace_by_slug(user=anon_user_api, slug=Slug("john.doe"))
     assert ns.path.serialize() == "john.doe"
     assert ns.kind.value == "user"
     assert ns.created_by == user.id
 
 
 @pytest.mark.asyncio
-async def test_migrate_storages_v2(get_app_configs: Callable[..., tuple[SyncConfig, UserRepo]], admin_user: APIUser):
+async def test_migrate_storages_v2(get_app_manager: Callable[..., DependencyManager], admin_user: APIUser):
     admin_user_info = UserInfo(
         id=admin_user.id,
         first_name=admin_user.first_name,
@@ -1008,9 +920,10 @@ async def test_migrate_storages_v2(get_app_configs: Callable[..., tuple[SyncConf
     user_api = APIUser(is_admin=False, id=user.id, access_token="access_token")
     user_roles = {admin_user.id: get_kc_roles(["renku-admin"])}
     kc_api = DummyKeycloakAPI(users=get_kc_users([admin_user_info, user]), user_roles=user_roles)
-    sync_config, _ = get_app_configs(kc_api)
+    dm = get_app_manager(kc_api)
+    dm.kc_api = kc_api
     # Sync users
-    await sync_config.syncer.users_sync(kc_api)
+    await dm.syncer.users_sync(kc_api)
 
     # Create a project and a storage_v2 attached to it
     project_payload = UnsavedProject(
@@ -1020,7 +933,7 @@ async def test_migrate_storages_v2(get_app_configs: Callable[..., tuple[SyncConf
         created_by=user.id,
         visibility="private",
     )
-    project = await sync_config.project_repo.insert_project(user_api, project_payload)
+    project = await dm.project_repo.insert_project(user_api, project_payload)
     unsaved_storage = UnsavedCloudStorage.from_url(
         storage_url="s3://my-bucket",
         name="storage-1",
@@ -1029,14 +942,14 @@ async def test_migrate_storages_v2(get_app_configs: Callable[..., tuple[SyncConf
         target_path="my_data",
     )
     storage_orm = CloudStorageORM.load(unsaved_storage)
-    async with sync_config.session_maker() as session, session.begin():
+    async with dm.session_maker() as session, session.begin():
         session.add(storage_orm)
     storage_v2 = storage_orm.dump()
 
-    await migrate_storages_v2_to_data_connectors(sync_config)
+    await migrate_storages_v2_to_data_connectors(dm)
 
     # After the migration, there is a new data connector
-    data_connector_repo = sync_config.data_connector_migration_tool.data_connector_repo
+    data_connector_repo = dm.data_connector_migration_tool.data_connector_repo
     data_connectors, data_connectors_count = await data_connector_repo.get_data_connectors(
         user=user_api,
         pagination=PaginationRequest(1, 100),
@@ -1051,7 +964,7 @@ async def test_migrate_storages_v2(get_app_configs: Callable[..., tuple[SyncConf
     assert data_connector.storage.target_path == storage_v2.target_path
     assert data_connector.created_by == user.id
 
-    data_connector_project_link_repo = sync_config.data_connector_migration_tool.data_connector_repo
+    data_connector_project_link_repo = dm.data_connector_migration_tool.data_connector_repo
     links = await data_connector_project_link_repo.get_links_to(user=user_api, project_id=project.id)
     assert links is not None
     assert len(links) == 1

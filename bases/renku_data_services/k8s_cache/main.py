@@ -6,7 +6,7 @@ import logging
 import kr8s
 
 from renku_data_services.k8s.models import Cluster, ClusterId
-from renku_data_services.k8s_cache.config import Config
+from renku_data_services.k8s_cache.dependencies import DependencyManager
 from renku_data_services.k8s_watcher import K8sWatcher, k8s_object_handler
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
@@ -16,19 +16,19 @@ async def main() -> None:
     """K8s cache entrypoint."""
 
     logging.basicConfig(format="%(asctime)s %(levelname)s %(message)s", level=logging.INFO)
-    config = Config.from_env()
+    dm = DependencyManager.from_env()
 
     kr8s_api = await kr8s.asyncio.api()
-    clusters = [Cluster(id=ClusterId("renkulab"), namespace=config.k8s.renku_namespace, api=kr8s_api)]
+    clusters = [Cluster(id=ClusterId("renkulab"), namespace=dm.config.k8s.renku_namespace, api=kr8s_api)]
 
     kinds = [AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK]
-    if config.image_builders.enabled:
+    if dm.config.image_builders.enabled:
         kinds.extend([BUILD_RUN_GVK, TASK_RUN_GVK])
     watcher = K8sWatcher(
-        handler=k8s_object_handler(config.k8s_cache, config.metrics, rp_repo=config.rp_repo),
+        handler=k8s_object_handler(dm.k8s_cache, dm.metrics, rp_repo=dm.rp_repo),
         clusters={c.id: c for c in clusters},
         kinds=kinds,
-        db_cache=config.k8s_cache,
+        db_cache=dm.k8s_cache,
     )
     await watcher.start()
     logging.info("started watching resources")

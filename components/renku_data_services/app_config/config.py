@@ -19,8 +19,8 @@ from renku_data_services import errors
 class KeycloakConfig:
     """Configuration values for keycloak."""
 
-    keycloak_url: str
-    keycloak_realm: str
+    url: str
+    realm: str
     client_id: str
     client_secret: str
     algorithms: list[str]
@@ -28,11 +28,11 @@ class KeycloakConfig:
     @classmethod
     def from_env(cls) -> "KeycloakConfig":
         """Load config from environment values."""
-        keycloak_url = os.environ.get("KEYCLOAK_URL")
-        if keycloak_url is None:
+        url = os.environ.get("KEYCLOAK_URL")
+        if url is None:
             raise errors.ConfigurationError(message="The Keycloak URL has to be specified.")
-        keycloak_url = keycloak_url.rstrip("/")
-        keycloak_realm = os.environ.get("KEYCLOAK_REALM", "Renku")
+        url = url.rstrip("/")
+        realm = os.environ.get("KEYCLOAK_REALM", "Renku")
         client_id = os.environ["KEYCLOAK_CLIENT_ID"]
         client_secret = os.environ["KEYCLOAK_CLIENT_SECRET"]
         algorithms = os.environ.get("KEYCLOAK_TOKEN_SIGNATURE_ALGS")
@@ -40,8 +40,8 @@ class KeycloakConfig:
             raise errors.ConfigurationError(message="At least one token signature algorithm is required.")
         algorithms_lst = [i.strip() for i in algorithms.split(",")]
         return cls(
-            keycloak_url=keycloak_url,
-            keycloak_realm=keycloak_realm,
+            url=url,
+            realm=realm,
             client_id=client_id,
             client_secret=client_secret,
             algorithms=algorithms_lst,
