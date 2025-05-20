@@ -46,7 +46,8 @@ async def test_group_creation_basic(
     assert search_updates[0].payload["id"] == group["id"]
     assert search_updates[0].payload["name"] == group["name"]
     assert search_updates[0].payload["description"] == group["description"]
-    assert search_updates[0].payload["namespace"] == group["slug"]
+    assert search_updates[0].payload["slug"] == group["slug"]
+    assert search_updates[0].payload["path"] == group["slug"]
 
     events = await app_manager.event_repo.get_pending_events()
 
@@ -167,7 +168,8 @@ async def test_group_patch_delete(
 
     search_updates = await app_manager.search_updates_repo.select_next(20)
     assert len(search_updates) == 1
-    assert search_updates[0].payload["namespace"] == group["slug"]
+    assert search_updates[0].payload["slug"] == group["slug"]
+    assert search_updates[0].payload["path"] == group["slug"]
     for k in ["id", "name", "description"]:
         assert search_updates[0].payload[k] == group[k]
 
