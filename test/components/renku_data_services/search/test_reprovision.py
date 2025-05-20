@@ -9,7 +9,12 @@ from renku_data_services.authz.authz import Authz
 from renku_data_services.authz.models import Visibility
 from renku_data_services.base_models.core import APIUser, NamespacePath
 from renku_data_services.data_connectors.db import DataConnectorRepository
-from renku_data_services.data_connectors.models import CloudStorageCore, DataConnector, UnsavedDataConnector
+from renku_data_services.data_connectors.models import (
+    CloudStorageCore,
+    DataConnector,
+    GlobalDataConnector,
+    UnsavedDataConnector,
+)
 from renku_data_services.message_queue.db import EventRepository, ReprovisioningRepository
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.models import Event
@@ -131,7 +136,7 @@ async def make_projects(setup: Setup, count: int) -> list[Project]:
     return result
 
 
-async def get_all_connectors(setup: Setup, per_page: int) -> list[DataConnector]:
+async def get_all_connectors(setup: Setup, per_page: int) -> list[DataConnector | GlobalDataConnector]:
     result = [item async for item in setup.search_reprovision._get_all_data_connectors(admin, per_page=per_page)]
     result.sort(key=lambda e: e.id)
     return result
