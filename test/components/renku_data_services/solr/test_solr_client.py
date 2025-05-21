@@ -4,13 +4,11 @@ import string
 
 import pytest
 
-from renku_data_services.base_models.core import Slug
 from renku_data_services.solr.entity_documents import Group, Project, User
 from renku_data_services.solr.entity_schema import Fields, FieldTypes
 from renku_data_services.solr.solr_client import (
     DefaultSolrAdminClient,
     DefaultSolrClient,
-    DocVersions,
     FacetArbitraryRange,
     FacetBuckets,
     FacetCount,
@@ -37,13 +35,6 @@ def assert_upsert_result(r: UpsertResponse):
             assert s.header.query_time > 0
         case _:
             raise Exception(f"Unexpected result: {r}")
-
-
-def test_serialize_document():
-    d = User(id="one", namespace=Slug("one"), version=DocVersions.not_exists())
-    djson = '{"id":"one", "namespace":"one", "_version_": -1}'
-    nd = User.model_validate_json(djson)
-    assert nd == d
 
 
 def test_facet_terms() -> None:
@@ -341,7 +332,7 @@ async def test_sub_query(solr_search):
         assert len(details["docs"]) == 1
         user_doc = details["docs"][0]
         user = User.model_validate(user_doc)
-        assert user.namespace == u2.namespace
+        assert user.path == u2.path
         assert user.id == u2.id
 
 
