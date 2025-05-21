@@ -99,6 +99,10 @@ class K8sSchedulingClient(K8sSchedudlingClientInterface):  # pragma:nocover
         """Delete a priority class."""
         return self.client.delete_priority_class(name, **kwargs)
 
+    def get_priority_class(self, name: Any, **kwargs: Any) -> Any:
+        """Get a priority class."""
+        return self.client.read_priority_class(name, **kwargs)
+
 
 class DummyCoreClient(K8sCoreClientInterface):
     """Dummy k8s core API client that does not require a k8s cluster.
@@ -232,6 +236,11 @@ class DummySchedulingClient(K8sSchedudlingClientInterface):
             if removed_pc is None:
                 raise client.ApiException(status=404)
             return removed_pc
+
+    def get_priority_class(self, name: Any, **kwargs: Any) -> Any:
+        """Get a priority class."""
+        with self._lock:
+            return self.pcs.get(name, None)
 
 
 class K8sClusterClient:

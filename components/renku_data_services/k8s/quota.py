@@ -1,5 +1,6 @@
 """The adapter used to create/delete/update/get resource quotas and priority classes in k8s."""
 
+from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -94,15 +95,22 @@ class QuotaRepository:
 
         metadata = {"labels": {self._label_name: self._label_value}, "name": quota.id}
         quota_manifest = self._quota_to_manifest(quota)
-        pc: client.V1PriorityClass = self.scheduling_client.create_priority_class(
-            client.V1PriorityClass(
-                global_default=False,
-                value=100,
-                preemption_policy="Never",
-                description="Renku resource quota priority class",
-                metadata=client.V1ObjectMeta(**metadata),
-            ),
-        )
+
+        # LSA Check if we have a priority class with the given name, return it or create one otherwise.
+        pc: client.V1PriorityClass | None = None
+        with suppress(client.ApiException):
+            pc = self.scheduling_client.get_priority_class(quota.id)
+        if pc is None:
+            pc = self.scheduling_client.create_priority_class(
+                client.V1PriorityClass(
+                    global_default=False,
+                    value=100,
+                    preemption_policy="Never",
+                    description="Renku resource quota priority class",
+                    metadata=client.V1ObjectMeta(**metadata),
+                ),
+            )
+
         # NOTE: The priority class is cluster-scoped and a namespace-scoped resource cannot be an owner
         # of a cluster-scoped resource. That is why the priority class is an owner of the quota.
         quota_manifest.owner_references = [
