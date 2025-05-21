@@ -33,16 +33,17 @@ configure each logger appropriately.
 import logging
 import os
 from logging import Logger, LoggerAdapter
+from typing import Final
 
-__name_prefix = "renku_data_services."
+__app_root_logger: Final[str] = "renku_data_services"
 
 
 def getLogger(name: str) -> Logger:
     """Return a logger with the name prefixed with our app name, if not already done."""
-    if not name.startswith(__name_prefix):
-        return logging.getLogger(f"{__name_prefix}{name}")
-    else:
+    if name.startswith(__app_root_logger + "."):
         return logging.getLogger(name)
+    else:
+        return logging.getLogger(f"{__app_root_logger}.{name}")
 
 
 def with_request_id(logger: Logger, request_id: str) -> LoggerAdapter:
@@ -89,15 +90,33 @@ def configure_logging(override_levels: dict[int, list[str]] = __logger_levels_fr
     """
     logging.basicConfig(level=logging.WARNING)
     logging.getLogger("sanic").setLevel(logging.INFO)
-    logging.getLogger("renku_data_services").setLevel(logging.INFO)
-
-    logger = getLogger(__name__)
+    logging.getLogger(__app_root_logger).setLevel(logging.INFO)
 
     # override minimum level for specific loggers
     for level, names in override_levels.items():
         for name in names:
-            logger.info(f"Set minimum level: {name} -> {logging._levelToName[level]}")
+            print(f">> Set minimum level: {name} -> {logging._levelToName[level]}")
             logging.getLogger(name).setLevel(level)
+
+
+def debug_logger_setting(msg: str | None = None) -> None:
+    """Help."""
+    l_root = logging.Logger.root
+    l_app = getLogger(__app_root_logger)
+    l_search = getLogger("search")
+    l_bp = getLogger("search.blueprints")
+    print("=================================================================")
+    if msg is not None:
+        print(f"--- {msg} ---")
+    print(f">>>> logger: {l_root} self.level={logging.getLevelName(l_root.level)}")
+    print(f">>>> logger: {l_app} self.level={logging.getLevelName(l_app.level)}")
+    print(f">>>> logger: {l_search} self.level={logging.getLevelName(l_search.level)}")
+    print(f">>>> logger: {l_bp} self.level={logging.getLevelName(l_bp.level)}")
+    for name in logging.Logger.manager.loggerDict:
+        ll = logging.Logger.manager.loggerDict[name]
+        if isinstance(ll, logging.Logger) and ll.level != logging.NOTSET:
+            print(f"  * {ll} (self.level={logging.getLevelName(ll.level)})")
+    print("=================================================================")
 
 
 class RequestIdAdapter(LoggerAdapter):
