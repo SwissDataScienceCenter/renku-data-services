@@ -7,6 +7,7 @@ from sanic.response import JSONResponse
 
 import renku_data_services.base_models as base_models
 import renku_data_services.search.core as core
+from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz
 from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
@@ -16,6 +17,10 @@ from renku_data_services.search.apispec import SearchQuery
 from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.search.user_query_parser import QueryParser
 from renku_data_services.solr.solr_client import SolrClientConfig
+
+logger = logging.getLogger(__name__)
+
+logging.debug_logger_setting("Loading search.blueprints module")
 
 
 @dataclass(kw_only=True)
@@ -77,6 +82,9 @@ class SearchBP(CustomBlueprint):
             per_page = query.per_page
             offset = (query.page - 1) * per_page
             uq = QueryParser.parse(query.q)
+            logger.debug(f"Running search query: {query}")
+            logging.debug_logger_setting("From blueprints request processing")
+
             result = await core.query(self.authz.client, self.solr_config, uq, user, per_page, offset)
             await self.metrics.search_queried(user)
             return json(

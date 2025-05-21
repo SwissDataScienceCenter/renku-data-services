@@ -15,7 +15,7 @@ from sentry_sdk.integrations.grpc import GRPCIntegration
 from sentry_sdk.integrations.sanic import SanicIntegration, _context_enter, _context_exit, _set_transaction
 
 import renku_data_services.solr.entity_schema as entity_schema
-from renku_data_services.app_config.logging import configure_logging, getLogger
+from renku_data_services.app_config.logging import configure_logging, debug_logger_setting, getLogger
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.data_api.app import register_all_handlers
@@ -34,6 +34,7 @@ from renku_data_services.utils.middleware import validate_null_byte
 
 if TYPE_CHECKING:
     import sentry_sdk._types
+
 
 logger = getLogger(__name__)
 
@@ -166,6 +167,11 @@ def create_app() -> Sanic:
         if getattr(app.ctx, "solr_reindex", False):
             app.manager.manage("SolrReindex", solr_reindex, {"app_name": app.name}, transient=True)
 
+    @app.before_server_start
+    async def logging_setup(app: Sanic) -> None:
+        configure_logging()
+        debug_logger_setting("On before server start")
+
     return app
 
 
@@ -179,9 +185,9 @@ if __name__ == "__main__":
     parser.add_argument("-d", "--dev", action="store_true", help="Enable Sanic development mode")
     parser.add_argument("--single-process", action="store_true", help="Do not use multiprocessing.")
     args: dict[str, Any] = vars(parser.parse_args())
-    configure_logging()
-    logger.info("Logging configured.")
+
     loader = AppLoader(factory=create_app)
     app = loader.load()
     app.prepare(**args)
+
     Sanic.serve(primary=app, app_loader=loader)
