@@ -56,7 +56,7 @@ class DependencyManager:
         return self._k8s_cache
 
     @classmethod
-    def from_env(cls, prefix: str = "") -> "DependencyManager":
+    def from_env(cls) -> "DependencyManager":
         """Create a config from environment variables."""
         config = Config.from_env()
 
