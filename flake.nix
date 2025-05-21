@@ -61,11 +61,11 @@
       devshellToolsPkgs = devshell-tools.packages.${system};
 
       rclone = pkgs.rclone.overrideAttrs (old: {
-        version = "v1.69.1";
+        version = "v1.69.2";
         src = pkgs.fetchFromGitHub {
           owner = "SwissDataScienceCenter";
           repo = "rclone";
-          rev = "v1.69.1+renku-1";
+          rev = "v1.69.2+renku-1";
           sha256 = "sha256-AaQnLRAyBSHZFXmpOnPl1Af04YesR+HZd/BVw4zNW+E=";
         };
       });
