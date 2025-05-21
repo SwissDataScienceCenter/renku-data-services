@@ -5,6 +5,7 @@ from typing import Optional
 
 from kubernetes import client
 from kubernetes.utils.quantity import parse_quantity
+from sanic.log import logger
 
 from renku_data_services import errors
 from renku_data_services.crc import models
@@ -97,6 +98,7 @@ class QuotaRepository:
 
         # LSA Check if we have a priority class with the given name, return it or create one otherwise.
         pc: client.V1PriorityClass = self.scheduling_client.get_priority_class(quota.id)
+        logger.warning(f"#### Retrieved priority class {quota.id}: {pc}")
         if pc is None:
             pc = self.scheduling_client.create_priority_class(
                 client.V1PriorityClass(
