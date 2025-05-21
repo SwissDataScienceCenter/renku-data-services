@@ -528,6 +528,9 @@ class DependencyManager:
                     message="The JWKS url for Keycloak cannot be found from the OIDC discovery endpoint."
                 )
             jwks = PyJWKClient(jwks_url)
+            if config.keycloak.algorithms is None:
+                raise errors.ConfigurationError(message="At least one token signature algorithm is required.")
+
             authenticator = KeycloakAuthenticator(jwks=jwks, algorithms=config.keycloak.algorithms)
             assert config.gitlab_url is not None
             gitlab_authenticator = GitlabAuthenticator(gitlab_url=config.gitlab_url)

@@ -23,7 +23,7 @@ class KeycloakConfig:
     realm: str
     client_id: str
     client_secret: str
-    algorithms: list[str]
+    algorithms: list[str] | None
 
     @classmethod
     def from_env(cls) -> "KeycloakConfig":
@@ -36,9 +36,9 @@ class KeycloakConfig:
         client_id = os.environ["KEYCLOAK_CLIENT_ID"]
         client_secret = os.environ["KEYCLOAK_CLIENT_SECRET"]
         algorithms = os.environ.get("KEYCLOAK_TOKEN_SIGNATURE_ALGS")
-        if algorithms is None:
-            raise errors.ConfigurationError(message="At least one token signature algorithm is required.")
-        algorithms_lst = [i.strip() for i in algorithms.split(",")]
+        algorithms_lst = None
+        if algorithms is not None:
+            algorithms_lst = [i.strip() for i in algorithms.split(",")]
         return cls(
             url=url,
             realm=realm,
