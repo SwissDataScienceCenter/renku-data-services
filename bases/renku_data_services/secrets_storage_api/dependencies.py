@@ -51,6 +51,9 @@ class DependencyManager:
                     message="The JWKS url for Keycloak cannot be found from the OIDC discovery endpoint."
                 )
             jwks = PyJWKClient(jwks_url)
+            if config.keycloak.algorithms is None:
+                raise errors.ConfigurationError(message="At least one token signature algorithm is required.")
+
             authenticator = KeycloakAuthenticator(jwks=jwks, algorithms=config.keycloak.algorithms)
             core_client = K8sCoreClient()
 
