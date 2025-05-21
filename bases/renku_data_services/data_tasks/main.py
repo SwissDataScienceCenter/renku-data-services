@@ -5,20 +5,13 @@ import logging
 
 import uvloop
 
+import renku_data_services.app_config.logging as logging
 from renku_data_services.data_tasks.dependencies import DependencyManager
 from renku_data_services.data_tasks.task_defs import all_tasks
 from renku_data_services.data_tasks.taskman import TaskDefininions, TaskManager
 from renku_data_services.data_tasks.tcp_handler import TcpHandler
 
-
-def configure_logging() -> None:
-    """Configures logging.
-
-    Log everything at level WARNING, except for our code that is set to INFO
-    """
-    logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(name)s %(levelname)s %(message)s")
-    logging.getLogger("renku_data_services").setLevel(logging.INFO)
-
+logger = logging.getLogger(__name__)
 
 async def log_tasks(logger: logging.Logger, tm: TaskManager, interval: int) -> None:
     """Log the currently running tasks each `interval`."""
@@ -33,8 +26,6 @@ async def log_tasks(logger: logging.Logger, tm: TaskManager, interval: int) -> N
 async def main() -> None:
     """Data tasks entry point."""
     dm = DependencyManager.from_env()
-    configure_logging()
-    logger = logging.getLogger("renku_data_services.data_tasks.main")
     logger.info(f"Config: {dm.config}")
 
     tm = TaskManager(dm.config.max_retry_wait_seconds)

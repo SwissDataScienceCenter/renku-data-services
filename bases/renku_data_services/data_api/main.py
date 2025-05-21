@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Any
 import sentry_sdk
 import uvloop
 from sanic import Request, Sanic
-from sanic.log import logger
 from sanic.response import BaseHTTPResponse
 from sanic.worker.loader import AppLoader
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
@@ -16,6 +15,7 @@ from sentry_sdk.integrations.grpc import GRPCIntegration
 from sentry_sdk.integrations.sanic import SanicIntegration, _context_enter, _context_exit, _set_transaction
 
 import renku_data_services.solr.entity_schema as entity_schema
+from renku_data_services.app_config.logging import configure_logging, getLogger
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.data_api.app import register_all_handlers
@@ -34,6 +34,8 @@ from renku_data_services.utils.middleware import validate_null_byte
 
 if TYPE_CHECKING:
     import sentry_sdk._types
+
+logger = getLogger(__name__)
 
 
 async def _solr_reindex(app: Sanic) -> None:
@@ -60,7 +62,7 @@ def solr_reindex(app_name: str) -> None:
 def create_app() -> Sanic:
     """Create a Sanic application."""
     dependency_manager = DependencyManager.from_env()
-    app = Sanic(dependency_manager.app_name)
+    app = Sanic(dependency_manager.app_name, configure_logging=False)
 
     if "COVERAGE_RUN" in environ:
         app.config.TOUCHUP = False
@@ -177,6 +179,8 @@ if __name__ == "__main__":
     parser.add_argument("-d", "--dev", action="store_true", help="Enable Sanic development mode")
     parser.add_argument("--single-process", action="store_true", help="Do not use multiprocessing.")
     args: dict[str, Any] = vars(parser.parse_args())
+    configure_logging()
+    logger.info("Logging configured.")
     loader = AppLoader(factory=create_app)
     app = loader.load()
     app.prepare(**args)
