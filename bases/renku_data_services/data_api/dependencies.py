@@ -493,7 +493,7 @@ class DependencyManager:
         return self._shipwright_client
 
     @classmethod
-    def from_env(cls, prefix: str = "") -> "DependencyManager":
+    def from_env(cls) -> "DependencyManager":
         """Create a config from environment variables."""
 
         user_store: base_models.UserStore

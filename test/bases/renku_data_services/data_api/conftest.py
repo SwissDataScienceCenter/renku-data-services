@@ -29,7 +29,7 @@ from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import UserInfo
 from renku_data_services.utils.middleware import validate_null_byte
-from test.bases.renku_data_services.background_jobs.test_sync import get_kc_users
+from test.bases.renku_data_services.data_tasks.test_sync import get_kc_users
 from test.utils import SanicReusableASGITestClient
 
 

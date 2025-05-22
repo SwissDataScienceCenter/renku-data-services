@@ -248,10 +248,6 @@ jobs:
             image-name: renku/renku-data-service
             dockerfile: ./projects/renku_data_service/Dockerfile
             name: renku-data-services
-          - service: "Background Jobs"
-            image-name: renku/data-service-background-jobs
-            dockerfile: ./projects/background_jobs/Dockerfile
-            name: background-jobs
           - service: "Secrets Storage"
             image-name: renku/secrets-storage
             dockerfile: ./projects/secrets_storage/Dockerfile

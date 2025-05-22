@@ -22,18 +22,17 @@ from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.authz.authz import Authz, ResourceType, _AuthzConverter, _Relation
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.authz.models import Role, UnsavedMember
-from renku_data_services.background_jobs.config import SyncConfig
-from renku_data_services.background_jobs.core import (
-    bootstrap_user_namespaces,
-    fix_mismatched_project_namespace_ids,
-    migrate_groups_make_all_public,
-    migrate_storages_v2_to_data_connectors,
-    migrate_user_namespaces_make_all_public,
-)
-from renku_data_services.background_jobs.dependencies import DependencyManager
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models import APIUser
 from renku_data_services.base_models.core import NamespacePath, Slug
+from renku_data_services.data_tasks.config import Config
+from renku_data_services.data_tasks.dependencies import DependencyManager
+from renku_data_services.data_tasks.task_defs import (
+    bootstrap_user_namespaces,
+    fix_mismatched_project_namespace_ids,
+    migrate_groups_make_all_public,
+    migrate_user_namespaces_make_all_public,
+)
 from renku_data_services.db_config import DBConfig
 from renku_data_services.errors import errors
 from renku_data_services.message_queue.config import RedisConfig
@@ -44,8 +43,6 @@ from renku_data_services.namespace.apispec import (
 from renku_data_services.namespace.models import UserNamespace
 from renku_data_services.namespace.orm import NamespaceORM
 from renku_data_services.project.models import UnsavedProject
-from renku_data_services.storage.models import UnsavedCloudStorage
-from renku_data_services.storage.orm import CloudStorageORM
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import KeycloakAdminEvent, UnsavedUserInfo, UserInfo, UserInfoFieldUpdate
 from renku_data_services.users.orm import UserORM
@@ -55,7 +52,7 @@ from renku_data_services.users.orm import UserORM
 def get_app_manager(db_instance: DBConfig, authz_instance: AuthzConfig):
     def _get_dependency_manager(kc_api: DummyKeycloakAPI, total_user_sync: bool = False) -> DependencyManager:
         redis = RedisConfig.fake()
-        config = SyncConfig.from_env()
+        config = Config.from_env()
         config.db = db_instance
         config.redis = redis
         dm = DependencyManager.from_env(config)
@@ -670,7 +667,7 @@ async def test_bootstraping_user_namespaces(get_app_manager, admin_user: APIUser
     dm = get_app_manager(kc_api)
     dm.kc_api = kc_api
     db_user_namespace_ids: set[ULID] = set()
-    async with dm.session_maker() as session, session.begin():
+    async with dm.config.db.async_session_maker() as session, session.begin():
         for user in [user1, user2]:
             user_orm = UserORM(
                 user.id,
@@ -889,86 +886,3 @@ async def test_migrate_user_namespaces_make_all_public(
     assert ns.path.serialize() == "john.doe"
     assert ns.kind.value == "user"
     assert ns.created_by == user.id
-
-
-@pytest.mark.asyncio
-async def test_migrate_storages_v2(get_app_manager: Callable[..., DependencyManager], admin_user: APIUser):
-    admin_user_info = UserInfo(
-        id=admin_user.id,
-        first_name=admin_user.first_name,
-        last_name=admin_user.last_name,
-        email=admin_user.email,
-        namespace=UserNamespace(
-            id=ULID(),
-            created_by=admin_user.id,
-            underlying_resource_id=admin_user.id,
-            path=NamespacePath.from_strings("admin.user"),
-        ),
-    )
-    user = UserInfo(
-        id="user-1-id",
-        first_name="Jane",
-        last_name="Doe",
-        email="jane.doe@gmail.com",
-        namespace=UserNamespace(
-            id=ULID(),
-            created_by="user-1-id",
-            underlying_resource_id="user-1-id",
-            path=NamespacePath.from_strings("jane.doe"),
-        ),
-    )
-    user_api = APIUser(is_admin=False, id=user.id, access_token="access_token")
-    user_roles = {admin_user.id: get_kc_roles(["renku-admin"])}
-    kc_api = DummyKeycloakAPI(users=get_kc_users([admin_user_info, user]), user_roles=user_roles)
-    dm = get_app_manager(kc_api)
-    dm.kc_api = kc_api
-    # Sync users
-    await dm.syncer.users_sync(kc_api)
-
-    # Create a project and a storage_v2 attached to it
-    project_payload = UnsavedProject(
-        name="project-1",
-        slug="project-1",
-        namespace=user.namespace.path.serialize(),
-        created_by=user.id,
-        visibility="private",
-    )
-    project = await dm.project_repo.insert_project(user_api, project_payload)
-    unsaved_storage = UnsavedCloudStorage.from_url(
-        storage_url="s3://my-bucket",
-        name="storage-1",
-        readonly=True,
-        project_id=str(project.id),
-        target_path="my_data",
-    )
-    storage_orm = CloudStorageORM.load(unsaved_storage)
-    async with dm.session_maker() as session, session.begin():
-        session.add(storage_orm)
-    storage_v2 = storage_orm.dump()
-
-    await migrate_storages_v2_to_data_connectors(dm)
-
-    # After the migration, there is a new data connector
-    data_connector_repo = dm.data_connector_migration_tool.data_connector_repo
-    data_connectors, data_connectors_count = await data_connector_repo.get_data_connectors(
-        user=user_api,
-        pagination=PaginationRequest(1, 100),
-    )
-    assert data_connectors is not None
-    assert data_connectors_count == 1
-    data_connector = data_connectors[0]
-    assert data_connector.name == storage_v2.name
-    assert data_connector.storage.storage_type == storage_v2.storage_type
-    assert data_connector.storage.readonly == storage_v2.readonly
-    assert data_connector.storage.source_path == storage_v2.source_path
-    assert data_connector.storage.target_path == storage_v2.target_path
-    assert data_connector.created_by == user.id
-
-    data_connector_project_link_repo = dm.data_connector_migration_tool.data_connector_repo
-    links = await data_connector_project_link_repo.get_links_to(user=user_api, project_id=project.id)
-    assert links is not None
-    assert len(links) == 1
-    link = links[0]
-    assert link.project_id == project.id
-    assert link.data_connector_id == data_connector.id
-    assert link.created_by == user.id

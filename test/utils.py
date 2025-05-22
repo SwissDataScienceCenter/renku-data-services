@@ -114,8 +114,8 @@ class AuthzConfigStack:
         return self.stack[-1]
 
     @classmethod
-    def from_env(cls, prefix: str = "") -> Self:
-        config = AuthzConfig.from_env(prefix)
+    def from_env(cls) -> Self:
+        config = AuthzConfig.from_env()
         this = cls()
         this.push(config)
         return this

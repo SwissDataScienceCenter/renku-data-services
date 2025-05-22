@@ -13,7 +13,6 @@ dynamic = ["dependencies"]
 [tool.poetry]
 packages = [
   { include = "renku_data_services/data_api", from = "bases" },
-  { include = "renku_data_services/background_jobs", from = "bases" },
   { include = "renku_data_services/data_tasks", from = "bases" },
   { include = "renku_data_services/authn", from = "components" },
   { include = "renku_data_services/db_config", from = "components" },
