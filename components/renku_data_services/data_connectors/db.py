@@ -66,7 +66,7 @@ class DataConnectorRepository:
         user: base_models.APIUser,
         pagination: PaginationRequest,
         namespace: ProjectPath | NamespacePath | None = None,
-    ) -> tuple[list[models.DataConnector | models.GlobalDataConnector], int]:
+    ) -> tuple[list[models.DataConnector], int]:
         """Get multiple data connectors from the database."""
         data_connector_ids = await self.authz.resources_with_permission(
             user, user.id, ResourceType.data_connector, Scope.READ
@@ -102,7 +102,7 @@ class DataConnectorRepository:
         self,
         user: base_models.APIUser,
         data_connector_id: ULID,
-    ) -> models.DataConnector | models.GlobalDataConnector:
+    ) -> models.DataConnector:
         """Get one data connector from the database."""
         not_found_msg = f"Data connector with id '{data_connector_id}' does not exist or you do not have access to it."
 
@@ -152,7 +152,7 @@ class DataConnectorRepository:
         self,
         user: base_models.APIUser,
         path: DataConnectorInProjectPath | DataConnectorPath,
-    ) -> models.DataConnector | models.GlobalDataConnector:
+    ) -> models.DataConnector:
         """Get one data connector from the database by slug.
 
         This will not return or find data connectors owned by projects.
@@ -199,7 +199,7 @@ class DataConnectorRepository:
         self,
         user: base_models.APIUser,
         slug: base_models.Slug,
-    ) -> models.DataConnector | models.GlobalDataConnector:
+    ) -> models.DataConnector:
         """Get one global data connector from the database by slug."""
         not_found_msg = f"Data connector with identifier '{slug}' does not exist or you do not have access to it."
 
@@ -232,7 +232,7 @@ class DataConnectorRepository:
         data_connector: models.UnsavedDataConnector | models.UnsavedGlobalDataConnector,
         *,
         session: AsyncSession | None = None,
-    ) -> models.DataConnector | models.GlobalDataConnector:
+    ) -> models.DataConnector:
         """Insert a new data connector entry."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required.")
@@ -371,12 +371,15 @@ class DataConnectorRepository:
     async def insert_global_data_connector(
         self,
         user: base_models.APIUser,
-        data_connector: models.UnsavedGlobalDataConnector,
+        # data_connector: models.UnsavedGlobalDataConnector,
+        data_connector: models.UnsavedDataConnector,
         validator: RCloneValidator | None,
         *,
         session: AsyncSession | None = None,
-    ) -> tuple[models.GlobalDataConnector, bool]:
+    ) -> tuple[models.DataConnector, bool]:
         """Insert a new global data connector entry."""
+        if not data_connector.is_global():
+            raise errors.ValidationError(message="The data connector is not global.")
         if not session:
             raise errors.ProgrammingError(message="A database session is required.")
         if user.id is None:
@@ -384,11 +387,17 @@ class DataConnectorRepository:
 
         slug = data_connector.slug or base_models.Slug.from_name(data_connector.name).value
 
-        existing_global_dc_stmt = select(schemas.DataConnectorORM).where(schemas.DataConnectorORM.global_slug == slug)
+        existing_global_dc_stmt = select(schemas.DataConnectorORM).where(
+            schemas.DataConnectorORM.slug.has(
+                ns_schemas.EntitySlugORM.slug == slug,
+            )
+        )  # .where(schemas.DataConnectorORM.slug)
+        existing_global_dc_stmt = _filter_by_namespace_slug(existing_global_dc_stmt, base_models.GLOBAL_NAMESPACE_PATH)
         existing_global_dc = await session.scalar(existing_global_dc_stmt)
         if existing_global_dc is not None:
             dc = existing_global_dc.dump()
-            if not isinstance(dc, models.GlobalDataConnector):
+            # if not isinstance(dc, models.GlobalDataConnector):
+            if not dc.is_global():
                 raise errors.ProgrammingError(message=f"Expected to get a global data connector ('{dc.id}')")
             authorized = await self.authz.has_permission(user, ResourceType.data_connector, dc.id, Scope.READ)
             if not authorized:
@@ -398,15 +407,21 @@ class DataConnectorRepository:
             return dc, False
 
         # Fully validate a global data connector before inserting
-        if isinstance(data_connector, models.UnsavedGlobalDataConnector):
-            if validator is None:
-                raise RuntimeError("Could not validate global data connector")
-            data_connector = await validate_unsaved_global_data_connector(
-                data_connector=data_connector, validator=validator
-            )
+        if validator is None:
+            raise RuntimeError("Could not validate global data connector")
+        data_connector = await validate_unsaved_global_data_connector(
+            data_connector=data_connector, validator=validator
+        )
+        # if isinstance(data_connector, models.UnsavedGlobalDataConnector):
+        #     if validator is None:
+        #         raise RuntimeError("Could not validate global data connector")
+        #     data_connector = await validate_unsaved_global_data_connector(
+        #         data_connector=data_connector, validator=validator
+        #     )
 
         dc = await self._insert_data_connector(user=user, data_connector=data_connector, session=session)
-        if not isinstance(dc, models.GlobalDataConnector):
+        # if not isinstance(dc, models.GlobalDataConnector):
+        if not dc.is_global():
             raise errors.ProgrammingError(message=f"Expected to get a global data connector ('{dc.id}')")
         return dc, True
 

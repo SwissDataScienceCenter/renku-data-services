@@ -465,11 +465,13 @@ class DataConnectorsBP(CustomBlueprint):
 
     @staticmethod
     def _dump_data_connector(
-        data_connector: models.DataConnector | models.GlobalDataConnector, validator: RCloneValidator
+        data_connector: models.DataConnector,  # | models.GlobalDataConnector,
+        validator: RCloneValidator,
     ) -> dict[str, Any]:
         """Dumps a data connector for API responses."""
         storage = dump_storage_with_sensitive_fields(data_connector.storage, validator=validator)
-        if data_connector.namespace is None:
+        # if data_connector.namespace is None:
+        if data_connector.is_global():
             return dict(
                 id=str(data_connector.id),
                 name=data_connector.name,
@@ -488,7 +490,6 @@ class DataConnectorsBP(CustomBlueprint):
             namespace=data_connector.namespace.path.serialize(),
             slug=data_connector.slug,
             storage=storage,
-            # secrets=,
             creation_date=data_connector.creation_date,
             created_by=data_connector.created_by,
             visibility=data_connector.visibility.value,
