@@ -20,8 +20,6 @@ from renku_data_services.solr.solr_client import SolrClientConfig
 
 logger = logging.getLogger(__name__)
 
-logging.debug_logger_setting("Loading search.blueprints module")
-
 
 @dataclass(kw_only=True)
 class SearchBP(CustomBlueprint):
@@ -83,7 +81,7 @@ class SearchBP(CustomBlueprint):
             offset = (query.page - 1) * per_page
             uq = QueryParser.parse(query.q)
             logger.debug(f"Running search query: {query}")
-            logging.debug_logger_setting("From blueprints request processing")
+            #            logging.print_logger_setting("From blueprints request processing")
 
             result = await core.query(self.authz.client, self.solr_config, uq, user, per_page, offset)
             await self.metrics.search_queried(user)
