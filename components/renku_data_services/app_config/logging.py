@@ -27,13 +27,15 @@ logger = logging.with_request_id(logger, "request-42")
 ```
 
 Before accessing loggers, run the `configure_logging()` method to
-configure each logger appropriately.
+configure loggers appropriately.
 """
 
 import logging
 import os
 from logging import Logger, LoggerAdapter
 from typing import Final
+
+import sanic.logging.formatter
 
 __app_root_logger: Final[str] = "renku_data_services"
 
@@ -47,7 +49,7 @@ def getLogger(name: str) -> Logger:
 
 
 def with_request_id(logger: Logger, request_id: str) -> LoggerAdapter:
-    """Amend the given logger adding the given `request_id` to every log message."""
+    """Amend `logger` adding `request_id` to every log message."""
     return RequestIdAdapter.create(logger, request_id)
 
 
@@ -61,13 +63,12 @@ def __logger_list(level: int) -> list[str]:
     if value is None:
         return []
 
-    return value.split(",")
+    return [n.strip() for n in value.split(",")]
 
 
 def __logger_levels_from_env() -> dict[int, list[str]]:
-    levels = [logging.DEBUG, logging.INFO, logging.WARNING]
     config = {}
-    for level in levels:
+    for level in list(logging._levelToName.keys()):
         logger_names = __logger_list(level)
         config.update({level: logger_names})
 
@@ -77,8 +78,10 @@ def __logger_levels_from_env() -> dict[int, list[str]]:
 def configure_logging(override_levels: dict[int, list[str]] = __logger_levels_from_env()) -> None:
     """Configures logging library.
 
-    This should run once when starting the application. It sets all
-    loggers to WARNING, except for our code that will log at INFO.
+    This should run before using a logger. It sets all loggers to
+    WARNING, except for our code that will log at INFO. Our code is
+    identified by the app root logger `renku_data_services`. All our
+    loggers should therefore be children of this logger.
 
     Level for individual loggers can be overriden using the
     `override_levels` argument. It is a map from logging level to a
@@ -87,35 +90,64 @@ def configure_logging(override_levels: dict[int, list[str]] = __logger_levels_fr
     The pattern is `{LEVEL}_LOGGING` the value is a comma separated
     list of logger names that will be configured to a minimum level of
     `{LEVEL}`.
+
     """
-    logging.basicConfig(level=logging.WARNING)
-    logging.getLogger("sanic").setLevel(logging.INFO)
+    # To have a uniform format *everywhere*, there is only one
+    # handler. It is added to the root logger.
+    handler = logging.StreamHandler()
+    handler.setFormatter(sanic.logging.formatter.AutoFormatter())
+    logging.root.setLevel(logging.WARNING)
+    for hdl in logging.root.handlers:
+        logging.root.removeHandler(hdl)
+    logging.root.addHandler(handler)
     logging.getLogger(__app_root_logger).setLevel(logging.INFO)
+
+    # this is for creating backwards compatibility, ideally these are
+    # defined as env vars in the specific base
+    logging.getLogger("sanic").setLevel(logging.INFO)
+    logging.getLogger("alembic").setLevel(logging.INFO)
+
+    logger = getLogger(__name__)
 
     # override minimum level for specific loggers
     for level, names in override_levels.items():
         for name in names:
-            print(f">> Set minimum level: {name} -> {logging._levelToName[level]}")
+            logger.info(f"Set threshold level: {name} -> {logging.getLevelName(level)}")
             logging.getLogger(name).setLevel(level)
 
 
-def debug_logger_setting(msg: str | None = None) -> None:
-    """Help."""
+def print_logger_setting(msg: str | None = None, show_all: bool = False) -> None:
+    """Prints the current logger settings.
+
+    It intentionally using `print` to survive a messed up logger
+    config. It prints all loggers that have an explicit set level.
+    Others, like those with a `NOT_SET` level and the 'PlaceHolder'
+    loggers are not printed.
+    """
     l_root = logging.Logger.root
-    l_app = getLogger(__app_root_logger)
-    l_search = getLogger("search")
-    l_bp = getLogger("search.blueprints")
     print("=================================================================")
     if msg is not None:
         print(f"--- {msg} ---")
-    print(f">>>> logger: {l_root} self.level={logging.getLevelName(l_root.level)}")
-    print(f">>>> logger: {l_app} self.level={logging.getLevelName(l_app.level)}")
-    print(f">>>> logger: {l_search} self.level={logging.getLevelName(l_search.level)}")
-    print(f">>>> logger: {l_bp} self.level={logging.getLevelName(l_bp.level)}")
+    print(f"Total logger entries: {len(logging.Logger.manager.loggerDict)}")
+    print(
+        f" * {l_root} (self.level={logging.getLevelName(l_root.level)}, handlers={len(logging.Logger.root.handlers)})"
+    )
     for name in logging.Logger.manager.loggerDict:
         ll = logging.Logger.manager.loggerDict[name]
-        if isinstance(ll, logging.Logger) and ll.level != logging.NOTSET:
-            print(f"  * {ll} (self.level={logging.getLevelName(ll.level)})")
+        match ll:
+            case logging.Logger() as logger:
+                level_name = logging.getLevelName(logger.level)
+                eff_level_name = logging.getLevelName(ll.getEffectiveLevel())
+                show_item = logger.level != logging.NOTSET
+                handlers = logger.handlers
+            case logging.PlaceHolder():
+                level_name = "{NOT_SET}"
+                eff_level_name = "{PlaceHolder}"
+                show_item = False
+                handlers = []
+
+        if show_all or show_item:
+            print(f" * Logger({name} @{eff_level_name}, self.level={level_name}, handlers={len(handlers)})")
     print("=================================================================")
 
 

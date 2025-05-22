@@ -1,5 +1,5 @@
 """Renku data service."""
 
-import renku_data_services.app_config as app_config
+import renku_data_services.app_config.logging as logging
 
-app_config.logging.configure_logging()
+logging.configure_logging()
