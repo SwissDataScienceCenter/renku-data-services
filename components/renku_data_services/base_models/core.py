@@ -206,6 +206,13 @@ class NamespaceSlug(Slug):
     """The slug for a group or user namespace."""
 
 
+class GlobalNamespaceSlug(NamespaceSlug):
+    """The slug for the global namespace."""
+
+    def __init__(self) -> None:
+        object.__setattr__(self, "value", GLOBAL_NAMESPACE_SLUG_STR)
+
+
 class ProjectSlug(Slug):
     """The slug for a project."""
 
@@ -383,7 +390,7 @@ class DataConnectorInProjectPath(__NamespaceCommonMixin):
 
 GLOBAL_NAMESPACE_SLUG_STR: Final[str] = "_global"
 """The string value of the slug of the global namespace."""
-GLOBAL_NAMESPACE_SLUG: Final[NamespaceSlug] = NamespaceSlug(value=GLOBAL_NAMESPACE_SLUG_STR)
+GLOBAL_NAMESPACE_SLUG: Final[GlobalNamespaceSlug] = GlobalNamespaceSlug()
 """The value of the slug of the global namespace."""
 GLOBAL_NAMESPACE_PATH: Final[NamespacePath] = NamespacePath(first=GLOBAL_NAMESPACE_SLUG)
 """The value of the path of the global namespace."""
