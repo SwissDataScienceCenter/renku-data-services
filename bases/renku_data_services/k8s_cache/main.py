@@ -13,6 +13,7 @@ from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 
 logger = logging.getLogger(__name__)
 
+
 async def main() -> None:
     """K8s cache entrypoint."""
 
