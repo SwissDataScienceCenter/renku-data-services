@@ -13,6 +13,7 @@ from renku_data_services.data_tasks.tcp_handler import TcpHandler
 
 logger = getLogger(__name__)
 
+
 async def log_tasks(logger: logging.Logger, tm: TaskManager, interval: int) -> None:
     """Log the currently running tasks each `interval`."""
     while interval > 0:

@@ -1,7 +1,6 @@
 """The task definitions in form of coroutines."""
 
 import asyncio
-import logging
 
 from authzed.api.v1 import (
     Consistency,
@@ -15,6 +14,7 @@ from authzed.api.v1 import (
     SubjectReference,
     WriteRelationshipsRequest,
 )
+from renku_data_services.app_config import logging
 from ulid import ULID
 
 import renku_data_services.authz.admin_sync as admin_sync
@@ -104,7 +104,7 @@ async def generate_user_namespaces(dm: DependencyManager) -> None:
 async def sync_user_namespaces(dm: DependencyManager) -> None:
     """Lists all user namespaces in the database and adds them to Authzed and the event queue."""
     user_namespaces = dm.group_repo._get_user_namespaces()
-    logging.info("Start syncing user namespaces to the authorization DB and message queue")
+    logger.info("Start syncing user namespaces to the authorization DB and message queue")
     num_authz: int = 0
     num_events: int = 0
     num_total: int = 0
@@ -124,14 +124,14 @@ async def sync_user_namespaces(dm: DependencyManager) -> None:
         except Exception as err:
             # NOTE: We do not rollback the authz changes here because it is OK if something is in Authz DB
             # but not in the message queue but not vice-versa.
-            logging.error(f"Failed to sync user namespace {user_namespace} because {err}")
+            logger.error(f"Failed to sync user namespace {user_namespace} because {err}")
             await tx.rollback()
         else:
             await tx.commit()
         finally:
             await session.close()
-    logging.info(f"Wrote authorization changes for {num_authz}/{num_total} user namespaces")
-    logging.info(f"Wrote to event queue database for {num_events}/{num_total} user namespaces")
+    logger.info(f"Wrote authorization changes for {num_authz}/{num_total} user namespaces")
+    logger.info(f"Wrote to event queue database for {num_events}/{num_total} user namespaces")
 
 
 async def bootstrap_user_namespaces(dm: DependencyManager) -> None:
@@ -152,7 +152,7 @@ async def bootstrap_user_namespaces(dm: DependencyManager) -> None:
                 if await anext(rels, None) is not None:
                     num_rels += 1
             if num_rels >= 5:
-                logging.info(
+                logger.info(
                     "Found at least 5 user namespace in the authorization database, "
                     "will not sync user namespaces to authorization."
                 )
@@ -183,12 +183,12 @@ async def fix_mismatched_project_namespace_ids(dm: DependencyManager) -> None:
                 )
             )
             async for rel in res:
-                logging.info(f"Checking project namespace - group relation {rel} for correct group ID")
+                logger.info(f"Checking project namespace - group relation {rel} for correct group ID")
                 project_id = rel.relationship.resource.object_id
                 try:
                     project = await dm.project_repo.get_project(api_user, project_id)
                 except errors.MissingResourceError:
-                    logging.info(f"Couldn't find project {project_id}, deleting relation")
+                    logger.info(f"Couldn't find project {project_id}, deleting relation")
                     await dm.authz.client.WriteRelationships(
                         WriteRelationshipsRequest(
                             updates=[
@@ -206,7 +206,7 @@ async def fix_mismatched_project_namespace_ids(dm: DependencyManager) -> None:
                 correct_group_id = project.namespace.underlying_resource_id
                 authzed_group_id = rel.relationship.subject.object.object_id
                 if authzed_group_id != correct_group_id:
-                    logging.info(
+                    logger.info(
                         f"The project namespace ID in Authzed {authzed_group_id} "
                         f"does not match the expected group ID {correct_group_id}, correcting it..."
                     )
