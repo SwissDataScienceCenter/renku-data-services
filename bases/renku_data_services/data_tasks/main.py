@@ -5,13 +5,13 @@ import logging
 
 import uvloop
 
-import renku_data_services.app_config.logging as logging
+from renku_data_services.app_config.logging import getLogger
 from renku_data_services.data_tasks.dependencies import DependencyManager
 from renku_data_services.data_tasks.task_defs import all_tasks
 from renku_data_services.data_tasks.taskman import TaskDefininions, TaskManager
 from renku_data_services.data_tasks.tcp_handler import TcpHandler
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 async def log_tasks(logger: logging.Logger, tm: TaskManager, interval: int) -> None:
     """Log the currently running tasks each `interval`."""
