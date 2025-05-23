@@ -14,12 +14,12 @@ from authzed.api.v1 import (
     SubjectReference,
     WriteRelationshipsRequest,
 )
-from renku_data_services.app_config import logging
 from ulid import ULID
 
 import renku_data_services.authz.admin_sync as admin_sync
 import renku_data_services.search.core as search_core
 from renku_data_services import errors
+from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import ResourceType, _AuthzConverter, _Relation
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
