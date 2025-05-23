@@ -1,13 +1,13 @@
 """Business logic for searching."""
 
 import asyncio
-import logging
 from datetime import UTC, datetime
 
 from authzed.api.v1 import AsyncClient as AuthzClient
 
 import renku_data_services.search.apispec as apispec
 import renku_data_services.search.solr_token as st
+from renku_data_services.app_config import logging
 from renku_data_services.authz.models import Role
 from renku_data_services.base_models import APIUser
 from renku_data_services.search import authz, converters
@@ -120,7 +120,7 @@ async def query(
 ) -> apispec.SearchResult:
     """Run the given user query against solr and return the result."""
 
-    logger.info(f"User search query: {query.render()}")
+    logger.debug(f"User search query: {query.render()}")
 
     class RoleAuthAccess(AuthAccess):
         async def get_role_ids(self, user_id: str, roles: Nel[Role]) -> list[str]:
@@ -129,7 +129,7 @@ async def query(
     ctx = Context.for_api_user(datetime.now(), UTC, user).with_auth_access(RoleAuthAccess())
     suq = await QueryInterpreter.default().run(ctx, query)
     solr_query = await _renku_query(authz_client, ctx, suq, limit, offset)
-    logger.info(f"Solr query: {solr_query.to_dict()}")
+    logger.debug(f"Solr query: {solr_query.to_dict()}")
 
     async with DefaultSolrClient(solr_config) as client:
         results = await client.query(solr_query)
