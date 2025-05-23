@@ -30,12 +30,15 @@ Before accessing loggers, run the `configure_logging()` method to
 configure loggers appropriately.
 """
 
+from __future__ import annotations
+
+import json
 import logging
 import os
+from datetime import datetime
+from enum import StrEnum
 from logging import Logger, LoggerAdapter
-from typing import Final
-
-import sanic.logging.formatter
+from typing import Final, cast
 
 __app_root_logger: Final[str] = "renku_data_services"
 
@@ -51,6 +54,110 @@ def getLogger(name: str) -> Logger:
 def with_request_id(logger: Logger, request_id: str) -> LoggerAdapter:
     """Amend `logger` adding `request_id` to every log message."""
     return RequestIdAdapter.create(logger, request_id)
+
+
+class RequestIdAdapter(LoggerAdapter):
+    """Adapter for adding a request id to log messages."""
+
+    def process(self, msg, kwargs):
+        """Implement process."""
+        rid = self.extra.get("request_id") if self.extra is not None else None
+        if rid is None:
+            return msg, kwargs
+        else:
+            return f"[{rid}] {msg}", kwargs
+
+    @classmethod
+    def create(cls, logger: Logger, request_id: str) -> LoggerAdapter:
+        """Create a logger adapter that automatically adds the given `request_id` to each log message."""
+        return RequestIdAdapter(logger, {"request_id": request_id})
+
+
+class RenkuLogFormatter(logging.Formatter):
+    """Custom formatter.
+
+    It is used to encapsulate the formatting options and to use
+    datetime instead of struct_time.
+    """
+
+    def __init__(self):
+        super().__init__(
+            fmt=(
+                "%(asctime)s [%(levelname)s] %(process)d/%(threadName)s "
+                "%(name)s (%(filename)s:%(lineno)d) - %(message)s"
+            ),
+            datefmt="%Y-%m-%dT%H:%M:%S.%f%z",
+        )
+
+    def formatTime(self, record, datefmt=None):
+        """Overriden to format the time string for %(asctime) interpolator."""
+        ct = datetime.fromtimestamp(record.created)
+        return ct.strftime(cast(str, self.datefmt))
+
+
+class RenkuJsonFormatter(RenkuLogFormatter):
+    """Formatter to produce json log messages."""
+
+    fields: Final[set[str]] = set(
+        [
+            "name",
+            "levelno",
+            "pathname",
+            "module",
+            "filename",
+            "lineno",
+        ]
+    )
+    default_fields: Final[set[str]] = set(fields).union(set(["exc_info", "stack_info", "asctime", "message", "msg"]))
+
+    def format(self, record: logging.LogRecord) -> str:
+        """Format the log record."""
+        super().format(record)
+        return json.dumps(self._to_dict(record))
+
+    def _to_dict(self, record: logging.LogRecord) -> dict:
+        base = {field: getattr(record, field, None) for field in self.fields}
+        extra = {key: value for key, value in record.__dict__.items() if key not in self.default_fields}
+        info = {}
+        if record.exc_info:
+            info["exc_info"] = self.formatException(record.exc_info)
+        if record.stack_info:
+            info["stack_info"] = self.formatStack(record.stack_info)
+        return {
+            "timestamp": self.formatTime(record, self.datefmt),
+            "level": record.levelname,
+            "message": record.getMessage(),
+            **base,
+            **info,
+            **extra,
+        }
+
+
+class LogFormatStyle(StrEnum):
+    """Supported log formats."""
+
+    plain = "plain"
+    json = "json"
+
+    def to_formatter(self) -> logging.Formatter:
+        """Return the formatter instance corresponding to this format style."""
+        match self:
+            case LogFormatStyle.plain:
+                return RenkuLogFormatter()
+            case LogFormatStyle.json:
+                return RenkuJsonFormatter()
+
+    @classmethod
+    def from_env(cls, prefix: str = "") -> LogFormatStyle:
+        """Read the format style from env var `LOG_FORMAT`."""
+        str_value = os.environ.get(f"{prefix}LOG_FORMAT", "plain").lower()
+        match str_value:
+            case "plain":
+                return LogFormatStyle.plain
+            case "json":
+                return LogFormatStyle.json
+            case _:
+                return LogFormatStyle.plain
 
 
 def __logger_list(level: int) -> list[str]:
@@ -75,7 +182,17 @@ def __logger_levels_from_env() -> dict[int, list[str]]:
     return config
 
 
-def configure_logging(override_levels: dict[int, list[str]] = __logger_levels_from_env()) -> None:
+def __get_all_loggers() -> list[logging.Logger]:
+    """Return the current snapshot of all loggers, including the root logger."""
+    all_loggers = [log for log in logging.Logger.manager.loggerDict.values() if isinstance(log, logging.Logger)]
+    all_loggers.append(logging.root)
+    return all_loggers
+
+
+def configure_logging(
+    format_style: LogFormatStyle = LogFormatStyle.from_env(),
+    override_levels: dict[int, list[str]] = __logger_levels_from_env(),
+) -> None:
     """Configures logging library.
 
     This should run before using a logger. It sets all loggers to
@@ -93,17 +210,23 @@ def configure_logging(override_levels: dict[int, list[str]] = __logger_levels_fr
 
     """
     # To have a uniform format *everywhere*, there is only one
-    # handler. It is added to the root logger.
+    # handler. It is added to the root logger. However, imported
+    # modules may change this configuration at any time - and they
+    # often do. This tries to remove all existing handlers as an best
+    # effort.
+    for ll in __get_all_loggers():
+        ll.setLevel(logging.NOTSET)
+        for hdl in ll.handlers:
+            ll.removeHandler(hdl)
+
     handler = logging.StreamHandler()
-    handler.setFormatter(sanic.logging.formatter.AutoFormatter())
+    handler.setFormatter(format_style.to_formatter())
     logging.root.setLevel(logging.WARNING)
-    for hdl in logging.root.handlers:
-        logging.root.removeHandler(hdl)
     logging.root.addHandler(handler)
     logging.getLogger(__app_root_logger).setLevel(logging.INFO)
 
     # this is for creating backwards compatibility, ideally these are
-    # defined as env vars in the specific base
+    # defined as env vars in the specific process
     logging.getLogger("sanic").setLevel(logging.INFO)
     logging.getLogger("alembic").setLevel(logging.INFO)
 
@@ -125,11 +248,12 @@ def print_logger_setting(msg: str | None = None, show_all: bool = False) -> None
     loggers are not printed.
     """
     l_root = logging.Logger.root
-    print("=================================================================")
+    output = ["================================================================="]
     if msg is not None:
-        print(f"--- {msg} ---")
-    print(f"Total logger entries: {len(logging.Logger.manager.loggerDict)}")
-    print(
+        output.append(f"--- {msg} ---")
+
+    output.append(f"Total logger entries: {len(logging.Logger.manager.loggerDict)}")
+    output.append(
         f" * {l_root} (self.level={logging.getLevelName(l_root.level)}, handlers={len(logging.Logger.root.handlers)})"
     )
     for name in logging.Logger.manager.loggerDict:
@@ -147,22 +271,6 @@ def print_logger_setting(msg: str | None = None, show_all: bool = False) -> None
                 handlers = []
 
         if show_all or show_item:
-            print(f" * Logger({name} @{eff_level_name}, self.level={level_name}, handlers={len(handlers)})")
-    print("=================================================================")
-
-
-class RequestIdAdapter(LoggerAdapter):
-    """Adapter for adding a request id to log messages."""
-
-    def process(self, msg, kwargs):
-        """Implement process."""
-        rid = self.extra.get("request_id") if self.extra is not None else None
-        if rid is None:
-            return msg, kwargs
-        else:
-            return f"[{rid}] {msg}", kwargs
-
-    @classmethod
-    def create(cls, logger: Logger, request_id: str) -> LoggerAdapter:
-        """Create a logger adapter that automatically adds the given `request_id` to each log message."""
-        return RequestIdAdapter(logger, {"request_id": request_id})
+            output.append(f" * Logger({name} @{eff_level_name}, self.level={level_name}, handlers={len(handlers)})")
+    output.append("=================================================================")
+    print("\n".join(output))

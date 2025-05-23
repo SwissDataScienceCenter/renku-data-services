@@ -81,7 +81,6 @@ class SearchBP(CustomBlueprint):
             offset = (query.page - 1) * per_page
             uq = QueryParser.parse(query.q)
             logger.debug(f"Running search query: {query}")
-            #            logging.print_logger_setting("From blueprints request processing")
 
             result = await core.query(self.authz.client, self.solr_config, uq, user, per_page, offset)
             await self.metrics.search_queried(user)
