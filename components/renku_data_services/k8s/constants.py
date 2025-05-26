@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Final
 if TYPE_CHECKING:
     from renku_data_services.k8s.models import ClusterId
 
-DEFAULT_K8S_CLUSTER: Final["ClusterId"] = "renkulab"  # type:ignore
+DEFAULT_K8S_CLUSTER: Final["ClusterId"] = ClusterId("0RENKULAB1RENKULAB2RENKULA")  # This has to be a valid ULID
 
 DUMMY_TASK_RUN_USER_ID: Final[str] = "DummyTaskRunUser"
 """The user id to use for TaskRuns in the k8s cache.

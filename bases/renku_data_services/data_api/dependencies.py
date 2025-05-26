@@ -219,6 +219,7 @@ class DependencyManager:
 
         config = Config.from_env()
         kc_api: IKeycloakAPI
+        cluster_repo = ClusterRepository(session_maker=config.db.async_session_maker)
 
         if config.dummy_stores:
             authenticator = DummyAuthenticator()
@@ -264,7 +265,12 @@ class DependencyManager:
                 kr8s_api = KubeConfigEnv().api()
                 k8s_db_cache = K8sDbCache(config.db.async_session_maker)
                 client = K8sClusterClientsPool(
-                    clusters=get_clusters("/secrets/kube_configs", namespace=config.k8s_namespace, api=kr8s_api),
+                    get_clusters=get_clusters(
+                        "/secrets/kube_configs",
+                        namespace=config.k8s_namespace,
+                        api=kr8s_api,
+                        cluster_rp=cluster_repo,
+                    ),
                     cache=k8s_db_cache,
                     kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
                 )
@@ -392,7 +398,6 @@ class DependencyManager:
             project_repo=project_repo,
             data_connector_repo=data_connector_repo,
         )
-        cluster_repo = ClusterRepository(session_maker=config.db.async_session_maker)
         metrics_repo = MetricsRepository(session_maker=config.db.async_session_maker)
         metrics = StagingMetricsService(enabled=config.posthog.enabled, metrics_repo=metrics_repo)
         return cls(
