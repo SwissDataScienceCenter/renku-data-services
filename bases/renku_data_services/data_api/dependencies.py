@@ -481,7 +481,12 @@ class DependencyManager:
             kr8s_api = KubeConfigEnv().api()
             k8s_db_cache = K8sDbCache(self.config.db.async_session_maker)
             client = K8sClusterClientsPool(
-                clusters=get_clusters("/secrets/kube_configs", namespace=self.config.k8s_namespace, api=kr8s_api),
+                get_clusters=get_clusters(
+                    "/secrets/kube_configs",
+                    namespace=self.config.k8s_namespace,
+                    api=kr8s_api,
+                    cluster_rp=self.cluster_repo,
+                ),
                 cache=k8s_db_cache,
                 kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
             )
