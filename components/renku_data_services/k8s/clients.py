@@ -20,6 +20,7 @@ from kubernetes.config.incluster_config import SERVICE_CERT_FILENAME, SERVICE_TO
 from renku_data_services.errors import errors
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface, K8sSchedudlingClientInterface
 from renku_data_services.k8s.models import APIObjectInCluster
+from renku_data_services.k8s.models import K8sObjectFilter
 
 if TYPE_CHECKING:
     from renku_data_services.k8s.models import (
@@ -27,7 +28,6 @@ if TYPE_CHECKING:
         Cluster,
         ClusterId,
         K8sObject,
-        K8sObjectFilter,
         K8sObjectMeta,
     )
     from renku_data_services.k8s_watcher import K8sDbCache
@@ -258,8 +258,7 @@ class K8sClusterClient:
     async def __list(self, _filter: K8sObjectFilter) -> AsyncIterable[APIObjectInCluster]:
         if _filter.cluster is not None and _filter.cluster != self.__cluster.id:
             return
-        if _filter.namespace is not None and _filter.namespace != self.__cluster.namespace:
-            return
+
         names = [_filter.name] if _filter.name is not None else []
 
         try:
@@ -377,7 +376,16 @@ class K8SCachedClusterClient(K8sClusterClient):
 
     async def list(self, _filter: K8sObjectFilter) -> AsyncIterable[K8sObject]:
         """List all k8s objects."""
-        results = self.__cache.list(_filter) if _filter.gvk in self.__kinds_to_cache else super().list(_filter)
+
+        # Don't even go to the DB or Kubernetes if the cluster id is set and does not match our cluster.
+        if _filter.cluster is not None and _filter.cluster != self.get_cluster().id:
+            return
+
+        filter2 = deepcopy(_filter)
+        if filter2.cluster is None:
+            filter2.cluster = self.get_cluster().id
+
+        results = self.__cache.list(filter2) if _filter.gvk in self.__kinds_to_cache else super().list(filter2)
         async for res in results:
             yield res
 
