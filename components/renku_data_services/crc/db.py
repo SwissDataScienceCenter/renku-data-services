@@ -895,6 +895,12 @@ class ClusterRepository:
 
     session_maker: Callable[..., AsyncSession]
 
+    async def select_all_saved_clusters(self) -> list[SavedCluster]:
+        """Returns all the clusters stored in the DB."""
+        async with self.session_maker() as session:
+            res = await session.scalars(select(ClusterORM))
+            return [c.dump() for c in res.all()]
+
     @_only_admins
     async def select_all(self, api_user: base_models.APIUser) -> AsyncGenerator[Cluster, Any]:
         """Get cluster configurations from the database."""
