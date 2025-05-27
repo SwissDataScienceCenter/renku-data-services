@@ -57,7 +57,7 @@ class K8sDbCache:
         if obj.user_id is None:
             raise errors.ValidationError(message="user_id is required to upsert k8s object.")
         async with self.__session_maker() as session, session.begin():
-            obj_orm = await self.__get(obj.meta, session)
+            obj_orm = await self.__get(obj, session)
             if obj_orm is not None:
                 obj_orm.manifest = obj.manifest
                 await session.commit()
@@ -66,9 +66,9 @@ class K8sDbCache:
             obj_orm = K8sObjectORM(
                 name=obj.name,
                 namespace=obj.namespace or "default",
-                group=obj.meta.gvk.group,
-                kind=obj.meta.gvk.kind,
-                version=obj.meta.gvk.version,
+                group=obj.gvk.group,
+                kind=obj.gvk.kind,
+                version=obj.gvk.version,
                 manifest=obj.manifest.to_dict(),
                 cluster=str(obj.cluster),
                 user_id=obj.user_id,
