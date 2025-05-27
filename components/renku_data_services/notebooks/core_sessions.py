@@ -579,7 +579,7 @@ async def patch_session(
                     "and/or check that you still have permissions for the image repository."
                 )
             # Ensure the secret is created in the cluster
-            await nb_config.k8s_v2_client.create_secret(image_secret.secret)
+            await nb_config.k8s_v2_client.create_secret(image_secret.secret, body.resource_class_id, user)
 
             updated_secrets = [
                 secret for secret in (session.spec.imagePullSecrets or []) if not secret.name.endswith("-image-secret")
