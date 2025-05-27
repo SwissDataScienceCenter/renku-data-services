@@ -413,7 +413,7 @@ class NotebookK8sClient(Generic[_SessionType]):
 
         secret_obj = K8sObject(
             name=secret.metadata.name,
-            namespace=self.namespace(),
+            namespace=cluster.namespace,
             cluster=cluster.id,
             gvk=GVK(kind=Secret.kind, version=Secret.version),
             manifest=Box(sanitizer(secret)),
