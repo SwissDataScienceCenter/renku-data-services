@@ -449,7 +449,7 @@ class NotebooksNewBP(CustomBlueprint):
                 ),
             )
             for s in secrets_to_create:
-                await self.nb_config.k8s_v2_client.create_secret(s.secret)
+                await self.nb_config.k8s_v2_client.create_secret(s.secret, resource_class.id, user)
             try:
                 manifest = await self.nb_config.k8s_v2_client.create_session(manifest, user)
             except Exception as err:
