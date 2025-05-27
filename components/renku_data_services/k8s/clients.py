@@ -285,7 +285,7 @@ class K8sClusterClient:
         await api_obj.create()
         # if refresh isn't called, status and timestamp will be blank
         await api_obj.refresh()
-        return obj.meta.with_manifest(api_obj.to_dict())
+        return obj.with_manifest(api_obj.to_dict())
 
     async def patch(self, meta: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
         """Patch a k8s object.
@@ -337,13 +337,13 @@ class K8SCachedClusterClient(K8sClusterClient):
 
     async def create(self, obj: K8sObject) -> K8sObject:
         """Create the k8s object."""
-        if obj.meta.gvk in self.__kinds_to_cache:
+        if obj.gvk in self.__kinds_to_cache:
             await self.__cache.upsert(obj)
         try:
             obj = await super().create(obj)
         except:
             # if there was an error creating the k8s object, we delete it from the db again to not have ghost entries
-            if obj.meta.gvk in self.__kinds_to_cache:
+            if obj.gvk in self.__kinds_to_cache:
                 await self.__cache.delete(obj)
             raise
         return obj

@@ -80,37 +80,25 @@ class K8sObject(K8sObjectMeta):
         super().__init__(name, namespace, cluster, gvk, user_id, namespaced)
         self.manifest = manifest
 
-    @property
-    def meta(self) -> K8sObjectMeta:
-        """Extract just the metadata."""
-        return K8sObjectMeta(
-            name=self.name,
-            namespace=self.namespace,
-            cluster=self.cluster,
-            gvk=self.gvk,
-            user_id=self.user_id,
-            namespaced=self.namespaced,
-        )
-
     def __repr__(self) -> str:
         return super().__repr__()
 
     def to_api_object(self, api: Api) -> APIObject:
         """Convert a regular k8s object to an api object for kr8s."""
 
-        _singular = self.meta.gvk.kind.lower()
+        _singular = self.gvk.kind.lower()
         _plural = f"{_singular}s"
         _endpoint = _plural
 
         class _APIObj(APIObject):
-            kind = self.meta.gvk.kind
-            version = self.meta.gvk.group_version
+            kind = self.gvk.kind
+            version = self.gvk.group_version
             singular = _singular
             plural = _plural
             endpoint = _endpoint
-            namespaced = self.meta.namespaced
+            namespaced = self.namespaced
 
-        return _APIObj(resource=self.manifest, namespace=self.meta.namespace, api=api)
+        return _APIObj(resource=self.manifest, namespace=self.namespace, api=api)
 
 
 @dataclass
