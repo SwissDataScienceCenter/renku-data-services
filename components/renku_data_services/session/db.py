@@ -1003,6 +1003,12 @@ class SessionRepository:
             # TODO: move this to its own method where build parameters determine args
             environment = build.environment
             environment.container_image = build.result_image
+            # An older version was hardcoding the values but we can and should
+            # rely on the defaults for args and command
+            if environment.command is not None:
+                environment.command = None
+            if environment.args is not None:
+                environment.args = None
 
         await session.flush()
         await session.refresh(build)
