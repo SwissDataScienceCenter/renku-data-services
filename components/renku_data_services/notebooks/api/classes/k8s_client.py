@@ -222,7 +222,7 @@ class NotebookK8sClient(Generic[_SessionType]):
         session_name = manifest.metadata.name
 
         session = await self.get_session(session_name, api_user.id)
-        if session:
+        if session is not None:
             # NOTE: session already exists
             return session
 
