@@ -64,7 +64,7 @@ class K8sWatcher:
             cache_obj_is_in_k8s = objects_in_k8s.get(cache_obj.name) is not None
             if cache_obj_is_in_k8s:
                 continue
-            await self.__cache.delete(cache_obj.meta)
+            await self.__cache.delete(cache_obj)
 
     async def __full_sync(self, cluster: Cluster) -> None:
         """Run the full sync if it has never run or at the required interval."""
