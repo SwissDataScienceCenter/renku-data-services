@@ -245,7 +245,7 @@ class NotebookK8sClient(Generic[_SessionType]):
         def _check_ready(obj: K8sObject | None) -> bool:
             return obj is None or obj.manifest.metadata.get("creationTimestamp") is None
 
-        refreshed_session = await retry_with_exponential_backoff_async(_check_ready)(self.__client.get)(session.meta)
+        refreshed_session = await retry_with_exponential_backoff_async(_check_ready)(self.__client.get)(session)
         if refreshed_session is not None:
             session = refreshed_session
 
@@ -281,7 +281,7 @@ class NotebookK8sClient(Generic[_SessionType]):
             return None
 
         return StatefulSet(
-            resource=statefulset.to_api_object(cluster.api), namespace=statefulset.meta.namespace, api=cluster.api
+            resource=statefulset.to_api_object(cluster.api), namespace=statefulset.namespace, api=cluster.api
         )
 
     async def patch_statefulset(
