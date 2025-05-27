@@ -16,7 +16,7 @@ from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
-from renku_data_services.k8s.models import GVK, Cluster, ClusterId, K8sObject, K8sObjectFilter, K8sObjectMeta
+from renku_data_services.k8s.models import GVK, Cluster, ClusterId, K8sObject, K8sObjectFilter
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
 from renku_data_services.notebooks.constants import JUPYTER_SESSION_GVK
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
@@ -405,14 +405,16 @@ class NotebookK8sClient(Generic[_SessionType]):
         ]
         await secret.patch(patch, type="json")
 
-    async def create_secret(self, secret: V1Secret) -> V1Secret:
+    async def create_secret(self, secret: V1Secret, class_id: int | None, user: APIUser) -> V1Secret:
         """Create a secret."""
-        # TODO: LSA Does not break current code, but bad, as it may be different based on the cluster
+
         assert secret.metadata is not None
+        cluster = await self.cluster_by_class_id(class_id, user)
+
         secret_obj = K8sObject(
             name=secret.metadata.name,
             namespace=self.namespace(),
-            cluster=self.cluster_id(),
+            cluster=cluster.id,
             gvk=GVK(kind=Secret.kind, version=Secret.version),
             manifest=Box(sanitizer(secret)),
         )
@@ -456,29 +458,34 @@ class NotebookK8sClient(Generic[_SessionType]):
 
     async def delete_secret(self, name: str) -> None:
         """Delete a secret."""
-        return await self.__client.delete(
-            # TODO: LSA Does not break current code, but bad, as it may be different based on the cluster
-            K8sObjectMeta(
-                name=name,
-                namespace=self.namespace(),
-                cluster=self.cluster_id(),
-                gvk=GVK(kind=Secret.kind, version=Secret.version),
+
+        secrets = [
+            s
+            async for s in self.__client.list(
+                K8sObjectFilter(name=name, gvk=GVK(kind=Secret.kind, version=Secret.version))
             )
-        )
+        ]
+        match len(secrets):
+            case 1:
+                await self.__client.delete(secrets[0])
+            case 0 | _:
+                pass
 
     async def patch_secret(self, name: str, patch: dict[str, Any] | list[dict[str, Any]]) -> None:
         """Patch a secret."""
-        # TODO: LSA Does not break current code, but bad, as it may be different based on the cluster
-        result = await self.__client.get(
-            K8sObjectMeta(
-                name=name,
-                namespace=self.namespace(),
-                cluster=self.cluster_id(),
-                gvk=GVK(kind=Secret.kind, version=Secret.version),
+
+        secrets = [
+            s
+            async for s in self.__client.list(
+                K8sObjectFilter(name=name, gvk=GVK(kind=Secret.kind, version=Secret.version))
             )
-        )
-        if result is None:
-            raise errors.MissingResourceError(message=f"Cannot find secret {name}.")
+        ]
+        match len(secrets):
+            case 1:
+                result = await self.__client.get(secrets[0])
+            case 0 | _:
+                raise errors.MissingResourceError(message=f"Cannot find secret {name}.")
+
         secret = result
         assert isinstance(secret, Secret)
 
