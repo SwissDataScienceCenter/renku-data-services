@@ -752,10 +752,6 @@ class SessionRepository:
 
     async def get_build(self, user: base_models.APIUser, build_id: ULID) -> models.Build:
         """Get a specific build."""
-
-        if not user.is_authenticated or user.id is None:
-            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
-
         async with self.session_maker() as session, session.begin():
             stmt = select(schemas.BuildORM).where(schemas.BuildORM.id == build_id)
             result = await session.scalars(stmt)
@@ -929,9 +925,6 @@ class SessionRepository:
         self, user: base_models.APIUser, build_id: ULID, max_log_lines: int | None = None
     ) -> dict[str, str]:
         """Get the logs of a build by querying Shipwright."""
-        if not user.is_authenticated or user.id is None:
-            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
-
         async with self.session_maker() as session, session.begin():
             stmt = select(schemas.BuildORM).where(schemas.BuildORM.id == build_id)
             result = await session.scalars(stmt)
