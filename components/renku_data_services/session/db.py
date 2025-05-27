@@ -8,13 +8,13 @@ from datetime import UTC, datetime
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
-from sanic.log import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import RESET
@@ -22,6 +22,8 @@ from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.session import constants, models
 from renku_data_services.session import orm as schemas
 from renku_data_services.session.k8s_client import ShipwrightClient
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from renku_data_services.session.config import BuildsConfig

@@ -9,9 +9,11 @@ from enum import Enum
 from typing import Any, NamedTuple
 
 from pydantic import BaseModel, Field
-from sanic.log import logger
 
+from renku_data_services.app_config import logging
 from renku_data_services.namespace.models import UserNamespace
+
+logger = logging.getLogger(__name__)
 
 
 class KeycloakEvent(Enum):

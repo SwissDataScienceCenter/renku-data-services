@@ -5,7 +5,10 @@ from functools import lru_cache
 from gitlab import Gitlab
 from gitlab.v4.objects.projects import Project
 from gitlab.v4.objects.users import CurrentUser
-from sanic.log import logger
+
+from renku_data_services.app_config import logging
+
+logger = logging.getLogger(__name__)
 
 
 class NotebooksGitlabClient:

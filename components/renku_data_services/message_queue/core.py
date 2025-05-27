@@ -3,10 +3,10 @@
 import json
 from collections.abc import AsyncGenerator, Callable
 
-from sanic.log import logger
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.base_models import APIUser
 from renku_data_services.message_queue.avro_models.io.renku.events import v2
@@ -17,6 +17,8 @@ from renku_data_services.message_queue.orm import EventORM
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.users.db import UserRepo
+
+logger = logging.getLogger(__name__)
 
 
 async def reprovision(

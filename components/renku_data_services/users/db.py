@@ -6,11 +6,11 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from sanic.log import logger
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services import base_models
+from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.base_api.auth import APIUser, only_authenticated
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
@@ -40,6 +40,8 @@ from renku_data_services.users.models import (
 from renku_data_services.users.orm import LastKeycloakEventTimestamp, UserORM, UserPreferencesORM
 from renku_data_services.utils.core import with_db_transaction
 from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass

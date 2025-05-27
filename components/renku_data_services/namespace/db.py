@@ -9,7 +9,6 @@ from contextlib import nullcontext
 from datetime import UTC, datetime
 from typing import Any, overload
 
-from sanic.log import logger
 from sqlalchemy import Select, delete, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
@@ -19,6 +18,7 @@ from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.authz.models import CheckPermissionItem, Member, MembershipChange, Role, Scope, UnsavedMember
 from renku_data_services.base_api.pagination import PaginationRequest, paginate_queries
@@ -44,6 +44,8 @@ from renku_data_services.search.decorators import update_search_document
 from renku_data_services.users import models as user_models
 from renku_data_services.users import orm as user_schemas
 from renku_data_services.utils.core import with_db_transaction
+
+logger = logging.getLogger(__name__)
 
 
 class GroupRepository:

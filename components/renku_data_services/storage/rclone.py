@@ -8,10 +8,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple, Union, cast
 
 from pydantic import BaseModel, Field, ValidationError
-from sanic.log import logger
 
 from renku_data_services import errors
+from renku_data_services.app_config import logging
 from renku_data_services.storage.rclone_patches import BANNED_STORAGE, apply_patches
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from renku_data_services.storage.models import RCloneConfig

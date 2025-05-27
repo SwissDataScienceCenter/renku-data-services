@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import logging
 from asyncio import CancelledError, Task
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
+from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import APIUser, InternalServiceAdmin, ServiceAdminId
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.crc.db import ResourcePoolRepository
@@ -17,6 +17,8 @@ from renku_data_services.k8s.clients import K8sClusterClient
 from renku_data_services.k8s.models import GVK, K8sObject, K8sObjectFilter
 from renku_data_services.k8s_watcher.db import K8sDbCache
 from renku_data_services.notebooks.crs import State
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from renku_data_services.k8s.models import APIObjectInCluster, Cluster, ClusterId
@@ -68,7 +70,7 @@ class K8sWatcher:
         while True:
             try:
                 if last_sync is None or (datetime.now() - last_sync).total_seconds() >= self.__sync_period_seconds:
-                    logging.info("Starting full k8s cache sync")
+                    logger.info("Starting full k8s cache sync")
                     await self.__sync()
                     last_sync = datetime.now()
                 watch = cluster.api.async_watch(kind=kind.kr8s_kind, namespace=cluster.namespace)
@@ -79,7 +81,7 @@ class K8sWatcher:
                     # execute indefinitely and prevent another resource kind from being watched.
                     await asyncio.sleep(0)
             except Exception as e:
-                logging.error(f"watch loop failed for {kind} in cluster {cluster.id}", exc_info=e)
+                logger.error(f"watch loop failed for {kind} in cluster {cluster.id}", exc_info=e)
                 # without sleeping, this can just hang the code as exceptions seem to bypass the async scheduler
                 await asyncio.sleep(1)
                 pass
@@ -88,7 +90,7 @@ class K8sWatcher:
         # The loops and error handling here will need some testing and love
         tasks = []
         for kind in self.__kinds:
-            logging.info(f"watching {kind} in cluster {cluster.id}")
+            logger.info(f"watching {kind} in cluster {cluster.id}")
             tasks.append(asyncio.create_task(self.__watch_kind(kind, cluster)))
 
         return tasks
@@ -123,7 +125,7 @@ class K8sWatcher:
                         with contextlib.suppress(CancelledError):
                             await task
                 except TimeoutError:
-                    logging.error("timeout trying to cancel k8s watcher task")
+                    logger.error("timeout trying to cancel k8s watcher task")
                     continue
 
 
@@ -182,7 +184,7 @@ def k8s_object_handler(cache: K8sDbCache, metrics: MetricsService, rp_repo: Reso
             try:
                 await collect_metrics(existing, obj, event_type, obj.user_id, metrics, rp_repo)
             except Exception as e:
-                logging.error("failed to track product metrics", exc_info=e)
+                logger.error("failed to track product metrics", exc_info=e)
         if event_type == "DELETED":
             await cache.delete(obj.meta)
             return

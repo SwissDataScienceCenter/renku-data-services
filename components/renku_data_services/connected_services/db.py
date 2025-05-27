@@ -8,7 +8,6 @@ from urllib.parse import urljoin
 
 from authlib.integrations.base_client import InvalidTokenError
 from authlib.integrations.httpx_client import AsyncOAuth2Client, OAuthError
-from sanic.log import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -16,6 +15,7 @@ from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from renku_data_services.app_config import logging
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.connected_services import apispec, models
 from renku_data_services.connected_services import orm as schemas
@@ -27,6 +27,8 @@ from renku_data_services.connected_services.provider_adapters import (
 )
 from renku_data_services.connected_services.utils import generate_code_verifier
 from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
+
+logger = logging.getLogger(__name__)
 
 
 class ConnectedServicesRepository:

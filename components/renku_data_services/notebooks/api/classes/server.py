@@ -8,8 +8,8 @@ from typing import Any
 from urllib.parse import urljoin, urlparse
 
 from gitlab.v4.objects.projects import Project
-from sanic.log import logger
 
+from renku_data_services.app_config import logging
 from renku_data_services.base_models import AnonymousAPIUser, AuthenticatedAPIUser
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.notebooks.api.amalthea_patches import cloudstorage as cloudstorage_patches
@@ -30,6 +30,8 @@ from renku_data_services.notebooks.constants import JUPYTER_SESSION_GVK
 from renku_data_services.notebooks.crs import JupyterServerV1Alpha1
 from renku_data_services.notebooks.errors.programming import DuplicateEnvironmentVariableError
 from renku_data_services.notebooks.errors.user import MissingResourceError
+
+logger = logging.getLogger(__name__)
 
 
 class UserServer(ABC):

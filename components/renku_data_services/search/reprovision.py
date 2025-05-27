@@ -3,8 +3,7 @@
 from collections.abc import AsyncGenerator, Callable
 from datetime import datetime
 
-from sanic.log import logger
-
+from renku_data_services.app_config import logging
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.data_connectors.db import DataConnectorRepository
@@ -19,6 +18,8 @@ from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.solr.solr_client import DefaultSolrClient, SolrClientConfig
 from renku_data_services.users.db import UserRepo
 from renku_data_services.users.models import UserInfo
+
+logger = logging.getLogger(__name__)
 
 
 class SearchReprovision:

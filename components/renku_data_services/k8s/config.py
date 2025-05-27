@@ -5,10 +5,12 @@ import os
 
 import kr8s
 import yaml
-from sanic.log import logger
 
+from renku_data_services.app_config import logging
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
 from renku_data_services.k8s.models import Cluster, ClusterId
+
+logger = logging.getLogger(__name__)
 
 
 class KubeConfig:
