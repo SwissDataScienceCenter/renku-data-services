@@ -23,22 +23,22 @@ class K8sDbCache:
     @staticmethod
     def __get_where_clauses(_filter: K8sObjectFilter) -> Select[tuple[K8sObjectORM]]:
         stmt = select(K8sObjectORM)
-        if _filter.name:
+        if _filter.name is not None:
             stmt = stmt.where(K8sObjectORM.name == _filter.name)
-        if _filter.namespace:
+        if _filter.namespace is not None:
             stmt = stmt.where(K8sObjectORM.namespace == _filter.namespace)
-        if _filter.cluster:
+        if _filter.cluster is not None:
             stmt = stmt.where(K8sObjectORM.cluster == str(_filter.cluster))
-        if _filter.gvk:
+        if _filter.gvk is not None:
             stmt = stmt.where(K8sObjectORM.kind_insensitive == _filter.gvk.kind)
             stmt = stmt.where(K8sObjectORM.version_insensitive == _filter.gvk.version)
             if _filter.gvk.group is None:
                 stmt = stmt.where(K8sObjectORM.group.is_(None))
             else:
                 stmt = stmt.where(K8sObjectORM.group_insensitive == _filter.gvk.group)
-        if _filter.user_id:
+        if _filter.user_id is not None:
             stmt = stmt.where(K8sObjectORM.user_id == _filter.user_id)
-        if _filter.label_selector:
+        if _filter.label_selector is not None:
             stmt = stmt.where(
                 # K8sObjectORM.manifest.comparator.contains({"metadata": {"labels": filter.label_selector}})
                 sqlalchemy.text("manifest -> 'metadata' -> 'labels' @> :labels").bindparams(
