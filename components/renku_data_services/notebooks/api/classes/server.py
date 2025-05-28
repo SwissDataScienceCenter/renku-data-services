@@ -121,7 +121,7 @@ class UserServer(ABC):
         return self._repositories
 
     @property
-    def server_url(self) -> str:
+    def server_url(self) -> str:  # FIXME: LSA Should this points to the cluster where the session is running?
         """The URL where a user can access their session."""
         if self._user.is_authenticated:
             return urljoin(
@@ -238,7 +238,9 @@ class UserServer(ABC):
                 "oidc": {"enabled": False},
             }
 
-        ingress_annotations = self.config.sessions.ingress.annotations
+        ingress_annotations = (
+            self.config.sessions.ingress.annotations
+        )  # FIXME: LSA Should this points to the cluster where the session is running?
 
         # FIXME: LSA Does it generate issue to have it set all the time?
         parent_host = self.config.sessions.ingress.host
@@ -267,7 +269,7 @@ class UserServer(ABC):
                     "hibernatedSecondsThreshold": self.hibernated_seconds_threshold,
                 },
                 "jupyterServer": {
-                    "defaultUrl": self.server_options.default_url,
+                    "defaultUrl": self.server_options.default_url,  # FIXME: LSA Should this points to the cluster where the session is running?
                     "image": self.image,
                     "rootDir": self.work_dir.as_posix(),
                     "resources": self.server_options.to_k8s_resources(
@@ -275,9 +277,13 @@ class UserServer(ABC):
                     ),
                 },
                 "routing": {
-                    "host": urlparse(self.server_url).netloc,
-                    "path": urlparse(self.server_url).path,
-                    "ingressAnnotations": ingress_annotations,
+                    "host": urlparse(
+                        self.server_url
+                    ).netloc,  # FIXME: LSA Should this points to the cluster where the session is running?
+                    "path": urlparse(
+                        self.server_url
+                    ).path,  # FIXME: LSA Should this points to the cluster where the session is running?
+                    "ingressAnnotations": ingress_annotations,  # FIXME: LSA Should this points to the cluster where the session is running?
                     "tls": {
                         "enabled": self.config.sessions.ingress.tls_secret is not None,
                         "secretName": self.config.sessions.ingress.tls_secret,
