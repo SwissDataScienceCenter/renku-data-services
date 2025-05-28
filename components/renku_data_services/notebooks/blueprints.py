@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from pathlib import PurePosixPath
+from urllib.parse import urlunparse
 
 from sanic import Request, empty, exceptions, json
 from sanic.response import HTTPResponse, JSONResponse
@@ -13,7 +14,7 @@ from renku_data_services.base_api.auth import authenticate, authenticate_2
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser, Authenticator
 from renku_data_services.base_models.metrics import MetricsService
-from renku_data_services.crc.db import ResourcePoolRepository
+from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
     DataConnectorSecretRepository,
@@ -240,6 +241,7 @@ class NotebooksNewBP(CustomBlueprint):
     data_connector_repo: DataConnectorRepository
     data_connector_secret_repo: DataConnectorSecretRepository
     metrics: MetricsService
+    cluster_repo: ClusterRepository
 
     def start(self) -> BlueprintFactoryResponse:
         """Start a session with the new operator."""
@@ -252,8 +254,6 @@ class NotebooksNewBP(CustomBlueprint):
             internal_gitlab_user: APIUser,
             body: apispec.SessionPostRequest,
         ) -> JSONResponse:
-            # gitlab_client = NotebooksGitlabClient(self.nb_config.git.url, internal_gitlab_user.access_token)
-
             launcher = await self.session_repo.get_launcher(user, ULID.from_str(body.launcher_id))
             project = await self.project_repo.get_project(user=user, project_id=launcher.project_id)
             cluster = await self.nb_config.k8s_client.cluster_by_class_id(launcher.resource_class_id, user)
@@ -342,13 +342,36 @@ class NotebooksNewBP(CustomBlueprint):
             extra_volumes.extend(extra_init_volumes_dc)
             extra_init_containers.extend(extra_init_containers_dc)
 
-            base_server_url = self.nb_config.sessions.ingress.base_url(server_name)
-            base_server_path = self.nb_config.sessions.ingress.base_path(server_name)
-            ui_path: str = (
-                f"{base_server_path.rstrip('/')}/{environment.default_url.lstrip('/')}"
-                if len(environment.default_url) > 0
-                else base_server_path
+            tls_secret = None
+            p = await cluster.get_ingress_parameters(user, self.cluster_repo)
+            if p is not None:
+                (scheme, public_remote_host, port, path) = p
+                base_server_path = f"{path}/{server_name}"
+                base_server_url = str(urlunparse((str(scheme), public_remote_host, base_server_path, None, None, None)))
+                host = public_remote_host
+            else:
+                # Fallback to global, main cluster parameters
+                base_server_path = self.nb_config.sessions.ingress.base_path(server_name)
+                base_server_url = self.nb_config.sessions.ingress.base_url(server_name)
+                host = self.nb_config.sessions.ingress.host
+
+                if self.nb_config.sessions.ingress.tls_secret is not None:
+                    TlsSecret(adopt=False, name=self.nb_config.sessions.ingress.tls_secret)
+
+            ui_path = f"{base_server_path}/"
+            if len(environment.default_url) > 0:
+                ui_path = f"{ui_path}/{environment.default_url.lstrip('/')}"
+
+            ingress_annotations = self.nb_config.sessions.ingress.annotations
+
+            ingress = Ingress(
+                host=host,
+                ingressClassName=ingress_annotations.get("kubernetes.io/ingress.class"),
+                annotations=ingress_annotations,
+                tlsSecret=tls_secret,
+                pathPrefix=base_server_path,
             )
+
             annotations: dict[str, str] = {
                 "renku.io/project_id": str(launcher.project_id),
                 "renku.io/launcher_id": body.launcher_id,
@@ -420,15 +443,7 @@ class NotebooksNewBP(CustomBlueprint):
                         shmSize="1G",
                         env=env,
                     ),
-                    ingress=Ingress(
-                        host=self.nb_config.sessions.ingress.host,
-                        ingressClassName=self.nb_config.sessions.ingress.annotations.get("kubernetes.io/ingress.class"),
-                        annotations=self.nb_config.sessions.ingress.annotations,
-                        tlsSecret=TlsSecret(adopt=False, name=self.nb_config.sessions.ingress.tls_secret)
-                        if self.nb_config.sessions.ingress.tls_secret is not None
-                        else None,
-                        pathPrefix=base_server_path,
-                    ),
+                    ingress=ingress,
                     extraContainers=extra_containers,
                     initContainers=extra_init_containers,
                     extraVolumes=extra_volumes,
