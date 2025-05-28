@@ -768,7 +768,8 @@ class SessionRepository:
                 raise errors.MissingResourceError(message=not_found_message)
 
             # Check and refresh the status of in-progress builds
-            await self._refresh_build(build=build, session=session, user_id=user.id)
+            if user.id is not None:
+                await self._refresh_build(build=build, session=session, user_id=user.id)
 
             return build.dump()
 
