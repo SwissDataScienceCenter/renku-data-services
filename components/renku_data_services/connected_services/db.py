@@ -274,7 +274,7 @@ class ConnectedServicesRepository:
                     adapter.token_endpoint_url, authorization_response=raw_url, code_verifier=code_verifier
                 )
 
-                logger.info(f"Token for client {client.id} has keys: {', '.join(token.keys())}")
+                logger.info(f"Token for client {client.id} has keys: {", ".join(token.keys())}")
 
                 next_url = connection.next_url
 
