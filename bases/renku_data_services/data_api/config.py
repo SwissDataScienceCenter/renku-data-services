@@ -6,6 +6,7 @@ from typing import Self
 
 from renku_data_services import errors
 from renku_data_services.app_config.config import KeycloakConfig, PosthogConfig, SentryConfig, TrustedProxiesConfig
+from renku_data_services.app_config.logging import Config as LoggingConfig
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.message_queue.config import RedisConfig
@@ -37,6 +38,7 @@ class Config:
     user_preferences: UserPreferencesConfig
     server_options: ServerOptionsConfig
     gitlab_url: str | None
+    log_cfg: LoggingConfig
     version: str = "0.0.1"
 
     @classmethod
@@ -56,6 +58,7 @@ class Config:
         user_preferences_config = UserPreferencesConfig.from_env()
         nb_config = NotebooksConfig.from_env(db)
         server_options = ServerOptionsConfig.from_env()
+        log_cfg = LoggingConfig.from_env()
         if dummy_stores:
             redis = RedisConfig.fake()
             keycloak = None
@@ -86,4 +89,5 @@ class Config:
             user_preferences=user_preferences_config,
             server_options=server_options,
             gitlab_url=gitlab_url,
+            log_cfg=log_cfg,
         )

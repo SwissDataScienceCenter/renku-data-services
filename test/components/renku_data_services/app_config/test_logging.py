@@ -9,7 +9,8 @@ from renku_data_services.app_config.logging import (
     LogFormatStyle,
     _RenkuJsonFormatter,
     _RenkuLogFormatter,
-    with_request_id,
+    _RequestIdFilter,
+    set_request_id,
 )
 
 logger = ll.getLogger(__name__)
@@ -23,6 +24,7 @@ sample_record = LogRecord(
     args=None,
     exc_info=None,
 )
+_RequestIdFilter().filter(sample_record)
 
 
 class TestHandler(ll.Handler):
@@ -41,6 +43,7 @@ def make_logger(name: str, level: int) -> tuple[ll.Logger, TestHandler]:
     logger = ll.Logger(name, level)
     hdl = TestHandler()
     logger.addHandler(hdl)
+    logger.addFilter(_RequestIdFilter())
     return logger, hdl
 
 
@@ -92,29 +95,22 @@ def test_config_from_env(monkeysession) -> None:
 
 def test_log_with_request_id() -> None:
     logger, hdl = make_logger("test.logger", ll.INFO)
-    logger = with_request_id(logger, "req1")
+    set_request_id("req_id_1")
     logger.info("hello world")
     assert len(hdl.records) == 1
     record = hdl.records[0]
-    assert record.getMessage() == "[req1] hello world"
+    assert record.request_id == "req_id_1"
+    assert record.getMessage() == "hello world"
 
 
 def test_log_request_id_json() -> None:
     logger, hdl = make_logger("test.logger", ll.INFO)
-    logger = with_request_id(logger, "req1")
+    set_request_id("test_req_2")
     logger.info("hello world")
     assert len(hdl.records) == 1
     record = hdl.records[0]
     js = json.loads(_RenkuJsonFormatter().format(record))
-    assert js["request_id"] == "req1"
-
-    hdl.reset()
-    logger.info("hello again", extra={"foo": 2})
-    assert len(hdl.records) == 1
-    record = hdl.records[0]
-    js = json.loads(_RenkuJsonFormatter().format(record))
-    assert js["request_id"] == "req1"
-    assert js["foo"] == 2
+    assert js["request_id"] == "test_req_2"
 
 
 def test_config_update_levels() -> None:

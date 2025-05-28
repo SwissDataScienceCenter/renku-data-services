@@ -15,7 +15,7 @@ from sentry_sdk.integrations.grpc import GRPCIntegration
 from sentry_sdk.integrations.sanic import SanicIntegration, _context_enter, _context_exit, _set_transaction
 
 import renku_data_services.solr.entity_schema as entity_schema
-from renku_data_services.app_config.logging import configure_logging, getLogger
+from renku_data_services.app_config import logging
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.data_api.app import register_all_handlers
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
     import sentry_sdk._types
 
 
-logger = getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 async def _solr_reindex(app: Sanic) -> None:
@@ -131,6 +131,14 @@ def create_app() -> Sanic:
 
     app.register_middleware(validate_null_byte, "request")
 
+    @app.on_request
+    async def set_request_id(request: Request) -> None:
+        logging.set_request_id(str(request.id))
+
+    @app.middleware("response")
+    async def set_request_id_header(request: Request, response: BaseHTTPResponse) -> None:
+        response.headers["X-Request-ID"] = request.id
+
     @app.middleware("response")
     async def handle_head(request: Request, response: BaseHTTPResponse) -> None:
         """Make sure HEAD requests return an empty body."""
@@ -169,11 +177,11 @@ def create_app() -> Sanic:
 
     @app.before_server_start
     async def logging_setup1(app: Sanic) -> None:
-        configure_logging()
+        logging.configure_logging(dependency_manager.config.log_cfg)
 
     @app.main_process_ready
     async def logging_setup2(app: Sanic) -> None:
-        configure_logging()
+        logging.configure_logging(dependency_manager.config.log_cfg)
 
     return app
 
