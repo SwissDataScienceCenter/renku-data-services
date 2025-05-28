@@ -135,9 +135,9 @@ class LogFormatStyle(StrEnum):
                 return _RenkuJsonFormatter()
 
     @classmethod
-    def from_env(cls, prefix: str = "") -> LogFormatStyle:
+    def from_env(cls, prefix: str = "", default: str = "plain") -> LogFormatStyle:
         """Read the format style from env var `LOG_FORMAT`."""
-        str_value = os.environ.get(f"{prefix}LOG_FORMAT_STYLE", "plain").lower()
+        str_value = os.environ.get(f"{prefix}LOG_FORMAT_STYLE", default).lower()
         match str_value:
             case "plain":
                 return LogFormatStyle.plain
@@ -157,24 +157,24 @@ class _Utils:
         return ln
 
     @classmethod
-    def _logger_list_from_env(cls, level: int) -> list[str]:
+    def _logger_list_from_env(cls, level: int, prefix: str) -> set[str]:
         level_name = logging._levelToName.get(level)
         if level_name is None:
-            return []
+            return set()
 
-        key = f"{level_name.upper()}_LOGGING"
+        key = f"{prefix}{level_name.upper()}_LOGGING"
         value = os.environ.get(key, "").strip()
         if value == "":
-            return []
+            return set()
 
-        return [n.strip() for n in value.split(",")]
+        return set([n.strip() for n in value.split(",")])
 
     @classmethod
-    def logger_levels_from_env(cls) -> dict[int, list[str]]:
+    def logger_levels_from_env(cls, prefix: str) -> dict[int, set[str]]:
         config = {}
         for level in list(logging._levelToName.keys()):
-            logger_names = cls._logger_list_from_env(level)
-            if logger_names != []:
+            logger_names = cls._logger_list_from_env(level, prefix)
+            if logger_names != set():
                 config.update({level: logger_names})
 
         return config
@@ -194,15 +194,43 @@ class Config:
     format_style: LogFormatStyle = LogFormatStyle.plain
     root_level: int = logging.WARNING
     app_level: int = logging.INFO
-    override_levels: dict[int, list[str]] = field(default_factory=dict)
+    override_levels: dict[int, set[str]] = field(default_factory=dict)
+
+    def update_override_levels(self, others: dict[int, set[str]]) -> None:
+        """Applies the given override levels to this config."""
+        other_loggers = set()
+        [other_loggers := other_loggers.union(x) for x in others.values()]
+        self.remove_override_loggers(other_loggers)
+        for level, names in others.items():
+            cur_names = self.override_levels.get(level) or set()
+            cur_names = names.union(cur_names)
+            self.override_levels.update({level: cur_names})
+
+    def remove_override_loggers(self, loggers: set[str]) -> None:
+        """Removes the given loggers from the override levels config."""
+        next_levels = {}
+        for level, names in self.override_levels.items():
+            next_names = names.difference(loggers)
+            if next_names != set():
+                next_levels.update({level: next_names})
+        self.override_levels = next_levels
 
     @classmethod
     def from_env(cls, prefix: str = "") -> Config:
         """Return a config obtained from environment variables."""
-        root_level = _Utils.get_numeric_level(os.environ.get(f"{prefix}LOG_ROOT_LEVEL", "WARNING"))
-        app_level = _Utils.get_numeric_level(os.environ.get(f"{prefix}LOG_APP_LEVEL", "INFO"))
-        format_style = LogFormatStyle.from_env(prefix)
-        levels = _Utils.logger_levels_from_env()
+        default = cls()
+        match os.environ.get(f"{prefix}LOG_ROOT_LEVEL"):
+            case None:
+                root_level = default.root_level
+            case lvl:
+                root_level = _Utils.get_numeric_level(lvl)
+        match os.environ.get(f"{prefix}LOG_APP_LEVEL"):
+            case None:
+                app_level = default.app_level
+            case lvl:
+                app_level = _Utils.get_numeric_level(lvl)
+        format_style = LogFormatStyle.from_env(prefix, default.format_style.value)
+        levels = _Utils.logger_levels_from_env(prefix)
         return Config(format_style, root_level, app_level, levels)
 
 

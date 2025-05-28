@@ -1,7 +1,7 @@
 """Tests for the app_config.logging module."""
 
 import json
-import logging
+import logging as ll
 from logging import LogRecord
 
 from renku_data_services.app_config.logging import (
@@ -12,9 +12,11 @@ from renku_data_services.app_config.logging import (
     with_request_id,
 )
 
+logger = ll.getLogger(__name__)
+
 sample_record = LogRecord(
     name="a.b.c",
-    level=logging.INFO,
+    level=ll.INFO,
     lineno=23,
     msg="this is a msg",
     pathname="a/b.py",
@@ -23,9 +25,9 @@ sample_record = LogRecord(
 )
 
 
-class TestHandler(logging.Handler):
+class TestHandler(ll.Handler):
     def __init__(self) -> None:
-        logging.Handler.__init__(self)
+        ll.Handler.__init__(self)
         self.records = []
 
     def emit(self, record) -> None:
@@ -35,8 +37,8 @@ class TestHandler(logging.Handler):
         self.records = []
 
 
-def make_logger(name: str, level: int) -> tuple[logging.Logger, TestHandler]:
-    logger = logging.Logger(name, level)
+def make_logger(name: str, level: int) -> tuple[ll.Logger, TestHandler]:
+    logger = ll.Logger(name, level)
     hdl = TestHandler()
     logger.addHandler(hdl)
     return logger, hdl
@@ -63,18 +65,18 @@ def test_plain_formatter() -> None:
 
 
 def test_default_config(monkeysession) -> None:
-    for level in logging._nameToLevel:
+    for level in ll._nameToLevel:
         monkeysession.setenv(f"{level}_LOGGING", "")
 
     cfg = Config.from_env()
-    assert cfg.app_level == logging.INFO
-    assert cfg.root_level == logging.WARNING
+    assert cfg.app_level == ll.INFO
+    assert cfg.root_level == ll.WARNING
     assert cfg.format_style == LogFormatStyle.plain
     assert cfg.override_levels == {}
 
 
 def test_config_from_env(monkeysession) -> None:
-    for level in logging._nameToLevel:
+    for level in ll._nameToLevel:
         monkeysession.setenv(f"{level}_LOGGING", "")
 
     monkeysession.setenv("DEBUG_LOGGING", "renku_data_services.test")
@@ -82,14 +84,14 @@ def test_config_from_env(monkeysession) -> None:
     monkeysession.setenv("LOG_FORMAT_STYLE", "Json")
 
     cfg = Config.from_env()
-    assert cfg.app_level == logging.WARNING
-    assert cfg.root_level == logging.WARNING
+    assert cfg.app_level == ll.WARNING
+    assert cfg.root_level == ll.WARNING
     assert cfg.format_style == LogFormatStyle.json
-    assert cfg.override_levels == {10: ["renku_data_services.test"]}
+    assert cfg.override_levels == {10: set(["renku_data_services.test"])}
 
 
 def test_log_with_request_id() -> None:
-    logger, hdl = make_logger("test.logger", logging.INFO)
+    logger, hdl = make_logger("test.logger", ll.INFO)
     logger = with_request_id(logger, "req1")
     logger.info("hello world")
     assert len(hdl.records) == 1
@@ -98,7 +100,7 @@ def test_log_with_request_id() -> None:
 
 
 def test_log_request_id_json() -> None:
-    logger, hdl = make_logger("test.logger", logging.INFO)
+    logger, hdl = make_logger("test.logger", ll.INFO)
     logger = with_request_id(logger, "req1")
     logger.info("hello world")
     assert len(hdl.records) == 1
@@ -113,3 +115,9 @@ def test_log_request_id_json() -> None:
     js = json.loads(_RenkuJsonFormatter().format(record))
     assert js["request_id"] == "req1"
     assert js["foo"] == 2
+
+
+def test_config_update_levels() -> None:
+    cfg1 = Config(override_levels={10: set(["a", "b"]), 20: set(["c"])})
+    cfg1.update_override_levels({10: set(["c"]), 20: set(["b"])})
+    assert cfg1.override_levels == {10: set(["a", "c"]), 20: set(["b"])}
