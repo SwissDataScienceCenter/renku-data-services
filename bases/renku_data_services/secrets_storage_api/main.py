@@ -6,7 +6,8 @@ from os import environ
 from typing import Any
 
 from prometheus_sanic import monitor
-from sanic import Sanic
+from sanic import Request, Sanic
+from sanic.response import BaseHTTPResponse
 from sanic.worker.loader import AppLoader
 
 from renku_data_services.app_config import logging
@@ -23,6 +24,14 @@ def create_app() -> Sanic:
     if "COVERAGE_RUN" in environ:
         app.config.TOUCHUP = False
     app = register_all_handlers(app, dm)
+
+    @app.on_request
+    async def set_request_id(request: Request) -> None:
+        logging.set_request_id(str(request.id))
+
+    @app.middleware("response")
+    async def set_request_id_header(request: Request, response: BaseHTTPResponse) -> None:
+        response.headers["X-Request-ID"] = request.id
 
     @app.main_process_start
     def main_process_start(app: Sanic) -> None:
