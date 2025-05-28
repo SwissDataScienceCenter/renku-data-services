@@ -175,15 +175,13 @@ def create_app() -> Sanic:
             logger.info("Starting solr reindex, as required by migrations.")
             app.manager.manage("SolrReindex", solr_reindex, {"app_name": app.name}, transient=True)
 
-    log_cfg = logging.Config.from_env()
-
     @app.before_server_start
     async def logging_setup1(app: Sanic) -> None:
-        logging.configure_logging(log_cfg)
+        logging.configure_logging(dependency_manager.config.log_cfg)
 
     @app.main_process_ready
     async def logging_setup2(app: Sanic) -> None:
-        logging.configure_logging(log_cfg)
+        logging.configure_logging(dependency_manager.config.log_cfg)
 
     return app
 
