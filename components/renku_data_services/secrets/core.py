@@ -7,10 +7,10 @@ from typing import TYPE_CHECKING
 from cryptography.hazmat.primitives.asymmetric import rsa
 from kubernetes import client as k8s_client
 from prometheus_client import Counter, Enum
-from sanic.log import logger
 from ulid import ULID
 
 from renku_data_services import base_models, errors
+from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import InternalServiceAdmin
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface
 from renku_data_services.secrets.models import OwnerReference, Secret
@@ -22,6 +22,8 @@ from renku_data_services.utils.cryptography import (
     encrypt_string,
     generate_random_encryption_key,
 )
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from renku_data_services.secrets.db import LowLevelUserSecretsRepo

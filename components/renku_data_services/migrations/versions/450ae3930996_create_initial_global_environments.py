@@ -8,14 +8,16 @@ Create Date: 2025-02-07 02:34:53.408066
 
 """
 
-import logging
 from dataclasses import dataclass
 
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB
 
+from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import InternalServiceAdmin
+
+logger = logging.getLogger(__name__)
 
 JSONVariant = sa.JSON().with_variant(JSONB(), "postgresql")
 # revision identifiers, used by Alembic.
@@ -79,11 +81,11 @@ def upgrade() -> None:
     try:
         connection = op.get_bind()
 
-        logging.info("creating global environments")
+        logger.info("creating global environments")
         env_stmt = sa.select(sa.column("id", type_=sa.String)).select_from(sa.table("environments", schema="sessions"))
         existing_envs = connection.execute(env_stmt).all()
         if existing_envs:
-            logging.info("skipping environment creation as there already are existing environments")
+            logger.info("skipping environment creation as there already are existing environments")
             return
         for env in GLOBAL_ENVIRONMENTS:
             op.execute(
@@ -135,10 +137,10 @@ def upgrade() -> None:
                     sa.bindparam("command", value=env.command, type_=JSONVariant),
                 )
             )
-            logging.info(f"created global environment {env.name}")
+            logger.info(f"created global environment {env.name}")
 
     except Exception:
-        logging.exception("creation of intial global environments failed")
+        logger.exception("creation of intial global environments failed")
 
     # ### end Alembic commands ###
 

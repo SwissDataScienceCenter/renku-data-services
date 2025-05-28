@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
 
@@ -11,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from renku_data_services import errors
+from renku_data_services.app_config import logging
 from renku_data_services.message_queue import orm as schemas
 from renku_data_services.message_queue.interface import IMessageQueue
 from renku_data_services.message_queue.models import Event, Reprovisioning
