@@ -121,6 +121,7 @@ class NotebooksConfig:
     git_provider_helper: GitProviderHelperProto
     k8s_client: NotebookK8sClient[JupyterServerV1Alpha1]
     k8s_v2_client: NotebookK8sClient[AmaltheaSessionV1Alpha1]
+    cluster_rp: ClusterRepository
     current_resource_schema_version: int = 1
     anonymous_sessions_enabled: bool = False
     ssh_enabled: bool = False
@@ -217,5 +218,6 @@ class NotebooksConfig:
             k8s_client=k8s_client,
             k8s_v2_client=k8s_v2_client,
             k8s_db_cache=k8s_db_cache,
+            cluster_rp=cluster_rp,
             _kr8s_api=kr8s_api,
         )
