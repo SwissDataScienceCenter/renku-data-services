@@ -91,8 +91,8 @@ def validate_query(
         async def decorated_function(request: Request, *args: _P.args, **kwargs: _P.kwargs) -> _T:
             try:
                 return await validate(query=query)(f)(request, *args, **kwargs)
-            except KeyError:
-                raise errors.ValidationError(message="Failed to validate the query parameters")
+            except KeyError as err:
+                raise errors.ValidationError(message="Failed to validate the query parameters") from err
 
         return decorated_function
 

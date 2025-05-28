@@ -353,7 +353,7 @@ class ConnectedServicesRepository:
                         message="The refresh token for the connected service has expired or is invalid.",
                         detail=f"Please reconnect your integration for the service with ID {str(connection_id)} "
                         "and try again.",
-                    )
+                    ) from err
                 raise
             token_model = models.OAuth2TokenSet.from_dict(oauth2_client.token)
             return token_model
@@ -379,7 +379,7 @@ class ConnectedServicesRepository:
                             message="The refresh token for the connected service has expired or is invalid.",
                             detail=f"Please reconnect your integration for the service with ID {str(connection_id)} "
                             "and try again.",
-                        )
+                        ) from err
                     raise
 
                 if response.status_code > 200:

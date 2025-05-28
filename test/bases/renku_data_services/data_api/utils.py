@@ -101,10 +101,12 @@ class K3DCluster(AbstractContextManager):
         cluster_name: str,
         k3s_image="latest",
         kubeconfig=".k3d-config.yaml",
-        extra_images=[],
+        extra_images: list[str] | None = None,
     ):
         self.cluster_name = cluster_name
         self.k3s_image = k3s_image
+        if extra_images is None:
+            extra_images = []
         self.extra_images = extra_images
         self.kubeconfig = kubeconfig
         self.env = os.environ.copy()
@@ -210,7 +212,7 @@ def setup_amalthea(install_name: str, app_name: str, version: str, cluster: K3DC
             watcher.stop()
             break
     else:
-        assert False, "Timeout waiting on amalthea to run"
+        raise AssertionError("Timeout waiting on amalthea to run") from None
 
 
 class ClusterRequired:

@@ -302,11 +302,11 @@ class ShipwrightClient:
             except httpx.ResponseNotRead:
                 # NOTE: This occurs when the container is still starting, but we try to read its logs
                 continue
-            except NotFoundError:
-                raise errors.MissingResourceError(message=f"The pod {name} does not exist.")
+            except NotFoundError as err:
+                raise errors.MissingResourceError(message=f"The pod {name} does not exist.") from err
             except ServerError as err:
                 if err.response is not None and err.response.status_code == 404:
-                    raise errors.MissingResourceError(message=f"The pod {name} does not exist.")
+                    raise errors.MissingResourceError(message=f"The pod {name} does not exist.") from err
                 raise
             else:
                 logs[container] = "\n".join(clogs)

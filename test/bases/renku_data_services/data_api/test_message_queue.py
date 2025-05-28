@@ -21,7 +21,7 @@ def _reprovisioning(sanic_client, user_headers):
             if response.status_code == 404:
                 break
             elif total_wait_time > 30:
-                assert False, "Reprovisioning was not finished after 30 seconds"
+                raise AssertionError("Reprovisioning was not finished after 30 seconds") from None
 
     return wait_helper
 

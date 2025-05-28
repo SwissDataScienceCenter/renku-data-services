@@ -173,7 +173,7 @@ class NotebooksBP(CustomBlueprint):
             try:
                 await core.stop_server(self.nb_config, user, server_name)
             except errors.MissingResourceError as err:
-                raise exceptions.NotFound(message=err.message)
+                raise exceptions.NotFound(message=err.message) from err
             return HTTPResponse(status=204)
 
         return "/notebooks/servers/<server_name>", ["DELETE"], _stop_server
@@ -198,7 +198,7 @@ class NotebooksBP(CustomBlueprint):
             try:
                 logs = await core.server_logs(self.nb_config, user, server_name, max_lines)
             except errors.MissingResourceError as err:
-                raise exceptions.NotFound(message=err.message)
+                raise exceptions.NotFound(message=err.message) from err
             return json(ServerLogs().dump(logs))
 
         return "/notebooks/logs/<server_name>", ["GET"], _server_logs
@@ -452,10 +452,10 @@ class NotebooksNewBP(CustomBlueprint):
                 await self.nb_config.k8s_v2_client.create_secret(s.secret)
             try:
                 manifest = await self.nb_config.k8s_v2_client.create_session(manifest, user)
-            except Exception:
+            except Exception as err:
                 for s in secrets_to_create:
                     await self.nb_config.k8s_v2_client.delete_secret(s.secret.metadata.name)
-                raise errors.ProgrammingError(message="Could not start the amalthea session")
+                raise errors.ProgrammingError(message="Could not start the amalthea session") from err
             else:
                 try:
                     await request_session_secret_creation(user, self.nb_config, manifest, session_secrets)

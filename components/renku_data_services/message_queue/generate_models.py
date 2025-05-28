@@ -129,7 +129,7 @@ class DependencyChecker(AvscSchemaDependenciesChecker):  # type: ignore[misc]
         # sort schemas by dependencies
         keys = list(self.schemas.output_writers.keys())
         keys = sorted(keys)
-        for idx, (record, dependencies) in enumerate(sorted(self.record_dependencies.items())):
+        for _idx, (record, dependencies) in enumerate(sorted(self.record_dependencies.items())):
             if len(dependencies) == 0:
                 continue
             record_index = keys.index(record)

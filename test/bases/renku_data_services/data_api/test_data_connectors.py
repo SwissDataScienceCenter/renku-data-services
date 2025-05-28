@@ -1751,7 +1751,7 @@ async def test_creating_dc_in_project_no_leak_to_other_project(sanic_client, use
     _, res = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
     assert res.status_code == 201, res.text
     project = res.json
-    project_path = f"{project["namespace"]}/{project["slug"]}"
+    project_path = f"{project['namespace']}/{project['slug']}"
 
     payload = {
         "name": "My data connector",
@@ -2365,7 +2365,7 @@ def _mock_get_doi_metadata(metadata: RCloneDOIMetadata, sanic_client: SanicASGIT
             assert doi_metadata == metadata
             return doi_metadata
 
-        warnings.warn("Could not retrieve DOI metadata, returning saved one")
+        warnings.warn("Could not retrieve DOI metadata, returning saved one", stacklevel=2)
         return metadata
 
     monkeypatch.setattr(validator, "get_doi_metadata", _mock_get_doi_metadata)

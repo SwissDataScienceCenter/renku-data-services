@@ -301,7 +301,7 @@ async def __wait_for_solr(host: str, port: int) -> None:
             except Exception as err:
                 print(err)
                 if tries >= 20:
-                    raise Exception(f"Cannot connect to solr, gave up after {tries} tries.")
+                    raise Exception(f"Cannot connect to solr, gave up after {tries} tries.") from err
                 else:
                     tries = tries + 1
                     await asyncio.sleep(1)

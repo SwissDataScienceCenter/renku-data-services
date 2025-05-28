@@ -76,7 +76,7 @@ def test_buildpacks_buildstrategy(namespace: str, buildrun: str) -> None:
     ]
 
     succeeded = False
-    for i in range(5 * 60):
+    for _i in range(5 * 60):
         result = subprocess.run(cmd, capture_output=True)
         assert result.returncode == 0
 

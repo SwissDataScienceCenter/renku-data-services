@@ -465,7 +465,7 @@ async def launch_notebook_helper(
                     )
                 )
         except errors.ValidationError as e:
-            raise user_errors.UserInputError(message=f"Couldn't load cloud storage config: {str(e)}")
+            raise user_errors.UserInputError(message=f"Couldn't load cloud storage config: {str(e)}") from e
         mount_points = set(s.mount_folder for s in storages if s.mount_folder and s.mount_folder != "/")
         if len(mount_points) != len(storages):
             raise user_errors.UserInputError(
