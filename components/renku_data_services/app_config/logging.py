@@ -316,7 +316,7 @@ def print_logger_setting(msg: str | None = None, show_all: bool = False) -> None
 
     """
     l_root = logging.Logger.root
-    output = ["".center(65, "=")]
+    output = ["=" * 65]
     if msg is not None:
         output.append(msg.center(65, "-"))
 
@@ -340,5 +340,5 @@ def print_logger_setting(msg: str | None = None, show_all: bool = False) -> None
 
         if show_all or show_item:
             output.append(f" * Logger({name} @{eff_level_name}, self.level={level_name}, handlers={len(handlers)})")
-    output.append("".center(65, "="))
+    output.append("" * 65)
     print("\n".join(output))
