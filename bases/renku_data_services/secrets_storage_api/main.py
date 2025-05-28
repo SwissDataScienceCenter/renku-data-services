@@ -36,11 +36,11 @@ def create_app() -> Sanic:
     @app.main_process_start
     def main_process_start(app: Sanic) -> None:
         app.shared_ctx.rotation_lock = Lock()
-        logging.configure_logging()
+        logging.configure_logging(dm.config.log_cfg)
 
     @app.before_server_start
     async def logging_setup1(app: Sanic) -> None:
-        logging.configure_logging()
+        logging.configure_logging(dm.config.log_cfg)
 
     # Setup prometheus
     monitor(app, endpoint_type="url", multiprocess_mode="all", is_middleware=True).expose_endpoint()

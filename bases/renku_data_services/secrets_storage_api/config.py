@@ -8,6 +8,7 @@ from typing import Any, Self
 from yaml import safe_load
 
 import renku_data_services.secrets
+from renku_data_services.app_config import logging
 from renku_data_services.app_config.config import KeycloakConfig
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.secrets.config import PrivateSecretsConfig
@@ -24,6 +25,7 @@ class Config:
     version: str = "0.0.1"
     dummy_stores: bool = False
     spec: dict[str, Any] = field(init=False, default_factory=dict)
+    log_cfg: logging.Config = field(default_factory=logging.Config.from_env)
 
     def __post_init__(self) -> None:
         spec_file = Path(renku_data_services.secrets.__file__).resolve().parent / "api.spec.yaml"
@@ -40,5 +42,13 @@ class Config:
         keycloak = None
         if not dummy_stores:
             keycloak = KeycloakConfig.from_env()
+        log_cfg = logging.Config.from_env()
 
-        return cls(db=db, secrets=secrets_config, version=version, keycloak=keycloak, dummy_stores=dummy_stores)
+        return cls(
+            db=db,
+            secrets=secrets_config,
+            version=version,
+            keycloak=keycloak,
+            dummy_stores=dummy_stores,
+            log_cfg=log_cfg,
+        )
