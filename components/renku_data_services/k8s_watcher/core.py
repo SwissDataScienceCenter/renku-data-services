@@ -52,7 +52,7 @@ class K8sWatcher:
         for kind in self.__kinds:
             for cluster in self.__clusters.values():
                 clnt = K8sClusterClient(cluster)
-                fltr = K8sObjectFilter(gvk=kind, namespace=cluster.namespace)
+                fltr = K8sObjectFilter(gvk=kind, namespace=cluster.namespace, cluster=cluster.id)
                 # Upsert new / updated objects
                 objects_in_k8s: dict[str, K8sObject] = {}
                 async for obj in clnt.list(fltr):
@@ -63,7 +63,7 @@ class K8sWatcher:
                     cache_obj_is_in_k8s = objects_in_k8s.get(cache_obj.name) is not None
                     if cache_obj_is_in_k8s:
                         continue
-                    await self.__cache.delete(cache_obj.meta)
+                    await self.__cache.delete(cache_obj)
 
     async def __watch_kind(self, kind: GVK, cluster: Cluster) -> None:
         last_sync: datetime | None = None

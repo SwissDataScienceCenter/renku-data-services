@@ -342,9 +342,13 @@ class NotebooksNewBP(CustomBlueprint):
             extra_volumes.extend(extra_init_volumes_dc)
             extra_init_containers.extend(extra_init_containers_dc)
 
-            base_server_url = self.nb_config.sessions.ingress.base_url(server_name)
-            base_server_path = self.nb_config.sessions.ingress.base_path(server_name)
-            ui_path: str = (
+            base_server_url = self.nb_config.sessions.ingress.base_url(
+                server_name
+            )  # FIXME: LSA Should this points to the cluster where the session is running?
+            base_server_path = self.nb_config.sessions.ingress.base_path(
+                server_name
+            )  # FIXME: LSA Should this points to the cluster where the session is running?
+            ui_path: str = (  # FIXME: LSA Should this points to the cluster where the session is running?
                 f"{base_server_path.rstrip('/')}/{environment.default_url.lstrip('/')}"
                 if len(environment.default_url) > 0
                 else base_server_path
@@ -378,12 +382,18 @@ class NotebooksNewBP(CustomBlueprint):
             # Raise an error if there are invalid environment variables in the request body
             verify_launcher_env_variable_overrides(launcher, body)
             env = [
-                SessionEnvItem(name="RENKU_BASE_URL_PATH", value=base_server_path),
-                SessionEnvItem(name="RENKU_BASE_URL", value=base_server_url),
+                SessionEnvItem(
+                    name="RENKU_BASE_URL_PATH", value=base_server_path
+                ),  # FIXME: LSA Should this points to the cluster where the session is running?
+                SessionEnvItem(
+                    name="RENKU_BASE_URL", value=base_server_url
+                ),  # FIXME: LSA Should this points to the cluster where the session is running?
                 SessionEnvItem(name="RENKU_MOUNT_DIR", value=storage_mount.as_posix()),
                 SessionEnvItem(name="RENKU_SESSION", value="1"),
                 SessionEnvItem(name="RENKU_SESSION_IP", value="0.0.0.0"),  # nosec B104
-                SessionEnvItem(name="RENKU_SESSION_PORT", value=f"{environment.port}"),
+                SessionEnvItem(
+                    name="RENKU_SESSION_PORT", value=f"{environment.port}"
+                ),  # FIXME: LSA Should this points to the cluster where the session is running?
                 SessionEnvItem(name="RENKU_WORKING_DIR", value=work_dir.as_posix()),
             ]
             launcher_env_variables = get_launcher_env_variables(launcher, body)
@@ -403,7 +413,7 @@ class NotebooksNewBP(CustomBlueprint):
                     session=Session(
                         image=image,
                         imagePullPolicy=ImagePullPolicy.Always,
-                        urlPath=ui_path,
+                        urlPath=ui_path,  # FIXME: LSA Should this points to the cluster where the session is running?
                         port=environment.port,
                         storage=Storage(
                             className=self.nb_config.sessions.storage.pvs_storage_class,
@@ -420,7 +430,7 @@ class NotebooksNewBP(CustomBlueprint):
                         shmSize="1G",
                         env=env,
                     ),
-                    ingress=Ingress(
+                    ingress=Ingress(  # FIXME: LSA Should this points to the cluster where the session is running?
                         host=self.nb_config.sessions.ingress.host,
                         ingressClassName=self.nb_config.sessions.ingress.annotations.get("kubernetes.io/ingress.class"),
                         annotations=self.nb_config.sessions.ingress.annotations,
@@ -449,7 +459,7 @@ class NotebooksNewBP(CustomBlueprint):
                 ),
             )
             for s in secrets_to_create:
-                await self.nb_config.k8s_v2_client.create_secret(s.secret)
+                await self.nb_config.k8s_v2_client.create_secret(s.secret, resource_class.id, user)
             try:
                 manifest = await self.nb_config.k8s_v2_client.create_session(manifest, user)
             except Exception:
