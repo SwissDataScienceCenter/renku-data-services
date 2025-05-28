@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, NewType, Self, cast
+from typing import TYPE_CHECKING, Any, NewType, Self, cast
 
 from box import Box
 from kr8s._api import Api
 from kr8s.asyncio.objects import APIObject
+from ulid import ULID
 
-from renku_data_services.errors import errors
+from renku_data_services.base_models import APIUser
+from renku_data_services.errors import MissingResourceError, errors
 from renku_data_services.k8s.constants import DUMMY_TASK_RUN_USER_ID
+
+if TYPE_CHECKING:
+    from renku_data_services.crc.db import ClusterRepository
 
 # LSA Not enough time: Adapt this to be an alias to ULID
 ClusterId = NewType("ClusterId", str)
@@ -124,6 +129,16 @@ class Cluster:
     def with_api_object(self, obj: APIObject) -> APIObjectInCluster:
         """Create an API object associated with the cluster."""
         return APIObjectInCluster(obj, self.id)
+
+    async def get_ingress_parameters(
+        self, user: APIUser, cluster_repo: ClusterRepository
+    ) -> tuple[str, str, int, str] | None:
+        """Return cluster-specific ingress parameters, mainly the public-facing URL components."""
+        try:
+            cluster = await cluster_repo.select(user, ULID.from_str(self.id))
+            return cluster.session_protocol.value, cluster.session_host, cluster.session_port, cluster.session_path
+        except (MissingResourceError, ValueError) as _e:
+            return None
 
 
 @dataclass(kw_only=True, frozen=True)
