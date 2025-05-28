@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=8)
-def __get_project(client: Gitlab, namespace_project: str) -> Project:
+def _get_project(client: Gitlab, namespace_project: str) -> Project:
     return client.projects.get(f"{namespace_project}")
 
 
@@ -32,7 +32,7 @@ class NotebooksGitlabClient:
     def get_renku_project(self, namespace_project: str) -> Project | None:
         """Retrieve the GitLab project."""
         try:
-            return __get_project(self.gitlab_client, namespace_project)
+            return _get_project(self.gitlab_client, namespace_project)
         except Exception as e:
             logger.warning(f"Cannot find the gitlab project: {namespace_project}, error: {e}")
         return None

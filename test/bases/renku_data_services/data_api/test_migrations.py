@@ -508,8 +508,8 @@ async def test_migration_to_75c83dd9d619(app_manager_instance: DependencyManager
     # The copied and the original env have the same name
     assert env1_row[2] == env2_row[2]
     # Check that the random environment is unchanged
-    assert random_env_row[0] == admin_user.id
-    assert random_env_row[1] == random_env_id
+    assert random_env_row[0] == random_env_id
+    assert random_env_row[1] == admin_user.id
     assert random_env_row[2] == "random env"
     # Check that the orphaned cloned project's environment has been also decoupled
     orphan_launcher_row = find_by_col(launchers, custom_launcher_id_orphan_cloned, 0)
