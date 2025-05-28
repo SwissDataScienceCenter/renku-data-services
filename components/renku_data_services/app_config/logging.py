@@ -1,7 +1,7 @@
 """Logging configuration.
 
 This is a central place for configuring the logging library, so that
-all log message have the same format. The intention is to use it like
+all log messages have the same format. The intention is to use it like
 described in the manual of python logging:
 
 Define a module based logger like this:
@@ -20,7 +20,7 @@ making sure the logger name is prefixed correctly.
 Additionally, there is a `LoggerAdapter` to amend log messages with a
 request id. This can be used to uniformly add this information to each
 log message. The logger needs to be wrapped into a the
-`LoggerApapter`:
+`LoggerAdapter`:
 
 ``` python
 logger = logging.with_request_id(logger, "request-42")
@@ -28,6 +28,7 @@ logger = logging.with_request_id(logger, "request-42")
 
 Before accessing loggers, run the `configure_logging()` method to
 configure loggers appropriately.
+
 """
 
 from __future__ import annotations
@@ -256,7 +257,7 @@ class _RequestIdAdapter(LoggerAdapter):
         return _RequestIdAdapter(logger, {"request_id": request_id})
 
 
-def configure_logging(cfg: Config = Config.from_env()) -> None:
+def configure_logging(cfg: Config | None = None) -> None:
     """Configures logging library.
 
     This should run before using a logger. It sets all loggers to
@@ -273,6 +274,9 @@ def configure_logging(cfg: Config = Config.from_env()) -> None:
     `{LEVEL}`.
 
     """
+    if cfg is None:
+        cfg = Config.from_env()
+
     # To have a uniform format *everywhere*, there is only one
     # handler. It is added to the root logger. However, imported
     # modules may change this configuration at any time (and they do).
@@ -312,9 +316,9 @@ def print_logger_setting(msg: str | None = None, show_all: bool = False) -> None
 
     """
     l_root = logging.Logger.root
-    output = ["================================================================="]
+    output = ["".center(65, "=")]
     if msg is not None:
-        output.append(f"--- {msg} ---")
+        output.append(msg.center(65, "-"))
 
     output.append(f"Total logger entries: {len(logging.Logger.manager.loggerDict)}")
     output.append(
@@ -336,5 +340,5 @@ def print_logger_setting(msg: str | None = None, show_all: bool = False) -> None
 
         if show_all or show_item:
             output.append(f" * Logger({name} @{eff_level_name}, self.level={level_name}, handlers={len(handlers)})")
-    output.append("=================================================================")
+    output.append("".center(65, "="))
     print("\n".join(output))

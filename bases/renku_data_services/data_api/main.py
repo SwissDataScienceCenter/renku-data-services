@@ -164,7 +164,7 @@ def create_app() -> Sanic:
     async def ready(app: Sanic) -> None:
         """Application ready event handler."""
         if getattr(app.ctx, "solr_reindex", False):
-            logger.info("Starting solr reindexd required by migrations.")
+            logger.info("Starting solr reindex, as required by migrations.")
             app.manager.manage("SolrReindex", solr_reindex, {"app_name": app.name}, transient=True)
 
     @app.before_server_start
