@@ -331,7 +331,7 @@ class GroupRepository:
                 raise errors.ValidationError(
                     message="The slug for the group should be unique but it already exists in the database",
                     detail="Please modify the slug field and then retry",
-                )
+                ) from err
             raise err
         # NOTE: This is needed to populate the relationship fields in the group after inserting the ID above
         await session.refresh(group)

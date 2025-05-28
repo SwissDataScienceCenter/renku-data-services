@@ -163,7 +163,7 @@ class UserSecretsRepo:
                     raise errors.ValidationError(
                         message="The default_filename for the secret should be unique but it already exists",
                         detail="Please modify the default_filename field and then retry",
-                    )
+                    ) from None
                 else:
                     raise
             return secret_orm.dump()
