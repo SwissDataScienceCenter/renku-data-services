@@ -50,10 +50,10 @@ class UserServer:
         work_dir: PurePosixPath,
         config: NotebooksConfig,
         internal_gitlab_user: APIUser,
+        host: str,
         using_default_image: bool = False,
         is_image_private: bool = False,
         repositories: list[Repository] | None = None,
-        host: str | None = None,
     ):
         self._user = user
         self.server_name = server_name
@@ -68,7 +68,7 @@ class UserServer:
         self.work_dir = work_dir
         self.cloudstorage = cloudstorage
         self.is_image_private = is_image_private
-        self.host = host or config.sessions.ingress.host
+        self.host = host
         self.config = config
         self.internal_gitlab_user = internal_gitlab_user
 
@@ -120,7 +120,7 @@ class UserServer:
         return self._repositories
 
     @property
-    def server_url(self) -> str:
+    def server_url(self) -> str:  # FIXME: LSA Should this points to the cluster where the session is running?
         """The URL where a user can access their session."""
         if self._user.is_authenticated:
             return urljoin(
@@ -237,12 +237,11 @@ class UserServer:
                 "oidc": {"enabled": False},
             }
 
+        # FIXME: LSA Should this points to the cluster where the session is running?
         ingress_annotations = self.config.sessions.ingress.annotations
 
-        # FIXME: LSA Does it generate issue to have it set all the time?
-        parent_host = self.config.sessions.ingress.host
         ingress_annotations["nginx.ingress.kubernetes.io/configuration-snippet"] = (
-            f"""more_set_headers "Content-Security-Policy: frame-ancestors 'self' {parent_host}";"""
+            f"""more_set_headers "Content-Security-Policy: frame-ancestors 'self' {self.host}";"""
         )
 
         # Combine everything into the manifest
@@ -396,11 +395,11 @@ class Renku1UserServer(UserServer):
         workspace_mount_path: PurePosixPath,
         work_dir: PurePosixPath,
         config: NotebooksConfig,
+        host: str,
         gitlab_project: Project | None,
         internal_gitlab_user: APIUser,
         using_default_image: bool = False,
         is_image_private: bool = False,
-        host: str | None = None,
         **_: dict,  # Required to ignore unused arguments, among which repositories
     ):
         repositories = [
