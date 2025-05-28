@@ -15,10 +15,10 @@ import httpx
 from kubernetes.client import V1ObjectMeta, V1Secret
 from kubernetes.utils.duration import format_duration
 from sanic import Request
-from sanic.log import logger
 from toml import dumps
 from yaml import safe_dump
 
+from renku_data_services.app_config import logging
 from renku_data_services.base_models import APIUser
 from renku_data_services.base_models.core import AnonymousAPIUser, AuthenticatedAPIUser
 from renku_data_services.base_models.metrics import MetricsService
@@ -61,6 +61,8 @@ from renku_data_services.project.models import Project, SessionSecret
 from renku_data_services.session.models import SessionLauncher
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.cryptography import get_encryption_key
+
+logger = logging.getLogger(__name__)
 
 
 async def get_extra_init_containers(

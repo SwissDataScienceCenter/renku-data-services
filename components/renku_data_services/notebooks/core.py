@@ -10,10 +10,10 @@ import escapism
 import httpx
 from gitlab.const import Visibility as GitlabVisibility
 from gitlab.v4.objects.projects import Project as GitlabProject
-from sanic.log import logger
 from sanic.response import JSONResponse
 from ulid import ULID
 
+from renku_data_services.app_config import logging
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.errors import errors
@@ -38,6 +38,8 @@ from renku_data_services.notebooks.util.kubernetes_ import find_container, renku
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.storage.models import CloudStorage
 from renku_data_services.users.db import UserRepo
+
+logger = logging.getLogger(__name__)
 
 
 def notebooks_info(config: NotebooksConfig) -> dict:

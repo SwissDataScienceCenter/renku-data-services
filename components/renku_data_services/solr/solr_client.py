@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -26,8 +25,11 @@ from pydantic import (
     model_validator,
 )
 
+from renku_data_services.app_config import logging
 from renku_data_services.errors.errors import BaseError
 from renku_data_services.solr.solr_schema import CoreSchema, FieldName, SchemaCommandList
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -65,7 +67,7 @@ class SolrClientConfig:
         try:
             timeout = int(tstr) if tstr is not None else 600
         except ValueError:
-            logging.warning(f"SOLR_REQUEST_TIMEOUT is not an integer: {tstr}")
+            logger.warning(f"SOLR_REQUEST_TIMEOUT is not an integer: {tstr}")
             timeout = 600
 
         user = SolrUser(username=username, password=str(password)) if username is not None else None
@@ -680,7 +682,7 @@ class DefaultSolrClient(SolrClient):
     async def modify_schema(self, cmds: SchemaCommandList) -> Response:
         """Updates the schema with the given commands."""
         data = cmds.to_json()
-        logging.debug(f"modify schema: {data}")
+        logger.debug(f"modify schema: {data}")
         try:
             return await self.delegate.post(
                 "/schema",
@@ -699,7 +701,7 @@ class DefaultSolrClient(SolrClient):
         other outcomes are raised as an exception.
         """
         j = json.dumps([e.to_dict() for e in docs])
-        logging.debug(f"upserting: {j}")
+        logger.debug(f"upserting: {j}")
         try:
             res = await self.delegate.post(
                 "/update",

@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Any
 import sentry_sdk
 import uvloop
 from sanic import Request, Sanic
-from sanic.log import logger
 from sanic.response import BaseHTTPResponse
 from sanic.worker.loader import AppLoader
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
@@ -16,6 +15,7 @@ from sentry_sdk.integrations.grpc import GRPCIntegration
 from sentry_sdk.integrations.sanic import SanicIntegration, _context_enter, _context_exit, _set_transaction
 
 import renku_data_services.solr.entity_schema as entity_schema
+from renku_data_services.app_config.logging import configure_logging, getLogger
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.data_api.app import register_all_handlers
@@ -34,6 +34,9 @@ from renku_data_services.utils.middleware import validate_null_byte
 
 if TYPE_CHECKING:
     import sentry_sdk._types
+
+
+logger = getLogger(__name__)
 
 
 async def _solr_reindex(app: Sanic) -> None:
@@ -60,7 +63,7 @@ def solr_reindex(app_name: str) -> None:
 def create_app() -> Sanic:
     """Create a Sanic application."""
     dependency_manager = DependencyManager.from_env()
-    app = Sanic(dependency_manager.app_name)
+    app = Sanic(dependency_manager.app_name, configure_logging=False)
 
     if "COVERAGE_RUN" in environ:
         app.config.TOUCHUP = False
@@ -160,9 +163,17 @@ def create_app() -> Sanic:
     @app.main_process_ready
     async def ready(app: Sanic) -> None:
         """Application ready event handler."""
-        logger.info("starting events background job.")
         if getattr(app.ctx, "solr_reindex", False):
+            logger.info("Starting solr reindex, as required by migrations.")
             app.manager.manage("SolrReindex", solr_reindex, {"app_name": app.name}, transient=True)
+
+    @app.before_server_start
+    async def logging_setup1(app: Sanic) -> None:
+        configure_logging()
+
+    @app.main_process_ready
+    async def logging_setup2(app: Sanic) -> None:
+        configure_logging()
 
     return app
 

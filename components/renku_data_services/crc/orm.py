@@ -1,6 +1,5 @@
 """SQLAlchemy schemas for the CRC database."""
 
-import logging
 from typing import Optional
 
 from sqlalchemy import BigInteger, Column, Identity, Integer, MetaData, String, Table
@@ -9,10 +8,13 @@ from sqlalchemy.schema import ForeignKey
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
+from renku_data_services.app_config import logging
 from renku_data_services.crc import models
 from renku_data_services.crc.models import SavedCluster
 from renku_data_services.errors import errors
 from renku_data_services.utils.sqlalchemy import ULIDType
+
+logger = logging.getLogger(__name__)
 
 metadata_obj = MetaData(schema="resource_pools")  # Has to match alembic ini section name
 
@@ -216,7 +218,7 @@ class ResourcePoolORM(BaseORM):
                 detail=f"The quota name in the database {self.quota} and Kubernetes {quota.id} do not match.",
             )
         if (quota is None and self.quota is not None) or (quota is not None and self.quota is None):
-            logging.error(
+            logger.error(
                 f"Unexpected error when dumping resource pool ORM with ID {self.id}. "
                 f"The quota in the database {self.quota} and Kubernetes {quota} do not match. "
                 f"Using the quota {quota} in the response."

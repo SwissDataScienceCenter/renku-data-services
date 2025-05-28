@@ -9,6 +9,7 @@ from prometheus_sanic import monitor
 from sanic import Sanic
 from sanic.worker.loader import AppLoader
 
+from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.secrets.core import rotate_encryption_keys
 from renku_data_services.secrets_storage_api.app import register_all_handlers
@@ -26,6 +27,11 @@ def create_app() -> Sanic:
     @app.main_process_start
     def main_process_start(app: Sanic) -> None:
         app.shared_ctx.rotation_lock = Lock()
+        logging.configure_logging()
+
+    @app.before_server_start
+    async def logging_setup1(app: Sanic) -> None:
+        logging.configure_logging()
 
     # Setup prometheus
     monitor(app, endpoint_type="url", multiprocess_mode="all", is_middleware=True).expose_endpoint()

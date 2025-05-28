@@ -1,7 +1,6 @@
 """Tests for taskman module."""
 
 import asyncio
-import logging
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -9,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from renku_data_services.app_config import logging
 from renku_data_services.data_tasks.taskman import TaskDefininions, TaskManager, _TaskContext
 
 logger = logging.getLogger(__name__)

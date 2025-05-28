@@ -4,9 +4,9 @@ import functools
 from collections.abc import Awaitable, Callable
 from typing import Concatenate, ParamSpec, Protocol, TypeVar, cast
 
-from sanic.log import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from renku_data_services.app_config import logging
 from renku_data_services.data_connectors.models import (
     DataConnector,
     DataConnectorUpdate,
@@ -19,6 +19,8 @@ from renku_data_services.project.models import DeletedProject, Project, ProjectU
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.models import DeleteDoc
 from renku_data_services.users.models import DeletedUser, UserInfo, UserInfoUpdate
+
+logger = logging.getLogger(__name__)
 
 
 class WithSearchUpdateRepo(Protocol):
