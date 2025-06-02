@@ -297,11 +297,13 @@ async def create_project(sanic_client, user_headers, admin_headers, regular_user
     async def create_project_helper(
         name: str,
         admin: bool = False,
-        members: list[dict[str, str]] = [],
+        members: list[dict[str, str]] | None = None,
         description: str | None = None,
         sanic_client=sanic_client,
         **payload,
     ) -> dict[str, Any]:
+        if members is None:
+            members = []
         headers = admin_headers if admin else user_headers
         user = admin_user if admin else regular_user
         payload = payload.copy()

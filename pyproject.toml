@@ -153,6 +153,9 @@ select = [
   "SIM",
   # unused-noqa https://docs.astral.sh/ruff/rules/unused-noqa/
   "RUF100",
+  # flake8-bugbear checks are pretty useful
+  # https://docs.astral.sh/ruff/rules/#flake8-bugbear-b
+  "B",
 ]
 ignore = [
   "D105",

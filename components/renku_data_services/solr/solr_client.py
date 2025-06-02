@@ -74,11 +74,7 @@ class SolrClientConfig:
         return cls(url, core, user, timeout)
 
     def __str__(self) -> str:
-        return (
-            f"SolrClientConfig(base_url={self.base_url}, "
-            f"core={self.core}, user={self.user}, "
-            f"timeout={self.timeout})"
-        )
+        return f"SolrClientConfig(base_url={self.base_url}, core={self.core}, user={self.user}, timeout={self.timeout})"
 
 
 class SolrClientException(BaseError, ABC):
@@ -332,7 +328,7 @@ class SolrBucketFacetResponse(BaseModel, frozen=True):
     ) -> SolrBucketFacetResponse:
         try:
             return handler(data)
-        except ValidationError:
+        except ValidationError as err:
             if isinstance(data, dict):
                 count: int | None = data.get("count")
                 if count is not None:
@@ -344,9 +340,9 @@ class SolrBucketFacetResponse(BaseModel, frozen=True):
 
                     return SolrBucketFacetResponse(count=count, buckets=buckets)
                 else:
-                    raise ValueError(f"No 'count' property in dict: {data}")
+                    raise ValueError(f"No 'count' property in dict: {data}") from err
             else:
-                raise ValueError(f"Expected a dict to, but got: {data}")
+                raise ValueError(f"Expected a dict to, but got: {data}") from err
 
 
 @final
@@ -654,14 +650,14 @@ class DefaultSolrClient(SolrClient):
         try:
             return await self.delegate.get("/get", params={"wt": "json", "ids": id})
         except ConnectError as e:
-            raise SolrClientConnectException(e)
+            raise SolrClientConnectException(e) from e
 
     async def query_raw(self, query: SolrQuery) -> Response:
         """Query documents and return the http response."""
         try:
             return await self.delegate.post("/query", params={"wt": "json"}, json=query.to_dict())
         except ConnectError as e:
-            raise SolrClientConnectException(e)
+            raise SolrClientConnectException(e) from e
 
     async def get(self, id: str) -> QueryResponse:
         """Get a document by id, returning a `QueryResponse`."""
@@ -691,7 +687,7 @@ class DefaultSolrClient(SolrClient):
                 headers={"Content-Type": "application/json"},
             )
         except ConnectError as e:
-            raise SolrClientConnectException(e)
+            raise SolrClientConnectException(e) from e
 
     async def upsert(self, docs: list[SolrDocument]) -> UpsertResponse:
         """Inserts or updates a document in SOLR.
@@ -716,9 +712,9 @@ class DefaultSolrClient(SolrClient):
                 case 409:
                     return "VersionConflict"
                 case _:
-                    raise SolrClientUpsertException(docs, res)
+                    raise SolrClientUpsertException(docs, res) from None
         except ConnectError as e:
-            raise SolrClientConnectException(e)
+            raise SolrClientConnectException(e) from e
 
     async def get_schema(self) -> CoreSchema:
         """Return the current schema."""

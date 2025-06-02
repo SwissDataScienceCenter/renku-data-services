@@ -1,6 +1,5 @@
 """Jupyter server models."""
 
-from abc import ABC
 from collections.abc import Sequence
 from itertools import chain
 from pathlib import PurePosixPath
@@ -34,7 +33,7 @@ from renku_data_services.notebooks.errors.user import MissingResourceError
 logger = logging.getLogger(__name__)
 
 
-class UserServer(ABC):
+class UserServer:
     """Represents a Renku server session."""
 
     def __init__(
