@@ -41,8 +41,8 @@ def str_to_slug(value: str) -> Slug:
     """Convert a str to Slug."""
     try:
         return Slug(value)
-    except errors.ValidationError:
-        raise ValueError("Couldn't parse slug")
+    except errors.ValidationError as err:
+        raise ValueError("Couldn't parse slug") from err
 
 
 def _patched_validate_body(

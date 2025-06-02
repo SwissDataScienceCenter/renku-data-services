@@ -425,7 +425,7 @@ class Authz:
                 pair.HasField("item")
                 and pair.item.permissionship == CheckPermissionResponse.PERMISSIONSHIP_HAS_PERMISSION,
             )
-            for item, pair in zip(items, response.pairs)
+            for item, pair in zip(items, response.pairs, strict=True)
         ]
 
     async def resources_with_permission(

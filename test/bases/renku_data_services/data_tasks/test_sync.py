@@ -156,9 +156,9 @@ def get_kc_roles(role_names: list[str]) -> dict[str, list[dict[str, Union[bool, 
                 "composite": False,
                 "clientRole": False,
                 "containerId": str(uuid4()),
-            },
+            }
+            for role_name in role_names
         ]
-        for role_name in role_names
     }
 
 

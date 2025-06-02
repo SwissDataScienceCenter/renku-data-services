@@ -355,11 +355,11 @@ class NotebookK8sClient(Generic[_SessionType]):
             except httpx.ResponseNotRead:
                 # NOTE: This occurs when the container is still starting, but we try to read its logs
                 continue
-            except NotFoundError:
-                raise errors.MissingResourceError(message=f"The session pod {pod_name} does not exist.")
+            except NotFoundError as err:
+                raise errors.MissingResourceError(message=f"The session pod {pod_name} does not exist.") from err
             except ServerError as err:
                 if err.status == 404:
-                    raise errors.MissingResourceError(message=f"The session pod {pod_name} does not exist.")
+                    raise errors.MissingResourceError(message=f"The session pod {pod_name} does not exist.") from err
                 raise
             else:
                 logs[container] = "\n".join(clogs)

@@ -85,7 +85,7 @@ async def create_k8s_secret(
                 decrypted_secrets[key] = b64encode(decrypted_value).decode()
     except Exception as e:
         # don't wrap the error, we don't want secrets accidentally leaking.
-        raise errors.SecretDecryptionError(message=f"An error occurred decrypting secrets: {str(type(e))}")
+        raise errors.SecretDecryptionError(message=f"An error occurred decrypting secrets: {str(type(e))}") from None
 
     owner_refs = []
     if owner_references:
@@ -114,7 +114,7 @@ async def create_k8s_secret(
                 sanitized_secret,
             )
         # don't wrap the error, we don't want secrets accidentally leaking.
-        raise errors.SecretCreationError(message=f"An error occurred creating secrets: {str(type(e))}")
+        raise errors.SecretCreationError(message=f"An error occurred creating secrets: {str(type(e))}") from None
 
 
 async def rotate_encryption_keys(
