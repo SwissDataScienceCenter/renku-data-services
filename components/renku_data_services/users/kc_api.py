@@ -66,6 +66,11 @@ class KeycloakAPI:
             client_id=self.client_id,
             client_secret=self.client_secret,
             token_endpoint_auth_method=ClientSecretJWT(token_endpoint),
+            # NOTE: Without providing the token_endpoint parameter the token is not
+            # automatically refreshed when it expires.
+            token_endpoint=token_endpoint,
+            leeway=300,
+            scope="openid",
         )
         session.mount("http://", adapter)
         session.mount("https://", adapter)
