@@ -44,7 +44,7 @@ class K8sWatcher:
         self.__tasks: dict[ClusterId, list[Task]] | None = None
         self.__kinds = kinds
         self.__clusters = clusters
-        self.__sync_period_seconds = 1800
+        self.__sync_period_seconds = 600
         self.__cache = db_cache
 
     async def __sync(self) -> None:
@@ -69,12 +69,12 @@ class K8sWatcher:
         last_sync: datetime | None = None
         while True:
             try:
-                if last_sync is None or (datetime.now() - last_sync).total_seconds() >= self.__sync_period_seconds:
-                    logger.info("Starting full k8s cache sync")
-                    await self.__sync()
-                    last_sync = datetime.now()
                 watch = cluster.api.async_watch(kind=kind.kr8s_kind, namespace=cluster.namespace)
                 async for event_type, obj in watch:
+                    if last_sync is None or (datetime.now() - last_sync).total_seconds() >= self.__sync_period_seconds:
+                        logger.info("Starting full k8s cache sync")
+                        await self.__sync()
+                        last_sync = datetime.now()
                     await self.__handler(cluster.with_api_object(obj), event_type)
                     # in some cases, the kr8s loop above just never yields, especially if there's exceptions which
                     # can bypass async scheduling. This sleep here is as a last line of defence so this code does not

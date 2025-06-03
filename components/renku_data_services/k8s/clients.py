@@ -351,8 +351,12 @@ class K8SCachedClusterClient(K8sClusterClient):
     async def delete(self, meta: K8sObjectMeta) -> None:
         """Delete a k8s object."""
         await super().delete(meta)
-        if meta.gvk in self.__kinds_to_cache:
-            await self.__cache.delete(meta)
+        # NOTE: We use foreground deletion in the k8s client.
+        # This means that the parent resource is usually not deleted immediately and will
+        # wait for its children to be deleted before it is deleted.
+        # To avoid premature purging of resources from the cache we do not delete the resource here
+        # from the cache, rather we expect that the cache will sync itself properly and quickly purge
+        # stale resources.
 
     async def get(self, meta: K8sObjectMeta) -> K8sObject | None:
         """Get a specific k8s object, None is returned if the object does not exist."""
