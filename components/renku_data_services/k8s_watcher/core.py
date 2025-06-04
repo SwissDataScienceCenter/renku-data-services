@@ -76,7 +76,6 @@ class K8sWatcher:
         self.__last_sync = datetime.now()
 
     async def __watch_kind(self, kind: GVK, cluster: Cluster) -> None:
-        last_sync: datetime | None = None
         while True:
             try:
                 # NOTE: The sync is required here because the full sync in the async iterator over watch events
