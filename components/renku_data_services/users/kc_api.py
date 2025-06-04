@@ -70,7 +70,7 @@ class KeycloakAPI:
             # automatically refreshed when it expires.
             token_endpoint=token_endpoint,
             leeway=300,
-            scope="openid",
+            scope="openid offline_access",
         )
         session.mount("http://", adapter)
         session.mount("https://", adapter)
