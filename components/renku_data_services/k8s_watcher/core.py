@@ -48,31 +48,30 @@ class K8sWatcher:
         self.__last_sync: datetime | None = None
         self.__cache = db_cache
 
-    async def __sync(self) -> None:
+    async def __sync(self, kind: GVK) -> None:
         """Upsert K8s objects in the cache and remove deleted objects from the cache."""
-        for kind in self.__kinds:
-            for cluster in self.__clusters.values():
-                clnt = K8sClusterClient(cluster)
-                fltr = K8sObjectFilter(gvk=kind, namespace=cluster.namespace)
-                # Upsert new / updated objects
-                objects_in_k8s: dict[str, K8sObject] = {}
-                async for obj in clnt.list(fltr):
-                    objects_in_k8s[obj.name] = obj
-                    await self.__cache.upsert(obj)
-                # Remove objects that have been deleted from k8s but are still in cache
-                async for cache_obj in self.__cache.list(fltr):
-                    cache_obj_is_in_k8s = objects_in_k8s.get(cache_obj.name) is not None
-                    if cache_obj_is_in_k8s:
-                        continue
-                    await self.__cache.delete(cache_obj.meta)
+        for cluster in self.__clusters.values():
+            clnt = K8sClusterClient(cluster)
+            fltr = K8sObjectFilter(gvk=kind, namespace=cluster.namespace)
+            # Upsert new / updated objects
+            objects_in_k8s: dict[str, K8sObject] = {}
+            async for obj in clnt.list(fltr):
+                objects_in_k8s[obj.name] = obj
+                await self.__cache.upsert(obj)
+            # Remove objects that have been deleted from k8s but are still in cache
+            async for cache_obj in self.__cache.list(fltr):
+                cache_obj_is_in_k8s = objects_in_k8s.get(cache_obj.name) is not None
+                if cache_obj_is_in_k8s:
+                    continue
+                await self.__cache.delete(cache_obj.meta)
 
-    async def __periodic_sync(self) -> None:
+    async def __periodic_sync(self, kind: GVK) -> None:
         """Run the full sync if it has never run or at the required interval."""
         since_last_sync = datetime.now() - self.__last_sync if self.__last_sync is not None else None
         if since_last_sync is not None and since_last_sync.total_seconds() < self.__sync_period_seconds:
             return
-        logger.info("Starting full k8s cache sync")
-        await self.__sync()
+        logger.info(f"Starting full k8s cache sync for kind {kind}")
+        await self.__sync(kind)
         self.__last_sync = datetime.now()
 
     async def __watch_kind(self, kind: GVK, cluster: Cluster) -> None:
@@ -82,10 +81,10 @@ class K8sWatcher:
                 # may in some cases never run if there are no events in the cluster and the loop never runs.
                 # Conversely if there are a lot of events we may never exit the loop so if we put the sync only
                 # outside of the loop over watch events then the sync may only run once at startup.
-                await self.__periodic_sync()
+                await self.__periodic_sync(kind)
                 watch = cluster.api.async_watch(kind=kind.kr8s_kind, namespace=cluster.namespace)
                 async for event_type, obj in watch:
-                    await self.__periodic_sync()
+                    await self.__periodic_sync(kind)
                     await self.__handler(cluster.with_api_object(obj), event_type)
                     # in some cases, the kr8s loop above just never yields, especially if there's exceptions which
                     # can bypass async scheduling. This sleep here is as a last line of defence so this code does not
