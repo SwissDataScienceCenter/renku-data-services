@@ -68,6 +68,7 @@ class KeycloakAPI:
             client_secret=self.client_secret,
             token_endpoint_auth_method=ClientSecretJWT(token_endpoint),
             grant_type="client_credentials",
+            token_endpoint=token_endpoint,
         )
         session.mount("http://", adapter)
         session.mount("https://", adapter)
