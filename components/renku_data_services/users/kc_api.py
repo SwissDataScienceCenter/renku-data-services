@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, ClassVar, Protocol, cast
 
-import requests
 from authlib.integrations.requests_client import OAuth2Session
 from authlib.oauth2.rfc7523 import ClientSecretJWT
 from requests.adapters import HTTPAdapter
@@ -51,7 +50,7 @@ class KeycloakAPI:
     realm: str = "Renku"
     client_id: str = "renku"
     result_per_request_limit: int = 20
-    _http_client: requests.Session = field(init=False, repr=False)
+    _http_client: OAuth2Session = field(init=False, repr=False)
     admin_role: ClassVar[str] = "renku-admin"
 
     def __post_init__(self) -> None:
@@ -62,24 +61,17 @@ class KeycloakAPI:
         )
         adapter = HTTPAdapter(max_retries=retry_strategy)
         token_endpoint = f"{self.keycloak_url}/realms/{self.realm}/protocol/openid-connect/token"
+        # NOTE: The data-service Keycloak client supports only the client_credentials grant
+        # and without setting the grant below the token will not be re-fetched when it expires.
         session = OAuth2Session(
             client_id=self.client_id,
             client_secret=self.client_secret,
             token_endpoint_auth_method=ClientSecretJWT(token_endpoint),
-            # NOTE: Without providing the token_endpoint parameter the token is not
-            # automatically refreshed when it expires.
-            token_endpoint=token_endpoint,
-            leeway=300,
-            scope="openid offline_access",
+            grant_type="client_credentials",
         )
         session.mount("http://", adapter)
         session.mount("https://", adapter)
-        session.fetch_token(
-            url=token_endpoint,
-            client_id=self.client_id,
-            client_secret=self.client_secret,
-            grant_type="client_credentials",
-        )
+        session.fetch_token(client_id=self.client_id, client_secret=self.client_secret, url=token_endpoint)
         self._http_client = session
 
     def _paginated_requests_iter(self, path: str, query_args: dict[str, Any] | None = None) -> Iterable[dict[str, Any]]:
