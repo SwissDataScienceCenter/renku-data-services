@@ -51,7 +51,7 @@ from renku_data_services.data_connectors.models import (
     DataConnectorToProjectLink,
     DataConnectorUpdate,
     DeletedDataConnector,
-    GlobalDataConnector,
+    # GlobalDataConnector,
 )
 from renku_data_services.errors import errors
 from renku_data_services.namespace.models import (
@@ -93,7 +93,7 @@ _AuthzChangeFuncResult = TypeVar(
     | UserInfo
     | DeletedUser
     | DataConnector
-    | GlobalDataConnector
+    # | GlobalDataConnector
     | DataConnectorUpdate
     | DeletedDataConnector
     | DataConnectorToProjectLink
@@ -272,7 +272,7 @@ def _is_allowed_on_resource(
                 | DeletedGroup
                 | Namespace
                 | DataConnector
-                | GlobalDataConnector
+                # | GlobalDataConnector
                 | DeletedDataConnector
                 | None
             ) = None
@@ -284,7 +284,9 @@ def _is_allowed_on_resource(
                 case ResourceType.user_namespace if isinstance(potential_resource, Namespace):
                     resource = potential_resource
                 case ResourceType.data_connector if isinstance(
-                    potential_resource, (DataConnector, GlobalDataConnector, DeletedDataConnector)
+                    # potential_resource, (DataConnector, GlobalDataConnector, DeletedDataConnector)
+                    potential_resource,
+                    (DataConnector, DeletedDataConnector),
                 ):
                     resource = potential_resource
                 case _:
@@ -675,9 +677,12 @@ class Authz:
                                 )
                             authz_change.extend(db_repo.authz._add_user_namespace(res.namespace))
                     case AuthzOperation.create, ResourceType.data_connector if isinstance(result, DataConnector):
-                        authz_change = db_repo.authz._add_data_connector(result)
-                    case AuthzOperation.create, ResourceType.data_connector if isinstance(result, GlobalDataConnector):
-                        authz_change = db_repo.authz._add_global_data_connector(result)
+                        if result.is_global():
+                            authz_change = db_repo.authz._add_global_data_connector(result)
+                        else:
+                            authz_change = db_repo.authz._add_data_connector(result)
+                    # case AuthzOperation.create, ResourceType.data_connector if isinstance(result, GlobalDataConnector):  # noqa E501
+                    #     authz_change = db_repo.authz._add_global_data_connector(result)
                     case AuthzOperation.delete, ResourceType.data_connector if result is None:
                         # NOTE: This means that the dc does not exist in the first place so nothing was deleted
                         pass
@@ -691,7 +696,8 @@ class Authz:
                             authz_change.extend(await db_repo.authz._update_data_connector_visibility(user, result.new))
                         if result.old.namespace != result.new.namespace:
                             user = _extract_user_from_args(*func_args, **func_kwargs)
-                            if isinstance(result.new, GlobalDataConnector):
+                            # if isinstance(result.new, GlobalDataConnector):
+                            if result.new.is_global():
                                 raise errors.ValidationError(
                                     message=f"Updating the namespace of a global data connector is not supported ('{result.new.id}')"  # noqa E501
                                 )
@@ -1620,7 +1626,11 @@ class Authz:
         )
         return _AuthzChange(apply=apply, undo=undo)
 
-    def _add_global_data_connector(self, data_connector: GlobalDataConnector) -> _AuthzChange:
+    def _add_global_data_connector(
+        self,
+        # data_connector: GlobalDataConnector
+        data_connector: DataConnector,
+    ) -> _AuthzChange:
         """Create the new global data connector and associated resources and relations in the DB."""
         data_connector_res = _AuthzConverter.data_connector(data_connector.id)
 
@@ -1716,7 +1726,7 @@ class Authz:
     async def _update_data_connector_visibility(
         self,
         user: base_models.APIUser,
-        data_connector: DataConnector | GlobalDataConnector,
+        data_connector: DataConnector,  # | GlobalDataConnector,
         *,
         zed_token: ZedToken | None = None,
     ) -> _AuthzChange:

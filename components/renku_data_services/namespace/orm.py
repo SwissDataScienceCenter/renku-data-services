@@ -55,7 +55,11 @@ class NamespaceORM(BaseORM):
 
     __tablename__ = "namespaces"
     __table_args__ = (
-        CheckConstraint("(user_id IS NULL) <> (group_id IS NULL)", name="either_group_id_or_user_id_is_set"),
+        # CheckConstraint("(user_id IS NULL) <> (group_id IS NULL)", name="either_group_id_or_user_id_is_set"),
+        CheckConstraint(
+            "(user_id IS NOT NULL) OR (group_id IS NOT NULL) OR (slug = '_global')",
+            name="either_group_id_or_user_id_is_set",
+        ),
     )
 
     id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)

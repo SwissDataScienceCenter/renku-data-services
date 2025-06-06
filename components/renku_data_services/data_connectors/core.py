@@ -110,7 +110,7 @@ def validate_unsaved_data_connector(
 
 async def prevalidate_unsaved_global_data_connector(
     body: apispec.GlobalDataConnectorPost, validator: RCloneValidator
-) -> models.UnsavedGlobalDataConnector:
+) -> models.UnsavedDataConnector:  # models.UnsavedGlobalDataConnector:
     """Pre-validate an unsaved data connector."""
 
     storage = validate_unsaved_storage(body.storage, validator=validator)
@@ -128,8 +128,9 @@ async def prevalidate_unsaved_global_data_connector(
     # Override provider in storage config
     storage.configuration["provider"] = rclone_metadata.provider
 
-    return models.UnsavedGlobalDataConnector(
+    return models.UnsavedDataConnector(
         name=doi_uri,
+        namespace=base_models.GLOBAL_NAMESPACE_PATH,
         slug=slug,
         visibility=Visibility.PUBLIC,
         created_by="",
@@ -140,9 +141,9 @@ async def prevalidate_unsaved_global_data_connector(
 
 
 async def validate_unsaved_global_data_connector(
-    data_connector: models.UnsavedGlobalDataConnector,
+    data_connector: models.UnsavedDataConnector,  # models.UnsavedGlobalDataConnector,
     validator: RCloneValidator,
-) -> models.UnsavedGlobalDataConnector:
+) -> models.UnsavedDataConnector:  # models.UnsavedGlobalDataConnector:
     """Validate an unsaved data connector."""
 
     # Check that we can list the files in the DOI
@@ -197,8 +198,9 @@ async def validate_unsaved_global_data_connector(
         readonly=data_connector.storage.readonly,
     )
 
-    return models.UnsavedGlobalDataConnector(
+    return models.UnsavedDataConnector(
         name=name,
+        namespace=base_models.GLOBAL_NAMESPACE_PATH,
         slug=data_connector.slug,
         visibility=Visibility.PUBLIC,
         created_by="",
@@ -233,18 +235,15 @@ def validate_storage_patch(
 
 
 def validate_data_connector_patch(
-    data_connector: models.DataConnector | models.GlobalDataConnector,
+    data_connector: models.DataConnector,  # | models.GlobalDataConnector,
     patch: apispec.DataConnectorPatch,
     validator: RCloneValidator,
 ) -> models.DataConnectorPatch:
     """Validate the update to a data connector."""
-    if isinstance(data_connector, models.GlobalDataConnector) and patch.namespace is not None:
+    # if isinstance(data_connector, models.GlobalDataConnector) and patch.namespace is not None:
+    if data_connector.is_global() and patch.namespace is not None:
         raise errors.ValidationError(message="Assigning a namespace to a global data connector is not supported")
-    if (
-        isinstance(data_connector, models.GlobalDataConnector)
-        and patch.slug is not None
-        and patch.slug != data_connector.slug
-    ):
+    if data_connector.is_global() and patch.slug is not None and patch.slug != data_connector.slug:
         raise errors.ValidationError(message="Updating the slug of a global data connector is not supported")
 
     slugs = patch.namespace.split("/") if patch.namespace else []
