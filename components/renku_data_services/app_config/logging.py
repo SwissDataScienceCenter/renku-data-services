@@ -17,14 +17,9 @@ In order to make sure, our loggers are always below
 function of this module. It will only delegate to the logging library
 making sure the logger name is prefixed correctly.
 
-Additionally, there is a `LoggerAdapter` to amend log messages with a
-request id. This can be used to uniformly add this information to each
-log message. The logger needs to be wrapped into a the
-`LoggerAdapter`:
-
-``` python
-logger = logging.with_request_id(logger, "request-42")
-```
+Additionally, with `set_request_id` a request id can be provided that
+will be injected into every log record. This id is managed by a
+ContextVar to be retained correctly in async contexts.
 
 Before accessing loggers, run the `configure_logging()` method to
 configure loggers appropriately.
@@ -33,19 +28,21 @@ configure loggers appropriately.
 
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 import os
-from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from logging import Logger, LoggerAdapter
-from typing import Any, Final, cast, final
+from logging import Logger
+from typing import Final, cast, final
 
 from renku_data_services.errors.errors import ConfigurationError
 
 __app_root_logger: Final[str] = "renku_data_services"
+
+_request_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_id")
 
 
 def getLogger(name: str) -> Logger:
@@ -56,9 +53,15 @@ def getLogger(name: str) -> Logger:
         return logging.getLogger(f"{__app_root_logger}.{name}")
 
 
-def with_request_id(logger: Logger, request_id: str) -> LoggerAdapter:
-    """Amend `logger` adding `request_id` to every log message."""
-    return _RequestIdAdapter.create(logger, request_id)
+def set_request_id(rid: str | None) -> None:
+    """Provide the request_id as a context sensitiv global variable.
+
+    The id will be used in subsequent logging statements.
+    """
+    if rid is None:
+        _request_var.set("")
+    else:
+        _request_var.set(rid)
 
 
 class _RenkuLogFormatter(logging.Formatter):
@@ -72,7 +75,7 @@ class _RenkuLogFormatter(logging.Formatter):
         super().__init__(
             fmt=(
                 "%(asctime)s [%(levelname)s] %(process)d/%(threadName)s "
-                "%(name)s (%(filename)s:%(lineno)d) - %(message)s"
+                "%(name)s (%(filename)s:%(lineno)d) [%(request_id)s] - %(message)s"
             ),
             datefmt="%Y-%m-%dT%H:%M:%S.%f%z",
         )
@@ -235,26 +238,13 @@ class Config:
         return Config(format_style, root_level, app_level, levels)
 
 
-class _RequestIdAdapter(LoggerAdapter):
-    """Adapter for adding a request id to log messages."""
+class _RequestIdFilter(logging.Filter):
+    """Hack the request id into the log record."""
 
-    def process(self, msg: str, kwargs: MutableMapping[str, Any]) -> tuple[str, MutableMapping[str, Any]]:
-        """Implement process."""
-        extra: Mapping[str, object] = self.extra if self.extra is not None else {}
-        rid = extra.get("request_id")
-        if rid is None:
-            return msg, kwargs
-        else:
-            if "extra" in kwargs:
-                kwargs["extra"] = {**extra, **kwargs["extra"]}
-            else:
-                kwargs["extra"] = self.extra
-            return f"[{rid}] {msg}", kwargs
-
-    @classmethod
-    def create(cls, logger: Logger, request_id: str) -> LoggerAdapter:
-        """Create a logger adapter that automatically adds the given `request_id` to each log message."""
-        return _RequestIdAdapter(logger, {"request_id": request_id})
+    def filter(self, record: logging.LogRecord) -> bool:
+        rid = _request_var.get(None) or "-"
+        record.request_id = rid
+        return True
 
 
 def configure_logging(cfg: Config | None = None) -> None:
@@ -288,6 +278,7 @@ def configure_logging(cfg: Config | None = None) -> None:
 
     handler = logging.StreamHandler()
     handler.setFormatter(cfg.format_style.to_formatter())
+    handler.addFilter(_RequestIdFilter())
     logging.root.setLevel(cfg.root_level)
     logging.root.addHandler(handler)
     logging.getLogger(__app_root_logger).setLevel(cfg.app_level)
