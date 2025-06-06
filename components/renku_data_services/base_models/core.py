@@ -78,6 +78,7 @@ class ServiceAdminId(StrEnum):
     migrations = "migrations"
     secrets_rotation = "secrets_rotation"
     k8s_watcher = "k8s_watcher"
+    search_reprovision = "search_reprovision"
 
 
 @dataclass(kw_only=True, frozen=True)
