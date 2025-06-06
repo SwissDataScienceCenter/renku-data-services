@@ -68,29 +68,27 @@ class DataConnectorRepository:
         namespace: ProjectPath | NamespacePath | None = None,
     ) -> tuple[list[models.DataConnector | models.GlobalDataConnector], int]:
         """Get multiple data connectors from the database."""
-        data_connector_ids = await self.authz.resources_with_permission(
-            user, user.id, ResourceType.data_connector, Scope.READ
-        )
+
+        async def restrict_by_read(stmt: Select) -> Select:
+            if user.is_admin:
+                return stmt
+            else:
+                dc_ids = await self.authz.resources_with_permission(
+                    user, user.id, ResourceType.data_connector, Scope.READ
+                )
+                return stmt.where(schemas.DataConnectorORM.id.in_(dc_ids))
 
         async with self.session_maker() as session:
-            stmt = (
-                select(schemas.DataConnectorORM)
-                .where(schemas.DataConnectorORM.id.in_(data_connector_ids))
-                .options(
-                    joinedload(schemas.DataConnectorORM.slug)
-                    .joinedload(ns_schemas.EntitySlugORM.project)
-                    .joinedload(ProjectORM.slug)
-                )
+            stmt = (await restrict_by_read(select(schemas.DataConnectorORM))).options(
+                joinedload(schemas.DataConnectorORM.slug)
+                .joinedload(ns_schemas.EntitySlugORM.project)
+                .joinedload(ProjectORM.slug)
             )
             if namespace:
                 stmt = _filter_by_namespace_slug(stmt, namespace)
             stmt = stmt.limit(pagination.per_page).offset(pagination.offset)
             stmt = stmt.order_by(schemas.DataConnectorORM.id.desc())
-            stmt_count = (
-                select(func.count())
-                .select_from(schemas.DataConnectorORM)
-                .where(schemas.DataConnectorORM.id.in_(data_connector_ids))
-            )
+            stmt_count = await restrict_by_read(select(func.count()).select_from(schemas.DataConnectorORM))
             if namespace:
                 stmt_count = _filter_by_namespace_slug(stmt_count, namespace)
             results = await session.scalars(stmt), await session.scalar(stmt_count)
