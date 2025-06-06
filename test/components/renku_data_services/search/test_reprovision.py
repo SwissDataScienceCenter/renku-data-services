@@ -168,7 +168,7 @@ async def test_run_reprovision(app_manager_instance, solr_search) -> None:
     projects = await make_projects(setup, 3)
     users = [item async for item in setup.user_repo.get_all_users(admin)]
 
-    count = await setup.search_reprovision.run_reprovision(admin)
+    count = await setup.search_reprovision.run_reprovision()
 
     next = await setup.search_update_repo.select_next(20)
 
