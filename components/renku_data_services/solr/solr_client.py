@@ -655,6 +655,7 @@ class DefaultSolrClient(SolrClient):
     async def query_raw(self, query: SolrQuery) -> Response:
         """Query documents and return the http response."""
         try:
+            logger.debug(f"Running solr query: {self.config.base_url}/solr/{self.config.core}")
             return await self.delegate.post("/query", params={"wt": "json"}, json=query.to_dict())
         except ConnectError as e:
             raise SolrClientConnectException(e) from e

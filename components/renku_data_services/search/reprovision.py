@@ -98,18 +98,19 @@ class SearchReprovision:
 
             all_users = self._user_repo.get_all_users(requested_by=requested_by)
             counter = await self.__update_entities(all_users, "user", started, counter, log_counter)
-            logger.info("Done adding user entities to search_updates table.")
+            logger.info(f"Done adding user entities to search_updates table. Record count: {counter}.")
 
             all_groups = self._group_repo.get_all_groups(requested_by=requested_by)
             counter = await self.__update_entities(all_groups, "group", started, counter, log_counter)
-            logger.info("Done adding group entities to search_updates table.")
+            logger.info(f"Done adding group entities to search_updates table. Record count: {counter}")
 
             all_projects = self._project_repo.get_all_projects(requested_by=requested_by)
             counter = await self.__update_entities(all_projects, "project", started, counter, log_counter)
-            logger.info("Done adding project entities to search_updates table.")
+            logger.info(f"Done adding project entities to search_updates table. Record count: {counter}")
 
             all_dcs = self._get_all_data_connectors(requested_by, per_page=20)
             counter = await self.__update_entities(all_dcs, "data connector", started, counter, log_counter)
+            logger.info(f"Done adding dataconnector entities to search_updates table. Record count: {counter}")
 
             logger.info(f"Inserted {counter} entities into the staging table.")
         except Exception as e:
