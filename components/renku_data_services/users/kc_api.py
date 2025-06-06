@@ -6,11 +6,13 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, ClassVar, Protocol, cast
 
+from authlib.integrations.base_client import InvalidTokenError
 from authlib.integrations.requests_client import OAuth2Session
 from authlib.oauth2.rfc7523 import ClientSecretJWT
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 
+from renku_data_services.errors import errors
 from renku_data_services.users.models import KeycloakAdminEvent, KeycloakEvent
 
 
@@ -60,9 +62,7 @@ class KeycloakAPI:
             backoff_factor=2,
         )
         adapter = HTTPAdapter(max_retries=retry_strategy)
-        token_endpoint = f"{self.keycloak_url}/realms/{self.realm}/protocol/openid-connect/token"
-        # NOTE: The data-service Keycloak client supports only the client_credentials grant
-        # and without setting the grant below the token will not be re-fetched when it expires.
+        token_endpoint = self.__token_endpoint
         session = OAuth2Session(
             client_id=self.client_id,
             client_secret=self.client_secret,
@@ -72,8 +72,21 @@ class KeycloakAPI:
         )
         session.mount("http://", adapter)
         session.mount("https://", adapter)
-        session.fetch_token(client_id=self.client_id, client_secret=self.client_secret, url=token_endpoint)
         self._http_client = session
+        self.__fetch_token()
+
+    @property
+    def __token_endpoint(self) -> str:
+        return f"{self.keycloak_url}/realms/{self.realm}/protocol/openid-connect/token"
+
+    def __fetch_token(self) -> None:
+        if self._http_client is None:
+            raise errors.ProgrammingError(
+                message="Cannot fetch a new Keycloak token if the HTTP Keycloak client is not initialized"
+            )
+        self._http_client.fetch_token(
+            client_id=self.client_id, client_secret=self.client_secret, url=self.__token_endpoint
+        )
 
     def _paginated_requests_iter(self, path: str, query_args: dict[str, Any] | None = None) -> Iterable[dict[str, Any]]:
         url = self.keycloak_url + path
@@ -82,7 +95,12 @@ class KeycloakAPI:
         req_query_args["max"] = self.result_per_request_limit + 1
         first = 0
         while True:
-            res = self._http_client.get(url, params={**req_query_args, "first": first})
+            try:
+                res = self._http_client.get(url, params={**req_query_args, "first": first})
+            except InvalidTokenError:
+                # NOTE: The library does not support getting new tokens automatically with client_credentials grant
+                self.__fetch_token()
+                continue
             output = res.json()
             if not isinstance(output, list):
                 raise ValueError(
