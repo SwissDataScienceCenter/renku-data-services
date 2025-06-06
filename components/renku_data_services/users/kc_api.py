@@ -67,7 +67,6 @@ class KeycloakAPI:
             client_id=self.client_id,
             client_secret=self.client_secret,
             token_endpoint_auth_method=ClientSecretJWT(token_endpoint),
-            grant_type="client_credentials",
             token_endpoint=token_endpoint,
         )
         session.mount("http://", adapter)
@@ -85,7 +84,10 @@ class KeycloakAPI:
                 message="Cannot fetch a new Keycloak token if the HTTP Keycloak client is not initialized"
             )
         self._http_client.fetch_token(
-            client_id=self.client_id, client_secret=self.client_secret, url=self.__token_endpoint
+            client_id=self.client_id,
+            client_secret=self.client_secret,
+            url=self.__token_endpoint,
+            grant_type="client_credentials",
         )
 
     def _paginated_requests_iter(self, path: str, query_args: dict[str, Any] | None = None) -> Iterable[dict[str, Any]]:
