@@ -40,7 +40,7 @@ class SearchBP(CustomBlueprint):
             reprovisioning = await self.search_reprovision.acquire_reprovision()
 
             request.app.add_task(
-                self.search_reprovision.init_reprovision(reprovisioning=reprovisioning),
+                self.search_reprovision.init_reprovision(user, reprovisioning=reprovisioning),
                 name=f"reprovisioning-{reprovisioning.id}",
             )
 

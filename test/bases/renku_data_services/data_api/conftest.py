@@ -15,7 +15,7 @@ import renku_data_services.search.core as search_core
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.authz.authz import _AuthzConverter
 from renku_data_services.base_models import Slug
-from renku_data_services.base_models.core import NamespacePath
+from renku_data_services.base_models.core import InternalServiceAdmin, NamespacePath, ServiceAdminId
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.migrations.core import run_migrations_for_app
@@ -261,8 +261,10 @@ async def sanic_client_with_solr(sanic_client: SanicASGITestClient, app_manager)
 
 @pytest_asyncio.fixture
 async def search_reprovision(app_manager_instance: DependencyManager, search_push_updates):
+    admin = InternalServiceAdmin(id=ServiceAdminId.search_reprovision)
+
     async def search_reprovision_helper() -> None:
-        await app_manager_instance.search_reprovisioning.run_reprovision()
+        await app_manager_instance.search_reprovisioning.run_reprovision(admin)
         await search_push_updates(clear_index=False)
 
     return search_reprovision_helper

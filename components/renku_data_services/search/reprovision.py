@@ -5,9 +5,10 @@ from datetime import datetime
 
 from renku_data_services.app_config import logging
 from renku_data_services.base_api.pagination import PaginationRequest
-from renku_data_services.base_models.core import APIUser, InternalServiceAdmin, ServiceAdminId
+from renku_data_services.base_models.core import APIUser
 from renku_data_services.data_connectors.db import DataConnectorRepository
 from renku_data_services.data_connectors.models import DataConnector, GlobalDataConnector
+from renku_data_services.errors.errors import ForbiddenError
 from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.message_queue.models import Reprovisioning
 from renku_data_services.namespace.db import GroupRepository
@@ -43,10 +44,10 @@ class SearchReprovision:
         self._project_repo = project_repo
         self._data_connector_repo = data_connector_repo
 
-    async def run_reprovision(self) -> int:
+    async def run_reprovision(self, admin: APIUser) -> int:
         """Start a reprovisioning if not already running."""
         reprovision = await self.acquire_reprovision()
-        return await self.init_reprovision(reprovision)
+        return await self.init_reprovision(admin, reprovision)
 
     async def acquire_reprovision(self) -> Reprovisioning:
         """Acquire a reprovisioning slot. Throws if already taken."""
@@ -74,7 +75,7 @@ class SearchReprovision:
             for dc in result[0]:
                 yield dc
 
-    async def init_reprovision(self, reprovisioning: Reprovisioning) -> int:
+    async def init_reprovision(self, admin: APIUser, reprovisioning: Reprovisioning) -> int:
         """Initiates reprovisioning by inserting documents into the staging table.
 
         Deletes all renku entities in the solr core. Then it goes
@@ -84,12 +85,14 @@ class SearchReprovision:
         solr with these entries.
         """
 
+        if not admin.is_admin:
+            raise ForbiddenError()
+
         def log_counter(c: int) -> None:
             if c % 50 == 0:
                 logger.info(f"Inserted {c}. entities into staging table...")
 
         counter = 0
-        admin = InternalServiceAdmin(id=ServiceAdminId.search_reprovision)
         try:
             logger.info(f"Starting reprovisioning with ID {reprovisioning.id}")
             started = datetime.now()
