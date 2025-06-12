@@ -98,6 +98,7 @@ async def _renku_query(
         )
         .add_filter(*role_constraint)
         .with_facet(FacetTerms(name=Fields.entity_type, field=Fields.entity_type))
+        .with_facet(FacetTerms(name=Fields.keywords, field=Fields.keywords))
         .add_sub_query(
             Fields.creator_details,
             SubQuery(
@@ -143,7 +144,8 @@ async def query(
         return apispec.SearchResult(
             items=docs,
             facets=apispec.FacetData(
-                entityType=apispec.MapEntityTypeInt(results.facets.get_counts(Fields.entity_type).to_simple_dict())
+                entityType=apispec.MapEntityTypeInt(results.facets.get_counts(Fields.entity_type).to_simple_dict()),
+                keywords=apispec.MapEntityTypeInt(results.facets.get_counts(Fields.keywords).to_simple_dict()),
             ),
             pagingInfo=apispec.PageWithTotals(
                 page=apispec.PageDef(limit=limit, offset=offset),
