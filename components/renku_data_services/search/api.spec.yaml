@@ -137,8 +137,11 @@ components:
       type: object
       required:
         - entityType
+        - keywords
       properties:
         entityType:
+          $ref: '#/components/schemas/Map_EntityType_Int'
+        keywords:
           $ref: '#/components/schemas/Map_EntityType_Int'
     Group:
       title: Group
