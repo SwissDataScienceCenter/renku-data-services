@@ -8,6 +8,7 @@ from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.data_connectors.db import DataConnectorRepository
 from renku_data_services.data_connectors.models import DataConnector, GlobalDataConnector
+from renku_data_services.errors.errors import ForbiddenError
 from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.message_queue.models import Reprovisioning
 from renku_data_services.namespace.db import GroupRepository
@@ -43,10 +44,10 @@ class SearchReprovision:
         self._project_repo = project_repo
         self._data_connector_repo = data_connector_repo
 
-    async def run_reprovision(self, requested_by: APIUser) -> int:
+    async def run_reprovision(self, admin: APIUser) -> int:
         """Start a reprovisioning if not already running."""
         reprovision = await self.acquire_reprovision()
-        return await self.init_reprovision(requested_by, reprovision)
+        return await self.init_reprovision(admin, reprovision)
 
     async def acquire_reprovision(self) -> Reprovisioning:
         """Acquire a reprovisioning slot. Throws if already taken."""
@@ -74,7 +75,7 @@ class SearchReprovision:
             for dc in result[0]:
                 yield dc
 
-    async def init_reprovision(self, requested_by: APIUser, reprovisioning: Reprovisioning) -> int:
+    async def init_reprovision(self, admin: APIUser, reprovisioning: Reprovisioning) -> int:
         """Initiates reprovisioning by inserting documents into the staging table.
 
         Deletes all renku entities in the solr core. Then it goes
@@ -83,6 +84,9 @@ class SearchReprovision:
         process is querying this table and will eventually update
         solr with these entries.
         """
+
+        if not admin.is_admin:
+            raise ForbiddenError(message="Only Renku administrators are allowed to start search reprovisioning.")
 
         def log_counter(c: int) -> None:
             if c % 50 == 0:
@@ -96,20 +100,21 @@ class SearchReprovision:
             async with DefaultSolrClient(self._solr_config) as client:
                 await client.delete("_type:*")
 
-            all_users = self._user_repo.get_all_users(requested_by=requested_by)
+            all_users = self._user_repo.get_all_users(requested_by=admin)
             counter = await self.__update_entities(all_users, "user", started, counter, log_counter)
-            logger.info("Done adding user entities to search_updates table.")
+            logger.info(f"Done adding user entities to search_updates table. Record count: {counter}.")
 
-            all_groups = self._group_repo.get_all_groups(requested_by=requested_by)
+            all_groups = self._group_repo.get_all_groups(requested_by=admin)
             counter = await self.__update_entities(all_groups, "group", started, counter, log_counter)
-            logger.info("Done adding group entities to search_updates table.")
+            logger.info(f"Done adding group entities to search_updates table. Record count: {counter}")
 
-            all_projects = self._project_repo.get_all_projects(requested_by=requested_by)
+            all_projects = self._project_repo.get_all_projects(requested_by=admin)
             counter = await self.__update_entities(all_projects, "project", started, counter, log_counter)
-            logger.info("Done adding project entities to search_updates table.")
+            logger.info(f"Done adding project entities to search_updates table. Record count: {counter}")
 
-            all_dcs = self._get_all_data_connectors(requested_by, per_page=20)
+            all_dcs = self._get_all_data_connectors(admin, per_page=20)
             counter = await self.__update_entities(all_dcs, "data connector", started, counter, log_counter)
+            logger.info(f"Done adding dataconnector entities to search_updates table. Record count: {counter}")
 
             logger.info(f"Inserted {counter} entities into the staging table.")
         except Exception as e:

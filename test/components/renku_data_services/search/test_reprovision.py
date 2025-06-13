@@ -161,14 +161,14 @@ async def test_get_data_connectors(app_manager_instance) -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_reprovision(app_manager_instance, solr_search) -> None:
+async def test_run_reprovision(app_manager_instance, solr_search, admin_user) -> None:
     setup = make_setup(app_manager_instance, solr_search)
     dcs = await make_data_connectors(setup, 5)
     groups = await make_groups(setup, 4)
     projects = await make_projects(setup, 3)
     users = [item async for item in setup.user_repo.get_all_users(admin)]
 
-    count = await setup.search_reprovision.run_reprovision(admin)
+    count = await setup.search_reprovision.run_reprovision(admin_user)
 
     next = await setup.search_update_repo.select_next(20)
 
