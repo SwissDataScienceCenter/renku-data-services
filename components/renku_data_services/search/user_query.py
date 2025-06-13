@@ -5,13 +5,14 @@ from __future__ import annotations
 import calendar
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from dataclasses import field as data_field
 from datetime import date, datetime, time, timedelta, tzinfo
 from enum import StrEnum
-from typing import Self
+from typing import Any, Self
 
 from renku_data_services.authz.models import Role, Visibility
+from renku_data_services.base_models.core import NamespaceSlug
 from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.solr_client import SortDirection
 
@@ -56,6 +57,11 @@ class Nel[A]:
         """Convert to a list."""
         return [self.value] + self.more_values
 
+    def deduplicate(self) -> Self:
+        """Return a copy with duplicates removed."""
+        lst = list(set(self.to_list()))
+        return type(self)(lst[0], lst[1:])
+
     def mk_string(self, sep: str, f: Callable[[A], str] = str) -> str:
         """Create a str from all elements mapped over f."""
         return sep.join([f(x) for x in self.to_list()])
@@ -97,6 +103,7 @@ class Field(StrEnum):
     role = "role"
     keyword = "keyword"
     namespace = "namespace"
+    member = "member"
 
 
 class Comparison(StrEnum):
@@ -105,6 +112,50 @@ class Comparison(StrEnum):
     is_equal = ":"
     is_lower_than = "<"
     is_greater_than = ">"
+
+
+@dataclass
+class Username:
+    """A user identifier: username slug."""
+
+    slug: NamespaceSlug
+    __hashvalue: int | None = field(init=False, repr=False, default=None)
+
+    def render(self) -> str:
+        """Render the query part of this value."""
+        return f"@{self.slug.value}"
+
+    def __eq__(self, other: Any) -> bool:
+        match other:
+            case Username() as u:
+                return u.slug.value == self.slug.value
+            case _:
+                return False
+
+    def __hash__(self) -> int:
+        if self.__hashvalue is None:
+            self.__hashvalue = hash(self.slug.value)
+
+        return self.__hashvalue
+
+    @classmethod
+    def from_name(cls, s: str) -> Username:
+        """Create a Username from a string."""
+        return Username(NamespaceSlug.from_name(s))
+
+
+@dataclass
+class UserId:
+    """A user identifier (the keycloak one)."""
+
+    id: str
+
+    def render(self) -> str:
+        """Renders the query representation of this value."""
+        return self.id
+
+
+type UserDef = Username | UserId
 
 
 @dataclass
@@ -289,6 +340,26 @@ class FieldComparison(ABC):
     def render(self) -> str:
         """Renders the string representation."""
         return f"{self.field.value}{self.cmp.value}{self._render_value()}"
+
+
+@dataclass
+class MemberIs(FieldComparison):
+    """Check for membership of a given user."""
+
+    users: Nel[UserDef]
+
+    @property
+    def field(self) -> Field:
+        """The field name."""
+        return Field.member
+
+    @property
+    def cmp(self) -> Comparison:
+        """The comparison to use."""
+        return Comparison.is_equal
+
+    def _render_value(self) -> str:
+        return self.users.map(lambda u: u.render()).mk_string(",")
 
 
 @dataclass
@@ -571,7 +642,7 @@ class Order:
 
 
 type FieldTerm = (
-    TypeIs | IdIs | NameIs | SlugIs | VisibilityIs | KeywordIs | NamespaceIs | CreatedByIs | Created | RoleIs
+    TypeIs | IdIs | NameIs | SlugIs | VisibilityIs | KeywordIs | NamespaceIs | CreatedByIs | Created | RoleIs | MemberIs
 )
 
 

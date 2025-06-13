@@ -19,6 +19,7 @@ from renku_data_services.search.solr_user_query import (
     Context,
     QueryInterpreter,
     SolrUserQuery,
+    UsernameResolve,
     UserRole,
 )
 from renku_data_services.search.user_query import Nel, UserQuery
@@ -117,17 +118,27 @@ async def _renku_query(
 
 
 async def query(
-    authz_client: AuthzClient, solr_config: SolrClientConfig, query: UserQuery, user: APIUser, limit: int, offset: int
+    authz_client: AuthzClient,
+    username_resolve: UsernameResolve,
+    solr_config: SolrClientConfig,
+    query: UserQuery,
+    user: APIUser,
+    limit: int,
+    offset: int,
 ) -> apispec.SearchResult:
     """Run the given user query against solr and return the result."""
 
     logger.debug(f"User search query: {query.render()}")
 
     class RoleAuthAccess(AuthAccess):
-        async def get_role_ids(self, user_id: str, roles: Nel[Role]) -> list[str]:
-            return await authz.get_role_ids(authz_client, user_id, roles)
+        async def get_ids_for_role(self, user_id: str, roles: Nel[Role]) -> list[str]:
+            return await authz.get_ids_for_roles(authz_client, user_id, roles)
 
-    ctx = Context.for_api_user(datetime.now(), UTC, user).with_auth_access(RoleAuthAccess())
+    ctx = (
+        Context.for_api_user(datetime.now(), UTC, user)
+        .with_auth_access(RoleAuthAccess())
+        .with_username_resolve(username_resolve)
+    )
     suq = await QueryInterpreter.default().run(ctx, query)
     solr_query = await _renku_query(authz_client, ctx, suq, limit, offset)
     logger.debug(f"Solr query: {solr_query.to_dict()}")

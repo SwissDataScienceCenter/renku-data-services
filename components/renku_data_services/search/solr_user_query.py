@@ -1,10 +1,11 @@
-"""Creating querios for solr given a parsed user search query."""
+"""Creating queries for solr given a parsed user search query."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, tzinfo
+from typing import override
 
 import renku_data_services.search.solr_token as st
 from renku_data_services.authz.models import Role
@@ -17,6 +18,7 @@ from renku_data_services.search.user_query import (
     FieldTerm,
     IdIs,
     KeywordIs,
+    MemberIs,
     NameIs,
     NamespaceIs,
     Nel,
@@ -26,6 +28,9 @@ from renku_data_services.search.user_query import (
     SortableField,
     Text,
     TypeIs,
+    UserDef,
+    UserId,
+    Username,
     UserQuery,
     VisibilityIs,
 )
@@ -77,7 +82,7 @@ class AuthAccess(ABC):
     """Access authorization information."""
 
     @abstractmethod
-    async def get_role_ids(self, user_id: str, roles: Nel[Role]) -> list[str]:
+    async def get_ids_for_role(self, user_id: str, roles: Nel[Role]) -> list[str]:
         """Return resource ids for which the given user has the given role."""
         ...
 
@@ -88,8 +93,28 @@ class AuthAccess(ABC):
 
 
 class _NoAuthAccess(AuthAccess):
-    async def get_role_ids(self, user_id: str, roles: Nel[Role]) -> list[str]:
+    async def get_ids_for_role(self, user_id: str, roles: Nel[Role]) -> list[str]:
         return []
+
+
+class UsernameResolve(ABC):
+    """Resolve usernames to their ids."""
+
+    @abstractmethod
+    async def resolve_usernames(self, names: Nel[Username]) -> dict[Username, UserId] | None:
+        """Return the user id for a given user name."""
+        ...
+
+    @classmethod
+    def none(cls) -> UsernameResolve:
+        """An implementation that doesn't resolve names."""
+        return __EmptyUsernameResolve()
+
+
+class __EmptyUsernameResolve(UsernameResolve):
+    @override
+    async def resolve_usernames(self, names: Nel[Username]) -> dict[Username, UserId] | None:
+        return None
 
 
 @dataclass
@@ -100,22 +125,37 @@ class Context:
     zone: tzinfo
     role: SearchRole | None
     auth_access: AuthAccess = field(default_factory=AuthAccess.none)
+    username_resolve: UsernameResolve = field(default_factory=UsernameResolve.none)
+
+    def __copy(
+        self,
+        role: SearchRole | None = None,
+        auth_access: AuthAccess | None = None,
+        username_resolve: UsernameResolve | None = None,
+    ) -> Context:
+        return Context(
+            self.current_time,
+            self.zone,
+            role or self.role,
+            auth_access or self.auth_access,
+            username_resolve or self.username_resolve,
+        )
 
     def with_role(self, role: SearchRole) -> Context:
         """Return a copy wit the given role set."""
-        return self if self.role == role else Context(self.current_time, self.zone, role)
+        return self if self.role == role else self.__copy(role=role)
 
     def with_user_role(self, user_id: str) -> Context:
         """Return a copy with the given user id as user role set."""
-        return self if self.role == UserRole(user_id) else Context(self.current_time, self.zone, UserRole(user_id))
+        return self if self.role == UserRole(user_id) else self.__copy(role=UserRole(user_id))
 
     def with_admin_role(self, user_id: str) -> Context:
         """Return a copy with the given user id as admin role set."""
-        return self if self.role == AdminRole(user_id) else Context(self.current_time, self.zone, AdminRole(user_id))
+        return self if self.role == AdminRole(user_id) else self.__copy(role=AdminRole(user_id))
 
     def with_anonymous(self) -> Context:
         """Return a copy with no search role set."""
-        return self if self.role is None else Context(self.current_time, self.zone, None)
+        return self if self.role is None else self.__copy(role=None)
 
     def with_api_user(self, api_user: APIUser) -> Context:
         """Return a copy with the search role set by the APIUser."""
@@ -128,7 +168,11 @@ class Context:
 
     def with_auth_access(self, aa: AuthAccess) -> Context:
         """Return a copy with the given AuthAccess set."""
-        return Context(self.current_time, self.zone, self.role, aa)
+        return self.__copy(auth_access=aa)
+
+    def with_username_resolve(self, ur: UsernameResolve) -> Context:
+        """Return a copy with the given UsernameResolve set."""
+        return self.__copy(username_resolve=ur)
 
     async def get_ids_for_roles(self, roles: Nel[Role]) -> list[str] | None:
         """Return a list of ids the user has one of the given roles.
@@ -137,11 +181,38 @@ class Context:
         """
         match self.role:
             case UserRole() as r:
-                return await self.auth_access.get_role_ids(r.id, roles)
+                return await self.auth_access.get_ids_for_role(r.id, roles)
             case AdminRole() as r:
-                return await self.auth_access.get_role_ids(r.id, roles)
+                return await self.auth_access.get_ids_for_role(r.id, roles)
             case _:
                 return None
+
+    async def get_member_ids(self, users: Nel[UserDef]) -> list[str]:
+        """Return a list of resource ids, all given users are members of."""
+        result: set[str] = set()
+        ids: set[UserId] = set()
+        names: set[Username] = set()
+        for user_def in users.to_list():
+            match user_def:
+                case Username() as u:
+                    names.add(u)
+
+                case UserId() as u:
+                    ids.add(u)
+
+        match Nel.from_list(list(names)):
+            case None:
+                pass
+            case nel:
+                remain_ids = await self.username_resolve.resolve_usernames(nel)
+                if remain_ids is not None:
+                    ids.update(remain_ids.values())
+
+        for uid in ids:
+            n = await self.auth_access.get_ids_for_role(uid.id, Nel.of(Role.VIEWER))
+            result = set(n) if result == set() else result.intersection(set(n))
+
+        return list(result)
 
     @classmethod
     def for_anonymous(cls, current_time: datetime, zone: tzinfo) -> Context:
@@ -230,6 +301,13 @@ class LuceneQueryInterpreter(QueryInterpreter):
                         return st.id_not_exists()
                     else:
                         return st.id_in(nel)
+            case MemberIs() as t:
+                ids = await ctx.get_member_ids(t.users)
+                if ids == []:
+                    return st.id_not_exists()
+                else:
+                    return st.id_in(Nel.unsafe_from_list(ids))
+
             case Created() as t:
                 tokens: list[SolrToken] = []
                 match t.cmp:
