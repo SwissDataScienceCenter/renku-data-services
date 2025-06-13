@@ -70,13 +70,12 @@ class RCloneValidator:
             f.write(f"[temp]\n{config}")
             f.close()
             args = [
-                "-vvv",  # TODO: remove (just for testing)
                 "lsf",
                 "--config",
                 f.name,
                 f"temp:{source_path}",
             ]
-            # Handle SFTP retries
+            # Handle SFTP retries, see https://github.com/SwissDataScienceCenter/renku-data-services/issues/893
             storage_type = cast(str, configuration.get("type"))
             if storage_type == "sftp":
                 args.extend(["--low-level-retries", "1"])
