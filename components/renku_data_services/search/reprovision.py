@@ -86,7 +86,7 @@ class SearchReprovision:
         """
 
         if not admin.is_admin:
-            raise ForbiddenError()
+            raise ForbiddenError(message="Only Renku administrators are allowed to start search reprovisioning.")
 
         def log_counter(c: int) -> None:
             if c % 50 == 0:

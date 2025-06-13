@@ -20,6 +20,7 @@ from renku_data_services.base_models.core import (
     DataConnectorInProjectPath,
     DataConnectorPath,
     DataConnectorSlug,
+    InternalServiceAdmin,
     NamespacePath,
     NamespaceSlug,
     ProjectPath,
@@ -70,7 +71,7 @@ class DataConnectorRepository:
         """Get multiple data connectors from the database."""
 
         async def restrict_by_read(stmt: Select) -> Select:
-            if user.is_admin:
+            if isinstance(user, InternalServiceAdmin):
                 return stmt
             else:
                 dc_ids = await self.authz.resources_with_permission(
