@@ -14,11 +14,13 @@
   }:
     {
       nixosConfigurations = let
+        system = flake-utils.lib.system.x86_64-linux;
         services = {
           services.dev-postgres = {
             enable = true;
             databases = ["renku_test"];
             init-script = ./.devcontainer/generate_ulid_func.sql;
+            pkg = nixpkgs.legacyPackages.${system}.postgresql_16;
             pgweb = {
               enable = true;
               database = "renku";
@@ -39,7 +41,7 @@
         };
       in {
         rdsdev-vm = devshell-tools.lib.mkVm {
-          system = flake-utils.lib.system.x86_64-linux;
+          inherit system;
           modules = [
             {
               virtualisation.memorySize = 2048;
@@ -110,7 +112,7 @@
 
       commonPackages = with pkgs; [
         redis
-        postgresql
+        postgresql_16
         jq
         devshellToolsPkgs.openapi-docs
         devshellToolsPkgs.solr
@@ -148,6 +150,10 @@
                 poetry self add poetry-polylith-plugin
             fi
           ''
+        )
+        (writeShellScriptBin "zedl" ''
+          ${spicedb-zed}/bin/zed --no-verify-ca --insecure --endpoint ''$ZED_ENDPOINT --token ''$ZED_TOKEN $@
+        ''
         )
       ];
     in {

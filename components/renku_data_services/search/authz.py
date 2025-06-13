@@ -54,15 +54,13 @@ async def get_ids_for_roles(client: AuthzClient, user_id: str, roles: Nel[Role])
     for role in roles.to_list():
         match role:
             case Role.VIEWER:
-                permission = Scope.NON_PUBLIC_READ
+                permission = "exclusive_member"
             case Role.EDITOR:
-                ## not implemented yet correctly: this includes
-                ## entities the user is owner, too.
-                permission = Scope.WRITE
+                permission = "exclusive_edit"
             case Role.OWNER:
-                permission = Scope.DELETE
+                permission = "exclusive_owner"
 
-        r = await __resources_with_permission(client, user_id, ets, permission.value)
+        r = await __resources_with_permission(client, user_id, ets, permission)
         result.update(r)
 
     return list(result)
