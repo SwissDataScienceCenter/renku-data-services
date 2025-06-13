@@ -82,7 +82,7 @@ class ProjectsBP(CustomBlueprint):
         async def _post(_: Request, user: base_models.APIUser, body: apispec.ProjectPost) -> JSONResponse:
             new_project = validate_unsaved_project(body, created_by=user.id or "")
             result = await self.project_repo.insert_project(user, new_project)
-            await self.metrics.project_created(user)
+            await self.metrics.project_created(user, metadata={"project_creation_kind": "NEW"})
             if len(result.repositories) > 0:
                 await self.metrics.code_repo_linked_to_project(user)
             return validated_json(apispec.Project, self._dump_project(result), status=201)
@@ -131,6 +131,7 @@ class ProjectsBP(CustomBlueprint):
             result = await self.project_migration_repo.migrate_v1_project(
                 user, project=new_project, project_v1_id=v1_id, session_launcher=body.session_launcher
             )
+            await self.metrics.project_created(user, metadata={"project_creation_kind": "MIGRATED"})
             return validated_json(apispec.Project, self._dump_project(result), status=201)
 
         return "/renku_v1_projects/<v1_id:int>/migrations", ["POST"], _post_migration
@@ -181,6 +182,7 @@ class ProjectsBP(CustomBlueprint):
                 session_repo=self.session_repo,
                 data_connector_repo=self.data_connector_repo,
             )
+            await self.metrics.project_created(user, metadata={"project_creation_kind": "COPIED"})
             return validated_json(apispec.Project, self._dump_project(project), status=201)
 
         return "/projects/<project_id:ulid>/copies", ["POST"], _copy
