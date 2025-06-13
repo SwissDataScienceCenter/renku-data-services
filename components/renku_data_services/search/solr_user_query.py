@@ -288,7 +288,7 @@ class LuceneQueryInterpreter(QueryInterpreter):
             case KeywordIs() as t:
                 return st.field_is_any(Fields.keywords, t.values.map(st.from_str))
             case NamespaceIs() as t:
-                return st.field_is_any(Fields.namespace, t.values.map(st.from_str))
+                return st.field_is_any(Fields.namespace_path, t.values.map(st.from_str))
             case CreatedByIs() as t:
                 return st.field_is_any(Fields.created_by, t.values.map(st.from_str))
             case RoleIs() as t:
