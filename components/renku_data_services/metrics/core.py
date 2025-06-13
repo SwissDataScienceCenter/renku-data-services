@@ -53,9 +53,9 @@ class StagingMetricsService(MetricsService):
             {"environment_kind": environment_kind, "environment_image_source": environment_image_source},
         )
 
-    async def project_created(self, user: APIUser) -> None:
+    async def project_created(self, user: APIUser, metadata: MetricsMetadata) -> None:
         """Store project created event in staging table."""
-        await self._store_event(MetricsEvent.project_created, user)
+        await self._store_event(MetricsEvent.project_created, user, metadata)
 
     async def code_repo_linked_to_project(self, user: APIUser) -> None:
         """Store code repo linked to project event in staging table."""

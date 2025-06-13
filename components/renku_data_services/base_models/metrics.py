@@ -54,7 +54,7 @@ class MetricsService(Protocol):
         """Send session launcher created event to metrics."""
         ...
 
-    async def project_created(self, user: APIUser) -> None:
+    async def project_created(self, user: APIUser, metadata: MetricsMetadata) -> None:
         """Send project created event to metrics."""
         ...
 
