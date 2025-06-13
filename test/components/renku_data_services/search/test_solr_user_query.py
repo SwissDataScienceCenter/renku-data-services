@@ -83,7 +83,7 @@ async def test_from_term() -> None:
         Fields.keywords, Nel.of(st.from_str("k1"), st.from_str("w2"))
     )
     assert await L._from_term(ctx, NamespaceIs(Nel.of("ns12"))) == st.field_is_any(
-        Fields.namespace, Nel.of(st.from_str("ns12"))
+        Fields.namespace_path, Nel.of(st.from_str("ns12"))
     )
     assert await L._from_term(ctx, CreatedByIs(Nel.of("12-34"))) == st.field_is_any(
         Fields.created_by, Nel.of(st.from_str("12-34"))
