@@ -15,6 +15,7 @@ from renku_data_services.search.user_query import (
     DateTimeCalc,
     IdIs,
     KeywordIs,
+    MemberIs,
     NameIs,
     NamespaceIs,
     Nel,
@@ -30,6 +31,8 @@ from renku_data_services.search.user_query import (
     SortableField,
     Text,
     TypeIs,
+    UserId,
+    Username,
     UserQuery,
     VisibilityIs,
 )
@@ -38,6 +41,20 @@ from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.solr_client import SortDirection
 
 pp = _ParsePrimitives()
+
+
+def test_user_name() -> None:
+    assert pp.user_name.parse("@hello") == Username.from_name("hello")
+    assert pp.user_name.parse("@test.me") == Username.from_name("test.me")
+    with pytest.raises(ParseError):
+        pp.user_name.parse("help")
+    with pytest.raises(ParseError):
+        pp.user_name.parse("@t - a")
+
+
+def test_member_is() -> None:
+    assert pp.member_is.parse("member:@hello") == MemberIs(Nel(Username.from_name("hello")))
+    assert pp.member_is.parse("member:hello") == MemberIs(Nel(UserId("hello")))
 
 
 def test_sortable_field() -> None:
@@ -166,6 +183,8 @@ def test_field_term() -> None:
     assert pp.field_term.parse("createdBy:test") == CreatedByIs(Nel("test"))
     assert pp.field_term.parse("role:owner") == RoleIs(Nel(Role.OWNER))
     assert pp.field_term.parse("role:viewer") == RoleIs(Nel(Role.VIEWER))
+    assert pp.field_term.parse("member:@john") == MemberIs(Nel(Username.from_name("john")))
+    assert pp.field_term.parse("member:123-456") == MemberIs(Nel(UserId("123-456")))
 
 
 def test_free_text() -> None:
@@ -192,6 +211,8 @@ def test_segment() -> None:
     assert pp.segment.parse("keyword:test") == KeywordIs(Nel("test"))
     assert pp.segment.parse("namespace:test") == NamespaceIs(Nel("test"))
     assert pp.segment.parse("createdBy:test") == CreatedByIs(Nel("test"))
+    assert pp.segment.parse("member:@john") == MemberIs(Nel(Username.from_name("john")))
+    assert pp.segment.parse("member:123-456") == MemberIs(Nel(UserId("123-456")))
 
     assert pp.segment.parse("name:") == Text("name:")
 
