@@ -108,10 +108,10 @@ class UsernameResolve(ABC):
     @classmethod
     def none(cls) -> UsernameResolve:
         """An implementation that doesn't resolve names."""
-        return __EmptyUsernameResolve()
+        return _EmptyUsernameResolve()
 
 
-class __EmptyUsernameResolve(UsernameResolve):
+class _EmptyUsernameResolve(UsernameResolve):
     @override
     async def resolve_usernames(self, names: Nel[Username]) -> dict[Username, UserId] | None:
         return None

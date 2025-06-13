@@ -154,6 +154,16 @@ class UserId:
         """Renders the query representation of this value."""
         return self.id
 
+    def __eq__(self, other: Any) -> bool:
+        match other:
+            case UserId() as id:
+                return id.id == self.id
+            case _:
+                return False
+
+    def __hash__(self) -> int:
+        return hash(self.id)
+
 
 type UserDef = Username | UserId
 
