@@ -8,9 +8,10 @@ from collections.abc import AsyncIterable
 from copy import deepcopy
 from multiprocessing import Lock
 from multiprocessing.synchronize import Lock as LockType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Awaitable, Callable, Coroutine
 from uuid import uuid4
 
+import httpx
 import kr8s
 from kubernetes import client, config
 from kubernetes.config.config_exception import ConfigException
@@ -234,6 +235,32 @@ class DummySchedulingClient(K8sSchedudlingClientInterface):
             return removed_pc
 
 
+class Kr8sClient(kr8s.Api):
+    """Wrapper around Kr8s async client."""
+
+    @contextlib.asynccontextmanager
+    async def call_api(
+        self,
+        method: str = "GET",
+        version: str = "v1",
+        base: str = "",
+        namespace: str | None = None,
+        url: str = "",
+        raise_for_status: bool = True,
+        stream: bool = False,
+        **kwargs,
+    ) -> AsyncGenerator[httpx.Response]:
+        try:
+            async with super().call_api(method=method, version=version, base=base) as res:
+                return res
+        except kr8s.ServerError as err:
+            if err.response and err.response.status_code != 401:
+                raise
+            await self.reauthenticate()
+            async with super().call_api(method=method, version=version, base=base) as res:
+                return res
+
+
 class K8sClusterClient:
     """A wrapper around a kr8s k8s client, acts on all resources of a cluster."""
 
@@ -270,11 +297,25 @@ class K8sClusterClient:
     async def __get_api_object(self, meta: K8sObjectFilter) -> APIObjectInCluster | None:
         return await anext(aiter(self.__list(meta)), None)
 
+    async def __refresh_creds_if_needed(self, func: Callable[..., Awaitable[None]]) -> None:
+        """Explain why we need this."""
+        try:
+            return await func()
+        except kr8s.ServerError as err:
+            if err.response and err.response.status_code != 401:
+                raise
+            # TODO: handle remote cluster
+            if self.__cluster.api._kubeconfig is not None:
+                raise
+            await self.__cluster.api.reauthenticate()
+            return await func()
+
     async def create(self, obj: K8sObject) -> K8sObject:
         """Create the k8s object."""
 
+        # load_kubeconfig in reauthenticate will fail for a remote
         api_obj = obj.to_api_object(self.__cluster.api)
-        await api_obj.create()
+        await self.__refresh_creds_if_needed(lambda: api_obj.create())
         # if refresh isn't called, status and timestamp will be blank
         await api_obj.refresh()
         return obj.meta.with_manifest(api_obj.to_dict())
