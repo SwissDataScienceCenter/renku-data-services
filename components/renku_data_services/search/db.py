@@ -6,16 +6,19 @@ from datetime import datetime
 from textwrap import dedent
 from typing import Any, cast
 
-from sqlalchemy import delete, select, text, update
+from sqlalchemy import delete, select, sql, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
 from renku_data_services.base_models.core import Slug
 from renku_data_services.data_connectors.models import DataConnector, GlobalDataConnector
 from renku_data_services.namespace.models import Group
+from renku_data_services.namespace.orm import NamespaceORM
 from renku_data_services.project.models import Project
 from renku_data_services.search.models import DeleteDoc, Entity
 from renku_data_services.search.orm import RecordState, SearchUpdatesORM
+from renku_data_services.search.solr_user_query import UsernameResolve
+from renku_data_services.search.user_query import Nel, UserId, Username
 from renku_data_services.solr.entity_documents import DataConnector as DataConnectorDoc
 from renku_data_services.solr.entity_documents import Group as GroupDoc
 from renku_data_services.solr.entity_documents import Project as ProjectDoc
@@ -272,3 +275,28 @@ class SearchUpdatesRepo:
         async with self.session_maker() as session, session.begin():
             stmt = update(SearchUpdatesORM).where(SearchUpdatesORM.state == RecordState.Locked).values(state=None)
             await session.execute(stmt)
+
+
+class DbUsernameResolve(UsernameResolve):
+    """Resolves usernames in the database."""
+
+    def __init__(self, session_maker: Callable[..., AsyncSession]) -> None:
+        self.session_maker = session_maker
+
+    async def resolve_usernames(self, names: Nel[Username]) -> dict[Username, UserId] | None:
+        """Bla."""
+        async with self.session_maker() as session, session.begin():
+            slugs = [u.slug.value for u in names.to_list()]
+
+            result = await session.execute(
+                sql.select(NamespaceORM.slug, NamespaceORM.user_id).where(
+                    NamespaceORM.slug.in_(slugs), NamespaceORM.user_id.is_not(None)
+                )
+            )
+            ret: dict[Username, UserId] = {}
+            for slug, id in result:
+                un = Username.from_name(str(slug))
+                uid = UserId(str(id))
+                ret.update({un: uid})
+
+            return ret

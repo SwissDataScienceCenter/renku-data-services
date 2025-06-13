@@ -45,13 +45,22 @@ async def get_non_public_read(client: AuthzClient, user_id: str) -> list[str]:
     return await __resources_with_permission(client, user_id, ets, Scope.NON_PUBLIC_READ.value)
 
 
-async def get_role_ids(client: AuthzClient, user_id: str, roles: Nel[Role]) -> list[str]:
+async def get_ids_for_roles(client: AuthzClient, user_id: str, roles: Nel[Role]) -> list[str]:
     """Return all resource ids for which the give user has one of the given roles."""
     ets = [e for e in EntityType]
     ets.remove(EntityType.user)  # user don't have this relation
-    result: list[str] = []
-    for role in roles.to_list():
-        r = await __resources_with_permission(client, user_id, ets, role.value)
-        result.extend(r)
+    result: set[str] = set()
 
-    return result
+    for role in roles.to_list():
+        match role:
+            case Role.VIEWER:
+                permission = "exclusive_member"
+            case Role.EDITOR:
+                permission = "exclusive_edit"
+            case Role.OWNER:
+                permission = "exclusive_owner"
+
+        r = await __resources_with_permission(client, user_id, ets, permission)
+        result.update(r)
+
+    return list(result)
