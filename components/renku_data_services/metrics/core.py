@@ -1,7 +1,7 @@
 """Implementation of staging metrics service."""
 
 from renku_data_services.base_models.core import APIUser
-from renku_data_services.base_models.metrics import MetricsEvent, MetricsService
+from renku_data_services.base_models.metrics import MetricsEvent, MetricsMetadata, MetricsService
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.metrics.utils import anonymize_user_id
 
@@ -17,9 +17,7 @@ class StagingMetricsService(MetricsService):
         self.enabled = enabled
         self._metrics_repo = metrics_repo
 
-    async def _store_event(
-        self, event: MetricsEvent, user: APIUser, metadata: dict[str, str | int] | None = None
-    ) -> None:
+    async def _store_event(self, event: MetricsEvent, user: APIUser, metadata: MetricsMetadata | None = None) -> None:
         """Store a metrics event in the staging table."""
         if not self.enabled:
             return
@@ -27,20 +25,22 @@ class StagingMetricsService(MetricsService):
         anonymous_user_id = anonymize_user_id(user)
         await self._metrics_repo.store_event(event=event.value, anonymous_user_id=anonymous_user_id, metadata=metadata)
 
-    async def session_started(self, user: APIUser, metadata: dict[str, str | int]) -> None:
+    async def session_started(self, user: APIUser, metadata: MetricsMetadata) -> None:
         """Store session started event in staging table."""
+        metadata["authenticated"] = user.is_authenticated
         await self._store_event(MetricsEvent.session_started, user, metadata)
 
-    async def session_resumed(self, user: APIUser, metadata: dict[str, str | int]) -> None:
+    async def session_resumed(self, user: APIUser, metadata: MetricsMetadata) -> None:
         """Store session resumed event in staging table."""
         await self._store_event(MetricsEvent.session_resumed, user, metadata)
 
-    async def session_hibernated(self, user: APIUser, metadata: dict[str, str | int]) -> None:
+    async def session_hibernated(self, user: APIUser, metadata: MetricsMetadata) -> None:
         """Store session hibernated event in staging table."""
         await self._store_event(MetricsEvent.session_hibernated, user, metadata)
 
-    async def session_stopped(self, user: APIUser, metadata: dict[str, str | int]) -> None:
+    async def session_stopped(self, user: APIUser, metadata: MetricsMetadata) -> None:
         """Store session stopped event in staging table."""
+        metadata["authenticated"] = user.is_authenticated
         await self._store_event(MetricsEvent.session_stopped, user, metadata)
 
     async def session_launcher_created(
@@ -83,12 +83,13 @@ class StagingMetricsService(MetricsService):
 
     async def search_queried(self, user: APIUser) -> None:
         """Store search queried event in staging table."""
-        await self._store_event(MetricsEvent.search_queried, user)
+        metadata: MetricsMetadata = {"authenticated": user.is_authenticated}
+        await self._store_event(MetricsEvent.search_queried, user, metadata)
 
-    async def user_requested_session_launch(self, user: APIUser, metadata: dict[str, str | int]) -> None:
+    async def user_requested_session_launch(self, user: APIUser, metadata: MetricsMetadata) -> None:
         """Send event about user requesting session launch."""
         await self._store_event(MetricsEvent.user_requested_session_launch, user, metadata)
 
-    async def user_requested_session_resume(self, user: APIUser, metadata: dict[str, str | int]) -> None:
+    async def user_requested_session_resume(self, user: APIUser, metadata: MetricsMetadata) -> None:
         """Send event about user requesting session resume."""
         await self._store_event(MetricsEvent.user_requested_session_resume, user, metadata)

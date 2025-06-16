@@ -17,7 +17,7 @@ from sentry_sdk.integrations.sanic import SanicIntegration, _context_enter, _con
 import renku_data_services.solr.entity_schema as entity_schema
 from renku_data_services.app_config import logging
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
-from renku_data_services.base_models.core import APIUser
+from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_api.prometheus import setup_app_metrics, setup_prometheus
@@ -46,7 +46,7 @@ async def _solr_reindex(app: Sanic) -> None:
     """
     config = DependencyManager.from_env()
     reprovision = config.search_reprovisioning
-    admin = APIUser(is_admin=True)
+    admin = InternalServiceAdmin(id=ServiceAdminId.search_reprovision)
     await reprovision.run_reprovision(admin)
 
 
