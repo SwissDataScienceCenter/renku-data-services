@@ -410,6 +410,7 @@ components:
         - "drive"
         - "onedrive"
         - "dropbox"
+        - "cscs"
       example: "gitlab"
     ApplicationSlug:
       description: |
