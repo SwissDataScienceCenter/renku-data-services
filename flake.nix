@@ -64,12 +64,12 @@
 
       rclone = pkgs.rclone.overrideAttrs (old: {
         version = "1.69.3";
-        vendorHash = "sha256-Wu9d98SIENCkJYoGT/f9KN8vnYYGMN7HxhzqtkOYQ/8=";
+        vendorHash = "sha256-WY5xBBOhDRl+mU0KuVxph0wDhfUYLI0gmiGY1boxmKU=";
         src = pkgs.fetchFromGitHub {
           owner = "SwissDataScienceCenter";
           repo = "rclone";
           rev = "v1.69.3+renku-1";
-          sha256 = "sha256-aorgWwYBVVOYhMXXBDWBMXkaZi0WjnGaMoRlwXCa5w4=";
+          sha256 = "sha256-3uL8La2SiiFezoBcG4q4aArYP6t8EjoGDAi/eGLVCEU=";
         };
       });
 
@@ -122,7 +122,6 @@
         rustc
         spicedb-zed
         ruff
-        ruff-lsp
         poetry
         python313
         basedpyright
