@@ -6,7 +6,7 @@ from renku_data_services.connected_services import apispec, models
 def validate_oauth2_client_patch(patch: apispec.ProviderPatch) -> models.OAuth2ClientPatch:
     """Validate the update to a OAuth2 Client."""
     return models.OAuth2ClientPatch(
-        kind=patch.kind,
+        kind=models.ProviderKind(patch.kind.value) if patch.kind else None,
         app_slug=patch.app_slug,
         client_id=patch.client_id,
         client_secret=patch.client_secret,
