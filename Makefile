@@ -141,36 +141,6 @@ tests: test_setup main_tests schemathesis_tests collect_coverage  ## Run all tes
 pre_commit_checks:  ## Run pre-commit checks
 	poetry run pre-commit run --all-files
 
-##@ General
-
-.PHONY: run
-run:  ## Run the sanic server
-	DUMMY_STORES=true poetry run python bases/renku_data_services/data_api/main.py --dev --debug
-
-.PHONY: debug
-debug:  ## Debug the sanic server
-	DUMMY_STORES=true poetry run python -Xfrozen_modules=off -m debugpy --listen 0.0.0.0:5678 --wait-for-client -m sanic renku_data_services.data_api.main:create_app --debug --single-process --port 8000 --host 0.0.0.0
-
-.PHONY: run-tasks
-run-tasks:  ## Run the data tasks
-	DUMMY_STORES=true poetry run python bases/renku_data_services/data_tasks/main.py
-
-
-# From the operator sdk Makefile
-# The help target prints out all targets with their descriptions organized
-# beneath their categories. The categories are represented by '##@' and the
-# target descriptions by '##'. The awk command is responsible for reading the
-# entire set of makefiles included in this invocation, looking for lines of the
-# file as xyz: ## something, and then pretty-format the target and help. Then,
-# if there's a line with ##@ something, that gets pretty-printed as a category.
-# More info on the usage of ANSI control characters for terminal formatting:
-# https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_parameters
-# More info on the awk command:
-# http://linuxcommand.org/lc3_adv_awk.php
-.PHONY: help
-help:  ## Display this help.
-	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-25s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
-
 ##@ Helm/k8s
 
 .PHONY: k3d_cluster
@@ -194,6 +164,57 @@ amalthea_schema:  ## Updates generates pydantic classes from CRDs
 shipwright_schema:  ## Updates the Shipwright pydantic classes
 	curl https://raw.githubusercontent.com/shipwright-io/build/refs/tags/v0.15.2/deploy/crds/shipwright.io_buildruns.yaml | yq '.spec.versions[] | select(.name == "v1beta1") | .schema.openAPIV3Schema' | poetry run datamodel-codegen --output components/renku_data_services/session/cr_shipwright_buildrun.py --base-class renku_data_services.session.cr_base.BaseCRD ${CR_CODEGEN_PARAMS}
 
+##@ Devcontainer
+
+.PHONY: devcontainer_up
+devcontainer_up:  ## Start dev containers
+	devcontainer up --workspace-folder .
+
+.PHONY: devcontainer_rebuild
+devcontainer_rebuild:  ## Rebuild dev containers images
+	devcontainer up --remove-existing-container --workspace-folder .
+
+.PHONY: devcontainer_exec
+devcontainer_exec: devcontainer_up ## Start a shell in the development container
+	devcontainer exec --container-id renku-data-services_devcontainer-data_service-1 -- bash
+
+##@ General
+
+.PHONY: run
+run:  ## Run the sanic server
+	DUMMY_STORES=true poetry run python bases/renku_data_services/data_api/main.py --dev --debug
+
+.PHONY: debug
+debug:  ## Debug the sanic server
+	DUMMY_STORES=true poetry run python -Xfrozen_modules=off -m debugpy --listen 0.0.0.0:5678 --wait-for-client -m sanic renku_data_services.data_api.main:create_app --debug --single-process --port 8000 --host 0.0.0.0
+
+.PHONY: run-tasks
+run-tasks:  ## Run the data tasks
+	DUMMY_STORES=true poetry run python bases/renku_data_services/data_tasks/main.py
+
+.PHONY: lock
+lock:  ## Update the lock files for all projects from their repsective poetry.toml
+	poetry lock $(ARGS)
+	poetry -C projects/renku_data_service lock $(ARGS)
+	poetry -C projects/secrets_storage lock $(ARGS)
+	poetry -C projects/k8s_watcher lock $(ARGS)
+	poetry -C projects/renku_data_tasks lock $(ARGS)
+
+# From the operator sdk Makefile
+# The help target prints out all targets with their descriptions organized
+# beneath their categories. The categories are represented by '##@' and the
+# target descriptions by '##'. The awk command is responsible for reading the
+# entire set of makefiles included in this invocation, looking for lines of the
+# file as xyz: ## something, and then pretty-format the target and help. Then,
+# if there's a line with ##@ something, that gets pretty-printed as a category.
+# More info on the usage of ANSI control characters for terminal formatting:
+# https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_parameters
+# More info on the awk command:
+# http://linuxcommand.org/lc3_adv_awk.php
+.PHONY: help
+help:  ## Display this help.
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-25s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+
 # Pattern rules
 
 API_SPEC_CODEGEN_PARAMS := ${CODEGEN_PARAMS}
@@ -206,24 +227,3 @@ API_SPEC_CODEGEN_PARAMS := ${CODEGEN_PARAMS}
 # Ignore the return value when there are more differences.
 	( git diff --exit-code -I "^#   timestamp\: " $@ >/dev/null && git checkout $@ ) || true
 
-# Devcontainer
-
-.PHONY: devcontainer_up
-devcontainer_up:
-	devcontainer up --workspace-folder .
-
-.PHONY: devcontainer_rebuild
-devcontainer_rebuild:
-	devcontainer up --remove-existing-container --workspace-folder .
-
-.PHONY: devcontainer_exec
-devcontainer_exec: devcontainer_up
-	devcontainer exec --container-id renku-data-services_devcontainer-data_service-1 -- bash
-
-.PHONY: lock
-lock:
-	poetry lock $(ARGS)
-	poetry -C projects/renku_data_service lock $(ARGS)
-	poetry -C projects/secrets_storage lock $(ARGS)
-	poetry -C projects/k8s_watcher lock $(ARGS)
-	poetry -C projects/renku_data_tasks lock $(ARGS)
