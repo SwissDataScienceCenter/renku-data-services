@@ -260,11 +260,11 @@ class K8sClusterClient:
                 namespace=_filter.namespace,
             )
 
+            async for r in res:
+                yield APIObjectInCluster(r, self.__cluster.id)
+
         except (kr8s.ServerError, kr8s.APITimeoutError):
             return
-
-        async for r in res:
-            yield APIObjectInCluster(r, self.__cluster.id)
 
     async def __get_api_object(self, meta: K8sObjectFilter) -> APIObjectInCluster | None:
         return await anext(aiter(self.__list(meta)), None)
