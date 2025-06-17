@@ -43,7 +43,7 @@ ctx: Context = Context.for_anonymous(ref_date, UTC)
 class TestAuthAccess(AuthAccess):
     result: list[str]
 
-    async def get_role_ids(self, user_id: str, roles: Nel[Role]) -> list[str]:
+    async def get_ids_for_role(self, user_id: str, roles: Nel[Role]) -> list[str]:
         return self.result
 
     @classmethod
