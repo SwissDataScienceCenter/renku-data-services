@@ -18,11 +18,11 @@ from kubernetes.config.incluster_config import SERVICE_CERT_FILENAME, SERVICE_TO
 
 from renku_data_services.errors import errors
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface, K8sSchedudlingClientInterface
+from renku_data_services.k8s.models import APIObjectInCluster
 
 if TYPE_CHECKING:
     from renku_data_services.k8s.models import (
         GVK,
-        APIObjectInCluster,
         Cluster,
         ClusterId,
         K8sObject,
