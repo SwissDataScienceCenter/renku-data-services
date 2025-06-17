@@ -10,7 +10,7 @@ from sqlalchemy.schema import UniqueConstraint
 from ulid import ULID
 
 from renku_data_services.connected_services import models
-from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind
+from renku_data_services.connected_services.apispec import ConnectionStatus
 from renku_data_services.utils.sqlalchemy import ULIDType
 
 JSONVariant = JSON().with_variant(JSONB(), "postgresql")
@@ -32,7 +32,7 @@ class OAuth2ClientORM(BaseORM):
     client_id: Mapped[str] = mapped_column("client_id", String(500), repr=False)
     display_name: Mapped[str] = mapped_column("display_name", String(99))
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
-    kind: Mapped[ProviderKind]
+    kind: Mapped[models.ProviderKind]
     scope: Mapped[str] = mapped_column("scope", String())
     url: Mapped[str] = mapped_column("url", String())
     use_pkce: Mapped[bool] = mapped_column("use_pkce", Boolean(), server_default=false())

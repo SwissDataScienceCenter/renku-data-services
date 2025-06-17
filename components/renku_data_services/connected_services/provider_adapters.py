@@ -8,7 +8,6 @@ from httpx import Response
 from renku_data_services import errors
 from renku_data_services.connected_services import external_models, models
 from renku_data_services.connected_services import orm as schemas
-from renku_data_services.connected_services.apispec import ProviderKind
 
 
 class ProviderAdapter(ABC):
@@ -232,12 +231,42 @@ class DropboxAdapter(ProviderAdapter):
         return external_models.DropboxConnectedAccount.model_validate(response.json()).to_connected_account()
 
 
-_adapter_map: dict[ProviderKind, type[ProviderAdapter]] = {
-    ProviderKind.gitlab: GitLabAdapter,
-    ProviderKind.github: GitHubAdapter,
-    ProviderKind.drive: GoogleDriveAdapter,
-    ProviderKind.onedrive: OneDriveAdapter,
-    ProviderKind.dropbox: DropboxAdapter,
+class CSCSAdapter(ProviderAdapter):
+    """Adapter for CSCS OAuth2 clients (using FirecREST v2)."""
+
+    @property
+    def authorization_url(self) -> str:
+        """The authorization URL for the OAuth2 protocol."""
+        url = urlparse(self.client_url)
+        url = url._replace(netloc=f"auth.{url.netloc}")
+        return urljoin(urlunparse(url), "auth/realms/cscs/protocol/openid-connect/auth")
+
+    @property
+    def token_endpoint_url(self) -> str:
+        """The token endpoint URL for the OAuth2 protocol."""
+        url = urlparse(self.client_url)
+        url = url._replace(netloc=f"auth.{url.netloc}")
+        return urljoin(urlunparse(url), "auth/realms/cscs/protocol/openid-connect/token")
+
+    @property
+    def api_url(self) -> str:
+        """The URL used for API calls on the Resource Server."""
+        url = urlparse(self.client_url)
+        url = url._replace(netloc=f"api.{url.netloc}")
+        return urljoin(urlunparse(url), "hpc/firecrest/v2/")
+
+    def api_validate_account_response(self, response: Response) -> models.ConnectedAccount:
+        """Validates and returns the connected account response from the Resource Server."""
+        raise NotImplementedError("cscs")
+
+
+_adapter_map: dict[models.ProviderKind, type[ProviderAdapter]] = {
+    models.ProviderKind.gitlab: GitLabAdapter,
+    models.ProviderKind.github: GitHubAdapter,
+    models.ProviderKind.drive: GoogleDriveAdapter,
+    models.ProviderKind.onedrive: OneDriveAdapter,
+    models.ProviderKind.dropbox: DropboxAdapter,
+    models.ProviderKind.cscs: CSCSAdapter,
 }
 
 
