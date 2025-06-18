@@ -602,7 +602,7 @@ definition group {
     permission delete = owner + group_platform->is_admin
     permission non_public_read = owner + editor + viewer - public_viewer
     permission exclusive_owner = owner
-    permission exclusive_edit = editor
+    permission exclusive_editor = editor
     permission exclusive_member = viewer + editor + owner
 }
 
@@ -640,7 +640,7 @@ definition project {
     permission delete = owner + project_platform->is_admin + project_namespace->delete
     permission non_public_read = owner + editor + viewer + project_namespace->read_children - public_viewer
     permission exclusive_owner = owner + project_namespace->exclusive_owner
-    permission exclusive_edit = editor + project_namespace->exclusive_edit
+    permission exclusive_editor = editor + project_namespace->exclusive_editor
     permission exclusive_member = owner + editor + viewer + project_namespace->exclusive_member
 }
 
@@ -658,7 +658,7 @@ definition data_connector {
     permission delete = owner + data_connector_platform->is_admin + data_connector_namespace->delete
     permission non_public_read = owner + editor + viewer + data_connector_namespace->read_children - public_viewer
     permission exclusive_owner = owner + data_connector_namespace->exclusive_owner
-    permission exclusive_edit = editor + data_connector_namespace->exclusive_edit
+    permission exclusive_editor = editor + data_connector_namespace->exclusive_editor
     permission exclusive_member = owner + editor + viewer + data_connector_namespace->exclusive_member
 }"""
 """This adds three permissions starting with `exclusive_` that are identifying the path of a role.

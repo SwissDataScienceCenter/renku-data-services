@@ -56,7 +56,7 @@ async def get_ids_for_roles(client: AuthzClient, user_id: str, roles: Nel[Role])
             case Role.VIEWER:
                 permission = "exclusive_member"
             case Role.EDITOR:
-                permission = "exclusive_edit"
+                permission = "exclusive_editor"
             case Role.OWNER:
                 permission = "exclusive_owner"
 
