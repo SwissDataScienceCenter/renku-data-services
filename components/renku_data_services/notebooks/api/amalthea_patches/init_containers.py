@@ -1,5 +1,7 @@
 """Patches for init containers."""
 
+from __future__ import annotations
+
 import json
 import os
 from dataclasses import asdict
@@ -152,7 +154,7 @@ async def git_clone_container_v2(
     }
 
 
-async def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
+async def git_clone_container(server: UserServer) -> dict[str, Any] | None:
     """Returns the specification for the container that clones the user's repositories."""
     repositories = await server.repositories()
     if not repositories:
@@ -272,7 +274,7 @@ async def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
     }
 
 
-async def git_clone(server: "UserServer") -> list[dict[str, Any]]:
+async def git_clone(server: UserServer) -> list[dict[str, Any]]:
     """The patch for the init container that clones the git repository."""
     container = await git_clone_container(server)
     if not container:
@@ -356,7 +358,7 @@ def certificates(config: NotebooksConfig) -> list[dict[str, Any]]:
     return patches
 
 
-def download_image_container(server: "UserServer") -> client.V1Container:
+def download_image_container(server: UserServer) -> client.V1Container:
     """Adds a container that does not do anything but simply downloads the session image at startup."""
     container = client.V1Container(
         name="download-image",
@@ -373,7 +375,7 @@ def download_image_container(server: "UserServer") -> client.V1Container:
     return container
 
 
-def download_image(server: "UserServer") -> list[dict[str, Any]]:
+def download_image(server: UserServer) -> list[dict[str, Any]]:
     """Adds a container that does not do anything but simply downloads the session image at startup."""
     container = download_image_container(server)
     api_client = client.ApiClient()

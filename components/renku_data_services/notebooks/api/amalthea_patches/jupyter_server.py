@@ -1,5 +1,7 @@
 """Patches to modify the jupyter container in the session."""
 
+from __future__ import annotations
+
 import base64
 import json
 from pathlib import Path
@@ -15,7 +17,7 @@ if TYPE_CHECKING:
     from renku_data_services.notebooks.api.classes.server import UserServer
 
 
-def env(server: "UserServer") -> list[dict[str, Any]]:
+def env(server: UserServer) -> list[dict[str, Any]]:
     """Injects environment variables in the jupyter container in the session.
 
     Amalthea always makes the jupyter server the first container in the statefulset
@@ -108,7 +110,7 @@ def args() -> list[dict[str, Any]]:
     return patches
 
 
-def image_pull_secret(server: "UserServer", access_token: str | None) -> list[dict[str, Any]]:
+def image_pull_secret(server: UserServer, access_token: str | None) -> list[dict[str, Any]]:
     """Adds an image pull secret to the session if the session image is not public."""
     patches = []
     if isinstance(server.user, AuthenticatedAPIUser) and server.is_image_private and access_token:
@@ -176,7 +178,7 @@ def disable_service_links() -> list[dict[str, Any]]:
     ]
 
 
-def rstudio_env_variables(server: "UserServer") -> list[dict[str, Any]]:
+def rstudio_env_variables(server: UserServer) -> list[dict[str, Any]]:
     """Makes sure environment variables propagate for R and Rstudio.
 
     Since we cannot be certain that R/Rstudio is or isn't used we inject this every time
@@ -232,7 +234,7 @@ def rstudio_env_variables(server: "UserServer") -> list[dict[str, Any]]:
     ]
 
 
-def user_secrets(server: "UserServer") -> list[dict[str, Any]]:
+def user_secrets(server: UserServer) -> list[dict[str, Any]]:
     """Patches to add volumes and corresponding mount volumes to the main container for user-requested secrets."""
 
     if server.user_secrets is None:
