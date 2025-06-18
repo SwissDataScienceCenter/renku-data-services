@@ -59,11 +59,6 @@ class Nel[A]:
         """Convert to a list."""
         return [self.value] + self.more_values
 
-    def deduplicate(self) -> Self:
-        """Return a copy with duplicates removed."""
-        lst = list(set(self.to_list()))
-        return type(self)(lst[0], lst[1:])
-
     def mk_string(self, sep: str, f: Callable[[A], str] = str) -> str:
         """Create a str from all elements mapped over f."""
         return sep.join([f(x) for x in self.to_list()])
