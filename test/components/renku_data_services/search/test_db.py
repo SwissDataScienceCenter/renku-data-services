@@ -1,17 +1,21 @@
 """Tests for the repository."""
 
+from typing import cast
+
 import pytest
 from ulid import ULID
 
 from renku_data_services.authz.models import Visibility
-from renku_data_services.base_models.core import NamespacePath, NamespaceSlug, ProjectPath, ProjectSlug
+from renku_data_services.base_models.core import APIUser, NamespacePath, NamespaceSlug, ProjectPath, ProjectSlug
 from renku_data_services.data_connectors.models import CloudStorageCore, DataConnector
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.namespace.models import ProjectNamespace, UserNamespace
-from renku_data_services.search.db import SearchUpdatesRepo
+from renku_data_services.search.db import DbUsernameResolve, SearchUpdatesRepo
 from renku_data_services.search.models import DeleteDoc
+from renku_data_services.search.user_query import Nel, UserId, Username
 from renku_data_services.solr.entity_documents import DataConnector as DataConnectorDoc
 from renku_data_services.solr.entity_documents import User as UserDoc
+from renku_data_services.users.db import UserRepo
 from renku_data_services.users.models import UserInfo
 
 user_namespace = UserNamespace(
@@ -26,6 +30,25 @@ project_namespace = ProjectNamespace(
     path=ProjectPath(NamespaceSlug("hello-word"), ProjectSlug("project-1")),
     underlying_resource_id=ULID(),
 )
+
+
+@pytest.mark.asyncio
+async def test_username_resolve(app_manager_instance) -> None:
+    run_migrations_for_app("common")
+    user_repo: UserRepo = app_manager_instance.kc_user_repo
+    user1 = APIUser(id="id-123", first_name="Mads", last_name="Pedersen")
+    user2 = APIUser(id="id-234", first_name="Wout", last_name="van Art")
+    user_info1 = cast(UserInfo, await user_repo.get_or_create_user(user1, str(user1.id)))
+    user_info2 = cast(UserInfo, await user_repo.get_or_create_user(user2, str(user2.id)))
+
+    resolver = DbUsernameResolve(app_manager_instance.config.db.async_session_maker)
+    data = await resolver.resolve_usernames(
+        Nel.of(Username.from_name("a.b"), Username.from_user_info(user_info1), Username.from_user_info(user_info2))
+    )
+    assert data is not None
+    assert data.get(Username.from_user_info(user_info1)) == UserId(user_info1.id)
+    assert data.get(Username.from_user_info(user_info2)) == UserId(user_info2.id)
+    assert len(data) == 2
 
 
 @pytest.mark.asyncio
