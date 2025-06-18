@@ -263,6 +263,8 @@ class K8sClusterClient:
             async for r in res:
                 yield APIObjectInCluster(r, self.__cluster.id)
 
+            print(f"Listed {_filter.gvk} objects in cluster {self.__cluster.id} with filter {_filter}")
+
         except (kr8s.ServerError, kr8s.APITimeoutError):
             return
 
