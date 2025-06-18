@@ -181,6 +181,12 @@ class Project(EntityDoc, frozen=True):
         """Return the type of this entity."""
         return EntityType.project
 
+    @field_validator("keywords")
+    @classmethod
+    def _sort_keywords(cls, v: list[str]) -> list[str]:
+        v.sort()
+        return v
+
     @field_serializer("id", when_used="always")
     def __serialize_id(self, id: ULID) -> str:
         return str(id)
@@ -236,6 +242,12 @@ class DataConnector(EntityDoc, frozen=True):
     def entity_type(self) -> EntityType:
         """Return the type of this entity."""
         return EntityType.dataconnector
+
+    @field_validator("keywords")
+    @classmethod
+    def _sort_keywords(cls, v: list[str]) -> list[str]:
+        v.sort()
+        return v
 
     @field_serializer("id", when_used="always")
     def __serialize_id(self, id: ULID) -> str:
