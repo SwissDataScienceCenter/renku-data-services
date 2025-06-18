@@ -456,6 +456,63 @@ def v6_schema() -> SpiceDBSchema:
     )
 
 
+@pytest.fixture
+def v7_schema() -> SpiceDBSchema:
+    return SpiceDBSchema(
+        schemas._v7,
+        relationships=[
+            # public project p1, owner=u1
+            "project:p1#owner@user:u1",
+            "project:p1#public_viewer@user:*",
+            "project:p1#public_viewer@anonymous_user:*",
+            "project:p1#editor@user:u11",
+            "project:p1#viewer@user:u12",
+            # private project p2, owner=u2
+            "project:p2#owner@user:u2",
+            "project:p2#editor@user:u21",
+            "project:p2#viewer@user:u22",
+            # private project p3, owner=g1 (group), group owner=u3
+            "project:p3#project_namespace@group:g1",
+            "group:g1#owner@user:u3",
+            "group:g1#editor@user:u4",
+            "group:g1#viewer@user:u5",
+        ],
+        assertions={
+            "assertTrue": [
+                "project:p1#exclusive_owner@user:u1",
+                "project:p1#exclusive_edit@user:u11",
+                "project:p1#exclusive_member@user:u1",
+                "project:p1#exclusive_member@user:u11",
+                "project:p1#exclusive_member@user:u12",
+                "project:p2#exclusive_owner@user:u2",
+                "project:p2#exclusive_edit@user:u21",
+                "project:p2#exclusive_member@user:u2",
+                "project:p2#exclusive_member@user:u21",
+                "project:p2#exclusive_member@user:u22",
+                "project:p3#exclusive_owner@user:u3",
+                "group:g1#exclusive_owner@user:u3",
+                "project:p3#exclusive_edit@user:u4",
+                "group:g1#exclusive_edit@user:u4",
+                "project:p3#exclusive_member@user:u5",
+                "project:p3#exclusive_member@user:u4",
+                "project:p3#exclusive_member@user:u3",
+                "group:g1#exclusive_member@user:u5",
+                "group:g1#exclusive_member@user:u4",
+                "group:g1#exclusive_member@user:u3",
+            ],
+            "assertFalse": [
+                "project:p1#exclusive_owner@user:u2",
+                "project:p1#exclusive_edit@user:u1",
+                "project:p1#exclusive_edit@user:u12",
+                "project:p2#exclusive_owner@user:u1",
+                "project:p2#exclusive_edit@user:u2",
+                "project:p2#exclusive_edit@user:u22",
+            ],
+        },
+        validation={},
+    )
+
+
 def test_v1_schema(tmp_path: Path, v1_schema: SpiceDBSchema) -> None:
     validation_file = tmp_path / "validate.yaml"
     v1_schema.to_yaml(validation_file)
@@ -477,4 +534,10 @@ def test_v5_schema(tmp_path: Path, v5_schema: SpiceDBSchema) -> None:
 def test_v6_schema(tmp_path: Path, v6_schema: SpiceDBSchema) -> None:
     validation_file = tmp_path / "validate.yaml"
     v6_schema.to_yaml(validation_file)
+    check_call(["zed", "validate", validation_file.as_uri()])
+
+
+def test_v7_schema(tmp_path: Path, v7_schema: SpiceDBSchema) -> None:
+    validation_file = tmp_path / "validate.yaml"
+    v7_schema.to_yaml(validation_file)
     check_call(["zed", "validate", validation_file.as_uri()])

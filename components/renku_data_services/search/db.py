@@ -284,7 +284,7 @@ class DbUsernameResolve(UsernameResolve):
         self.session_maker = session_maker
 
     async def resolve_usernames(self, names: Nel[Username]) -> dict[Username, UserId] | None:
-        """Bla."""
+        """Resolve usernames to their user ids."""
         async with self.session_maker() as session, session.begin():
             slugs = [u.slug.value for u in names.to_list()]
 
