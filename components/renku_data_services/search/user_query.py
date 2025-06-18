@@ -13,8 +13,10 @@ from typing import Any, Self
 
 from renku_data_services.authz.models import Role, Visibility
 from renku_data_services.base_models.core import NamespaceSlug
+from renku_data_services.namespace.models import UserNamespace
 from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.solr_client import SortDirection
+from renku_data_services.users.models import UserInfo
 
 
 @dataclass
@@ -142,6 +144,16 @@ class Username:
     def from_name(cls, s: str) -> Username:
         """Create a Username from a string."""
         return Username(NamespaceSlug.from_name(s))
+
+    @classmethod
+    def from_user_namespace(cls, ns: UserNamespace) -> Username:
+        """Create a Username from a UserNamespace."""
+        return Username(ns.path.first)
+
+    @classmethod
+    def from_user_info(cls, u: UserInfo) -> Username:
+        """Create a Username from a UserInfo."""
+        return cls.from_user_namespace(u.namespace)
 
 
 @dataclass
