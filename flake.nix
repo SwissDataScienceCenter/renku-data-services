@@ -73,6 +73,22 @@
         };
       });
 
+      ruff = pkgs.ruff.overrideAttrs (old: rec {
+        pname = "ruff";
+        version = "0.8.6";
+        src = pkgs.fetchFromGitHub {
+          owner = "astral-sh";
+          repo = "ruff";
+          tag = "0.8.6";
+          hash = "sha256-9YvHmNiKdf5hKqy9tToFSQZM2DNLoIiChcfjQay8wbU=";
+        };
+        cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
+          inherit src;
+          name = "${pname}-${version}";
+          hash = "sha256-aTzTCDCMhG4cKD9wFNHv6A3VBUifnKgI8a6kelc3bAM=";
+        };
+      });
+
       poetrySettings = {
         LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
         POETRY_VIRTUALENVS_PREFER_ACTIVE_PYTHON = "true";
