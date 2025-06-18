@@ -83,6 +83,7 @@ async def _renku_query(
     authz_client: AuthzClient, ctx: Context, uq: SolrUserQuery, limit: int, offset: int
 ) -> SolrQuery:
     """Create the final solr query embedding the given user query."""
+    logger.debug(f"Searching as user: {ctx.role or "anonymous"}")
     role_constraint: list[str] = [st.public_only()]
     match ctx.role:
         case AdminRole():
