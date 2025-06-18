@@ -1,5 +1,7 @@
 """Cloud storage patches."""
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -8,7 +10,7 @@ if TYPE_CHECKING:
     from renku_data_services.notebooks.api.classes.server import UserServer
 
 
-async def main(server: "UserServer") -> list[dict[str, Any]]:
+async def main(server: UserServer) -> list[dict[str, Any]]:
     """Cloud storage patches."""
     cloud_storage_patches: list[dict[str, Any]] = []
     cloud_storage_request: ICloudStorageRequest
