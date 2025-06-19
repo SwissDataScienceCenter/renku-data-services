@@ -15,6 +15,7 @@ from renku_data_services.search.user_query import (
     Comparison,
     Created,
     CreatedByIs,
+    DirectMemberIs,
     FieldTerm,
     IdIs,
     KeywordIs,
@@ -303,6 +304,13 @@ class LuceneQueryInterpreter(QueryInterpreter):
                         return st.id_in(nel)
             case MemberIs() as t:
                 ids = await ctx.get_member_ids(t.users, direct_membership=False)
+                if ids == []:
+                    return st.id_not_exists()
+                else:
+                    return st.id_in(Nel.unsafe_from_list(ids))
+
+            case DirectMemberIs() as t:
+                ids = await ctx.get_member_ids(t.users, direct_membership=True)
                 if ids == []:
                     return st.id_not_exists()
                 else:

@@ -101,6 +101,7 @@ class Field(StrEnum):
     keyword = "keyword"
     namespace = "namespace"
     member = "member"
+    direct_member = "direct_member"
 
 
 class Comparison(StrEnum):
@@ -369,6 +370,26 @@ class MemberIs(FieldComparison):
     def field(self) -> Field:
         """The field name."""
         return Field.member
+
+    @property
+    def cmp(self) -> Comparison:
+        """The comparison to use."""
+        return Comparison.is_equal
+
+    def _render_value(self) -> str:
+        return self.users.map(lambda u: u.render()).mk_string(",")
+
+
+@dataclass
+class DirectMemberIs(FieldComparison):
+    """Check for direct membership of a given user."""
+
+    users: Nel[UserDef]
+
+    @property
+    def field(self) -> Field:
+        """The field name."""
+        return Field.direct_member
 
     @property
     def cmp(self) -> Comparison:
@@ -659,7 +680,18 @@ class Order:
 
 
 type FieldTerm = (
-    TypeIs | IdIs | NameIs | SlugIs | VisibilityIs | KeywordIs | NamespaceIs | CreatedByIs | Created | RoleIs | MemberIs
+    TypeIs
+    | IdIs
+    | NameIs
+    | SlugIs
+    | VisibilityIs
+    | KeywordIs
+    | NamespaceIs
+    | CreatedByIs
+    | Created
+    | RoleIs
+    | MemberIs
+    | DirectMemberIs
 )
 
 

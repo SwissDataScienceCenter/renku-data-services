@@ -13,6 +13,7 @@ from renku_data_services.search.user_query import (
     Created,
     CreatedByIs,
     DateTimeCalc,
+    DirectMemberIs,
     IdIs,
     KeywordIs,
     MemberIs,
@@ -55,6 +56,11 @@ def test_user_name() -> None:
 def test_member_is() -> None:
     assert pp.member_is.parse("member:@hello") == MemberIs(Nel(Username.from_name("hello")))
     assert pp.member_is.parse("member:hello") == MemberIs(Nel(UserId("hello")))
+
+
+def test_direct_member_is() -> None:
+    assert pp.direct_member_is.parse("direct_member:@hello") == DirectMemberIs(Nel(Username.from_name("hello")))
+    assert pp.direct_member_is.parse("direct_member:hello") == DirectMemberIs(Nel(UserId("hello")))
 
 
 def test_sortable_field() -> None:
@@ -185,6 +191,8 @@ def test_field_term() -> None:
     assert pp.field_term.parse("role:viewer") == RoleIs(Nel(Role.VIEWER))
     assert pp.field_term.parse("member:@john") == MemberIs(Nel(Username.from_name("john")))
     assert pp.field_term.parse("member:123-456") == MemberIs(Nel(UserId("123-456")))
+    assert pp.field_term.parse("direct_member:@john") == DirectMemberIs(Nel(Username.from_name("john")))
+    assert pp.field_term.parse("direct_member:123-456") == DirectMemberIs(Nel(UserId("123-456")))
 
 
 def test_free_text() -> None:
@@ -213,6 +221,8 @@ def test_segment() -> None:
     assert pp.segment.parse("createdBy:test") == CreatedByIs(Nel("test"))
     assert pp.segment.parse("member:@john") == MemberIs(Nel(Username.from_name("john")))
     assert pp.segment.parse("member:123-456") == MemberIs(Nel(UserId("123-456")))
+    assert pp.segment.parse("direct_member:@john") == DirectMemberIs(Nel(Username.from_name("john")))
+    assert pp.segment.parse("direct_member:123-456") == DirectMemberIs(Nel(UserId("123-456")))
 
     assert pp.segment.parse("name:") == Text("name:")
 

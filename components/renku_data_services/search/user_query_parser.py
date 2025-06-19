@@ -23,6 +23,7 @@ from renku_data_services.search.user_query import (
     Created,
     CreatedByIs,
     DateTimeCalc,
+    DirectMemberIs,
     Field,
     Helper,
     IdIs,
@@ -188,10 +189,13 @@ class _ParsePrimitives:
     user_id: Parser = string_basic.map(UserId)
     user_def_nel: Parser = (user_name | user_id).sep_by(comma, min=1).map(Nel.unsafe_from_list)
     member_is: Parser = string(Field.member.value, lambda s: s.lower()) >> is_equal >> user_def_nel.map(MemberIs)
+    direct_member_is: Parser = (
+        string(Field.direct_member.value, lambda s: s.lower()) >> is_equal >> user_def_nel.map(DirectMemberIs)
+    )
 
     term_is: Parser = seq(from_enum(Field, lambda s: s.lower()) << is_equal, string_values).bind(_make_field_term)
 
-    field_term: Parser = type_is | visibility_is | role_is | member_is | created | term_is
+    field_term: Parser = type_is | visibility_is | role_is | member_is | direct_member_is | created | term_is
     free_text: Parser = test_char(lambda c: not c.isspace(), "string without spaces").at_least(1).concat().map(Text)
 
     segment: Parser = field_term | sort_term | free_text
