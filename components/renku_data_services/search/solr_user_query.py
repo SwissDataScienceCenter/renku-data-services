@@ -82,7 +82,7 @@ class AuthAccess(ABC):
     """Access authorization information."""
 
     @abstractmethod
-    async def get_ids_for_role(self, user_id: str, roles: Nel[Role]) -> list[str]:
+    async def get_ids_for_role(self, user_id: str, roles: Nel[Role], direct_membership: bool) -> list[str]:
         """Return resource ids for which the given user has the given role."""
         ...
 
@@ -93,7 +93,7 @@ class AuthAccess(ABC):
 
 
 class _NoAuthAccess(AuthAccess):
-    async def get_ids_for_role(self, user_id: str, roles: Nel[Role]) -> list[str]:
+    async def get_ids_for_role(self, user_id: str, roles: Nel[Role], direct_membership: bool) -> list[str]:
         return []
 
 
@@ -174,20 +174,20 @@ class Context:
         """Return a copy with the given UsernameResolve set."""
         return self.__copy(username_resolve=ur)
 
-    async def get_ids_for_roles(self, roles: Nel[Role]) -> list[str] | None:
+    async def get_ids_for_roles(self, roles: Nel[Role], direct_membership: bool) -> list[str] | None:
         """Return a list of ids the user has one of the given roles.
 
         Return None when anonymous.
         """
         match self.role:
             case UserRole() as r:
-                return await self.auth_access.get_ids_for_role(r.id, roles)
+                return await self.auth_access.get_ids_for_role(r.id, roles, direct_membership)
             case AdminRole() as r:
-                return await self.auth_access.get_ids_for_role(r.id, roles)
+                return await self.auth_access.get_ids_for_role(r.id, roles, direct_membership)
             case _:
                 return None
 
-    async def get_member_ids(self, users: Nel[UserDef]) -> list[str]:
+    async def get_member_ids(self, users: Nel[UserDef], direct_membership: bool) -> list[str]:
         """Return a list of resource ids, all given users are members of."""
         result: set[str] = set()
         ids: set[UserId] = set()
@@ -209,7 +209,7 @@ class Context:
                     ids.update(remain_ids.values())
 
         for uid in ids:
-            n = await self.auth_access.get_ids_for_role(uid.id, Nel.of(Role.VIEWER))
+            n = await self.auth_access.get_ids_for_role(uid.id, Nel.of(Role.VIEWER), direct_membership)
             result = set(n) if result == set() else result.intersection(set(n))
 
         return list(result)
@@ -292,7 +292,7 @@ class LuceneQueryInterpreter(QueryInterpreter):
             case CreatedByIs() as t:
                 return st.field_is_any(Fields.created_by, t.values.map(st.from_str))
             case RoleIs() as t:
-                ids = await ctx.get_ids_for_roles(t.values)
+                ids = await ctx.get_ids_for_roles(t.values, direct_membership=True)
                 if ids is None:
                     return st.empty()
                 else:
@@ -302,7 +302,7 @@ class LuceneQueryInterpreter(QueryInterpreter):
                     else:
                         return st.id_in(nel)
             case MemberIs() as t:
-                ids = await ctx.get_member_ids(t.users)
+                ids = await ctx.get_member_ids(t.users, direct_membership=False)
                 if ids == []:
                     return st.id_not_exists()
                 else:
