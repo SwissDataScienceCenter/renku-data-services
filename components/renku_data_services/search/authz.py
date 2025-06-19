@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 async def __resources_with_permission(
-    client: AuthzClient, user_id: str, entity_types: Iterable[EntityType], relation_name: str
+    client: AuthzClient, user_id: str, entity_types: Iterable[EntityType], permission_name: str
 ) -> list[str]:
     """Get all the resource IDs that a specific user has the given permission/role."""
     user_ref = SubjectReference(object=ObjectReference(object_type=ResourceType.user.value, object_id=user_id))
@@ -26,7 +26,7 @@ async def __resources_with_permission(
         req = LookupResourcesRequest(
             consistency=Consistency(fully_consistent=True),
             resource_object_type=et.to_resource_type.value,
-            permission=relation_name,
+            permission=permission_name,
             subject=user_ref,
         )
         response = client.LookupResources(req)
@@ -34,7 +34,7 @@ async def __resources_with_permission(
             if o.permissionship == LOOKUP_PERMISSIONSHIP_HAS_PERMISSION:
                 result.append(o.resource_object_id)
 
-    logger.debug(f"Found ids for user '{user_id}' and perm={relation_name}: {result}")
+    logger.debug(f"Found ids for user '{user_id}' and perm={permission_name}: {result}")
     return result
 
 
@@ -45,7 +45,7 @@ async def get_non_public_read(client: AuthzClient, user_id: str) -> list[str]:
     return await __resources_with_permission(client, user_id, ets, Scope.NON_PUBLIC_READ.value)
 
 
-async def get_ids_for_roles(client: AuthzClient, user_id: str, roles: Nel[Role]) -> list[str]:
+async def get_ids_for_roles(client: AuthzClient, user_id: str, roles: Nel[Role], direct_membership: bool) -> list[str]:
     """Return all resource ids for which the give user has one of the given roles."""
     ets = [e for e in EntityType]
     ets.remove(EntityType.user)  # user don't have this relation
@@ -54,11 +54,11 @@ async def get_ids_for_roles(client: AuthzClient, user_id: str, roles: Nel[Role])
     for role in roles.to_list():
         match role:
             case Role.VIEWER:
-                permission = "exclusive_member"
+                permission = Scope.DIRECT_MEMBER.value if direct_membership else Scope.EXCLUSIVE_MEMBER.value
             case Role.EDITOR:
-                permission = "exclusive_editor"
+                permission = role.value if direct_membership else Scope.EXCLUSIVE_EDITOR.value
             case Role.OWNER:
-                permission = "exclusive_owner"
+                permission = role.value if direct_membership else Scope.EXCLUSIVE_OWNER.value
 
         r = await __resources_with_permission(client, user_id, ets, permission)
         result.update(r)

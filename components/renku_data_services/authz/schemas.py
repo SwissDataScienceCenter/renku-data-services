@@ -604,6 +604,7 @@ definition group {
     permission exclusive_owner = owner
     permission exclusive_editor = editor
     permission exclusive_member = viewer + editor + owner
+    permission direct_member = owner + editor + viewer
 }
 
 definition user_namespace {
@@ -617,6 +618,7 @@ definition user_namespace {
     permission non_public_read = owner - public_viewer
     permission exclusive_owner = owner
     permission exclusive_member = owner
+    permission direct_member = owner
 }
 
 definition anonymous_user {}
@@ -642,6 +644,7 @@ definition project {
     permission exclusive_owner = owner + project_namespace->exclusive_owner
     permission exclusive_editor = editor + project_namespace->exclusive_editor
     permission exclusive_member = owner + editor + viewer + project_namespace->exclusive_member
+    permission direct_member = owner + editor + viewer
 }
 
 definition data_connector {
@@ -660,6 +663,7 @@ definition data_connector {
     permission exclusive_owner = owner + data_connector_namespace->exclusive_owner
     permission exclusive_editor = editor + data_connector_namespace->exclusive_editor
     permission exclusive_member = owner + editor + viewer + data_connector_namespace->exclusive_member
+    permission direct_member = owner + editor + viewer
 }"""
 """This adds three permissions starting with `exclusive_` that are identifying the path of a role.
 

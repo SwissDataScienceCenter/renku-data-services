@@ -132,8 +132,8 @@ async def query(
     logger.debug(f"User search query: {query.render()}")
 
     class RoleAuthAccess(AuthAccess):
-        async def get_ids_for_role(self, user_id: str, roles: Nel[Role]) -> list[str]:
-            return await authz.get_ids_for_roles(authz_client, user_id, roles)
+        async def get_ids_for_role(self, user_id: str, roles: Nel[Role], direct_membership: bool) -> list[str]:
+            return await authz.get_ids_for_roles(authz_client, user_id, roles, direct_membership)
 
     ctx = (
         Context.for_api_user(datetime.now(), UTC, user)
