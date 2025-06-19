@@ -1,172 +1,191 @@
-import json
-from typing import cast
-
 import pytest
 
 from renku_data_services.base_models.core import APIUser
+from renku_data_services.data_connectors.apispec import DataConnector as ApiDataConnector
+from renku_data_services.namespace.apispec import GroupResponse as ApiGroup
 from renku_data_services.project.apispec import Project as ApiProject
-from renku_data_services.search.apispec import Group as SearchGroup
-from renku_data_services.search.apispec import SearchProject, SearchResult
+from renku_data_services.search.apispec import (
+    Group as SearchGroup,
+)
+from renku_data_services.search.apispec import (
+    SearchDataConnector,
+    SearchEntity,
+    SearchProject,
+    SearchResult,
+)
+from renku_data_services.search.apispec import (
+    User as SearchUser,
+)
 from renku_data_services.solr.entity_documents import EntityType
-from renku_data_services.users.db import UserRepo
 from renku_data_services.users.models import UserInfo
+from test.bases.renku_data_services.data_api.conftest import (
+    CreateDataConnectorCall,
+    CreateGroupCall,
+    CreateProjectCall,
+    CreateUserCall,
+    SearchQueryCall,
+    SearchReprovisionCall,
+)
 
 
 @pytest.mark.asyncio
 async def test_member_search(
-    app_manager_instance, regular_user, search_reprovision, create_project, create_group, search_query, admin_headers
+    create_user: CreateUserCall,
+    regular_user: UserInfo,
+    search_reprovision: SearchReprovisionCall,
+    create_project_model: CreateProjectCall,
+    create_group_model: CreateGroupCall,
+    search_query: SearchQueryCall,
 ) -> None:
-    user_repo: UserRepo = app_manager_instance.kc_user_repo
-    mads: UserInfo = cast(
-        UserInfo,
-        await user_repo.get_or_create_user(APIUser(id="id-123", first_name="Mads", last_name="Pedersen"), "id-123"),
-    )
-    wout: UserInfo = cast(
-        UserInfo,
-        await user_repo.get_or_create_user(APIUser(id="id-567", first_name="Wout", last_name="van Art"), "id-567"),
-    )
-    assert mads is not None and wout is not None
+    mads = await create_user(APIUser(id="id-123", first_name="Mads", last_name="Pedersen"))
+    wout = await create_user(APIUser(id="id-567", first_name="Wout", last_name="van Art"))
 
-    gr_visma: dict = await create_group("Visma", members=[{"id": wout.id, "role": "editor"}])
-    gr_lidl: dict = await create_group("Lidl-Trek", members=[{"id": mads.id, "role": "viewer"}])
+    gr_visma = await create_group_model("Visma", members=[{"id": wout.id, "role": "editor"}])
+    gr_lidl = await create_group_model("Lidl-Trek", members=[{"id": mads.id, "role": "viewer"}])
 
-    p1 = ApiProject.model_validate(
-        await create_project(name="private bike clean course 1 of 54", namespace=gr_visma["slug"])
+    p1 = await create_project_model(name="private bike clean course 1 of 54", namespace=gr_visma.slug)
+    p2 = await create_project_model(
+        name="public bike clean course 42 of 54", namespace=gr_visma.slug, visibility="public"
     )
-    p2 = ApiProject.model_validate(
-        await create_project(name="public bike clean course 42 of 54", namespace=gr_visma["slug"], visibility="public")
+    p3 = await create_project_model(name="private get the bike dirty course 1/2", namespace=gr_lidl.slug)
+    p4 = await create_project_model(
+        name="public get the bike dirty course 2/2", namespace=gr_lidl.slug, visibility="public"
     )
-    p3 = ApiProject.model_validate(
-        await create_project(name="private get the bike dirty course 1/2", namespace=gr_lidl["slug"])
-    )
-    p4 = ApiProject.model_validate(
-        await create_project(
-            name="public get the bike dirty course 2/2", namespace=gr_lidl["slug"], visibility="public"
-        )
-    )
-    p5 = ApiProject.model_validate(
-        await create_project(name="public get the bike dirty course 2/2", visibility="private")
-    )
+    p5 = await create_project_model(name="public get the bike dirty course 2/2", visibility="private")
+
     await search_reprovision()
 
-    ## Searching as 'regular_user' returns all entities, since this is teh user implicitely used to create everything
-    result = SearchResult.model_validate(
-        await search_query(f"member:@{regular_user.namespace.path.first}", headers=__make_headers(regular_user))
-    )
+    ## Searching as 'regular_user' returns all entities, since this is the user implicitely used to create everything
+    result = await search_query(f"member:@{regular_user.namespace.path.first}", regular_user)
+
     # 5 projects, 2 groups. users are removed there is no "membership" relation
-    assert_search_result(result, projects=[p1, p2, p3, p4, p5], groups=[gr_visma, gr_lidl])
+    assert_search_result(result, [p1, p2, p3, p4, p5, gr_visma, gr_lidl], check_order=False)
 
     ## Searching as 'regular_user' peeking into a different users' entities
-    result = SearchResult.model_validate(
-        await search_query(f"member:@{mads.namespace.path.first}", headers=__make_headers(regular_user))
-    )
-    assert_search_result(result, projects=[p3, p4], groups=[gr_lidl])
+    result = await search_query(f"member:@{mads.namespace.path.first}", regular_user)
+    assert_search_result(result, [p3, p4, gr_lidl], check_order=False)
 
     ## searching as mads, shows own enities
-    result = SearchResult.model_validate(
-        await search_query(f"member:@{mads.namespace.path.first}", headers=__make_headers(mads))
-    )
-    assert_search_result(result, projects=[p3, p4], groups=[gr_lidl])
+    result = await search_query(f"member:@{mads.namespace.path.first}", mads)
+    assert_search_result(result, [p3, p4, gr_lidl], check_order=False)
 
     ## searching as wout, shows own enities
-    result = SearchResult.model_validate(
-        await search_query(f"member:@{wout.namespace.path.first}", headers=__make_headers(wout))
-    )
-    assert_search_result(result, projects=[p1, p2], groups=[gr_visma])
+    result = await search_query(f"member:@{wout.namespace.path.first}", wout)
+    assert_search_result(result, [p1, p2, gr_visma], check_order=False)
 
     ## mads inspecting wouts, shows only public entities from wout
-    result = SearchResult.model_validate(
-        await search_query(f"member:@{wout.namespace.path.first}", headers=__make_headers(mads))
-    )
-    assert_search_result(result, projects=[p2], groups=[gr_visma])
+    result = await search_query(f"member:@{wout.namespace.path.first}", mads)
+    assert_search_result(result, [p2, gr_visma], check_order=False)
 
     ## searching as anonymous
-    result = SearchResult.model_validate(await search_query(f"member:@{wout.namespace.path.first}"))
-    assert_search_result(result, projects=[p2], groups=[gr_visma])
+    result = await search_query(f"member:@{wout.namespace.path.first}")
+    assert_search_result(result, [p2, gr_visma], check_order=False)
 
     ## with the username, anonymous can find every entity the user is "member of"
-    result = SearchResult.model_validate(await search_query(f"member:@{regular_user.namespace.path.first}"))
-    assert_search_result(result, projects=[p2, p4], groups=[gr_visma, gr_lidl])
+    result = await search_query(f"member:@{regular_user.namespace.path.first}")
+    assert_search_result(result, [p2, p4, gr_visma, gr_lidl], check_order=False)
 
 
 @pytest.mark.asyncio
-async def test_projects(search_reprovision, create_project, search_query) -> None:
+async def test_projects(
+    search_reprovision: SearchReprovisionCall, create_project_model: CreateProjectCall, search_query: SearchQueryCall
+) -> None:
     """More occurrences of a word should push results up."""
-    await create_project("Project Bike Z", visibility="public", description="a bike with a bike")
-    await create_project("Project Bike A", visibility="public")
-    await create_project("Project Bike R", visibility="public", description="a bike")
+    p1 = await create_project_model("Project Bike Z", visibility="public", description="a bike with a bike")
+
+    p2 = await create_project_model("Project Bike A", visibility="public")
+    p3 = await create_project_model("Project Bike R", visibility="public", description="a bike")
     await search_reprovision()
 
     result = await search_query("bike")
-    items = [e["name"] for e in result["items"]]
-    assert items == ["Project Bike Z", "Project Bike R", "Project Bike A"]
+    assert_search_result(result, [p1, p3, p2], check_order=True)
 
 
 @pytest.mark.asyncio
-async def test_distance(search_reprovision, create_project, search_query) -> None:
+async def test_distance(
+    search_reprovision: SearchReprovisionCall, create_project_model: CreateProjectCall, search_query: SearchQueryCall
+) -> None:
     """Search should be lenient to simple typos, distance=2."""
-    await create_project("Project Bike Z", visibility="public", description="a bike with a bike")
+    p1 = await create_project_model("Project Bike Z", visibility="public", description="a bike with a bike")
     await search_reprovision()
 
     result = await search_query("mikin type:project")
-    assert result["items"] == []
+    assert result.items == []
 
     result = await search_query("mike type:project")
-    assert len(result["items"]) == 1
-    assert result["items"][0]["name"] == "Project Bike Z"
+    assert result.items is not None
+    assert len(result.items) == 1
+    assert __entity_id(result.items[0]) == p1.id
 
 
 @pytest.mark.asyncio
 async def test_search_by_entity_type(
-    create_project, create_group, create_data_connector, user_headers, search_query, search_reprovision
+    create_project_model: CreateProjectCall,
+    create_group_model: CreateGroupCall,
+    create_data_connector_model: CreateDataConnectorCall,
+    regular_user: UserInfo,
+    search_query: SearchQueryCall,
+    search_reprovision: SearchReprovisionCall,
 ) -> None:
-    await create_project("Project Mine")
-    await create_group("Group Wine")
-    await create_data_connector("Data Zine", visibility="public")
+    p1 = await create_project_model("Project Mine")
+    g1 = await create_group_model("Group Wine")
+    d1 = await create_data_connector_model("Data Zine", visibility="public")
     await search_reprovision()
 
-    result = await search_query("", headers=user_headers)
-    items = result["items"]
-    types = set([e["type"] for e in items])
-    assert types == set(["Project", "Group", "User", "DataConnector"])
+    result = await search_query("type:dataconnector,project,group", regular_user)
+    assert_search_result(result, [p1, g1, d1], check_order=False)
 
     for field in EntityType._member_map_.values():
         qstr = [f"type:{field.value}", f"type:{field.value.upper()}", f"type:{field.value.lower()}"]
         for q in qstr:
-            result = await search_query(q, headers=user_headers)
-            items = result["items"]
+            result = await search_query(q, regular_user)
+            items = result.items or []
             assert len(items) >= 1, f"Invalid results for query '{q}': {items}"
             for item in items:
-                assert item["type"] == field.value
+                assert item.root.type == field.value
 
 
-def __make_headers(user: UserInfo, admin: bool = False) -> dict[str, str]:
-    access_token = json.dumps(
-        {
-            "is_admin": admin,
-            "id": user.id,
-            "name": f"{user.first_name} {user.last_name}",
-            "first_name": user.first_name,
-            "last_name": user.last_name,
-            "email": user.email,
-            "full_name": f"{user.first_name} {user.last_name}",
-        }
-    )
-    return {"Authorization": f"Bearer {access_token}"}
+def __entity_id(e: SearchEntity) -> str:
+    match e.root:
+        case SearchProject() as p:
+            return p.id
+
+        case SearchGroup() as g:
+            return g.id
+
+        case SearchDataConnector() as d:
+            return d.id
+
+        case SearchUser() as u:
+            return u.id
 
 
-def assert_search_result(result: SearchResult, projects: list[ApiProject], groups: list) -> None:
-    project_ids = set([p.id for p in projects])
-    group_ids = set([g["id"] for g in groups])
-    for item in result.items or []:
-        match item.root:
-            case SearchProject() as p:
-                assert p.id in project_ids, f"Expected project {p.id} in the results {result}"
-                project_ids.remove(p.id)
-            case SearchGroup() as g:
-                assert g.id in group_ids, f"Expected group {g.id} in the results {result}"
-                group_ids.remove(g.id)
-            case _:
-                pass
-    assert project_ids == set(), f"Some projects not found in the result: {project_ids}"
-    assert group_ids == set(), f"Some groups not found in the result: {group_ids}"
+def __api_entity_id(e: ApiProject | ApiGroup | ApiDataConnector) -> str:
+    match e:
+        case ApiProject() as p:
+            return p.id
+        case ApiGroup() as g:
+            return g.id
+        case ApiDataConnector() as d:
+            return d.id
+
+
+def assert_search_result(
+    result: SearchResult, entities: list[ApiProject | ApiGroup | ApiDataConnector], check_order: bool = False
+) -> None:
+    items = [__entity_id(e) for e in result.items or []]
+    expected = [__api_entity_id(e) for e in entities]
+    if not check_order:
+        items.sort()
+        expected.sort()
+
+    if len(items) < len(expected):
+        missing = set(expected).difference(set(items))
+        raise Exception(f"Some entities are missing in the search result: {missing}")
+
+    if len(items) > len(expected):
+        missing = set(items).difference(set(expected))
+        raise Exception(f"Too many results than expected: {missing}")
+
+    for r, e in zip(items, expected, strict=True):
+        assert r == e, f"Unexpected element (result={r}, expected={e}) in {items} vs {expected}"
