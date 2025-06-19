@@ -766,7 +766,7 @@ components:
         type:
           type: string
           description: data type of option value. RClone has more options but they map to the ones listed here.
-          enum: ["int", "bool", "string", "Time", "Duration", "MultiEncoder", "SizeSuffix", "SpaceSepList", "CommaSepList", "Tristate", "Encoding", "Bits"]
+          enum: ["int", "bool", "string", "stringArray", "Time", "Duration", "MultiEncoder", "SizeSuffix", "SpaceSepList", "CommaSepList", "Tristate", "Encoding", "Bits"]
       required:
         - name
         - help
