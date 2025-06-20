@@ -227,3 +227,26 @@ def test_query_extract_order() -> None:
         [Segments.name_is("test"), Segments.text("some"), Segments.keyword_is("datascience")],
         Segments.sort_by((SortableField.fname, SortDirection.desc), (SortableField.score, SortDirection.asc)),
     )
+
+
+def test_find_entity_types() -> None:
+    q = UserQuery.of(Segments.keyword_is("science"), Segments.name_is("test"))
+    assert q.find_entity_types() is None
+
+    q = UserQuery.of(Segments.keyword_is("science"), Segments.type_is(EntityType.project), Segments.name_is("test"))
+    assert q.find_entity_types() == set([EntityType.project])
+
+    q = UserQuery.of(
+        Segments.keyword_is("science"),
+        Segments.type_is(EntityType.project, EntityType.dataconnector),
+        Segments.name_is("test"),
+    )
+    assert q.find_entity_types() == set([EntityType.project, EntityType.dataconnector])
+
+    q = UserQuery.of(
+        Segments.keyword_is("science"),
+        Segments.type_is(EntityType.project),
+        Segments.type_is(EntityType.dataconnector),
+        Segments.name_is("test"),
+    )
+    assert q.find_entity_types() == set()

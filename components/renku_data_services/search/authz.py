@@ -34,21 +34,25 @@ async def __resources_with_permission(
             if o.permissionship == LOOKUP_PERMISSIONSHIP_HAS_PERMISSION:
                 result.append(o.resource_object_id)
 
-    logger.debug(f"Found ids for user '{user_id}' and perm={permission_name}: {result}")
+    logger.debug(f"Found ids for user:{user_id} perm={permission_name} ets={entity_types}: {result}")
     return result
 
 
-async def get_non_public_read(client: AuthzClient, user_id: str) -> list[str]:
+async def get_non_public_read(client: AuthzClient, user_id: str, ets: Iterable[EntityType]) -> list[str]:
     """Return all resource ids the given user as access to, that are not public."""
-    ets = [e for e in EntityType]
-    ets.remove(EntityType.user)  # user don't have this relation
+    ets = list(ets)
+    if EntityType.user in ets:
+        ets.remove(EntityType.user)  # user don't have this relation
     return await __resources_with_permission(client, user_id, ets, Scope.NON_PUBLIC_READ.value)
 
 
-async def get_ids_for_roles(client: AuthzClient, user_id: str, roles: Nel[Role], direct_membership: bool) -> list[str]:
+async def get_ids_for_roles(
+    client: AuthzClient, user_id: str, roles: Nel[Role], ets: Iterable[EntityType], direct_membership: bool
+) -> list[str]:
     """Return all resource ids for which the give user has one of the given roles."""
-    ets = [e for e in EntityType]
-    ets.remove(EntityType.user)  # user don't have this relation
+    ets = list(ets)
+    if EntityType.user in ets:
+        ets.remove(EntityType.user)  # user don't have this relation
     result: set[str] = set()
 
     for role in roles.to_list():

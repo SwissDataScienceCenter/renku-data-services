@@ -1,5 +1,6 @@
 """Tests for the solr_user_query module."""
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -43,7 +44,9 @@ ctx: Context = Context.for_anonymous(ref_date, UTC)
 class TestAuthAccess(AuthAccess):
     result: list[str]
 
-    async def get_ids_for_role(self, user_id: str, roles: Nel[Role], direct_membership: bool) -> list[str]:
+    async def get_ids_for_role(
+        self, user_id: str, roles: Nel[Role], ets: Iterable[EntityType], direct_membership: bool
+    ) -> list[str]:
         return self.result
 
     @classmethod

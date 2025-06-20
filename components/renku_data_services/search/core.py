@@ -1,6 +1,7 @@
 """Business logic for searching."""
 
 import asyncio
+from collections.abc import Iterable
 from datetime import UTC, datetime
 
 from authzed.api.v1 import AsyncClient as AuthzClient
@@ -23,7 +24,7 @@ from renku_data_services.search.solr_user_query import (
     UserRole,
 )
 from renku_data_services.search.user_query import Nel, UserQuery
-from renku_data_services.solr.entity_documents import DataConnector, EntityDocReader, Group, Project, User
+from renku_data_services.solr.entity_documents import DataConnector, EntityDocReader, EntityType, Group, Project, User
 from renku_data_services.solr.entity_schema import Fields
 from renku_data_services.solr.solr_client import (
     DefaultSolrClient,
@@ -89,7 +90,7 @@ async def _renku_query(
         case AdminRole():
             role_constraint = []
         case UserRole() as u:
-            ids = await authz.get_non_public_read(authz_client, u.id)
+            ids = await authz.get_non_public_read(authz_client, u.id, ctx.get_entity_types())
             role_constraint = [st.public_or_ids(ids)]
 
     return (
@@ -132,14 +133,18 @@ async def query(
     logger.debug(f"User search query: {query.render()}")
 
     class RoleAuthAccess(AuthAccess):
-        async def get_ids_for_role(self, user_id: str, roles: Nel[Role], direct_membership: bool) -> list[str]:
-            return await authz.get_ids_for_roles(authz_client, user_id, roles, direct_membership)
+        async def get_ids_for_role(
+            self, user_id: str, roles: Nel[Role], ets: Iterable[EntityType], direct_membership: bool
+        ) -> list[str]:
+            return await authz.get_ids_for_roles(authz_client, user_id, roles, ets, direct_membership)
 
     ctx = (
         Context.for_api_user(datetime.now(), UTC, user)
         .with_auth_access(RoleAuthAccess())
         .with_username_resolve(username_resolve)
+        .with_requested_entity_types(query)
     )
+
     suq = await QueryInterpreter.default().run(ctx, query)
     solr_query = await _renku_query(authz_client, ctx, suq, limit, offset)
     logger.debug(f"Solr query: {solr_query.to_dict()}")
