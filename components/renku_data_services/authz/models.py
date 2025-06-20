@@ -57,6 +57,10 @@ class Scope(Enum):
     ADD_LINK = "add_link"
     IS_ADMIN = "is_admin"
     NON_PUBLIC_READ = "non_public_read"
+    EXCLUSIVE_MEMBER = "exclusive_member"
+    EXCLUSIVE_EDITOR = "exclusive_editor"
+    EXCLUSIVE_OWNER = "exclusive_owner"
+    DIRECT_MEMBER = "direct_member"
 
 
 @dataclass

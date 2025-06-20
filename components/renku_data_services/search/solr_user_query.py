@@ -1,10 +1,12 @@
-"""Creating querios for solr given a parsed user search query."""
+"""Creating queries for solr given a parsed user search query."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime, tzinfo
+from typing import override
 
 import renku_data_services.search.solr_token as st
 from renku_data_services.authz.models import Role
@@ -14,9 +16,11 @@ from renku_data_services.search.user_query import (
     Comparison,
     Created,
     CreatedByIs,
+    DirectMemberIs,
     FieldTerm,
     IdIs,
     KeywordIs,
+    MemberIs,
     NameIs,
     NamespaceIs,
     Nel,
@@ -26,9 +30,13 @@ from renku_data_services.search.user_query import (
     SortableField,
     Text,
     TypeIs,
+    UserDef,
+    UserId,
+    Username,
     UserQuery,
     VisibilityIs,
 )
+from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.entity_schema import Fields
 from renku_data_services.solr.solr_client import SortDirection
 from renku_data_services.solr.solr_schema import FieldName
@@ -77,7 +85,9 @@ class AuthAccess(ABC):
     """Access authorization information."""
 
     @abstractmethod
-    async def get_role_ids(self, user_id: str, roles: Nel[Role]) -> list[str]:
+    async def get_ids_for_role(
+        self, user_id: str, roles: Nel[Role], ets: Iterable[EntityType], direct_membership: bool
+    ) -> list[str]:
         """Return resource ids for which the given user has the given role."""
         ...
 
@@ -88,34 +98,82 @@ class AuthAccess(ABC):
 
 
 class _NoAuthAccess(AuthAccess):
-    async def get_role_ids(self, user_id: str, roles: Nel[Role]) -> list[str]:
+    async def get_ids_for_role(
+        self, user_id: str, roles: Nel[Role], ets: Iterable[EntityType], direct_membership: bool
+    ) -> list[str]:
         return []
+
+
+class UsernameResolve(ABC):
+    """Resolve usernames to their ids."""
+
+    @abstractmethod
+    async def resolve_usernames(self, names: Nel[Username]) -> dict[Username, UserId] | None:
+        """Return the user id for a given user name."""
+        ...
+
+    @classmethod
+    def none(cls) -> UsernameResolve:
+        """An implementation that doesn't resolve names."""
+        return _EmptyUsernameResolve()
+
+
+class _EmptyUsernameResolve(UsernameResolve):
+    @override
+    async def resolve_usernames(self, names: Nel[Username]) -> dict[Username, UserId] | None:
+        return None
 
 
 @dataclass
 class Context:
-    """Contextual information available at search time that can be used to create the query."""
+    """Contextual information available at search time.
+
+    A single context is meant to be created for interpreting a single query.
+    """
 
     current_time: datetime
     zone: tzinfo
     role: SearchRole | None
     auth_access: AuthAccess = field(default_factory=AuthAccess.none)
+    username_resolve: UsernameResolve = field(default_factory=UsernameResolve.none)
+    requested_entity_types: set[EntityType] | None = None
+
+    def __copy(
+        self,
+        role: SearchRole | None = None,
+        auth_access: AuthAccess | None = None,
+        username_resolve: UsernameResolve | None = None,
+        requested_entity_types: set[EntityType] | None = None,
+    ) -> Context:
+        return Context(
+            self.current_time,
+            self.zone,
+            role or self.role,
+            auth_access or self.auth_access,
+            username_resolve or self.username_resolve,
+            requested_entity_types=requested_entity_types,
+        )
+
+    def with_requested_entity_types(self, uq: UserQuery) -> Context:
+        """Return a copy with the requested entity types set."""
+        et = uq.find_entity_types()
+        return self if self.requested_entity_types == et else self.__copy(requested_entity_types=et)
 
     def with_role(self, role: SearchRole) -> Context:
         """Return a copy wit the given role set."""
-        return self if self.role == role else Context(self.current_time, self.zone, role)
+        return self if self.role == role else self.__copy(role=role)
 
     def with_user_role(self, user_id: str) -> Context:
         """Return a copy with the given user id as user role set."""
-        return self if self.role == UserRole(user_id) else Context(self.current_time, self.zone, UserRole(user_id))
+        return self if self.role == UserRole(user_id) else self.__copy(role=UserRole(user_id))
 
     def with_admin_role(self, user_id: str) -> Context:
         """Return a copy with the given user id as admin role set."""
-        return self if self.role == AdminRole(user_id) else Context(self.current_time, self.zone, AdminRole(user_id))
+        return self if self.role == AdminRole(user_id) else self.__copy(role=AdminRole(user_id))
 
     def with_anonymous(self) -> Context:
         """Return a copy with no search role set."""
-        return self if self.role is None else Context(self.current_time, self.zone, None)
+        return self if self.role is None else self.__copy(role=None)
 
     def with_api_user(self, api_user: APIUser) -> Context:
         """Return a copy with the search role set by the APIUser."""
@@ -128,20 +186,57 @@ class Context:
 
     def with_auth_access(self, aa: AuthAccess) -> Context:
         """Return a copy with the given AuthAccess set."""
-        return Context(self.current_time, self.zone, self.role, aa)
+        return self.__copy(auth_access=aa)
 
-    async def get_ids_for_roles(self, roles: Nel[Role]) -> list[str] | None:
+    def with_username_resolve(self, ur: UsernameResolve) -> Context:
+        """Return a copy with the given UsernameResolve set."""
+        return self.__copy(username_resolve=ur)
+
+    def get_entity_types(self) -> list[EntityType]:
+        """Return the list of entity types that are requested from the query."""
+        return [e for e in EntityType] if self.requested_entity_types is None else list(self.requested_entity_types)
+
+    async def get_ids_for_roles(self, roles: Nel[Role], direct_membership: bool) -> list[str] | None:
         """Return a list of ids the user has one of the given roles.
 
         Return None when anonymous.
         """
+        ets = self.get_entity_types()
         match self.role:
             case UserRole() as r:
-                return await self.auth_access.get_role_ids(r.id, roles)
+                return await self.auth_access.get_ids_for_role(r.id, roles, ets, direct_membership)
             case AdminRole() as r:
-                return await self.auth_access.get_role_ids(r.id, roles)
+                return await self.auth_access.get_ids_for_role(r.id, roles, ets, direct_membership)
             case _:
                 return None
+
+    async def get_member_ids(self, users: Nel[UserDef], direct_membership: bool) -> list[str]:
+        """Return a list of resource ids, all given users are members of."""
+        result: set[str] = set()
+        ids: set[UserId] = set()
+        names: set[Username] = set()
+        ets = self.get_entity_types()
+        for user_def in users.to_list():
+            match user_def:
+                case Username() as u:
+                    names.add(u)
+
+                case UserId() as u:
+                    ids.add(u)
+
+        match Nel.from_list(list(names)):
+            case None:
+                pass
+            case nel:
+                remain_ids = await self.username_resolve.resolve_usernames(nel)
+                if remain_ids is not None:
+                    ids.update(remain_ids.values())
+
+        for uid in ids:
+            n = await self.auth_access.get_ids_for_role(uid.id, Nel.of(Role.VIEWER), ets, direct_membership)
+            result = set(n) if result == set() else result.intersection(set(n))
+
+        return list(result)
 
     @classmethod
     def for_anonymous(cls, current_time: datetime, zone: tzinfo) -> Context:
@@ -217,11 +312,11 @@ class LuceneQueryInterpreter(QueryInterpreter):
             case KeywordIs() as t:
                 return st.field_is_any(Fields.keywords, t.values.map(st.from_str))
             case NamespaceIs() as t:
-                return st.field_is_any(Fields.namespace, t.values.map(st.from_str))
+                return st.field_is_any(Fields.namespace_path, t.values.map(st.from_str))
             case CreatedByIs() as t:
                 return st.field_is_any(Fields.created_by, t.values.map(st.from_str))
             case RoleIs() as t:
-                ids = await ctx.get_ids_for_roles(t.values)
+                ids = await ctx.get_ids_for_roles(t.values, direct_membership=True)
                 if ids is None:
                     return st.empty()
                 else:
@@ -230,6 +325,20 @@ class LuceneQueryInterpreter(QueryInterpreter):
                         return st.id_not_exists()
                     else:
                         return st.id_in(nel)
+            case MemberIs() as t:
+                ids = await ctx.get_member_ids(t.users, direct_membership=False)
+                if ids == []:
+                    return st.id_not_exists()
+                else:
+                    return st.id_in(Nel.unsafe_from_list(ids))
+
+            case DirectMemberIs() as t:
+                ids = await ctx.get_member_ids(t.users, direct_membership=True)
+                if ids == []:
+                    return st.id_not_exists()
+                else:
+                    return st.id_in(Nel.unsafe_from_list(ids))
+
             case Created() as t:
                 tokens: list[SolrToken] = []
                 match t.cmp:

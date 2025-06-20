@@ -14,11 +14,13 @@
   }:
     {
       nixosConfigurations = let
+        system = flake-utils.lib.system.x86_64-linux;
         services = {
           services.dev-postgres = {
             enable = true;
             databases = ["renku_test"];
             init-script = ./.devcontainer/generate_ulid_func.sql;
+            pkg = nixpkgs.legacyPackages.${system}.postgresql_16;
             pgweb = {
               enable = true;
               database = "renku";
@@ -39,7 +41,7 @@
         };
       in {
         rdsdev-vm = devshell-tools.lib.mkVm {
-          system = flake-utils.lib.system.x86_64-linux;
+          inherit system;
           modules = [
             {
               virtualisation.memorySize = 2048;
@@ -62,12 +64,28 @@
 
       rclone = pkgs.rclone.overrideAttrs (old: {
         version = "1.69.3";
-        vendorHash = "sha256-Wu9d98SIENCkJYoGT/f9KN8vnYYGMN7HxhzqtkOYQ/8=";
+        vendorHash = "sha256-WY5xBBOhDRl+mU0KuVxph0wDhfUYLI0gmiGY1boxmKU=";
         src = pkgs.fetchFromGitHub {
           owner = "SwissDataScienceCenter";
           repo = "rclone";
           rev = "v1.69.3+renku-1";
-          sha256 = "sha256-aorgWwYBVVOYhMXXBDWBMXkaZi0WjnGaMoRlwXCa5w4=";
+          sha256 = "sha256-3uL8La2SiiFezoBcG4q4aArYP6t8EjoGDAi/eGLVCEU=";
+        };
+      });
+
+      ruff = pkgs.ruff.overrideAttrs (old: rec {
+        pname = "ruff";
+        version = "0.8.6";
+        src = pkgs.fetchFromGitHub {
+          owner = "astral-sh";
+          repo = "ruff";
+          tag = "0.8.6";
+          hash = "sha256-9YvHmNiKdf5hKqy9tToFSQZM2DNLoIiChcfjQay8wbU=";
+        };
+        cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
+          inherit src;
+          name = "${pname}-${version}";
+          hash = "sha256-aTzTCDCMhG4cKD9wFNHv6A3VBUifnKgI8a6kelc3bAM=";
         };
       });
 
@@ -110,7 +128,7 @@
 
       commonPackages = with pkgs; [
         redis
-        postgresql
+        postgresql_16
         jq
         devshellToolsPkgs.openapi-docs
         devshellToolsPkgs.solr
@@ -120,7 +138,6 @@
         rustc
         spicedb-zed
         ruff
-        ruff-lsp
         poetry
         python313
         basedpyright
@@ -148,6 +165,10 @@
                 poetry self add poetry-polylith-plugin
             fi
           ''
+        )
+        (writeShellScriptBin "zedl" ''
+          ${spicedb-zed}/bin/zed --no-verify-ca --insecure --endpoint ''$ZED_ENDPOINT --token ''$ZED_TOKEN $@
+        ''
         )
       ];
     in {

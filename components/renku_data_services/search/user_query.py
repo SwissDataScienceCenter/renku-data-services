@@ -5,15 +5,18 @@ from __future__ import annotations
 import calendar
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from dataclasses import field as data_field
 from datetime import date, datetime, time, timedelta, tzinfo
 from enum import StrEnum
-from typing import Self
+from typing import Any, Self
 
 from renku_data_services.authz.models import Role, Visibility
+from renku_data_services.base_models.core import NamespaceSlug
+from renku_data_services.namespace.models import UserNamespace
 from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.solr_client import SortDirection
+from renku_data_services.users.models import UserInfo
 
 
 @dataclass
@@ -97,6 +100,8 @@ class Field(StrEnum):
     role = "role"
     keyword = "keyword"
     namespace = "namespace"
+    member = "member"
+    direct_member = "direct_member"
 
 
 class Comparison(StrEnum):
@@ -105,6 +110,70 @@ class Comparison(StrEnum):
     is_equal = ":"
     is_lower_than = "<"
     is_greater_than = ">"
+
+
+@dataclass
+class Username:
+    """A user identifier: username slug."""
+
+    slug: NamespaceSlug
+    __hashvalue: int | None = field(init=False, repr=False, default=None)
+
+    def render(self) -> str:
+        """Render the query part of this value."""
+        return f"@{self.slug.value}"
+
+    def __eq__(self, other: Any) -> bool:
+        match other:
+            case Username() as u:
+                return u.slug.value == self.slug.value
+            case _:
+                return False
+
+    def __hash__(self) -> int:
+        if self.__hashvalue is None:
+            self.__hashvalue = hash(self.slug.value)
+
+        return self.__hashvalue
+
+    @classmethod
+    def from_name(cls, s: str) -> Username:
+        """Create a Username from a string."""
+        return Username(NamespaceSlug.from_name(s))
+
+    @classmethod
+    def from_user_namespace(cls, ns: UserNamespace) -> Username:
+        """Create a Username from a UserNamespace."""
+        return Username(ns.path.first)
+
+    @classmethod
+    def from_user_info(cls, u: UserInfo) -> Username:
+        """Create a Username from a UserInfo."""
+        return cls.from_user_namespace(u.namespace)
+
+
+@dataclass
+class UserId:
+    """A user identifier (the keycloak one)."""
+
+    id: str
+
+    def render(self) -> str:
+        """Renders the query representation of this value."""
+        return self.id
+
+    def __eq__(self, other: Any) -> bool:
+        match other:
+            case UserId() as id:
+                return id.id == self.id
+            case _:
+                return False
+
+    def __hash__(self) -> int:
+        return hash(self.id)
+
+
+type UserDef = Username | UserId
 
 
 @dataclass
@@ -268,7 +337,16 @@ class DateTimeCalc:
 type DateTimeRef = PartialDateTime | RelativeDate | DateTimeCalc
 
 
-class FieldComparison(ABC):
+class SegmentBase(ABC):
+    """Base class for a query segment."""
+
+    @abstractmethod
+    def accept(self, visitor: UserQueryVisitor) -> None:
+        """Apply this to the visitor."""
+        ...
+
+
+class FieldComparison(SegmentBase):
     """A query part for a specific field."""
 
     @property
@@ -292,6 +370,54 @@ class FieldComparison(ABC):
 
 
 @dataclass
+class MemberIs(FieldComparison):
+    """Check for membership of a given user."""
+
+    users: Nel[UserDef]
+
+    @property
+    def field(self) -> Field:
+        """The field name."""
+        return Field.member
+
+    @property
+    def cmp(self) -> Comparison:
+        """The comparison to use."""
+        return Comparison.is_equal
+
+    def _render_value(self) -> str:
+        return self.users.map(lambda u: u.render()).mk_string(",")
+
+    def accept(self, visitor: UserQueryVisitor) -> None:
+        """Apply this to the visitor."""
+        visitor.visit_member_is(self)
+
+
+@dataclass
+class DirectMemberIs(FieldComparison):
+    """Check for direct membership of a given user."""
+
+    users: Nel[UserDef]
+
+    @property
+    def field(self) -> Field:
+        """The field name."""
+        return Field.direct_member
+
+    @property
+    def cmp(self) -> Comparison:
+        """The comparison to use."""
+        return Comparison.is_equal
+
+    def _render_value(self) -> str:
+        return self.users.map(lambda u: u.render()).mk_string(",")
+
+    def accept(self, visitor: UserQueryVisitor) -> None:
+        """Apply this to the visitor."""
+        visitor.visit_direct_member_is(self)
+
+
+@dataclass
 class TypeIs(FieldComparison):
     """Compare the type property against a list of values."""
 
@@ -309,6 +435,10 @@ class TypeIs(FieldComparison):
 
     def _render_value(self) -> str:
         return self.values.mk_string(",")
+
+    def accept(self, visitor: UserQueryVisitor) -> None:
+        """Apply this to the visitor."""
+        visitor.visit_type_is(self)
 
 
 @dataclass
@@ -330,6 +460,10 @@ class IdIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",", Helper.quote)
 
+    def accept(self, visitor: UserQueryVisitor) -> None:
+        """Apply this to the visitor."""
+        visitor.visit_id_is(self)
+
 
 @dataclass
 class NameIs(FieldComparison):
@@ -349,6 +483,10 @@ class NameIs(FieldComparison):
 
     def _render_value(self) -> str:
         return self.values.mk_string(",", Helper.quote)
+
+    def accept(self, visitor: UserQueryVisitor) -> None:
+        """Apply this to the visitor."""
+        visitor.visit_name_is(self)
 
 
 @dataclass
@@ -370,6 +508,10 @@ class SlugIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",", Helper.quote)
 
+    def accept(self, visitor: UserQueryVisitor) -> None:
+        """Apply this to the visitor."""
+        visitor.visit_slug_is(self)
+
 
 @dataclass
 class KeywordIs(FieldComparison):
@@ -389,6 +531,10 @@ class KeywordIs(FieldComparison):
 
     def _render_value(self) -> str:
         return self.values.mk_string(",", Helper.quote)
+
+    def accept(self, visitor: UserQueryVisitor) -> None:
+        """Apply this to the visitor."""
+        visitor.visit_keyword_is(self)
 
 
 @dataclass
@@ -410,6 +556,10 @@ class NamespaceIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",", Helper.quote)
 
+    def accept(self, visitor: UserQueryVisitor) -> None:
+        """Apply this to the visitor."""
+        visitor.visit_namespace_is(self)
+
 
 @dataclass
 class VisibilityIs(FieldComparison):
@@ -430,6 +580,10 @@ class VisibilityIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",")
 
+    def accept(self, visitor: UserQueryVisitor) -> None:
+        """Apply this to the visitor."""
+        visitor.visit_visibility_is(self)
+
 
 @dataclass
 class CreatedByIs(FieldComparison):
@@ -449,6 +603,10 @@ class CreatedByIs(FieldComparison):
 
     def _render_value(self) -> str:
         return self.values.mk_string(",", Helper.quote)
+
+    def accept(self, visitor: UserQueryVisitor) -> None:
+        """Apply this to the visitor."""
+        visitor.visit_created_by_is(self)
 
 
 @dataclass
@@ -489,6 +647,10 @@ class Created(FieldComparison):
         nel = Nel(value, list(args))
         return Created(Comparison.is_greater_than, nel)
 
+    def accept(self, visitor: UserQueryVisitor) -> None:
+        """Apply this to the visitor."""
+        visitor.visit_created(self)
+
 
 @dataclass
 class RoleIs(FieldComparison):
@@ -509,9 +671,13 @@ class RoleIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",")
 
+    def accept(self, visitor: UserQueryVisitor) -> None:
+        """Apply this to the visitor."""
+        visitor.visit_role_is(self)
+
 
 @dataclass
-class Text:
+class Text(SegmentBase):
     """A query part that is not corresponding to a specific field."""
 
     value: str
@@ -528,6 +694,10 @@ class Text:
             return self
         else:
             return type(self)(self.value + " " + next.value)
+
+    def accept(self, visitor: UserQueryVisitor) -> None:
+        """Apply this to the visitor."""
+        visitor.visit_text(self)
 
 
 class SortableField(StrEnum):
@@ -556,7 +726,7 @@ class OrderBy:
 
 
 @dataclass
-class Order:
+class Order(SegmentBase):
     """A query part for defining how to order results."""
 
     fields: Nel[OrderBy]
@@ -569,9 +739,24 @@ class Order:
         """Append the field list of `other` to this."""
         return type(self)(self.fields.append(other.fields))
 
+    def accept(self, visitor: UserQueryVisitor) -> None:
+        """Apply this to the visitor."""
+        visitor.visit_order(self)
+
 
 type FieldTerm = (
-    TypeIs | IdIs | NameIs | SlugIs | VisibilityIs | KeywordIs | NamespaceIs | CreatedByIs | Created | RoleIs
+    TypeIs
+    | IdIs
+    | NameIs
+    | SlugIs
+    | VisibilityIs
+    | KeywordIs
+    | NamespaceIs
+    | CreatedByIs
+    | Created
+    | RoleIs
+    | MemberIs
+    | DirectMemberIs
 )
 
 
@@ -580,6 +765,16 @@ type Segment = FieldTerm | Text | Order
 
 class Segments:
     """Helpers for creating segments."""
+
+    @classmethod
+    def direct_member_is(cls, user: UserDef, *args: UserDef) -> Segment:
+        """Return member-is query segment."""
+        return DirectMemberIs(Nel(user, list(args)))
+
+    @classmethod
+    def member_is(cls, user: UserDef, *args: UserDef) -> Segment:
+        """Return member-is query segment."""
+        return MemberIs(Nel(user, list(args)))
 
     @classmethod
     def text(cls, text: str) -> Segment:
@@ -676,6 +871,11 @@ class UserQuery:
         """Return the string representation of this query."""
         return " ".join([e.render() for e in self.segments])
 
+    def accept(self, visitor: UserQueryVisitor) -> None:
+        """Apply the visitor."""
+        for s in self.segments:
+            s.accept(visitor)
+
     def extract_order(self) -> tuple[list[FieldTerm | Text], Order | None]:
         """Extracts all sort segments into a single OrderBy value."""
         segs: list[FieldTerm | Text] = []
@@ -690,3 +890,133 @@ class UserQuery:
 
         sort = Nel.from_list(orders)
         return (segs, Order(sort) if sort is not None else None)
+
+    def find_entity_types(self) -> set[EntityType] | None:
+        """Gather all entity types that are requested."""
+        result: set[EntityType] | None = None
+        for seg in self.segments:
+            match seg:
+                case TypeIs() as t:
+                    values = set(t.values.to_list())
+                    result = values if result is None else result.intersection(values)
+                case _:
+                    pass
+        return result
+
+
+class UserQueryVisitor(ABC):
+    """A visitor to transform user queries."""
+
+    @abstractmethod
+    def visit_order(self, order: Order) -> None:
+        """Visit node."""
+        ...
+
+    @abstractmethod
+    def visit_text(self, text: Text) -> None:
+        """Visit node."""
+        ...
+
+    @abstractmethod
+    def visit_type_is(self, ft: TypeIs) -> None:
+        """Visit node."""
+        ...
+
+    @abstractmethod
+    def visit_id_is(self, ft: IdIs) -> None:
+        """Visit node."""
+        ...
+
+    @abstractmethod
+    def visit_name_is(self, ft: NameIs) -> None:
+        """Visit node."""
+        ...
+
+    @abstractmethod
+    def visit_slug_is(self, ft: SlugIs) -> None:
+        """Visit node."""
+        ...
+
+    @abstractmethod
+    def visit_visibility_is(self, ft: VisibilityIs) -> None:
+        """Visit node."""
+        ...
+
+    @abstractmethod
+    def visit_keyword_is(self, ft: KeywordIs) -> None:
+        """Visit node."""
+        ...
+
+    @abstractmethod
+    def visit_namespace_is(self, ft: NamespaceIs) -> None:
+        """Visit node."""
+        ...
+
+    @abstractmethod
+    def visit_created_by_is(self, ft: CreatedByIs) -> None:
+        """Visit node."""
+        ...
+
+    @abstractmethod
+    def visit_created(self, ft: Created) -> None:
+        """Visit node."""
+        ...
+
+    @abstractmethod
+    def visit_role_is(self, ft: RoleIs) -> None:
+        """Visit node."""
+        ...
+
+    @abstractmethod
+    def visit_member_is(self, ft: MemberIs) -> None:
+        """Visit node."""
+        ...
+
+    @abstractmethod
+    def visit_direct_member_is(self, ft: DirectMemberIs) -> None:
+        """Visit node."""
+        ...
+
+
+# class NoopUserQueryVisitor(UserQueryVisitor):
+#     def visit_text(self, text: Text) -> None:
+#         pass
+
+#     def visit_created(self, ft: Created) -> None:
+#         pass
+
+#     def visit_created_by_is(self, ft: CreatedByIs) -> None:
+#         pass
+
+#     def visit_direct_member_is(self, ft: DirectMemberIs) -> None:
+#         pass
+
+#     def visit_id_is(self, ft: IdIs) -> None:
+#         pass
+
+#     def visit_keyword_is(self, ft: KeywordIs) -> None:
+#         pass
+
+#     def visit_member_is(self, ft: MemberIs) -> None:
+#         pass
+
+#     def visit_name_is(self, ft: NameIs) -> None:
+#         pass
+
+#     def visit_namespace_is(self, ft: NamespaceIs) -> None:
+#         pass
+
+#     def visit_order(self, order: Order) -> None:
+#         pass
+
+#     def visit_role_is(self, ft: RoleIs) -> None:
+#         pass
+
+#     def visit_slug_is(self, ft: SlugIs) -> None:
+#         pass
+
+#     def visit_type_is(self, ft: TypeIs) -> None:
+#         pass
+
+#     def visit_visibility_is(self, ft: VisibilityIs) -> None:
+#         pass
