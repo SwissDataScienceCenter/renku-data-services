@@ -86,7 +86,14 @@ async def test_resource_pool_creation_with_cluster_ids(
     if "cluster_id" in payload:
         _, res = await sanic_client.post(
             "/api/data/clusters",
-            json={"name": "test-name", "config_name": "test-class-name"},
+            json={
+                "name": "test-name",
+                "config_name": "test-class-name",
+                "session_protocol": "http",
+                "session_host": "localhost",
+                "session_port": 8080,
+                "session_path": "/renku-sessions",
+            },
             headers={"Authorization": 'Bearer {"is_admin": true}'},
         )
         payload["cluster_id"] = res.json["id"]
