@@ -10,6 +10,7 @@ from ulid import ULID
 import renku_data_services.base_models as base_models
 from renku_data_services.app_config import logging
 from renku_data_services.crc import models
+from renku_data_services.crc.apispec import Protocol as CrcApiProtocol
 from renku_data_services.crc.models import SavedCluster
 from renku_data_services.errors import errors
 from renku_data_services.utils.sqlalchemy import ULIDType
@@ -145,15 +146,34 @@ class ClusterORM(BaseORM):
     id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
     name: Mapped[str] = mapped_column(String(40), unique=True, index=True)
     config_name: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    session_protocol: Mapped[str] = mapped_column(String(10))
+    session_host: Mapped[str] = mapped_column(String(256))
+    session_port: Mapped[int] = mapped_column(Integer)
+    session_path: Mapped[str] = mapped_column(String(40))
 
     def dump(self) -> models.SavedCluster:
         """Create a cluster model from the ORM object."""
-        return SavedCluster(id=self.id, name=self.name, config_name=self.config_name)
+        return SavedCluster(
+            id=self.id,
+            name=self.name,
+            config_name=self.config_name,
+            session_protocol=CrcApiProtocol[self.session_protocol],
+            session_host=self.session_host,
+            session_port=self.session_port,
+            session_path=self.session_path,
+        )
 
     @classmethod
     def load(cls, cluster: models.Cluster) -> "ClusterORM":
         """Create an ORM object from the cluster model."""
-        return ClusterORM(name=cluster.name, config_name=cluster.config_name)
+        return ClusterORM(
+            name=cluster.name,
+            config_name=cluster.config_name,
+            session_protocol=cluster.session_protocol.name,
+            session_host=cluster.session_host,
+            session_port=cluster.session_port,
+            session_path=cluster.session_path,
+        )
 
 
 class ResourcePoolORM(BaseORM):
