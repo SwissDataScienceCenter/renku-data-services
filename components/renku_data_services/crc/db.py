@@ -947,8 +947,16 @@ class ClusterRepository:
             if saved_cluster is None:
                 raise errors.MissingResourceError(message=f"Cluster definition id='{cluster_id}' does not exist.")
 
-            saved_cluster.name = cluster.name
-            saved_cluster.config_name = cluster.config_name
+            kwargs = asdict(cluster)
+            for key, value in kwargs.items():
+                match key:
+                    case "id":
+                        # Make sure we do not allow changing the id of the cluster
+                        pass
+                    case "session_protocol":
+                        saved_cluster.session_protocol = value.value
+                    case _:
+                        setattr(saved_cluster, key, value)
 
             await session.flush()
             await session.refresh(saved_cluster)
