@@ -370,7 +370,7 @@ async def create_project_model(sanic_client, regular_user: UserInfo, admin_user:
         user = user or regular_user
         headers = __make_headers(user, admin=user.id == admin_user.id)
         if "namespace" not in payload:
-            payload.update({"namespace": f"{user.first_name}.{user.last_name}".lower()})
+            payload.update({"namespace": user.namespace.path.serialize()})
 
         _, response = await sanic_client.post("/api/data/projects", headers=headers, json=payload)
 
