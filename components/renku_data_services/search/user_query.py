@@ -810,3 +810,15 @@ class UserQuery:
 
         sort = Nel.from_list(orders)
         return (segs, Order(sort) if sort is not None else None)
+
+    def find_entity_types(self) -> set[EntityType] | None:
+        """Gather all entity types that are requested."""
+        result: set[EntityType] | None = None
+        for seg in self.segments:
+            match seg:
+                case TypeIs() as t:
+                    values = set(t.values.to_list())
+                    result = values if result is None else result.intersection(values)
+                case _:
+                    pass
+        return result

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime, tzinfo
 from typing import override
@@ -35,6 +36,7 @@ from renku_data_services.search.user_query import (
     UserQuery,
     VisibilityIs,
 )
+from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.entity_schema import Fields
 from renku_data_services.solr.solr_client import SortDirection
 from renku_data_services.solr.solr_schema import FieldName
@@ -83,7 +85,9 @@ class AuthAccess(ABC):
     """Access authorization information."""
 
     @abstractmethod
-    async def get_ids_for_role(self, user_id: str, roles: Nel[Role], direct_membership: bool) -> list[str]:
+    async def get_ids_for_role(
+        self, user_id: str, roles: Nel[Role], ets: Iterable[EntityType], direct_membership: bool
+    ) -> list[str]:
         """Return resource ids for which the given user has the given role."""
         ...
 
@@ -94,7 +98,9 @@ class AuthAccess(ABC):
 
 
 class _NoAuthAccess(AuthAccess):
-    async def get_ids_for_role(self, user_id: str, roles: Nel[Role], direct_membership: bool) -> list[str]:
+    async def get_ids_for_role(
+        self, user_id: str, roles: Nel[Role], ets: Iterable[EntityType], direct_membership: bool
+    ) -> list[str]:
         return []
 
 
@@ -120,19 +126,24 @@ class _EmptyUsernameResolve(UsernameResolve):
 
 @dataclass
 class Context:
-    """Contextual information available at search time that can be used to create the query."""
+    """Contextual information available at search time.
+
+    A single context is meant to be created for interpreting a single query.
+    """
 
     current_time: datetime
     zone: tzinfo
     role: SearchRole | None
     auth_access: AuthAccess = field(default_factory=AuthAccess.none)
     username_resolve: UsernameResolve = field(default_factory=UsernameResolve.none)
+    requested_entity_types: set[EntityType] | None = None
 
     def __copy(
         self,
         role: SearchRole | None = None,
         auth_access: AuthAccess | None = None,
         username_resolve: UsernameResolve | None = None,
+        requested_entity_types: set[EntityType] | None = None,
     ) -> Context:
         return Context(
             self.current_time,
@@ -140,7 +151,13 @@ class Context:
             role or self.role,
             auth_access or self.auth_access,
             username_resolve or self.username_resolve,
+            requested_entity_types=requested_entity_types,
         )
+
+    def with_requested_entity_types(self, uq: UserQuery) -> Context:
+        """Return a copy with the requested entity types set."""
+        et = uq.find_entity_types()
+        return self if self.requested_entity_types == et else self.__copy(requested_entity_types=et)
 
     def with_role(self, role: SearchRole) -> Context:
         """Return a copy wit the given role set."""
@@ -175,16 +192,21 @@ class Context:
         """Return a copy with the given UsernameResolve set."""
         return self.__copy(username_resolve=ur)
 
+    def get_entity_types(self) -> list[EntityType]:
+        """Return the list of entity types that are requested from the query."""
+        return [e for e in EntityType] if self.requested_entity_types is None else list(self.requested_entity_types)
+
     async def get_ids_for_roles(self, roles: Nel[Role], direct_membership: bool) -> list[str] | None:
         """Return a list of ids the user has one of the given roles.
 
         Return None when anonymous.
         """
+        ets = self.get_entity_types()
         match self.role:
             case UserRole() as r:
-                return await self.auth_access.get_ids_for_role(r.id, roles, direct_membership)
+                return await self.auth_access.get_ids_for_role(r.id, roles, ets, direct_membership)
             case AdminRole() as r:
-                return await self.auth_access.get_ids_for_role(r.id, roles, direct_membership)
+                return await self.auth_access.get_ids_for_role(r.id, roles, ets, direct_membership)
             case _:
                 return None
 
@@ -193,6 +215,7 @@ class Context:
         result: set[str] = set()
         ids: set[UserId] = set()
         names: set[Username] = set()
+        ets = self.get_entity_types()
         for user_def in users.to_list():
             match user_def:
                 case Username() as u:
@@ -210,7 +233,7 @@ class Context:
                     ids.update(remain_ids.values())
 
         for uid in ids:
-            n = await self.auth_access.get_ids_for_role(uid.id, Nel.of(Role.VIEWER), direct_membership)
+            n = await self.auth_access.get_ids_for_role(uid.id, Nel.of(Role.VIEWER), ets, direct_membership)
             result = set(n) if result == set() else result.intersection(set(n))
 
         return list(result)

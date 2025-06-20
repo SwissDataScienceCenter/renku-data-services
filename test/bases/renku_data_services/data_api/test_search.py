@@ -95,6 +95,9 @@ async def test_direct_member_search(
     result = await search_query(f"direct_member:@{wout.namespace.path.first}", user=regular_user)
     assert_search_result(result, [gr_lidl, gr_visma, p3, p4, p5])
 
+    result = await search_query(f"direct_member:@{wout.namespace.path.first},@{mads.namespace.path.first}", user=mads)
+    assert_search_result(result, [p3, gr_visma, gr_lidl])
+
     result = await search_query(f"member:@{wout.namespace.path.first}", user=regular_user)
     assert_search_result(result, [gr_lidl, gr_visma, p1, p2, p3, p4, p5])
 
