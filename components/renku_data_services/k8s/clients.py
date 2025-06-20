@@ -19,8 +19,7 @@ from kubernetes.config.incluster_config import SERVICE_CERT_FILENAME, SERVICE_TO
 
 from renku_data_services.errors import errors
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface, K8sSchedudlingClientInterface
-from renku_data_services.k8s.models import APIObjectInCluster
-from renku_data_services.k8s.models import K8sObjectFilter
+from renku_data_services.k8s.models import APIObjectInCluster, K8sObjectFilter
 
 if TYPE_CHECKING:
     from renku_data_services.k8s.models import (
