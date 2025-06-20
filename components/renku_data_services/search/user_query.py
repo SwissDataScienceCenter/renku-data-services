@@ -702,6 +702,16 @@ class Segments:
     """Helpers for creating segments."""
 
     @classmethod
+    def direct_member_is(cls, user: UserDef, *args: UserDef) -> Segment:
+        """Return member-is query segment."""
+        return DirectMemberIs(Nel(user, list(args)))
+
+    @classmethod
+    def member_is(cls, user: UserDef, *args: UserDef) -> Segment:
+        """Return member-is query segment."""
+        return MemberIs(Nel(user, list(args)))
+
+    @classmethod
     def text(cls, text: str) -> Segment:
         """Return a free text query segment."""
         return Text(text)
