@@ -255,6 +255,36 @@ def test_query() -> None:
     assert q.render() == qstr
 
 
+def test_collapse_member_and_text_query() -> None:
+    q = UserQuery(
+        [
+            Segments.name_is("al"),
+            Segments.member_is(Username.from_name("jane"), Username.from_name("joe")),
+            Segments.text("hello this world"),
+        ]
+    )
+    qstr = "name:al hello  member:@jane this world member:@joe"
+    assert QueryParser.parse(qstr) == q
+    assert q.render() == "name:al member:@jane,@joe hello this world"
+
+
+def test_restrict_members_query() -> None:
+    q = UserQuery(
+        [
+            Segments.name_is("al"),
+            Segments.member_is(
+                Username.from_name("jane"), Username.from_name("joe"), Username.from_name("jeff"), UserId("123")
+            ),
+            Segments.text("hello"),
+        ]
+    )
+    qstr = "name:al  member:@jane hello member:@joe,@jeff,123,456,@wuff"
+    assert QueryParser.parse(qstr) == q
+
+
+##    assert q.render() == "name:al member:@jane,@joe hello this world"
+
+
 def test_invalid_query() -> None:
     result = QueryParser.parse("type:uu:ue:")
     assert result == UserQuery([Text("type:uu:ue:")])
