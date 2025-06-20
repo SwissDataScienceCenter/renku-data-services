@@ -595,13 +595,20 @@ class ClustersBP(CustomBlueprint):
         return "/clusters", ["GET"], _handler
 
     def post(self) -> BlueprintFactoryResponse:
-        """Get the cluster descriptions."""
+        """Create a cluster description."""
 
         @authenticate(self.authenticator)
         @only_admins
         @validate(json=apispec.Cluster)
         async def _handler(_request: Request, user: base_models.APIUser, body: apispec.Cluster) -> HTTPResponse:
-            cluster = UnsavedCluster(name=body.name, config_name=body.config_name)
+            cluster = UnsavedCluster(
+                name=body.name,
+                config_name=body.config_name,
+                session_protocol=body.session_protocol,
+                session_host=body.session_host,
+                session_port=body.session_port,
+                session_path=body.session_path,
+            )
             cluster = await self.repo.insert(user, cluster)
 
             return validated_json(apispec.ClusterWithId, cluster, status=201)
@@ -629,7 +636,14 @@ class ClustersBP(CustomBlueprint):
         async def _handler(
             _request: Request, user: base_models.APIUser, cluster_id: ULID, body: apispec.Cluster
         ) -> HTTPResponse:
-            cluster = UnsavedCluster(name=body.name, config_name=body.config_name)
+            cluster = UnsavedCluster(
+                name=body.name,
+                config_name=body.config_name,
+                session_protocol=body.session_protocol,
+                session_host=body.session_host,
+                session_port=body.session_port,
+                session_path=body.session_path,
+            )
             cluster = await self.repo.update(user, cluster, cluster_id)
 
             return validated_json(apispec.ClusterWithId, cluster, status=201)
@@ -645,11 +659,11 @@ class ClustersBP(CustomBlueprint):
         async def _handler(
             _request: Request, user: base_models.APIUser, cluster_id: ULID, body: apispec.ClusterPatch
         ) -> HTTPResponse:
-            old = await self.repo.select(user, cluster_id)
+            old = asdict(await self.repo.select(user, cluster_id))
+            old.pop("id")
+            new = body.model_dump(exclude_none=True)
 
-            name = body.name if body.name is not None else old.name
-            config_name = body.config_name if body.config_name is not None else old.config_name
-            cluster = UnsavedCluster(name=name, config_name=config_name)
+            cluster = UnsavedCluster(**{**old, **new})
 
             cluster = await self.repo.update(user, cluster, cluster_id)
 

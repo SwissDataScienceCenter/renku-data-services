@@ -12,6 +12,7 @@ from uuid import uuid4
 from ulid import ULID
 
 from renku_data_services import errors
+from renku_data_services.crc.apispec import Protocol as CrcApiProtocol
 from renku_data_services.errors import ValidationError
 
 
@@ -191,15 +192,10 @@ class Cluster:
 
     name: str
     config_name: str
-
-    @classmethod
-    def from_dict(cls, data: dict) -> Cluster:
-        """Instantiate a Cluster from the dictionary."""
-
-        if "id" in data:
-            return SavedCluster(**data)
-        else:
-            return UnsavedCluster(**data)
+    session_protocol: CrcApiProtocol
+    session_host: str
+    session_port: int
+    session_path: str
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
