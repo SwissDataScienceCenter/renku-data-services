@@ -226,4 +226,3 @@ API_SPEC_CODEGEN_PARAMS := ${CODEGEN_PARAMS}
 # newer than the requirements these steps won't be re-triggered.
 # Ignore the return value when there are more differences.
 	( git diff --exit-code -I "^#   timestamp\: " $@ >/dev/null && git checkout $@ ) || true
-
