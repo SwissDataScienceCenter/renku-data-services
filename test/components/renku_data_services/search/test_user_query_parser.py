@@ -16,7 +16,6 @@ from renku_data_services.search.user_query import (
     DirectMemberIs,
     IdIs,
     KeywordIs,
-    MemberIs,
     NameIs,
     NamespaceIs,
     Nel,
@@ -29,6 +28,7 @@ from renku_data_services.search.user_query import (
     RoleIs,
     Segments,
     SlugIs,
+    SoftMemberIs,
     SortableField,
     Text,
     TypeIs,
@@ -53,14 +53,14 @@ def test_user_name() -> None:
         pp.user_name.parse("@t - a")
 
 
-def test_member_is() -> None:
-    assert pp.member_is.parse("member:@hello") == MemberIs(Nel(Username.from_name("hello")))
-    assert pp.member_is.parse("member:hello") == MemberIs(Nel(UserId("hello")))
+def test_soft_member_is() -> None:
+    assert pp.soft_member_is.parse("soft_member:@hello") == SoftMemberIs(Nel(Username.from_name("hello")))
+    assert pp.soft_member_is.parse("soft_member:hello") == SoftMemberIs(Nel(UserId("hello")))
 
 
 def test_direct_member_is() -> None:
-    assert pp.direct_member_is.parse("direct_member:@hello") == DirectMemberIs(Nel(Username.from_name("hello")))
-    assert pp.direct_member_is.parse("direct_member:hello") == DirectMemberIs(Nel(UserId("hello")))
+    assert pp.direct_member_is.parse("member:@hello") == DirectMemberIs(Nel(Username.from_name("hello")))
+    assert pp.direct_member_is.parse("member:hello") == DirectMemberIs(Nel(UserId("hello")))
 
 
 def test_sortable_field() -> None:
@@ -189,10 +189,10 @@ def test_field_term() -> None:
     assert pp.field_term.parse("createdBy:test") == CreatedByIs(Nel("test"))
     assert pp.field_term.parse("role:owner") == RoleIs(Nel(Role.OWNER))
     assert pp.field_term.parse("role:viewer") == RoleIs(Nel(Role.VIEWER))
-    assert pp.field_term.parse("member:@john") == MemberIs(Nel(Username.from_name("john")))
-    assert pp.field_term.parse("member:123-456") == MemberIs(Nel(UserId("123-456")))
-    assert pp.field_term.parse("direct_member:@john") == DirectMemberIs(Nel(Username.from_name("john")))
-    assert pp.field_term.parse("direct_member:123-456") == DirectMemberIs(Nel(UserId("123-456")))
+    assert pp.field_term.parse("member:@john") == DirectMemberIs(Nel(Username.from_name("john")))
+    assert pp.field_term.parse("member:123-456") == DirectMemberIs(Nel(UserId("123-456")))
+    assert pp.field_term.parse("soft_member:@john") == SoftMemberIs(Nel(Username.from_name("john")))
+    assert pp.field_term.parse("soft_member:123-456") == SoftMemberIs(Nel(UserId("123-456")))
 
 
 def test_free_text() -> None:
@@ -219,10 +219,10 @@ def test_segment() -> None:
     assert pp.segment.parse("keyword:test") == KeywordIs(Nel("test"))
     assert pp.segment.parse("namespace:test") == NamespaceIs(Nel("test"))
     assert pp.segment.parse("createdBy:test") == CreatedByIs(Nel("test"))
-    assert pp.segment.parse("member:@john") == MemberIs(Nel(Username.from_name("john")))
-    assert pp.segment.parse("member:123-456") == MemberIs(Nel(UserId("123-456")))
-    assert pp.segment.parse("direct_member:@john") == DirectMemberIs(Nel(Username.from_name("john")))
-    assert pp.segment.parse("direct_member:123-456") == DirectMemberIs(Nel(UserId("123-456")))
+    assert pp.segment.parse("member:@john") == DirectMemberIs(Nel(Username.from_name("john")))
+    assert pp.segment.parse("member:123-456") == DirectMemberIs(Nel(UserId("123-456")))
+    assert pp.segment.parse("soft_member:@john") == SoftMemberIs(Nel(Username.from_name("john")))
+    assert pp.segment.parse("soft_member:123-456") == SoftMemberIs(Nel(UserId("123-456")))
 
     assert pp.segment.parse("name:") == Text("name:")
 
@@ -260,7 +260,7 @@ def test_collapse_member_and_text_query() -> None:
         [
             Segments.name_is("al"),
             Segments.text("hello this world"),
-            Segments.member_is(Username.from_name("jane"), Username.from_name("joe")),
+            Segments.direct_member_is(Username.from_name("jane"), Username.from_name("joe")),
         ]
     )
     qstr = "name:al hello  member:@jane this world member:@joe"
@@ -273,16 +273,13 @@ def test_restrict_members_query() -> None:
         [
             Segments.name_is("al"),
             Segments.text("hello"),
-            Segments.member_is(
+            Segments.direct_member_is(
                 Username.from_name("jane"), Username.from_name("joe"), Username.from_name("jeff"), UserId("123")
             ),
         ]
     )
     qstr = "name:al  member:@jane hello member:@joe,@jeff,123,456,@wuff"
     assert QueryParser.parse(qstr) == q
-
-
-##    assert q.render() == "name:al member:@jane,@joe hello this world"
 
 
 def test_invalid_query() -> None:

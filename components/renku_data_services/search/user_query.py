@@ -101,7 +101,7 @@ class Field(StrEnum):
     keyword = "keyword"
     namespace = "namespace"
     member = "member"
-    direct_member = "direct_member"
+    soft_member = "soft_member"
 
 
 class Comparison(StrEnum):
@@ -370,7 +370,7 @@ class FieldComparison(SegmentBase):
 
 
 @dataclass
-class MemberIs(FieldComparison):
+class SoftMemberIs(FieldComparison):
     """Check for membership of a given user."""
 
     users: Nel[UserDef]
@@ -378,7 +378,7 @@ class MemberIs(FieldComparison):
     @property
     def field(self) -> Field:
         """The field name."""
-        return Field.member
+        return Field.soft_member
 
     @property
     def cmp(self) -> Comparison:
@@ -390,7 +390,7 @@ class MemberIs(FieldComparison):
 
     def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
-        visitor.visit_member_is(self)
+        visitor.visit_soft_member_is(self)
 
 
 @dataclass
@@ -402,7 +402,7 @@ class DirectMemberIs(FieldComparison):
     @property
     def field(self) -> Field:
         """The field name."""
-        return Field.direct_member
+        return Field.member
 
     @property
     def cmp(self) -> Comparison:
@@ -755,7 +755,7 @@ type FieldTerm = (
     | CreatedByIs
     | Created
     | RoleIs
-    | MemberIs
+    | SoftMemberIs
     | DirectMemberIs
 )
 
@@ -767,14 +767,14 @@ class Segments:
     """Helpers for creating segments."""
 
     @classmethod
+    def soft_member_is(cls, user: UserDef, *args: UserDef) -> Segment:
+        """Return member-is query segment."""
+        return SoftMemberIs(Nel(user, list(args)))
+
+    @classmethod
     def direct_member_is(cls, user: UserDef, *args: UserDef) -> Segment:
         """Return member-is query segment."""
         return DirectMemberIs(Nel(user, list(args)))
-
-    @classmethod
-    def member_is(cls, user: UserDef, *args: UserDef) -> Segment:
-        """Return member-is query segment."""
-        return MemberIs(Nel(user, list(args)))
 
     @classmethod
     def text(cls, text: str) -> Segment:
@@ -956,12 +956,12 @@ class UserQueryVisitor[T](ABC):
         ...
 
     @abstractmethod
-    def visit_member_is(self, ft: MemberIs) -> None:
+    def visit_direct_member_is(self, ft: DirectMemberIs) -> None:
         """Visit node."""
         ...
 
     @abstractmethod
-    def visit_direct_member_is(self, ft: DirectMemberIs) -> None:
+    def visit_soft_member_is(self, ft: SoftMemberIs) -> None:
         """Visit node."""
         ...
 
@@ -997,7 +997,7 @@ class UserQuerySegmentVisitor[T](UserQueryVisitor[T]):
         """Forwards to `visit_field_term`."""
         return self.visit_field_term(ft)
 
-    def visit_member_is(self, ft: MemberIs) -> None:
+    def visit_soft_member_is(self, ft: SoftMemberIs) -> None:
         """Forwards to `visit_field_term`."""
         return self.visit_field_term(ft)
 
