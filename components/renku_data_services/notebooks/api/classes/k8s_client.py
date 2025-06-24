@@ -352,7 +352,7 @@ class NotebookK8sClient(Generic[_SessionType]):
             try:
                 # NOTE: calling pod.logs without a container name set crashes the library
                 clogs: list[str] = [clog async for clog in pod.logs(container=container, tail_lines=max_log_lines)]
-            except httpx.ResponseNotRead:
+            except (httpx.ResponseNotRead, httpx.HTTPStatusError):
                 # NOTE: This occurs when the container is still starting, but we try to read its logs
                 continue
             except NotFoundError as err:
