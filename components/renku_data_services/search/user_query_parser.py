@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import datetime
-from typing import Protocol, cast
+from typing import cast
 
 from parsy import (
     Parser,
@@ -42,17 +42,16 @@ from renku_data_services.search.user_query import (
     PartialTime,
     RelativeDate,
     RoleIs,
-    Segment,
     SlugIs,
     SortableField,
     Text,
     TypeIs,
-    UserDef,
     UserId,
     Username,
     UserQuery,
     VisibilityIs,
 )
+from renku_data_services.search.user_query_process import CollapseMembers, CollapseText
 from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.solr_client import SortDirection
 
@@ -209,146 +208,12 @@ class _ParsePrimitives:
     query: Parser = segment.sep_by(whitespace, min=0).map(UserQuery)
 
 
-class UserQueryTransform(Protocol):
-    """Capture transformation to the user query."""
-
-    def visit(self, seg: Segment) -> list[Segment]:
-        """Visit a segment.
-
-        Return the empty list to remove the segment or insert other
-        segments in the place of the current.
-        """
-        ...
-
-    def on_end(self) -> list[Segment]:
-        """Notify on end."""
-        ...
-
-    def __call__(self, uq: UserQuery) -> UserQuery:
-        """Apply this transformation to a user query."""
-        res: list[Segment] = []
-        for seg in uq.segments:
-            res.extend(self.visit(seg))
-
-        res.extend(self.on_end())
-        return UserQuery(res)
-
-    @classmethod
-    def sequence(cls, *args: UserQueryTransform) -> UserQueryTransform:
-        """Create a new transformation applying the given ones sequentially."""
-        uqt = list(args)
-        if len(uqt) == 1:
-            return uqt[0]
-        else:
-            return _SeqUserQueryTransform(uqt)
-
-
-class _SeqUserQueryTransform(UserQueryTransform):
-    def __init__(self, seq: list[UserQueryTransform]) -> None:
-        self.__all = seq
-
-    def visit(self, seg: Segment) -> list[Segment]:
-        """Visit a segment."""
-        lst = [seg]
-        for ut in self.__all:
-            med = [ut.visit(e) for e in lst]
-            lst = [item for sublist in med for item in sublist]
-
-        return lst
-
-    def on_end(self) -> list[Segment]:
-        """Notify on end."""
-        result = []
-        for ut in self.__all:
-            result.extend(ut.on_end())
-        return result
-
-
-class _CollapseTexts(UserQueryTransform):
-    """Collapses consecutive free text segments.
-
-    It is a bit hard to parse them directly as every term is separated by whitespace.
-    """
-
-    def __init__(self) -> None:
-        self.__current: Text | None = None
-
-    def visit(self, seg: Segment) -> list[Segment]:
-        """Visit a segment."""
-        match seg:
-            case Text() as t:
-                self.__current = t if self.__current is None else self.__current.append(t)
-                return []
-            case _:
-                res: list[Segment] = []
-                if self.__current is not None:
-                    res.append(self.__current)
-                    self.__current = None
-                res.append(seg)
-                return res
-
-    def on_end(self) -> list[Segment]:
-        """Notify on end."""
-        cur = self.__current
-        if cur is not None:
-            self.__current = None
-            return [cur]
-        else:
-            return []
-
-
-class _CollapseMembers(UserQueryTransform):
-    maximum = 4
-
-    def __init__(self) -> None:
-        self.__members: list[UserDef] = []
-        self.__direct_members: list[UserDef] = []
-
-    def visit(self, seg: Segment) -> list[Segment]:
-        match seg:
-            case MemberIs() as t:
-                self.__members.extend(t.users.to_list())
-                return []
-            case DirectMemberIs() as t:
-                self.__direct_members.extend(t.users.to_list())
-                return []
-            case _:
-                return [seg]
-
-    def on_end(self) -> list[Segment]:
-        result: list[Segment] = []
-        max = self.maximum
-        length = len(self.__members) + len(self.__direct_members)
-        if length > max:
-            logger.info(f"Removing {length - max} members from query, only {max} allowed!")
-            self.__members = self.__members[:max]
-            remaining = abs(max - len(self.__members))
-            self.__direct_members = self.__direct_members[:remaining]
-
-        nel = Nel.from_list(self.__members)
-        if nel is not None:
-            result.append(MemberIs(nel))
-
-        nel = Nel.from_list(self.__direct_members)
-        if nel is not None:
-            result.append(DirectMemberIs(nel))
-
-        self.__members = []
-        self.__direct_members = []
-        return result
-
-
 class QueryParser:
     """Parsing user search queries."""
-
-    @classmethod
-    def __make_transform(cls) -> UserQueryTransform:
-        return UserQueryTransform.sequence(_CollapseMembers(), _CollapseTexts())
 
     @classmethod
     def parse(cls, input: str) -> UserQuery:
         """Parses a user search query into its ast."""
         pp = _ParsePrimitives()
-        res = pp.query.parse(input.strip())
-        transform = cls.__make_transform()
-        return transform(cast(UserQuery, res))
+        res = cast(UserQuery, pp.query.parse(input.strip()))
+        return res.transform(CollapseMembers(), CollapseText())

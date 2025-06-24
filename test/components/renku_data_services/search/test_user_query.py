@@ -6,6 +6,8 @@ from ulid import ULID
 
 from renku_data_services.search.user_query import (
     DateTimeCalc,
+    EmptyUserQueryVisitor,
+    FieldTerm,
     Helper,
     IdIs,
     Nel,
@@ -15,8 +17,10 @@ from renku_data_services.search.user_query import (
     PartialDateTime,
     PartialTime,
     RelativeDate,
+    Segment,
     Segments,
     SortableField,
+    Text,
     TypeIs,
     UserQuery,
 )
@@ -198,55 +202,29 @@ def test_resolve_date_calc() -> None:
     )
 
 
-def test_query_extract_order() -> None:
-    q = UserQuery.of(Segments.name_is("test"), Segments.text("some"), Segments.keyword_is("datascience"))
-    assert q.extract_order() == (
-        [Segments.name_is("test"), Segments.text("some"), Segments.keyword_is("datascience")],
-        None,
-    )
+class TestUserQueryTransform(EmptyUserQueryVisitor[UserQuery]):
+    def __init__(self, to_add: Segment) -> None:
+        self.segments: list[Segment] = []
+        self.to_add = to_add
 
-    q = UserQuery.of(
-        Segments.name_is("test"),
-        Segments.text("some"),
-        Segments.keyword_is("datascience"),
-        Segments.sort_by((SortableField.score, SortDirection.asc)),
-    )
-    assert q.extract_order() == (
-        [Segments.name_is("test"), Segments.text("some"), Segments.keyword_is("datascience")],
-        Segments.sort_by((SortableField.score, SortDirection.asc)),
-    )
+    def visit_field_term(self, ft: FieldTerm) -> None:
+        self.segments.append(ft)
 
-    q = UserQuery.of(
-        Segments.name_is("test"),
-        Segments.sort_by((SortableField.fname, SortDirection.desc)),
-        Segments.text("some"),
-        Segments.keyword_is("datascience"),
-        Segments.sort_by((SortableField.score, SortDirection.asc)),
-    )
-    assert q.extract_order() == (
-        [Segments.name_is("test"), Segments.text("some"), Segments.keyword_is("datascience")],
-        Segments.sort_by((SortableField.fname, SortDirection.desc), (SortableField.score, SortDirection.asc)),
-    )
+    def visit_order(self, order: Order) -> None:
+        self.segments.append(order)
+
+    def visit_text(self, text: Text) -> None:
+        self.segments.append(text)
+
+    def build(self) -> UserQuery:
+        self.segments.append(self.to_add)
+        return UserQuery(self.segments)
 
 
-def test_find_entity_types() -> None:
-    q = UserQuery.of(Segments.keyword_is("science"), Segments.name_is("test"))
-    assert q.find_entity_types() is None
-
-    q = UserQuery.of(Segments.keyword_is("science"), Segments.type_is(EntityType.project), Segments.name_is("test"))
-    assert q.find_entity_types() == set([EntityType.project])
-
-    q = UserQuery.of(
-        Segments.keyword_is("science"),
-        Segments.type_is(EntityType.project, EntityType.dataconnector),
-        Segments.name_is("test"),
+def test_transform() -> None:
+    q0 = UserQuery.of(Segments.name_is("john"), Segments.text("help"))
+    q = q0.transform(
+        TestUserQueryTransform(Segments.type_is(EntityType.project)), TestUserQueryTransform(Segments.id_is("id-123"))
     )
-    assert q.find_entity_types() == set([EntityType.project, EntityType.dataconnector])
 
-    q = UserQuery.of(
-        Segments.keyword_is("science"),
-        Segments.type_is(EntityType.project),
-        Segments.type_is(EntityType.dataconnector),
-        Segments.name_is("test"),
-    )
-    assert q.find_entity_types() == set()
+    assert q == UserQuery(q0.segments + [Segments.type_is(EntityType.project), Segments.id_is("id-123")])
