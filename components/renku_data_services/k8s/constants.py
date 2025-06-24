@@ -1,11 +1,10 @@
 """Constant values for k8s."""
 
-from typing import TYPE_CHECKING, Final
+from typing import Final
 
-if TYPE_CHECKING:
-    from renku_data_services.k8s.models import ClusterId
+from renku_data_services.k8s.models import ClusterId
 
-DEFAULT_K8S_CLUSTER: Final["ClusterId"] = ClusterId("0RENKULAB1RENKULAB2RENKULA")  # This has to be a valid ULID
+DEFAULT_K8S_CLUSTER: Final[ClusterId] = ClusterId("0RENK1RENK2RENK3RENK4RENK5")  # This has to be a valid ULID
 
 DUMMY_TASK_RUN_USER_ID: Final[str] = "DummyTaskRunUser"
 """The user id to use for TaskRuns in the k8s cache.
