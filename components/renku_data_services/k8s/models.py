@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, NewType, Self, cast
+from typing import TYPE_CHECKING, Any, Self, cast
 
 from box import Box
 from kr8s._api import Api
@@ -12,13 +12,10 @@ from ulid import ULID
 
 from renku_data_services.base_models import APIUser
 from renku_data_services.errors import MissingResourceError, errors
-from renku_data_services.k8s.constants import DUMMY_TASK_RUN_USER_ID
+from renku_data_services.k8s.constants import DUMMY_TASK_RUN_USER_ID, ClusterId
 
 if TYPE_CHECKING:
     from renku_data_services.crc.db import ClusterRepository
-
-# LSA Not enough time: Adapt this to be an alias to ULID
-ClusterId = NewType("ClusterId", str)
 
 
 class K8sObjectMeta:

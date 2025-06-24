@@ -1,8 +1,11 @@
 """Constant values for k8s."""
 
-from typing import Final
+from __future__ import annotations
 
-from renku_data_services.k8s.models import ClusterId
+from typing import Final, NewType
+
+# LSA Not enough time: Adapt this to be an alias to ULID
+ClusterId = NewType("ClusterId", str)
 
 DEFAULT_K8S_CLUSTER: Final[ClusterId] = ClusterId("0RENK1RENK2RENK3RENK4RENK5")  # This has to be a valid ULID
 

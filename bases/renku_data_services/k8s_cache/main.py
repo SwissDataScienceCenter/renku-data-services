@@ -5,8 +5,7 @@ import asyncio
 import kr8s
 
 from renku_data_services.app_config import logging
-from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
-from renku_data_services.k8s.models import Cluster
+from renku_data_services.k8s.config import get_clusters
 from renku_data_services.k8s_cache.dependencies import DependencyManager
 from renku_data_services.k8s_watcher import K8sWatcher, k8s_object_handler
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
@@ -21,7 +20,13 @@ async def main() -> None:
     dm = DependencyManager.from_env()
 
     kr8s_api = await kr8s.asyncio.api()
-    clusters = [Cluster(id=DEFAULT_K8S_CLUSTER, namespace=dm.config.k8s.renku_namespace, api=kr8s_api)]
+
+    clusters = await get_clusters(
+        kube_conf_root_dir=dm.config.k8s.kube_config_root,
+        namespace=dm.config.k8s.renku_namespace,
+        api=kr8s_api,
+        cluster_rp=dm.cluster_repo(),
+    )
 
     kinds = [AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK]
     if dm.config.image_builders.enabled:
