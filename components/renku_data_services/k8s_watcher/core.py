@@ -21,8 +21,8 @@ from renku_data_services.notebooks.crs import State
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from renku_data_services.k8s.models import APIObjectInCluster, Cluster, ClusterId
-
+    from renku_data_services.k8s.constants import ClusterId
+    from renku_data_services.k8s.models import APIObjectInCluster, Cluster
 
 type EventHandler = Callable[[APIObjectInCluster, str], Awaitable[None]]
 type SyncFunc = Callable[[], Awaitable[None]]

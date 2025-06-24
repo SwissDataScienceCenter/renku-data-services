@@ -15,8 +15,8 @@ from kubernetes.client import V1Secret
 from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.errors import errors
-from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
-from renku_data_services.k8s.models import GVK, Cluster, ClusterId, K8sObject, K8sObjectFilter
+from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
+from renku_data_services.k8s.models import GVK, Cluster, K8sObject, K8sObjectFilter
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
 from renku_data_services.notebooks.constants import JUPYTER_SESSION_GVK
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
