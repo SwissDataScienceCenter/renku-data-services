@@ -14,7 +14,8 @@ from ulid import ULID
 
 from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
 from renku_data_services.errors import errors
-from renku_data_services.k8s.models import GVK, ClusterId, K8sObject
+from renku_data_services.k8s.constants import ClusterId
+from renku_data_services.k8s.models import GVK, K8sObject
 from renku_data_services.utils.sqlalchemy import ULIDType
 
 
