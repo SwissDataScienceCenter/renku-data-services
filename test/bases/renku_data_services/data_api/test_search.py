@@ -80,30 +80,30 @@ async def test_direct_member_search(
     result = await search_query(f"namespace:{gr_lidl.slug}", user=wout)
     assert_search_result(result, [p1, p2, p3])
 
-    result = await search_query(f"namespace:{gr_lidl.slug} direct_member:@{flor.namespace.path.first}", user=mads)
+    result = await search_query(f"namespace:{gr_lidl.slug} member:@{flor.namespace.path.first}", user=mads)
     assert_search_result(result, [p1])
 
-    result = await search_query(f"namespace:{gr_lidl.slug} direct_member:@{wout.namespace.path.first}", user=mads)
+    result = await search_query(f"namespace:{gr_lidl.slug} member:@{wout.namespace.path.first}", user=mads)
     assert_search_result(result, [p3])
 
-    result = await search_query(f"namespace:{gr_visma.slug} direct_member:@{flor.namespace.path.first}", user=wout)
+    result = await search_query(f"namespace:{gr_visma.slug} member:@{flor.namespace.path.first}", user=wout)
     assert_search_result(result, [p5])
 
-    result = await search_query(f"namespace:{gr_visma.slug} direct_member:@{flor.namespace.path.first}", user=mads)
+    result = await search_query(f"namespace:{gr_visma.slug} member:@{flor.namespace.path.first}", user=mads)
     assert_search_result(result, [p5])
-
-    result = await search_query(f"direct_member:@{wout.namespace.path.first}", user=regular_user)
-    assert_search_result(result, [gr_lidl, gr_visma, p3, p4, p5])
-
-    result = await search_query(f"direct_member:@{wout.namespace.path.first},@{mads.namespace.path.first}", user=mads)
-    assert_search_result(result, [p3, gr_visma, gr_lidl])
 
     result = await search_query(f"member:@{wout.namespace.path.first}", user=regular_user)
+    assert_search_result(result, [gr_lidl, gr_visma, p3, p4, p5])
+
+    result = await search_query(f"member:@{wout.namespace.path.first},@{mads.namespace.path.first}", user=mads)
+    assert_search_result(result, [p3, gr_visma, gr_lidl])
+
+    result = await search_query(f"soft_member:@{wout.namespace.path.first}", user=regular_user)
     assert_search_result(result, [gr_lidl, gr_visma, p1, p2, p3, p4, p5])
 
 
 @pytest.mark.asyncio
-async def test_member_search(
+async def test_soft_member_search(
     create_user: CreateUserCall,
     regular_user: UserInfo,
     search_reprovision: SearchReprovisionCall,
@@ -130,33 +130,33 @@ async def test_member_search(
     await search_reprovision()
 
     ## Searching as 'regular_user' returns all entities, since this is the user implicitely used to create everything
-    result = await search_query(f"member:@{regular_user.namespace.path.first}", regular_user)
+    result = await search_query(f"soft_member:@{regular_user.namespace.path.first}", regular_user)
 
     # 5 projects, 2 groups. users are removed there is no "membership" relation
     assert_search_result(result, [p1, p2, p3, p4, p5, gr_visma, gr_lidl], check_order=False)
 
     ## Searching as 'regular_user' peeking into a different users' entities
-    result = await search_query(f"member:@{mads.namespace.path.first}", regular_user)
+    result = await search_query(f"soft_member:@{mads.namespace.path.first}", regular_user)
     assert_search_result(result, [p3, p4, gr_lidl], check_order=False)
 
     ## searching as mads, shows own enities
-    result = await search_query(f"member:@{mads.namespace.path.first}", mads)
+    result = await search_query(f"soft_member:@{mads.namespace.path.first}", mads)
     assert_search_result(result, [p3, p4, gr_lidl], check_order=False)
 
     ## searching as wout, shows own enities
-    result = await search_query(f"member:@{wout.namespace.path.first}", wout)
+    result = await search_query(f"soft_member:@{wout.namespace.path.first}", wout)
     assert_search_result(result, [p1, p2, gr_visma], check_order=False)
 
     ## mads inspecting wouts, shows only public entities from wout
-    result = await search_query(f"member:@{wout.namespace.path.first}", mads)
+    result = await search_query(f"soft_member:@{wout.namespace.path.first}", mads)
     assert_search_result(result, [p2, gr_visma], check_order=False)
 
     ## searching as anonymous
-    result = await search_query(f"member:@{wout.namespace.path.first}")
+    result = await search_query(f"soft_member:@{wout.namespace.path.first}")
     assert_search_result(result, [p2, gr_visma], check_order=False)
 
     ## with the username, anonymous can find every entity the user is "member of"
-    result = await search_query(f"member:@{regular_user.namespace.path.first}")
+    result = await search_query(f"soft_member:@{regular_user.namespace.path.first}")
     assert_search_result(result, [p2, p4, gr_visma, gr_lidl], check_order=False)
 
 

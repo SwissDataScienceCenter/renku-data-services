@@ -9,11 +9,11 @@ from renku_data_services.search.user_query import (
     DirectMemberIs,
     EmptyUserQueryVisitor,
     FieldTerm,
-    MemberIs,
     Nel,
     Order,
     OrderBy,
     Segment,
+    SoftMemberIs,
     Text,
     TypeIs,
     UserDef,
@@ -106,36 +106,36 @@ class CollapseMembers(UserQuerySegmentVisitor[UserQuery]):
     def __init__(self, maximum_member_count: int = 4) -> None:
         self.maximum_member_count = maximum_member_count
         self.segments: list[Segment] = []
-        self.members: list[UserDef] = []
+        self.soft_members: list[UserDef] = []
         self.direct_members: list[UserDef] = []
 
     def build(self) -> UserQuery:
         """Return the query with member segments combined."""
         result: list[Segment] = []
         max = self.maximum_member_count
-        length = len(self.members) + len(self.direct_members)
+        length = len(self.soft_members) + len(self.direct_members)
         if length > max:
             logger.info(f"Removing {length - max} members from query, only {max} allowed!")
-            self.members = self.members[:max]
-            remaining = abs(max - len(self.members))
-            self.direct_members = self.direct_members[:remaining]
-
-        nel = Nel.from_list(self.members)
-        if nel is not None:
-            result.append(MemberIs(nel))
+            self.direct_members = self.direct_members[:max]
+            remaining = abs(max - len(self.direct_members))
+            self.soft_members = self.soft_members[:remaining]
 
         nel = Nel.from_list(self.direct_members)
         if nel is not None:
             result.append(DirectMemberIs(nel))
 
-        self.members = []
+        nel = Nel.from_list(self.soft_members)
+        if nel is not None:
+            result.append(SoftMemberIs(nel))
+
         self.direct_members = []
+        self.soft_members = []
         self.segments.extend(result)
         return UserQuery(self.segments)
 
     @override
-    def visit_member_is(self, ft: MemberIs) -> None:
-        self.members.extend(ft.users.to_list())
+    def visit_soft_member_is(self, ft: SoftMemberIs) -> None:
+        self.soft_members.extend(ft.users.to_list())
 
     @override
     def visit_direct_member_is(self, ft: DirectMemberIs) -> None:

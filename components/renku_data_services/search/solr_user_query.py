@@ -20,13 +20,13 @@ from renku_data_services.search.user_query import (
     FieldTerm,
     IdIs,
     KeywordIs,
-    MemberIs,
     NameIs,
     NamespaceIs,
     Nel,
     OrderBy,
     RoleIs,
     SlugIs,
+    SoftMemberIs,
     SortableField,
     Text,
     TypeIs,
@@ -326,7 +326,7 @@ class LuceneQueryInterpreter(QueryInterpreter):
                         return st.id_not_exists()
                     else:
                         return st.id_in(nel)
-            case MemberIs() as t:
+            case SoftMemberIs() as t:
                 ids = await ctx.get_member_ids(t.users, direct_membership=False)
                 if ids == []:
                     return st.id_not_exists()

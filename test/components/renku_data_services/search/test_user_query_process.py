@@ -84,9 +84,9 @@ def test_collapse_text_segments() -> None:
 def test_restrict_members_query() -> None:
     q = UserQuery.of(
         Segments.name_is("al"),
-        Segments.member_is(Username.from_name("jane")),
+        Segments.direct_member_is(Username.from_name("jane")),
         Segments.text("hello"),
-        Segments.member_is(
+        Segments.direct_member_is(
             Username.from_name("joe"),
             Username.from_name("jeff"),
             UserId("123"),
@@ -97,7 +97,7 @@ def test_restrict_members_query() -> None:
     assert q.transform(CollapseMembers()) == UserQuery.of(
         Segments.name_is("al"),
         Segments.text("hello"),
-        Segments.member_is(
+        Segments.direct_member_is(
             Username.from_name("jane"), Username.from_name("joe"), Username.from_name("jeff"), UserId("123")
         ),
     )
