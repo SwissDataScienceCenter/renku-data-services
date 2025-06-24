@@ -18,11 +18,11 @@ from kubernetes.config.incluster_config import SERVICE_CERT_FILENAME, SERVICE_TO
 
 from renku_data_services.errors import errors
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface, K8sSchedudlingClientInterface
+from renku_data_services.k8s.models import APIObjectInCluster
 
 if TYPE_CHECKING:
     from renku_data_services.k8s.models import (
         GVK,
-        APIObjectInCluster,
         Cluster,
         ClusterId,
         K8sObject,
@@ -253,19 +253,18 @@ class K8sClusterClient:
         names = [_filter.name] if _filter.name is not None else []
 
         try:
-            res = await self.__cluster.api.async_get(
+            res = self.__cluster.api.async_get(
                 _filter.gvk.kr8s_kind,
                 *names,
                 label_selector=_filter.label_selector,
                 namespace=_filter.namespace,
             )
+
+            async for r in res:
+                yield APIObjectInCluster(r, self.__cluster.id)
+
         except (kr8s.ServerError, kr8s.APITimeoutError):
             return
-
-        if not isinstance(res, list):
-            res = [res]
-        for r in res:
-            yield self.__cluster.with_api_object(r)
 
     async def __get_api_object(self, meta: K8sObjectFilter) -> APIObjectInCluster | None:
         return await anext(aiter(self.__list(meta)), None)
@@ -312,8 +311,7 @@ class K8sClusterClient:
 
     async def list(self, _filter: K8sObjectFilter) -> AsyncIterable[K8sObject]:
         """List all k8s objects."""
-        results = self.__list(_filter)
-        async for r in results:
+        async for r in self.__list(_filter):
             yield r.to_k8s_object()
 
 
