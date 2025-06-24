@@ -22,10 +22,10 @@ from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface, K8
 from renku_data_services.k8s.models import APIObjectInCluster, K8sObjectFilter
 
 if TYPE_CHECKING:
+    from renku_data_services.k8s.constants import ClusterId
     from renku_data_services.k8s.models import (
         GVK,
         Cluster,
-        ClusterId,
         K8sObject,
         K8sObjectMeta,
     )
