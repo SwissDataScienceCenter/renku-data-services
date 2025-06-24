@@ -266,7 +266,7 @@ class DependencyManager:
                 k8s_db_cache = K8sDbCache(config.db.async_session_maker)
                 client = K8sClusterClientsPool(
                     get_clusters=get_clusters(
-                        "/secrets/kube_configs",
+                        kube_conf_root_dir=config.k8s_config_root,
                         namespace=config.k8s_namespace,
                         api=kr8s_api,
                         cluster_rp=cluster_repo,
