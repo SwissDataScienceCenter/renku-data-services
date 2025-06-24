@@ -364,7 +364,7 @@ class NotebooksNewBP(CustomBlueprint):
 
             ui_path = f"{base_server_path}/"
             if len(environment.default_url) > 0:
-                ui_path = f"{ui_path}/{environment.default_url.lstrip('/')}"
+                ui_path = f"{ui_path}{environment.default_url.lstrip('/')}"
             logger.warning(f"#### Ingress parameters2  {(host, base_server_url, base_server_path, ui_path)}")
 
             ingress_annotations = self.nb_config.sessions.ingress.annotations

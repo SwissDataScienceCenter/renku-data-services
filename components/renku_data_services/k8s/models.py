@@ -138,16 +138,17 @@ class Cluster:
         self, user: APIUser, cluster_repo: ClusterRepository
     ) -> tuple[Protocol, str, int, str] | None:
         """Return cluster-specific ingress parameters, mainly the public-facing URL components."""
+        logger.warning(f"### Cluster ID: {self.id}")
         try:
             id = ULID.from_str(self.id)
-            logger.warning(f"### Cluster ID: {id}")
             cluster = await cluster_repo.select(user, id)
             logger.warning(
                 f"### Cluster Ingress: {(cluster.session_protocol, cluster.session_host,
                                                     cluster.session_port, cluster.session_path)}"
             )
             return cluster.session_protocol, cluster.session_host, cluster.session_port, cluster.session_path
-        except (MissingResourceError, ValueError):
+        except (MissingResourceError, ValueError) as e:
+            logger.warning(f"### CLUSTER EXCEPTION {e}")
             return None
 
 
