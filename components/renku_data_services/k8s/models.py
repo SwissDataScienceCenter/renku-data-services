@@ -10,7 +10,6 @@ from kr8s._api import Api
 from kr8s.asyncio.objects import APIObject
 from ulid import ULID
 
-from renku_data_services.app_config import logging
 from renku_data_services.base_models import APIUser
 from renku_data_services.errors import MissingResourceError, errors
 from renku_data_services.k8s.constants import DUMMY_TASK_RUN_USER_ID, ClusterId
@@ -18,8 +17,6 @@ from renku_data_services.k8s.constants import DUMMY_TASK_RUN_USER_ID, ClusterId
 if TYPE_CHECKING:
     from renku_data_services.crc.apispec import Protocol
     from renku_data_services.crc.db import ClusterRepository
-
-logger = logging.getLogger(__name__)
 
 
 class K8sObjectMeta:
@@ -135,17 +132,11 @@ class Cluster:
         self, user: APIUser, cluster_repo: ClusterRepository
     ) -> tuple[Protocol, str, int, str] | None:
         """Return cluster-specific ingress parameters, mainly the public-facing URL components."""
-        logger.warning(f"### Cluster ID: {self.id}")
         try:
             id = ULID.from_str(self.id)
             cluster = await cluster_repo.select(user, id)
-            logger.warning(
-                f"### Cluster Ingress: {(cluster.session_protocol, cluster.session_host,
-                                                    cluster.session_port, cluster.session_path)}"
-            )
             return cluster.session_protocol, cluster.session_host, cluster.session_port, cluster.session_path
         except (MissingResourceError, ValueError) as e:
-            logger.warning(f"### CLUSTER EXCEPTION {e}")
             return None
 
 
