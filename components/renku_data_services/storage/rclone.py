@@ -69,12 +69,19 @@ class RCloneValidator:
             config = "\n".join(f"{k}={v}" for k, v in transformed_config.items())
             f.write(f"[temp]\n{config}")
             f.close()
-            proc = await asyncio.create_subprocess_exec(
-                "rclone",
+            args = [
                 "lsf",
                 "--config",
                 f.name,
                 f"temp:{source_path}",
+            ]
+            # Handle SFTP retries, see https://github.com/SwissDataScienceCenter/renku-data-services/issues/893
+            storage_type = cast(str, configuration.get("type"))
+            if storage_type == "sftp":
+                args.extend(["--low-level-retries", "1"])
+            proc = await asyncio.create_subprocess_exec(
+                "rclone",
+                *args,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
