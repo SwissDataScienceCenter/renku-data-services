@@ -341,7 +341,7 @@ class SegmentBase(ABC):
     """Base class for a query segment."""
 
     @abstractmethod
-    def accept(self, visitor: UserQueryVisitor) -> None:
+    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
         ...
 
@@ -388,7 +388,7 @@ class MemberIs(FieldComparison):
     def _render_value(self) -> str:
         return self.users.map(lambda u: u.render()).mk_string(",")
 
-    def accept(self, visitor: UserQueryVisitor) -> None:
+    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
         visitor.visit_member_is(self)
 
@@ -412,7 +412,7 @@ class DirectMemberIs(FieldComparison):
     def _render_value(self) -> str:
         return self.users.map(lambda u: u.render()).mk_string(",")
 
-    def accept(self, visitor: UserQueryVisitor) -> None:
+    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
         visitor.visit_direct_member_is(self)
 
@@ -436,7 +436,7 @@ class TypeIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",")
 
-    def accept(self, visitor: UserQueryVisitor) -> None:
+    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
         visitor.visit_type_is(self)
 
@@ -460,7 +460,7 @@ class IdIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",", Helper.quote)
 
-    def accept(self, visitor: UserQueryVisitor) -> None:
+    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
         visitor.visit_id_is(self)
 
@@ -484,7 +484,7 @@ class NameIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",", Helper.quote)
 
-    def accept(self, visitor: UserQueryVisitor) -> None:
+    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
         visitor.visit_name_is(self)
 
@@ -508,7 +508,7 @@ class SlugIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",", Helper.quote)
 
-    def accept(self, visitor: UserQueryVisitor) -> None:
+    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
         visitor.visit_slug_is(self)
 
@@ -532,7 +532,7 @@ class KeywordIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",", Helper.quote)
 
-    def accept(self, visitor: UserQueryVisitor) -> None:
+    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
         visitor.visit_keyword_is(self)
 
@@ -556,7 +556,7 @@ class NamespaceIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",", Helper.quote)
 
-    def accept(self, visitor: UserQueryVisitor) -> None:
+    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
         visitor.visit_namespace_is(self)
 
@@ -580,7 +580,7 @@ class VisibilityIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",")
 
-    def accept(self, visitor: UserQueryVisitor) -> None:
+    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
         visitor.visit_visibility_is(self)
 
@@ -604,7 +604,7 @@ class CreatedByIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",", Helper.quote)
 
-    def accept(self, visitor: UserQueryVisitor) -> None:
+    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
         visitor.visit_created_by_is(self)
 
@@ -647,7 +647,7 @@ class Created(FieldComparison):
         nel = Nel(value, list(args))
         return Created(Comparison.is_greater_than, nel)
 
-    def accept(self, visitor: UserQueryVisitor) -> None:
+    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
         visitor.visit_created(self)
 
@@ -671,7 +671,7 @@ class RoleIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",")
 
-    def accept(self, visitor: UserQueryVisitor) -> None:
+    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
         visitor.visit_role_is(self)
 
@@ -695,7 +695,7 @@ class Text(SegmentBase):
         else:
             return type(self)(self.value + " " + next.value)
 
-    def accept(self, visitor: UserQueryVisitor) -> None:
+    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
         visitor.visit_text(self)
 
@@ -739,7 +739,7 @@ class Order(SegmentBase):
         """Append the field list of `other` to this."""
         return type(self)(self.fields.append(other.fields))
 
-    def accept(self, visitor: UserQueryVisitor) -> None:
+    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
         visitor.visit_order(self)
 
@@ -871,41 +871,29 @@ class UserQuery:
         """Return the string representation of this query."""
         return " ".join([e.render() for e in self.segments])
 
-    def accept(self, visitor: UserQueryVisitor) -> None:
+    def accept[T](self, visitor: UserQueryVisitor[T]) -> T:
         """Apply the visitor."""
         for s in self.segments:
             s.accept(visitor)
+        return visitor.build()
 
-    def extract_order(self) -> tuple[list[FieldTerm | Text], Order | None]:
-        """Extracts all sort segments into a single OrderBy value."""
-        segs: list[FieldTerm | Text] = []
-        orders: list[OrderBy] = []
-        for s in self.segments:
-            match s:
-                case Order() as o:
-                    orders.extend(o.fields.to_list())
+    def transform(self, visitor: UserQueryVisitor[UserQuery], *args: UserQueryVisitor[UserQuery]) -> UserQuery:
+        """Apply this query to the given transformations sequentially."""
+        transforms: list[UserQueryVisitor[UserQuery]] = [visitor]
+        transforms.extend(list(args))
 
-                case f:
-                    segs.append(f)
-
-        sort = Nel.from_list(orders)
-        return (segs, Order(sort) if sort is not None else None)
-
-    def find_entity_types(self) -> set[EntityType] | None:
-        """Gather all entity types that are requested."""
-        result: set[EntityType] | None = None
-        for seg in self.segments:
-            match seg:
-                case TypeIs() as t:
-                    values = set(t.values.to_list())
-                    result = values if result is None else result.intersection(values)
-                case _:
-                    pass
-        return result
+        acc = self
+        [acc := acc.accept(t) for t in transforms]
+        return acc
 
 
-class UserQueryVisitor(ABC):
+class UserQueryVisitor[T](ABC):
     """A visitor to transform user queries."""
+
+    @abstractmethod
+    def build(self) -> T:
+        """Return the value."""
+        ...
 
     @abstractmethod
     def visit_order(self, order: Order) -> None:
@@ -978,45 +966,80 @@ class UserQueryVisitor(ABC):
         ...
 
 
-# class NoopUserQueryVisitor(UserQueryVisitor):
-#     def visit_text(self, text: Text) -> None:
-#         pass
+class UserQuerySegmentVisitor[T](UserQueryVisitor[T]):
+    """A variant of a visitor dispatching on the base union type Segment.
 
-#     def visit_created(self, ft: Created) -> None:
-#         pass
+    Every concrete visit_ method forwards to the `visit_field_term` method.
+    """
 
-#     def visit_created_by_is(self, ft: CreatedByIs) -> None:
-#         pass
+    @abstractmethod
+    def visit_field_term(self, ft: FieldTerm) -> None:
+        """Visit a field term query segment."""
+        ...
 
-#     def visit_direct_member_is(self, ft: DirectMemberIs) -> None:
-#         pass
+    def visit_created(self, ft: Created) -> None:
+        """Forwards to `visit_field_term`."""
+        return self.visit_field_term(ft)
 
-#     def visit_id_is(self, ft: IdIs) -> None:
-#         pass
+    def visit_created_by_is(self, ft: CreatedByIs) -> None:
+        """Forwards to `visit_field_term`."""
+        return self.visit_field_term(ft)
 
-#     def visit_keyword_is(self, ft: KeywordIs) -> None:
-#         pass
+    def visit_direct_member_is(self, ft: DirectMemberIs) -> None:
+        """Forwards to `visit_field_term`."""
+        return self.visit_field_term(ft)
 
-#     def visit_member_is(self, ft: MemberIs) -> None:
-#         pass
+    def visit_id_is(self, ft: IdIs) -> None:
+        """Forwards to `visit_field_term`."""
+        return self.visit_field_term(ft)
 
-#     def visit_name_is(self, ft: NameIs) -> None:
-#         pass
+    def visit_keyword_is(self, ft: KeywordIs) -> None:
+        """Forwards to `visit_field_term`."""
+        return self.visit_field_term(ft)
 
-#     def visit_namespace_is(self, ft: NamespaceIs) -> None:
-#         pass
+    def visit_member_is(self, ft: MemberIs) -> None:
+        """Forwards to `visit_field_term`."""
+        return self.visit_field_term(ft)
 
-#     def visit_order(self, order: Order) -> None:
-#         pass
+    def visit_name_is(self, ft: NameIs) -> None:
+        """Forwards to `visit_field_term`."""
+        return self.visit_field_term(ft)
 
-#     def visit_role_is(self, ft: RoleIs) -> None:
-#         pass
+    def visit_namespace_is(self, ft: NamespaceIs) -> None:
+        """Forwards to `visit_field_term`."""
+        return self.visit_field_term(ft)
 
-#     def visit_slug_is(self, ft: SlugIs) -> None:
-#         pass
+    def visit_role_is(self, ft: RoleIs) -> None:
+        """Forwards to `visit_field_term`."""
+        return self.visit_field_term(ft)
 
-#     def visit_type_is(self, ft: TypeIs) -> None:
-#         pass
+    def visit_slug_is(self, ft: SlugIs) -> None:
+        """Forwards to `visit_field_term`."""
+        return self.visit_field_term(ft)
 
-#     def visit_visibility_is(self, ft: VisibilityIs) -> None:
-#         pass
+    def visit_type_is(self, ft: TypeIs) -> None:
+        """Forwards to `visit_field_term`."""
+        return self.visit_field_term(ft)
+
+    def visit_visibility_is(self, ft: VisibilityIs) -> None:
+        """Forwards to `visit_field_term`."""
+        return self.visit_field_term(ft)
+
+
+class EmptyUserQueryVisitor[T](UserQuerySegmentVisitor[T]):
+    """A visitor with every method doing nothing.
+
+    The `build` method is left to implement by subclasses.
+    """
+
+    def visit_field_term(self, ft: FieldTerm) -> None:
+        """Visit field-term node."""
+        return None
+
+    def visit_order(self, order: Order) -> None:
+        """Visit order node."""
+        return None
+
+    def visit_text(self, text: Text) -> None:
+        """Visit text node."""
+        return None

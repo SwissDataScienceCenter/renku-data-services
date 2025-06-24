@@ -36,6 +36,7 @@ from renku_data_services.search.user_query import (
     UserQuery,
     VisibilityIs,
 )
+from renku_data_services.search.user_query_process import CollectEntityTypes, ExtractOrder
 from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.entity_schema import Fields
 from renku_data_services.solr.solr_client import SortDirection
@@ -156,7 +157,7 @@ class Context:
 
     def with_requested_entity_types(self, uq: UserQuery) -> Context:
         """Return a copy with the requested entity types set."""
-        et = uq.find_entity_types()
+        et = uq.accept(CollectEntityTypes())
         return self if self.requested_entity_types == et else self.__copy(requested_entity_types=et)
 
     def with_role(self, role: SearchRole) -> Context:
@@ -377,7 +378,7 @@ class LuceneQueryInterpreter(QueryInterpreter):
 
     async def run(self, ctx: Context, q: UserQuery) -> SolrUserQuery:
         """Convert a user query into a search query."""
-        (terms, sort) = q.extract_order()
+        (terms, sort) = q.accept(ExtractOrder())
         sort = sort.fields.to_list() if sort is not None else []
 
         solr_sort = [LuceneQueryInterpreter._to_solr_sort(e) for e in sort]
