@@ -175,7 +175,11 @@ class ResourcePoolRepository(_Base):
     ) -> list[models.ResourcePool]:
         """Get resource pools from database."""
         async with self.session_maker() as session:
-            stmt = select(schemas.ResourcePoolORM).options(selectinload(schemas.ResourcePoolORM.classes))
+            stmt = (
+                select(schemas.ResourcePoolORM)
+                .options(selectinload(schemas.ResourcePoolORM.classes))
+                .options(selectinload(schemas.ResourcePoolORM.classes))
+            )
             if name is not None:
                 stmt = stmt.where(schemas.ResourcePoolORM.name == name)
             if id is not None:

@@ -259,7 +259,8 @@ class NotebooksNewBP(CustomBlueprint):
         ) -> JSONResponse:
             launcher = await self.session_repo.get_launcher(user, ULID.from_str(body.launcher_id))
             project = await self.project_repo.get_project(user=user, project_id=launcher.project_id)
-            cluster = await self.nb_config.k8s_client.cluster_by_class_id(launcher.resource_class_id, user)
+            cluster = await self.nb_config.k8s_v2_client.cluster_by_class_id(launcher.resource_class_id, user)
+            logger.warning(f"#### LOOKING FOR CLASS {launcher.resource_class_id} {cluster.id}")
             server_name = renku_2_make_server_name(
                 user=user, project_id=str(launcher.project_id), launcher_id=body.launcher_id, cluster_id=cluster.id
             )
