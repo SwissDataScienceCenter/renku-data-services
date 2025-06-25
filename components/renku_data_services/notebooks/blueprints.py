@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 from pathlib import PurePosixPath
-from urllib.parse import urlunparse
 
 from sanic import Request, empty, exceptions, json
 from sanic.response import HTTPResponse, JSONResponse
@@ -10,7 +9,6 @@ from sanic_ext import validate
 from ulid import ULID
 
 from renku_data_services import base_models
-from renku_data_services.app_config import logging
 from renku_data_services.base_api.auth import authenticate, authenticate_2
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser, Authenticator
@@ -75,8 +73,6 @@ from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.db import UserRepo
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass(kw_only=True)
@@ -262,7 +258,6 @@ class NotebooksNewBP(CustomBlueprint):
             # We have to use body.resource_class_id and not launcher.resource_class_id as it may have been overridden by
             # the user when selecting a different resource class from a different resource pool.
             cluster = await self.nb_config.k8s_v2_client.cluster_by_class_id(body.resource_class_id, user)
-            logger.warning(f"#### LOOKING FOR CLASS {launcher.resource_class_id} {cluster.id}")
             server_name = renku_2_make_server_name(
                 user=user, project_id=str(launcher.project_id), launcher_id=body.launcher_id, cluster_id=cluster.id
             )
@@ -350,26 +345,27 @@ class NotebooksNewBP(CustomBlueprint):
 
             tls_secret = None
             p = await cluster.get_ingress_parameters(user, self.cluster_repo)
-            clusters = await self.cluster_repo.select_all_saved_clusters()
-            logger.warning(f"#### KNOWN clusters: {clusters}")
-            logger.warning(f"#### LOOKING FOR   : {cluster.id}")
-
             if p is not None:
                 (scheme, public_remote_host, port, path) = p
                 base_server_path = f"{path}/{server_name}"
-                base_server_url = str(urlunparse((str(scheme), public_remote_host, base_server_path, None, None, None)))
+                base_server_url = f"{scheme}://{public_remote_host}:{port}{base_server_path}"
+                base_server_https_url = base_server_url
                 host = public_remote_host
+                # FIXME: LSA Ingress annotations should be provided by remote admins
+                ingress_annotations = self.nb_config.sessions.ingress.annotations
             else:
                 # Fallback to global, main cluster parameters
                 base_server_path = self.nb_config.sessions.ingress.base_path(server_name)
                 base_server_url = self.nb_config.sessions.ingress.base_url(server_name)
+                base_server_https_url = self.nb_config.sessions.ingress.base_url(server_name, force_https=True)
                 host = self.nb_config.sessions.ingress.host
 
                 if self.nb_config.sessions.ingress.tls_secret is not None:
                     TlsSecret(adopt=False, name=self.nb_config.sessions.ingress.tls_secret)
 
+                ingress_annotations = self.nb_config.sessions.ingress.annotations
+
             ui_path = f"{base_server_path}/{environment.default_url.lstrip('/')}"
-            ingress_annotations = self.nb_config.sessions.ingress.annotations
 
             ingress = Ingress(
                 host=host,
@@ -378,7 +374,6 @@ class NotebooksNewBP(CustomBlueprint):
                 tlsSecret=tls_secret,
                 pathPrefix=base_server_path,
             )
-            logger.warning(f"#### INGRESS: {ingress}")
 
             annotations: dict[str, str] = {
                 "renku.io/project_id": str(launcher.project_id),
@@ -386,7 +381,9 @@ class NotebooksNewBP(CustomBlueprint):
                 "renku.io/resource_class_id": str(body.resource_class_id or default_resource_class.id),
             }
             if isinstance(user, AuthenticatedAPIUser):
-                auth_secret = await get_auth_secret_authenticated(self.nb_config, user, server_name)
+                auth_secret = await get_auth_secret_authenticated(
+                    self.nb_config, user, server_name, base_server_url, base_server_https_url, base_server_path
+                )
             else:
                 auth_secret = await get_auth_secret_anonymous(self.nb_config, server_name, request)
             if auth_secret.volume:

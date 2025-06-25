@@ -16,7 +16,6 @@ from renku_data_services.errors import MissingResourceError, errors
 from renku_data_services.k8s.constants import DUMMY_TASK_RUN_USER_ID, ClusterId
 
 if TYPE_CHECKING:
-    from renku_data_services.crc.apispec import Protocol
     from renku_data_services.crc.db import ClusterRepository
 
 logger = logging.getLogger(__name__)
@@ -133,17 +132,13 @@ class Cluster:
 
     async def get_ingress_parameters(
         self, user: APIUser, cluster_repo: ClusterRepository
-    ) -> tuple[Protocol, str, int, str] | None:
+    ) -> tuple[str, str, int, str] | None:
         """Return cluster-specific ingress parameters, mainly the public-facing URL components."""
         try:
-            logger.warning(f"#### Cluster ID {self.id}")
             id = ULID.from_str(self.id)
-            logger.warning(f"#### Cluster ULID {id}")
             cluster = await cluster_repo.select(user, id)
-            logger.warning(f"#### Cluster {cluster}")
-            return cluster.session_protocol, cluster.session_host, cluster.session_port, cluster.session_path
-        except (MissingResourceError, ValueError) as e:
-            logger.warning(f"### FAILED {e}")
+            return cluster.session_protocol.value, cluster.session_host, cluster.session_port, cluster.session_path
+        except (MissingResourceError, ValueError) as _e:
             return None
 
 

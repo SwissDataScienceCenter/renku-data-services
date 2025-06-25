@@ -906,7 +906,6 @@ class ClusterRepository:
             res = await session.scalars(select(ClusterORM))
             return [c.dump() for c in res.all()]
 
-    @_only_admins
     async def select_all(self, api_user: base_models.APIUser) -> AsyncGenerator[Cluster, Any]:
         """Get cluster configurations from the database."""
 
@@ -919,7 +918,6 @@ class ClusterRepository:
 
         return _f()
 
-    @_only_admins
     async def select(self, api_user: base_models.APIUser, cluster_id: ULID) -> SavedCluster:
         """Get cluster configurations from the database."""
 

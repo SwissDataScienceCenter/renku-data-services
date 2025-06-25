@@ -187,16 +187,11 @@ class NotebookK8sClient(Generic[_SessionType]):
         if class_id is not None:
             try:
                 rp = await self.__rp_repo.get_resource_pool_from_class(api_user, class_id)
-                logger.warning(f"#### LOADED RESOURCEPOOL: {rp}")
-
                 if rp.cluster is not None:
                     cluster_id = ClusterId(str(rp.cluster.id))
-                    logger.warning(f"#### rp.cluster.id {rp.cluster.id}")
 
             except errors.MissingResourceError:
                 pass
-
-            logger.warning(f"#### cluster_id {cluster_id}")
 
         return self.__client.cluster_by_id(cluster_id)
 
