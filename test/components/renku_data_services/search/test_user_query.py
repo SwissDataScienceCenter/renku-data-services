@@ -5,13 +5,13 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from ulid import ULID
 
+from renku_data_services.search.nel import Nel
 from renku_data_services.search.user_query import (
     DateTimeCalc,
     EmptyUserQueryVisitor,
     FieldTerm,
     Helper,
     IdIs,
-    Nel,
     Order,
     OrderBy,
     PartialDate,
@@ -52,37 +52,6 @@ def test_render_order() -> None:
         Nel.of(OrderBy(SortableField.fname, SortDirection.asc), OrderBy(SortableField.score, SortDirection.desc)),
     )
     assert order.render() == "sort:name-asc,score-desc"
-
-
-def test_nel() -> None:
-    value = Nel(1)
-    assert value.to_list() == [1]
-
-    value = Nel(1, [2, 3])
-    assert value.to_list() == [1, 2, 3]
-
-    # sad, mypy doesn't catch this
-    value = Nel.of(1, 2, 3, "a")
-    assert value.to_list() == [1, 2, 3, "a"]
-
-    value = Nel.of(1, 2, 3, 4)
-    assert value.to_list() == [1, 2, 3, 4]
-
-    value = Nel.of(1, 2).append(Nel.of(3, 4))
-    assert value.to_list() == [1, 2, 3, 4]
-
-    nel = Nel.of(1, 2)
-    value = nel.append_list([])
-    assert value is nel
-
-    value = nel.append_list([3, 4])
-    assert value.to_list() == [1, 2, 3, 4]
-
-    nel: Nel[int] | None = Nel.from_list([])
-    assert nel is None
-
-    nel = Nel.from_list([1, 2, 3])
-    assert nel == Nel.of(1, 2, 3)
 
 
 def test_helper_quote() -> None:

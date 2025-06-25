@@ -14,6 +14,7 @@ from renku_data_services.base_models import APIUser
 from renku_data_services.search import authz, converters
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.models import DeleteDoc
+from renku_data_services.search.nel import Nel
 from renku_data_services.search.solr_user_query import (
     AdminRole,
     AuthAccess,
@@ -23,7 +24,7 @@ from renku_data_services.search.solr_user_query import (
     UsernameResolve,
     UserRole,
 )
-from renku_data_services.search.user_query import Nel, UserQuery
+from renku_data_services.search.user_query import UserQuery
 from renku_data_services.solr.entity_documents import DataConnector, EntityDocReader, EntityType, Group, Project, User
 from renku_data_services.solr.entity_schema import Fields
 from renku_data_services.solr.solr_client import (

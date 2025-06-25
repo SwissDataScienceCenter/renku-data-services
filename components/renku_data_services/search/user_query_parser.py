@@ -21,6 +21,7 @@ from parsy import (
 from renku_data_services.app_config import logging
 from renku_data_services.authz.models import Role, Visibility
 from renku_data_services.base_models.core import NamespaceSlug
+from renku_data_services.search.nel import Nel
 from renku_data_services.search.user_query import (
     Comparison,
     Created,
@@ -34,7 +35,6 @@ from renku_data_services.search.user_query import (
     KeywordIs,
     NameIs,
     NamespaceIs,
-    Nel,
     Order,
     OrderBy,
     PartialDate,

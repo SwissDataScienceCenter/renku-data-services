@@ -9,7 +9,7 @@ from authzed.api.v1.permission_service_pb2 import LOOKUP_PERMISSIONSHIP_HAS_PERM
 from renku_data_services.app_config import logging
 from renku_data_services.authz.models import Role, Scope
 from renku_data_services.base_models.core import ResourceType
-from renku_data_services.search.user_query import Nel
+from renku_data_services.search.nel import Nel
 from renku_data_services.solr.entity_documents import EntityType
 
 logger = logging.getLogger(__name__)
@@ -55,7 +55,7 @@ async def get_ids_for_roles(
         ets.remove(EntityType.user)  # user don't have this relation
     result: set[str] = set()
 
-    for role in roles.to_list():
+    for role in roles:
         match role:
             case Role.VIEWER:
                 permission = Scope.DIRECT_MEMBER.value if direct_membership else Scope.EXCLUSIVE_MEMBER.value

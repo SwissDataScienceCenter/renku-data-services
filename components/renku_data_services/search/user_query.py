@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import calendar
 from abc import ABC, abstractmethod
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from dataclasses import field as data_field
 from datetime import date, datetime, time, timedelta, tzinfo
@@ -14,60 +13,10 @@ from typing import Any, Self, override
 from renku_data_services.authz.models import Role, Visibility
 from renku_data_services.base_models.core import NamespaceSlug
 from renku_data_services.namespace.models import UserNamespace
+from renku_data_services.search.nel import Nel
 from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.solr_client import SortDirection
 from renku_data_services.users.models import UserInfo
-
-
-@dataclass
-class Nel[A]:
-    """A non empty list."""
-
-    value: A
-    more_values: list[A] = data_field(default_factory=list)
-
-    @classmethod
-    def of(cls, el: A, *args: A) -> Nel[A]:
-        """Constructor using varargs."""
-        return Nel(value=el, more_values=list(args))
-
-    @classmethod
-    def unsafe_from_list(cls, els: list[A]) -> Nel[A]:
-        """Creates a non-empty list from a list, failing if the argument is empty."""
-        return Nel(els[0], els[1:])
-
-    @classmethod
-    def from_list(cls, els: list[A]) -> Nel[A] | None:
-        """Creates a non-empty list from a list."""
-        if els == []:
-            return None
-        else:
-            return cls.unsafe_from_list(els)
-
-    def append(self, other: Self) -> Self:
-        """Append other to this list."""
-        return self.append_list(other.to_list())
-
-    def append_list(self, other: list[A]) -> Self:
-        """Append other to this list."""
-        if other == []:
-            return self
-        else:
-            return type(self)(self.value, self.more_values + other)
-
-    def to_list(self) -> list[A]:
-        """Convert to a list."""
-        return [self.value] + self.more_values
-
-    def mk_string(self, sep: str, f: Callable[[A], str] = str) -> str:
-        """Create a str from all elements mapped over f."""
-        return sep.join([f(x) for x in self.to_list()])
-
-    def map[B](self, f: Callable[[A], B]) -> Nel[B]:
-        """Maps `f` over this list."""
-        head = f(self.value)
-        rest = [f(x) for x in self.more_values]
-        return Nel(head, rest)
 
 
 class Helper:
