@@ -8,7 +8,7 @@ import pytest
 
 import renku_data_services.search.solr_token as st
 from renku_data_services.authz.models import Role, Visibility
-from renku_data_services.search.solr_user_query import AuthAccess, Context, SolrUserQuery, _LuceneQueryVisitor
+from renku_data_services.search.solr_user_query import AuthAccess, Context, SolrUserQuery, _LuceneQueryTransform
 from renku_data_services.search.solr_user_query import LuceneQueryInterpreter as L
 from renku_data_services.search.user_query import (
     Created,
@@ -60,14 +60,14 @@ def end_of_day(d: datetime) -> datetime:
 
 
 async def to_solr(ctx: Context, seg: Segment) -> st.SolrToken:
-    v = _LuceneQueryVisitor(ctx)
+    v = _LuceneQueryTransform(ctx)
     await seg.accept(v)
     sq = await v.build()
     return sq.query
 
 
 def test_to_solr_sort() -> None:
-    assert _LuceneQueryVisitor._to_solr_sort(OrderBy(field=SortableField.fname, direction=SortDirection.asc)) == (
+    assert _LuceneQueryTransform._to_solr_sort(OrderBy(field=SortableField.fname, direction=SortDirection.asc)) == (
         Fields.name,
         SortDirection.asc,
     )
