@@ -5,12 +5,12 @@ from __future__ import annotations
 from typing import override
 
 from renku_data_services.app_config import logging
+from renku_data_services.search.nel import Nel
 from renku_data_services.search.user_query import (
     DirectMemberIs,
     EmptyUserQueryVisitor,
     FieldTerm,
     InheritedMemberIs,
-    Nel,
     Order,
     Segment,
     Text,
@@ -32,7 +32,7 @@ class CollectEntityTypes(EmptyUserQueryVisitor[set[EntityType] | None]):
 
     async def visit_type_is(self, ft: TypeIs) -> None:
         """Collect type-is nodes."""
-        values = set(ft.values.to_list())
+        values = set(ft.values)
         self.result = values if self.result is None else self.result.intersection(values)
 
     async def build(self) -> set[EntityType] | None:
@@ -109,11 +109,11 @@ class CollapseMembers(UserQueryFieldTermVisitor[UserQuery]):
 
     @override
     async def visit_inherited_member_is(self, ft: InheritedMemberIs) -> None:
-        self.inherited_members.extend(ft.users.to_list())
+        self.inherited_members.extend(ft.users)
 
     @override
     async def visit_direct_member_is(self, ft: DirectMemberIs) -> None:
-        self.direct_members.extend(ft.users.to_list())
+        self.direct_members.extend(ft.users)
 
     async def visit_order(self, order: Order) -> None:
         """Collect order nodes."""

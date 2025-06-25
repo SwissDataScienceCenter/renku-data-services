@@ -13,7 +13,8 @@ from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.namespace.models import ProjectNamespace, UserNamespace
 from renku_data_services.search.db import DbUsernameResolve, SearchUpdatesRepo
 from renku_data_services.search.models import DeleteDoc
-from renku_data_services.search.user_query import Nel, UserId, Username
+from renku_data_services.search.nel import Nel
+from renku_data_services.search.user_query import UserId, Username
 from renku_data_services.solr.entity_documents import DataConnector as DataConnectorDoc
 from renku_data_services.solr.entity_documents import User as UserDoc
 from renku_data_services.users.db import UserRepo

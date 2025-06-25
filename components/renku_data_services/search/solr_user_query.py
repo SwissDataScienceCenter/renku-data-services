@@ -11,6 +11,7 @@ from typing import override
 import renku_data_services.search.solr_token as st
 from renku_data_services.authz.models import Role
 from renku_data_services.base_models.core import APIUser
+from renku_data_services.search.nel import Nel
 from renku_data_services.search.solr_token import SolrToken
 from renku_data_services.search.user_query import (
     Comparison,
@@ -22,7 +23,6 @@ from renku_data_services.search.user_query import (
     KeywordIs,
     NameIs,
     NamespaceIs,
-    Nel,
     Order,
     OrderBy,
     RoleIs,
@@ -218,7 +218,7 @@ class Context:
         ids: set[UserId] = set()
         names: set[Username] = set()
         ets = self.get_entity_types()
-        for user_def in users.to_list():
+        for user_def in users:
             match user_def:
                 case Username() as u:
                     names.add(u)
@@ -289,7 +289,7 @@ class _LuceneQueryTransform(UserQueryVisitor[SolrUserQuery]):
 
     async def visit_order(self, order: Order) -> None:
         """Process order."""
-        sort = [self._to_solr_sort(e) for e in order.fields.to_list()]
+        sort = [self._to_solr_sort(e) for e in order.fields]
         self.solr_sort.extend(sort)
 
     @classmethod
@@ -375,21 +375,21 @@ class _LuceneQueryTransform(UserQueryVisitor[SolrUserQuery]):
         tokens: list[SolrToken] = []
         match ft.cmp:
             case Comparison.is_equal:
-                for dt in ft.values.to_list():
+                for dt in ft.values:
                     (min, max_opt) = dt.resolve(self.ctx.current_time, self.ctx.zone)
                     tokens.append(st.created_range(min, max_opt) if max_opt is not None else st.created_is(min))
 
                 self.__append(st.fold_or(tokens))
 
             case Comparison.is_greater_than:
-                for dt in ft.values.to_list():
+                for dt in ft.values:
                     (min, max_opt) = dt.resolve(self.ctx.current_time, self.ctx.zone)
                     tokens.append(st.created_gt(max_opt or min))
 
                 self.__append(st.fold_or(tokens))
 
             case Comparison.is_lower_than:
-                for dt in ft.values.to_list():
+                for dt in ft.values:
                     (min, _) = dt.resolve(self.ctx.current_time, self.ctx.zone)
                     tokens.append(st.created_lt(min))
 

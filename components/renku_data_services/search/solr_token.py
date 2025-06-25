@@ -1,11 +1,12 @@
 """Model for creating solr lucene queries."""
 
 import re
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import NewType
 
 from renku_data_services.authz.models import Visibility
-from renku_data_services.search.user_query import Nel
+from renku_data_services.search.nel import Nel
 from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.entity_schema import Fields
 from renku_data_services.solr.solr_schema import FieldName
@@ -98,7 +99,7 @@ def field_is_any(field: FieldName, value: Nel[SolrToken]) -> SolrToken:
     if value.more_values == []:
         return field_is(field, value.value)
     else:
-        vs = fold_or(value.to_list())
+        vs = fold_or(value)
         return field_is(field, SolrToken(f"({vs})"))
 
 
@@ -107,12 +108,12 @@ def type_is(et: EntityType) -> SolrToken:
     return field_is(Fields.entity_type, from_entity_type(et))
 
 
-def fold_and(tokens: list[SolrToken]) -> SolrToken:
+def fold_and(tokens: Iterable[SolrToken]) -> SolrToken:
     """Combine multiple solr query parts with AND."""
     return SolrToken(" AND ".join(tokens))
 
 
-def fold_or(tokens: list[SolrToken]) -> SolrToken:
+def fold_or(tokens: Iterable[SolrToken]) -> SolrToken:
     """Combine multiple solr query parts with OR."""
     return SolrToken(" OR ".join(tokens))
 

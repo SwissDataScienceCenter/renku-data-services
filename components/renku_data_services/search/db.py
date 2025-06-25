@@ -16,9 +16,10 @@ from renku_data_services.namespace.models import Group
 from renku_data_services.namespace.orm import NamespaceORM
 from renku_data_services.project.models import Project
 from renku_data_services.search.models import DeleteDoc, Entity
+from renku_data_services.search.nel import Nel
 from renku_data_services.search.orm import RecordState, SearchUpdatesORM
 from renku_data_services.search.solr_user_query import UsernameResolve
-from renku_data_services.search.user_query import Nel, UserId, Username
+from renku_data_services.search.user_query import UserId, Username
 from renku_data_services.solr.entity_documents import DataConnector as DataConnectorDoc
 from renku_data_services.solr.entity_documents import Group as GroupDoc
 from renku_data_services.solr.entity_documents import Project as ProjectDoc
@@ -286,7 +287,7 @@ class DbUsernameResolve(UsernameResolve):
     async def resolve_usernames(self, names: Nel[Username]) -> dict[Username, UserId] | None:
         """Resolve usernames to their user ids."""
         async with self.session_maker() as session, session.begin():
-            slugs = [u.slug.value for u in names.to_list()]
+            slugs = [u.slug.value for u in names]
 
             result = await session.execute(
                 sql.select(NamespaceORM.slug, NamespaceORM.user_id).where(
