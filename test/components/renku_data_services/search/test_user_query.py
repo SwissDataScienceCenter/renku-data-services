@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from ulid import ULID
 
 from renku_data_services.search.user_query import (
@@ -77,7 +78,7 @@ def test_nel() -> None:
     value = nel.append_list([3, 4])
     assert value.to_list() == [1, 2, 3, 4]
 
-    nel = Nel.from_list([])
+    nel: Nel[int] | None = Nel.from_list([])
     assert nel is None
 
     nel = Nel.from_list([1, 2, 3])
@@ -207,23 +208,24 @@ class TestUserQueryTransform(EmptyUserQueryVisitor[UserQuery]):
         self.segments: list[Segment] = []
         self.to_add = to_add
 
-    def visit_field_term(self, ft: FieldTerm) -> None:
+    async def visit_field_term(self, ft: FieldTerm) -> None:
         self.segments.append(ft)
 
-    def visit_order(self, order: Order) -> None:
+    async def visit_order(self, order: Order) -> None:
         self.segments.append(order)
 
-    def visit_text(self, text: Text) -> None:
+    async def visit_text(self, text: Text) -> None:
         self.segments.append(text)
 
-    def build(self) -> UserQuery:
+    async def build(self) -> UserQuery:
         self.segments.append(self.to_add)
         return UserQuery(self.segments)
 
 
-def test_transform() -> None:
+@pytest.mark.asyncio
+async def test_transform() -> None:
     q0 = UserQuery.of(Segments.name_is("john"), Segments.text("help"))
-    q = q0.transform(
+    q = await q0.transform(
         TestUserQueryTransform(Segments.type_is(EntityType.project)), TestUserQueryTransform(Segments.id_is("id-123"))
     )
 

@@ -81,7 +81,7 @@ class SearchBP(CustomBlueprint):
         async def _query(_: Request, user: base_models.APIUser, query: SearchQuery) -> HTTPResponse | JSONResponse:
             per_page = query.per_page
             offset = (query.page - 1) * per_page
-            uq = QueryParser.parse(query.q)
+            uq = await QueryParser.parse(query.q)
             logger.debug(f"Running search query: {query}")
 
             result = await core.query(

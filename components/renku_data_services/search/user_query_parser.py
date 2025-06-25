@@ -214,8 +214,13 @@ class QueryParser:
     """Parsing user search queries."""
 
     @classmethod
-    def parse(cls, input: str) -> UserQuery:
-        """Parses a user search query into its ast."""
+    def parse_raw(cls, input: str) -> UserQuery:
+        """Parses the input string into a UserQuery, without any post processing."""
         pp = _ParsePrimitives()
-        res = cast(UserQuery, pp.query.parse(input.strip()))
-        return res.transform(CollapseMembers(), CollapseText())
+        return cast(UserQuery, pp.query.parse(input.strip()))
+
+    @classmethod
+    async def parse(cls, input: str) -> UserQuery:
+        """Parses a user search query into its ast."""
+        q = cls.parse_raw(input)
+        return await q.transform(CollapseMembers(), CollapseText())

@@ -1,6 +1,9 @@
 """Tests for user query processing."""
 
-from renku_data_services.search.user_query import Segments, SortableField, UserId, Username, UserQuery
+import pytest
+
+from renku_data_services.search.user_query import Segments as S
+from renku_data_services.search.user_query import SortableField, UserId, Username, UserQuery
 from renku_data_services.search.user_query_process import (
     CollapseMembers,
     CollapseText,
@@ -11,82 +14,86 @@ from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.solr_client import SortDirection
 
 
-def test_find_entity_types() -> None:
-    q = UserQuery.of(Segments.keyword_is("science"), Segments.name_is("test"))
-    assert q.accept(CollectEntityTypes()) is None
+@pytest.mark.asyncio
+async def test_find_entity_types() -> None:
+    q = UserQuery.of(S.keyword_is("science"), S.name_is("test"))
+    assert await q.accept(CollectEntityTypes()) is None
 
-    q = UserQuery.of(Segments.keyword_is("science"), Segments.type_is(EntityType.project), Segments.name_is("test"))
-    assert q.accept(CollectEntityTypes()) == set([EntityType.project])
-
-    q = UserQuery.of(
-        Segments.keyword_is("science"),
-        Segments.type_is(EntityType.project, EntityType.dataconnector),
-        Segments.name_is("test"),
-    )
-    assert q.accept(CollectEntityTypes()) == set([EntityType.project, EntityType.dataconnector])
+    q = UserQuery.of(S.keyword_is("science"), S.type_is(EntityType.project), S.name_is("test"))
+    assert await q.accept(CollectEntityTypes()) == set([EntityType.project])
 
     q = UserQuery.of(
-        Segments.keyword_is("science"),
-        Segments.type_is(EntityType.project),
-        Segments.type_is(EntityType.dataconnector),
-        Segments.name_is("test"),
+        S.keyword_is("science"),
+        S.type_is(EntityType.project, EntityType.dataconnector),
+        S.name_is("test"),
     )
-    assert q.accept(CollectEntityTypes()) == set()
+    assert await q.accept(CollectEntityTypes()) == set([EntityType.project, EntityType.dataconnector])
+
+    q = UserQuery.of(
+        S.keyword_is("science"),
+        S.type_is(EntityType.project),
+        S.type_is(EntityType.dataconnector),
+        S.name_is("test"),
+    )
+    assert await q.accept(CollectEntityTypes()) == set()
 
 
-def test_query_extract_order() -> None:
-    q = UserQuery.of(Segments.name_is("test"), Segments.text("some"), Segments.keyword_is("datascience"))
-    assert q.accept(ExtractOrder()) == (
-        [Segments.name_is("test"), Segments.text("some"), Segments.keyword_is("datascience")],
+@pytest.mark.asyncio
+async def test_query_extract_order() -> None:
+    q = UserQuery.of(S.name_is("test"), S.text("some"), S.keyword_is("datascience"))
+    assert await q.accept(ExtractOrder()) == (
+        [S.name_is("test"), S.text("some"), S.keyword_is("datascience")],
         None,
     )
 
     q = UserQuery.of(
-        Segments.name_is("test"),
-        Segments.text("some"),
-        Segments.keyword_is("datascience"),
-        Segments.sort_by((SortableField.score, SortDirection.asc)),
+        S.name_is("test"),
+        S.text("some"),
+        S.keyword_is("datascience"),
+        S.sort_by((SortableField.score, SortDirection.asc)),
     )
-    assert q.accept(ExtractOrder()) == (
-        [Segments.name_is("test"), Segments.text("some"), Segments.keyword_is("datascience")],
-        Segments.sort_by((SortableField.score, SortDirection.asc)),
+    assert await q.accept(ExtractOrder()) == (
+        [S.name_is("test"), S.text("some"), S.keyword_is("datascience")],
+        S.sort_by((SortableField.score, SortDirection.asc)),
     )
 
     q = UserQuery.of(
-        Segments.name_is("test"),
-        Segments.sort_by((SortableField.fname, SortDirection.desc)),
-        Segments.text("some"),
-        Segments.keyword_is("datascience"),
-        Segments.sort_by((SortableField.score, SortDirection.asc)),
+        S.name_is("test"),
+        S.sort_by((SortableField.fname, SortDirection.desc)),
+        S.text("some"),
+        S.keyword_is("datascience"),
+        S.sort_by((SortableField.score, SortDirection.asc)),
     )
-    assert q.accept(ExtractOrder()) == (
-        [Segments.name_is("test"), Segments.text("some"), Segments.keyword_is("datascience")],
-        Segments.sort_by((SortableField.fname, SortDirection.desc), (SortableField.score, SortDirection.asc)),
+    assert await q.accept(ExtractOrder()) == (
+        [S.name_is("test"), S.text("some"), S.keyword_is("datascience")],
+        S.sort_by((SortableField.fname, SortDirection.desc), (SortableField.score, SortDirection.asc)),
     )
 
 
-def test_collapse_text_segments() -> None:
+@pytest.mark.asyncio
+async def test_collapse_text_segments() -> None:
     q = UserQuery.of(
-        Segments.name_is("john"),
-        Segments.text("hello"),
-        Segments.text("world"),
-        Segments.keyword_is("check"),
-        Segments.text("help"),
+        S.name_is("john"),
+        S.text("hello"),
+        S.text("world"),
+        S.keyword_is("check"),
+        S.text("help"),
     )
-    assert q.accept(CollapseText()) == UserQuery.of(
-        Segments.name_is("john"),
-        Segments.text("hello world"),
-        Segments.keyword_is("check"),
-        Segments.text("help"),
+    assert await q.accept(CollapseText()) == UserQuery.of(
+        S.name_is("john"),
+        S.text("hello world"),
+        S.keyword_is("check"),
+        S.text("help"),
     )
 
 
-def test_restrict_members_query() -> None:
+@pytest.mark.asyncio
+async def test_restrict_members_query() -> None:
     q = UserQuery.of(
-        Segments.name_is("al"),
-        Segments.direct_member_is(Username.from_name("jane")),
-        Segments.text("hello"),
-        Segments.direct_member_is(
+        S.name_is("al"),
+        S.direct_member_is(Username.from_name("jane")),
+        S.text("hello"),
+        S.direct_member_is(
             Username.from_name("joe"),
             Username.from_name("jeff"),
             UserId("123"),
@@ -94,10 +101,10 @@ def test_restrict_members_query() -> None:
             Username.from_name("wuff"),
         ),
     )
-    assert q.transform(CollapseMembers()) == UserQuery.of(
-        Segments.name_is("al"),
-        Segments.text("hello"),
-        Segments.direct_member_is(
+    assert await q.transform(CollapseMembers()) == UserQuery.of(
+        S.name_is("al"),
+        S.text("hello"),
+        S.direct_member_is(
             Username.from_name("jane"), Username.from_name("joe"), Username.from_name("jeff"), UserId("123")
         ),
     )
