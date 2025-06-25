@@ -139,7 +139,7 @@ async def query(
             return await authz.get_ids_for_roles(authz_client, user_id, roles, ets, direct_membership)
 
     ctx = (
-        Context.for_api_user(datetime.now(), UTC, user)
+        await Context.for_api_user(datetime.now(), UTC, user)
         .with_auth_access(RoleAuthAccess())
         .with_username_resolve(username_resolve)
         .with_requested_entity_types(query)

@@ -27,7 +27,6 @@ from renku_data_services.search.user_query import (
     PartialTime,
     RelativeDate,
     RoleIs,
-    Segments,
     SlugIs,
     SortableField,
     Text,
@@ -36,6 +35,9 @@ from renku_data_services.search.user_query import (
     Username,
     UserQuery,
     VisibilityIs,
+)
+from renku_data_services.search.user_query import (
+    Segments as S,
 )
 from renku_data_services.search.user_query_parser import QueryParser, _DateTimeParser, _ParsePrimitives
 from renku_data_services.solr.entity_documents import EntityType
@@ -229,17 +231,16 @@ def test_segment() -> None:
     assert pp.segment.parse("name:") == Text("name:")
 
 
-def test_query() -> None:
+@pytest.mark.asyncio
+async def test_query() -> None:
     assert pp.query.parse("") == UserQuery([])
 
-    q = UserQuery(
-        [
-            Created(Comparison.is_greater_than, Nel(DateTimeCalc(RelativeDate.today, -7, False))),
-            Text("some"),
-            SlugIs(Nel("bad slug")),
-            Text("text"),
-            Order(Nel(OrderBy(SortableField.score, SortDirection.asc))),
-        ]
+    q = UserQuery.of(
+        S.created(Comparison.is_greater_than, DateTimeCalc(RelativeDate.today, -7, False)),
+        S.text("some"),
+        S.slug_is("bad slug"),
+        S.text("text"),
+        S.order(OrderBy(SortableField.score, SortDirection.asc)),
     )
     qstr = 'created>today-7d some slug:"bad slug" text sort:score-asc'
     assert pp.query.parse(qstr) == q
@@ -247,53 +248,53 @@ def test_query() -> None:
 
     q = UserQuery(
         [
-            Segments.name_is("al"),
-            Segments.text("hello world hello"),
-            Segments.sort_by((SortableField.score, SortDirection.desc)),
+            S.name_is("al"),
+            S.text("hello world hello"),
+            S.sort_by((SortableField.score, SortDirection.desc)),
         ]
     )
     qstr = "name:al hello world hello sort:score-desc"
-    assert QueryParser.parse(qstr) == q
+    assert await QueryParser.parse(qstr) == q
     assert q.render() == qstr
 
 
-def test_collapse_member_and_text_query() -> None:
-    q = UserQuery(
-        [
-            Segments.name_is("al"),
-            Segments.text("hello this world"),
-            Segments.direct_member_is(Username.from_name("jane"), Username.from_name("joe")),
-        ]
+@pytest.mark.asyncio
+async def test_collapse_member_and_text_query() -> None:
+    q = UserQuery.of(
+        S.name_is("al"),
+        S.text("hello this world"),
+        S.direct_member_is(Username.from_name("jane"), Username.from_name("joe")),
     )
     qstr = "name:al hello  member:@jane this world member:@joe"
-    assert QueryParser.parse(qstr) == q
+    assert await QueryParser.parse(qstr) == q
     assert q.render() == "name:al hello this world member:@jane,@joe"
 
 
-def test_restrict_members_query() -> None:
-    q = UserQuery(
-        [
-            Segments.name_is("al"),
-            Segments.text("hello"),
-            Segments.direct_member_is(
-                Username.from_name("jane"), Username.from_name("joe"), Username.from_name("jeff"), UserId("123")
-            ),
-        ]
+@pytest.mark.asyncio
+async def test_restrict_members_query() -> None:
+    q = UserQuery.of(
+        S.name_is("al"),
+        S.text("hello"),
+        S.direct_member_is(
+            Username.from_name("jane"), Username.from_name("joe"), Username.from_name("jeff"), UserId("123")
+        ),
     )
     qstr = "name:al  member:@jane hello member:@joe,@jeff,123,456,@wuff"
-    assert QueryParser.parse(qstr) == q
+    assert (await QueryParser.parse(qstr)) == q
 
 
-def test_invalid_query() -> None:
-    result = QueryParser.parse("type:uu:ue:")
+@pytest.mark.asyncio
+async def test_invalid_query() -> None:
+    result = await QueryParser.parse("type:uu:ue:")
     assert result == UserQuery([Text("type:uu:ue:")])
 
 
-def test_random_query() -> None:
+@pytest.mark.asyncio
+async def test_random_query() -> None:
     """Any random string must parse successfully."""
     rlen = random.randint(0, 50)
     rstr = "".join(random.choices(string.printable, k=rlen))
-    QueryParser.parse(rstr)
+    await QueryParser.parse(rstr)
 
 
 def test_string_basic() -> None:

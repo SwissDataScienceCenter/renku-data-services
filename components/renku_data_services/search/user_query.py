@@ -341,7 +341,7 @@ class SegmentBase(ABC):
     """Base class for a query segment."""
 
     @abstractmethod
-    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
+    async def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
         ...
 
@@ -388,9 +388,9 @@ class InheritedMemberIs(FieldComparison):
     def _render_value(self) -> str:
         return self.users.map(lambda u: u.render()).mk_string(",")
 
-    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
+    async def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
-        visitor.visit_inherited_member_is(self)
+        return await visitor.visit_inherited_member_is(self)
 
 
 @dataclass
@@ -412,9 +412,9 @@ class DirectMemberIs(FieldComparison):
     def _render_value(self) -> str:
         return self.users.map(lambda u: u.render()).mk_string(",")
 
-    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
+    async def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
-        visitor.visit_direct_member_is(self)
+        return await visitor.visit_direct_member_is(self)
 
 
 @dataclass
@@ -436,9 +436,9 @@ class TypeIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",")
 
-    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
+    async def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
-        visitor.visit_type_is(self)
+        return await visitor.visit_type_is(self)
 
 
 @dataclass
@@ -460,9 +460,9 @@ class IdIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",", Helper.quote)
 
-    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
+    async def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
-        visitor.visit_id_is(self)
+        return await visitor.visit_id_is(self)
 
 
 @dataclass
@@ -484,9 +484,9 @@ class NameIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",", Helper.quote)
 
-    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
+    async def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
-        visitor.visit_name_is(self)
+        return await visitor.visit_name_is(self)
 
 
 @dataclass
@@ -508,9 +508,9 @@ class SlugIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",", Helper.quote)
 
-    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
+    async def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
-        visitor.visit_slug_is(self)
+        return await visitor.visit_slug_is(self)
 
 
 @dataclass
@@ -532,9 +532,9 @@ class KeywordIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",", Helper.quote)
 
-    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
+    async def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
-        visitor.visit_keyword_is(self)
+        return await visitor.visit_keyword_is(self)
 
 
 @dataclass
@@ -556,9 +556,9 @@ class NamespaceIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",", Helper.quote)
 
-    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
+    async def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
-        visitor.visit_namespace_is(self)
+        return await visitor.visit_namespace_is(self)
 
 
 @dataclass
@@ -580,9 +580,9 @@ class VisibilityIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",")
 
-    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
+    async def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
-        visitor.visit_visibility_is(self)
+        return await visitor.visit_visibility_is(self)
 
 
 @dataclass
@@ -604,9 +604,9 @@ class CreatedByIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",", Helper.quote)
 
-    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
+    async def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
-        visitor.visit_created_by_is(self)
+        return await visitor.visit_created_by_is(self)
 
 
 @dataclass
@@ -647,9 +647,9 @@ class Created(FieldComparison):
         nel = Nel(value, list(args))
         return Created(Comparison.is_greater_than, nel)
 
-    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
+    async def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
-        visitor.visit_created(self)
+        return await visitor.visit_created(self)
 
 
 @dataclass
@@ -671,9 +671,9 @@ class RoleIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",")
 
-    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
+    async def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
-        visitor.visit_role_is(self)
+        return await visitor.visit_role_is(self)
 
 
 @dataclass
@@ -695,9 +695,9 @@ class Text(SegmentBase):
         else:
             return type(self)(self.value + " " + next.value)
 
-    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
+    async def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
-        visitor.visit_text(self)
+        return await visitor.visit_text(self)
 
 
 class SortableField(StrEnum):
@@ -739,9 +739,9 @@ class Order(SegmentBase):
         """Append the field list of `other` to this."""
         return type(self)(self.fields.append(other.fields))
 
-    def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
+    async def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
-        visitor.visit_order(self)
+        return await visitor.visit_order(self)
 
 
 type FieldTerm = (
@@ -765,6 +765,11 @@ type Segment = FieldTerm | Text | Order
 
 class Segments:
     """Helpers for creating segments."""
+
+    @classmethod
+    def order(cls, o: OrderBy, *args: OrderBy) -> Segment:
+        """Return an order segment."""
+        return Order(Nel(o, list(args)))
 
     @classmethod
     def inherited_member_is(cls, user: UserDef, *args: UserDef) -> Segment:
@@ -871,19 +876,19 @@ class UserQuery:
         """Return the string representation of this query."""
         return " ".join([e.render() for e in self.segments])
 
-    def accept[T](self, visitor: UserQueryVisitor[T]) -> T:
+    async def accept[T](self, visitor: UserQueryVisitor[T]) -> T:
         """Apply the visitor."""
         for s in self.segments:
-            s.accept(visitor)
-        return visitor.build()
+            await s.accept(visitor)
+        return await visitor.build()
 
-    def transform(self, visitor: UserQueryVisitor[UserQuery], *args: UserQueryVisitor[UserQuery]) -> UserQuery:
+    async def transform(self, visitor: UserQueryVisitor[UserQuery], *args: UserQueryVisitor[UserQuery]) -> UserQuery:
         """Apply this query to the given transformations sequentially."""
         transforms: list[UserQueryVisitor[UserQuery]] = [visitor]
         transforms.extend(list(args))
 
         acc = self
-        [acc := acc.accept(t) for t in transforms]
+        [acc := await acc.accept(t) for t in transforms]
         return acc
 
 
@@ -891,77 +896,77 @@ class UserQueryVisitor[T](ABC):
     """A visitor to transform user queries."""
 
     @abstractmethod
-    def build(self) -> T:
+    async def build(self) -> T:
         """Return the value."""
         ...
 
     @abstractmethod
-    def visit_order(self, order: Order) -> None:
+    async def visit_order(self, order: Order) -> None:
         """Visit node."""
         ...
 
     @abstractmethod
-    def visit_text(self, text: Text) -> None:
+    async def visit_text(self, text: Text) -> None:
         """Visit node."""
         ...
 
     @abstractmethod
-    def visit_type_is(self, ft: TypeIs) -> None:
+    async def visit_type_is(self, ft: TypeIs) -> None:
         """Visit node."""
         ...
 
     @abstractmethod
-    def visit_id_is(self, ft: IdIs) -> None:
+    async def visit_id_is(self, ft: IdIs) -> None:
         """Visit node."""
         ...
 
     @abstractmethod
-    def visit_name_is(self, ft: NameIs) -> None:
+    async def visit_name_is(self, ft: NameIs) -> None:
         """Visit node."""
         ...
 
     @abstractmethod
-    def visit_slug_is(self, ft: SlugIs) -> None:
+    async def visit_slug_is(self, ft: SlugIs) -> None:
         """Visit node."""
         ...
 
     @abstractmethod
-    def visit_visibility_is(self, ft: VisibilityIs) -> None:
+    async def visit_visibility_is(self, ft: VisibilityIs) -> None:
         """Visit node."""
         ...
 
     @abstractmethod
-    def visit_keyword_is(self, ft: KeywordIs) -> None:
+    async def visit_keyword_is(self, ft: KeywordIs) -> None:
         """Visit node."""
         ...
 
     @abstractmethod
-    def visit_namespace_is(self, ft: NamespaceIs) -> None:
+    async def visit_namespace_is(self, ft: NamespaceIs) -> None:
         """Visit node."""
         ...
 
     @abstractmethod
-    def visit_created_by_is(self, ft: CreatedByIs) -> None:
+    async def visit_created_by_is(self, ft: CreatedByIs) -> None:
         """Visit node."""
         ...
 
     @abstractmethod
-    def visit_created(self, ft: Created) -> None:
+    async def visit_created(self, ft: Created) -> None:
         """Visit node."""
         ...
 
     @abstractmethod
-    def visit_role_is(self, ft: RoleIs) -> None:
+    async def visit_role_is(self, ft: RoleIs) -> None:
         """Visit node."""
         ...
 
     @abstractmethod
-    def visit_direct_member_is(self, ft: DirectMemberIs) -> None:
+    async def visit_direct_member_is(self, ft: DirectMemberIs) -> None:
         """Visit node."""
         ...
 
     @abstractmethod
-    def visit_inherited_member_is(self, ft: InheritedMemberIs) -> None:
+    async def visit_inherited_member_is(self, ft: InheritedMemberIs) -> None:
         """Visit node."""
         ...
 
@@ -973,69 +978,69 @@ class UserQuerySegmentVisitor[T](UserQueryVisitor[T]):
     """
 
     @abstractmethod
-    def visit_field_term(self, ft: FieldTerm) -> None:
+    async def visit_field_term(self, ft: FieldTerm) -> None:
         """Visit a field term query segment."""
         ...
 
     @override
-    def visit_created(self, ft: Created) -> None:
+    async def visit_created(self, ft: Created) -> None:
         """Forwards to `visit_field_term`."""
-        return self.visit_field_term(ft)
+        return await self.visit_field_term(ft)
 
     @override
-    def visit_created_by_is(self, ft: CreatedByIs) -> None:
+    async def visit_created_by_is(self, ft: CreatedByIs) -> None:
         """Forwards to `visit_field_term`."""
-        return self.visit_field_term(ft)
+        return await self.visit_field_term(ft)
 
     @override
-    def visit_direct_member_is(self, ft: DirectMemberIs) -> None:
+    async def visit_direct_member_is(self, ft: DirectMemberIs) -> None:
         """Forwards to `visit_field_term`."""
-        return self.visit_field_term(ft)
+        return await self.visit_field_term(ft)
 
     @override
-    def visit_id_is(self, ft: IdIs) -> None:
+    async def visit_id_is(self, ft: IdIs) -> None:
         """Forwards to `visit_field_term`."""
-        return self.visit_field_term(ft)
+        return await self.visit_field_term(ft)
 
     @override
-    def visit_keyword_is(self, ft: KeywordIs) -> None:
+    async def visit_keyword_is(self, ft: KeywordIs) -> None:
         """Forwards to `visit_field_term`."""
-        return self.visit_field_term(ft)
+        return await self.visit_field_term(ft)
 
     @override
-    def visit_inherited_member_is(self, ft: InheritedMemberIs) -> None:
+    async def visit_inherited_member_is(self, ft: InheritedMemberIs) -> None:
         """Forwards to `visit_field_term`."""
-        return self.visit_field_term(ft)
+        return await self.visit_field_term(ft)
 
     @override
-    def visit_name_is(self, ft: NameIs) -> None:
+    async def visit_name_is(self, ft: NameIs) -> None:
         """Forwards to `visit_field_term`."""
-        return self.visit_field_term(ft)
+        return await self.visit_field_term(ft)
 
     @override
-    def visit_namespace_is(self, ft: NamespaceIs) -> None:
+    async def visit_namespace_is(self, ft: NamespaceIs) -> None:
         """Forwards to `visit_field_term`."""
-        return self.visit_field_term(ft)
+        return await self.visit_field_term(ft)
 
     @override
-    def visit_role_is(self, ft: RoleIs) -> None:
+    async def visit_role_is(self, ft: RoleIs) -> None:
         """Forwards to `visit_field_term`."""
-        return self.visit_field_term(ft)
+        return await self.visit_field_term(ft)
 
     @override
-    def visit_slug_is(self, ft: SlugIs) -> None:
+    async def visit_slug_is(self, ft: SlugIs) -> None:
         """Forwards to `visit_field_term`."""
-        return self.visit_field_term(ft)
+        return await self.visit_field_term(ft)
 
     @override
-    def visit_type_is(self, ft: TypeIs) -> None:
+    async def visit_type_is(self, ft: TypeIs) -> None:
         """Forwards to `visit_field_term`."""
-        return self.visit_field_term(ft)
+        return await self.visit_field_term(ft)
 
     @override
-    def visit_visibility_is(self, ft: VisibilityIs) -> None:
+    async def visit_visibility_is(self, ft: VisibilityIs) -> None:
         """Forwards to `visit_field_term`."""
-        return self.visit_field_term(ft)
+        return await self.visit_field_term(ft)
 
 
 class EmptyUserQueryVisitor[T](UserQuerySegmentVisitor[T]):
@@ -1044,14 +1049,14 @@ class EmptyUserQueryVisitor[T](UserQuerySegmentVisitor[T]):
     The `build` method is left to implement by subclasses.
     """
 
-    def visit_field_term(self, ft: FieldTerm) -> None:
+    async def visit_field_term(self, ft: FieldTerm) -> None:
         """Visit field-term node."""
         return None
 
-    def visit_order(self, order: Order) -> None:
+    async def visit_order(self, order: Order) -> None:
         """Visit order node."""
         return None
 
-    def visit_text(self, text: Text) -> None:
+    async def visit_text(self, text: Text) -> None:
         """Visit text node."""
         return None

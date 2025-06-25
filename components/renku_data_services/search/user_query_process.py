@@ -32,20 +32,20 @@ class ExtractOrder(UserQuerySegmentVisitor[tuple[list[FieldTerm | Text], Order |
         self.segs: list[FieldTerm | Text] = []
         self.orders: list[OrderBy] = []
 
-    def build(self) -> tuple[list[FieldTerm | Text], Order | None]:
+    async def build(self) -> tuple[list[FieldTerm | Text], Order | None]:
         """Return the split query."""
         sort = Nel.from_list(self.orders)
         return (self.segs, Order(sort) if sort is not None else None)
 
-    def visit_order(self, order: Order) -> None:
+    async def visit_order(self, order: Order) -> None:
         """Collect order nodes."""
         self.orders.extend(order.fields.to_list())
 
-    def visit_text(self, text: Text) -> None:
+    async def visit_text(self, text: Text) -> None:
         """Collect text nodes."""
         self.segs.append(text)
 
-    def visit_field_term(self, ft: FieldTerm) -> None:
+    async def visit_field_term(self, ft: FieldTerm) -> None:
         """Collect field term nodes."""
         self.segs.append(ft)
 
@@ -56,12 +56,12 @@ class CollectEntityTypes(EmptyUserQueryVisitor[set[EntityType] | None]):
     def __init__(self) -> None:
         self.result: set[EntityType] | None = None
 
-    def visit_type_is(self, ft: TypeIs) -> None:
+    async def visit_type_is(self, ft: TypeIs) -> None:
         """Collect type-is nodes."""
         values = set(ft.values.to_list())
         self.result = values if self.result is None else self.result.intersection(values)
 
-    def build(self) -> set[EntityType] | None:
+    async def build(self) -> set[EntityType] | None:
         """Return the collected entity types."""
         return self.result
 
@@ -73,13 +73,13 @@ class CollapseText(UserQuerySegmentVisitor[UserQuery]):
         self.segments: list[Segment] = []
         self.current: Text | None = None
 
-    def build(self) -> UserQuery:
+    async def build(self) -> UserQuery:
         """Return the modified query."""
         if self.current is not None:
             self.segments.append(self.current)
         return UserQuery(self.segments)
 
-    def visit_text(self, text: Text) -> None:
+    async def visit_text(self, text: Text) -> None:
         """Collect text nodes."""
         self.current = text if self.current is None else self.current.append(text)
         return None
@@ -91,11 +91,11 @@ class CollapseText(UserQuerySegmentVisitor[UserQuery]):
             self.current = None
         self.segments.append(seg)
 
-    def visit_order(self, order: Order) -> None:
+    async def visit_order(self, order: Order) -> None:
         """Visit order nodes."""
         return self.visit_other(order)
 
-    def visit_field_term(self, ft: FieldTerm) -> None:
+    async def visit_field_term(self, ft: FieldTerm) -> None:
         """Visit field term nodes."""
         return self.visit_other(ft)
 
@@ -109,7 +109,7 @@ class CollapseMembers(UserQuerySegmentVisitor[UserQuery]):
         self.inherited_members: list[UserDef] = []
         self.direct_members: list[UserDef] = []
 
-    def build(self) -> UserQuery:
+    async def build(self) -> UserQuery:
         """Return the query with member segments combined."""
         result: list[Segment] = []
         max = self.maximum_member_count
@@ -134,21 +134,21 @@ class CollapseMembers(UserQuerySegmentVisitor[UserQuery]):
         return UserQuery(self.segments)
 
     @override
-    def visit_inherited_member_is(self, ft: InheritedMemberIs) -> None:
+    async def visit_inherited_member_is(self, ft: InheritedMemberIs) -> None:
         self.inherited_members.extend(ft.users.to_list())
 
     @override
-    def visit_direct_member_is(self, ft: DirectMemberIs) -> None:
+    async def visit_direct_member_is(self, ft: DirectMemberIs) -> None:
         self.direct_members.extend(ft.users.to_list())
 
-    def visit_order(self, order: Order) -> None:
+    async def visit_order(self, order: Order) -> None:
         """Collect order nodes."""
         self.segments.append(order)
 
-    def visit_text(self, text: Text) -> None:
+    async def visit_text(self, text: Text) -> None:
         """Collect text nodes."""
         self.segments.append(text)
 
-    def visit_field_term(self, ft: FieldTerm) -> None:
+    async def visit_field_term(self, ft: FieldTerm) -> None:
         """Collect remaining terms."""
         self.segments.append(ft)
