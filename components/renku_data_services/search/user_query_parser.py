@@ -30,6 +30,7 @@ from renku_data_services.search.user_query import (
     Field,
     Helper,
     IdIs,
+    InheritedMemberIs,
     KeywordIs,
     NameIs,
     NamespaceIs,
@@ -42,7 +43,6 @@ from renku_data_services.search.user_query import (
     RelativeDate,
     RoleIs,
     SlugIs,
-    SoftMemberIs,
     SortableField,
     Text,
     TypeIs,
@@ -193,8 +193,8 @@ class _ParsePrimitives:
     user_name: Parser = string("@") >> string_basic.map(NamespaceSlug.from_name).map(Username)
     user_id: Parser = string_basic.map(UserId)
     user_def_nel: Parser = (user_name | user_id).sep_by(comma, min=1).map(Nel.unsafe_from_list)
-    soft_member_is: Parser = (
-        string(Field.soft_member.value, lambda s: s.lower()) >> is_equal >> user_def_nel.map(SoftMemberIs)
+    inherited_member_is: Parser = (
+        string(Field.inherited_member.value, lambda s: s.lower()) >> is_equal >> user_def_nel.map(InheritedMemberIs)
     )
     direct_member_is: Parser = (
         string(Field.member.value, lambda s: s.lower()) >> is_equal >> user_def_nel.map(DirectMemberIs)
@@ -202,7 +202,7 @@ class _ParsePrimitives:
 
     term_is: Parser = seq(from_enum(Field, lambda s: s.lower()) << is_equal, string_values).bind(_make_field_term)
 
-    field_term: Parser = type_is | visibility_is | role_is | soft_member_is | direct_member_is | created | term_is
+    field_term: Parser = type_is | visibility_is | role_is | inherited_member_is | direct_member_is | created | term_is
     free_text: Parser = test_char(lambda c: not c.isspace(), "string without spaces").at_least(1).concat().map(Text)
 
     segment: Parser = field_term | sort_term | free_text

@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from dataclasses import field as data_field
 from datetime import date, datetime, time, timedelta, tzinfo
 from enum import StrEnum
-from typing import Any, Self
+from typing import Any, Self, override
 
 from renku_data_services.authz.models import Role, Visibility
 from renku_data_services.base_models.core import NamespaceSlug
@@ -101,7 +101,7 @@ class Field(StrEnum):
     keyword = "keyword"
     namespace = "namespace"
     member = "member"
-    soft_member = "soft_member"
+    inherited_member = "inherited_member"
 
 
 class Comparison(StrEnum):
@@ -370,7 +370,7 @@ class FieldComparison(SegmentBase):
 
 
 @dataclass
-class SoftMemberIs(FieldComparison):
+class InheritedMemberIs(FieldComparison):
     """Check for membership of a given user."""
 
     users: Nel[UserDef]
@@ -378,7 +378,7 @@ class SoftMemberIs(FieldComparison):
     @property
     def field(self) -> Field:
         """The field name."""
-        return Field.soft_member
+        return Field.inherited_member
 
     @property
     def cmp(self) -> Comparison:
@@ -390,7 +390,7 @@ class SoftMemberIs(FieldComparison):
 
     def accept[T](self, visitor: UserQueryVisitor[T]) -> None:
         """Apply this to the visitor."""
-        visitor.visit_soft_member_is(self)
+        visitor.visit_inherited_member_is(self)
 
 
 @dataclass
@@ -755,7 +755,7 @@ type FieldTerm = (
     | CreatedByIs
     | Created
     | RoleIs
-    | SoftMemberIs
+    | InheritedMemberIs
     | DirectMemberIs
 )
 
@@ -767,9 +767,9 @@ class Segments:
     """Helpers for creating segments."""
 
     @classmethod
-    def soft_member_is(cls, user: UserDef, *args: UserDef) -> Segment:
+    def inherited_member_is(cls, user: UserDef, *args: UserDef) -> Segment:
         """Return member-is query segment."""
-        return SoftMemberIs(Nel(user, list(args)))
+        return InheritedMemberIs(Nel(user, list(args)))
 
     @classmethod
     def direct_member_is(cls, user: UserDef, *args: UserDef) -> Segment:
@@ -961,7 +961,7 @@ class UserQueryVisitor[T](ABC):
         ...
 
     @abstractmethod
-    def visit_soft_member_is(self, ft: SoftMemberIs) -> None:
+    def visit_inherited_member_is(self, ft: InheritedMemberIs) -> None:
         """Visit node."""
         ...
 
@@ -977,50 +977,62 @@ class UserQuerySegmentVisitor[T](UserQueryVisitor[T]):
         """Visit a field term query segment."""
         ...
 
+    @override
     def visit_created(self, ft: Created) -> None:
         """Forwards to `visit_field_term`."""
         return self.visit_field_term(ft)
 
+    @override
     def visit_created_by_is(self, ft: CreatedByIs) -> None:
         """Forwards to `visit_field_term`."""
         return self.visit_field_term(ft)
 
+    @override
     def visit_direct_member_is(self, ft: DirectMemberIs) -> None:
         """Forwards to `visit_field_term`."""
         return self.visit_field_term(ft)
 
+    @override
     def visit_id_is(self, ft: IdIs) -> None:
         """Forwards to `visit_field_term`."""
         return self.visit_field_term(ft)
 
+    @override
     def visit_keyword_is(self, ft: KeywordIs) -> None:
         """Forwards to `visit_field_term`."""
         return self.visit_field_term(ft)
 
-    def visit_soft_member_is(self, ft: SoftMemberIs) -> None:
+    @override
+    def visit_inherited_member_is(self, ft: InheritedMemberIs) -> None:
         """Forwards to `visit_field_term`."""
         return self.visit_field_term(ft)
 
+    @override
     def visit_name_is(self, ft: NameIs) -> None:
         """Forwards to `visit_field_term`."""
         return self.visit_field_term(ft)
 
+    @override
     def visit_namespace_is(self, ft: NamespaceIs) -> None:
         """Forwards to `visit_field_term`."""
         return self.visit_field_term(ft)
 
+    @override
     def visit_role_is(self, ft: RoleIs) -> None:
         """Forwards to `visit_field_term`."""
         return self.visit_field_term(ft)
 
+    @override
     def visit_slug_is(self, ft: SlugIs) -> None:
         """Forwards to `visit_field_term`."""
         return self.visit_field_term(ft)
 
+    @override
     def visit_type_is(self, ft: TypeIs) -> None:
         """Forwards to `visit_field_term`."""
         return self.visit_field_term(ft)
 
+    @override
     def visit_visibility_is(self, ft: VisibilityIs) -> None:
         """Forwards to `visit_field_term`."""
         return self.visit_field_term(ft)

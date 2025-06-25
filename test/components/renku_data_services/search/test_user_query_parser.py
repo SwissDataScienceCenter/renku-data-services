@@ -15,6 +15,7 @@ from renku_data_services.search.user_query import (
     DateTimeCalc,
     DirectMemberIs,
     IdIs,
+    InheritedMemberIs,
     KeywordIs,
     NameIs,
     NamespaceIs,
@@ -28,7 +29,6 @@ from renku_data_services.search.user_query import (
     RoleIs,
     Segments,
     SlugIs,
-    SoftMemberIs,
     SortableField,
     Text,
     TypeIs,
@@ -53,9 +53,11 @@ def test_user_name() -> None:
         pp.user_name.parse("@t - a")
 
 
-def test_soft_member_is() -> None:
-    assert pp.soft_member_is.parse("soft_member:@hello") == SoftMemberIs(Nel(Username.from_name("hello")))
-    assert pp.soft_member_is.parse("soft_member:hello") == SoftMemberIs(Nel(UserId("hello")))
+def test_inherited_member_is() -> None:
+    assert pp.inherited_member_is.parse("inherited_member:@hello") == InheritedMemberIs(
+        Nel(Username.from_name("hello"))
+    )
+    assert pp.inherited_member_is.parse("inherited_member:hello") == InheritedMemberIs(Nel(UserId("hello")))
 
 
 def test_direct_member_is() -> None:
@@ -191,8 +193,8 @@ def test_field_term() -> None:
     assert pp.field_term.parse("role:viewer") == RoleIs(Nel(Role.VIEWER))
     assert pp.field_term.parse("member:@john") == DirectMemberIs(Nel(Username.from_name("john")))
     assert pp.field_term.parse("member:123-456") == DirectMemberIs(Nel(UserId("123-456")))
-    assert pp.field_term.parse("soft_member:@john") == SoftMemberIs(Nel(Username.from_name("john")))
-    assert pp.field_term.parse("soft_member:123-456") == SoftMemberIs(Nel(UserId("123-456")))
+    assert pp.field_term.parse("inherited_member:@john") == InheritedMemberIs(Nel(Username.from_name("john")))
+    assert pp.field_term.parse("inherited_member:123-456") == InheritedMemberIs(Nel(UserId("123-456")))
 
 
 def test_free_text() -> None:
@@ -221,8 +223,8 @@ def test_segment() -> None:
     assert pp.segment.parse("createdBy:test") == CreatedByIs(Nel("test"))
     assert pp.segment.parse("member:@john") == DirectMemberIs(Nel(Username.from_name("john")))
     assert pp.segment.parse("member:123-456") == DirectMemberIs(Nel(UserId("123-456")))
-    assert pp.segment.parse("soft_member:@john") == SoftMemberIs(Nel(Username.from_name("john")))
-    assert pp.segment.parse("soft_member:123-456") == SoftMemberIs(Nel(UserId("123-456")))
+    assert pp.segment.parse("inherited_member:@john") == InheritedMemberIs(Nel(Username.from_name("john")))
+    assert pp.segment.parse("inherited_member:123-456") == InheritedMemberIs(Nel(UserId("123-456")))
 
     assert pp.segment.parse("name:") == Text("name:")
 
