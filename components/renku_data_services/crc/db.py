@@ -955,7 +955,7 @@ class ClusterRepository:
             for key, value in kwargs.items():
                 match key:
                     case "session_protocol":
-                        saved_cluster.session_protocol = str(value)
+                        saved_cluster.session_protocol = value.value
                     case _:
                         setattr(saved_cluster, key, value)
 
