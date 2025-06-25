@@ -12,6 +12,7 @@ from kr8s import NotFoundError, ServerError
 from kr8s.asyncio.objects import APIObject, Pod, Secret, StatefulSet
 from kubernetes.client import V1Secret
 
+from renku_data_services.app_config import logging
 from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.errors import errors
@@ -28,6 +29,7 @@ if TYPE_CHECKING:
     from renku_data_services.k8s.clients import K8sClusterClientsPool
 
 sanitizer = kubernetes.client.ApiClient().sanitize_for_serialization
+logger = logging.getLogger(__name__)
 
 
 # NOTE The type ignore below is because the kr8s library has no type stubs, they claim pyright better handles type hints
@@ -185,10 +187,16 @@ class NotebookK8sClient(Generic[_SessionType]):
         if class_id is not None:
             try:
                 rp = await self.__rp_repo.get_resource_pool_from_class(api_user, class_id)
+                logger.warning(f"#### LOADED RESOURCEPOOL: {rp}")
+
                 if rp.cluster is not None:
                     cluster_id = ClusterId(str(rp.cluster.id))
+                    logger.warning(f"#### rp.cluster.id {rp.cluster.id}")
+
             except errors.MissingResourceError:
                 pass
+
+            logger.warning(f"#### cluster_id {cluster_id}")
 
         return self.__client.cluster_by_id(cluster_id)
 
