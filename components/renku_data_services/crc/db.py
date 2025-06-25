@@ -952,7 +952,6 @@ class ClusterRepository:
 
             # Make sure we do not allow changing the id of the cluster
             kwargs = asdict(cluster)
-            kwargs.pop("id")
             for k, v in kwargs.items():
                 setattr(saved_cluster, k, v)
 

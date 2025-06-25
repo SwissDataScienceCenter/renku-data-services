@@ -660,6 +660,7 @@ class ClustersBP(CustomBlueprint):
             _request: Request, user: base_models.APIUser, cluster_id: ULID, body: apispec.ClusterPatch
         ) -> HTTPResponse:
             old = asdict(await self.repo.select(user, cluster_id))
+            old.pop("id")
             new = body.model_dump(exclude_none=True)
             cluster = UnsavedCluster(**{**old, **new})
 
