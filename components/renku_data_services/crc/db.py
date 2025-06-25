@@ -175,7 +175,11 @@ class ResourcePoolRepository(_Base):
     ) -> list[models.ResourcePool]:
         """Get resource pools from database."""
         async with self.session_maker() as session:
-            stmt = select(schemas.ResourcePoolORM).options(selectinload(schemas.ResourcePoolORM.classes))
+            stmt = (
+                select(schemas.ResourcePoolORM)
+                .options(selectinload(schemas.ResourcePoolORM.classes))
+                .options(selectinload(schemas.ResourcePoolORM.cluster))
+            )
             if name is not None:
                 stmt = stmt.where(schemas.ResourcePoolORM.name == name)
             if id is not None:
@@ -199,6 +203,7 @@ class ResourcePoolRepository(_Base):
                 select(schemas.ResourcePoolORM)
                 .where(schemas.ResourcePoolORM.classes.any(schemas.ResourceClassORM.id == resource_class_id))
                 .options(selectinload(schemas.ResourcePoolORM.classes))
+                .options(selectinload(schemas.ResourcePoolORM.cluster))
             )
             # NOTE: The line below ensures that the right users can access the right resources, do not remove.
             stmt = _resource_pool_access_control(api_user, stmt)
