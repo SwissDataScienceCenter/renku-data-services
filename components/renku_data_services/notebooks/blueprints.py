@@ -10,6 +10,7 @@ from sanic_ext import validate
 from ulid import ULID
 
 from renku_data_services import base_models
+from renku_data_services.app_config import logging
 from renku_data_services.base_api.auth import authenticate, authenticate_2
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser, Authenticator
@@ -74,6 +75,8 @@ from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.db import UserRepo
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(kw_only=True)
@@ -344,6 +347,10 @@ class NotebooksNewBP(CustomBlueprint):
 
             tls_secret = None
             p = await cluster.get_ingress_parameters(user, self.cluster_repo)
+            clusters = await self.cluster_repo.select_all_saved_clusters()
+            logger.warning(f"#### KNOWN clusters: {clusters}")
+            logger.warning(f"#### LOOKING FOR   : {cluster.id}")
+
             if p is not None:
                 (scheme, public_remote_host, port, path) = p
                 base_server_path = f"{path}/{server_name}"
@@ -368,6 +375,7 @@ class NotebooksNewBP(CustomBlueprint):
                 tlsSecret=tls_secret,
                 pathPrefix=base_server_path,
             )
+            logger.warning(f"#### INGRESS: {ingress}")
 
             annotations: dict[str, str] = {
                 "renku.io/project_id": str(launcher.project_id),
