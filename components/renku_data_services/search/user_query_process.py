@@ -12,7 +12,6 @@ from renku_data_services.search.user_query import (
     InheritedMemberIs,
     Nel,
     Order,
-    OrderBy,
     Segment,
     Text,
     TypeIs,
@@ -23,31 +22,6 @@ from renku_data_services.search.user_query import (
 from renku_data_services.solr.entity_documents import EntityType
 
 logger = logging.getLogger(__name__)
-
-
-class ExtractOrder(UserQuerySegmentVisitor[tuple[list[FieldTerm | Text], Order | None]]):
-    """Extract order from a query."""
-
-    def __init__(self) -> None:
-        self.segs: list[FieldTerm | Text] = []
-        self.orders: list[OrderBy] = []
-
-    async def build(self) -> tuple[list[FieldTerm | Text], Order | None]:
-        """Return the split query."""
-        sort = Nel.from_list(self.orders)
-        return (self.segs, Order(sort) if sort is not None else None)
-
-    async def visit_order(self, order: Order) -> None:
-        """Collect order nodes."""
-        self.orders.extend(order.fields.to_list())
-
-    async def visit_text(self, text: Text) -> None:
-        """Collect text nodes."""
-        self.segs.append(text)
-
-    async def visit_field_term(self, ft: FieldTerm) -> None:
-        """Collect field term nodes."""
-        self.segs.append(ft)
 
 
 class CollectEntityTypes(EmptyUserQueryVisitor[set[EntityType] | None]):

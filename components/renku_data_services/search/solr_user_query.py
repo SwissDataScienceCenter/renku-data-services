@@ -17,13 +17,13 @@ from renku_data_services.search.user_query import (
     Created,
     CreatedByIs,
     DirectMemberIs,
-    FieldTerm,
     IdIs,
     InheritedMemberIs,
     KeywordIs,
     NameIs,
     NamespaceIs,
     Nel,
+    Order,
     OrderBy,
     RoleIs,
     SlugIs,
@@ -34,9 +34,10 @@ from renku_data_services.search.user_query import (
     UserId,
     Username,
     UserQuery,
+    UserQueryVisitor,
     VisibilityIs,
 )
-from renku_data_services.search.user_query_process import CollectEntityTypes, ExtractOrder
+from renku_data_services.search.user_query_process import CollectEntityTypes
 from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.entity_schema import Fields
 from renku_data_services.solr.solr_client import SortDirection
@@ -274,6 +275,135 @@ class QueryInterpreter(ABC):
         return LuceneQueryInterpreter()
 
 
+class _LuceneQueryVisitor(UserQueryVisitor[SolrUserQuery]):
+    """Convert a user search query into solrs standard query.
+
+    See https://solr.apache.org/guide/solr/latest/query-guide/standard-query-parser.html
+
+    This class takes care of converting a user supplied query into the
+    corresponding solr query.
+
+    Here the search query can be tweaked if necessary (fuzzy searching
+    etc).
+
+    """
+
+    def __init__(self, ctx: Context) -> None:
+        self.solr_sort: list[tuple[FieldName, SortDirection]] = []
+        self.solr_token: list[SolrToken] = []
+        self.ctx = ctx
+
+    async def build(self) -> SolrUserQuery:
+        """Create and return the solr query."""
+        return SolrUserQuery(st.fold_and(self.solr_token), self.solr_sort)
+
+    async def visit_order(self, order: Order) -> None:
+        """Process order."""
+        sort = [self._to_solr_sort(e) for e in order.fields.to_list()]
+        self.solr_sort.extend(sort)
+
+    @classmethod
+    def _to_solr_sort(cls, ob: OrderBy) -> tuple[FieldName, SortDirection]:
+        match ob.field:
+            case SortableField.fname:
+                return (Fields.name, ob.direction)
+            case SortableField.score:
+                return (Fields.score, ob.direction)
+            case SortableField.created:
+                return (Fields.creation_date, ob.direction)
+
+    def _append(self, t: SolrToken) -> None:
+        self.solr_token.append(t)
+
+    async def visit_text(self, text: Text) -> None:
+        """Process free text segment."""
+        if text.value != "":
+            self._append(st.content_all(text.value))
+
+    async def visit_type_is(self, ft: TypeIs) -> None:
+        """Process type-is segment."""
+        self._append(st.field_is_any(Fields.entity_type, ft.values.map(st.from_entity_type)))
+
+    async def visit_id_is(self, ft: IdIs) -> None:
+        """Process id-is segment."""
+        self._append(st.field_is_any(Fields.id, ft.values.map(st.from_str)))
+
+    async def visit_name_is(self, ft: NameIs) -> None:
+        """Process name-is segment."""
+        self._append(st.field_is_any(Fields.name, ft.values.map(st.from_str)))
+
+    async def visit_slug_is(self, ft: SlugIs) -> None:
+        """Process slug-is segment."""
+        self._append(st.field_is_any(Fields.slug, ft.values.map(st.from_str)))
+
+    async def visit_visibility_is(self, ft: VisibilityIs) -> None:
+        """Process visibility-is segment."""
+        self._append(st.field_is_any(Fields.visibility, ft.values.map(st.from_visibility)))
+
+    async def visit_keyword_is(self, ft: KeywordIs) -> None:
+        """Process keyword-is segment."""
+        self._append(st.field_is_any(Fields.keywords, ft.values.map(st.from_str)))
+
+    async def visit_namespace_is(self, ft: NamespaceIs) -> None:
+        """Process the namespace-is segment."""
+        self._append(st.field_is_any(Fields.namespace_path, ft.values.map(st.from_str)))
+
+    async def visit_created_by_is(self, ft: CreatedByIs) -> None:
+        """Process the created-by segment."""
+        self._append(st.field_is_any(Fields.created_by, ft.values.map(st.from_str)))
+
+    async def visit_role_is(self, ft: RoleIs) -> None:
+        """Process role-is segment."""
+        ids = await self.ctx.get_ids_for_roles(ft.values, direct_membership=True)
+        if ids is not None:
+            nel = Nel.from_list(ids)
+            if nel is None:
+                self._append(st.id_not_exists())
+            else:
+                self._append(st.id_in(nel))
+
+    async def visit_inherited_member_is(self, ft: InheritedMemberIs) -> None:
+        """Process inherited-member-is segment."""
+        ids = await self.ctx.get_member_ids(ft.users, direct_membership=False)
+        if ids == []:
+            self._append(st.id_not_exists())
+        else:
+            self._append(st.id_in(Nel.unsafe_from_list(ids)))
+
+    async def visit_direct_member_is(self, ft: DirectMemberIs) -> None:
+        """Process direct-member-is segment."""
+        ids = await self.ctx.get_member_ids(ft.users, direct_membership=True)
+        if ids == []:
+            self._append(st.id_not_exists())
+        else:
+            self._append(st.id_in(Nel.unsafe_from_list(ids)))
+
+    async def visit_created(self, ft: Created) -> None:
+        """Process the created segment."""
+        tokens: list[SolrToken] = []
+        match ft.cmp:
+            case Comparison.is_equal:
+                for dt in ft.values.to_list():
+                    (min, max_opt) = dt.resolve(self.ctx.current_time, self.ctx.zone)
+                    tokens.append(st.created_range(min, max_opt) if max_opt is not None else st.created_is(min))
+
+                self._append(st.fold_or(tokens))
+
+            case Comparison.is_greater_than:
+                for dt in ft.values.to_list():
+                    (min, max_opt) = dt.resolve(self.ctx.current_time, self.ctx.zone)
+                    tokens.append(st.created_gt(max_opt or min))
+
+                self._append(st.fold_or(tokens))
+
+            case Comparison.is_lower_than:
+                for dt in ft.values.to_list():
+                    (min, _) = dt.resolve(self.ctx.current_time, self.ctx.zone)
+                    tokens.append(st.created_lt(min))
+
+                self._append(st.fold_or(tokens))
+
+
 class LuceneQueryInterpreter(QueryInterpreter):
     """Convert a user search query into solrs standard query.
 
@@ -287,106 +417,7 @@ class LuceneQueryInterpreter(QueryInterpreter):
 
     """
 
-    @classmethod
-    def _to_solr_sort(cls, ob: OrderBy) -> tuple[FieldName, SortDirection]:
-        match ob.field:
-            case SortableField.fname:
-                return (Fields.name, ob.direction)
-            case SortableField.score:
-                return (Fields.score, ob.direction)
-            case SortableField.created:
-                return (Fields.creation_date, ob.direction)
-
-    @classmethod
-    async def _from_term(cls, ctx: Context, term: FieldTerm) -> SolrToken:
-        match term:
-            case TypeIs() as t:
-                return st.field_is_any(Fields.entity_type, t.values.map(st.from_entity_type))
-            case IdIs() as t:
-                return st.field_is_any(Fields.id, t.values.map(st.from_str))
-            case NameIs() as t:
-                return st.field_is_any(Fields.name, t.values.map(st.from_str))
-            case SlugIs() as t:
-                return st.field_is_any(Fields.slug, t.values.map(st.from_str))
-            case VisibilityIs() as t:
-                return st.field_is_any(Fields.visibility, t.values.map(st.from_visibility))
-            case KeywordIs() as t:
-                return st.field_is_any(Fields.keywords, t.values.map(st.from_str))
-            case NamespaceIs() as t:
-                return st.field_is_any(Fields.namespace_path, t.values.map(st.from_str))
-            case CreatedByIs() as t:
-                return st.field_is_any(Fields.created_by, t.values.map(st.from_str))
-            case RoleIs() as t:
-                ids = await ctx.get_ids_for_roles(t.values, direct_membership=True)
-                if ids is None:
-                    return st.empty()
-                else:
-                    nel = Nel.from_list(ids)
-                    if nel is None:
-                        return st.id_not_exists()
-                    else:
-                        return st.id_in(nel)
-            case InheritedMemberIs() as t:
-                ids = await ctx.get_member_ids(t.users, direct_membership=False)
-                if ids == []:
-                    return st.id_not_exists()
-                else:
-                    return st.id_in(Nel.unsafe_from_list(ids))
-
-            case DirectMemberIs() as t:
-                ids = await ctx.get_member_ids(t.users, direct_membership=True)
-                if ids == []:
-                    return st.id_not_exists()
-                else:
-                    return st.id_in(Nel.unsafe_from_list(ids))
-
-            case Created() as t:
-                tokens: list[SolrToken] = []
-                match t.cmp:
-                    case Comparison.is_equal:
-                        for dt in t.values.to_list():
-                            (min, max_opt) = dt.resolve(ctx.current_time, ctx.zone)
-                            tokens.append(st.created_range(min, max_opt) if max_opt is not None else st.created_is(min))
-
-                        return st.fold_or(tokens)
-
-                    case Comparison.is_greater_than:
-                        for dt in t.values.to_list():
-                            (min, max_opt) = dt.resolve(ctx.current_time, ctx.zone)
-                            tokens.append(st.created_gt(max_opt or min))
-
-                        return st.fold_or(tokens)
-
-                    case Comparison.is_lower_than:
-                        for dt in t.values.to_list():
-                            (min, _) = dt.resolve(ctx.current_time, ctx.zone)
-                            tokens.append(st.created_lt(min))
-
-                        return st.fold_or(tokens)
-
-    @classmethod
-    def _from_text(cls, text: Text) -> SolrToken:
-        return st.content_all(text.value)
-
-    @classmethod
-    async def _from_segment(cls, ctx: Context, segment: FieldTerm | Text) -> SolrToken:
-        match segment:
-            case Text() as t:
-                return cls._from_text(t)
-            case t:
-                return await cls._from_term(ctx, t)
-
     async def run(self, ctx: Context, q: UserQuery) -> SolrUserQuery:
         """Convert a user query into a search query."""
-        (terms, sort) = await q.accept(ExtractOrder())
-        sort = sort.fields.to_list() if sort is not None else []
 
-        solr_sort = [LuceneQueryInterpreter._to_solr_sort(e) for e in sort]
-        solr_token = []
-        empty = st.empty()
-        for e in terms:
-            t = await LuceneQueryInterpreter._from_segment(ctx, e)
-            if t != empty:
-                solr_token.append(t)
-
-        return SolrUserQuery(st.fold_and(solr_token), solr_sort)
+        return await q.accept(_LuceneQueryVisitor(ctx))
