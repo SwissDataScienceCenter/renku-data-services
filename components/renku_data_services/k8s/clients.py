@@ -271,7 +271,7 @@ class K8sClusterClient:
             async for r in res:
                 yield APIObjectInCluster(r, self.__cluster.id)
 
-        except (kr8s.ServerError, kr8s.APITimeoutError, ValueError):
+        except (kr8s.ServerError, kr8s.APITimeoutError, ValueError) as _e:
             # ValueError is generated when the kind does not exist on the cluster
             return
 
