@@ -199,6 +199,7 @@ class ResourcePoolRepository(_Base):
                 select(schemas.ResourcePoolORM)
                 .where(schemas.ResourcePoolORM.classes.any(schemas.ResourceClassORM.id == resource_class_id))
                 .options(selectinload(schemas.ResourcePoolORM.classes))
+                .options(selectinload(schemas.ResourcePoolORM.cluster))
             )
             # NOTE: The line below ensures that the right users can access the right resources, do not remove.
             stmt = _resource_pool_access_control(api_user, stmt)
