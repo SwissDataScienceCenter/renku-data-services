@@ -3,15 +3,13 @@
 import pytest
 
 from renku_data_services.search.user_query import Segments as S
-from renku_data_services.search.user_query import SortableField, UserId, Username, UserQuery
+from renku_data_services.search.user_query import UserId, Username, UserQuery
 from renku_data_services.search.user_query_process import (
     CollapseMembers,
     CollapseText,
     CollectEntityTypes,
-    ExtractOrder,
 )
 from renku_data_services.solr.entity_documents import EntityType
-from renku_data_services.solr.solr_client import SortDirection
 
 
 @pytest.mark.asyncio
@@ -36,38 +34,6 @@ async def test_find_entity_types() -> None:
         S.name_is("test"),
     )
     assert await q.accept(CollectEntityTypes()) == set()
-
-
-@pytest.mark.asyncio
-async def test_query_extract_order() -> None:
-    q = UserQuery.of(S.name_is("test"), S.text("some"), S.keyword_is("datascience"))
-    assert await q.accept(ExtractOrder()) == (
-        [S.name_is("test"), S.text("some"), S.keyword_is("datascience")],
-        None,
-    )
-
-    q = UserQuery.of(
-        S.name_is("test"),
-        S.text("some"),
-        S.keyword_is("datascience"),
-        S.sort_by((SortableField.score, SortDirection.asc)),
-    )
-    assert await q.accept(ExtractOrder()) == (
-        [S.name_is("test"), S.text("some"), S.keyword_is("datascience")],
-        S.sort_by((SortableField.score, SortDirection.asc)),
-    )
-
-    q = UserQuery.of(
-        S.name_is("test"),
-        S.sort_by((SortableField.fname, SortDirection.desc)),
-        S.text("some"),
-        S.keyword_is("datascience"),
-        S.sort_by((SortableField.score, SortDirection.asc)),
-    )
-    assert await q.accept(ExtractOrder()) == (
-        [S.name_is("test"), S.text("some"), S.keyword_is("datascience")],
-        S.sort_by((SortableField.fname, SortDirection.desc), (SortableField.score, SortDirection.asc)),
-    )
 
 
 @pytest.mark.asyncio
