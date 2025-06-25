@@ -275,18 +275,8 @@ class QueryInterpreter(ABC):
         return LuceneQueryInterpreter()
 
 
-class _LuceneQueryVisitor(UserQueryVisitor[SolrUserQuery]):
-    """Convert a user search query into solrs standard query.
-
-    See https://solr.apache.org/guide/solr/latest/query-guide/standard-query-parser.html
-
-    This class takes care of converting a user supplied query into the
-    corresponding solr query.
-
-    Here the search query can be tweaked if necessary (fuzzy searching
-    etc).
-
-    """
+class _LuceneQueryTransform(UserQueryVisitor[SolrUserQuery]):
+    """Transform a UserQuery into a SolrUserQuery."""
 
     def __init__(self, ctx: Context) -> None:
         self.solr_sort: list[tuple[FieldName, SortDirection]] = []
@@ -312,45 +302,45 @@ class _LuceneQueryVisitor(UserQueryVisitor[SolrUserQuery]):
             case SortableField.created:
                 return (Fields.creation_date, ob.direction)
 
-    def _append(self, t: SolrToken) -> None:
+    def __append(self, t: SolrToken) -> None:
         self.solr_token.append(t)
 
     async def visit_text(self, text: Text) -> None:
         """Process free text segment."""
         if text.value != "":
-            self._append(st.content_all(text.value))
+            self.__append(st.content_all(text.value))
 
     async def visit_type_is(self, ft: TypeIs) -> None:
         """Process type-is segment."""
-        self._append(st.field_is_any(Fields.entity_type, ft.values.map(st.from_entity_type)))
+        self.__append(st.field_is_any(Fields.entity_type, ft.values.map(st.from_entity_type)))
 
     async def visit_id_is(self, ft: IdIs) -> None:
         """Process id-is segment."""
-        self._append(st.field_is_any(Fields.id, ft.values.map(st.from_str)))
+        self.__append(st.field_is_any(Fields.id, ft.values.map(st.from_str)))
 
     async def visit_name_is(self, ft: NameIs) -> None:
         """Process name-is segment."""
-        self._append(st.field_is_any(Fields.name, ft.values.map(st.from_str)))
+        self.__append(st.field_is_any(Fields.name, ft.values.map(st.from_str)))
 
     async def visit_slug_is(self, ft: SlugIs) -> None:
         """Process slug-is segment."""
-        self._append(st.field_is_any(Fields.slug, ft.values.map(st.from_str)))
+        self.__append(st.field_is_any(Fields.slug, ft.values.map(st.from_str)))
 
     async def visit_visibility_is(self, ft: VisibilityIs) -> None:
         """Process visibility-is segment."""
-        self._append(st.field_is_any(Fields.visibility, ft.values.map(st.from_visibility)))
+        self.__append(st.field_is_any(Fields.visibility, ft.values.map(st.from_visibility)))
 
     async def visit_keyword_is(self, ft: KeywordIs) -> None:
         """Process keyword-is segment."""
-        self._append(st.field_is_any(Fields.keywords, ft.values.map(st.from_str)))
+        self.__append(st.field_is_any(Fields.keywords, ft.values.map(st.from_str)))
 
     async def visit_namespace_is(self, ft: NamespaceIs) -> None:
         """Process the namespace-is segment."""
-        self._append(st.field_is_any(Fields.namespace_path, ft.values.map(st.from_str)))
+        self.__append(st.field_is_any(Fields.namespace_path, ft.values.map(st.from_str)))
 
     async def visit_created_by_is(self, ft: CreatedByIs) -> None:
         """Process the created-by segment."""
-        self._append(st.field_is_any(Fields.created_by, ft.values.map(st.from_str)))
+        self.__append(st.field_is_any(Fields.created_by, ft.values.map(st.from_str)))
 
     async def visit_role_is(self, ft: RoleIs) -> None:
         """Process role-is segment."""
@@ -358,25 +348,27 @@ class _LuceneQueryVisitor(UserQueryVisitor[SolrUserQuery]):
         if ids is not None:
             nel = Nel.from_list(ids)
             if nel is None:
-                self._append(st.id_not_exists())
+                self.__append(st.id_not_exists())
             else:
-                self._append(st.id_in(nel))
+                self.__append(st.id_in(nel))
 
     async def visit_inherited_member_is(self, ft: InheritedMemberIs) -> None:
         """Process inherited-member-is segment."""
         ids = await self.ctx.get_member_ids(ft.users, direct_membership=False)
-        if ids == []:
-            self._append(st.id_not_exists())
-        else:
-            self._append(st.id_in(Nel.unsafe_from_list(ids)))
+        match Nel.from_list(ids):
+            case None:
+                self.__append(st.id_not_exists())
+            case nel:
+                self.__append(st.id_in(nel))
 
     async def visit_direct_member_is(self, ft: DirectMemberIs) -> None:
         """Process direct-member-is segment."""
         ids = await self.ctx.get_member_ids(ft.users, direct_membership=True)
-        if ids == []:
-            self._append(st.id_not_exists())
-        else:
-            self._append(st.id_in(Nel.unsafe_from_list(ids)))
+        match Nel.from_list(ids):
+            case None:
+                self.__append(st.id_not_exists())
+            case nel:
+                self.__append(st.id_in(nel))
 
     async def visit_created(self, ft: Created) -> None:
         """Process the created segment."""
@@ -387,21 +379,21 @@ class _LuceneQueryVisitor(UserQueryVisitor[SolrUserQuery]):
                     (min, max_opt) = dt.resolve(self.ctx.current_time, self.ctx.zone)
                     tokens.append(st.created_range(min, max_opt) if max_opt is not None else st.created_is(min))
 
-                self._append(st.fold_or(tokens))
+                self.__append(st.fold_or(tokens))
 
             case Comparison.is_greater_than:
                 for dt in ft.values.to_list():
                     (min, max_opt) = dt.resolve(self.ctx.current_time, self.ctx.zone)
                     tokens.append(st.created_gt(max_opt or min))
 
-                self._append(st.fold_or(tokens))
+                self.__append(st.fold_or(tokens))
 
             case Comparison.is_lower_than:
                 for dt in ft.values.to_list():
                     (min, _) = dt.resolve(self.ctx.current_time, self.ctx.zone)
                     tokens.append(st.created_lt(min))
 
-                self._append(st.fold_or(tokens))
+                self.__append(st.fold_or(tokens))
 
 
 class LuceneQueryInterpreter(QueryInterpreter):
@@ -418,6 +410,6 @@ class LuceneQueryInterpreter(QueryInterpreter):
     """
 
     async def run(self, ctx: Context, q: UserQuery) -> SolrUserQuery:
-        """Convert a user query into a search query."""
+        """Convert a user query into a solr search query."""
 
-        return await q.accept(_LuceneQueryVisitor(ctx))
+        return await q.accept(_LuceneQueryTransform(ctx))

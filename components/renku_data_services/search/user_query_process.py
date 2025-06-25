@@ -17,7 +17,7 @@ from renku_data_services.search.user_query import (
     TypeIs,
     UserDef,
     UserQuery,
-    UserQuerySegmentVisitor,
+    UserQueryFieldTermVisitor,
 )
 from renku_data_services.solr.entity_documents import EntityType
 
@@ -40,7 +40,7 @@ class CollectEntityTypes(EmptyUserQueryVisitor[set[EntityType] | None]):
         return self.result
 
 
-class CollapseText(UserQuerySegmentVisitor[UserQuery]):
+class CollapseText(UserQueryFieldTermVisitor[UserQuery]):
     """Collapses consecutive free text segments."""
 
     def __init__(self) -> None:
@@ -74,7 +74,7 @@ class CollapseText(UserQuerySegmentVisitor[UserQuery]):
         return self.visit_other(ft)
 
 
-class CollapseMembers(UserQuerySegmentVisitor[UserQuery]):
+class CollapseMembers(UserQueryFieldTermVisitor[UserQuery]):
     """Collapses member segments and limits values to a maximum."""
 
     def __init__(self, maximum_member_count: int = 4) -> None:
