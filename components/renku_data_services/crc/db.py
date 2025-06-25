@@ -952,8 +952,12 @@ class ClusterRepository:
 
             # Make sure we do not allow changing the id of the cluster
             kwargs = asdict(cluster)
-            for k, v in kwargs.items():
-                setattr(saved_cluster, k, v)
+            for key, value in kwargs.items():
+                match key:
+                    case "session_protocol":
+                        saved_cluster.session_protocol = str(value)
+                    case _:
+                        setattr(saved_cluster, key, value)
 
             await session.flush()
             await session.refresh(saved_cluster)
