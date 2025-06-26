@@ -49,7 +49,7 @@ class Field(StrEnum):
     role = "role"
     keyword = "keyword"
     namespace = "namespace"
-    member = "member"
+    direct_member = "direct_member"
     inherited_member = "inherited_member"
 
 
@@ -351,7 +351,7 @@ class DirectMemberIs(FieldComparison):
     @property
     def field(self) -> Field:
         """The field name."""
-        return Field.member
+        return Field.direct_member
 
     @property
     def cmp(self) -> Comparison:

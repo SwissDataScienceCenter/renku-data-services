@@ -197,7 +197,7 @@ class _ParsePrimitives:
         string(Field.inherited_member.value, lambda s: s.lower()) >> is_equal >> user_def_nel.map(InheritedMemberIs)
     )
     direct_member_is: Parser = (
-        string(Field.member.value, lambda s: s.lower()) >> is_equal >> user_def_nel.map(DirectMemberIs)
+        string(Field.direct_member.value, lambda s: s.lower()) >> is_equal >> user_def_nel.map(DirectMemberIs)
     )
 
     term_is: Parser = seq(from_enum(Field, lambda s: s.lower()) << is_equal, string_values).bind(_make_field_term)
