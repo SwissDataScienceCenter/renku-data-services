@@ -63,8 +63,8 @@ def test_inherited_member_is() -> None:
 
 
 def test_direct_member_is() -> None:
-    assert pp.direct_member_is.parse("member:@hello") == DirectMemberIs(Nel(Username.from_name("hello")))
-    assert pp.direct_member_is.parse("member:hello") == DirectMemberIs(Nel(UserId("hello")))
+    assert pp.direct_member_is.parse("direct_member:@hello") == DirectMemberIs(Nel(Username.from_name("hello")))
+    assert pp.direct_member_is.parse("direct_member:hello") == DirectMemberIs(Nel(UserId("hello")))
 
 
 def test_sortable_field() -> None:
@@ -193,8 +193,8 @@ def test_field_term() -> None:
     assert pp.field_term.parse("createdBy:test") == CreatedByIs(Nel("test"))
     assert pp.field_term.parse("role:owner") == RoleIs(Nel(Role.OWNER))
     assert pp.field_term.parse("role:viewer") == RoleIs(Nel(Role.VIEWER))
-    assert pp.field_term.parse("member:@john") == DirectMemberIs(Nel(Username.from_name("john")))
-    assert pp.field_term.parse("member:123-456") == DirectMemberIs(Nel(UserId("123-456")))
+    assert pp.field_term.parse("direct_member:@john") == DirectMemberIs(Nel(Username.from_name("john")))
+    assert pp.field_term.parse("direct_member:123-456") == DirectMemberIs(Nel(UserId("123-456")))
     assert pp.field_term.parse("inherited_member:@john") == InheritedMemberIs(Nel(Username.from_name("john")))
     assert pp.field_term.parse("inherited_member:123-456") == InheritedMemberIs(Nel(UserId("123-456")))
 
@@ -223,8 +223,8 @@ def test_segment() -> None:
     assert pp.segment.parse("keyword:test") == KeywordIs(Nel("test"))
     assert pp.segment.parse("namespace:test") == NamespaceIs(Nel("test"))
     assert pp.segment.parse("createdBy:test") == CreatedByIs(Nel("test"))
-    assert pp.segment.parse("member:@john") == DirectMemberIs(Nel(Username.from_name("john")))
-    assert pp.segment.parse("member:123-456") == DirectMemberIs(Nel(UserId("123-456")))
+    assert pp.segment.parse("direct_member:@john") == DirectMemberIs(Nel(Username.from_name("john")))
+    assert pp.segment.parse("direct_member:123-456") == DirectMemberIs(Nel(UserId("123-456")))
     assert pp.segment.parse("inherited_member:@john") == InheritedMemberIs(Nel(Username.from_name("john")))
     assert pp.segment.parse("inherited_member:123-456") == InheritedMemberIs(Nel(UserId("123-456")))
 
@@ -265,9 +265,9 @@ async def test_collapse_member_and_text_query() -> None:
         S.text("hello this world"),
         S.direct_member_is(Username.from_name("jane"), Username.from_name("joe")),
     )
-    qstr = "name:al hello  member:@jane this world member:@joe"
+    qstr = "name:al hello  direct_member:@jane this world direct_member:@joe"
     assert await QueryParser.parse(qstr) == q
-    assert q.render() == "name:al hello this world member:@jane,@joe"
+    assert q.render() == "name:al hello this world direct_member:@jane,@joe"
 
 
 @pytest.mark.asyncio
@@ -279,7 +279,7 @@ async def test_restrict_members_query() -> None:
             Username.from_name("jane"), Username.from_name("joe"), Username.from_name("jeff"), UserId("123")
         ),
     )
-    qstr = "name:al  member:@jane hello member:@joe,@jeff,123,456,@wuff"
+    qstr = "name:al  direct_member:@jane hello direct_member:@joe,@jeff,123,456,@wuff"
     assert (await QueryParser.parse(qstr)) == q
 
 

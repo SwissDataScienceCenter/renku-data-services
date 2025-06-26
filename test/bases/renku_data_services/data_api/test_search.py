@@ -80,22 +80,22 @@ async def test_direct_member_search(
     result = await search_query(f"namespace:{gr_lidl.slug}", user=wout)
     assert_search_result(result, [p1, p2, p3])
 
-    result = await search_query(f"namespace:{gr_lidl.slug} member:@{flor.namespace.path.first}", user=mads)
+    result = await search_query(f"namespace:{gr_lidl.slug} direct_member:@{flor.namespace.path.first}", user=mads)
     assert_search_result(result, [p1])
 
-    result = await search_query(f"namespace:{gr_lidl.slug} member:@{wout.namespace.path.first}", user=mads)
+    result = await search_query(f"namespace:{gr_lidl.slug} direct_member:@{wout.namespace.path.first}", user=mads)
     assert_search_result(result, [p3])
 
-    result = await search_query(f"namespace:{gr_visma.slug} member:@{flor.namespace.path.first}", user=wout)
+    result = await search_query(f"namespace:{gr_visma.slug} direct_member:@{flor.namespace.path.first}", user=wout)
     assert_search_result(result, [p5])
 
-    result = await search_query(f"namespace:{gr_visma.slug} member:@{flor.namespace.path.first}", user=mads)
+    result = await search_query(f"namespace:{gr_visma.slug} direct_member:@{flor.namespace.path.first}", user=mads)
     assert_search_result(result, [p5])
 
-    result = await search_query(f"member:@{wout.namespace.path.first}", user=regular_user)
+    result = await search_query(f"direct_member:@{wout.namespace.path.first}", user=regular_user)
     assert_search_result(result, [gr_lidl, gr_visma, p3, p4, p5])
 
-    result = await search_query(f"member:@{wout.namespace.path.first},@{mads.namespace.path.first}", user=mads)
+    result = await search_query(f"direct_member:@{wout.namespace.path.first},@{mads.namespace.path.first}", user=mads)
     assert_search_result(result, [p3, gr_visma, gr_lidl])
 
     result = await search_query(f"inherited_member:@{wout.namespace.path.first}", user=regular_user)
