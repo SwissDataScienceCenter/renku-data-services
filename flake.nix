@@ -62,9 +62,10 @@
       pkgs = nixpkgs.legacyPackages.${system};
       devshellToolsPkgs = devshell-tools.packages.${system};
 
-      rclone = pkgs.rclone.overrideAttrs (old: {
+      rclone-sdsc = pkgs.rclone.overrideAttrs (old: {
         version = "1.70.0";
         vendorHash = "sha256-9yEWEM96cRUzp1mRXEzxvOaBZQsf7Zifoe163OtJCPw=";
+        nativeInstallCheckInputs = [];
         src = pkgs.fetchFromGitHub {
           owner = "SwissDataScienceCenter";
           repo = "rclone";
@@ -103,9 +104,9 @@
           DB_NAME = "renku";
           DB_PASSWORD = "dev";
           PGPASSWORD = "dev";
-          PSQLRC = (pkgs.writeText "rsdrc.sql" ''
+          PSQLRC = pkgs.writeText "rsdrc.sql" ''
             SET SEARCH_PATH TO authz,common,connected_services,events,platform,projects,public,resource_pools,secrets,sessions,storage,users
-          '');
+          '';
           AUTHZ_DB_KEY = "dev";
           AUTHZ_DB_NO_TLS_CONNECTION = "true";
           AUTHZ_DB_GRPC_PORT = "50051";
@@ -141,10 +142,11 @@
         poetry
         python313
         basedpyright
-        rclone
-        (writeShellScriptBin "pg" ''
-          psql -h $DB_HOST -p $DB_PORT -U dev $DB_NAME
-        ''
+        rclone-sdsc
+        (
+          writeShellScriptBin "pg" ''
+            psql -h $DB_HOST -p $DB_PORT -U dev $DB_NAME
+          ''
         )
         (writeShellScriptBin "pyfix" ''
           poetry run ruff check --fix
@@ -166,9 +168,10 @@
             fi
           ''
         )
-        (writeShellScriptBin "zedl" ''
-          ${spicedb-zed}/bin/zed --no-verify-ca --insecure --endpoint ''$ZED_ENDPOINT --token ''$ZED_TOKEN $@
-        ''
+        (
+          writeShellScriptBin "zedl" ''
+            ${spicedb-zed}/bin/zed --no-verify-ca --insecure --endpoint ''$ZED_ENDPOINT --token ''$ZED_TOKEN $@
+          ''
         )
       ];
     in {
