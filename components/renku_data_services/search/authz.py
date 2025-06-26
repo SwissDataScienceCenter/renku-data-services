@@ -1,5 +1,6 @@
 """Utility functions for integrating authzed into search."""
 
+import re
 from collections.abc import Iterable
 
 from authzed.api.v1 import AsyncClient as AuthzClient
@@ -14,13 +15,38 @@ from renku_data_services.solr.entity_documents import EntityType
 
 logger = logging.getLogger(__name__)
 
+__object_id_regex = re.compile("^[a-zA-Z0-9/_|\\-=+]{1,}$")
+
+
+def __check_authz_object_id(id: str) -> bool:
+    """Checks whether the given string is a valid authz object id.
+
+    Unfortunately, I couldn't find anything in the authz python
+    package that would do it. You can safely create invalid
+    ObjectReferences and send them to authz, only the server will give
+    a 400 error back
+
+    The regex is copied from the error response sending the request
+    with bad data.
+
+    Since wildcards are not supported for lookup resources, this part
+    is removed from the regex and disallowed here.
+
+    """
+    return __object_id_regex.fullmatch(id) is not None
+
 
 async def __resources_with_permission(
     client: AuthzClient, user_id: str, entity_types: Iterable[EntityType], permission_name: str
 ) -> list[str]:
     """Get all the resource IDs that a specific user has the given permission/role."""
-    user_ref = SubjectReference(object=ObjectReference(object_type=ResourceType.user.value, object_id=user_id))
     result: list[str] = []
+
+    if not __check_authz_object_id(user_id):
+        logger.debug(f"The user-id passed is not a valid spicedb/authz id: {user_id}")
+        return result
+
+    user_ref = SubjectReference(object=ObjectReference(object_type=ResourceType.user.value, object_id=user_id))
 
     for et in entity_types:
         req = LookupResourcesRequest(
