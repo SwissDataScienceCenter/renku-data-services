@@ -90,13 +90,13 @@ def test_partial_date_render() -> None:
 
 
 def test_partial_date_min_max() -> None:
-    assert str(PartialDate(2025, 2).max()) == "2025-02-28"
-    assert str(PartialDate(2024, 2).max()) == "2024-02-29"
-    assert str(PartialDate(2025, 2).min()) == "2025-02-01"
-    assert str(PartialDate(2021).max()) == "2021-12-31"
-    assert str(PartialDate(2021).min()) == "2021-01-01"
-    assert str(PartialDate(2025, 3, 7).max()) == "2025-03-07"
-    assert str(PartialDate(2025, 3, 7).min()) == "2025-03-07"
+    assert str(PartialDate(2025, 2).date_max()) == "2025-02-28"
+    assert str(PartialDate(2024, 2).date_max()) == "2024-02-29"
+    assert str(PartialDate(2025, 2).date_min()) == "2025-02-01"
+    assert str(PartialDate(2021).date_max()) == "2021-12-31"
+    assert str(PartialDate(2021).date_min()) == "2021-01-01"
+    assert str(PartialDate(2025, 3, 7).date_max()) == "2025-03-07"
+    assert str(PartialDate(2025, 3, 7).date_min()) == "2025-03-07"
 
 
 def test_partial_time_render() -> None:
@@ -106,12 +106,12 @@ def test_partial_time_render() -> None:
 
 
 def test_partial_time_min_max() -> None:
-    assert str(PartialTime(12).max()) == "12:59:59"
-    assert str(PartialTime(12).min()) == "12:00:00"
-    assert str(PartialTime(2, 30).max()) == "02:30:59"
-    assert str(PartialTime(2, 30).min()) == "02:30:00"
-    assert str(PartialTime(12, 30, 15).max()) == "12:30:15"
-    assert str(PartialTime(12, 30, 15).min()) == "12:30:15"
+    assert str(PartialTime(12).time_max()) == "12:59:59"
+    assert str(PartialTime(12).time_min()) == "12:00:00"
+    assert str(PartialTime(2, 30).time_max()) == "02:30:59"
+    assert str(PartialTime(2, 30).time_min()) == "02:30:00"
+    assert str(PartialTime(12, 30, 15).time_max()) == "12:30:15"
+    assert str(PartialTime(12, 30, 15).time_min()) == "12:30:15"
 
 
 def test_partial_datetime_render() -> None:
