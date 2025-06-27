@@ -61,7 +61,7 @@ class Comparison(StrEnum):
     is_greater_than = ">"
 
 
-@dataclass
+@dataclass(eq=True, frozen=True)
 class Username:
     """A user identifier: username slug."""
 
@@ -71,19 +71,6 @@ class Username:
     def render(self) -> str:
         """Render the query part of this value."""
         return f"@{self.slug.value}"
-
-    def __eq__(self, other: Any) -> bool:
-        match other:
-            case Username() as u:
-                return u.slug.value == self.slug.value
-            case _:
-                return False
-
-    def __hash__(self) -> int:
-        if self.__hashvalue is None:
-            self.__hashvalue = hash(self.slug.value)
-
-        return self.__hashvalue
 
     @classmethod
     def from_name(cls, s: str) -> Username:
@@ -101,7 +88,7 @@ class Username:
         return cls.from_user_namespace(u.namespace)
 
 
-@dataclass
+@dataclass(eq=True, frozen=True)
 class UserId:
     """A user identifier (the keycloak one)."""
 
@@ -110,16 +97,6 @@ class UserId:
     def render(self) -> str:
         """Renders the query representation of this value."""
         return self.id
-
-    def __eq__(self, other: Any) -> bool:
-        match other:
-            case UserId() as id:
-                return id.id == self.id
-            case _:
-                return False
-
-    def __hash__(self) -> int:
-        return hash(self.id)
 
 
 type UserDef = Username | UserId
