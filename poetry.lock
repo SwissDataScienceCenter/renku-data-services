@@ -2423,6 +2423,21 @@ lingua = ["lingua"]
 testing = ["pytest"]
 
 [[package]]
+name = "markdown-code-runner"
+version = "2.2.0"
+description = "Automatically execute code blocks within a Markdown file and update the output in-place"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "markdown_code_runner-2.2.0-py3-none-any.whl", hash = "sha256:d8812c48ad3fd4a3f3725dfcd5a1b7e5baf7216855eeea8a92c7fd9120717ac6"},
+    {file = "markdown_code_runner-2.2.0.tar.gz", hash = "sha256:3c495998a437bc7d7a4b1a5ce518bce10cf5ba0fa69c569fee1e32c5238603c4"},
+]
+
+[package.extras]
+test = ["coverage", "pre-commit", "pytest", "pytest-cov"]
+
+[[package]]
 name = "markdown-it-py"
 version = "3.0.0"
 description = "Python port of markdown-it. Markdown parsing, done right!"
@@ -5873,4 +5888,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.13"
-content-hash = "5f45f9a41d5214dba60ef000e39301041c480b41a169b1a6b2caf82207ff0808"
+content-hash = "50b3da67efedb44b29c250a49ff37c9eff5b541b8c9046367e186114304b9bb3"
