@@ -1,6 +1,7 @@
 """Business logic for searching."""
 
 import asyncio
+from collections.abc import Iterable
 from datetime import UTC, datetime
 
 from authzed.api.v1 import AsyncClient as AuthzClient
@@ -10,6 +11,7 @@ import renku_data_services.search.solr_token as st
 from renku_data_services.app_config import logging
 from renku_data_services.authz.models import Role
 from renku_data_services.base_models import APIUser
+from renku_data_services.base_models.nel import Nel
 from renku_data_services.search import authz, converters
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.models import DeleteDoc
@@ -19,10 +21,11 @@ from renku_data_services.search.solr_user_query import (
     Context,
     QueryInterpreter,
     SolrUserQuery,
+    UsernameResolve,
     UserRole,
 )
-from renku_data_services.search.user_query import Nel, UserQuery
-from renku_data_services.solr.entity_documents import DataConnector, EntityDocReader, Group, Project, User
+from renku_data_services.search.user_query import UserQuery
+from renku_data_services.solr.entity_documents import DataConnector, EntityDocReader, EntityType, Group, Project, User
 from renku_data_services.solr.entity_schema import Fields
 from renku_data_services.solr.solr_client import (
     DefaultSolrClient,
@@ -82,12 +85,13 @@ async def _renku_query(
     authz_client: AuthzClient, ctx: Context, uq: SolrUserQuery, limit: int, offset: int
 ) -> SolrQuery:
     """Create the final solr query embedding the given user query."""
+    logger.debug(f"Searching as user: {ctx.role or "anonymous"}")
     role_constraint: list[str] = [st.public_only()]
     match ctx.role:
         case AdminRole():
             role_constraint = []
         case UserRole() as u:
-            ids = await authz.get_non_public_read(authz_client, u.id)
+            ids = await authz.get_non_public_read(authz_client, u.id, ctx.get_entity_types())
             role_constraint = [st.public_or_ids(ids)]
 
     return (
@@ -98,6 +102,7 @@ async def _renku_query(
         )
         .add_filter(*role_constraint)
         .with_facet(FacetTerms(name=Fields.entity_type, field=Fields.entity_type))
+        .with_facet(FacetTerms(name=Fields.keywords, field=Fields.keywords))
         .add_sub_query(
             Fields.creator_details,
             SubQuery(
@@ -116,17 +121,31 @@ async def _renku_query(
 
 
 async def query(
-    authz_client: AuthzClient, solr_config: SolrClientConfig, query: UserQuery, user: APIUser, limit: int, offset: int
+    authz_client: AuthzClient,
+    username_resolve: UsernameResolve,
+    solr_config: SolrClientConfig,
+    query: UserQuery,
+    user: APIUser,
+    limit: int,
+    offset: int,
 ) -> apispec.SearchResult:
     """Run the given user query against solr and return the result."""
 
     logger.debug(f"User search query: {query.render()}")
 
     class RoleAuthAccess(AuthAccess):
-        async def get_role_ids(self, user_id: str, roles: Nel[Role]) -> list[str]:
-            return await authz.get_role_ids(authz_client, user_id, roles)
+        async def get_ids_for_role(
+            self, user_id: str, roles: Nel[Role], ets: Iterable[EntityType], direct_membership: bool
+        ) -> list[str]:
+            return await authz.get_ids_for_roles(authz_client, user_id, roles, ets, direct_membership)
 
-    ctx = Context.for_api_user(datetime.now(), UTC, user).with_auth_access(RoleAuthAccess())
+    ctx = (
+        await Context.for_api_user(datetime.now(), UTC, user)
+        .with_auth_access(RoleAuthAccess())
+        .with_username_resolve(username_resolve)
+        .with_requested_entity_types(query)
+    )
+
     suq = await QueryInterpreter.default().run(ctx, query)
     solr_query = await _renku_query(authz_client, ctx, suq, limit, offset)
     logger.debug(f"Solr query: {solr_query.to_dict()}")
@@ -143,7 +162,8 @@ async def query(
         return apispec.SearchResult(
             items=docs,
             facets=apispec.FacetData(
-                entityType=apispec.MapEntityTypeInt(results.facets.get_counts(Fields.entity_type).to_simple_dict())
+                entityType=apispec.MapEntityTypeInt(results.facets.get_counts(Fields.entity_type).to_simple_dict()),
+                keywords=apispec.MapEntityTypeInt(results.facets.get_counts(Fields.keywords).to_simple_dict()),
             ),
             pagingInfo=apispec.PageWithTotals(
                 page=apispec.PageDef(limit=limit, offset=offset),
