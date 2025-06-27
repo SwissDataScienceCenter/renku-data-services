@@ -1,6 +1,6 @@
 """Tests for non empty list."""
 
-from renku_data_services.search.nel import Nel
+from renku_data_services.base_models.nel import Nel
 
 
 def test_nel() -> None:

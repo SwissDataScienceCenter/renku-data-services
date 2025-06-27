@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from ulid import ULID
 
-from renku_data_services.search.nel import Nel
+from renku_data_services.base_models.nel import Nel
 from renku_data_services.search.user_query import (
     DateTimeCalc,
     EmptyUserQueryVisitor,

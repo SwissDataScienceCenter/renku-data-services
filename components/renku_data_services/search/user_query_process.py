@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import override
 
 from renku_data_services.app_config import logging
-from renku_data_services.search.nel import Nel
+from renku_data_services.base_models.nel import Nel
 from renku_data_services.search.user_query import (
     DirectMemberIs,
     EmptyUserQueryVisitor,

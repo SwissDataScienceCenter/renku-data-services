@@ -8,7 +8,7 @@ import pytest
 from parsy import ParseError
 
 from renku_data_services.authz.models import Role, Visibility
-from renku_data_services.search.nel import Nel
+from renku_data_services.base_models.nel import Nel
 from renku_data_services.search.user_query import (
     Comparison,
     Created,
