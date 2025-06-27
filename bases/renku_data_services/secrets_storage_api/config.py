@@ -36,7 +36,7 @@ class Config:
     def from_env(cls) -> Self:
         """Load values from environment."""
         dummy_stores = os.environ.get("DUMMY_STORES", "false").lower() == "true"
-        db = DBConfig.from_env()
+        db = DBConfig.from_env(pool_size=4)
         secrets_config = PrivateSecretsConfig.from_env()
         version = os.environ.get("VERSION", "0.0.1")
         keycloak = None
