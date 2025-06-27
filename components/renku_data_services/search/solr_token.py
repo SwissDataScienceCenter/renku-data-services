@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import NewType
 
 from renku_data_services.authz.models import Visibility
-from renku_data_services.search.nel import Nel
+from renku_data_services.base_models.nel import Nel
 from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.entity_schema import Fields
 from renku_data_services.solr.solr_schema import FieldName

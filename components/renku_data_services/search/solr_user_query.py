@@ -11,7 +11,7 @@ from typing import override
 import renku_data_services.search.solr_token as st
 from renku_data_services.authz.models import Role
 from renku_data_services.base_models.core import APIUser
-from renku_data_services.search.nel import Nel
+from renku_data_services.base_models.nel import Nel
 from renku_data_services.search.solr_token import SolrToken
 from renku_data_services.search.user_query import (
     Comparison,

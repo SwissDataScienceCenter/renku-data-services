@@ -10,7 +10,7 @@ from authzed.api.v1.permission_service_pb2 import LOOKUP_PERMISSIONSHIP_HAS_PERM
 from renku_data_services.app_config import logging
 from renku_data_services.authz.models import Role, Scope
 from renku_data_services.base_models.core import ResourceType
-from renku_data_services.search.nel import Nel
+from renku_data_services.base_models.nel import Nel
 from renku_data_services.solr.entity_documents import EntityType
 
 logger = logging.getLogger(__name__)

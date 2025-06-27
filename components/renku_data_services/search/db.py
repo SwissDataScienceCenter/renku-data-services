@@ -11,12 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
 from renku_data_services.base_models.core import Slug
+from renku_data_services.base_models.nel import Nel
 from renku_data_services.data_connectors.models import DataConnector, GlobalDataConnector
 from renku_data_services.namespace.models import Group
 from renku_data_services.namespace.orm import NamespaceORM
 from renku_data_services.project.models import Project
 from renku_data_services.search.models import DeleteDoc, Entity
-from renku_data_services.search.nel import Nel
 from renku_data_services.search.orm import RecordState, SearchUpdatesORM
 from renku_data_services.search.solr_user_query import UsernameResolve
 from renku_data_services.search.user_query import UserId, Username

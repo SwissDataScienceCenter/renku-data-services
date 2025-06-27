@@ -11,10 +11,10 @@ import renku_data_services.search.solr_token as st
 from renku_data_services.app_config import logging
 from renku_data_services.authz.models import Role
 from renku_data_services.base_models import APIUser
+from renku_data_services.base_models.nel import Nel
 from renku_data_services.search import authz, converters
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.models import DeleteDoc
-from renku_data_services.search.nel import Nel
 from renku_data_services.search.solr_user_query import (
     AdminRole,
     AuthAccess,
