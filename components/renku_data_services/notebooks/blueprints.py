@@ -353,7 +353,7 @@ class NotebooksNewBP(CustomBlueprint):
                 host = public_remote_host
 
                 # FIXME: LSA Ingress annotations should be provided by remote admins
-                tls_secret = TlsSecret(adopt=True, name=host.replace(".", "_") + "-tls")
+                tls_secret = TlsSecret(adopt=False, name=host.replace(".", "_") + "-tls")
                 ingress_annotations = {
                     "kubernetes.io/ingress.class": "nginx",
                     "nginx.ingress.kubernetes.io/configuration-snippet": (
