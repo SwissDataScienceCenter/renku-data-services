@@ -432,7 +432,7 @@ class NotebooksNewBP(CustomBlueprint):
                     extraContainers=extra_containers,
                     initContainers=extra_init_containers,
                     extraVolumes=extra_volumes,
-                    culling=get_culling(resource_pool, self.nb_config),
+                    culling=get_culling(user, resource_pool, self.nb_config),
                     authentication=Authentication(
                         enabled=True,
                         type=AuthenticationType.oauth2proxy
