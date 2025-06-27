@@ -45,9 +45,9 @@ class Nel[A](Sequence[A]):
         if isinstance(key, slice):
             raise NotImplementedError("slicing non-empty lists is not supported")
         if key == 0:
-            return [self.value]
+            return self.value
         else:
-            return [self.more_values[key - 1]]
+            return self.more_values[key - 1]
 
     def __len__(self) -> int:
         return len(self.more_values) + 1
