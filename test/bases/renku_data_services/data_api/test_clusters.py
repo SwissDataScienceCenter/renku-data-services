@@ -6,6 +6,10 @@ from sanic_testing.testing import SanicASGITestClient
 cluster_payload = {
     "config_name": "a-filename-without-yaml-ext",
     "name": "test-cluster-post",
+    "session_protocol": "http",
+    "session_host": "localhost",
+    "session_port": 8080,
+    "session_path": "/renku-sessions",
 }
 
 

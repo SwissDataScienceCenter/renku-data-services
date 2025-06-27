@@ -3,17 +3,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, NewType, Self, cast
+from typing import TYPE_CHECKING, Any, Self, cast
 
 from box import Box
 from kr8s._api import Api
 from kr8s.asyncio.objects import APIObject
+from ulid import ULID
 
-from renku_data_services.errors import errors
-from renku_data_services.k8s.constants import DUMMY_TASK_RUN_USER_ID
+from renku_data_services.app_config import logging
+from renku_data_services.base_models import APIUser
+from renku_data_services.errors import MissingResourceError, errors
+from renku_data_services.k8s.constants import DUMMY_TASK_RUN_USER_ID, ClusterId
 
-# LSA Not enough time: Adapt this to be an alias to ULID
-ClusterId = NewType("ClusterId", str)
+if TYPE_CHECKING:
+    from renku_data_services.crc.db import ClusterRepository
+
+logger = logging.getLogger(__name__)
 
 
 class K8sObjectMeta:
@@ -80,37 +85,25 @@ class K8sObject(K8sObjectMeta):
         super().__init__(name, namespace, cluster, gvk, user_id, namespaced)
         self.manifest = manifest
 
-    @property
-    def meta(self) -> K8sObjectMeta:
-        """Extract just the metadata."""
-        return K8sObjectMeta(
-            name=self.name,
-            namespace=self.namespace,
-            cluster=self.cluster,
-            gvk=self.gvk,
-            user_id=self.user_id,
-            namespaced=self.namespaced,
-        )
-
     def __repr__(self) -> str:
         return super().__repr__()
 
     def to_api_object(self, api: Api) -> APIObject:
         """Convert a regular k8s object to an api object for kr8s."""
 
-        _singular = self.meta.gvk.kind.lower()
+        _singular = self.gvk.kind.lower()
         _plural = f"{_singular}s"
         _endpoint = _plural
 
         class _APIObj(APIObject):
-            kind = self.meta.gvk.kind
-            version = self.meta.gvk.group_version
+            kind = self.gvk.kind
+            version = self.gvk.group_version
             singular = _singular
             plural = _plural
             endpoint = _endpoint
-            namespaced = self.meta.namespaced
+            namespaced = self.namespaced
 
-        return _APIObj(resource=self.manifest, namespace=self.meta.namespace, api=api)
+        return _APIObj(resource=self.manifest, namespace=self.namespace, api=api)
 
 
 @dataclass
@@ -136,6 +129,17 @@ class Cluster:
     def with_api_object(self, obj: APIObject) -> APIObjectInCluster:
         """Create an API object associated with the cluster."""
         return APIObjectInCluster(obj, self.id)
+
+    async def get_ingress_parameters(
+        self, user: APIUser, cluster_repo: ClusterRepository
+    ) -> tuple[str, str, int, str] | None:
+        """Return cluster-specific ingress parameters, mainly the public-facing URL components."""
+        try:
+            id = ULID.from_str(self.id)
+            cluster = await cluster_repo.select(user, id)
+            return cluster.session_protocol.value, cluster.session_host, cluster.session_port, cluster.session_path
+        except (MissingResourceError, ValueError) as _e:
+            return None
 
 
 @dataclass(kw_only=True, frozen=True)
