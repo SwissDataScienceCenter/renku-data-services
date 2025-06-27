@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from dataclasses import field as data_field
+from typing import Never, overload
 
 
 @dataclass
-class Nel[A]:
+class Nel[A](Sequence[A]):
     """A non empty list."""
 
     value: A
-    more_values: list[A] = data_field(default_factory=list)
+    more_values: Sequence[A] = data_field(default_factory=list)
 
     @classmethod
     def of(cls, el: A, *args: A) -> Nel[A]:
@@ -20,12 +21,12 @@ class Nel[A]:
         return Nel(value=el, more_values=list(args))
 
     @classmethod
-    def unsafe_from_list(cls, els: list[A]) -> Nel[A]:
+    def unsafe_from_list(cls, els: Sequence[A]) -> Nel[A]:
         """Creates a non-empty list from a list, failing if the argument is empty."""
         return Nel(els[0], els[1:])
 
     @classmethod
-    def from_list(cls, els: list[A]) -> Nel[A] | None:
+    def from_list(cls, els: Sequence[A]) -> Nel[A] | None:
         """Creates a non-empty list from a list."""
         if els == []:
             return None
@@ -35,11 +36,18 @@ class Nel[A]:
     def __iter__(self) -> Iterator[A]:
         return _NelIterator(self.value, self.more_values)
 
-    def __getitem__(self, index: int) -> A:
-        if index == 0:
-            return self.value
+    @overload
+    def __getitem__(self, key: int) -> A: ...
+    @overload
+    def __getitem__(self, key: slice[int]) -> Never: ...
+
+    def __getitem__(self, key: int | slice[int]) -> A | Sequence[A]:
+        if isinstance(key, slice):
+            raise NotImplementedError("slicing non-empty lists is not supported")
+        if key == 0:
+            return [self.value]
         else:
-            return self.more_values[index - 1]
+            return [self.more_values[key - 1]]
 
     def __len__(self) -> int:
         return len(self.more_values) + 1
@@ -49,8 +57,7 @@ class Nel[A]:
         if not other:
             return self
         else:
-            remain = self.more_values.copy()
-            remain.extend(other)
+            remain = [*self.more_values, *other]
             return Nel(self.value, remain)
 
     def to_list(self) -> list[A]:
@@ -77,7 +84,7 @@ class Nel[A]:
 class _NelIterator[A](Iterator[A]):
     """Iterator for non empty lists."""
 
-    def __init__(self, head: A, tail: list[A]) -> None:
+    def __init__(self, head: A, tail: Sequence[A]) -> None:
         self._head = head
         self._tail = tail
         self._tail_len = len(tail)
