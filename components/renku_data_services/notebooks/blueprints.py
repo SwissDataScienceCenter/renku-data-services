@@ -9,6 +9,7 @@ from sanic_ext import validate
 from ulid import ULID
 
 from renku_data_services import base_models
+from renku_data_services.app_config import logging
 from renku_data_services.base_api.auth import authenticate, authenticate_2
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser, Authenticator
@@ -73,6 +74,8 @@ from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.db import UserRepo
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(kw_only=True)
@@ -353,7 +356,9 @@ class NotebooksNewBP(CustomBlueprint):
                 host = public_remote_host
 
                 # FIXME: LSA Ingress annotations should be provided by remote admins
-                tls_secret = TlsSecret(adopt=False, name=host.replace(".", "_") + "-tls")
+                tls_name = host.replace(".", "_") + "-tls"
+                logger.warning(f"#### TLS HOST NAME: {tls_name}")
+                tls_secret = TlsSecret(adopt=False, name=tls_name)
                 ingress_annotations = {
                     "kubernetes.io/ingress.class": "nginx",
                     "nginx.ingress.kubernetes.io/configuration-snippet": (
