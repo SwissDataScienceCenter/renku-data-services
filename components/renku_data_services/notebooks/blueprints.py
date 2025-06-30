@@ -69,7 +69,6 @@ from renku_data_services.notebooks.utils import (
     tolerations_from_resource_class,
 )
 from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
-from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.db import UserRepo
@@ -81,7 +80,6 @@ class NotebooksBP(CustomBlueprint):
 
     authenticator: Authenticator
     nb_config: NotebooksConfig
-    git_repo: GitRepositoriesRepository
     internal_gitlab_authenticator: base_models.Authenticator
     rp_repo: ResourcePoolRepository
     user_repo: UserRepo
@@ -252,8 +250,6 @@ class NotebooksNewBP(CustomBlueprint):
             internal_gitlab_user: APIUser,
             body: apispec.SessionPostRequest,
         ) -> JSONResponse:
-            # gitlab_client = NotebooksGitlabClient(self.nb_config.git.url, internal_gitlab_user.access_token)
-
             launcher = await self.session_repo.get_launcher(user, ULID.from_str(body.launcher_id))
             project = await self.project_repo.get_project(user=user, project_id=launcher.project_id)
             cluster = await self.nb_config.k8s_client.cluster_by_class_id(launcher.resource_class_id, user)

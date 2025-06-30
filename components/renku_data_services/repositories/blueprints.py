@@ -32,7 +32,7 @@ class RepositoriesBP(CustomBlueprint):
         @authenticate_2(self.authenticator, self.internal_gitlab_authenticator)
         @extract_if_none_match
         async def _get_one_repository(
-            request: Request,
+            _: Request,
             user: base_models.APIUser,
             internal_gitlab_user: base_models.APIUser,
             repository_url: str,
