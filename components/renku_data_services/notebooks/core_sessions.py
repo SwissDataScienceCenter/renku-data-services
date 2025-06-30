@@ -592,7 +592,7 @@ async def patch_session(
             if not image_secret:
                 logger.error(f"Failed to create image pull secret for session ID {session_id} with image {image}")
                 raise errors.ProgrammingError(
-                    message=f"We cannot retrive credentials for your private image {image}. "
+                    message=f"We cannot retrieve credentials for your private image {image}. "
                     "In order to resolve this problem, you can try to log out and back in "
                     "and/or check that you still have permissions for the image repository."
                 )

@@ -106,7 +106,7 @@ class Kr8sApiStack:
 
 @dataclass
 class NotebooksConfig:
-    """The notebooks configuration."""
+    """The notebooks' configuration."""
 
     server_options: ServerOptionsConfig
     sessions: _SessionConfig

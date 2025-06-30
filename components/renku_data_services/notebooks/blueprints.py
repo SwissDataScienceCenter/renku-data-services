@@ -70,7 +70,6 @@ from renku_data_services.notebooks.utils import (
     tolerations_from_resource_class,
 )
 from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
-from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.db import UserRepo
@@ -82,7 +81,6 @@ class NotebooksBP(CustomBlueprint):
 
     authenticator: Authenticator
     nb_config: NotebooksConfig
-    git_repo: GitRepositoriesRepository
     internal_gitlab_authenticator: base_models.Authenticator
     rp_repo: ResourcePoolRepository
     user_repo: UserRepo

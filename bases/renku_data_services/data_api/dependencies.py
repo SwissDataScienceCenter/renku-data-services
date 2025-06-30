@@ -21,7 +21,7 @@ import renku_data_services.storage
 import renku_data_services.users
 from renku_data_services import errors
 from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
-from renku_data_services.authn.gitlab import GitlabAuthenticator
+from renku_data_services.authn.gitlab import EmptyGitlabAuthenticator, GitlabAuthenticator
 from renku_data_services.authn.keycloak import KcUserStore, KeycloakAuthenticator
 from renku_data_services.authz.authz import Authz
 from renku_data_services.connected_services.db import ConnectedServicesRepository
@@ -37,7 +37,7 @@ from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
     DataConnectorSecretRepository,
 )
-from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
+from renku_data_services.git.gitlab import DummyGitlabAPI, EmptyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.clients import (
     DummyCoreClient,
     DummySchedulingClient,
@@ -244,10 +244,13 @@ class DependencyManager:
                 raise errors.ConfigurationError(message="At least one token signature algorithm is required.")
 
             authenticator = KeycloakAuthenticator(jwks=jwks, algorithms=config.keycloak.algorithms)
-            assert config.gitlab_url is not None
-            gitlab_authenticator = GitlabAuthenticator(gitlab_url=config.gitlab_url)
+            if config.gitlab_url is None:
+                gitlab_authenticator = EmptyGitlabAuthenticator()
+                gitlab_client = EmptyGitlabAPI()
+            else:
+                gitlab_authenticator = GitlabAuthenticator(gitlab_url=config.gitlab_url)
+                gitlab_client = GitlabAPI(gitlab_url=config.gitlab_url)
             user_store = KcUserStore(keycloak_url=config.keycloak.url, realm=config.keycloak.realm)
-            gitlab_client = GitlabAPI(gitlab_url=config.gitlab_url)
             kc_api = KeycloakAPI(
                 keycloak_url=config.keycloak.url,
                 client_id=config.keycloak.client_id,
@@ -348,7 +351,6 @@ class DependencyManager:
             session_maker=config.db.async_session_maker,
             encryption_key=config.secrets.encryption_key,
             async_oauth2_client_class=cls.async_oauth2_client_class,
-            internal_gitlab_url=config.gitlab_url,
         )
         git_repositories_repo = GitRepositoriesRepository(
             session_maker=config.db.async_session_maker,
