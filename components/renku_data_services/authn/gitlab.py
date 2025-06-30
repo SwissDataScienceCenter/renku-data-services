@@ -89,3 +89,14 @@ class GitlabAuthenticator:
             full_name=full_name,
             access_token_expires_at=expires_at,
         )
+
+
+@dataclass
+class EmptyGitlabAuthenticator:
+    """An empty gitlab authenticator used to decouple gitlab from Renku."""
+
+    token_field: str = "Not-Applicable"
+
+    async def authenticate(self, _: str, __: Request) -> base_models.APIUser:
+        """Always return an anonymous user."""
+        return base_models.APIUser()

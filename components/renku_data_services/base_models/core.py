@@ -53,7 +53,7 @@ class APIUser:
 
 @dataclass(kw_only=True, frozen=True)
 class AuthenticatedAPIUser(APIUser):
-    """The model for a an authenticated user of the API."""
+    """The model for an authenticated user of the API."""
 
     id: str
     email: str

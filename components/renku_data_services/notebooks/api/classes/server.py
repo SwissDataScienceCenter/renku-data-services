@@ -331,7 +331,7 @@ class UserServer:
                 # Cloud Storage needs to patch the git clone sidecar spec and so should come after
                 # the sidecars
                 # WARN: this patch depends on the index of the sidecar and so needs to be updated
-                # if sidercars are added or removed
+                # if sidecars are added or removed
                 await cloudstorage_patches.main(self),
                 # NOTE: User secrets adds an init container, volume and mounts, so it may affect
                 # indices in other patches.

@@ -116,6 +116,15 @@ class GitlabAPI:
 
 
 @dataclass(kw_only=True)
+class EmptyGitlabAPI:
+    """An empty gitlab API used to decouple gitlab from Renku."""
+
+    async def filter_projects_by_access_level(self, _: APIUser, __: list[str], ___: GitlabAccessLevel) -> list[str]:
+        """Always return an empty list."""
+        return []
+
+
+@dataclass(kw_only=True)
 class DummyGitlabAPI:
     """Dummy gitlab API.
 
