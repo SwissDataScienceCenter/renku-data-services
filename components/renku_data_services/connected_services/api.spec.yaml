@@ -412,12 +412,15 @@ components:
         setting up a GitHub App.
       type: string
       example: "my-application"
+      maxLength: 500
     ClientId:
       description: |
         Client ID or Application ID value. This is provided by
         the Resource Server when setting up a new OAuth2 Client.
       type: string
       example: "some-client-id"
+      minLength: 1
+      maxLength: 99
     ClientSecret:
       description: |
         Client secret provided by the Resource Server when setting
@@ -427,6 +430,8 @@ components:
     DisplayName:
       type: string
       example: "my oauth2 application"
+      minLength: 1
+      maxLength: 99
     ApiScope:
       type: string
       example: "api"
