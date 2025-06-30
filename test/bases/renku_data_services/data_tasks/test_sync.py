@@ -35,7 +35,6 @@ from renku_data_services.data_tasks.task_defs import (
 )
 from renku_data_services.db_config import DBConfig
 from renku_data_services.errors import errors
-from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.namespace.apispec import (
     GroupPostRequest,
@@ -51,10 +50,8 @@ from renku_data_services.users.orm import UserORM
 @pytest.fixture
 def get_app_manager(db_instance: DBConfig, authz_instance: AuthzConfig):
     def _get_dependency_manager(kc_api: DummyKeycloakAPI, total_user_sync: bool = False) -> DependencyManager:
-        redis = RedisConfig.fake()
         config = Config.from_env()
         config.db = db_instance
-        config.redis = redis
         dm = DependencyManager.from_env(config)
         run_migrations_for_app("common")
         return dm

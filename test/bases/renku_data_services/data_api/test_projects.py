@@ -13,11 +13,7 @@ from syrupy.filters import props
 from ulid import ULID
 
 from renku_data_services.data_api.dependencies import DependencyManager
-from renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
-from renku_data_services.message_queue.avro_models.io.renku.events.v2.member_role import MemberRole
-from renku_data_services.message_queue.models import deserialize_binary
 from renku_data_services.users.models import UserInfo
-from test.bases.renku_data_services.data_api.utils import deserialize_event, merge_headers
 
 
 @pytest.fixture
@@ -93,17 +89,8 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
 
     project_created_event = next((e for e in events if e.get_message_type() == "project.created"), None)
     assert project_created_event
-    created_event = deserialize_binary(
-        b64decode(project_created_event.payload["payload"]), avro_schema_v2.ProjectCreated
-    )
-    assert created_event.name == payload["name"]
-    assert created_event.slug == payload["slug"]
-    assert created_event.repositories == payload["repositories"]
     project_auth_added = next((e for e in events if e.get_message_type() == "projectAuth.added"), None)
     assert project_auth_added
-    auth_event = deserialize_binary(b64decode(project_auth_added.payload["payload"]), avro_schema_v2.ProjectMemberAdded)
-    assert auth_event.userId == "user"
-    assert auth_event.role == MemberRole.OWNER
 
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
 
@@ -1247,7 +1234,7 @@ async def test_project_copy_basics(
     assert copy_project == snapshot(exclude=props("id", "updated_at", "creation_date", "etag", "template_id"))
 
     _, response = await sanic_client.get(
-        f"/api/data/projects/{copy_project["id"]}", params={"with_documentation": True}, headers=user_headers
+        f"/api/data/projects/{copy_project['id']}", params={"with_documentation": True}, headers=user_headers
     )
     assert response.status_code == 200, response.text
     copy_project = response.json
@@ -1261,18 +1248,6 @@ async def test_project_copy_basics(
     search_doc = next(x for x in search_updates if x.entity_id == copy_project["id"])
     assert search_doc.payload["slug"] == "project-slug"
     assert search_doc.payload["name"] == "Renku Native Project"
-
-    events = await app_manager.event_repo.get_pending_events()
-    assert len(events) == 2
-    project_created_event = next(e for e in events if e.get_message_type() == "project.created")
-    project_created = deserialize_event(project_created_event)
-    assert project_created.name == payload["name"]
-    assert project_created.slug == payload["slug"]
-    assert project_created.repositories == project["repositories"]
-    project_auth_added_event = next(e for e in events if e.get_message_type() == "projectAuth.added")
-    project_auth_added = deserialize_event(project_auth_added_event)
-    assert project_auth_added.userId == "user"
-    assert project_auth_added.role == MemberRole.OWNER
 
     project_id = copy_project["id"]
 

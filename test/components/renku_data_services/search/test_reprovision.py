@@ -15,9 +15,7 @@ from renku_data_services.data_connectors.models import (
     GlobalDataConnector,
     UnsavedDataConnector,
 )
-from renku_data_services.message_queue.db import EventRepository, ReprovisioningRepository
-from renku_data_services.message_queue.interface import IMessageQueue
-from renku_data_services.message_queue.models import Event
+from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.namespace.models import Group, UnsavedGroup, UserNamespace
@@ -36,11 +34,6 @@ user_namespace = UserNamespace(
 )
 
 
-class NoneMessageQueue(IMessageQueue):
-    async def send_message(self, event: Event) -> None:
-        return None
-
-
 @dataclass
 class Setup:
     group_repo: GroupRepository
@@ -53,14 +46,12 @@ class Setup:
 
 def make_setup(app_manager_instance, solr_config) -> Setup:
     run_migrations_for_app("common")
-    mq = NoneMessageQueue()
     sess = app_manager_instance.config.db.async_session_maker
-    events = EventRepository(sess, mq)
     search_updates = SearchUpdatesRepo(sess)
     authz = Authz(app_manager_instance.config.authz_config)
-    gr = GroupRepository(sess, events, authz, mq, search_updates)
-    ur = UserRepo(sess, mq, events, gr, search_updates, None, authz)
-    pr = ProjectRepository(sess, mq, events, gr, search_updates, authz)
+    gr = GroupRepository(sess, authz, search_updates)
+    ur = UserRepo(sess, gr, search_updates, None, authz)
+    pr = ProjectRepository(sess, gr, search_updates, authz)
     dcr = DataConnectorRepository(sess, authz, pr, gr, search_updates)
     sr = SearchReprovision(
         search_updates_repo=search_updates,
