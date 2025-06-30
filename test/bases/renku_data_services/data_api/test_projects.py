@@ -56,7 +56,6 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
         "secrets_mount_directory": "/etc/renku_secrets",
     }
 
-    await app_manager.event_repo.delete_all_events()
     await app_manager.search_updates_repo.clear_all()
 
     _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
@@ -80,17 +79,10 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
     app_manager.metrics.project_created.assert_called_once()
     project_id = project["id"]
 
-    events = await app_manager.event_repo.get_pending_events()
-    assert len(events) == 2
     search_updates = await app_manager.search_updates_repo.select_next(10)
     assert len(search_updates) == 1
     for e in search_updates:
         assert e.entity_type == "Project"
-
-    project_created_event = next((e for e in events if e.get_message_type() == "project.created"), None)
-    assert project_created_event
-    project_auth_added = next((e for e in events if e.get_message_type() == "projectAuth.added"), None)
-    assert project_auth_added
 
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
 
@@ -1203,8 +1195,6 @@ async def test_project_copy_basics(
         "namespace": regular_user.namespace.path.serialize(),
     }
 
-    await app_manager.event_repo.delete_all_events()
-
     _, response = await sanic_client.post(f"/api/data/projects/{project_id}/copies", headers=user_headers, json=payload)
 
     assert response.status_code == 201, response.text
@@ -1810,8 +1800,6 @@ async def test_migrate_v1_project(
             "default_url": "/lab",
         },
     }
-
-    await app_manager.event_repo.delete_all_events()
 
     _, response = await sanic_client.post(
         f"/api/data/renku_v1_projects/{v1_id}/migrations", headers=user_headers, json=v1_project
