@@ -24,7 +24,6 @@ from renku_data_services.crc.blueprints import (
 )
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_connectors.blueprints import DataConnectorsBP
-from renku_data_services.message_queue.blueprints import MessageQueueBP
 from renku_data_services.namespace.blueprints import GroupsBP
 from renku_data_services.notebooks.blueprints import NotebooksBP, NotebooksNewBP
 from renku_data_services.platform.blueprints import PlatformConfigBP
@@ -223,17 +222,6 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         platform_repo=dm.platform_repo,
         authenticator=dm.authenticator,
     )
-    message_queue = MessageQueueBP(
-        name="search",
-        url_prefix=url_prefix,
-        authenticator=dm.authenticator,
-        session_maker=dm.config.db.async_session_maker,
-        reprovisioning_repo=dm.reprovisioning_repo,
-        user_repo=dm.kc_user_repo,
-        group_repo=dm.group_repo,
-        project_repo=dm.project_repo,
-        authz=dm.authz,
-    )
     search = SearchBP(
         name="search2",
         url_prefix=url_prefix,
@@ -284,7 +272,6 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
             notebooks.blueprint(),
             notebooks_new.blueprint(),
             platform_config.blueprint(),
-            message_queue.blueprint(),
             search.blueprint(),
             data_connectors.blueprint(),
         ]

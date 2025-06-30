@@ -9,7 +9,6 @@ from renku_data_services.app_config.config import KeycloakConfig, PosthogConfig,
 from renku_data_services.app_config.logging import Config as LoggingConfig
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.db_config.config import DBConfig
-from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.notebooks.config.dynamic import ServerOptionsConfig
 from renku_data_services.secrets.config import PublicSecretsConfig
@@ -33,7 +32,6 @@ class Config:
     solr: SolrClientConfig
     authz_config: AuthzConfig
     trusted_proxies: TrustedProxiesConfig
-    redis: RedisConfig
     keycloak: KeycloakConfig | None
     user_preferences: UserPreferencesConfig
     server_options: ServerOptionsConfig
@@ -60,11 +58,9 @@ class Config:
         server_options = ServerOptionsConfig.from_env()
         log_cfg = LoggingConfig.from_env()
         if dummy_stores:
-            redis = RedisConfig.fake()
             keycloak = None
             gitlab_url = None
         else:
-            redis = RedisConfig.from_env()
             keycloak = KeycloakConfig.from_env()
             gitlab_url = os.environ.get("GITLAB_URL")
             if gitlab_url is None:
@@ -84,7 +80,6 @@ class Config:
             authz_config=authz_config,
             solr=solr_config,
             trusted_proxies=trusted_proxies,
-            redis=redis,
             keycloak=keycloak,
             user_preferences=user_preferences_config,
             server_options=server_options,

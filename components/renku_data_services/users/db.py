@@ -15,11 +15,6 @@ from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.base_api.auth import APIUser, only_authenticated
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.errors import errors
-from renku_data_services.message_queue import events
-from renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
-from renku_data_services.message_queue.db import EventRepository
-from renku_data_services.message_queue.interface import IMessageQueue
-from renku_data_services.message_queue.redis_queue import dispatch_message
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.namespace.orm import NamespaceORM
 from renku_data_services.search.db import SearchUpdatesRepo
@@ -49,17 +44,13 @@ class UserRepo:
     """An adapter for accessing users from the database."""
 
     session_maker: Callable[..., AsyncSession]
-    message_queue: IMessageQueue
-    event_repo: EventRepository
     group_repo: GroupRepository
     search_updates_repo: SearchUpdatesRepo
     encryption_key: bytes | None = field(repr=False)
     authz: Authz
 
     def __post_init__(self) -> None:
-        self._users_sync = UsersSync(
-            self.session_maker, self.message_queue, self.event_repo, self.group_repo, self, self.authz
-        )
+        self._users_sync = UsersSync(self.session_maker, self.group_repo, self, self.authz)
 
     async def initialize(self, kc_api: IKeycloakAPI) -> None:
         """Do a total sync of users from Keycloak if there is nothing in the DB."""
@@ -150,7 +141,6 @@ class UserRepo:
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.delete, ResourceType.user)
-    @dispatch_message(avro_schema_v2.UserRemoved)
     @update_search_document
     async def _remove_user(
         self, requested_by: APIUser, user_id: str, *, session: AsyncSession | None = None
@@ -197,15 +187,11 @@ class UsersSync:
     def __init__(
         self,
         session_maker: Callable[..., AsyncSession],
-        message_queue: IMessageQueue,
-        event_repo: EventRepository,
         group_repo: GroupRepository,
         user_repo: UserRepo,
         authz: Authz,
     ) -> None:
         self.session_maker = session_maker
-        self.message_queue: IMessageQueue = message_queue
-        self.event_repo: EventRepository = event_repo
         self.group_repo = group_repo
         self.user_repo = user_repo
         self.authz = authz
@@ -222,7 +208,6 @@ class UsersSync:
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.update_or_insert, ResourceType.user)
     @update_search_document
-    @dispatch_message(events.UpdateOrInsertUser)
     async def update_or_insert_user(
         self, user: UnsavedUserInfo, *, session: AsyncSession | None = None
     ) -> UserInfoUpdate:

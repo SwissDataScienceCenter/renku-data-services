@@ -48,9 +48,7 @@ from renku_data_services.k8s.clients import (
 from renku_data_services.k8s.config import KubeConfigEnv
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.k8s_watcher import K8sDbCache
-from renku_data_services.message_queue.db import EventRepository, ReprovisioningRepository
-from renku_data_services.message_queue.interface import IMessageQueue
-from renku_data_services.message_queue.redis_queue import RedisQueue
+from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.metrics.core import StagingMetricsService
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
@@ -116,7 +114,6 @@ class DependencyManager:
     quota_repo: QuotaRepository
     gitlab_client: base_models.GitlabAPIProtocol
     kc_api: IKeycloakAPI
-    message_queue: IMessageQueue
     authz: Authz
     user_repo: UserRepository
     rp_repo: ResourcePoolRepository
@@ -124,7 +121,6 @@ class DependencyManager:
     project_repo: ProjectRepository
     project_migration_repo: ProjectMigrationRepository
     group_repo: GroupRepository
-    event_repo: EventRepository
     reprovisioning_repo: ReprovisioningRepository
     search_updates_repo: SearchUpdatesRepo
     search_reprovisioning: SearchReprovision
@@ -170,7 +166,6 @@ class DependencyManager:
             renku_data_services.repositories.__file__,
             renku_data_services.notebooks.__file__,
             renku_data_services.platform.__file__,
-            renku_data_services.message_queue.__file__,
             renku_data_services.data_connectors.__file__,
             renku_data_services.search.__file__,
         ]
@@ -268,20 +263,14 @@ class DependencyManager:
                 )
 
         authz = Authz(config.authz_config)
-        message_queue = RedisQueue(config.redis)
-        event_repo = EventRepository(session_maker=config.db.async_session_maker, message_queue=message_queue)
         search_updates_repo = SearchUpdatesRepo(session_maker=config.db.async_session_maker)
         group_repo = GroupRepository(
             session_maker=config.db.async_session_maker,
-            event_repo=event_repo,
             group_authz=authz,
-            message_queue=message_queue,
             search_updates_repo=search_updates_repo,
         )
         kc_user_repo = KcUserRepo(
             session_maker=config.db.async_session_maker,
-            message_queue=message_queue,
-            event_repo=event_repo,
             group_repo=group_repo,
             search_updates_repo=search_updates_repo,
             encryption_key=config.secrets.encryption_key,
@@ -304,8 +293,6 @@ class DependencyManager:
         project_repo = ProjectRepository(
             session_maker=config.db.async_session_maker,
             authz=authz,
-            message_queue=message_queue,
-            event_repo=event_repo,
             group_repo=group_repo,
             search_updates_repo=search_updates_repo,
         )
@@ -319,16 +306,12 @@ class DependencyManager:
         project_migration_repo = ProjectMigrationRepository(
             session_maker=config.db.async_session_maker,
             authz=authz,
-            message_queue=message_queue,
             project_repo=project_repo,
-            event_repo=event_repo,
             session_repo=session_repo,
         )
         project_member_repo = ProjectMemberRepository(
             session_maker=config.db.async_session_maker,
             authz=authz,
-            event_repo=event_repo,
-            message_queue=message_queue,
         )
         project_session_secret_repo = ProjectSessionSecretRepository(
             session_maker=config.db.async_session_maker,
@@ -397,11 +380,9 @@ class DependencyManager:
             user_store=user_store,
             quota_repo=quota_repo,
             kc_api=kc_api,
-            message_queue=message_queue,
             user_repo=user_repo,
             rp_repo=rp_repo,
             storage_repo=storage_repo,
-            event_repo=event_repo,
             reprovisioning_repo=reprovisioning_repo,
             search_updates_repo=search_updates_repo,
             search_reprovisioning=search_reprovisioning,

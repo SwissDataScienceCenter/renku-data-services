@@ -4,8 +4,6 @@ from dataclasses import dataclass
 
 from renku_data_services.authz.authz import Authz
 from renku_data_services.data_tasks.config import Config
-from renku_data_services.message_queue.db import EventRepository
-from renku_data_services.message_queue.redis_queue import RedisQueue
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project.db import ProjectRepository
@@ -22,7 +20,6 @@ class DependencyManager:
 
     config: Config
     search_updates_repo: SearchUpdatesRepo
-    event_repo: EventRepository
     metrics_repo: MetricsRepository
     group_repo: GroupRepository
     project_repo: ProjectRepository
@@ -36,36 +33,21 @@ class DependencyManager:
         if cfg is None:
             cfg = Config.from_env()
         search_updates_repo = SearchUpdatesRepo(cfg.db.async_session_maker)
-        event_repo = EventRepository(cfg.db.async_session_maker, RedisQueue(cfg.redis))
         metrics_repo = MetricsRepository(cfg.db.async_session_maker)
         authz = Authz(cfg.authz)
-        message_queue = RedisQueue(cfg.redis)
         group_repo = GroupRepository(
             cfg.db.async_session_maker,
-            event_repo=event_repo,
             group_authz=authz,
-            message_queue=message_queue,
-            search_updates_repo=search_updates_repo,
-        )
-        group_repo = GroupRepository(
-            cfg.db.async_session_maker,
-            event_repo=event_repo,
-            group_authz=authz,
-            message_queue=message_queue,
             search_updates_repo=search_updates_repo,
         )
         project_repo = ProjectRepository(
             session_maker=cfg.db.async_session_maker,
-            message_queue=message_queue,
-            event_repo=event_repo,
             group_repo=group_repo,
             search_updates_repo=search_updates_repo,
             authz=authz,
         )
         user_repo = UserRepo(
             session_maker=cfg.db.async_session_maker,
-            message_queue=message_queue,
-            event_repo=event_repo,
             group_repo=group_repo,
             search_updates_repo=search_updates_repo,
             encryption_key=None,
@@ -73,8 +55,6 @@ class DependencyManager:
         )
         syncer = UsersSync(
             cfg.db.async_session_maker,
-            message_queue=message_queue,
-            event_repo=event_repo,
             group_repo=group_repo,
             user_repo=user_repo,
             authz=authz,
@@ -98,7 +78,6 @@ class DependencyManager:
         return cls(
             config=cfg,
             search_updates_repo=search_updates_repo,
-            event_repo=event_repo,
             metrics_repo=metrics_repo,
             group_repo=group_repo,
             project_repo=project_repo,
