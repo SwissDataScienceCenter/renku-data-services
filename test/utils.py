@@ -258,7 +258,6 @@ class TestDependencyManager(DependencyManager):
             session_maker=config.db.async_session_maker,
             encryption_key=config.secrets.encryption_key,
             async_oauth2_client_class=cls.async_oauth2_client_class,
-            internal_gitlab_url=config.gitlab_url,
         )
         git_repositories_repo = GitRepositoriesRepository(
             session_maker=config.db.async_session_maker,
