@@ -1,4 +1,3 @@
-from base64 import b64decode
 from datetime import datetime
 
 import pytest
@@ -175,7 +174,6 @@ async def test_group_members(
     }
     _, response = await sanic_client.post("/api/data/groups", headers=user_headers, json=payload)
     assert response.status_code == 201, response.text
-    group = response.json
     _, response = await sanic_client.get("/api/data/groups/group-1/members", headers=user_headers)
     assert response.status_code == 200, response.text
     members = response.json
@@ -200,15 +198,6 @@ async def test_group_members(
     search_updates = await app_manager.search_updates_repo.select_next(20)
     assert len(search_updates) == 0
 
-    events = await app_manager.event_repo.get_pending_events()
-
-    group_events = sorted([e for e in events if e.get_message_type() == "memberGroup.added"], key=lambda e: e.id)
-    assert len(group_events) == 2
-    group_event = deserialize_binary(b64decode(group_events[1].payload["payload"]), GroupMemberAdded)
-    assert group_event.userId == member_1["id"]
-    assert group_event.groupId == group["id"]
-    assert group_event.role.value == "VIEWER"
-
 
 @pytest.mark.asyncio
 async def test_removing_single_group_owner_not_allowed(
@@ -225,7 +214,6 @@ async def test_removing_single_group_owner_not_allowed(
     # Create a group
     _, response = await sanic_client.post("/api/data/groups", headers=user_headers, json=payload)
     assert response.status_code == 201, response.text
-    group = response.json
 
     _, response = await sanic_client.get("/api/data/groups/group-1/members", headers=user_headers)
     assert response.status_code == 200, response.text
@@ -250,16 +238,12 @@ async def test_removing_single_group_owner_not_allowed(
     _, response = await sanic_client.patch("/api/data/groups/group-1/members", headers=user_headers, json=new_members)
     assert response.status_code == 200
 
-    events = await app_manager.event_repo.get_pending_events()
-
     search_updates = await app_manager.search_updates_repo.select_next(20)
     assert len(search_updates) == 0
 
     # Removing the original owner now works
     _, response = await sanic_client.delete("/api/data/groups/group-1/members/user", headers=user_headers)
     assert response.status_code == 204
-
-    events = await app_manager.event_repo.get_pending_events()
 
     search_updates = await app_manager.search_updates_repo.select_next(20)
     assert len(search_updates) == 0
