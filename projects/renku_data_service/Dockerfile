@@ -1,5 +1,5 @@
 ARG RCLONE_IMAGE_REPOSITORY="ghcr.io/swissdatasciencecenter/rclone"
-ARG RCLONE_IMAGE_TAG="sha-9cbde11"
+ARG RCLONE_IMAGE_TAG="sha-66b7f3e"
 FROM ${RCLONE_IMAGE_REPOSITORY}:${RCLONE_IMAGE_TAG} AS rclone
 
 FROM python:3.13-bookworm AS builder
@@ -46,4 +46,5 @@ COPY --from=builder /usr/bin/rclone /usr/bin
 USER $USER_UID:$USER_GID
 WORKDIR /app
 COPY --from=builder /app/env ./env
+ENV DB_POOL_SIZE=10
 ENTRYPOINT ["tini", "-g", "--", "env/bin/python", "-m", "renku_data_services.data_api.main"]
