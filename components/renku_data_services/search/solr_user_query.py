@@ -42,6 +42,7 @@ from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.entity_schema import Fields
 from renku_data_services.solr.solr_client import SortDirection
 from renku_data_services.solr.solr_schema import FieldName
+from renku_data_services.users.db import UsernameResolver
 
 
 @dataclass
@@ -110,7 +111,7 @@ class UsernameResolve(ABC):
     """Resolve usernames to their ids."""
 
     @abstractmethod
-    async def resolve_usernames(self, names: Nel[Username]) -> dict[Username, UserId] | None:
+    async def resolve_usernames(self, names: Nel[Username]) -> dict[Username, UserId]:
         """Return the user id for a given user name."""
         ...
 
@@ -119,11 +120,29 @@ class UsernameResolve(ABC):
         """An implementation that doesn't resolve names."""
         return _EmptyUsernameResolve()
 
+    @classmethod
+    def db(cls, repo: UsernameResolver) -> UsernameResolve:
+        """An implementation using the resolver from the user module."""
+        return _DbUsernameResolve(repo)
+
 
 class _EmptyUsernameResolve(UsernameResolve):
     @override
-    async def resolve_usernames(self, names: Nel[Username]) -> dict[Username, UserId] | None:
-        return None
+    async def resolve_usernames(self, names: Nel[Username]) -> dict[Username, UserId]:
+        return {}
+
+
+class _DbUsernameResolve(UsernameResolve):
+    def __init__(self, resolver: UsernameResolver) -> None:
+        self._resolver = resolver
+
+    async def resolve_usernames(self, names: Nel[Username]) -> dict[Username, UserId]:
+        """Return the user id for a given user name."""
+        result = {}
+        for k, v in (await self._resolver.resolve_usernames(names.map(lambda n: n.slug.value))).items():
+            result.update({Username.from_name(k): UserId(v)})
+
+        return result
 
 
 @dataclass
@@ -231,8 +250,7 @@ class Context:
                 pass
             case nel:
                 remain_ids = await self.username_resolve.resolve_usernames(nel)
-                if remain_ids is not None:
-                    ids.update(remain_ids.values())
+                ids.update(remain_ids.values())
 
         for uid in ids:
             n = await self.auth_access.get_ids_for_role(uid.id, Nel.of(Role.VIEWER), ets, direct_membership)

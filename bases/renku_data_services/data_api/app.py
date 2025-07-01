@@ -31,8 +31,8 @@ from renku_data_services.platform.blueprints import PlatformConfigBP
 from renku_data_services.project.blueprints import ProjectsBP, ProjectSessionSecretBP
 from renku_data_services.repositories.blueprints import RepositoriesBP
 from renku_data_services.search.blueprints import SearchBP
-from renku_data_services.search.db import DbUsernameResolve
 from renku_data_services.search.reprovision import SearchReprovision
+from renku_data_services.search.solr_user_query import UsernameResolve
 from renku_data_services.session.blueprints import BuildsBP, EnvironmentsBP, SessionLaunchersBP
 from renku_data_services.storage.blueprints import StorageBP, StorageSchemaBP
 from renku_data_services.users.blueprints import KCUsersBP, UserPreferencesBP, UserSecretsBP
@@ -239,7 +239,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         name="search2",
         url_prefix=url_prefix,
         authenticator=dm.authenticator,
-        username_resolve=DbUsernameResolve(dm.config.db.async_session_maker),
+        username_resolve=UsernameResolve.db(dm.kc_user_repo),
         search_reprovision=SearchReprovision(
             search_updates_repo=dm.search_updates_repo,
             reprovisioning_repo=dm.reprovisioning_repo,
