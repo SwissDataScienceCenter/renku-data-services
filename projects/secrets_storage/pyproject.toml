@@ -62,10 +62,7 @@ psycopg = { version = "^3.2.3", extras = ["binary"] }
 urllib3 = "^2.3.0"
 deepmerge = "^2.0"
 authlib = "^1.5.0"
-redis = "^5.2.1"
-dataclasses-avroschema = "^0.65.8"
 undictify = "^0.11.3"
-types-redis = "^4.6.0.20241004"
 prometheus-sanic = "^3.0.0"
 sentry-sdk = { version = "^2.22.0", extras = ["sanic"] }
 cryptography = "^44.0.1"
@@ -88,9 +85,6 @@ sanic-ext = "^24.12.0"
 posthog = "^3.21.0"
 
 [tool.poetry.group.dev.dependencies]
-pyavro-gen = "^0.3.3"
-avro-preprocessor = "^0.3.0"
-fakeredis = "^2.26.2"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
