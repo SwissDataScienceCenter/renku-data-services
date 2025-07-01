@@ -54,7 +54,7 @@ class MetricsService(Protocol):
         """Send session launcher created event to metrics."""
         ...
 
-    async def project_created(self, user: APIUser) -> None:
+    async def project_created(self, user: APIUser, metadata: MetricsMetadata) -> None:
         """Send project created event to metrics."""
         ...
 
@@ -93,3 +93,11 @@ class MetricsService(Protocol):
     async def user_requested_session_resume(self, user: APIUser, metadata: MetricsMetadata) -> None:
         """Send event about user requesting session resume."""
         ...
+
+
+class ProjectCreationType(StrEnum):
+    """The different types of project creation metrics."""
+
+    new = "new"
+    migrated = "migrated"
+    copied = "copied"

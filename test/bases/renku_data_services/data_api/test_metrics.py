@@ -7,6 +7,7 @@ import pytest
 import pytest_asyncio
 from sanic_testing.testing import SanicASGITestClient
 
+from renku_data_services.base_models.metrics import ProjectCreationType
 from renku_data_services.metrics.core import StagingMetricsService
 
 
@@ -40,7 +41,7 @@ async def test_metrics_are_stored(sanic_metrics_client, app_manager, create_proj
     project_created = events[0]
     assert re.match(r"^[0-7][0-9A-HJKMNP-TV-Z]{25}$", str(project_created.id))
     assert project_created.event == "project_created"
-    assert project_created.metadata_ is None
+    assert project_created.metadata_ == {"project_creation_kind": ProjectCreationType.new.value}
 
     session_launcher_created = events[1]
     assert re.match(r"^[0-7][0-9A-HJKMNP-TV-Z]{25}$", str(session_launcher_created.id))
