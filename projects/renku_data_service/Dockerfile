@@ -46,4 +46,5 @@ COPY --from=builder /usr/bin/rclone /usr/bin
 USER $USER_UID:$USER_GID
 WORKDIR /app
 COPY --from=builder /app/env ./env
+ENV DB_POOL_SIZE=10
 ENTRYPOINT ["tini", "-g", "--", "env/bin/python", "-m", "renku_data_services.data_api.main"]
