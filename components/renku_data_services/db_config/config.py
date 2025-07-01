@@ -20,6 +20,7 @@ class DBConfig:
     port: str = "5432"
     db_name: str = "renku"
     _async_engine: ClassVar[AsyncEngine | None] = field(default=None, repr=False, init=False)
+    pool_size: int = 4
 
     @classmethod
     def from_env(cls) -> "DBConfig":
@@ -29,13 +30,20 @@ class DBConfig:
         pg_user = os.environ.get("DB_USER")
         pg_port = os.environ.get("DB_PORT")
         db_name = os.environ.get("DB_NAME")
+        pool_size = int(os.environ.get("DB_POOL_SIZE", "4"))
         pg_password = os.environ.get("DB_PASSWORD")
         if pg_password is None:
             raise errors.ConfigurationError(
                 message="Please provide a database password in the 'DB_PASSWORD' environment variable."
             )
-        kwargs = {"host": pg_host, "password": pg_password, "port": pg_port, "db_name": db_name, "user": pg_user}
-        config = cls(**{k: v for (k, v) in kwargs.items() if v is not None})
+        config = cls(
+            password=pg_password,
+            host=pg_host or "localhost",
+            user=pg_user or "renku",
+            port=pg_port or "5432",
+            db_name=db_name or "renku",
+            pool_size=pool_size,
+        )
         return config
 
     def conn_url(self, async_client: bool = True) -> str:
@@ -50,7 +58,7 @@ class DBConfig:
         if not DBConfig._async_engine:
             DBConfig._async_engine = create_async_engine(
                 self.conn_url(),
-                pool_size=10,
+                pool_size=self.pool_size,
                 max_overflow=0,
             )
         return async_sessionmaker(DBConfig._async_engine, expire_on_commit=False)
