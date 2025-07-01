@@ -1204,7 +1204,7 @@ async def test_project_copy_basics(
     assert copy_project == snapshot(exclude=props("id", "updated_at", "creation_date", "etag", "template_id"))
 
     _, response = await sanic_client.get(
-        f"/api/data/projects/{copy_project['id']}", params={"with_documentation": True}, headers=user_headers
+        f"/api/data/projects/{copy_project["id"]}", params={"with_documentation": True}, headers=user_headers
     )
     assert response.status_code == 200, response.text
     copy_project = response.json
