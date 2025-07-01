@@ -20,7 +20,7 @@ class DBConfig:
     port: str = "5432"
     db_name: str = "renku"
     _async_engine: ClassVar[AsyncEngine | None] = field(default=None, repr=False, init=False)
-    pool_size: int = 10
+    pool_size: int = 4
 
     @classmethod
     def from_env(cls) -> "DBConfig":
@@ -30,7 +30,7 @@ class DBConfig:
         pg_user = os.environ.get("DB_USER")
         pg_port = os.environ.get("DB_PORT")
         db_name = os.environ.get("DB_NAME")
-        pool_size = int(os.environ.get("DB_POOL_SIZE", "10"))
+        pool_size = int(os.environ.get("DB_POOL_SIZE", "4"))
         pg_password = os.environ.get("DB_PASSWORD")
         if pg_password is None:
             raise errors.ConfigurationError(
@@ -45,18 +45,6 @@ class DBConfig:
             pool_size=pool_size,
         )
         return config
-
-    def with_pool_size(self, pool_size: int) -> "DBConfig":
-        """Initialize a new config with a different size of the DB connection pool."""
-        DBConfig._async_engine = None
-        return DBConfig(
-            password=self.password,
-            host=self.host,
-            user=self.user,
-            port=self.port,
-            db_name=self.db_name,
-            pool_size=pool_size,
-        )
 
     def conn_url(self, async_client: bool = True) -> str:
         """Return an asynchronous or synchronous database connection url."""

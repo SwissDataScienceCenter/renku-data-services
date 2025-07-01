@@ -73,7 +73,7 @@ class Config:
 
         keycloak = None if dummy_stores else KeycloakConfig.from_env()
         return Config(
-            db=DBConfig.from_env().with_pool_size(4),
+            db=DBConfig.from_env(),
             max_retry_wait_seconds=max_retry,
             main_log_interval_seconds=main_tick,
             solr=solr_config,
