@@ -39,6 +39,14 @@ def end_of_day(d: datetime) -> datetime:
     return d.replace(hour=23, minute=59, second=59, microsecond=0)
 
 
+def test_render_keywords() -> None:
+    assert Segments.keyword_is("hello").render() == "keyword:hello"
+    assert Segments.keyword_is("hello-me").render() == "keyword:hello-me"
+    assert Segments.keyword_is("hello me").render() == 'keyword:"hello me"'
+    assert Segments.keyword_is("tl,dr", "data").render() == 'keyword:"tl,dr",data'
+    assert Segments.keyword_is("""a "and" b""", "data").render() == 'keyword:"a \\"and\\" b",data'
+
+
 def test_render_order_by() -> None:
     order = OrderBy(SortableField.fname, SortDirection.asc)
     assert order.render() == "name-asc"
@@ -58,7 +66,8 @@ def test_helper_quote() -> None:
     assert Helper.quote("hello world") == '"hello world"'
     assert Helper.quote("hello ") == '"hello "'
     assert Helper.quote("1,2") == '"1,2"'
-    assert Helper.quote('x="3"') == '"x="3""'
+    assert Helper.quote('x="3"') == '"x=\\"3\\""'
+    assert Helper.quote("""a "and" b""") == '"a \\"and\\" b"'
 
 
 def test_type_is() -> None:

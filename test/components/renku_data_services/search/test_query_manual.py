@@ -2,7 +2,6 @@
 
 from textwrap import dedent
 
-import pytest
 from markdown_it import MarkdownIt
 
 from renku_data_services.search import query_manual
@@ -15,7 +14,7 @@ def test_create_manual() -> None:
 ## When editing the manual it is quicker to run this test and open the
 ## html file in the browser. It adds the (ugly :-)) swagger ui styles
 ## for a more realistic preview
-@pytest.mark.skip(reason="This is not really an automated test.")
+# @pytest.mark.skip(reason="This is not really an automated test.")
 def test_manual_html() -> None:
     md = MarkdownIt("commonmark", {"breaks": False, "html": True})
     html = md.render(query_manual.manual_to_str())

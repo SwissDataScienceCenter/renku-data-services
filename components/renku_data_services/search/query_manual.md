@@ -107,6 +107,52 @@ Possbile values are:
 This content will be replaced by the output of the code block above.
 <!-- OUTPUT:END -->
 
+
+## CreatedBy
+
+Selects entities that were created by a specific user.
+
+<!-- CODE:START -->
+<!-- print(f"""``` -->
+<!-- {Segments.created_by_is("abc-id-123").render()} -->
+<!-- ```""") -->
+<!-- CODE:END -->
+<!-- OUTPUT:START -->
+This content will be replaced by the output of the code block above.
+<!-- OUTPUT:END -->
+
+Note that this field only accepts user-ids! I cannot (yet) resolve usernames.
+
+## Keywords
+
+Entities with certain keywoards can be searched, where multiple keywards given
+in one field term are combined via *OR* and multiple field-terms are combined
+via *AND*. Keywords have to match exactly (no typos allowed).
+
+<!-- CODE:START -->
+<!-- print(f"""``` -->
+<!-- {Segments.keyword_is("data", "ml").render()} {Segments.keyword_is("health", "disease").render()} -->
+<!-- ```""") -->
+<!-- CODE:END -->
+<!-- OUTPUT:START -->
+This content will be replaced by the output of the code block above.
+<!-- OUTPUT:END -->
+
+Searches for entities that have either `data` or `ml` *and* either `health` or
+`disease` as keywords. If keywords contain whitespace or a comma, they must be
+quoted as written above. If a keyword contains a quote character (`"`), it must
+be prefixed by a backslash (`\`) to escape from interpreting it as an
+end-of-value symbol.
+
+<!-- CODE:START -->
+<!-- print(f"""``` -->
+<!-- {Segments.keyword_is("data science", "ml", "tl,dr", "\"well\" said").render()} -->
+<!-- ```""") -->
+<!-- CODE:END -->
+<!-- OUTPUT:START -->
+This content will be replaced by the output of the code block above.
+<!-- OUTPUT:END -->
+
 ## Members
 
 There are two fields that allow to search for entities where a given

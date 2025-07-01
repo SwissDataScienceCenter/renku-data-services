@@ -32,7 +32,7 @@ class Helper:
         """Wraps input in quotes if necessary."""
         for c in input:
             if not Helper.is_valid_char(c):
-                return f'"{input.replace('"', '"')}"'
+                return f'"{input.replace('"', '\\"')}"'
         return input
 
 
