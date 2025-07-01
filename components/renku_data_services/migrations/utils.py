@@ -157,7 +157,7 @@ def run_migrations(metadata: Sequence[MetaData]) -> None:
     """Run migrations for a specific base model class."""
     # this is the Alembic Config object, which provides
     # access to the values within the .ini file in use.
-    db_config = DBConfig.from_env()
+    db_config = DBConfig.from_env().with_pool_size(2)
     sync_sqlalchemy_url = db_config.conn_url(async_client=False)
     if context.is_offline_mode():
         run_migrations_offline(metadata, sync_sqlalchemy_url)
