@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import pytest
 from authzed.api.v1 import (
+    Consistency,
     DeleteRelationshipsRequest,
     ReadRelationshipsRequest,
     Relationship,
@@ -623,9 +624,10 @@ async def get_user_namespace_ids_in_authz(authz: Authz) -> set[str]:
     """Returns the user"""
     res = authz.client.ReadRelationships(
         ReadRelationshipsRequest(
+            consistency=Consistency(fully_consistent=True),
             relationship_filter=RelationshipFilter(
                 resource_type=ResourceType.user_namespace.value, optional_relation=_Relation.owner.value
-            )
+            ),
         )
     )
     ids = [i.relationship.resource.object_id async for i in res]

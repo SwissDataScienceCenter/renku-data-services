@@ -1,7 +1,7 @@
 """remove redis message queue
 
 Revision ID: fe3b7470d226
-Revises: f4ad62b7b323
+Revises: cfda91a3a6a6
 Create Date: 2025-06-30 16:28:18.919140
 
 """
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "fe3b7470d226"
-down_revision = "f4ad62b7b323"
+down_revision = "cfda91a3a6a6"
 branch_labels = None
 depends_on = None
 
