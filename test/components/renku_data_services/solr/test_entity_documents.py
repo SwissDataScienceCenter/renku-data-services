@@ -47,6 +47,47 @@ dc_global = DataConnector(
 ).in_namespace(None)
 
 
+def test_dc_project_keywords_sort() -> None:
+    dc = DataConnector.from_dict(
+        {
+            "id": str(dc_one.id),
+            "slug": "dc-xy1",
+            "name": "qq dc one",
+            "readonly": True,
+            "storageType": "s3",
+            "namespacePath": user_jan_ullrich.path,
+            "path": f"{user_jan_ullrich.path}/dc-xy1",
+            "createdBy": user_jan_ullrich.id,
+            "creationDate": "2025-04-10T16:14:04Z",
+            "description": "Bad data is filtered out.",
+            "keywords": ["z", "a", "b"],
+            "visibility": "public",
+            "_kind": "fullentity",
+            "_type": "DataConnector",
+            "_version_": -1,
+        }
+    )
+    assert dc.keywords == ["a", "b", "z"]
+
+    p = Project.from_dict(
+        {
+            "id": str(project_ai_stuff.id),
+            "name": "AI stuff",
+            "slug": "the-p1",
+            "namespacePath": user_jan_ullrich.path,
+            "path": f"{user_jan_ullrich.path}/the-p1",
+            "visibility": "public",
+            "createdBy": "abc-def",
+            "creationDate": "2025-01-31T09:47:44Z",
+            "_type": "Project",
+            "keywords": ["z", "b", "a"],
+            "_kind": "fullentity",
+            "_version_": -1,
+        }
+    )
+    assert p.keywords == ["a", "b", "z"]
+
+
 def test_dc_global_dict():
     assert dc_global.to_dict() == {
         "id": str(dc_global.id),

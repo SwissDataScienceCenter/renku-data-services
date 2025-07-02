@@ -1,10 +1,13 @@
 """Database adapters and helpers for users."""
 
+from __future__ import annotations
+
 import secrets
-from collections.abc import AsyncGenerator, Callable
+from abc import abstractmethod
+from collections.abc import AsyncGenerator, Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +17,7 @@ from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.base_api.auth import APIUser, only_authenticated
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
+from renku_data_services.base_models.nel import Nel
 from renku_data_services.errors import errors
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.namespace.orm import NamespaceORM
@@ -39,8 +43,40 @@ from renku_data_services.utils.cryptography import decrypt_string, encrypt_strin
 logger = logging.getLogger(__name__)
 
 
+class UsernameResolver(Protocol):
+    """Resolve usernames to their ids."""
+
+    @abstractmethod
+    async def resolve_usernames(self, names: Nel[str]) -> Mapping[str, str]:
+        """Return a map of username->user_id tuples."""
+        ...
+
+
+class DbUsernameResolver(UsernameResolver, Protocol):
+    """Resolve usernames using the database."""
+
+    @abstractmethod
+    def make_session(self) -> AsyncSession:
+        """Create a db session."""
+        ...
+
+    async def resolve_usernames(self, names: Nel[str]) -> dict[str, str]:
+        """Resolve usernames to their user ids."""
+        async with self.make_session() as session, session.begin():
+            result = await session.execute(
+                select(NamespaceORM.slug, NamespaceORM.user_id).where(
+                    NamespaceORM.slug.in_(names), NamespaceORM.user_id.is_not(None)
+                )
+            )
+            ret: dict[str, str] = {}
+            for slug, id in result:
+                ret.update({slug: id})
+
+            return ret
+
+
 @dataclass
-class UserRepo:
+class UserRepo(DbUsernameResolver):
     """An adapter for accessing users from the database."""
 
     session_maker: Callable[..., AsyncSession]
@@ -51,6 +87,10 @@ class UserRepo:
 
     def __post_init__(self) -> None:
         self._users_sync = UsersSync(self.session_maker, self.group_repo, self, self.authz)
+
+    def make_session(self) -> AsyncSession:
+        """Create a db session."""
+        return self.session_maker()
 
     async def initialize(self, kc_api: IKeycloakAPI) -> None:
         """Do a total sync of users from Keycloak if there is nothing in the DB."""

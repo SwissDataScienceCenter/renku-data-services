@@ -1,5 +1,7 @@
 """Tests for the repository."""
 
+from datetime import datetime
+
 import pytest
 from ulid import ULID
 
@@ -71,6 +73,7 @@ async def test_data_connector_upsert(app_manager_instance):
         visibility=Visibility.PUBLIC,
         created_by="userid_2",
         namespace=user_namespace,
+        updated_at=datetime.now(),
     )
     orm_id = await repo.upsert(dc, started_at=None)
     db_doc = await repo.find_by_id(orm_id)
