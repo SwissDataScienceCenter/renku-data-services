@@ -1434,6 +1434,21 @@ lingua = ["lingua"]
 testing = ["pytest"]
 
 [[package]]
+name = "markdown-code-runner"
+version = "2.2.0"
+description = "Automatically execute code blocks within a Markdown file and update the output in-place"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "markdown_code_runner-2.2.0-py3-none-any.whl", hash = "sha256:d8812c48ad3fd4a3f3725dfcd5a1b7e5baf7216855eeea8a92c7fd9120717ac6"},
+    {file = "markdown_code_runner-2.2.0.tar.gz", hash = "sha256:3c495998a437bc7d7a4b1a5ce518bce10cf5ba0fa69c569fee1e32c5238603c4"},
+]
+
+[package.extras]
+test = ["coverage", "pre-commit", "pytest", "pytest-cov"]
+
+[[package]]
 name = "markupsafe"
 version = "3.0.2"
 description = "Safely add untrusted strings to HTML/XML markup."
@@ -3261,4 +3276,4 @@ h11 = ">=0.9.0,<1"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.13"
-content-hash = "8b9f9c936ceed69e1c9a03ae43487e51e2173c4a2cc4c3e19919fe25bfe4a0dd"
+content-hash = "f88a7a2ae58d14b02e7e8d8a437e3874e41cbdb58e9437e39eb03e668204ffa6"
