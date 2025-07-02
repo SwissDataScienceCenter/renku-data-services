@@ -57,7 +57,6 @@ from renku_data_services.notebooks.crs import (
     Session,
     SessionEnvItem,
     Storage,
-    TlsSecret,
 )
 from renku_data_services.notebooks.errors.intermittent import AnonymousUserPatchError
 from renku_data_services.notebooks.models import ExtraSecret
@@ -343,27 +342,16 @@ class NotebooksNewBP(CustomBlueprint):
             extra_volumes.extend(extra_init_volumes_dc)
             extra_init_containers.extend(extra_init_containers_dc)
 
-            tls_secret = None
-            p = await cluster.get_ingress_parameters(user, self.cluster_repo)
-            if p is not None:
-                (scheme, public_remote_host, port, path) = p
-                base_server_path = f"{path}/{server_name}"
-                base_server_url = f"{scheme}://{public_remote_host}:{port}{base_server_path}"
-                base_server_https_url = base_server_url
-                host = public_remote_host
-                # FIXME: LSA Ingress annotations should be provided by remote admins
-                ingress_annotations = self.nb_config.sessions.ingress.annotations
-            else:
-                # Fallback to global, main cluster parameters
-                base_server_path = self.nb_config.sessions.ingress.base_path(server_name)
-                base_server_url = self.nb_config.sessions.ingress.base_url(server_name)
-                base_server_https_url = self.nb_config.sessions.ingress.base_url(server_name, force_https=True)
-                host = self.nb_config.sessions.ingress.host
-
-                if self.nb_config.sessions.ingress.tls_secret is not None:
-                    TlsSecret(adopt=False, name=self.nb_config.sessions.ingress.tls_secret)
-
-                ingress_annotations = self.nb_config.sessions.ingress.annotations
+            (
+                base_server_path,
+                base_server_url,
+                base_server_https_url,
+                host,
+                tls_secret,
+                ingress_annotations,
+            ) = await cluster.get_ingress_parameters(
+                user, self.cluster_repo, self.nb_config.sessions.ingress, server_name
+            )
 
             ui_path = f"{base_server_path}/{environment.default_url.lstrip('/')}"
 

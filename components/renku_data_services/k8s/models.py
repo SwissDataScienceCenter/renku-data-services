@@ -13,9 +13,11 @@ from ulid import ULID
 from renku_data_services.base_models import APIUser
 from renku_data_services.errors import MissingResourceError, errors
 from renku_data_services.k8s.constants import DUMMY_TASK_RUN_USER_ID, ClusterId
+from renku_data_services.notebooks.cr_amalthea_session import TlsSecret
 
 if TYPE_CHECKING:
     from renku_data_services.crc.db import ClusterRepository
+    from renku_data_services.notebooks.config.dynamic import _SessionIngress
 
 
 class K8sObjectMeta:
@@ -128,14 +130,47 @@ class Cluster:
         return APIObjectInCluster(obj, self.id)
 
     async def get_ingress_parameters(
-        self, user: APIUser, cluster_repo: ClusterRepository
-    ) -> tuple[str, str, int, str] | None:
-        """Return cluster-specific ingress parameters, mainly the public-facing URL components."""
+        self, user: APIUser, cluster_repo: ClusterRepository, main_ingress: _SessionIngress, server_name: str
+    ) -> tuple[str, str, str, str, TlsSecret | None, dict[str, str]]:
+        """Returns the ingress parameters of the cluster."""
+        tls_name = None
+
         try:
             cluster = await cluster_repo.select(user, ULID.from_str(self.id))
-            return cluster.session_protocol.value, cluster.session_host, cluster.session_port, cluster.session_path
+
+            host = cluster.session_host
+            base_server_path = f"{cluster.session_path}/{server_name}"
+            base_server_url = f"{cluster.session_protocol.value}://{host}:{cluster.session_port}{base_server_path}"
+            base_server_https_url = base_server_url
+            # FIXME: LSA Ingress annotations should be provided by remote admins
+            # - tls_secret_name
+            # - ingress class
+            # - annotation dictionnary
+            tls_name = host.replace(".", "-") + "-tls"
+            ingress_annotations = {
+                "kubernetes.io/ingress.class": "nginx",
+                "cert-manager.io/cluster-issuer": "letsencrypt-production",
+                "nginx.ingress.kubernetes.io/configuration-snippet": (
+                    """more_set_headers "Content-Security-Policy: frame-ancestors 'self'"""
+                    + f""" {host}"""
+                    + f""" {main_ingress.host}"""
+                    + """ ";"""
+                ),
+            }
         except (MissingResourceError, ValueError) as _e:
-            return None
+            # Fallback to global, main cluster parameters
+            host = main_ingress.host
+            base_server_path = main_ingress.base_path(server_name)
+            base_server_url = main_ingress.base_url(server_name)
+            base_server_https_url = main_ingress.base_url(server_name, force_https=True)
+            ingress_annotations = main_ingress.annotations
+
+            if main_ingress.tls_secret is not None:
+                tls_name = main_ingress.tls_secret
+
+        tls_secret = None if tls_name is None else TlsSecret(adopt=False, name=tls_name)
+
+        return base_server_path, base_server_url, base_server_https_url, host, tls_secret, ingress_annotations
 
 
 @dataclass(kw_only=True, frozen=True)
