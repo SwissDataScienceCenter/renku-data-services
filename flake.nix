@@ -14,11 +14,13 @@
   }:
     {
       nixosConfigurations = let
+        system = flake-utils.lib.system.x86_64-linux;
         services = {
           services.dev-postgres = {
             enable = true;
             databases = ["renku_test"];
             init-script = ./.devcontainer/generate_ulid_func.sql;
+            pkg = nixpkgs.legacyPackages.${system}.postgresql_16;
             pgweb = {
               enable = true;
               database = "renku";
@@ -39,7 +41,7 @@
         };
       in {
         rdsdev-vm = devshell-tools.lib.mkVm {
-          system = flake-utils.lib.system.x86_64-linux;
+          inherit system;
           modules = [
             {
               virtualisation.memorySize = 2048;
@@ -60,14 +62,31 @@
       pkgs = nixpkgs.legacyPackages.${system};
       devshellToolsPkgs = devshell-tools.packages.${system};
 
-      rclone = pkgs.rclone.overrideAttrs (old: {
+      rclone-sdsc = pkgs.rclone.overrideAttrs (old: {
         version = "1.70.0";
-        vendorHash = "sha256-Wu9d98SIENCkJYoGT/f9KN8vnYYGMN7HxhzqtkOYQ/8=";
+        vendorHash = "sha256-9yEWEM96cRUzp1mRXEzxvOaBZQsf7Zifoe163OtJCPw=";
+        nativeInstallCheckInputs = [];
         src = pkgs.fetchFromGitHub {
           owner = "SwissDataScienceCenter";
           repo = "rclone";
           rev = "v1.70.0+renku-1";
-          sha256 = "sha256-aorgWwYBVVOYhMXXBDWBMXkaZi0WjnGaMoRlwXCa5w4=";
+          sha256 = "sha256-JJk3H9aExACIxSGwZYgZzuefeoZtJrTUrv7ffk+Xpzg=";
+        };
+      });
+
+      ruff = pkgs.ruff.overrideAttrs (old: rec {
+        pname = "ruff";
+        version = "0.8.6";
+        src = pkgs.fetchFromGitHub {
+          owner = "astral-sh";
+          repo = "ruff";
+          tag = "0.8.6";
+          hash = "sha256-9YvHmNiKdf5hKqy9tToFSQZM2DNLoIiChcfjQay8wbU=";
+        };
+        cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
+          inherit src;
+          name = "${pname}-${version}";
+          hash = "sha256-aTzTCDCMhG4cKD9wFNHv6A3VBUifnKgI8a6kelc3bAM=";
         };
       });
 
@@ -85,9 +104,9 @@
           DB_NAME = "renku";
           DB_PASSWORD = "dev";
           PGPASSWORD = "dev";
-          PSQLRC = (pkgs.writeText "rsdrc.sql" ''
+          PSQLRC = pkgs.writeText "rsdrc.sql" ''
             SET SEARCH_PATH TO authz,common,connected_services,events,platform,projects,public,resource_pools,secrets,sessions,storage,users
-          '');
+          '';
           AUTHZ_DB_KEY = "dev";
           AUTHZ_DB_NO_TLS_CONNECTION = "true";
           AUTHZ_DB_GRPC_PORT = "50051";
@@ -110,7 +129,7 @@
 
       commonPackages = with pkgs; [
         redis
-        postgresql
+        postgresql_16
         jq
         devshellToolsPkgs.openapi-docs
         devshellToolsPkgs.solr
@@ -120,14 +139,14 @@
         rustc
         spicedb-zed
         ruff
-        ruff-lsp
         poetry
         python313
         basedpyright
-        rclone
-        (writeShellScriptBin "pg" ''
-          psql -h $DB_HOST -p $DB_PORT -U dev $DB_NAME
-        ''
+        rclone-sdsc
+        (
+          writeShellScriptBin "pg" ''
+            psql -h $DB_HOST -p $DB_PORT -U dev $DB_NAME
+          ''
         )
         (writeShellScriptBin "pyfix" ''
           poetry run ruff check --fix
@@ -147,6 +166,11 @@
             if ! poetry self show --addons | grep poetry-polylith-plugin > /dev/null; then
                 poetry self add poetry-polylith-plugin
             fi
+          ''
+        )
+        (
+          writeShellScriptBin "zedl" ''
+            ${spicedb-zed}/bin/zed --no-verify-ca --insecure --endpoint ''$ZED_ENDPOINT --token ''$ZED_TOKEN $@
           ''
         )
       ];
