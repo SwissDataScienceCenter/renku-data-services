@@ -97,7 +97,7 @@ This content will be replaced by the output of the code block above.
 
 The `visibility` field can be used to restrict to entities with a
 certain visibility. Users have a default visibility of `public`.
-Possbile values are:
+Possible values are:
 
 <!-- CODE:START -->
 <!-- for v in Visibility: -->
@@ -108,7 +108,7 @@ This content will be replaced by the output of the code block above.
 <!-- OUTPUT:END -->
 
 
-## CreatedBy
+## Created By
 
 Selects entities that were created by a specific user.
 
@@ -125,7 +125,7 @@ Note that this field only accepts user-ids! I cannot (yet) resolve usernames.
 
 ## Keywords
 
-Entities with certain keywoards can be searched, where multiple keywards given
+Entities with certain keywords can be searched, where multiple keywords given
 in one field term are combined via *OR* and multiple field-terms are combined
 via *AND*. Keywords have to match exactly (no typos allowed).
 
@@ -166,8 +166,8 @@ user is either a member of. There are two variants:
 This content will be replaced by the output of the code block above.
 <!-- OUTPUT:END -->
 
-The first includes only entites where the given user has a direct
-relationship. The latter additionally includes entites, where this
+The first includes only entities where the given user has a direct
+relationship. The latter additionally includes entities, where this
 relationship is deduced from where the entity is located. For example,
 a member of a group is also a member of all projects in that group. So
 it would select all entities that are "somehow" related to that
@@ -291,7 +291,7 @@ reference date. The reference date must be given either as a relative
 date or partial timestamp. Then a `+`, `-` or `/` follows with the
 amount of days.
 
-The `/` character allows to add and substract the days from the
+The `/` character allows to add and subtract the days from the
 reference date, making the reference date the middle.
 
 Example:
