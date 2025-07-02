@@ -352,7 +352,21 @@ class NotebooksNewBP(CustomBlueprint):
                 base_server_https_url = base_server_url
                 host = public_remote_host
                 # FIXME: LSA Ingress annotations should be provided by remote admins
-                ingress_annotations = self.nb_config.sessions.ingress.annotations
+                # - tls_secret_name
+                # - ingress class
+                # - annotation dictionnary
+                tls_name = host.replace(".", "-") + "-tls"
+                tls_secret = TlsSecret(adopt=False, name=tls_name)
+                ingress_annotations = {
+                    "kubernetes.io/ingress.class": "nginx",
+                    "cert-manager.io/cluster-issuer": "letsencrypt-production",
+                    "nginx.ingress.kubernetes.io/configuration-snippet": (
+                        """more_set_headers "Content-Security-Policy: frame-ancestors 'self'"""
+                        + f""" {host}"""
+                        + f""" {self.nb_config.sessions.ingress.host}";"""
+                    ),
+                }
+
             else:
                 # Fallback to global, main cluster parameters
                 base_server_path = self.nb_config.sessions.ingress.base_path(server_name)
