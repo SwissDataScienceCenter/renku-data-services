@@ -109,6 +109,7 @@ types-aiofiles = "^24.1.0.20241221"
 pytest-mock = "^3.14.0"
 uvloop = "^0.21.0"
 syrupy = "^4.8.2"
+ruamel-yaml = "^0.18.14"
 
 [build-system]
 requires = ["poetry-core"]
