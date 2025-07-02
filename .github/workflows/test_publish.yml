@@ -95,31 +95,6 @@ jobs:
           push: never
           skipContainerUserIdUpdate: false
           cacheFrom: ${{ needs.build-devcontainer.outputs.image_repository }}:${{ needs.build-devcontainer.outputs.image_tag }}
-  optional-checks:
-    runs-on: ubuntu-latest
-    needs:
-      - build-devcontainer
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/cache/restore@v4
-        name: Restore cache
-        with:
-          path: ${{ env.CACHE_PATH }}
-          key: ${{ env.CACHE_KEY }}
-      - name: Set Git config
-        shell: bash
-        run: |
-          git config --add user.name "Renku Bot"
-          git config --add user.email "renku@datascience.ch"
-      - name: Check Avro Schemas are up to date
-        uses: devcontainers/ci@v0.3
-        with:
-          runCmd: make check_avro
-          push: never
-          skipContainerUserIdUpdate: false
-          cacheFrom: ${{ needs.build-devcontainer.outputs.image_repository }}:${{ needs.build-devcontainer.outputs.image_tag }}
   test-main:
     runs-on: ubuntu-latest
     needs:

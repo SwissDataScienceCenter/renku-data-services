@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from renku_data_services.app_config.config import KeycloakConfig
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.db_config.config import DBConfig
-from renku_data_services.message_queue.config import RedisConfig
 from renku_data_services.solr.solr_client import SolrClientConfig
 
 
@@ -41,7 +40,6 @@ class Config:
     db: DBConfig
     solr: SolrClientConfig
     posthog: PosthogConfig
-    redis: RedisConfig
     authz: AuthzConfig
     keycloak: KeycloakConfig | None
     dummy_stores: bool
@@ -68,7 +66,6 @@ class Config:
         short_task_period = int(os.environ.get("SHORT_TASK_PERIOD_S", 2 * 60))
         long_task_period = int(os.environ.get("LONG_TASK_PERIOD_S", 3 * 60 * 60))
 
-        redis = RedisConfig.fake() if dummy_stores else RedisConfig.from_env()
         authz = AuthzConfig.from_env()
 
         keycloak = None if dummy_stores else KeycloakConfig.from_env()
@@ -78,7 +75,6 @@ class Config:
             main_log_interval_seconds=main_tick,
             solr=solr_config,
             posthog=posthog_config,
-            redis=redis,
             authz=authz,
             keycloak=keycloak,
             tcp_host=tcp_host,

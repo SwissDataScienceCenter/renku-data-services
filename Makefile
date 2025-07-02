@@ -1,4 +1,3 @@
-AMALTHEA_JS_VERSION ?= 0.18.1
 AMALTHEA_SESSIONS_VERSION ?= 0.18.1
 CODEGEN_PARAMS := \
     --input-file-type openapi \
@@ -59,7 +58,6 @@ API_SPECS := \
     components/renku_data_services/repositories/apispec.py \
     components/renku_data_services/notebooks/apispec.py \
     components/renku_data_services/platform/apispec.py \
-    components/renku_data_services/message_queue/apispec.py \
     components/renku_data_services/data_connectors/apispec.py \
     components/renku_data_services/search/apispec.py
 
@@ -74,34 +72,11 @@ components/renku_data_services/connected_services/apispec.py: components/renku_d
 components/renku_data_services/repositories/apispec.py: components/renku_data_services/repositories/api.spec.yaml
 components/renku_data_services/notebooks/apispec.py: components/renku_data_services/notebooks/api.spec.yaml
 components/renku_data_services/platform/apispec.py: components/renku_data_services/platform/api.spec.yaml
-components/renku_data_services/message_queue/apispec.py: components/renku_data_services/message_queue/api.spec.yaml
 components/renku_data_services/data_connectors/apispec.py: components/renku_data_services/data_connectors/api.spec.yaml
 components/renku_data_services/search/apispec.py: components/renku_data_services/search/api.spec.yaml
 
 schemas: ${API_SPECS}  ## Generate pydantic classes from apispec yaml files
 	@echo "generated classes based on ApiSpec"
-
-##@ Avro schemas
-
-.PHONY: download_avro
-download_avro:  ## Download the latest avro schema files
-	@echo "Downloading avro schema files"
-	curl -L -o schemas.tar.gz https://github.com/SwissDataScienceCenter/renku-schema/tarball/main
-	tar xf schemas.tar.gz --directory=components/renku_data_services/message_queue/schemas/ --strip-components=1
-	rm schemas.tar.gz
-
-.PHONY: check_avro
-check_avro: download_avro avro_models  ## Download avro schemas, generate models and check if the avro schemas are up to date
-	@echo "checking if avro schemas are up to date"
-	git diff --exit-code || (git diff && exit 1)
-
-.PHONY: avro_models
-avro_models:  ## Generate message queue classes and code from the avro schemas
-	@echo "generating message queues classes from avro schemas"
-	poetry run python components/renku_data_services/message_queue/generate_models.py
-
-.PHONY: update_avro
-update_avro: download_avro avro_models  ## Download avro schemas and generate models
 
 ##@ Test and linting
 

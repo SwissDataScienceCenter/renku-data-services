@@ -2,7 +2,6 @@
 
 import asyncio
 import time
-from base64 import b64decode
 from typing import Any
 
 import pytest
@@ -13,11 +12,8 @@ from syrupy.filters import props
 from ulid import ULID
 
 from renku_data_services.data_api.dependencies import DependencyManager
-from renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
-from renku_data_services.message_queue.avro_models.io.renku.events.v2.member_role import MemberRole
-from renku_data_services.message_queue.models import deserialize_binary
 from renku_data_services.users.models import UserInfo
-from test.bases.renku_data_services.data_api.utils import deserialize_event, merge_headers
+from test.bases.renku_data_services.data_api.utils import merge_headers
 
 
 @pytest.fixture
@@ -60,7 +56,6 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
         "secrets_mount_directory": "/etc/renku_secrets",
     }
 
-    await app_manager.event_repo.delete_all_events()
     await app_manager.search_updates_repo.clear_all()
 
     _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
@@ -84,26 +79,10 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
     app_manager.metrics.project_created.assert_called_once()
     project_id = project["id"]
 
-    events = await app_manager.event_repo.get_pending_events()
-    assert len(events) == 2
     search_updates = await app_manager.search_updates_repo.select_next(10)
     assert len(search_updates) == 1
     for e in search_updates:
         assert e.entity_type == "Project"
-
-    project_created_event = next((e for e in events if e.get_message_type() == "project.created"), None)
-    assert project_created_event
-    created_event = deserialize_binary(
-        b64decode(project_created_event.payload["payload"]), avro_schema_v2.ProjectCreated
-    )
-    assert created_event.name == payload["name"]
-    assert created_event.slug == payload["slug"]
-    assert created_event.repositories == payload["repositories"]
-    project_auth_added = next((e for e in events if e.get_message_type() == "projectAuth.added"), None)
-    assert project_auth_added
-    auth_event = deserialize_binary(b64decode(project_auth_added.payload["payload"]), avro_schema_v2.ProjectMemberAdded)
-    assert auth_event.userId == "user"
-    assert auth_event.role == MemberRole.OWNER
 
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
 
@@ -395,15 +374,6 @@ async def test_delete_project(create_project, sanic_client, user_headers, app_ma
 
     assert response.status_code == 204, response.text
 
-    events = await app_manager.event_repo.get_pending_events()
-    assert len(events) == 15
-    project_removed_event = next((e for e in events if e.get_message_type() == "project.removed"), None)
-    assert project_removed_event
-    removed_event = deserialize_binary(
-        b64decode(project_removed_event.payload["payload"]), avro_schema_v2.ProjectRemoved
-    )
-    assert removed_event.id == project_id
-
     # Check search updates
     search_updates = await app_manager.search_updates_repo.select_next(20)
     assert len(search_updates) == 5
@@ -446,17 +416,6 @@ async def test_patch_project(create_project, get_project, sanic_client, user_hea
     search_updates = await app_manager.search_updates_repo.select_next(20)
     assert len(search_updates) == 3
     assert len(set([e.entity_id for e in search_updates])) == 3
-
-    events = await app_manager.event_repo.get_pending_events()
-    assert len(events) == 11
-    project_updated_event = next((e for e in events if e.get_message_type() == "project.updated"), None)
-    assert project_updated_event
-    updated_event = deserialize_binary(
-        b64decode(project_updated_event.payload["payload"]), avro_schema_v2.ProjectUpdated
-    )
-    assert updated_event.name == patch["name"]
-    assert updated_event.description == patch["description"]
-    assert updated_event.repositories == patch["repositories"]
 
     # Get the project
     project = await get_project(project_id=project_id)
@@ -1236,8 +1195,6 @@ async def test_project_copy_basics(
         "namespace": regular_user.namespace.path.serialize(),
     }
 
-    await app_manager.event_repo.delete_all_events()
-
     _, response = await sanic_client.post(f"/api/data/projects/{project_id}/copies", headers=user_headers, json=payload)
 
     assert response.status_code == 201, response.text
@@ -1261,18 +1218,6 @@ async def test_project_copy_basics(
     search_doc = next(x for x in search_updates if x.entity_id == copy_project["id"])
     assert search_doc.payload["slug"] == "project-slug"
     assert search_doc.payload["name"] == "Renku Native Project"
-
-    events = await app_manager.event_repo.get_pending_events()
-    assert len(events) == 2
-    project_created_event = next(e for e in events if e.get_message_type() == "project.created")
-    project_created = deserialize_event(project_created_event)
-    assert project_created.name == payload["name"]
-    assert project_created.slug == payload["slug"]
-    assert project_created.repositories == project["repositories"]
-    project_auth_added_event = next(e for e in events if e.get_message_type() == "projectAuth.added")
-    project_auth_added = deserialize_event(project_auth_added_event)
-    assert project_auth_added.userId == "user"
-    assert project_auth_added.role == MemberRole.OWNER
 
     project_id = copy_project["id"]
 
@@ -1855,8 +1800,6 @@ async def test_migrate_v1_project(
             "default_url": "/lab",
         },
     }
-
-    await app_manager.event_repo.delete_all_events()
 
     _, response = await sanic_client.post(
         f"/api/data/renku_v1_projects/{v1_id}/migrations", headers=user_headers, json=v1_project

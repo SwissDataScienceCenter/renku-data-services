@@ -24,11 +24,6 @@ from renku_data_services.authz.models import CheckPermissionItem, Member, Member
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models import RESET
 from renku_data_services.base_models.core import Slug
-from renku_data_services.message_queue import events
-from renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
-from renku_data_services.message_queue.db import EventRepository
-from renku_data_services.message_queue.interface import IMessageQueue
-from renku_data_services.message_queue.redis_queue import dispatch_message
 from renku_data_services.namespace import orm as ns_schemas
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project import apispec as project_apispec
@@ -56,15 +51,11 @@ class ProjectRepository:
     def __init__(
         self,
         session_maker: Callable[..., AsyncSession],
-        message_queue: IMessageQueue,
-        event_repo: EventRepository,
         group_repo: GroupRepository,
         search_updates_repo: SearchUpdatesRepo,
         authz: Authz,
     ) -> None:
         self.session_maker = session_maker
-        self.message_queue: IMessageQueue = message_queue
-        self.event_repo: EventRepository = event_repo
         self.group_repo: GroupRepository = group_repo
         self.search_updates_repo: SearchUpdatesRepo = search_updates_repo
         self.authz = authz
@@ -227,7 +218,6 @@ class ProjectRepository:
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.create, ResourceType.project)
     @update_search_document
-    @dispatch_message(avro_schema_v2.ProjectCreated)
     async def insert_project(
         self,
         user: base_models.APIUser,
@@ -299,7 +289,6 @@ class ProjectRepository:
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.update, ResourceType.project)
-    @dispatch_message(avro_schema_v2.ProjectUpdated)
     @update_search_document
     async def update_project(
         self,
@@ -417,7 +406,6 @@ class ProjectRepository:
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.delete, ResourceType.project)
-    @dispatch_message(avro_schema_v2.ProjectRemoved)
     @update_search_document
     async def delete_project(
         self, user: base_models.APIUser, project_id: ULID, *, session: AsyncSession | None = None
@@ -521,14 +509,10 @@ class ProjectMemberRepository:
     def __init__(
         self,
         session_maker: Callable[..., AsyncSession],
-        event_repo: EventRepository,
         authz: Authz,
-        message_queue: IMessageQueue,
     ) -> None:
         self.session_maker = session_maker
-        self.event_repo = event_repo
         self.authz = authz
-        self.message_queue = message_queue
 
     @with_db_transaction
     @_project_exists
@@ -542,7 +526,6 @@ class ProjectMemberRepository:
 
     @with_db_transaction
     @_project_exists
-    @dispatch_message(events.ProjectMembershipChanged)
     async def update_members(
         self,
         user: base_models.APIUser,
@@ -573,7 +556,6 @@ class ProjectMemberRepository:
 
     @with_db_transaction
     @_project_exists
-    @dispatch_message(events.ProjectMembershipChanged)
     async def delete_members(
         self, user: base_models.APIUser, project_id: ULID, user_ids: list[str], *, session: AsyncSession | None = None
     ) -> list[MembershipChange]:
@@ -913,16 +895,12 @@ class ProjectMigrationRepository:
         self,
         session_maker: Callable[..., AsyncSession],
         authz: Authz,
-        message_queue: IMessageQueue,
-        event_repo: EventRepository,
         project_repo: ProjectRepository,
         session_repo: SessionRepository,
     ) -> None:
         self.session_maker = session_maker
         self.authz = authz
-        self.message_queue: IMessageQueue = message_queue
         self.project_repo = project_repo
-        self.event_repo: EventRepository = event_repo
         self.session_repo = session_repo
 
     async def get_project_migrations(
@@ -940,7 +918,6 @@ class ProjectMigrationRepository:
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.create, ResourceType.project)
-    @dispatch_message(avro_schema_v2.ProjectCreated)
     async def migrate_v1_project(
         self,
         user: base_models.APIUser,

@@ -25,8 +25,7 @@ from renku_data_services.db_config.config import DBConfig
 from renku_data_services.git.gitlab import DummyGitlabAPI
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
-from renku_data_services.message_queue.db import EventRepository, ReprovisioningRepository
-from renku_data_services.message_queue.redis_queue import RedisQueue
+from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.platform.db import PlatformRepository
@@ -185,22 +184,15 @@ class TestDependencyManager(DependencyManager):
         gitlab_client = DummyGitlabAPI()
         kc_api = DummyKeycloakAPI(users=[i.to_keycloak_dict() for i in dummy_users])
 
-        message_queue = RedisQueue(config.redis)
         authz = NonCachingAuthz(config.authz_config)
-        message_queue = RedisQueue(config.redis)
-        event_repo = EventRepository(session_maker=config.db.async_session_maker, message_queue=message_queue)
         search_updates_repo = SearchUpdatesRepo(session_maker=config.db.async_session_maker)
         group_repo = GroupRepository(
             session_maker=config.db.async_session_maker,
-            event_repo=event_repo,
             group_authz=authz,
-            message_queue=message_queue,
             search_updates_repo=search_updates_repo,
         )
         kc_user_repo = KcUserRepo(
             session_maker=config.db.async_session_maker,
-            message_queue=message_queue,
-            event_repo=event_repo,
             group_repo=group_repo,
             search_updates_repo=search_updates_repo,
             encryption_key=config.secrets.encryption_key,
@@ -223,8 +215,6 @@ class TestDependencyManager(DependencyManager):
         project_repo = ProjectRepository(
             session_maker=config.db.async_session_maker,
             authz=authz,
-            message_queue=message_queue,
-            event_repo=event_repo,
             group_repo=group_repo,
             search_updates_repo=search_updates_repo,
         )
@@ -238,16 +228,12 @@ class TestDependencyManager(DependencyManager):
         project_migration_repo = ProjectMigrationRepository(
             session_maker=config.db.async_session_maker,
             authz=authz,
-            message_queue=message_queue,
             project_repo=project_repo,
-            event_repo=event_repo,
             session_repo=session_repo,
         )
         project_member_repo = ProjectMemberRepository(
             session_maker=config.db.async_session_maker,
             authz=authz,
-            event_repo=event_repo,
-            message_queue=message_queue,
         )
         project_session_secret_repo = ProjectSessionSecretRepository(
             session_maker=config.db.async_session_maker,
@@ -316,11 +302,9 @@ class TestDependencyManager(DependencyManager):
             user_store=user_store,
             quota_repo=quota_repo,
             kc_api=kc_api,
-            message_queue=message_queue,
             user_repo=user_repo,
             rp_repo=rp_repo,
             storage_repo=storage_repo,
-            event_repo=event_repo,
             reprovisioning_repo=reprovisioning_repo,
             search_updates_repo=search_updates_repo,
             search_reprovisioning=search_reprovisioning,
