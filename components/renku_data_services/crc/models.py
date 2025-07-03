@@ -6,14 +6,16 @@ from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
-from typing import Any, Optional, Protocol
+from typing import TYPE_CHECKING, Any, Optional, Protocol
 from uuid import uuid4
 
 from ulid import ULID
 
 from renku_data_services import errors
-from renku_data_services.crc.apispec import Protocol as CrcApiProtocol
 from renku_data_services.errors import ValidationError
+
+if TYPE_CHECKING:
+    from renku_data_services.crc.apispec import Protocol as CrcApiProtocol
 
 
 class ResourcesProtocol(Protocol):

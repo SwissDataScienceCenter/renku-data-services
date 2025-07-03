@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from itertools import chain
 from pathlib import PurePosixPath
 from typing import Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
 from gitlab.v4.objects.projects import Project
 
@@ -93,6 +93,10 @@ class UserServer:
         self._git_providers: list[GitProvider] | None = None
         self._has_configured_git_providers = False
 
+        self.server_url = f"https://{self.host}/sessions/{self.server_name}"
+        if not self._user.is_authenticated:
+            self.server_url = f"{self.server_url}?token={self._user.id}"
+
     def k8s_namespace(self) -> str:
         """Get the preferred namespace for a server."""
         return self._k8s_client.namespace()
@@ -118,19 +122,6 @@ class UserServer:
             self._has_configured_git_providers = True
 
         return self._repositories
-
-    @property
-    def server_url(self) -> str:  # FIXME: LSA Should this points to the cluster where the session is running?
-        """The URL where a user can access their session."""
-        if self._user.is_authenticated:
-            return urljoin(
-                f"https://{self.host}",
-                f"sessions/{self.server_name}",
-            )
-        return urljoin(
-            f"https://{self.host}",
-            f"sessions/{self.server_name}?token={self._user.id}",
-        )
 
     async def git_providers(self) -> list[GitProvider]:
         """The list of git providers."""
@@ -237,11 +228,16 @@ class UserServer:
                 "oidc": {"enabled": False},
             }
 
-        # FIXME: LSA Should this points to the cluster where the session is running?
-        ingress_annotations = self.config.sessions.ingress.annotations
-
-        ingress_annotations["nginx.ingress.kubernetes.io/configuration-snippet"] = (
-            f"""more_set_headers "Content-Security-Policy: frame-ancestors 'self' {self.host}";"""
+        cluster = await self.config.k8s_client.cluster_by_class_id(self.server_options.resource_class_id, self._user)
+        (
+            base_server_path,
+            base_server_url,
+            base_server_https_url,
+            host,
+            tls_secret,
+            ingress_annotations,
+        ) = await cluster.get_ingress_parameters(
+            self._user, self.config.cluster_rp, self.config.sessions.ingress, self.server_name
         )
 
         # Combine everything into the manifest
@@ -273,12 +269,12 @@ class UserServer:
                     ),
                 },
                 "routing": {
-                    "host": urlparse(self.server_url).netloc,
-                    "path": urlparse(self.server_url).path,
+                    "host": host,
+                    "path": base_server_path,
                     "ingressAnnotations": ingress_annotations,
                     "tls": {
-                        "enabled": self.config.sessions.ingress.tls_secret is not None,
-                        "secretName": self.config.sessions.ingress.tls_secret,
+                        "enabled": tls_secret is not None,
+                        "secretName": tls_secret.name if tls_secret is not None else "",
                     },
                 },
                 "storage": storage,
