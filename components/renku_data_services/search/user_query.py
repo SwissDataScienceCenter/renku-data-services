@@ -32,7 +32,7 @@ class Helper:
         """Wraps input in quotes if necessary."""
         for c in input:
             if not Helper.is_valid_char(c):
-                return f'"{input.replace('"', '"')}"'
+                return f'"{input.replace('"', '\\"')}"'
         return input
 
 
@@ -123,13 +123,26 @@ class PartialDate:
         """Return whether all optional parts are set."""
         return self.month is not None and self.dayOfMonth is not None
 
-    def max(self) -> date:
+    def max(self) -> PartialDate:
         """Set missing parts to the maximum value."""
         m = self.month or 12
         (_, dom) = calendar.monthrange(self.year, m)
-        return date(self.year, m, self.dayOfMonth or dom)
+        return PartialDate(self.year, m, self.dayOfMonth or dom)
 
-    def min(self) -> date:
+    def min(self) -> PartialDate:
+        """Set missing parts to the lowest value."""
+        return PartialDate(
+            self.year,
+            self.month or 1,
+            self.dayOfMonth or 1,
+        )
+
+    def date_max(self) -> date:
+        """Set missing parts to the maximum value."""
+        dm = self.max()
+        return date(dm.year, dm.month or 0, dm.dayOfMonth or 0)
+
+    def date_min(self) -> date:
         """Set missing parts to the lowest value."""
         return date(
             self.year,
@@ -155,11 +168,19 @@ class PartialTime:
             res += f":{self.second:02}"
         return res
 
-    def max(self) -> time:
+    def max(self) -> PartialTime:
+        """Set missing parts to the highest value."""
+        return PartialTime(self.hour, self.minute or 59, self.second or 59)
+
+    def min(self) -> PartialTime:
+        """Set missing parts to the lowest value."""
+        return PartialTime(self.hour, self.minute or 0, self.second or 0)
+
+    def time_max(self) -> time:
         """Set missing parts to the highest value."""
         return time(self.hour, self.minute or 59, self.second or 59)
 
-    def min(self) -> time:
+    def time_min(self) -> time:
         """Set missing parts to the lowest value."""
         return time(self.hour, self.minute or 0, self.second or 0)
 
@@ -181,16 +202,24 @@ class PartialDateTime:
             res += ""
         return res
 
+    def max(self) -> PartialDateTime:
+        """Set missing parts to the highest value."""
+        return PartialDateTime(self.date.max(), (self.time or PartialTime(23)).max())
+
+    def min(self) -> PartialDateTime:
+        """Set missing parts to the lowest value."""
+        return PartialDateTime(self.date.min(), (self.time or PartialTime(0)).min())
+
     def datetime_max(self, default_zone: tzinfo) -> datetime:
         """Set missing parts to the highest value."""
-        d = self.date.max()
-        t = (self.time or PartialTime(23, 59, 59)).max()
+        d = self.date.date_max()
+        t = (self.time or PartialTime(23, 59, 59)).time_max()
         return datetime(d.year, d.month, d.day, t.hour, t.minute, t.second, 0, self.zone or default_zone, fold=t.fold)
 
     def datetime_min(self, default_zone: tzinfo) -> datetime:
         """Set missing parts to the lowest value."""
-        d = self.date.min()
-        t = (self.time or PartialTime(0)).min()
+        d = self.date.date_min()
+        t = (self.time or PartialTime(0)).time_min()
         return datetime(d.year, d.month, d.day, t.hour, t.minute, t.second, 0, self.zone or default_zone, fold=t.fold)
 
     def with_zone(self, zone: tzinfo) -> Self:
