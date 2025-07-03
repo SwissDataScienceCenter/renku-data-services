@@ -601,14 +601,7 @@ class ClustersBP(CustomBlueprint):
         @only_admins
         @validate(json=apispec.Cluster)
         async def _handler(_request: Request, user: base_models.APIUser, body: apispec.Cluster) -> HTTPResponse:
-            cluster = UnsavedCluster(
-                name=body.name,
-                config_name=body.config_name,
-                session_protocol=body.session_protocol,
-                session_host=body.session_host,
-                session_port=body.session_port,
-                session_path=body.session_path,
-            )
+            cluster = UnsavedCluster(**body.model_dump())
             cluster = await self.repo.insert(user, cluster)
 
             return validated_json(apispec.ClusterWithId, cluster, status=201)
@@ -636,14 +629,7 @@ class ClustersBP(CustomBlueprint):
         async def _handler(
             _request: Request, user: base_models.APIUser, cluster_id: ULID, body: apispec.Cluster
         ) -> HTTPResponse:
-            cluster = UnsavedCluster(
-                name=body.name,
-                config_name=body.config_name,
-                session_protocol=body.session_protocol,
-                session_host=body.session_host,
-                session_port=body.session_port,
-                session_path=body.session_path,
-            )
+            cluster = UnsavedCluster(**body.model_dump())
             cluster = await self.repo.update(user, cluster, cluster_id)
 
             return validated_json(apispec.ClusterWithId, cluster, status=201)
@@ -664,7 +650,6 @@ class ClustersBP(CustomBlueprint):
             new = body.model_dump(exclude_none=True)
 
             cluster = UnsavedCluster(**{**old, **new})
-
             cluster = await self.repo.update(user, cluster, cluster_id)
 
             return validated_json(apispec.ClusterWithId, cluster, status=201)
