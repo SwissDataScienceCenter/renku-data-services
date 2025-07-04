@@ -111,13 +111,16 @@ async def get_extra_containers(
 
 
 async def get_auth_secret_authenticated(
-    nb_config: NotebooksConfig, user: AuthenticatedAPIUser, server_name: str
+    nb_config: NotebooksConfig,
+    user: AuthenticatedAPIUser,
+    server_name: str,
+    base_server_url: str,
+    base_server_https_url: str,
+    base_server_path: str,
 ) -> ExtraSecret:
     """Get the extra secrets that need to be added to the session for an authenticated user."""
     secret_data = {}
-    base_server_url = nb_config.sessions.ingress.base_url(server_name)
-    base_server_path = nb_config.sessions.ingress.base_path(server_name)
-    base_server_https_url = nb_config.sessions.ingress.base_url(server_name, force_https=True)
+
     parsed_proxy_url = urlparse(urljoin(base_server_url + "/", "oauth2"))
     vol = ExtraVolume(
         name="renku-authorized-emails",
@@ -579,7 +582,7 @@ async def patch_session(
                     "and/or check that you still have permissions for the image repository."
                 )
             # Ensure the secret is created in the cluster
-            await nb_config.k8s_v2_client.create_secret(image_secret.secret)
+            await nb_config.k8s_v2_client.create_secret(image_secret.secret, body.resource_class_id, user)
 
             updated_secrets = [
                 secret for secret in (session.spec.imagePullSecrets or []) if not secret.name.endswith("-image-secret")

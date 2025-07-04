@@ -27,6 +27,7 @@ class ResourcePoolsBP(CustomBlueprint):
 
     rp_repo: ResourcePoolRepository
     user_repo: UserRepository
+    cluster_repo: ClusterRepository
     authenticator: base_models.Authenticator
 
     def get_all(self) -> BlueprintFactoryResponse:
@@ -49,7 +50,11 @@ class ResourcePoolsBP(CustomBlueprint):
         @only_admins
         @validate(json=apispec.ResourcePool)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.ResourcePool) -> HTTPResponse:
-            rp = models.ResourcePool.from_dict(body.model_dump(exclude_none=True))
+            cluster = None
+            if body.cluster_id is not None:
+                cluster = await self.cluster_repo.select(api_user=user, cluster_id=ULID.from_str(body.cluster_id))
+            rp = models.ResourcePool.from_dict({**body.model_dump(exclude_none=True), "cluster": cluster})
+
             res = await self.rp_repo.insert_resource_pool(api_user=user, resource_pool=rp)
             return validated_json(apispec.ResourcePoolWithId, res, status=201)
 
@@ -590,13 +595,13 @@ class ClustersBP(CustomBlueprint):
         return "/clusters", ["GET"], _handler
 
     def post(self) -> BlueprintFactoryResponse:
-        """Get the cluster descriptions."""
+        """Create a cluster description."""
 
         @authenticate(self.authenticator)
         @only_admins
         @validate(json=apispec.Cluster)
         async def _handler(_request: Request, user: base_models.APIUser, body: apispec.Cluster) -> HTTPResponse:
-            cluster = UnsavedCluster(name=body.name, config_name=body.config_name)
+            cluster = UnsavedCluster(**body.model_dump())
             cluster = await self.repo.insert(user, cluster)
 
             return validated_json(apispec.ClusterWithId, cluster, status=201)
@@ -624,7 +629,7 @@ class ClustersBP(CustomBlueprint):
         async def _handler(
             _request: Request, user: base_models.APIUser, cluster_id: ULID, body: apispec.Cluster
         ) -> HTTPResponse:
-            cluster = UnsavedCluster(name=body.name, config_name=body.config_name)
+            cluster = UnsavedCluster(**body.model_dump())
             cluster = await self.repo.update(user, cluster, cluster_id)
 
             return validated_json(apispec.ClusterWithId, cluster, status=201)
@@ -640,12 +645,11 @@ class ClustersBP(CustomBlueprint):
         async def _handler(
             _request: Request, user: base_models.APIUser, cluster_id: ULID, body: apispec.ClusterPatch
         ) -> HTTPResponse:
-            old = await self.repo.select(user, cluster_id)
+            old = asdict(await self.repo.select(user, cluster_id))
+            old.pop("id")
+            new = body.model_dump(exclude_none=True)
 
-            name = body.name if body.name is not None else old.name
-            config_name = body.config_name if body.config_name is not None else old.config_name
-            cluster = UnsavedCluster(name=name, config_name=config_name)
-
+            cluster = UnsavedCluster(**{**old, **new})
             cluster = await self.repo.update(user, cluster, cluster_id)
 
             return validated_json(apispec.ClusterWithId, cluster, status=201)
