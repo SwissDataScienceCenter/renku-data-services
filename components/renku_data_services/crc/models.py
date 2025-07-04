@@ -183,6 +183,7 @@ class Cluster:
 
     name: str
     config_name: str
+    service_account_name: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict) -> Cluster:
