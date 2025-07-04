@@ -2,7 +2,7 @@
 
 import re
 from datetime import datetime, timedelta
-from typing import Any, cast
+from typing import Any, cast, override
 from urllib.parse import urlunparse
 
 from kubernetes.utils import parse_duration, parse_quantity
@@ -35,6 +35,7 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     RequiredDuringSchedulingIgnoredDuringExecution,
     SecretRef,
     Session,
+    Size,
     Spec,
     State,
     Status,
@@ -44,11 +45,15 @@ from renku_data_services.notebooks.cr_amalthea_session import (
 )
 from renku_data_services.notebooks.cr_amalthea_session import EnvItem2 as SessionEnvItem
 from renku_data_services.notebooks.cr_amalthea_session import Item4 as SecretAsVolumeItem
+from renku_data_services.notebooks.cr_amalthea_session import Limits6 as Limits
+from renku_data_services.notebooks.cr_amalthea_session import Limits7 as LimitsStr
 from renku_data_services.notebooks.cr_amalthea_session import Model as _ASModel
+from renku_data_services.notebooks.cr_amalthea_session import Requests6 as Requests
+from renku_data_services.notebooks.cr_amalthea_session import Requests7 as RequestsStr
 from renku_data_services.notebooks.cr_amalthea_session import Resources3 as Resources
 from renku_data_services.notebooks.cr_amalthea_session import Secret1 as SecretAsVolume
-from renku_data_services.notebooks.cr_amalthea_session import SecretRef as SecretRefKey
-from renku_data_services.notebooks.cr_amalthea_session import SecretRef1 as SecretRefWhole
+from renku_data_services.notebooks.cr_amalthea_session import ShmSize1 as ShmSizeStr
+from renku_data_services.notebooks.cr_amalthea_session import Size1 as SizeStr
 from renku_data_services.notebooks.cr_amalthea_session import Spec as AmaltheaSessionSpec
 from renku_data_services.notebooks.cr_amalthea_session import Type as AuthenticationType
 from renku_data_services.notebooks.cr_amalthea_session import Type1 as CodeRepositoryType
@@ -311,6 +316,7 @@ class AmaltheaSessionV1Alpha1SpecPatch(BaseCRD):
     affinity: Affinity | None = None
     session: AmaltheaSessionV1Alpha1SpecSessionPatch | None = None
     culling: Culling | None = None
+    service_account_name: str | None = None
 
 
 class AmaltheaSessionV1Alpha1Patch(BaseCRD):
@@ -345,3 +351,11 @@ def safe_parse_duration(val: Any) -> timedelta:
             case "ms":
                 return timedelta(microseconds=float(num))
     return cast(timedelta, parse_duration(val))
+
+
+class SecretRefKey(SecretRef):
+    """A k8s secret reference to a specific key."""
+
+
+class SecretRefWhole(SecretRef):
+    """A secret reference to the whole k8s secret."""
