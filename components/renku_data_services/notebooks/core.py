@@ -392,10 +392,14 @@ async def launch_notebook_helper(
     else:
         raise user_errors.UserInputError(message="Cannot determine which Docker image to use.")
 
+    host = nb_config.sessions.ingress.host
     parsed_server_options: ServerOptions | None = None
     if resource_class_id is not None:
         # A resource class ID was passed in, validate with CRC service
         parsed_server_options = await nb_config.crc_validator.validate_class_storage(user, resource_class_id, storage)
+        k8s_cluster = await nb_config.k8s_client.cluster_by_class_id(resource_class_id, user)
+        cluster = await nb_config.cluster_rp.select(user, ULID.from_str(k8s_cluster.id))
+        host = cluster.session_host
     elif server_options is not None:
         if isinstance(server_options, dict):
             requested_server_options = ServerOptions(
@@ -506,6 +510,7 @@ async def launch_notebook_helper(
         is_image_private=is_image_private,
         repositories=[Repository.from_dict(r.model_dump()) for r in repositories],
         config=nb_config,
+        host=host,
         **extra_kwargs,
     )
 

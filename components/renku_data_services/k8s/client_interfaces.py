@@ -60,3 +60,8 @@ class K8sSchedudlingClientInterface(ABC):
     def delete_priority_class(self, name: Any, **kwargs: Any) -> Any:
         """Delete a priority class."""
         ...
+
+    @abstractmethod
+    def get_priority_class(self, name: Any, **kwargs: Any) -> Any:
+        """Retrieve a priority class."""
+        ...

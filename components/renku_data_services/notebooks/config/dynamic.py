@@ -264,14 +264,15 @@ class _SessionIngress:
             annotations=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__INGRESS__ANNOTATIONS", "{}"))),
         )
 
-    def base_path(self, server_name: str) -> str:
+    @staticmethod
+    def base_path(server_name: str) -> str:
         return f"/sessions/{server_name}"
 
     def base_url(self, server_name: str, force_https: bool = False) -> str:
         scheme = "https" if self.tls_secret else "http"
         if force_https:
             scheme = "https"
-        return urlunparse((scheme, self.host, self.base_path(server_name), None, None, None))
+        return str(urlunparse((scheme, self.host, self.base_path(server_name), None, None, None)))
 
 
 @dataclass
