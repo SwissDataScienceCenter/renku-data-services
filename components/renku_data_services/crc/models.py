@@ -198,6 +198,8 @@ class Cluster:
     session_host: str
     session_port: int
     session_path: str
+    session_ingress_annotations: dict[str, Any]
+    session_tls_secret_name: str
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

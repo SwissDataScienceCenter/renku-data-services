@@ -986,7 +986,12 @@ components:
           $ref: "#/components/schemas/Port"
         session_path:
           type: string
-      required: [ "name", "config_name", "session_protocol", "session_host", "session_port", "session_path" ]
+        session_ingress_annotations:
+          type: object
+          additionalProperties: true
+        session_tls_secret_name:
+          type: string
+      required: [ "name", "config_name", "session_protocol", "session_host", "session_port", "session_path", "session_ingress_annotations", "session_tls_secret_name" ]
     ClusterPatch:
       type: object
       additionalProperties: false
@@ -1002,6 +1007,11 @@ components:
         session_port:
           $ref: "#/components/schemas/Port"
         session_path:
+          type: string
+        session_ingress_annotations:
+          type: object
+          additionalProperties: true
+        session_tls_secret_name:
           type: string
     ClusterWithId:
       type: object
@@ -1021,7 +1031,12 @@ components:
           $ref: "#/components/schemas/Port"
         session_path:
           type: string
-      required: [ "name", "config_name", "session_protocol", "session_host", "session_port", "session_path", "id" ]
+        session_ingress_annotations:
+          type: object
+          additionalProperties: true
+        session_tls_secret_name:
+          type: string
+      required: [ "name", "config_name", "session_protocol", "session_host", "session_port", "session_path", "session_ingress_annotations", "session_tls_secret_name", "id" ]
     ClustersWithId:
       type: array
       items:

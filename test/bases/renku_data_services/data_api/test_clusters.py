@@ -10,6 +10,13 @@ cluster_payload = {
     "session_host": "localhost",
     "session_port": 8080,
     "session_path": "/renku-sessions",
+    "session_tls_secret_name": "a-server-domain-name-tls",
+    "session_ingress_annotations": {
+        "kubernetes.io/ingress.class": "nginx",
+        "cert-manager.io/cluster-issuer": "letsencrypt-production",
+        "nginx.ingress.kubernetes.io/configuration-snippet": """more_set_headers "Content-Security-Policy: """
+        + """frame-ancestors 'self'""",
+    },
 }
 
 
