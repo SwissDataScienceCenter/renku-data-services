@@ -1,6 +1,5 @@
 """SQLAlchemy schemas for the CRC database."""
 
-from dataclasses import asdict
 from typing import Optional
 
 from sqlalchemy import JSON, BigInteger, Column, Identity, Integer, MetaData, String, Table
@@ -179,17 +178,16 @@ class ClusterORM(BaseORM):
     def load(cls, cluster: models.Cluster) -> "ClusterORM":
         """Create an ORM object from the cluster model."""
         return ClusterORM(
-            name=cluster.name, 
-            config_name=cluster.config_name, 
+            name=cluster.name,
+            config_name=cluster.config_name,
             service_account_name=cluster.service_account_name,
-            session_protocol=cluster.session_protocol,
+            session_protocol=cluster.session_protocol.value,
             session_host=cluster.session_host,
             session_port=cluster.session_port,
             session_path=cluster.session_path,
             session_ingress_annotations=cluster.session_ingress_annotations,
             session_tls_secret_name=cluster.session_tls_secret_name,
             session_storage_class=cluster.session_storage_class,
-            service_account_name=cluster.service_account_name,
         )
 
 
