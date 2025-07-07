@@ -351,11 +351,3 @@ def safe_parse_duration(val: Any) -> timedelta:
             case "ms":
                 return timedelta(microseconds=float(num))
     return cast(timedelta, parse_duration(val))
-
-
-class SecretRefKey(SecretRef):
-    """A k8s secret reference to a specific key."""
-
-
-class SecretRefWhole(SecretRef):
-    """A secret reference to the whole k8s secret."""
