@@ -978,7 +978,20 @@ components:
           $ref: "#/components/schemas/Name"
         config_name:
           $ref: "#/components/schemas/ConfigName"
-      required: [ "name", "config_name" ]
+        session_protocol:
+          $ref: "#/components/schemas/Protocol"
+        session_host:
+          $ref: "#/components/schemas/Host"
+        session_port:
+          $ref: "#/components/schemas/Port"
+        session_path:
+          type: string
+        session_ingress_annotations:
+          type: object
+          additionalProperties: true
+        session_tls_secret_name:
+          type: string
+      required: [ "name", "config_name", "session_protocol", "session_host", "session_port", "session_path", "session_ingress_annotations", "session_tls_secret_name" ]
     ClusterPatch:
       type: object
       additionalProperties: false
@@ -987,6 +1000,19 @@ components:
           $ref: "#/components/schemas/Name"
         config_name:
           $ref: "#/components/schemas/Name"
+        session_protocol:
+          $ref: "#/components/schemas/Protocol"
+        session_host:
+          $ref: "#/components/schemas/Host"
+        session_port:
+          $ref: "#/components/schemas/Port"
+        session_path:
+          type: string
+        session_ingress_annotations:
+          type: object
+          additionalProperties: true
+        session_tls_secret_name:
+          type: string
     ClusterWithId:
       type: object
       additionalProperties: false
@@ -997,7 +1023,20 @@ components:
           $ref: "#/components/schemas/Name"
         id:
           $ref: "#/components/schemas/Ulid"
-      required: [ "name", "config_name", "id" ]
+        session_protocol:
+          $ref: "#/components/schemas/Protocol"
+        session_host:
+          $ref: "#/components/schemas/Host"
+        session_port:
+          $ref: "#/components/schemas/Port"
+        session_path:
+          type: string
+        session_ingress_annotations:
+          type: object
+          additionalProperties: true
+        session_tls_secret_name:
+          type: string
+      required: [ "name", "config_name", "session_protocol", "session_host", "session_port", "session_path", "session_ingress_annotations", "session_tls_secret_name", "id" ]
     ClustersWithId:
       type: array
       items:
@@ -1223,7 +1262,7 @@ components:
       additionalProperties: false
       properties:
         quota:
-          $ref: "#/components/schemas/Quota"
+          $ref: "#/components/schemas/QuotaWithOptionalId"
         classes:
           $ref: "#/components/schemas/ResourceClasses"
         name:
@@ -1359,8 +1398,12 @@ components:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
           $ref: "#/components/schemas/HibernationThreshold"
-        cluster_id:
-          $ref: "#/components/schemas/Ulid"
+        cluster:
+          type: object
+          properties:
+            id:
+              $ref: "#/components/schemas/Ulid"
+          required: ["id"]
       required: ["classes", "name", "id", "public", "default"]
       example:
         quota:
@@ -1530,6 +1573,24 @@ components:
         memory: 1000
         id: 518c7d27-b5db-4aee-855f-f4638aded2d4
       required: ["cpu", "memory", "gpu", "id"]
+    QuotaWithOptionalId:
+      type: object
+      additionalProperties: false
+      properties:
+        cpu:
+          $ref: "#/components/schemas/Cpu"
+        memory:
+          $ref: "#/components/schemas/Memory"
+        gpu:
+          $ref: "#/components/schemas/Gpu"
+        id:
+          $ref: "#/components/schemas/Name"
+      example:
+        gpu: 0
+        cpu: 100
+        memory: 1000
+        id: 518c7d27-b5db-4aee-855f-f4638aded2d4
+      required: ["cpu", "memory", "gpu"]
     Version:
       type: object
       properties:
@@ -1707,6 +1768,19 @@ components:
       minLength: 26
       maxLength: 26
       pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"  # This is case-insensitive
+    Protocol:
+      description: Allowed Protocol strings
+      type: string
+      enum: [ "http", "https" ]
+    Port:
+      type: integer
+      minimum: 0
+      maximum: 65536
+    Host:
+      type: string
+      maxLength: 256
+      # The following pattern accept things it should not, but this is better than no validation at all.
+      pattern: "^([0-9a-zA-Z:_-]+[.])*[0-9a-zA-Z:_-]+$"
   responses:
     Error:
       description: The schema for all 4xx and 5xx responses

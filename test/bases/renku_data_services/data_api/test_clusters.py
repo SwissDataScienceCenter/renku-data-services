@@ -6,6 +6,17 @@ from sanic_testing.testing import SanicASGITestClient
 cluster_payload = {
     "config_name": "a-filename-without-yaml-ext",
     "name": "test-cluster-post",
+    "session_protocol": "http",
+    "session_host": "localhost",
+    "session_port": 8080,
+    "session_path": "/renku-sessions",
+    "session_tls_secret_name": "a-server-domain-name-tls",
+    "session_ingress_annotations": {
+        "kubernetes.io/ingress.class": "nginx",
+        "cert-manager.io/cluster-issuer": "letsencrypt-production",
+        "nginx.ingress.kubernetes.io/configuration-snippet": """more_set_headers "Content-Security-Policy: """
+        + """frame-ancestors 'self'""",
+    },
 }
 
 

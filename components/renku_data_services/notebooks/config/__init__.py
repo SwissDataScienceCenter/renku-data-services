@@ -7,7 +7,7 @@ from typing import Any, Optional, Protocol, Self
 import kr8s
 
 from renku_data_services.base_models import APIUser
-from renku_data_services.crc.db import ResourcePoolRepository
+from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
 from renku_data_services.crc.models import ResourceClass
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.k8s.clients import (
@@ -121,6 +121,7 @@ class NotebooksConfig:
     git_provider_helper: GitProviderHelperProto
     k8s_client: NotebookK8sClient[JupyterServerV1Alpha1]
     k8s_v2_client: NotebookK8sClient[AmaltheaSessionV1Alpha1]
+    cluster_rp: ClusterRepository
     current_resource_schema_version: int = 1
     anonymous_sessions_enabled: bool = False
     ssh_enabled: bool = False
@@ -171,9 +172,13 @@ class NotebooksConfig:
 
         k8s_config = _K8sConfig.from_env()
         k8s_db_cache = K8sDbCache(db_config.async_session_maker)
+        cluster_rp = ClusterRepository(db_config.async_session_maker)
         client = K8sClusterClientsPool(
-            clusters=get_clusters(
-                kube_conf_root_dir=kube_config_root, namespace=k8s_config.renku_namespace, api=kr8s_api
+            get_clusters=get_clusters(
+                kube_conf_root_dir=kube_config_root,
+                namespace=k8s_config.renku_namespace,
+                api=kr8s_api,
+                cluster_rp=cluster_rp,
             ),
             cache=k8s_db_cache,
             kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
@@ -213,5 +218,6 @@ class NotebooksConfig:
             k8s_client=k8s_client,
             k8s_v2_client=k8s_v2_client,
             k8s_db_cache=k8s_db_cache,
+            cluster_rp=cluster_rp,
             _kr8s_api=kr8s_api,
         )
