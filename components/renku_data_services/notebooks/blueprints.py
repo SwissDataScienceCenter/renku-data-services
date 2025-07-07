@@ -431,7 +431,7 @@ class NotebooksNewBP(CustomBlueprint):
                         port=environment.port,
                         storage=Storage(
                             className=storage_class,
-                            size=str(body.disk_storage) + "G",
+                            size=SizeStr(str(body.disk_storage) + "G"),
                             mountPath=storage_mount.as_posix(),
                         ),
                         workingDir=work_dir.as_posix(),

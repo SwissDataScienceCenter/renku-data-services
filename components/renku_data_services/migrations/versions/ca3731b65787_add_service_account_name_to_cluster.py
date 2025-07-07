@@ -1,7 +1,7 @@
 """add service account name to cluster
 
 Revision ID: ca3731b65787
-Revises: cfda91a3a6a6
+Revises: b402b9d584bf
 Create Date: 2025-07-07 13:25:48.254099
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "ca3731b65787"
-down_revision = "cfda91a3a6a6"
+down_revision = "b402b9d584bf"
 branch_labels = None
 depends_on = None
 
