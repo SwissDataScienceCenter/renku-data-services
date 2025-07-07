@@ -145,15 +145,22 @@ class ClusterORM(BaseORM):
     id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
     name: Mapped[str] = mapped_column(String(40), unique=True, index=True)
     config_name: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    # NOTE: The service account name is expected to point to a service account that already exists
+    # in the cluster in the namespace where the sessions will be launched.
+    service_account_name: Mapped[str | None] = mapped_column(String(256), default=None, nullable=True)
 
     def dump(self) -> models.SavedCluster:
         """Create a cluster model from the ORM object."""
-        return SavedCluster(id=self.id, name=self.name, config_name=self.config_name)
+        return SavedCluster(
+            id=self.id, name=self.name, config_name=self.config_name, service_account_name=self.service_account_name
+        )
 
     @classmethod
     def load(cls, cluster: models.Cluster) -> "ClusterORM":
         """Create an ORM object from the cluster model."""
-        return ClusterORM(name=cluster.name, config_name=cluster.config_name)
+        return ClusterORM(
+            name=cluster.name, config_name=cluster.config_name, service_account_name=cluster.service_account_name
+        )
 
 
 class ResourcePoolORM(BaseORM):
