@@ -142,21 +142,8 @@ class Cluster:
             base_server_path = f"{cluster.session_path}/{server_name}"
             base_server_url = f"{cluster.session_protocol.value}://{host}:{cluster.session_port}{base_server_path}"
             base_server_https_url = base_server_url
-            # FIXME: LSA Ingress annotations should be provided by remote admins
-            # - tls_secret_name
-            # - ingress class
-            # - annotation dictionnary
-            tls_name = host.replace(".", "-") + "-tls"
-            ingress_annotations = {
-                "kubernetes.io/ingress.class": "nginx",
-                "cert-manager.io/cluster-issuer": "letsencrypt-production",
-                "nginx.ingress.kubernetes.io/configuration-snippet": (
-                    """more_set_headers "Content-Security-Policy: frame-ancestors 'self'"""
-                    + f""" {host}"""
-                    + f""" {main_ingress.host}"""
-                    + """ ";"""
-                ),
-            }
+            tls_name = cluster.session_tls_secret_name
+            ingress_annotations = cluster.session_ingress_annotations
         except (MissingResourceError, ValueError) as _e:
             # Fallback to global, main cluster parameters
             host = main_ingress.host

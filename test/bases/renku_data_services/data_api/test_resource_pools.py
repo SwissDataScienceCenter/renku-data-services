@@ -93,6 +93,8 @@ async def test_resource_pool_creation_with_cluster_ids(
                 "session_host": "localhost",
                 "session_port": 8080,
                 "session_path": "/renku-sessions",
+                "session_ingress_annotations": {},
+                "session_tls_secret_name": "a-domain-name-tls",
             },
             headers={"Authorization": 'Bearer {"is_admin": true}'},
         )
