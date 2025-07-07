@@ -1,8 +1,10 @@
 """SQLAlchemy schemas for the CRC database."""
 
+from dataclasses import asdict
 from typing import Optional
 
-from sqlalchemy import BigInteger, Column, Identity, Integer, MetaData, String, Table
+from sqlalchemy import JSON, BigInteger, Column, Identity, Integer, MetaData, String, Table
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
 from ulid import ULID
@@ -17,6 +19,7 @@ from renku_data_services.utils.sqlalchemy import ULIDType
 
 logger = logging.getLogger(__name__)
 
+JSONVariant = JSON().with_variant(JSONB(), "postgresql")
 metadata_obj = MetaData(schema="resource_pools")  # Has to match alembic ini section name
 
 
@@ -150,6 +153,8 @@ class ClusterORM(BaseORM):
     session_host: Mapped[str] = mapped_column(String(256))
     session_port: Mapped[int] = mapped_column(Integer)
     session_path: Mapped[str] = mapped_column(String(40))
+    session_ingress_annotations: Mapped[dict[str, str]] = mapped_column(JSONVariant)
+    session_tls_secret_name: Mapped[str] = mapped_column(String(256))
 
     def dump(self) -> models.SavedCluster:
         """Create a cluster model from the ORM object."""
@@ -161,19 +166,14 @@ class ClusterORM(BaseORM):
             session_host=self.session_host,
             session_port=self.session_port,
             session_path=self.session_path,
+            session_ingress_annotations=self.session_ingress_annotations,
+            session_tls_secret_name=self.session_tls_secret_name,
         )
 
     @classmethod
     def load(cls, cluster: models.Cluster) -> "ClusterORM":
         """Create an ORM object from the cluster model."""
-        return ClusterORM(
-            name=cluster.name,
-            config_name=cluster.config_name,
-            session_protocol=cluster.session_protocol.name,
-            session_host=cluster.session_host,
-            session_port=cluster.session_port,
-            session_path=cluster.session_path,
-        )
+        return ClusterORM(**{**asdict(cluster), "session_protocol": cluster.session_protocol.value})
 
 
 class ResourcePoolORM(BaseORM):
