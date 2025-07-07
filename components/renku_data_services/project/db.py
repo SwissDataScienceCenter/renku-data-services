@@ -1014,9 +1014,6 @@ class ProjectMigrationRepository:
 
     async def get_migration_by_v1_id(self, user: base_models.APIUser, v1_id: int) -> models.Project:
         """Retrieve all migration records for a given project v1 ID."""
-        if user.id is None:
-            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
-
         async with self.session_maker() as session:
             stmt = select(schemas.ProjectMigrationsORM).where(schemas.ProjectMigrationsORM.project_v1_id == v1_id)
             result = await session.execute(stmt)
@@ -1026,7 +1023,9 @@ class ProjectMigrationRepository:
                 raise errors.MissingResourceError(message=f"Migration for project v1 with id '{v1_id}' does not exist.")
 
             # NOTE: Show only those projects that user has access to
-            allowed_projects = await self.authz.resources_with_direct_membership(user, ResourceType.project)
+            allowed_projects = await self.authz.resources_with_permission(
+                user, user.id, ResourceType.project, Scope.READ
+            )
             project_id_list = [project_ids.project_id]
             stmt = select(schemas.ProjectORM)
             stmt = stmt.where(schemas.ProjectORM.id.in_(project_id_list))
