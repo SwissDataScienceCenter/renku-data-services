@@ -7,7 +7,7 @@ from jwt import PyJWKClient
 from renku_data_services import base_models, errors
 from renku_data_services.authn.dummy import DummyAuthenticator
 from renku_data_services.authn.keycloak import KeycloakAuthenticator
-from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface
+from renku_data_services.k8s.client_interfaces import SecretClient
 from renku_data_services.k8s.clients import DummyCoreClient, K8sCoreClient
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo
 from renku_data_services.secrets_storage_api.config import Config
@@ -20,7 +20,7 @@ class DependencyManager:
 
     authenticator: base_models.Authenticator
     config: Config
-    core_client: K8sCoreClientInterface
+    core_client: SecretClient
     _user_secrets_repo: LowLevelUserSecretsRepo | None = field(default=None, repr=False, init=False)
 
     @property
@@ -36,7 +36,7 @@ class DependencyManager:
     def from_env(cls) -> "DependencyManager":
         """Create a config from environment variables."""
         authenticator: base_models.Authenticator
-        core_client: K8sCoreClientInterface
+        core_client: SecretClient
         config = Config.from_env()
 
         if config.dummy_stores:

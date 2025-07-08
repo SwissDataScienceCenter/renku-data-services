@@ -26,20 +26,20 @@ from test.components.renku_data_services.crc_models.hypothesis import quota_stra
 
 def test_dummy_core_client() -> None:
     core_client = DummyCoreClient({}, {})
-    quotas = core_client.list_namespaced_resource_quota("default")
-    assert len(quotas.items) == 0
+    quotas = core_client.list_resource_quota("default", "")
+    assert len(quotas) == 0
     assert len(core_client.quotas) == 0
     quota_name = "test"
     quota = client.V1ResourceQuota(
         metadata={"name": quota_name}, spec=client.V1ResourceQuotaSpec(hard={"requests.cpu": 1})
     )
-    core_client.create_namespaced_resource_quota("default", quota)
-    quotas = core_client.list_namespaced_resource_quota("default")
-    assert len(quotas.items) == 1
+    core_client.create_resource_quota("default", quota)
+    quotas = core_client.list_resource_quota("default", "")
+    assert len(quotas) == 1
     assert len(core_client.quotas) == 1
-    core_client.delete_namespaced_resource_quota(quota_name, "default")
-    quotas = core_client.list_namespaced_resource_quota("default")
-    assert len(quotas.items) == 0
+    core_client.delete_resource_quota(quota_name, "default")
+    quotas = core_client.list_resource_quota("default", "")
+    assert len(quotas) == 0
     assert len(core_client.quotas) == 0
 
 
@@ -50,7 +50,7 @@ def test_dummy_scheduling_client() -> None:
     pc = client.V1PriorityClass(global_default=False, value=100, metadata=client.V1ObjectMeta(name=pc_name))
     scheduling_client.create_priority_class(pc)
     assert len(scheduling_client.pcs) == 1
-    scheduling_client.delete_priority_class(pc_name)
+    scheduling_client.delete_priority_class(pc_name, body=client.V1DeleteOptions())
     assert len(scheduling_client.pcs) == 0
 
 

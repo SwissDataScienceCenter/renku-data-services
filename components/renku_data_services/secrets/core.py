@@ -12,7 +12,7 @@ from ulid import ULID
 from renku_data_services import base_models, errors
 from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import InternalServiceAdmin
-from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface
+from renku_data_services.k8s.client_interfaces import SecretClient
 from renku_data_services.secrets.models import OwnerReference, Secret
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.cryptography import (
@@ -38,7 +38,7 @@ async def create_k8s_secret(
     secrets_repo: "LowLevelUserSecretsRepo",
     secret_service_private_key: rsa.RSAPrivateKey,
     previous_secret_service_private_key: rsa.RSAPrivateKey | None,
-    core_client: K8sCoreClientInterface,
+    core_client: SecretClient,
     key_mapping: dict[str, str | list[str]] | None,
 ) -> None:
     """Creates a single k8s secret from a list of user secrets stored in the DB."""
@@ -100,7 +100,7 @@ async def create_k8s_secret(
     )
 
     try:
-        core_client.create_namespaced_secret(namespace, secret)
+        core_client.create_secret(namespace, secret)
     except k8s_client.ApiException as e:
         if e.status == 409:
             logger.info(
@@ -108,9 +108,9 @@ async def create_k8s_secret(
                 "the existing secret will be patched"
             )
             sanitized_secret = k8s_client.ApiClient().sanitize_for_serialization(secret)
-            core_client.patch_namespaced_secret(
-                namespace,
+            core_client.patch_secret(
                 secret_name,
+                namespace,
                 sanitized_secret,
             )
         # don't wrap the error, we don't want secrets accidentally leaking.
