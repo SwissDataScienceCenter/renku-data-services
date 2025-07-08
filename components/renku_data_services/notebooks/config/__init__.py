@@ -162,9 +162,7 @@ class NotebooksConfig:
             crc_validator = CRCValidator(rp_repo)
             sessions_config = _SessionConfig.from_env()
             git_config = _GitConfig.from_env()
-            git_provider_helper = GitProviderHelper(
-                data_service_url, f"http://{sessions_config.ingress.host}", git_config.url
-            )
+            git_provider_helper = GitProviderHelper(data_service_url, f"http://{sessions_config.ingress.host}")
             # NOTE: we need to get an async client as a sync client can't be used in an async way
             # But all the config code is not async, so we need to drop into the running loop, if there is one
             kr8s_api = KubeConfigEnv().api()

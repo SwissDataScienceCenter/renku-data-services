@@ -188,7 +188,6 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         url_prefix=url_prefix,
         git_repositories_repo=dm.git_repositories_repo,
         authenticator=dm.authenticator,
-        internal_gitlab_authenticator=dm.gitlab_authenticator,
     )
     notebooks = NotebooksBP(
         name="notebooks_old",

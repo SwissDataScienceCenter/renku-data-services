@@ -366,7 +366,6 @@ class DependencyManager:
         git_repositories_repo = GitRepositoriesRepository(
             session_maker=config.db.async_session_maker,
             connected_services_repo=connected_services_repo,
-            internal_gitlab_url=config.gitlab_url,
         )
         platform_repo = PlatformRepository(
             session_maker=config.db.async_session_maker,

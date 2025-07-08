@@ -125,9 +125,3 @@ def get_provider_adapter(client: connected_services_schemas.OAuth2ClientORM) -> 
 
     adapter_class = _adapter_map[client.kind]
     return adapter_class(client_url=client.url)
-
-
-def get_internal_gitlab_adapter(internal_gitlab_url: str) -> GitLabAdapter:
-    """Returns an adapter instance corresponding to the internal GitLab provider."""
-    client_url = internal_gitlab_url
-    return GitLabAdapter(client_url=client_url)
