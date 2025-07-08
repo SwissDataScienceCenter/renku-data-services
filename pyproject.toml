@@ -86,6 +86,7 @@ poetry = "^2.1.1"
 parsy = "^2.1"
 sanic-ext = "^24.12.0"
 posthog = "^3.21.0"
+markdown-code-runner = "^2.2.0"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.8.3"
@@ -267,6 +268,7 @@ module = [
   "kr8s.*",
   "parsy.*",
   "posthog.*",
+  "markdown_code_runner"
 ]
 ignore_missing_imports = true
 

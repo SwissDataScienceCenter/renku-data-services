@@ -62,6 +62,7 @@ from renku_data_services.project.db import (
     ProjectSessionSecretRepository,
 )
 from renku_data_services.repositories.db import GitRepositoriesRepository
+from renku_data_services.search import query_manual
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsRepo
@@ -176,7 +177,12 @@ class DependencyManager:
         for file in files:
             spec_file = Path(file).resolve().parent / "api.spec.yaml"
             with open(spec_file) as f:
-                api_specs.append(safe_load(f))
+                yaml_content = safe_load(f)
+                if file == renku_data_services.search.__file__:
+                    qm = query_manual.safe_manual_to_str()
+                    yaml_content["paths"]["/search/query"]["get"]["description"] = qm
+
+                api_specs.append(yaml_content)
 
         return merge_api_specs(*api_specs)
 
