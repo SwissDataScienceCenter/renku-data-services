@@ -1,6 +1,5 @@
 """The adapter used to create/delete/update/get resource quotas and priority classes in k8s."""
 
-from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -9,15 +8,15 @@ from kubernetes.utils.quantity import parse_quantity
 
 from renku_data_services import errors
 from renku_data_services.crc import models
-from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface, K8sSchedudlingClientInterface
+from renku_data_services.k8s.client_interfaces import PriorityClassClient, ResourceQuotaClient
 
 
 @dataclass
 class QuotaRepository:
     """Adapter for CRUD operations on resource quotas and priority classes in k8s."""
 
-    core_client: K8sCoreClientInterface
-    scheduling_client: K8sSchedudlingClientInterface
+    core_client: ResourceQuotaClient
+    priority_class_client: PriorityClassClient
     namespace: str = "default"
     _label_name: str = field(init=False, default="app")
     _label_value: str = field(init=False, default="renku")
@@ -71,9 +70,7 @@ class QuotaRepository:
         if not name:
             return None
         try:
-            res_quota: client.V1ResourceQuota = self.core_client.read_namespaced_resource_quota(
-                name=name, namespace=self.namespace
-            )
+            res_quota = self.core_client.read_resource_quota(name=name, namespace=self.namespace)
         except client.ApiException as e:
             if e.status == 404:
                 return None
@@ -85,10 +82,10 @@ class QuotaRepository:
         if name is not None:
             quota = self.get_quota(name)
             return [quota] if quota is not None else []
-        quotas = self.core_client.list_namespaced_resource_quota(
+        quotas = self.core_client.list_resource_quota(
             namespace=self.namespace, label_selector=f"{self._label_name}={self._label_value}"
         )
-        return [self._quota_from_manifest(q) for q in quotas.items]
+        return [self._quota_from_manifest(q) for q in quotas]
 
     def create_quota(self, quota: models.Quota) -> models.Quota:
         """Create a resource quota and priority class."""
@@ -97,11 +94,9 @@ class QuotaRepository:
         quota_manifest = self._quota_to_manifest(quota)
 
         # LSA Check if we have a priority class with the given name, return it or create one otherwise.
-        pc: client.V1PriorityClass | None = None
-        with suppress(client.ApiException):
-            pc = self.scheduling_client.get_priority_class(quota.id)
+        pc = self.priority_class_client.read_priority_class(quota.id)
         if pc is None:
-            pc = self.scheduling_client.create_priority_class(
+            pc = self.priority_class_client.create_priority_class(
                 client.V1PriorityClass(
                     global_default=False,
                     value=100,
@@ -123,27 +118,19 @@ class QuotaRepository:
                 uid=pc.metadata.uid,
             )
         ]
-        self.core_client.create_namespaced_resource_quota(self.namespace, quota_manifest)
+        self.core_client.create_resource_quota(self.namespace, quota_manifest)
         return quota
 
     def delete_quota(self, name: str) -> None:
         """Delete a resource quota and priority class."""
-        try:
-            self.scheduling_client.delete_priority_class(
-                name=name, body=client.V1DeleteOptions(propagation_policy="Foreground")
-            )
-            self.core_client.delete_namespaced_resource_quota(name=name, namespace=self.namespace)
-        except client.ApiException as e:
-            if e.status == 404:
-                # NOTE: The priorityclass is an owner of the resource quota so when the priority class is deleted the
-                # resource quota is also deleted. Also, we don't care if the thing we are trying to delete is not there
-                # we have the desired state so we can just go on.
-                return
-            raise
+        self.priority_class_client.delete_priority_class(
+            name=name, body=client.V1DeleteOptions(propagation_policy="Foreground")
+        )
+        self.core_client.delete_resource_quota(name=name, namespace=self.namespace)
 
     def update_quota(self, quota: models.Quota) -> models.Quota:
         """Update a specific resource quota."""
 
         quota_manifest = self._quota_to_manifest(quota)
-        self.core_client.patch_namespaced_resource_quota(name=quota.id, namespace=self.namespace, body=quota_manifest)
+        self.core_client.patch_resource_quota(name=quota.id, namespace=self.namespace, body=quota_manifest)
         return quota
