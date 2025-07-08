@@ -12,7 +12,7 @@ from ulid import ULID
 from renku_data_services import base_models, errors
 from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import InternalServiceAdmin
-from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface
+from renku_data_services.k8s.client_interfaces import SecretClient
 from renku_data_services.secrets.models import OwnerReference, Secret
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.cryptography import (
@@ -38,7 +38,7 @@ async def create_k8s_secret(
     secrets_repo: "LowLevelUserSecretsRepo",
     secret_service_private_key: rsa.RSAPrivateKey,
     previous_secret_service_private_key: rsa.RSAPrivateKey | None,
-    core_client: K8sCoreClientInterface,
+    core_client: SecretClient,
     key_mapping: dict[str, str | list[str]] | None,
 ) -> None:
     """Creates a single k8s secret from a list of user secrets stored in the DB."""
