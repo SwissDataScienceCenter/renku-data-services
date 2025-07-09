@@ -109,7 +109,6 @@ class ProjectsBP(CustomBlueprint):
         """Get project migration by project v1 id."""
 
         @authenticate(self.authenticator)
-        @only_authenticated
         async def _get_migration(_: Request, user: base_models.APIUser, v1_id: int) -> JSONResponse:
             project = await self.project_migration_repo.get_migration_by_v1_id(user, v1_id)
             project_dump = self._dump_project(project)
