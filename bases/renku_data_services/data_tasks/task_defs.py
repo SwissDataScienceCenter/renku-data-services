@@ -25,8 +25,6 @@ from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.data_tasks.dependencies import DependencyManager
 from renku_data_services.data_tasks.taskman import TaskDefininions
-from renku_data_services.message_queue.avro_models.io.renku.events import v2
-from renku_data_services.message_queue.converters import EventConverter
 from renku_data_services.namespace.models import NamespaceKind
 from renku_data_services.solr.solr_client import DefaultSolrClient
 
@@ -38,13 +36,6 @@ async def update_search(dm: DependencyManager) -> None:
     while True:
         async with DefaultSolrClient(dm.config.solr) as client:
             await search_core.update_solr(dm.search_updates_repo, client, 20)
-        await asyncio.sleep(1)
-
-
-async def send_pending_redis_events(dm: DependencyManager) -> None:
-    """Send pending messages to redis."""
-    while True:
-        await dm.event_repo.send_pending_events()
         await asyncio.sleep(1)
 
 
@@ -110,7 +101,6 @@ async def sync_user_namespaces(dm: DependencyManager) -> None:
     num_total: int = 0
     async for user_namespace in user_namespaces:
         num_total += 1
-        events = EventConverter.to_events(user_namespace, v2.UserAdded)
         authz_change = dm.authz._add_user_namespace(user_namespace.namespace)
         session = dm.config.db.async_session_maker()
         tx = session.begin()
@@ -118,9 +108,6 @@ async def sync_user_namespaces(dm: DependencyManager) -> None:
         try:
             await dm.authz.client.WriteRelationships(authz_change.apply)
             num_authz += 1
-            for event in events:
-                await dm.event_repo.store_event(session, event)
-            num_events += 1
         except Exception as err:
             # NOTE: We do not rollback the authz changes here because it is OK if something is in Authz DB
             # but not in the message queue but not vice-versa.
@@ -407,7 +394,6 @@ def all_tasks(dm: DependencyManager) -> TaskDefininions:
     return TaskDefininions(
         {
             "update_search": lambda: update_search(dm),
-            "send_pending_events": lambda: send_pending_redis_events(dm),
             "send_product_metrics": lambda: send_metrics_to_posthog(dm),
             "generate_user_namespace": lambda: generate_user_namespaces(dm),
             "bootstrap_user_namespaces": lambda: bootstrap_user_namespaces(dm),

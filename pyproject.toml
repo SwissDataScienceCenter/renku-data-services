@@ -62,10 +62,7 @@ psycopg = { version = "^3.2.3", extras = ["binary"] }
 urllib3 = "^2.3.0"
 deepmerge = "^2.0"
 authlib = "^1.5.0"
-redis = "^5.2.1"
-dataclasses-avroschema = "^0.65.8"
 undictify = "^0.11.3"
-types-redis = "^4.6.0.20241004"
 prometheus-sanic = "^3.0.0"
 prometheus_client = "^0.7.1"
 kubernetes-asyncio = "^32.0.0"
@@ -104,9 +101,6 @@ schemathesis = "==3.39.7"
 pytest-asyncio = "^0.21.2"
 pytest-postgresql = "^6.1.1"
 types-urllib3 = "^1.26.25.14"
-pyavro-gen = "^0.3.3"
-avro-preprocessor = "^0.3.0"
-fakeredis = "^2.27.0"
 ruff = "^0.8.6"
 debugpy = "^1.8.12"
 pytest-xdist = { version = "^3.6.1", extras = ["psutil"] }
@@ -116,6 +110,7 @@ types-aiofiles = "^24.1.0.20241221"
 pytest-mock = "^3.14.0"
 uvloop = "^0.21.0"
 syrupy = "^4.8.2"
+ruamel-yaml = "^0.18.14"
 
 [build-system]
 requires = ["poetry-core"]
@@ -127,7 +122,6 @@ target-version = "py311"
 output-format = "full"
 include = ["*.py", "*.pyi"]
 exclude = [
-  "*/avro_models/*",
   ".devcontainer/",
   "components/renku_data_services/notebooks/cr_amalthea_session.py",
   "components/renku_data_services/notebooks/cr_jupyter_server.py",
@@ -250,7 +244,6 @@ module = [
   "renku_data_services.notebooks.cr_amalthea_session",
   "renku_data_services.notebooks.cr_jupyter_server",
   "renku_data_services.platform.apispec",
-  "renku_data_services.message_queue.apispec",
   "renku_data_services.search.apispec",
 ]
 ignore_errors = true
@@ -261,8 +254,6 @@ module = [
   "aiofiles.*",
   "authlib.*",
   "authzed.*",
-  "avro_preprocessor.*",
-  "dataclasses_avroschema",
   "deepmerge.*",
   "grpc.*",
   "grpcutil.*",
@@ -270,7 +261,6 @@ module = [
   "kubernetes_asyncio.*",
   "prometheus_client.*",
   "prometheus_sanic.*",
-  "pyavro_gen.*",
   "sanic_testing.*",
   "undictify.*",
   "urllib3.*",

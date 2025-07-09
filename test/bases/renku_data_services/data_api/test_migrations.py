@@ -1,4 +1,3 @@
-import base64
 import random
 import string
 from collections.abc import Sequence
@@ -17,8 +16,6 @@ from ulid import ULID
 from renku_data_services import errors
 from renku_data_services.base_models.core import Slug
 from renku_data_services.data_api.dependencies import DependencyManager
-from renku_data_services.message_queue.avro_models.io.renku.events import v2
-from renku_data_services.message_queue.models import deserialize_binary
 from renku_data_services.migrations.core import downgrade_migrations_for_app, get_alembic_config, run_migrations_for_app
 from renku_data_services.namespace import orm as ns_schemas
 from renku_data_services.users import orm as user_schemas
@@ -104,15 +101,6 @@ async def test_migration_to_f34b87ddd954(
     _, response = await sanic_client.get("/api/data/groups", headers=user_headers)
     assert response.status_code == 200
     assert len(response.json) == 0
-    # The database should have delete events for the groups
-    events_orm = await app_manager_instance.event_repo.get_pending_events()
-    group_removed_events = [
-        deserialize_binary(base64.b64decode(e.payload["payload"]), v2.GroupRemoved)
-        for e in events_orm
-        if e.queue == "group.removed"
-    ]
-    assert len(group_removed_events) == 2
-    assert set(added_group_ids) == {e.id for e in group_removed_events}
 
 
 @pytest.mark.asyncio
