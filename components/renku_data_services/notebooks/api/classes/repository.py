@@ -3,8 +3,6 @@
 from dataclasses import dataclass
 from typing import Self
 
-INTERNAL_GITLAB_PROVIDER = "INTERNAL_GITLAB"
-
 
 @dataclass
 class Repository:

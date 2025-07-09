@@ -8,7 +8,7 @@ from sanic.response import JSONResponse
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
-from renku_data_services.base_api.auth import authenticate_2
+from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.etag import extract_if_none_match
 from renku_data_services.base_models.validation import validated_json
@@ -24,17 +24,15 @@ class RepositoriesBP(CustomBlueprint):
 
     git_repositories_repo: GitRepositoriesRepository
     authenticator: base_models.Authenticator
-    internal_gitlab_authenticator: base_models.Authenticator
 
     def get_one_repository(self) -> BlueprintFactoryResponse:
         """Get the metadata available about a repository."""
 
-        @authenticate_2(self.authenticator, self.internal_gitlab_authenticator)
+        @authenticate(self.authenticator)
         @extract_if_none_match
         async def _get_one_repository(
-            request: Request,
+            _: Request,
             user: base_models.APIUser,
-            internal_gitlab_user: base_models.APIUser,
             repository_url: str,
             etag: str | None,
         ) -> JSONResponse | HTTPResponse:
@@ -45,7 +43,6 @@ class RepositoriesBP(CustomBlueprint):
                 repository_url=repository_url,
                 user=user,
                 etag=etag,
-                internal_gitlab_user=internal_gitlab_user,
             )
             if result == "304":
                 return HTTPResponse(status=304)

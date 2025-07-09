@@ -9,12 +9,7 @@ import httpx
 from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.crc.models import ResourceClass, ResourcePool
-from renku_data_services.notebooks.api.classes.repository import (
-    INTERNAL_GITLAB_PROVIDER,
-    GitProvider,
-    OAuth2Connection,
-    OAuth2Provider,
-)
+from renku_data_services.notebooks.api.classes.repository import GitProvider, OAuth2Connection, OAuth2Provider
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
 from renku_data_services.notebooks.errors.intermittent import IntermittentError
 from renku_data_services.notebooks.errors.user import InvalidComputeResourceError
@@ -151,7 +146,6 @@ class GitProviderHelper:
 
     service_url: str
     renku_url: str
-    internal_gitlab_url: str
 
     def __post_init__(self) -> None:
         self.service_url = self.service_url.rstrip("/")
@@ -178,19 +172,7 @@ class GitProviderHelper:
                 access_token_url=access_token_url,
             )
 
-        providers_list = list(providers.values())
-        # Insert the internal GitLab as the first provider
-        internal_gitlab_access_token_url = urljoin(self.renku_url, "/api/auth/gitlab/exchange")
-        providers_list.insert(
-            0,
-            GitProvider(
-                id=INTERNAL_GITLAB_PROVIDER,
-                url=self.internal_gitlab_url,
-                connection_id="",
-                access_token_url=internal_gitlab_access_token_url,
-            ),
-        )
-        return providers_list
+        return list(providers.values())
 
     async def get_oauth2_connections(self, user: APIUser | None = None) -> list[OAuth2Connection]:
         """Get oauth2 connections."""

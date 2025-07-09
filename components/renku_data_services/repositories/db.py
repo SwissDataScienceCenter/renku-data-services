@@ -15,10 +15,7 @@ from renku_data_services import errors
 from renku_data_services.connected_services import orm as connected_services_schemas
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.repositories import models
-from renku_data_services.repositories.provider_adapters import (
-    get_internal_gitlab_adapter,
-    get_provider_adapter,
-)
+from renku_data_services.repositories.provider_adapters import get_provider_adapter
 
 
 class GitRepositoriesRepository:
@@ -28,18 +25,15 @@ class GitRepositoriesRepository:
         self,
         session_maker: Callable[..., AsyncSession],
         connected_services_repo: ConnectedServicesRepository,
-        internal_gitlab_url: str | None,
     ):
         self.session_maker = session_maker
         self.connected_services_repo = connected_services_repo
-        self.internal_gitlab_url = internal_gitlab_url
 
     async def get_repository(
         self,
         repository_url: str,
         user: base_models.APIUser,
         etag: str | None,
-        internal_gitlab_user: base_models.APIUser,
     ) -> models.RepositoryProviderMatch | Literal["304"]:
         """Get the metadata about a repository."""
         repository_netloc = urlparse(repository_url).netloc
@@ -49,16 +43,6 @@ class GitRepositoriesRepository:
             clients = result_clients.all()
 
         matched_client = next(filter(lambda x: urlparse(x.url).netloc == repository_netloc, clients), None)
-
-        if self.internal_gitlab_url:
-            internal_gitlab_netloc = urlparse(self.internal_gitlab_url).netloc
-            if matched_client is None and internal_gitlab_netloc == repository_netloc:
-                return await self._get_repository_from_internal_gitlab(
-                    repository_url=repository_url,
-                    user=internal_gitlab_user,
-                    etag=etag,
-                    internal_gitlab_url=self.internal_gitlab_url,
-                )
 
         if matched_client is None:
             raise errors.MissingResourceError(message=f"No OAuth2 Client found for repository {repository_url}.")
@@ -141,31 +125,4 @@ class GitRepositoriesRepository:
             repository = adapter.api_validate_repository_response(response, is_anonymous=False)
             return models.RepositoryProviderMatch(
                 provider_id=connection.client.id, connection_id=connection_id, repository_metadata=repository
-            )
-
-    async def _get_repository_from_internal_gitlab(
-        self, repository_url: str, user: base_models.APIUser, etag: str | None, internal_gitlab_url: str
-    ) -> models.RepositoryProviderMatch | Literal["304"]:
-        """Get the metadata about a repository from the internal GitLab instance."""
-        async with HttpClient(timeout=5) as http:
-            adapter = get_internal_gitlab_adapter(internal_gitlab_url)
-            request_url = adapter.get_repository_api_url(repository_url)
-            is_anonymous = not bool(user.access_token)
-            headers = adapter.api_common_headers or dict()
-            if user.access_token:
-                headers["Authorization"] = f"Bearer {user.access_token}"
-            if etag:
-                headers["If-None-Match"] = etag
-            response = await http.get(request_url, headers=headers)
-
-            if response.status_code == 304:
-                return "304"
-            if response.status_code > 200:
-                return models.RepositoryProviderMatch(
-                    provider_id="INTERNAL_GITLAB", connection_id=None, repository_metadata=None
-                )
-
-            repository = adapter.api_validate_repository_response(response, is_anonymous=is_anonymous)
-            return models.RepositoryProviderMatch(
-                provider_id="INTERNAL_GITLAB", connection_id=None, repository_metadata=repository
             )
