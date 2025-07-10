@@ -75,5 +75,5 @@ LANGUAGE plpgsql;""")
 AFTER DELETE ON common.entity_slugs
 FOR EACH ROW
 EXECUTE FUNCTION delete_data_connector_after_slug_deletion();""")
-    op.execute("DROP TRIGGER IF EXISTS on common.entity_slugs cleanup_after_slug_deletion;")
+    op.execute("DROP TRIGGER IF EXISTS cleanup_after_slug_deletion ON common.entity_slugs ;")
     op.execute("DROP FUNCTION IF EXISTS cleanup_after_slug_deletion;")
