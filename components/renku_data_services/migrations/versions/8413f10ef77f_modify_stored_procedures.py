@@ -49,8 +49,10 @@ def downgrade() -> None:
 RETURNS TRIGGER AS
 $$
 BEGIN
-    IF OLD.project_id IS NOT NULL AND OLD.namespace_id IS NOT NULL AND OLD.data_connector_id IS NULL THEN
+    IF OLD.project_id IS NOT NULL AND OLD.data_connector_id IS NULL THEN
         DELETE FROM projects.projects WHERE projects.id = OLD.project_id;
+    ELSIF OLD.data_connector_id IS NOT NULL THEN
+        DELETE FROM storage.data_connectors WHERE data_connectors.id = OLD.data_connector_id;
     END IF;
     RETURN OLD;
 END;

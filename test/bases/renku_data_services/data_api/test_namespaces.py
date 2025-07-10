@@ -454,11 +454,10 @@ async def test_stored_procedure_cleanup_after_data_connector_slug_deletion(
         # We do not have APIs exposed that will remove the slug so this is the only way to trigger this
         stmt = (
             select(EntitySlugORM)
-            .where(EntitySlugORM.project_id == proj_id)
-            .where(EntitySlugORM.namespace_id.is_not(None))
             .where(EntitySlugORM.data_connector_id == dc_id)
         )
-        res = await session.scalar(stmt)
+        scalars = await session.scalars(stmt)
+        res = scalars.one_or_none()
         assert res is not None
         await session.delete(res)
         await session.flush()
