@@ -900,23 +900,12 @@ class ClusterRepository:
 
     session_maker: Callable[..., AsyncSession]
 
-    async def select_all_saved_clusters(self) -> list[SavedCluster]:
-        """Returns all the clusters stored in the DB."""
-        async with self.session_maker() as session:
-            res = await session.scalars(select(ClusterORM))
-            return [c.dump() for c in res.all()]
-
-    async def select_all(self, api_user: base_models.APIUser) -> AsyncGenerator[Cluster, Any]:
+    async def select_all(self) -> AsyncGenerator[SavedCluster, Any]:
         """Get cluster configurations from the database."""
-
-        # Work around typing issues... by using an inner function.
-        async def _f() -> AsyncGenerator[Cluster, Any]:
-            async with self.session_maker() as session:
-                clusters = await session.stream_scalars(select(ClusterORM))
-                async for cluster in clusters:
-                    yield cluster.dump()
-
-        return _f()
+        async with self.session_maker() as session:
+            clusters = await session.stream_scalars(select(ClusterORM))
+            async for cluster in clusters:
+                yield cluster.dump()
 
     async def select(self, api_user: base_models.APIUser, cluster_id: ULID) -> SavedCluster:
         """Get cluster configurations from the database."""
