@@ -446,16 +446,22 @@ async def test_stored_procedure_cleanup_after_data_connector_slug_deletion(
     assert proj_slug is not None
     _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}", headers=user_headers)
     assert response.status_code == 200
-    dc = await create_data_connector(name="test-dc", namespace=f"{namespace}/{proj_slug}")
-    dc_id = dc.get("id")
-    assert dc_id is not None
-    assert dc is not None
+    dc1 = await create_data_connector(name="test-dc", namespace=f"{namespace}/{proj_slug}")
+    dc1_id = dc1.get("id")
+    assert dc1_id is not None
+    assert dc1 is not None
+    dc2 = await create_data_connector(name="test-dc", namespace=namespace)
+    dc2_id = dc2.get("id")
+    assert dc2_id is not None
+    assert dc2 is not None
     async with app_manager.config.db.async_session_maker() as session, session.begin():
         # We do not have APIs exposed that will remove the slug so this is the only way to trigger this
-        stmt = (
-            select(EntitySlugORM)
-            .where(EntitySlugORM.data_connector_id == dc_id)
-        )
+        stmt = select(EntitySlugORM).where(EntitySlugORM.data_connector_id == dc1_id)
+        scalars = await session.scalars(stmt)
+        res = scalars.one_or_none()
+        assert res is not None
+        await session.delete(res)
+        stmt = select(EntitySlugORM).where(EntitySlugORM.data_connector_id == dc2_id)
         scalars = await session.scalars(stmt)
         res = scalars.one_or_none()
         assert res is not None
@@ -470,8 +476,10 @@ async def test_stored_procedure_cleanup_after_data_connector_slug_deletion(
     # The project is still there
     _, response = await sanic_client.get(f"/api/data/projects/{proj_id}", headers=user_headers)
     assert response.status_code == 200
-    # The data connector is gone
-    _, response = await sanic_client.get(f"/api/data/data_connectors/{dc_id}", headers=user_headers)
+    # The data connectors are gone
+    _, response = await sanic_client.get(f"/api/data/data_connectors/{dc1_id}", headers=user_headers)
+    assert response.status_code == 404
+    _, response = await sanic_client.get(f"/api/data/data_connectors/{dc2_id}", headers=user_headers)
     assert response.status_code == 404
 
 

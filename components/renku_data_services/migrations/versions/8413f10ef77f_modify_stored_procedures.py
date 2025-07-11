@@ -22,9 +22,9 @@ def upgrade() -> None:
 RETURNS TRIGGER AS
 $$
 BEGIN
-    IF OLD.project_id IS NOT NULL AND OLD.namespace_id IS NOT NULL AND OLD.data_connector_id IS NULL THEN
+    IF OLD.project_id IS NOT NULL AND OLD.data_connector_id IS NULL THEN
         DELETE FROM projects.projects WHERE projects.id = OLD.project_id;
-    ELSIF old.project_id is NOT NULL AND old.namespace_id IS NOT NULL AND old.data_connector_id IS NOT NULL THEN
+    ELSIF old.data_connector_id IS NOT NULL THEN
         DELETE FROM storage.data_connectors WHERE data_connectors.id = OLD.data_connector_id;
     END IF;
     RETURN OLD;
@@ -45,37 +45,5 @@ EXECUTE FUNCTION cleanup_after_slug_deletion();""")
 
 
 def downgrade() -> None:
-    op.execute("""CREATE OR REPLACE FUNCTION delete_project_after_slug_deletion()
-RETURNS TRIGGER AS
-$$
-BEGIN
-    IF OLD.project_id IS NOT NULL AND OLD.data_connector_id IS NULL THEN
-        DELETE FROM projects.projects WHERE projects.id = OLD.project_id;
-    ELSIF OLD.data_connector_id IS NOT NULL THEN
-        DELETE FROM storage.data_connectors WHERE data_connectors.id = OLD.data_connector_id;
-    END IF;
-    RETURN OLD;
-END;
-$$
-LANGUAGE plpgsql;""")
-    op.execute("""CREATE OR REPLACE TRIGGER delete_project_after_slug_deletion
-AFTER DELETE ON common.entity_slugs
-FOR EACH ROW
-EXECUTE FUNCTION delete_project_after_slug_deletion();""")
-    op.execute("""CREATE OR REPLACE FUNCTION delete_data_connector_after_slug_deletion()
-RETURNS TRIGGER AS
-$$
-BEGIN
-    IF old.project_id is NOT NULL And old.namespace_id IS NOT NULL and old.data_connector_id IS NOT NULL THEN
-        DELETE FROM storage.data_connectors WHERE data_connectors.id = OLD.data_connector_id;
-    END IF;
-    RETURN OLD;
-END;
-$$
-LANGUAGE plpgsql;""")
-    op.execute("""CREATE OR REPLACE TRIGGER delete_data_connector_after_slug_deletion
-AFTER DELETE ON common.entity_slugs
-FOR EACH ROW
-EXECUTE FUNCTION delete_data_connector_after_slug_deletion();""")
-    op.execute("DROP TRIGGER IF EXISTS cleanup_after_slug_deletion ON common.entity_slugs ;")
-    op.execute("DROP FUNCTION IF EXISTS cleanup_after_slug_deletion;")
+    # NOTE: The procedures from previous versions have bugs so there is no point in re-applying them here.
+    pass
