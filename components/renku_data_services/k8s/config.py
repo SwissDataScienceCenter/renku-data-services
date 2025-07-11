@@ -96,7 +96,7 @@ async def get_clusters(
     """Get all clusters accessible to the application."""
 
     clusters = [k8s_models.Cluster(id=DEFAULT_K8S_CLUSTER, namespace=namespace, api=api)]
-    db_clusters_by_conf_name = {c.config_name: c for c in await cluster_rp.select_all_saved_clusters()}
+    db_clusters_by_conf_name = {c.config_name: c async for c in cluster_rp.select_all()}
 
     if os.path.exists(kube_conf_root_dir):
         for filename in glob.glob(pathname="*.yaml", root_dir=kube_conf_root_dir):

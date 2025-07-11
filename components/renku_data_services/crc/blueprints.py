@@ -588,7 +588,7 @@ class ClustersBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         async def _handler(_request: Request, user: base_models.APIUser) -> HTTPResponse:
-            clusters = [c async for c in await self.repo.select_all(user)]
+            clusters = [c async for c in self.repo.select_all()]
 
             return validated_json(apispec.ClustersWithId, clusters)
 
