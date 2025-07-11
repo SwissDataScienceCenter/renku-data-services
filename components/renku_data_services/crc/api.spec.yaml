@@ -1527,21 +1527,6 @@ components:
       items:
         $ref: "#/components/schemas/PoolUserWithId"
       uniqueItems: true
-    Quota:
-      type: object
-      additionalProperties: false
-      properties:
-        cpu:
-          $ref: "#/components/schemas/Cpu"
-        memory:
-          $ref: "#/components/schemas/Memory"
-        gpu:
-          $ref: "#/components/schemas/Gpu"
-      required: ["cpu", "memory", "gpu"]
-      example:
-        cpu: 1.0
-        memory: 4
-        gpu: 0
     QuotaPatch:
       type: object
       additionalProperties: false
