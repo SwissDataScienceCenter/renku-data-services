@@ -206,12 +206,41 @@ class Cluster:
 class UnsavedCluster(Cluster):
     """Unsaved, memory-only K8s Cluster settings."""
 
+    @staticmethod
+    def from_dict(data: dict) -> UnsavedCluster:
+        """Instantiate an UnsavedCluster from a plain dictionary."""
+        return UnsavedCluster(
+            name=data["name"],
+            config_name=data["config_name"],
+            session_protocol=data["session_protocol"],
+            session_host=data["session_host"],
+            session_port=data["session_port"],
+            session_path=data["session_path"],
+            session_ingress_annotations=data["session_ingress_annotations"],
+            session_tls_secret_name=data["session_tls_secret_name"],
+        )
+
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class SavedCluster(Cluster):
     """K8s Cluster settings from the DB."""
 
     id: ULID
+
+    @staticmethod
+    def from_dict(data: dict) -> SavedCluster:
+        """Instantiate a SavedCluster from a plain dictionary."""
+        return SavedCluster(
+            name=data["name"],
+            config_name=data["config_name"],
+            session_protocol=data["session_protocol"],
+            session_host=data["session_host"],
+            session_port=data["session_port"],
+            session_path=data["session_path"],
+            session_ingress_annotations=data["session_ingress_annotations"],
+            session_tls_secret_name=data["session_tls_secret_name"],
+            id=data["id"],
+        )
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -292,7 +321,7 @@ class ResourcePool:
         if "cluster" in data:
             match data["cluster"]:
                 case dict():
-                    cluster = SavedCluster(**data["cluster"])
+                    cluster = SavedCluster.from_dict(data["cluster"])
                 case SavedCluster():
                     cluster = data["cluster"]
                 case None:

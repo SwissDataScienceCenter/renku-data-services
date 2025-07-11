@@ -601,7 +601,7 @@ class ClustersBP(CustomBlueprint):
         @only_admins
         @validate(json=apispec.Cluster)
         async def _handler(_request: Request, user: base_models.APIUser, body: apispec.Cluster) -> HTTPResponse:
-            cluster = UnsavedCluster(**body.model_dump())
+            cluster = UnsavedCluster.from_dict(**body.model_dump())
             cluster = await self.repo.insert(user, cluster)
 
             return validated_json(apispec.ClusterWithId, cluster, status=201)
@@ -629,7 +629,7 @@ class ClustersBP(CustomBlueprint):
         async def _handler(
             _request: Request, user: base_models.APIUser, cluster_id: ULID, body: apispec.Cluster
         ) -> HTTPResponse:
-            cluster = UnsavedCluster(**body.model_dump())
+            cluster = UnsavedCluster.from_dict(**body.model_dump())
             cluster = await self.repo.update(user, cluster, cluster_id)
 
             return validated_json(apispec.ClusterWithId, cluster, status=201)
@@ -649,8 +649,7 @@ class ClustersBP(CustomBlueprint):
             old.pop("id")
             new = body.model_dump(exclude_none=True)
 
-            cluster = UnsavedCluster(**{**old, **new})
-            cluster = await self.repo.update(user, cluster, cluster_id)
+            cluster = await self.repo.update(user, UnsavedCluster.from_dict({**old, **new}), cluster_id)
 
             return validated_json(apispec.ClusterWithId, cluster, status=201)
 
