@@ -24,7 +24,7 @@ def upgrade() -> None:
     )
     op.add_column("clusters", sa.Column("session_host", sa.String(length=256), nullable=False), schema="resource_pools")
     op.add_column("clusters", sa.Column("session_port", sa.Integer(), nullable=False), schema="resource_pools")
-    op.add_column("clusters", sa.Column("session_path", sa.String(length=40), nullable=False), schema="resource_pools")
+    op.add_column("clusters", sa.Column("session_path", sa.String(), nullable=False), schema="resource_pools")
     op.add_column(
         "clusters",
         sa.Column(

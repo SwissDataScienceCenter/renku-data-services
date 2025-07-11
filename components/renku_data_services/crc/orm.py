@@ -152,7 +152,7 @@ class ClusterORM(BaseORM):
     session_protocol: Mapped[str] = mapped_column(String(10))
     session_host: Mapped[str] = mapped_column(String(256))
     session_port: Mapped[int] = mapped_column(Integer)
-    session_path: Mapped[str] = mapped_column(String(40))
+    session_path: Mapped[str] = mapped_column(String())
     session_ingress_annotations: Mapped[dict[str, str]] = mapped_column(JSONVariant)
     session_tls_secret_name: Mapped[str] = mapped_column(String(256))
 
