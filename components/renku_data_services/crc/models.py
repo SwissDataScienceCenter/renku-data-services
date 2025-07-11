@@ -203,15 +203,24 @@ class Cluster:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class UnsavedCluster(Cluster):
-    """Unsaved, memory-only K8s Cluster settings."""
-
-
-@dataclass(frozen=True, eq=True, kw_only=True)
 class SavedCluster(Cluster):
     """K8s Cluster settings from the DB."""
 
     id: ULID
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ClusterPatch:
+    """K8s Cluster settings patch."""
+
+    name: str | None
+    config_name: str | None
+    session_protocol: CrcApiProtocol | None
+    session_host: str | None
+    session_port: int | None
+    session_path: str | None
+    session_ingress_annotations: dict[str, Any] | None
+    session_tls_secret_name: str | None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -289,16 +298,26 @@ class ResourcePool:
         elif "classes" in data and isinstance(data["classes"], list):
             classes = [ResourceClass.from_dict(c) if isinstance(c, dict) else c for c in data["classes"]]
 
-        if "cluster" in data:
-            match data["cluster"]:
-                case dict():
-                    cluster = SavedCluster(**data["cluster"])
-                case SavedCluster():
-                    cluster = data["cluster"]
-                case None:
-                    cluster = None
-                case unknown:
-                    raise errors.ValidationError(message=f"Got unexpected cluster data {unknown} when creating model")
+        match tmp := data.get("cluster"):
+            case SavedCluster():
+                # This has to be before the dict() case, as this is also an instance of dict.
+                cluster = tmp
+            case dict():
+                cluster = SavedCluster(
+                    name=tmp["name"],
+                    config_name=tmp["config_name"],
+                    session_protocol=tmp["session_protocol"],
+                    session_host=tmp["session_host"],
+                    session_port=tmp["session_port"],
+                    session_path=tmp["session_path"],
+                    session_ingress_annotations=tmp["session_ingress_annotations"],
+                    session_tls_secret_name=tmp["session_tls_secret_name"],
+                    id=tmp["id"],
+                )
+            case None:
+                cluster = None
+            case unknown:
+                raise errors.ValidationError(message=f"Got unexpected cluster data {unknown} when creating model")
 
         return cls(
             name=data["name"],

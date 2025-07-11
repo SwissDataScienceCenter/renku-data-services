@@ -14,8 +14,8 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_api.misc import validate_body_root_model, validate_db_ids, validate_query
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.crc import apispec, models
+from renku_data_services.crc.core import validate_cluster, validate_cluster_patch
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository, UserRepository
-from renku_data_services.crc.models import UnsavedCluster
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.models import UserInfo
@@ -601,7 +601,7 @@ class ClustersBP(CustomBlueprint):
         @only_admins
         @validate(json=apispec.Cluster)
         async def _handler(_request: Request, user: base_models.APIUser, body: apispec.Cluster) -> HTTPResponse:
-            cluster = UnsavedCluster(**body.model_dump())
+            cluster = validate_cluster(body)
             cluster = await self.repo.insert(user, cluster)
 
             return validated_json(apispec.ClusterWithId, cluster, status=201)
@@ -629,7 +629,7 @@ class ClustersBP(CustomBlueprint):
         async def _handler(
             _request: Request, user: base_models.APIUser, cluster_id: ULID, body: apispec.Cluster
         ) -> HTTPResponse:
-            cluster = UnsavedCluster(**body.model_dump())
+            cluster = validate_cluster(body)
             cluster = await self.repo.update(user, cluster, cluster_id)
 
             return validated_json(apispec.ClusterWithId, cluster, status=201)
@@ -645,11 +645,9 @@ class ClustersBP(CustomBlueprint):
         async def _handler(
             _request: Request, user: base_models.APIUser, cluster_id: ULID, body: apispec.ClusterPatch
         ) -> HTTPResponse:
-            old = asdict(await self.repo.select(user, cluster_id))
-            old.pop("id")
-            new = body.model_dump(exclude_none=True)
+            cluster = await self.repo.select(user, cluster_id)
+            cluster = validate_cluster_patch(cluster, body)
 
-            cluster = UnsavedCluster(**{**old, **new})
             cluster = await self.repo.update(user, cluster, cluster_id)
 
             return validated_json(apispec.ClusterWithId, cluster, status=201)

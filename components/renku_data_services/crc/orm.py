@@ -13,7 +13,6 @@ import renku_data_services.base_models as base_models
 from renku_data_services.app_config import logging
 from renku_data_services.crc import models
 from renku_data_services.crc.apispec import Protocol as CrcApiProtocol
-from renku_data_services.crc.models import SavedCluster
 from renku_data_services.errors import errors
 from renku_data_services.utils.sqlalchemy import ULIDType
 
@@ -158,7 +157,7 @@ class ClusterORM(BaseORM):
 
     def dump(self) -> models.SavedCluster:
         """Create a cluster model from the ORM object."""
-        return SavedCluster(
+        return models.SavedCluster(
             id=self.id,
             name=self.name,
             config_name=self.config_name,
