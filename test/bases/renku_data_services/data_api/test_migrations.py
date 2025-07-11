@@ -34,14 +34,17 @@ async def test_unique_migration_head() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("downgrade_to, upgrade_to", [("base", "head"), ("fe3b7470d226", "8413f10ef77f")])
 async def test_upgrade_downgrade_cycle(
     app_manager_instance: DependencyManager,
     sanic_client_no_migrations: SanicASGITestClient,
     admin_headers: dict,
     admin_user: UserInfo,
+    downgrade_to: str,
+    upgrade_to: str,
 ) -> None:
     # Migrate to head and create a project
-    run_migrations_for_app("common", "head")
+    run_migrations_for_app("common", upgrade_to)
     await app_manager_instance.kc_user_repo.initialize(app_manager_instance.kc_api)
     await app_manager_instance.group_repo.generate_user_namespaces()
     payload: dict[str, Any] = {
@@ -50,11 +53,12 @@ async def test_upgrade_downgrade_cycle(
     }
     _, res = await sanic_client_no_migrations.post("/api/data/projects", headers=admin_headers, json=payload)
     assert res.status_code == 201
+    project_id = res.json["id"]
     # Migrate/downgrade a few times but end on head
-    downgrade_migrations_for_app("common", "base")
-    run_migrations_for_app("common", "head")
-    downgrade_migrations_for_app("common", "base")
-    run_migrations_for_app("common", "head")
+    downgrade_migrations_for_app("common", downgrade_to)
+    run_migrations_for_app("common", upgrade_to)
+    downgrade_migrations_for_app("common", downgrade_to)
+    run_migrations_for_app("common", upgrade_to)
     # Try to make the same project again
     # NOTE: The engine has to be disposed otherwise it caches the postgres types (i.e. enums)
     # from previous migrations and then trying to create a project below fails with the message
@@ -63,7 +67,15 @@ async def test_upgrade_downgrade_cycle(
     await app_manager_instance.kc_user_repo.initialize(app_manager_instance.kc_api)
     await app_manager_instance.group_repo.generate_user_namespaces()
     _, res = await sanic_client_no_migrations.post("/api/data/projects", headers=admin_headers, json=payload)
-    assert res.status_code == 201, res.json
+    assert res.status_code in [201, 409], res.json
+    if res.status_code == 409:
+        # NOTE: This means the project is still in the DB because the down migration was not going
+        # far enough to delete the projects table, so we delete the project and recreate it to make sure
+        # things are OK.
+        _, res = await sanic_client_no_migrations.delete(f"/api/data/projects/{project_id}", headers=admin_headers)
+        assert res.status_code == 204, res.json
+        _, res = await sanic_client_no_migrations.post("/api/data/projects", headers=admin_headers, json=payload)
+        assert res.status_code == 201, res.json
 
 
 # !IMPORTANT: This test can only be run on v2 of the authz schema
