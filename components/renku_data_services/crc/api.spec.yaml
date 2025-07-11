@@ -987,10 +987,9 @@ components:
         session_path:
           type: string
         session_ingress_annotations:
-          type: object
-          additionalProperties: true
+          $ref: "#/components/schemas/IngressAnnotations"
         session_tls_secret_name:
-          type: string
+          $ref: "#/components/schemas/TlsSecretName"
       required: [ "name", "config_name", "session_protocol", "session_host", "session_port", "session_path", "session_ingress_annotations", "session_tls_secret_name" ]
     ClusterPatch:
       type: object
@@ -1009,10 +1008,9 @@ components:
         session_path:
           type: string
         session_ingress_annotations:
-          type: object
-          additionalProperties: true
+          $ref: "#/components/schemas/IngressAnnotations"
         session_tls_secret_name:
-          type: string
+          $ref: "#/components/schemas/TlsSecretName"
     ClusterWithId:
       type: object
       additionalProperties: false
@@ -1032,10 +1030,9 @@ components:
         session_path:
           type: string
         session_ingress_annotations:
-          type: object
-          additionalProperties: true
+          $ref: "#/components/schemas/IngressAnnotations"
         session_tls_secret_name:
-          type: string
+          $ref: "#/components/schemas/TlsSecretName"
       required: [ "name", "config_name", "session_protocol", "session_host", "session_port", "session_path", "session_ingress_annotations", "session_tls_secret_name", "id" ]
     ClustersWithId:
       type: array
@@ -1766,6 +1763,12 @@ components:
       maxLength: 256
       # The following pattern accept things it should not, but this is better than no validation at all.
       pattern: "^([0-9a-zA-Z:_-]+[.])*[0-9a-zA-Z:_-]+$"
+    TlsSecretName:
+      type: string
+      maxLength: 256
+    IngressAnnotations:
+      type: object
+      additionalProperties: true
   responses:
     Error:
       description: The schema for all 4xx and 5xx responses
