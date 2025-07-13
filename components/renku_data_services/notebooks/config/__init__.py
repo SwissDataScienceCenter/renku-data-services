@@ -136,7 +136,7 @@ class NotebooksConfig:
     session_id_cookie_name: str = "_renku_session"  # NOTE: This cookie name is set and controlled by the gateway
 
     @classmethod
-    def from_env(cls, db_config: DBConfig) -> Self:
+    def from_env(cls, db_config: DBConfig, enable_internal_gitlab: bool) -> Self:
         """Create a configuration object from environment variables."""
         dummy_stores = _parse_str_as_bool(os.environ.get("DUMMY_STORES", False))
         sessions_config: _SessionConfig
@@ -162,9 +162,12 @@ class NotebooksConfig:
             rp_repo = ResourcePoolRepository(db_config.async_session_maker, quota_repo)
             crc_validator = CRCValidator(rp_repo)
             sessions_config = _SessionConfig.from_env()
-            git_config = _GitConfig.from_env()
+            git_config = _GitConfig.from_env(enable_internal_gitlab=enable_internal_gitlab)
             git_provider_helper = GitProviderHelper(
-                data_service_url, f"http://{sessions_config.ingress.host}", git_config.url
+                service_url=data_service_url,
+                renku_url=f"http://{sessions_config.ingress.host}",
+                internal_gitlab_url=git_config.url,
+                enable_internal_gitlab=enable_internal_gitlab,
             )
             # NOTE: we need to get an async client as a sync client can't be used in an async way
             # But all the config code is not async, so we need to drop into the running loop, if there is one

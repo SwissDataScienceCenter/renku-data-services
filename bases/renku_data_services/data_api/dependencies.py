@@ -244,12 +244,13 @@ class DependencyManager:
                 raise errors.ConfigurationError(message="At least one token signature algorithm is required.")
 
             authenticator = KeycloakAuthenticator(jwks=jwks, algorithms=config.keycloak.algorithms)
-            if config.gitlab_url is None:
-                gitlab_authenticator = EmptyGitlabAuthenticator()
-                gitlab_client = EmptyGitlabAPI()
-            else:
+            if config.enable_internal_gitlab:
+                assert config.gitlab_url
                 gitlab_authenticator = GitlabAuthenticator(gitlab_url=config.gitlab_url)
                 gitlab_client = GitlabAPI(gitlab_url=config.gitlab_url)
+            else:
+                gitlab_authenticator = EmptyGitlabAuthenticator()
+                gitlab_client = EmptyGitlabAPI()
             user_store = KcUserStore(keycloak_url=config.keycloak.url, realm=config.keycloak.realm)
             kc_api = KeycloakAPI(
                 keycloak_url=config.keycloak.url,
@@ -356,6 +357,7 @@ class DependencyManager:
             session_maker=config.db.async_session_maker,
             connected_services_repo=connected_services_repo,
             internal_gitlab_url=config.gitlab_url,
+            enable_internal_gitlab=config.enable_internal_gitlab,
         )
         platform_repo = PlatformRepository(
             session_maker=config.db.async_session_maker,
