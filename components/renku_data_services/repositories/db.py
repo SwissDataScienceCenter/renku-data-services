@@ -29,10 +29,12 @@ class GitRepositoriesRepository:
         session_maker: Callable[..., AsyncSession],
         connected_services_repo: ConnectedServicesRepository,
         internal_gitlab_url: str | None,
+        enable_internal_gitlab: bool,
     ):
         self.session_maker = session_maker
         self.connected_services_repo = connected_services_repo
         self.internal_gitlab_url = internal_gitlab_url
+        self.enable_internal_gitlab = enable_internal_gitlab
 
     async def get_repository(
         self,
@@ -51,7 +53,7 @@ class GitRepositoriesRepository:
         matched_client = next(filter(lambda x: urlparse(x.url).netloc == repository_netloc, clients), None)
 
         if matched_client is None:
-            if self.internal_gitlab_url:
+            if self.enable_internal_gitlab and self.internal_gitlab_url:
                 internal_gitlab_netloc = urlparse(self.internal_gitlab_url).netloc
                 if internal_gitlab_netloc == repository_netloc:
                     return await self._get_repository_from_internal_gitlab(
