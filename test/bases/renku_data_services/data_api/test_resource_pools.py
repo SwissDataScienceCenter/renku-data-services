@@ -88,7 +88,7 @@ async def test_resource_pool_creation_with_cluster_ids(
             "/api/data/clusters",
             json={
                 "name": "test-name",
-                "config_name": "test-class-name",
+                "config_name": "test-class-name.yaml",
                 "session_protocol": "http",
                 "session_host": "localhost",
                 "session_port": 8080,
@@ -1045,7 +1045,7 @@ resource_pool_payload = {
 }
 
 cluster_payload = {
-    "config_name": "a-filename-without-yaml-ext",
+    "config_name": "a-filename.yaml",
     "name": "test-cluster-post",
 }
 

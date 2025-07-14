@@ -4,7 +4,7 @@ import pytest
 from sanic_testing.testing import SanicASGITestClient
 
 cluster_payload = {
-    "config_name": "a-filename-without-yaml-ext",
+    "config_name": "a-filename_with.0.9_AND_UPPER_CASE.yaml",
     "name": "test-cluster-post",
     "session_protocol": "http",
     "session_host": "localhost",
@@ -152,7 +152,7 @@ put_patch_common_test_inputs = [
         422,
         True,
         None,
-        {"name": "new_name", "config_name": "a-filename-without-yaml-ext", "unknown_field": 42},
+        {"name": "new_name", "config_name": "a-filename.yaml", "unknown_field": 42},
         cluster_payload,
     ),
     (404, True, "ZZZZZZZZZZZZZZZZZZZZZZZZZZ", cluster_payload, cluster_payload),

@@ -1,6 +1,5 @@
 """Base config for k8s."""
 
-import glob
 import os
 
 import kr8s
@@ -96,27 +95,23 @@ async def get_clusters(
     """Get all clusters accessible to the application."""
 
     clusters = [k8s_models.Cluster(id=DEFAULT_K8S_CLUSTER, namespace=namespace, api=api)]
-    db_clusters_by_conf_name = {c.config_name: c async for c in cluster_rp.select_all()}
 
-    if os.path.exists(kube_conf_root_dir):
-        for filename in glob.glob(pathname="*.yaml", root_dir=kube_conf_root_dir):
-            basename = filename.removesuffix(".yaml")
-            db_cluster = db_clusters_by_conf_name.get(basename)
-            if db_cluster is not None:
-                try:
-                    kube_config = KubeConfigYaml(f"{kube_conf_root_dir}/{filename}")
-                    cluster = k8s_models.Cluster(
-                        id=renku_data_services.k8s.constants.ClusterId(str(db_cluster.id)),
-                        namespace=kube_config.api().namespace,
-                        api=kube_config.api(),
-                    )
-                    clusters.append(cluster)
-                    logger.info(f"Successfully loaded Kubernetes config: '{kube_conf_root_dir}/{filename}'")
-                except Exception as e:
-                    logger.warning(
-                        f"Failed while loading '{kube_conf_root_dir}/{filename}', ignoring kube config. Error: {e}"
-                    )
-    else:
+    if not os.path.exists(kube_conf_root_dir):
         logger.warning(f"Cannot open directory '{kube_conf_root_dir}', ignoring kube configs...")
+        return clusters
+
+    async for db_cluster in cluster_rp.select_all():
+        filename = db_cluster.config_name
+        try:
+            kube_config = KubeConfigYaml(f"{kube_conf_root_dir}/{filename}")
+            cluster = k8s_models.Cluster(
+                id=renku_data_services.k8s.constants.ClusterId(str(db_cluster.id)),
+                namespace=kube_config.api().namespace,
+                api=kube_config.api(),
+            )
+            clusters.append(cluster)
+            logger.info(f"Successfully loaded Kubernetes config: '{kube_conf_root_dir}/{filename}'")
+        except Exception as e:
+            logger.warning(f"Failed while loading '{kube_conf_root_dir}/{filename}', ignoring kube config. Error: {e}")
 
     return clusters
