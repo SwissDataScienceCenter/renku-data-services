@@ -498,6 +498,7 @@ async def patch_session(
         raise errors.ProgrammingError(
             message=f"The session {session_id} being patched is missing the expected 'spec' field.", quiet=True
         )
+    cluster = await nb_config.k8s_v2_client.cluster_by_class_id(session.resource_class_id(), user)
 
     patch = AmaltheaSessionV1Alpha1Patch(spec=AmaltheaSessionV1Alpha1SpecPatch())
     is_getting_hibernated: bool = False
@@ -582,7 +583,7 @@ async def patch_session(
                     "and/or check that you still have permissions for the image repository."
                 )
             # Ensure the secret is created in the cluster
-            await nb_config.k8s_v2_client.create_secret(image_secret.secret, body.resource_class_id, user)
+            await nb_config.k8s_v2_client.create_secret(image_secret.secret, cluster)
 
             updated_secrets = [
                 secret for secret in (session.spec.imagePullSecrets or []) if not secret.name.endswith("-image-secret")

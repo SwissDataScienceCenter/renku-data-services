@@ -2,7 +2,6 @@
 
 import base64
 import json
-from contextlib import suppress
 from typing import TYPE_CHECKING, Any, Generic, Optional, TypeVar, cast
 
 import httpx
@@ -16,7 +15,7 @@ from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
-from renku_data_services.k8s.models import GVK, Cluster, K8sObject, K8sObjectFilter
+from renku_data_services.k8s.models import GVK, Cluster, K8sObject, K8sObjectFilter, K8sObjectMeta
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
 from renku_data_services.notebooks.constants import JUPYTER_SESSION_GVK
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
@@ -405,11 +404,10 @@ class NotebookK8sClient(Generic[_SessionType]):
         ]
         await secret.patch(patch, type="json")
 
-    async def create_secret(self, secret: V1Secret, class_id: int | None, user: APIUser) -> V1Secret:
+    async def create_secret(self, secret: V1Secret, cluster: Cluster) -> V1Secret:
         """Create a secret."""
 
         assert secret.metadata is not None
-        cluster = await self.cluster_by_class_id(class_id, user)
 
         secret_obj = K8sObject(
             name=secret.metadata.name,
@@ -456,42 +454,14 @@ class NotebookK8sClient(Generic[_SessionType]):
             type=result.manifest.get("type"),
         )
 
-    async def delete_secret(self, name: str) -> None:
+    async def delete_secret(self, name: str, cluster: Cluster) -> None:
         """Delete a secret."""
 
-        secrets = [
-            s
-            async for s in self.__client.list(
-                K8sObjectFilter(name=name, gvk=GVK(kind=Secret.kind, version=Secret.version))
+        await self.__client.delete(
+            K8sObjectMeta(
+                name=name,
+                namespace=cluster.namespace,
+                cluster=cluster.id,
+                gvk=GVK(kind=Secret.kind, version=Secret.version),
             )
-        ]
-        match len(secrets):
-            case 1:
-                await self.__client.delete(secrets[0])
-            case 0 | _:
-                pass
-
-    async def patch_secret(self, name: str, patch: dict[str, Any] | list[dict[str, Any]]) -> None:
-        """Patch a secret."""
-
-        secrets = [
-            s
-            async for s in self.__client.list(
-                K8sObjectFilter(name=name, gvk=GVK(kind=Secret.kind, version=Secret.version))
-            )
-        ]
-        match len(secrets):
-            case 1:
-                result = await self.__client.get(secrets[0])
-            case 0 | _:
-                raise errors.MissingResourceError(message=f"Cannot find secret {name}.")
-
-        secret = result
-        assert isinstance(secret, Secret)
-
-        patch_type: str | None = None  # rfc7386 patch
-        if isinstance(patch, list):
-            patch_type = "json"  # rfc6902 patch
-
-        with suppress(NotFoundError):
-            await secret.patch(patch, type=patch_type)
+        )
