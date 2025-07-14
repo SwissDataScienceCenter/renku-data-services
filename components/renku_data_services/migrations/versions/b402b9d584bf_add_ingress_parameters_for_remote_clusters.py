@@ -1,7 +1,7 @@
 """Add ingress parameters for remote clusters
 
 Revision ID: b402b9d584bf
-Revises: fe3b7470d226
+Revises: 8413f10ef77f
 Create Date: 2025-06-20 11:05:22.238236
 
 """
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "b402b9d584bf"
-down_revision = "fe3b7470d226"
+down_revision = "8413f10ef77f"
 branch_labels = None
 depends_on = None
 
