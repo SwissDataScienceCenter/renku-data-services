@@ -51,7 +51,7 @@ paths:
             type: string
       responses:
         "200":
-          description: The repository seems to be availabe.
+          description: The repository seems to be available.
         "404":
           description: There is no available provider for this repository.
         default:

@@ -39,12 +39,10 @@ class ConnectedServicesRepository:
         session_maker: Callable[..., AsyncSession],
         encryption_key: bytes,
         async_oauth2_client_class: type[AsyncOAuth2Client],
-        internal_gitlab_url: str | None,
     ):
         self.session_maker = session_maker
         self.encryption_key = encryption_key
         self.async_oauth2_client_class = async_oauth2_client_class
-        self.internal_gitlab_url = internal_gitlab_url.rstrip("/") if internal_gitlab_url else None
 
     async def get_oauth2_clients(
         self,

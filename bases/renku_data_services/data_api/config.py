@@ -21,6 +21,7 @@ from renku_data_services.users.config import UserPreferencesConfig
 class Config:
     """Application configuration."""
 
+    enable_internal_gitlab: bool
     dummy_stores: bool
     k8s_namespace: str
     db: DBConfig
@@ -42,6 +43,8 @@ class Config:
     @classmethod
     def from_env(cls, db: DBConfig | None = None) -> Self:
         """Load config from environment."""
+        enable_internal_gitlab = os.getenv("ENABLE_V1_SERVICES", "true").lower() == "true"
+
         version = os.environ.get("VERSION", "0.0.1")
         dummy_stores = os.environ.get("DUMMY_STORES", "false").lower() == "true"
         k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
@@ -54,7 +57,7 @@ class Config:
         solr_config = SolrClientConfig.from_env()
         trusted_proxies = TrustedProxiesConfig.from_env()
         user_preferences_config = UserPreferencesConfig.from_env()
-        nb_config = NotebooksConfig.from_env(db)
+        nb_config = NotebooksConfig.from_env(db, enable_internal_gitlab=enable_internal_gitlab)
         server_options = ServerOptionsConfig.from_env()
         log_cfg = LoggingConfig.from_env()
         if dummy_stores:
@@ -62,12 +65,16 @@ class Config:
             gitlab_url = None
         else:
             keycloak = KeycloakConfig.from_env()
-            gitlab_url = os.environ.get("GITLAB_URL")
-            if gitlab_url is None:
-                raise errors.ConfigurationError(message="Please provide the gitlab instance URL")
+            if enable_internal_gitlab:
+                gitlab_url = os.environ.get("GITLAB_URL")
+                if gitlab_url is None:
+                    raise errors.ConfigurationError(message="Please provide the gitlab instance URL")
+            else:
+                gitlab_url = None
         authz_config = AuthzConfig.from_env()
 
         return cls(
+            enable_internal_gitlab=enable_internal_gitlab,
             version=version,
             dummy_stores=dummy_stores,
             k8s_namespace=k8s_namespace,
