@@ -461,17 +461,6 @@ class _SessionConfig:
 
 
 @dataclass
-class _K8sConfig:
-    """Defines the k8s client and namespace."""
-
-    renku_namespace: str = "default"
-
-    @classmethod
-    def from_env(cls) -> Self:
-        return cls(renku_namespace=os.environ.get("KUBERNETES_NAMESPACE", "default"))
-
-
-@dataclass
 class _DynamicConfig:
     server_options: ServerOptionsConfig
     sessions: _SessionConfig
