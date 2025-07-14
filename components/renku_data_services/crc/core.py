@@ -16,6 +16,7 @@ def validate_cluster(body: apispec.Cluster) -> models.Cluster:
         session_path=body.session_path,
         session_ingress_annotations=body.session_ingress_annotations.model_dump(),
         session_tls_secret_name=body.session_tls_secret_name,
+        session_storage_class=body.session_storage_class,
     )
 
 

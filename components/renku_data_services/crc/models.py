@@ -200,6 +200,7 @@ class Cluster:
     session_path: str
     session_ingress_annotations: dict[str, Any]
     session_tls_secret_name: str
+    session_storage_class: str | None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -221,6 +222,7 @@ class ClusterPatch:
     session_path: str | None
     session_ingress_annotations: dict[str, Any] | None
     session_tls_secret_name: str | None
+    session_storage_name: str | None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -312,6 +314,7 @@ class ResourcePool:
                     session_path=tmp["session_path"],
                     session_ingress_annotations=tmp["session_ingress_annotations"],
                     session_tls_secret_name=tmp["session_tls_secret_name"],
+                    session_storage_class=tmp["session_storage_class"],
                     id=tmp["id"],
                 )
             case None:

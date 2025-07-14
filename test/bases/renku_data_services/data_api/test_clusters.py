@@ -19,6 +19,9 @@ cluster_payload = {
     },
 }
 
+cluster_payload_with_storage = deepcopy(cluster_payload)
+cluster_payload_with_storage["session_storage_class"] = "an-arbitrary-class-name"
+
 
 @pytest.mark.parametrize(
     "expected_status_code,auth,url",
@@ -39,20 +42,27 @@ async def test_clusters_get(
 
 
 @pytest.mark.parametrize(
-    "expected_status_code,auth,url",
+    "expected_status_code,auth,url,payload",
     [
-        (401, False, "/api/data/clusters/"),
-        (201, True, "/api/data/clusters/"),
+        (401, False, "/api/data/clusters/", cluster_payload),
+        (401, False, "/api/data/clusters/", cluster_payload_with_storage),
+        (201, True, "/api/data/clusters/", cluster_payload),
+        (201, True, "/api/data/clusters/", cluster_payload_with_storage),
     ],
 )
 @pytest.mark.asyncio
 async def test_clusters_post(
-    sanic_client: SanicASGITestClient, admin_headers: dict[str, str], expected_status_code: int, url: str, auth: bool
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    expected_status_code: int,
+    url: str,
+    auth: bool,
+    payload,
 ) -> None:
     if auth:
-        _, res = await sanic_client.post(url, headers=admin_headers, json=cluster_payload)
+        _, res = await sanic_client.post(url, headers=admin_headers, json=payload)
     else:
-        _, res = await sanic_client.post(url, json=cluster_payload)
+        _, res = await sanic_client.post(url, json=payload)
     assert res.status_code == expected_status_code, res.text
 
 
@@ -101,12 +111,13 @@ async def _clusters_request(
     auth: bool,
     cluster_id: str | None,
     payload: dict | None,
+    post_payload: dict,
 ) -> None:
     base_url = "/api/data/clusters"
 
     check_payload = None
     if cluster_id is None:
-        _, res = await sanic_client.post(base_url, headers=admin_headers, json=cluster_payload)
+        _, res = await sanic_client.post(base_url, headers=admin_headers, json=post_payload)
         assert res.status_code == 201, res.text
         cluster_id = res.json["id"]
 
@@ -127,20 +138,34 @@ async def _clusters_request(
 
 
 put_patch_common_test_inputs = [
-    (401, False, "ZZZZZZZZZZZZZZZZZZZZZZZZZZ", None),
-    (422, True, "ZZZZZZZZZZZZZZZZZZZZZZZZZZ", None),
-    (401, False, "ZZZZZZZZZZZZZZZZZZZZZZZZZZYY", None),
-    (422, True, "ZZZZZZZZZZZZZZZZZZZZZZZZZZYY", None),
-    (401, False, "XX", None),
-    (422, True, "XX", None),
-    (401, False, None, {"name": "new_name"}),
-    (201, True, None, cluster_payload),
-    (422, True, None, {"name": "new_name", "config_name": "a-filename-without-yaml-ext", "unknown_field": 42}),
-    (404, True, "ZZZZZZZZZZZZZZZZZZZZZZZZZZ", cluster_payload),
+    (401, False, "ZZZZZZZZZZZZZZZZZZZZZZZZZZ", None, cluster_payload),
+    (422, True, "ZZZZZZZZZZZZZZZZZZZZZZZZZZ", None, cluster_payload),
+    (401, False, "ZZZZZZZZZZZZZZZZZZZZZZZZZZYY", None, cluster_payload),
+    (422, True, "ZZZZZZZZZZZZZZZZZZZZZZZZZZYY", None, cluster_payload),
+    (401, False, "XX", None, cluster_payload),
+    (422, True, "XX", None, cluster_payload),
+    (401, False, None, {"name": "new_name"}, cluster_payload),
+    (201, True, None, cluster_payload, cluster_payload),
+    (201, True, None, cluster_payload_with_storage, cluster_payload_with_storage),
+    (201, True, None, cluster_payload_with_storage, cluster_payload),
+    (
+        422,
+        True,
+        None,
+        {"name": "new_name", "config_name": "a-filename-without-yaml-ext", "unknown_field": 42},
+        cluster_payload,
+    ),
+    (404, True, "ZZZZZZZZZZZZZZZZZZZZZZZZZZ", cluster_payload, cluster_payload),
 ]
 
 
-@pytest.mark.parametrize("expected_status_code,auth,cluster_id,payload", put_patch_common_test_inputs)
+@pytest.mark.parametrize(
+    "expected_status_code,auth,cluster_id,payload,post_payload",
+    put_patch_common_test_inputs
+    + [
+        (201, True, None, cluster_payload, cluster_payload_with_storage),
+    ],
+)
 @pytest.mark.asyncio
 async def test_clusters_put(
     sanic_client: SanicASGITestClient,
@@ -149,11 +174,14 @@ async def test_clusters_put(
     auth: bool,
     cluster_id: str | None,
     payload: dict | None,
+    post_payload: dict,
 ) -> None:
-    await _clusters_request(sanic_client, "PUT", admin_headers, expected_status_code, auth, cluster_id, payload)
+    await _clusters_request(
+        sanic_client, "PUT", admin_headers, expected_status_code, auth, cluster_id, payload, post_payload
+    )
 
 
-@pytest.mark.parametrize("expected_status_code,auth,cluster_id,payload", put_patch_common_test_inputs)
+@pytest.mark.parametrize("expected_status_code,auth,cluster_id,payload,post_payload", put_patch_common_test_inputs)
 @pytest.mark.asyncio
 async def test_clusters_patch(
     sanic_client: SanicASGITestClient,
@@ -162,8 +190,11 @@ async def test_clusters_patch(
     auth: bool,
     cluster_id: str | None,
     payload: dict | None,
+    post_payload: dict,
 ) -> None:
-    await _clusters_request(sanic_client, "PATCH", admin_headers, expected_status_code, auth, cluster_id, payload)
+    await _clusters_request(
+        sanic_client, "PATCH", admin_headers, expected_status_code, auth, cluster_id, payload, post_payload
+    )
 
 
 @pytest.mark.parametrize(

@@ -154,6 +154,7 @@ class ClusterORM(BaseORM):
     session_path: Mapped[str] = mapped_column(String())
     session_ingress_annotations: Mapped[dict[str, str]] = mapped_column(JSONVariant)
     session_tls_secret_name: Mapped[str] = mapped_column(String(256))
+    session_storage_class: Mapped[str | None] = mapped_column(String(256))
 
     def dump(self) -> models.SavedCluster:
         """Create a cluster model from the ORM object."""
@@ -167,6 +168,7 @@ class ClusterORM(BaseORM):
             session_path=self.session_path,
             session_ingress_annotations=self.session_ingress_annotations,
             session_tls_secret_name=self.session_tls_secret_name,
+            session_storage_class=self.session_storage_class,
         )
 
     @classmethod

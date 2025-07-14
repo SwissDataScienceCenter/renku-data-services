@@ -990,6 +990,8 @@ components:
           $ref: "#/components/schemas/IngressAnnotations"
         session_tls_secret_name:
           $ref: "#/components/schemas/TlsSecretName"
+        session_storage_class:
+          $ref: "#/components/schemas/StorageClassName"
       required: [ "name", "config_name", "session_protocol", "session_host", "session_port", "session_path", "session_ingress_annotations", "session_tls_secret_name" ]
     ClusterPatch:
       type: object
@@ -1011,6 +1013,8 @@ components:
           $ref: "#/components/schemas/IngressAnnotations"
         session_tls_secret_name:
           $ref: "#/components/schemas/TlsSecretName"
+        session_storage_class:
+          $ref: "#/components/schemas/StorageClassName"
     ClusterWithId:
       type: object
       additionalProperties: false
@@ -1033,6 +1037,8 @@ components:
           $ref: "#/components/schemas/IngressAnnotations"
         session_tls_secret_name:
           $ref: "#/components/schemas/TlsSecretName"
+        session_storage_class:
+          $ref: "#/components/schemas/StorageClassName"
       required: [ "name", "config_name", "session_protocol", "session_host", "session_port", "session_path", "session_ingress_annotations", "session_tls_secret_name", "id" ]
     ClustersWithId:
       type: array
@@ -1764,6 +1770,9 @@ components:
       # The following pattern accept things it should not, but this is better than no validation at all.
       pattern: "^([0-9a-zA-Z:_-]+[.])*[0-9a-zA-Z:_-]+$"
     TlsSecretName:
+      type: string
+      maxLength: 256
+    StorageClassName:
       type: string
       maxLength: 256
     IngressAnnotations:
