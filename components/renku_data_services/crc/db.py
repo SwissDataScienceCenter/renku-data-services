@@ -944,6 +944,13 @@ class ClusterRepository:
                 match key, value:
                     case "session_protocol", CrcProtocol():
                         setattr(saved_cluster, key, value.value)
+                    case "session_storage_class", "":
+                        # If we received an empty string in the storage class, reset it to the default storage class by
+                        # setting it to None.
+                        setattr(saved_cluster, key, None)
+                    case _, None:
+                        # Do not modify a value which has not been set in the patch
+                        pass
                     case _, _:
                         setattr(saved_cluster, key, value)
 

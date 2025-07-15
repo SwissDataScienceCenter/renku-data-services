@@ -21,11 +21,6 @@ def validate_cluster(body: apispec.Cluster) -> models.Cluster:
 def validate_cluster_patch(patch: apispec.ClusterPatch) -> models.ClusterPatch:
     """Convert a REST API Cluster object patch to a model Cluster object."""
 
-    if (s := patch.session_storage_class) is not None and s == "":
-        # If we received an empty string in the storage class, reset it to the default storage class by setting
-        # it to None.
-        patch.session_storage_class = None
-
     return models.ClusterPatch(
         name=patch.name,
         config_name=patch.config_name,
