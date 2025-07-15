@@ -189,6 +189,21 @@ class Quota(ResourcesCompareMixin):
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
+class ClusterPatch:
+    """K8s Cluster settings patch."""
+
+    name: str | None
+    config_name: str | None
+    session_protocol: CrcApiProtocol | None
+    session_host: str | None
+    session_port: int | None
+    session_path: str | None
+    session_ingress_annotations: dict[str, Any] | None
+    session_tls_secret_name: str | None
+    session_storage_class: str | None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
 class Cluster:
     """K8s Cluster settings."""
 
@@ -202,27 +217,27 @@ class Cluster:
     session_tls_secret_name: str
     session_storage_class: str | None
 
+    def to_cluster_patch(self) -> ClusterPatch:
+        """Convert to ClusterPatch."""
+
+        return ClusterPatch(
+            name=self.name,
+            config_name=self.config_name,
+            session_protocol=self.session_protocol,
+            session_host=self.session_host,
+            session_port=self.session_port,
+            session_path=self.session_path,
+            session_ingress_annotations=self.session_ingress_annotations,
+            session_tls_secret_name=self.session_tls_secret_name,
+            session_storage_class=self.session_storage_class,
+        )
+
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class SavedCluster(Cluster):
     """K8s Cluster settings from the DB."""
 
     id: ULID
-
-
-@dataclass(frozen=True, eq=True, kw_only=True)
-class ClusterPatch:
-    """K8s Cluster settings patch."""
-
-    name: str | None
-    config_name: str | None
-    session_protocol: CrcApiProtocol | None
-    session_host: str | None
-    session_port: int | None
-    session_path: str | None
-    session_ingress_annotations: dict[str, Any] | None
-    session_tls_secret_name: str | None
-    session_storage_name: str | None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

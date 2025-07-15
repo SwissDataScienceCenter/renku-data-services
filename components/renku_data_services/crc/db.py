@@ -22,7 +22,8 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
-from renku_data_services.crc.models import Cluster, SavedCluster
+from renku_data_services.crc.apispec import Protocol as CrcProtocol
+from renku_data_services.crc.models import Cluster, ClusterPatch, SavedCluster
 from renku_data_services.crc.orm import ClusterORM
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.users.db import UserRepo
@@ -931,7 +932,7 @@ class ClusterRepository:
             return cluster_orm.dump()
 
     @_only_admins
-    async def update(self, api_user: base_models.APIUser, cluster: Cluster, cluster_id: ULID) -> Cluster:
+    async def update(self, api_user: base_models.APIUser, cluster: ClusterPatch, cluster_id: ULID) -> Cluster:
         """Updates a cluster configuration."""
 
         async with self.session_maker() as session, session.begin():
@@ -939,15 +940,11 @@ class ClusterRepository:
             if saved_cluster is None:
                 raise errors.MissingResourceError(message=f"Cluster definition id='{cluster_id}' does not exist.")
 
-            kwargs = asdict(cluster)
-            for key, value in kwargs.items():
-                match key:
-                    case "id":
-                        # Make sure we do not allow changing the id of the cluster
-                        pass
-                    case "session_protocol":
-                        saved_cluster.session_protocol = value.value
-                    case _:
+            for key, value in asdict(cluster).items():
+                match key, value:
+                    case "session_protocol", CrcProtocol():
+                        setattr(saved_cluster, key, value.value)
+                    case _, _:
                         setattr(saved_cluster, key, value)
 
             await session.flush()

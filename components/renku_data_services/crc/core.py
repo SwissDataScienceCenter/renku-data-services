@@ -1,7 +1,5 @@
 """crc modules converters and validators."""
 
-from dataclasses import asdict
-
 from renku_data_services.crc import apispec, models
 
 
@@ -20,10 +18,24 @@ def validate_cluster(body: apispec.Cluster) -> models.Cluster:
     )
 
 
-def validate_cluster_patch(cluster: models.SavedCluster, body: apispec.ClusterPatch) -> models.Cluster:
+def validate_cluster_patch(patch: apispec.ClusterPatch) -> models.ClusterPatch:
     """Convert a REST API Cluster object patch to a model Cluster object."""
-    cluster = asdict(cluster)
-    cluster.pop("id", None)
 
-    patch = body.model_dump(exclude_none=True)
-    return models.Cluster(**{**cluster, **patch})
+    if (s := patch.session_storage_class) is not None and s == "":
+        # If we received an empty string in the storage class, reset it to the default storage class by setting
+        # it to None.
+        patch.session_storage_class = None
+
+    return models.ClusterPatch(
+        name=patch.name,
+        config_name=patch.config_name,
+        session_protocol=patch.session_protocol,
+        session_host=patch.session_host,
+        session_port=patch.session_port,
+        session_path=patch.session_path,
+        session_ingress_annotations=patch.session_ingress_annotations.model_dump()
+        if patch.session_ingress_annotations is not None
+        else None,
+        session_tls_secret_name=patch.session_tls_secret_name,
+        session_storage_class=patch.session_storage_class,
+    )

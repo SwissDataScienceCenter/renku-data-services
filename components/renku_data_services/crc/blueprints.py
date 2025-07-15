@@ -630,7 +630,7 @@ class ClustersBP(CustomBlueprint):
             _request: Request, user: base_models.APIUser, cluster_id: ULID, body: apispec.Cluster
         ) -> HTTPResponse:
             cluster = validate_cluster(body)
-            cluster = await self.repo.update(user, cluster, cluster_id)
+            cluster = await self.repo.update(user, cluster.to_cluster_patch(), cluster_id)
 
             return validated_json(apispec.ClusterWithId, cluster, status=201)
 
@@ -645,10 +645,8 @@ class ClustersBP(CustomBlueprint):
         async def _handler(
             _request: Request, user: base_models.APIUser, cluster_id: ULID, body: apispec.ClusterPatch
         ) -> HTTPResponse:
-            cluster = await self.repo.select(user, cluster_id)
-            cluster = validate_cluster_patch(cluster, body)
-
-            cluster = await self.repo.update(user, cluster, cluster_id)
+            patch = validate_cluster_patch(body)
+            cluster = await self.repo.update(user, patch, cluster_id)
 
             return validated_json(apispec.ClusterWithId, cluster, status=201)
 
