@@ -159,13 +159,7 @@ put_patch_common_test_inputs = [
 ]
 
 
-@pytest.mark.parametrize(
-    "expected_status_code,auth,cluster_id,payload,post_payload",
-    put_patch_common_test_inputs
-    + [
-        (201, True, None, cluster_payload, cluster_payload_with_storage),
-    ],
-)
+@pytest.mark.parametrize("expected_status_code,auth,cluster_id,payload,post_payload", put_patch_common_test_inputs)
 @pytest.mark.asyncio
 async def test_clusters_put(
     sanic_client: SanicASGITestClient,

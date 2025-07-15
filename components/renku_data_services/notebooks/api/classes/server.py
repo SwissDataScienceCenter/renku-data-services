@@ -197,6 +197,8 @@ class UserServer:
                 "size": self.server_options.storage,
                 "pvc": {
                     "enabled": True,
+                    # We should check against the cluster, but as this is only used by V1 sessions, we ignore this
+                    # use-case.
                     "storageClassName": self.config.sessions.storage.pvs_storage_class,
                     "mountPath": self.workspace_mount_path.as_posix(),
                 },

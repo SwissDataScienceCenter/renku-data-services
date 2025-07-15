@@ -406,6 +406,9 @@ class NotebooksNewBP(CustomBlueprint):
             if launcher_env_variables:
                 env.extend(launcher_env_variables)
 
+            storage_class = await cluster.get_storage_class(
+                user, self.cluster_repo, self.nb_config.sessions.storage.pvs_storage_class
+            )
             manifest = AmaltheaSessionV1Alpha1(
                 metadata=Metadata(name=server_name, annotations=annotations),
                 spec=AmaltheaSessionSpec(
@@ -422,7 +425,7 @@ class NotebooksNewBP(CustomBlueprint):
                         urlPath=ui_path,
                         port=environment.port,
                         storage=Storage(
-                            className=self.nb_config.sessions.storage.pvs_storage_class,
+                            className=storage_class,
                             size=str(body.disk_storage) + "G",
                             mountPath=storage_mount.as_posix(),
                         ),

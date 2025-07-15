@@ -129,6 +129,18 @@ class Cluster:
         """Create an API object associated with the cluster."""
         return APIObjectInCluster(obj, self.id)
 
+    async def get_storage_class(
+        self, user: APIUser, cluster_repo: ClusterRepository, default_storage_class: str | None
+    ) -> str | None:
+        """Get the default storage class for the cluster."""
+        try:
+            cluster = await cluster_repo.select(user, ULID.from_str(self.id))
+            storage_class = cluster.session_storage_class
+        except (MissingResourceError, ValueError) as _e:
+            storage_class = default_storage_class
+
+        return storage_class
+
     async def get_ingress_parameters(
         self, user: APIUser, cluster_repo: ClusterRepository, main_ingress: _SessionIngress, server_name: str
     ) -> tuple[str, str, str, str, TlsSecret | None, dict[str, str]]:
