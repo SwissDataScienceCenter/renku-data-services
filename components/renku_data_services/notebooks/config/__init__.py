@@ -33,6 +33,7 @@ from renku_data_services.notebooks.config.dynamic import (
     ServerOptionsConfig,
     _CloudStorage,
     _GitConfig,
+    _K8sConfig,
     _parse_str_as_bool,
     _SentryConfig,
     _SessionConfig,
@@ -111,6 +112,7 @@ class NotebooksConfig:
     sessions: _SessionConfig
     sentry: _SentryConfig
     git: _GitConfig
+    k8s: _K8sConfig
     k8s_db_cache: K8sDbCache
     _kr8s_api: kr8s.asyncio.Api
     cloud_storage: _CloudStorage
@@ -168,12 +170,13 @@ class NotebooksConfig:
             # But all the config code is not async, so we need to drop into the running loop, if there is one
             kr8s_api = KubeConfigEnv().api()
 
+        k8s_config = _K8sConfig.from_env()
         k8s_db_cache = K8sDbCache(db_config.async_session_maker)
         cluster_rp = ClusterRepository(db_config.async_session_maker)
         client = K8sClusterClientsPool(
             get_clusters=get_clusters(
                 kube_conf_root_dir=kube_config_root,
-                namespace=k8s_namespace,
+                namespace=k8s_config.renku_namespace,
                 api=kr8s_api,
                 cluster_rp=cluster_rp,
             ),
@@ -200,6 +203,7 @@ class NotebooksConfig:
             sessions=sessions_config,
             sentry=_SentryConfig.from_env(),
             git=git_config,
+            k8s=k8s_config,
             cloud_storage=_CloudStorage.from_env(),
             user_secrets=_UserSecrets.from_env(),
             current_resource_schema_version=1,

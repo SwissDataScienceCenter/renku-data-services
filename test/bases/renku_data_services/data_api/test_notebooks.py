@@ -2,7 +2,6 @@
 
 import asyncio
 import contextlib
-import os
 from collections.abc import AsyncGenerator, AsyncIterator, Generator
 from contextlib import suppress
 from datetime import timedelta
@@ -257,7 +256,7 @@ class TestNotebooks(ClusterRequired):
         clusters = [
             Cluster(
                 id=DEFAULT_K8S_CLUSTER,
-                namespace=os.environ.get("KUBERNETES_NAMESPACE", "default"),
+                namespace=app_manager.config.nb_config.k8s.renku_namespace,
                 api=app_manager.config.nb_config._kr8s_api.current,
             )
         ]
