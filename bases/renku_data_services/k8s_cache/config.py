@@ -12,6 +12,7 @@ from renku_data_services.db_config.config import DBConfig
 class _K8sConfig:
     """Defines the k8s client and namespace."""
 
+    # This is used only for the main/local/default cluster
     renku_namespace: str
     kube_config_root: str
 
