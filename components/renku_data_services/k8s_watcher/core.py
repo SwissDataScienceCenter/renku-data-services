@@ -21,8 +21,8 @@ from renku_data_services.notebooks.crs import State
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from renku_data_services.k8s.models import APIObjectInCluster, Cluster, ClusterId
-
+    from renku_data_services.k8s.constants import ClusterId
+    from renku_data_services.k8s.models import APIObjectInCluster, Cluster
 
 type EventHandler = Callable[[APIObjectInCluster, str], Awaitable[None]]
 type SyncFunc = Callable[[], Awaitable[None]]
@@ -53,7 +53,7 @@ class K8sWatcher:
     async def __sync(self, cluster: Cluster, kind: GVK) -> None:
         """Upsert K8s objects in the cache and remove deleted objects from the cache."""
         clnt = K8sClusterClient(cluster)
-        fltr = K8sObjectFilter(gvk=kind, namespace=cluster.namespace)
+        fltr = K8sObjectFilter(gvk=kind, cluster=cluster.id, namespace=cluster.namespace)
         # Upsert new / updated objects
         objects_in_k8s: dict[str, K8sObject] = {}
         async for obj in clnt.list(fltr):
@@ -64,7 +64,7 @@ class K8sWatcher:
             cache_obj_is_in_k8s = objects_in_k8s.get(cache_obj.name) is not None
             if cache_obj_is_in_k8s:
                 continue
-            await self.__cache.delete(cache_obj.meta)
+            await self.__cache.delete(cache_obj)
 
     async def __full_sync(self, cluster: Cluster) -> None:
         """Run the full sync if it has never run or at the required interval."""

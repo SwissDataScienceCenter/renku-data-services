@@ -12,11 +12,16 @@ from renku_data_services.db_config.config import DBConfig
 class _K8sConfig:
     """Defines the k8s client and namespace."""
 
-    renku_namespace: str = "default"
+    # This is used only for the main/local/default cluster
+    renku_namespace: str
+    kube_config_root: str
 
     @classmethod
     def from_env(cls) -> Self:
-        return cls(renku_namespace=os.environ.get("KUBERNETES_NAMESPACE", "default"))
+        return cls(
+            renku_namespace=os.environ.get("KUBERNETES_NAMESPACE", "default"),
+            kube_config_root=os.environ.get("K8S_CONFIGS_ROOT", "/secrets/kube_configs"),
+        )
 
 
 @dataclass

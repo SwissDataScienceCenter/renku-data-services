@@ -1,14 +1,15 @@
 """Base config for k8s."""
 
-import glob
 import os
 
 import kr8s
 import yaml
 
+import renku_data_services.k8s.constants
 from renku_data_services.app_config import logging
+from renku_data_services.crc.db import ClusterRepository
+from renku_data_services.k8s import models as k8s_models
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
-from renku_data_services.k8s.models import Cluster, ClusterId
 
 logger = logging.getLogger(__name__)
 
@@ -88,26 +89,29 @@ class KubeConfigYaml(KubeConfig):
                     break
 
 
-def get_clusters(kube_conf_root_dir: str, namespace: str, api: kr8s.asyncio.Api) -> list[Cluster]:
+async def get_clusters(
+    kube_conf_root_dir: str, namespace: str, api: kr8s.asyncio.Api, cluster_rp: ClusterRepository
+) -> list[k8s_models.Cluster]:
     """Get all clusters accessible to the application."""
-    clusters = [Cluster(id=DEFAULT_K8S_CLUSTER, namespace=namespace, api=api)]
 
-    if os.path.exists(kube_conf_root_dir):
-        for filename in glob.glob(pathname="*.yaml", root_dir=kube_conf_root_dir):
-            try:
-                kube_config = KubeConfigYaml(filename)
-                cluster = Cluster(
-                    id=ClusterId(filename.removesuffix(".yaml")),
-                    namespace=kube_config.api().namespace,
-                    api=kube_config.api(),
-                )
-                clusters.append(cluster)
-                logger.info(f"Successfully loaded Kubernetes config: '{kube_conf_root_dir}/{filename}'")
-            except Exception as e:
-                logger.warning(
-                    f"Failed while loading '{kube_conf_root_dir}/{filename}', ignoring kube config. Error: {e}"
-                )
-    else:
+    clusters = [k8s_models.Cluster(id=DEFAULT_K8S_CLUSTER, namespace=namespace, api=api)]
+
+    if not os.path.exists(kube_conf_root_dir):
         logger.warning(f"Cannot open directory '{kube_conf_root_dir}', ignoring kube configs...")
+        return clusters
+
+    async for db_cluster in cluster_rp.select_all():
+        filename = db_cluster.config_name
+        try:
+            kube_config = KubeConfigYaml(f"{kube_conf_root_dir}/{filename}")
+            cluster = k8s_models.Cluster(
+                id=renku_data_services.k8s.constants.ClusterId(str(db_cluster.id)),
+                namespace=kube_config.api().namespace,
+                api=kube_config.api(),
+            )
+            clusters.append(cluster)
+            logger.info(f"Successfully loaded Kubernetes config: '{kube_conf_root_dir}/{filename}'")
+        except Exception as e:
+            logger.warning(f"Failed while loading '{kube_conf_root_dir}/{filename}', ignoring kube config. Error: {e}")
 
     return clusters

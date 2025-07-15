@@ -7,55 +7,58 @@ from sanic_testing.testing import SanicASGITestClient
 
 from test.bases.renku_data_services.data_api.utils import create_rp
 
+resource_pool_payload = [
+    (
+        {
+            "name": "test-name",
+            "classes": [
+                {
+                    "cpu": 1.0,
+                    "memory": 10,
+                    "gpu": 0,
+                    "name": "test-class-name",
+                    "max_storage": 100,
+                    "default_storage": 1,
+                    "default": True,
+                    "node_affinities": [],
+                    "tolerations": [],
+                }
+            ],
+            "quota": {"cpu": 100, "memory": 100, "gpu": 0},
+            "default": False,
+            "public": True,
+            "idle_threshold": 86400,
+            "hibernation_threshold": 99999,
+            "cluster_id": "change_me",
+        },
+        201,
+    ),
+    (
+        {
+            "name": "test-name",
+            "classes": [
+                {
+                    "cpu": 1.0,
+                    "memory": 10,
+                    "gpu": 0,
+                    "name": "test-class-name",
+                    "max_storage": 100,
+                    "default_storage": 1,
+                    "default": True,
+                }
+            ],
+            "quota": "something",
+            "default": False,
+            "public": True,
+        },
+        422,
+    ),
+]
+
 
 @pytest.mark.parametrize(
     "payload,expected_status_code",
-    [
-        (
-            {
-                "name": "test-name",
-                "classes": [
-                    {
-                        "cpu": 1.0,
-                        "memory": 10,
-                        "gpu": 0,
-                        "name": "test-class-name",
-                        "max_storage": 100,
-                        "default_storage": 1,
-                        "default": True,
-                        "node_affinities": [],
-                        "tolerations": [],
-                    }
-                ],
-                "quota": {"cpu": 100, "memory": 100, "gpu": 0},
-                "default": False,
-                "public": True,
-                "idle_threshold": 86400,
-                "hibernation_threshold": 99999,
-            },
-            201,
-        ),
-        (
-            {
-                "name": "test-name",
-                "classes": [
-                    {
-                        "cpu": 1.0,
-                        "memory": 10,
-                        "gpu": 0,
-                        "name": "test-class-name",
-                        "max_storage": 100,
-                        "default_storage": 1,
-                        "default": True,
-                    }
-                ],
-                "quota": "something",
-                "default": False,
-                "public": True,
-            },
-            422,
-        ),
-    ],
+    resource_pool_payload,
 )
 @pytest.mark.asyncio
 async def test_resource_pool_creation(
@@ -63,8 +66,47 @@ async def test_resource_pool_creation(
     payload: dict[str, Any],
     expected_status_code: int,
 ) -> None:
+    if "cluster_id" in payload:
+        payload["cluster_id"] = None
+
     _, res = await create_rp(payload, sanic_client)
     assert res.status_code == expected_status_code
+
+
+@pytest.mark.parametrize(
+    "payload,expected_status_code",
+    resource_pool_payload,
+)
+@pytest.mark.asyncio
+async def test_resource_pool_creation_with_cluster_ids(
+    sanic_client: SanicASGITestClient,
+    payload: dict[str, Any],
+    expected_status_code: int,
+) -> None:
+    if "cluster_id" in payload:
+        _, res = await sanic_client.post(
+            "/api/data/clusters",
+            json={
+                "name": "test-name",
+                "config_name": "test-class-name.yaml",
+                "session_protocol": "http",
+                "session_host": "localhost",
+                "session_port": 8080,
+                "session_path": "/renku-sessions",
+                "session_ingress_annotations": {},
+                "session_tls_secret_name": "a-domain-name-tls",
+            },
+            headers={"Authorization": 'Bearer {"is_admin": true}'},
+        )
+        payload["cluster_id"] = res.json["id"]
+
+    _, res = await create_rp(payload, sanic_client)
+    assert res.status_code == expected_status_code
+
+    if "cluster_id" in payload:
+        assert "cluster" in res.json
+        assert "id" in res.json["cluster"]
+        assert res.json["cluster"]["id"] == payload["cluster_id"]
 
 
 @pytest.mark.asyncio
@@ -1003,7 +1045,7 @@ resource_pool_payload = {
 }
 
 cluster_payload = {
-    "config_name": "a-filename-without-yaml-ext",
+    "config_name": "a-filename.yaml",
     "name": "test-cluster-post",
 }
 

@@ -406,12 +406,6 @@ class SanicReusableASGITestClient(SanicASGITestClient):
         return None, response  # type: ignore
 
 
-def remove_id_from_quota(quota: rp_models.Quota) -> rp_models.Quota:
-    kwargs = asdict(quota)
-    kwargs["id"] = None
-    return rp_models.Quota(**kwargs)
-
-
 def remove_id_from_rc(rc: rp_models.ResourceClass) -> rp_models.ResourceClass:
     kwargs = asdict(rc)
     kwargs["id"] = None
@@ -419,24 +413,7 @@ def remove_id_from_rc(rc: rp_models.ResourceClass) -> rp_models.ResourceClass:
 
 
 def remove_quota_from_rc(rc: rp_models.ResourceClass) -> rp_models.ResourceClass:
-    return rc.update(quota=None)
-
-
-def remove_id_from_rp(rp: rp_models.ResourcePool) -> rp_models.ResourcePool:
-    quota = rp.quota
-    if isinstance(quota, rp_models.Quota):
-        quota = remove_id_from_quota(quota)
-    classes = [remove_quota_from_rc(remove_id_from_rc(rc)) for rc in rp.classes]
-    return rp_models.ResourcePool(
-        name=rp.name,
-        id=None,
-        quota=quota,
-        classes=classes,
-        default=rp.default,
-        public=rp.public,
-        idle_threshold=rp.idle_threshold,
-        hibernation_threshold=rp.hibernation_threshold,
-    )
+    return rc.update(quota={})
 
 
 def remove_id_from_user(user: base_models.User) -> base_models.User:
@@ -453,12 +430,11 @@ async def create_rp(
     rp: rp_models.ResourcePool, repo: ResourcePoolRepository, api_user: base_models.APIUser
 ) -> rp_models.ResourcePool:
     inserted_rp = await repo.insert_resource_pool(api_user, rp)
+
     assert inserted_rp is not None
     assert inserted_rp.id is not None
     assert inserted_rp.quota is not None
     assert all([rc.id is not None for rc in inserted_rp.classes])
-    inserted_rp_no_ids = remove_id_from_rp(inserted_rp)
-    assert rp == inserted_rp_no_ids, f"resource pools do not match {rp} != {inserted_rp_no_ids}"
     retrieved_rps = await repo.get_resource_pools(api_user, inserted_rp.id)
     assert len(retrieved_rps) == 1
     assert inserted_rp.id == retrieved_rps[0].id

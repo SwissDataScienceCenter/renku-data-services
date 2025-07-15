@@ -9,7 +9,8 @@ from kr8s.asyncio.objects import APIObject, Pod
 
 from renku_data_services import errors
 from renku_data_services.errors.errors import CannotStartBuildError
-from renku_data_services.k8s.models import GVK, ClusterId, K8sObjectFilter, K8sObjectMeta
+from renku_data_services.k8s.constants import ClusterId
+from renku_data_services.k8s.models import GVK, K8sObjectFilter, K8sObjectMeta
 from renku_data_services.notebooks.api.classes.k8s_client import DEFAULT_K8S_CLUSTER
 from renku_data_services.notebooks.util.retries import retry_with_exponential_backoff_async
 from renku_data_services.session import crs, models

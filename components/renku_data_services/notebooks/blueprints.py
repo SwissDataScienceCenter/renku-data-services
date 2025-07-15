@@ -13,7 +13,7 @@ from renku_data_services.base_api.auth import authenticate, authenticate_2
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser, Authenticator
 from renku_data_services.base_models.metrics import MetricsService
-from renku_data_services.crc.db import ResourcePoolRepository
+from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
     DataConnectorSecretRepository,
@@ -57,7 +57,6 @@ from renku_data_services.notebooks.crs import (
     Session,
     SessionEnvItem,
     Storage,
-    TlsSecret,
 )
 from renku_data_services.notebooks.errors.intermittent import AnonymousUserPatchError
 from renku_data_services.notebooks.models import ExtraSecret
@@ -240,6 +239,7 @@ class NotebooksNewBP(CustomBlueprint):
     data_connector_repo: DataConnectorRepository
     data_connector_secret_repo: DataConnectorSecretRepository
     metrics: MetricsService
+    cluster_repo: ClusterRepository
 
     def start(self) -> BlueprintFactoryResponse:
         """Start a session with the new operator."""
@@ -252,11 +252,11 @@ class NotebooksNewBP(CustomBlueprint):
             internal_gitlab_user: APIUser,
             body: apispec.SessionPostRequest,
         ) -> JSONResponse:
-            # gitlab_client = NotebooksGitlabClient(self.nb_config.git.url, internal_gitlab_user.access_token)
-
             launcher = await self.session_repo.get_launcher(user, ULID.from_str(body.launcher_id))
             project = await self.project_repo.get_project(user=user, project_id=launcher.project_id)
-            cluster = await self.nb_config.k8s_client.cluster_by_class_id(launcher.resource_class_id, user)
+            # We have to use body.resource_class_id and not launcher.resource_class_id as it may have been overridden by
+            # the user when selecting a different resource class from a different resource pool.
+            cluster = await self.nb_config.k8s_v2_client.cluster_by_class_id(body.resource_class_id, user)
             server_name = renku_2_make_server_name(
                 user=user, project_id=str(launcher.project_id), launcher_id=body.launcher_id, cluster_id=cluster.id
             )
@@ -342,20 +342,36 @@ class NotebooksNewBP(CustomBlueprint):
             extra_volumes.extend(extra_init_volumes_dc)
             extra_init_containers.extend(extra_init_containers_dc)
 
-            base_server_url = self.nb_config.sessions.ingress.base_url(server_name)
-            base_server_path = self.nb_config.sessions.ingress.base_path(server_name)
-            ui_path: str = (
-                f"{base_server_path.rstrip('/')}/{environment.default_url.lstrip('/')}"
-                if len(environment.default_url) > 0
-                else base_server_path
+            (
+                base_server_path,
+                base_server_url,
+                base_server_https_url,
+                host,
+                tls_secret,
+                ingress_annotations,
+            ) = await cluster.get_ingress_parameters(
+                user, self.cluster_repo, self.nb_config.sessions.ingress, server_name
             )
+
+            ui_path = f"{base_server_path}/{environment.default_url.lstrip('/')}"
+
+            ingress = Ingress(
+                host=host,
+                ingressClassName=ingress_annotations.get("kubernetes.io/ingress.class"),
+                annotations=ingress_annotations,
+                tlsSecret=tls_secret,
+                pathPrefix=base_server_path,
+            )
+
             annotations: dict[str, str] = {
                 "renku.io/project_id": str(launcher.project_id),
                 "renku.io/launcher_id": body.launcher_id,
                 "renku.io/resource_class_id": str(body.resource_class_id or default_resource_class.id),
             }
             if isinstance(user, AuthenticatedAPIUser):
-                auth_secret = await get_auth_secret_authenticated(self.nb_config, user, server_name)
+                auth_secret = await get_auth_secret_authenticated(
+                    self.nb_config, user, server_name, base_server_url, base_server_https_url, base_server_path
+                )
             else:
                 auth_secret = await get_auth_secret_anonymous(self.nb_config, server_name, request)
             if auth_secret.volume:
@@ -390,6 +406,9 @@ class NotebooksNewBP(CustomBlueprint):
             if launcher_env_variables:
                 env.extend(launcher_env_variables)
 
+            storage_class = await cluster.get_storage_class(
+                user, self.cluster_repo, self.nb_config.sessions.storage.pvs_storage_class
+            )
             manifest = AmaltheaSessionV1Alpha1(
                 metadata=Metadata(name=server_name, annotations=annotations),
                 spec=AmaltheaSessionSpec(
@@ -406,7 +425,7 @@ class NotebooksNewBP(CustomBlueprint):
                         urlPath=ui_path,
                         port=environment.port,
                         storage=Storage(
-                            className=self.nb_config.sessions.storage.pvs_storage_class,
+                            className=storage_class,
                             size=str(body.disk_storage) + "G",
                             mountPath=storage_mount.as_posix(),
                         ),
@@ -420,15 +439,7 @@ class NotebooksNewBP(CustomBlueprint):
                         shmSize="1G",
                         env=env,
                     ),
-                    ingress=Ingress(
-                        host=self.nb_config.sessions.ingress.host,
-                        ingressClassName=self.nb_config.sessions.ingress.annotations.get("kubernetes.io/ingress.class"),
-                        annotations=self.nb_config.sessions.ingress.annotations,
-                        tlsSecret=TlsSecret(adopt=False, name=self.nb_config.sessions.ingress.tls_secret)
-                        if self.nb_config.sessions.ingress.tls_secret is not None
-                        else None,
-                        pathPrefix=base_server_path,
-                    ),
+                    ingress=ingress,
                     extraContainers=extra_containers,
                     initContainers=extra_init_containers,
                     extraVolumes=extra_volumes,
@@ -449,12 +460,12 @@ class NotebooksNewBP(CustomBlueprint):
                 ),
             )
             for s in secrets_to_create:
-                await self.nb_config.k8s_v2_client.create_secret(s.secret)
+                await self.nb_config.k8s_v2_client.create_secret(s.secret, cluster)
             try:
                 manifest = await self.nb_config.k8s_v2_client.create_session(manifest, user)
             except Exception as err:
                 for s in secrets_to_create:
-                    await self.nb_config.k8s_v2_client.delete_secret(s.secret.metadata.name)
+                    await self.nb_config.k8s_v2_client.delete_secret(s.secret.metadata.name, cluster)
                 raise errors.ProgrammingError(message="Could not start the amalthea session") from err
             else:
                 try:
