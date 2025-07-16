@@ -6,7 +6,8 @@ from typing import Any, cast, override
 from urllib.parse import urlunparse
 
 from kubernetes.utils import parse_duration, parse_quantity
-from pydantic import BaseModel, Field, field_validator
+from kubernetes.utils.duration import format_duration
+from pydantic import BaseModel, Field, field_serializer, field_validator, model_serializer
 from ulid import ULID
 
 from renku_data_services.errors import errors
@@ -16,7 +17,6 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     Affinity,
     Authentication,
     CodeRepository,
-    Culling,
     DataSource,
     EmptyDir,
     ExtraContainer,
@@ -36,12 +36,14 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     SecretRef,
     Session,
     Size,
-    Spec,
     State,
     Status,
     Storage,
     TlsSecret,
     Toleration,
+)
+from renku_data_services.notebooks.cr_amalthea_session import (
+    Culling as _ASCulling,
 )
 from renku_data_services.notebooks.cr_amalthea_session import EnvItem2 as SessionEnvItem
 from renku_data_services.notebooks.cr_amalthea_session import Item4 as SecretAsVolumeItem
@@ -54,7 +56,7 @@ from renku_data_services.notebooks.cr_amalthea_session import Resources3 as Reso
 from renku_data_services.notebooks.cr_amalthea_session import Secret1 as SecretAsVolume
 from renku_data_services.notebooks.cr_amalthea_session import ShmSize1 as ShmSizeStr
 from renku_data_services.notebooks.cr_amalthea_session import Size1 as SizeStr
-from renku_data_services.notebooks.cr_amalthea_session import Spec as AmaltheaSessionSpec
+from renku_data_services.notebooks.cr_amalthea_session import Spec as _ASSpec
 from renku_data_services.notebooks.cr_amalthea_session import Type as AuthenticationType
 from renku_data_services.notebooks.cr_amalthea_session import Type1 as CodeRepositoryType
 from renku_data_services.notebooks.cr_base import BaseCRD
@@ -143,6 +145,29 @@ class JupyterServerV1Alpha1(_JSModel):
         return i
 
 
+class Culling(_ASCulling):
+    """Amalthea session culling configuration."""
+
+    @field_serializer("*", mode="wrap")
+    def __serialize_duration_field(self, val: Any, nxt: Any, _info: Any) -> Any:
+        if isinstance(val, timedelta):
+            return format_duration(val)
+        return nxt(val)
+
+    @field_validator("*", mode="wrap")
+    @classmethod
+    def __deserialize_duration(cls, val: Any, handler: Any) -> Any:
+        if isinstance(val, str):
+            return safe_parse_duration(val)
+        return handler(val)
+
+
+class AmaltheaSessionSpec(_ASSpec):
+    """Amalthea session specification."""
+
+    culling: Culling | None = None
+
+
 class AmaltheaSessionV1Alpha1(_ASModel):
     """Amalthea session CRD."""
 
@@ -150,11 +175,10 @@ class AmaltheaSessionV1Alpha1(_ASModel):
     apiVersion: str = AMALTHEA_SESSION_GVK.group_version
     # Here we overwrite the default from ASModel because it is too weakly typed
     metadata: Metadata  # type: ignore[assignment]
+    spec: AmaltheaSessionSpec
 
     def get_compute_resources(self) -> ComputeResources:
         """Convert the k8s resource requests and storage into usable values."""
-        if self.spec is None:
-            return ComputeResources()
         resource_requests: dict = {}
         if self.spec.session.resources is not None:
             resource_requests = self.spec.session.resources.requests or {}
@@ -343,6 +367,8 @@ def safe_parse_duration(val: Any) -> timedelta:
     This does not make the whole thing 100% foolproof but it eliminates errors like the above which
     we have seen in production.
     """
+    if isinstance(val, timedelta):
+        return val
     m = re.match(r"^([0-9]+)(h|m|s|ms)$", str(val))
     if m is not None:
         num = m.group(1)
