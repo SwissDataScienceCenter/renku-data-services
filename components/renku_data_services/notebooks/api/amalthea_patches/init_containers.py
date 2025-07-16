@@ -260,10 +260,9 @@ async def git_clone_container(server: UserServer) -> dict[str, Any] | None:
         },
         "securityContext": {
             "allowPrivilegeEscalation": False,
-            "runAsGroup": 1000,
+            "runAsGroup": 100,
             "runAsUser": 1000,
             "runAsNonRoot": True,
-            "capabilities": {"drop": ["ALL"]},
         },
         "volumeMounts": [
             {
