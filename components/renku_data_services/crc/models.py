@@ -216,6 +216,7 @@ class Cluster:
     session_ingress_annotations: dict[str, Any]
     session_tls_secret_name: str
     session_storage_class: str | None
+    service_account_name: str | None = None
 
     def to_cluster_patch(self) -> ClusterPatch:
         """Convert to ClusterPatch."""
