@@ -94,6 +94,8 @@ class ComputeResources(BaseModel):
     def _convert_k8s_cpu(cls, val: Any) -> Any:
         if val is None:
             return None
+        if hasattr(val, "root"):
+            val = val.root
         return float(parse_quantity(val))
 
     @field_validator("gpu", mode="before")
@@ -101,6 +103,8 @@ class ComputeResources(BaseModel):
     def _convert_k8s_gpu(cls, val: Any) -> Any:
         if val is None:
             return None
+        if hasattr(val, "root"):
+            val = val.root
         return round(parse_quantity(val), ndigits=None)
 
     @field_validator("memory", "storage", mode="before")
@@ -109,6 +113,8 @@ class ComputeResources(BaseModel):
         """Converts to gigabytes of base 10."""
         if val is None:
             return None
+        if hasattr(val, "root"):
+            val = val.root
         return round(parse_quantity(val) / 1_000_000_000, ndigits=None)
 
 
