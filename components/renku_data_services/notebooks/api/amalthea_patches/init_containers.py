@@ -306,6 +306,13 @@ def certificates_container(config: NotebooksConfig) -> tuple[client.V1Container,
             custom_certs=True,
             read_only_etc_certs=False,
         ),
+        security_context=client.V1SecurityContext(
+            allow_privilege_escalation=False,
+            run_as_group=1000,
+            run_as_user=1000,
+            run_as_non_root=True,
+            capabilities=client.V1Capabilities(drop=["ALL"]),
+        ),
         resources={
             "requests": {
                 "cpu": "50m",
