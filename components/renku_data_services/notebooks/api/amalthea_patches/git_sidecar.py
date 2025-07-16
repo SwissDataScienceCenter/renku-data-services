@@ -103,10 +103,10 @@ async def main(server: UserServer) -> list[dict[str, Any]]:
                         ],
                         "securityContext": {
                             "allowPrivilegeEscalation": False,
-                            "fsGroup": 100,
                             "runAsGroup": 1000,
                             "runAsUser": 1000,
                             "runAsNonRoot": True,
+                            "capabilities": {"drop": ["ALL"]},
                         },
                         "volumeMounts": [volume_mount],
                         "livenessProbe": {

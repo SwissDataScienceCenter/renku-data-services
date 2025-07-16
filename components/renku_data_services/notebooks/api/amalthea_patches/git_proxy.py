@@ -73,6 +73,7 @@ async def main_container(
             "runAsUser": 1000,
             "allowPrivilegeEscalation": False,
             "runAsNonRoot": True,
+            "capabilities": {"drop": ["ALL"]},
         },
         name="git-proxy",
         env=env,
