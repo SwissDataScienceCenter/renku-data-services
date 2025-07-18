@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 
 def main_container(
+    session_id: str,
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     config: NotebooksConfig,
 ) -> client.V1Container | None:
@@ -30,7 +31,9 @@ def main_container(
 
     prefix = "API_PROXY_"
     env = [
+        client.V1EnvVar(name=f"{prefix}HOST", value="localhost"),
         client.V1EnvVar(name=f"{prefix}PORT", value="58080"),
+        client.V1EnvVar(name=f"{prefix}SESSION_ID", value=session_id),
         client.V1EnvVar(name=f"{prefix}RENKU_ACCESS_TOKEN", value=str(user.access_token)),
         client.V1EnvVar(name=f"{prefix}RENKU_REFRESH_TOKEN", value=str(user.refresh_token)),
         client.V1EnvVar(name=f"{prefix}RENKU_REALM", value=config.keycloak_realm),

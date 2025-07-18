@@ -9,15 +9,23 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/SwissDataScienceCenter/renku-data-services/components/renku_session_services/api_proxy/pkg/config"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
 
 func Run() {
+	cfg, err := config.LoadAndValidateConfig()
+	if err != nil {
+		slog.Error("loading the configuration failed", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("loaded configuration", "config", cfg)
+
 	e := createServer()
 
 	// Start server
-	address := fmt.Sprintf("%s:%d", "0.0.0.0", 58080) // TODO: config
+	address := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	slog.Info("starting the server on address " + address)
 	go func() {
 		err := e.Start(address)

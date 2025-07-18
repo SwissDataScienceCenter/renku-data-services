@@ -96,6 +96,7 @@ async def get_extra_init_containers(
 
 async def get_extra_containers(
     nb_config: NotebooksConfig,
+    session_id: str,
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     repositories: list[Repository],
     git_providers: list[GitProvider],
@@ -107,7 +108,7 @@ async def get_extra_containers(
     )
     if git_proxy_container:
         conts.append(ExtraContainer.model_validate(sanitizer(git_proxy_container)))
-    api_proxy_container = api_proxy.main_container(user=user, config=nb_config)
+    api_proxy_container = api_proxy.main_container(session_id=session_id, user=user, config=nb_config)
     if api_proxy_container:
         conts.append(ExtraContainer.model_validate(sanitizer(api_proxy_container)))
     return conts
@@ -552,6 +553,7 @@ async def patch_session(
     repositories = await repositories_from_session(user, session, project_repo, git_providers)
     extra_containers = await get_extra_containers(
         nb_config,
+        session_id,
         user,
         repositories,
         git_providers,
