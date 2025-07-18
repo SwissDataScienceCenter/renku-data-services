@@ -43,6 +43,9 @@ func loadConfig() (config Config, err error) {
 	v.SetDefault("port", 58080)
 	v.SetDefault("renku_access_token", "")
 	v.SetDefault("renku_refresh_token", "")
+	v.SetDefault("renku_realm", "")
+	v.SetDefault("renku_client_id", "")
+	v.SetDefault("renku_client_secret", "")
 	v.SetDefault("renku_url", nil)
 
 	dh := viper.DecodeHook(parseStringAsURL())
@@ -62,6 +65,15 @@ func (c *Config) Validate() error {
 	}
 	if c.RenkuURL == nil {
 		return fmt.Errorf("the renku URL is not defined")
+	}
+	if c.RenkuRealm == "" {
+		return fmt.Errorf("the renku realm is not defined")
+	}
+	if c.RenkuClientID == "" {
+		return fmt.Errorf("the renku client id is not defined")
+	}
+	if c.RenkuClientSecret == "" {
+		return fmt.Errorf("the renku client secret is not defined")
 	}
 	return nil
 }
