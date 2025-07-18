@@ -48,7 +48,7 @@ def main_container(
         client.V1EnvVar(name=f"{prefix}RENKU_URL", value="https://" + config.sessions.ingress.host),
     ]
     container = client.V1Container(
-        image="leafty/test:api-proxy-00bce7b7",
+        image="leafty/test:api-proxy-acf25edc",
         security_context={
             "runAsGroup": 1000,
             "runAsUser": 1000,
