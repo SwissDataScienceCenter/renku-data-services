@@ -10,22 +10,27 @@ import (
 	"time"
 
 	"github.com/SwissDataScienceCenter/renku-data-services/components/renku_session_services/api_proxy/pkg/config"
+	"github.com/SwissDataScienceCenter/renku-data-services/components/renku_session_services/api_proxy/pkg/tokenstore"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
 
 func Run() {
-	cfg, err := config.LoadAndValidateConfig()
+	config, err := config.LoadAndValidateConfig()
 	if err != nil {
 		slog.Error("loading the configuration failed", "error", err)
 		os.Exit(1)
 	}
-	slog.Info("loaded configuration", "config", cfg)
+	slog.Info("loaded configuration", "config", config)
 
-	e := createServer()
+	e, err := createServer(config)
+	if err != nil {
+		slog.Error("creating the API proxy failed", "error", err)
+		os.Exit(1)
+	}
 
 	// Start server
-	address := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	address := fmt.Sprintf("%s:%d", config.Host, config.Port)
 	slog.Info("starting the server on address " + address)
 	go func() {
 		err := e.Start(address)
@@ -50,7 +55,7 @@ func Run() {
 }
 
 // createServer creates the API Proxy server
-func createServer() (e *echo.Echo) {
+func createServer(config config.Config) (e *echo.Echo, err error) {
 	e = echo.New()
 	e.Pre(middleware.RequestID(), middleware.RemoveTrailingSlash())
 	e.Use(middleware.Recover())
@@ -64,5 +69,12 @@ func createServer() (e *echo.Echo) {
 		return c.NoContent(http.StatusOK)
 	})
 
-	return e
+	store := tokenstore.New(&config)
+	ap, err := NewApiProxy(WithConfig(config), WithTokenStore(store))
+	if err != nil {
+		return nil, err
+	}
+	ap.RegisterHandlers(e)
+
+	return e, nil
 }

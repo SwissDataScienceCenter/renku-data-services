@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"strings"
 
 	"github.com/SwissDataScienceCenter/renku-data-services/components/renku_session_services/api_proxy/pkg/config"
 	"github.com/SwissDataScienceCenter/renku-data-services/components/renku_session_services/api_proxy/pkg/tokenstore"
@@ -21,6 +22,9 @@ func (ap *ApiProxy) RegisterHandlers(e *echo.Echo, commonMiddlewares ...echo.Mid
 	dataApiURL := ap.config.RenkuURL.JoinPath("api/data")
 	sessionURL := dataApiURL.JoinPath("sessions", ap.config.SessionID)
 	sessionPath := sessionURL.EscapedPath()
+	if !strings.HasPrefix(sessionPath, "/") {
+		sessionPath = "/" + sessionPath
+	}
 
 	tokenMiddleware := ap.getTokenMiddleware()
 	dataServiceProxy := proxyFromURL(dataApiURL)

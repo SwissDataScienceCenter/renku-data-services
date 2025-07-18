@@ -39,8 +39,9 @@ func loadConfig() (config Config, err error) {
 	v.SetEnvPrefix("api_proxy")
 	v.AutomaticEnv()
 
-	v.SetDefault("host", "localhost")
+	v.SetDefault("host", "")
 	v.SetDefault("port", 58080)
+	v.SetDefault("session_id", "")
 	v.SetDefault("renku_access_token", "")
 	v.SetDefault("renku_refresh_token", "")
 	v.SetDefault("renku_realm", "")
@@ -57,6 +58,9 @@ func loadConfig() (config Config, err error) {
 }
 
 func (c *Config) Validate() error {
+	if c.SessionID == "" {
+		return fmt.Errorf("the session ID is not defined")
+	}
 	if c.RenkuAccessToken == "" {
 		return fmt.Errorf("the renku access token is not defined")
 	}
