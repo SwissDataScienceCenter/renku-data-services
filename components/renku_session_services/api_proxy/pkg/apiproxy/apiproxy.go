@@ -30,7 +30,7 @@ func (ap *ApiProxy) RegisterHandlers(e *echo.Echo, commonMiddlewares ...echo.Mid
 	dataServiceProxy := proxyFromURL(ap.config.RenkuURL)
 
 	slog.Info("setting up reverse proxy for session", "path", sessionPath)
-	e.Group(sessionPath, append(commonMiddlewares, tokenMiddleware, dataServiceProxy)...)
+	e.Group(sessionPath, append(commonMiddlewares, tokenMiddleware, setHost(ap.config.RenkuURL.Host), dataServiceProxy)...)
 }
 
 func (ap *ApiProxy) getTokenMiddleware() echo.MiddlewareFunc {
@@ -57,11 +57,12 @@ func proxyFromURL(url *url.URL) echo.MiddlewareFunc {
 		os.Exit(1)
 	}
 	config := middleware.ProxyConfig{
-		// // the skipper is used to log only
-		// Skipper: func(c echo.Context) bool {
-		// 	// slog.Info("PROXY", "requestID", utils.GetRequestID(c), "destination", url.String())
-		// 	return false
-		// },
+		// the skipper is used to log only
+		Skipper: func(c echo.Context) bool {
+			slog.Info("proxy", "destination", url.String(), "request", c.Request().URL.String())
+			// slog.Info("PROXY", "requestID", utils.GetRequestID(c), "destination", url.String())
+			return false
+		},
 		Balancer: middleware.NewRoundRobinBalancer([]*middleware.ProxyTarget{
 			{
 				Name: url.String(),
@@ -69,6 +70,15 @@ func proxyFromURL(url *url.URL) echo.MiddlewareFunc {
 			}}),
 	}
 	return middleware.ProxyWithConfig(config)
+}
+
+func setHost(host string) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			c.Request().Host = host
+			return next(c)
+		}
+	}
 }
 
 type ApiProxyOption func(*ApiProxy)
