@@ -27,7 +27,7 @@ func (ap *ApiProxy) RegisterHandlers(e *echo.Echo, commonMiddlewares ...echo.Mid
 	}
 
 	tokenMiddleware := ap.getTokenMiddleware()
-	dataServiceProxy := proxyFromURL(dataApiURL)
+	dataServiceProxy := proxyFromURL(ap.config.RenkuURL)
 
 	slog.Info("setting up reverse proxy for session", "path", sessionPath)
 	e.Group(sessionPath, append(commonMiddlewares, tokenMiddleware, dataServiceProxy)...)
