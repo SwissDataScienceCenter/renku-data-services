@@ -31,7 +31,7 @@ def main_container(
 
     prefix = "API_PROXY_"
     env = [
-        client.V1EnvVar(name=f"{prefix}HOST", value="localhost"),
+        client.V1EnvVar(name=f"{prefix}HOST", value=""),
         client.V1EnvVar(name=f"{prefix}PORT", value="58080"),
         client.V1EnvVar(name=f"{prefix}SESSION_ID", value=session_id),
         client.V1EnvVar(name=f"{prefix}RENKU_ACCESS_TOKEN", value=str(user.access_token)),
