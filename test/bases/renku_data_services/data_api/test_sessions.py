@@ -496,6 +496,51 @@ async def test_post_session_launcher_with_environment_build(
 
 
 @pytest.mark.asyncio
+async def test_post_session_launcher_with_advanced_environment_build(
+    sanic_client,
+    admin_headers,
+    create_project,
+    create_resource_pool,
+) -> None:
+    project = await create_project("Some project")
+
+    payload = {
+        "name": "Launcher 1",
+        "project_id": project["id"],
+        "description": "A session launcher.",
+        "environment": {
+            "repository": "https://github.com/some/repo",
+            "builder_variant": "python",
+            "frontend_variant": "vscodium",
+            "repository_revision": "some-branch",
+            "context_dir": "path/to/context",
+            "environment_image_source": "build",
+        },
+    }
+
+    _, response = await sanic_client.post("/api/data/session_launchers", headers=admin_headers, json=payload)
+
+    assert response.status_code == 201, response.text
+    assert response.json is not None
+    assert response.json.get("name") == "Launcher 1"
+    assert response.json.get("project_id") == project["id"]
+    assert response.json.get("description") == "A session launcher."
+    environment = response.json.get("environment", {})
+    assert environment.get("id") is not None
+    assert environment.get("name") == "Launcher 1"
+    assert environment.get("environment_kind") == "CUSTOM"
+    assert environment.get("build_parameters") == {
+        "repository": "https://github.com/some/repo",
+        "builder_variant": "python",
+        "frontend_variant": "vscodium",
+        "repository_revision": "some-branch",
+        "context_dir": "path/to/context",
+    }
+    assert environment.get("environment_image_source") == "build"
+    assert environment.get("container_image") == "image:unknown-at-the-moment"
+
+
+@pytest.mark.asyncio
 async def test_post_session_launcher_unauthorized(
     sanic_client: SanicASGITestClient,
     valid_resource_pool_payload: dict[str, Any],
