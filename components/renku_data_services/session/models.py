@@ -311,6 +311,8 @@ class ShipwrightBuildRunParams:
     annotations: dict[str, str] | None = None
     frontend: str = FrontendVariant.vscodium.value
     build_image: str | None = None
+    git_repository_revision: str | None = None
+    context_dir: str | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

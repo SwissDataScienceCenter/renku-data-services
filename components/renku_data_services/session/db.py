@@ -1040,6 +1040,8 @@ class SessionRepository:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
         git_repository = build_parameters.repository
+        git_repository_revision = build_parameters.repository_revision
+        context_dir = build_parameters.context_dir
 
         output_image_prefix = (
             self.builds_config.build_output_image_prefix or constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
@@ -1088,6 +1090,8 @@ class SessionRepository:
             labels=labels,
             annotations=annotations,
             frontend=build_parameters.frontend_variant,
+            git_repository_revision=git_repository_revision,
+            context_dir=context_dir,
         )
 
     async def _get_environment_authorization(
