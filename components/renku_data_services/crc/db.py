@@ -423,9 +423,7 @@ class ResourcePoolRepository(_Base):
                         cluster = None
 
                         if cluster_id is not None:
-                            cluster = await self.__cluster_repo.select(
-                                api_user=api_user, cluster_id=ULID.from_str(cluster_id)
-                            )
+                            cluster = await self.__cluster_repo.select(cluster_id=ULID.from_str(cluster_id))
 
                         rp.cluster_id = cluster_id
                         new_rp_model = new_rp_model.update(cluster=cluster)
@@ -900,23 +898,23 @@ class ClusterRepository:
 
     session_maker: Callable[..., AsyncSession]
 
-    async def select_all(self) -> AsyncGenerator[SavedCluster, Any]:
+    async def select_all(self, cluster_id: ULID | None = None) -> AsyncGenerator[SavedCluster, Any]:
         """Get cluster configurations from the database."""
         async with self.session_maker() as session:
-            clusters = await session.stream_scalars(select(ClusterORM))
+            query = select(ClusterORM)
+            if cluster_id is not None:
+                query = query.where(ClusterORM.id == cluster_id)
+
+            clusters = await session.stream_scalars(query)
             async for cluster in clusters:
                 yield cluster.dump()
 
-    async def select(self, api_user: base_models.APIUser, cluster_id: ULID) -> SavedCluster:
+    async def select(self, cluster_id: ULID) -> SavedCluster:
         """Get cluster configurations from the database."""
+        async for cluster in self.select_all(cluster_id):
+            return cluster
 
-        async with self.session_maker() as session:
-            r = await session.scalars(select(ClusterORM).where(ClusterORM.id == cluster_id))
-            cluster = r.one_or_none()
-            if cluster is None:
-                raise errors.MissingResourceError(message=f"Cluster definition id='{cluster_id}' does not exist.")
-
-            return cluster.dump()
+        raise errors.MissingResourceError(message=f"Cluster definition id='{cluster_id}' does not exist.")
 
     @_only_admins
     async def insert(self, api_user: base_models.APIUser, cluster: Cluster) -> Cluster:
