@@ -5,9 +5,8 @@ from zoneinfo import ZoneInfo
 
 import renku_data_services.search.solr_token as st
 from renku_data_services.authz.models import Visibility
-from renku_data_services.search.user_query import Nel
+from renku_data_services.base_models.nel import Nel
 from renku_data_services.solr.entity_documents import EntityType
-from renku_data_services.solr.entity_schema import Fields
 from renku_data_services.solr.solr_schema import FieldName
 
 ref_date: datetime = datetime(2024, 2, 27, 15, 34, 55, tzinfo=UTC)
@@ -128,12 +127,6 @@ def test_fold_or() -> None:
 
 def test_created_by_exists() -> None:
     assert st.created_by_exists() == "(createdBy:[* TO *] OR (*:* AND -_type:Project))"
-
-
-def test_namespace_exists() -> None:
-    assert st.namespace_exists() == st.fold_or(
-        [st.field_exists(Fields.namespace), st.type_is(EntityType.dataconnector)]
-    )
 
 
 def test_content_all() -> None:

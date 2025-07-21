@@ -26,22 +26,25 @@ class MetricsEvent(StrEnum):
     user_requested_session_resume = "user_requested_session_resume"
 
 
+type MetricsMetadata = dict[str, str | int | bool]
+
+
 class MetricsService(Protocol):
     """Protocol for sending product metrics."""
 
-    async def session_started(self, user: APIUser, metadata: dict[str, str | int]) -> None:
+    async def session_started(self, user: APIUser, metadata: MetricsMetadata) -> None:
         """Send session start event to metrics."""
         ...
 
-    async def session_resumed(self, user: APIUser, metadata: dict[str, str | int]) -> None:
+    async def session_resumed(self, user: APIUser, metadata: MetricsMetadata) -> None:
         """Send session resumed event to metrics."""
         ...
 
-    async def session_hibernated(self, user: APIUser, metadata: dict[str, str | int]) -> None:
+    async def session_hibernated(self, user: APIUser, metadata: MetricsMetadata) -> None:
         """Send session paused event to metrics."""
         ...
 
-    async def session_stopped(self, user: APIUser, metadata: dict[str, str | int]) -> None:
+    async def session_stopped(self, user: APIUser, metadata: MetricsMetadata) -> None:
         """Send session stopped event to metrics."""
         ...
 
@@ -51,7 +54,7 @@ class MetricsService(Protocol):
         """Send session launcher created event to metrics."""
         ...
 
-    async def project_created(self, user: APIUser) -> None:
+    async def project_created(self, user: APIUser, metadata: MetricsMetadata) -> None:
         """Send project created event to metrics."""
         ...
 
@@ -83,10 +86,18 @@ class MetricsService(Protocol):
         """Send search queried event to metrics."""
         ...
 
-    async def user_requested_session_launch(self, user: APIUser, metadata: dict[str, str | int]) -> None:
+    async def user_requested_session_launch(self, user: APIUser, metadata: MetricsMetadata) -> None:
         """Send event about user requesting session launch."""
         ...
 
-    async def user_requested_session_resume(self, user: APIUser, metadata: dict[str, str | int]) -> None:
+    async def user_requested_session_resume(self, user: APIUser, metadata: MetricsMetadata) -> None:
         """Send event about user requesting session resume."""
         ...
+
+
+class ProjectCreationType(StrEnum):
+    """The different types of project creation metrics."""
+
+    new = "new"
+    migrated = "migrated"
+    copied = "copied"

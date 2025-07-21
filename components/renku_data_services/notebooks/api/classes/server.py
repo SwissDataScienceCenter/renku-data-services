@@ -1,15 +1,14 @@
 """Jupyter server models."""
 
-from abc import ABC
 from collections.abc import Sequence
 from itertools import chain
 from pathlib import PurePosixPath
 from typing import Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
 from gitlab.v4.objects.projects import Project
-from sanic.log import logger
 
+from renku_data_services.app_config import logging
 from renku_data_services.base_models import AnonymousAPIUser, AuthenticatedAPIUser
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.notebooks.api.amalthea_patches import cloudstorage as cloudstorage_patches
@@ -31,8 +30,10 @@ from renku_data_services.notebooks.crs import JupyterServerV1Alpha1
 from renku_data_services.notebooks.errors.programming import DuplicateEnvironmentVariableError
 from renku_data_services.notebooks.errors.user import MissingResourceError
 
+logger = logging.getLogger(__name__)
 
-class UserServer(ABC):
+
+class UserServer:
     """Represents a Renku server session."""
 
     def __init__(
@@ -49,10 +50,10 @@ class UserServer(ABC):
         work_dir: PurePosixPath,
         config: NotebooksConfig,
         internal_gitlab_user: APIUser,
+        host: str,
         using_default_image: bool = False,
         is_image_private: bool = False,
         repositories: list[Repository] | None = None,
-        host: str | None = None,
     ):
         self._user = user
         self.server_name = server_name
@@ -67,7 +68,7 @@ class UserServer(ABC):
         self.work_dir = work_dir
         self.cloudstorage = cloudstorage
         self.is_image_private = is_image_private
-        self.host = host or config.sessions.ingress.host
+        self.host = host
         self.config = config
         self.internal_gitlab_user = internal_gitlab_user
 
@@ -91,6 +92,10 @@ class UserServer(ABC):
         self._repositories: list[Repository] = repositories or []
         self._git_providers: list[GitProvider] | None = None
         self._has_configured_git_providers = False
+
+        self.server_url = f"https://{self.host}/sessions/{self.server_name}"
+        if not self._user.is_authenticated:
+            self.server_url = f"{self.server_url}?token={self._user.id}"
 
     def k8s_namespace(self) -> str:
         """Get the preferred namespace for a server."""
@@ -117,19 +122,6 @@ class UserServer(ABC):
             self._has_configured_git_providers = True
 
         return self._repositories
-
-    @property
-    def server_url(self) -> str:
-        """The URL where a user can access their session."""
-        if self._user.is_authenticated:
-            return urljoin(
-                f"https://{self.host}",
-                f"sessions/{self.server_name}",
-            )
-        return urljoin(
-            f"https://{self.host}",
-            f"sessions/{self.server_name}?token={self._user.id}",
-        )
 
     async def git_providers(self) -> list[GitProvider]:
         """The list of git providers."""
@@ -205,6 +197,8 @@ class UserServer(ABC):
                 "size": self.server_options.storage,
                 "pvc": {
                     "enabled": True,
+                    # We should check against the cluster, but as this is only used by V1 sessions, we ignore this
+                    # use-case.
                     "storageClassName": self.config.sessions.storage.pvs_storage_class,
                     "mountPath": self.workspace_mount_path.as_posix(),
                 },
@@ -236,12 +230,16 @@ class UserServer(ABC):
                 "oidc": {"enabled": False},
             }
 
-        ingress_annotations = self.config.sessions.ingress.annotations
-
-        # FIXME: LSA Does it generate issue to have it set all the time?
-        parent_host = self.config.sessions.ingress.host
-        ingress_annotations["nginx.ingress.kubernetes.io/configuration-snippet"] = (
-            f"""more_set_headers "Content-Security-Policy: frame-ancestors 'self' {parent_host}";"""
+        cluster = await self.config.k8s_client.cluster_by_class_id(self.server_options.resource_class_id, self._user)
+        (
+            base_server_path,
+            base_server_url,
+            base_server_https_url,
+            host,
+            tls_secret,
+            ingress_annotations,
+        ) = await cluster.get_ingress_parameters(
+            self._user, self.config.cluster_rp, self.config.sessions.ingress, self.server_name
         )
 
         # Combine everything into the manifest
@@ -273,12 +271,12 @@ class UserServer(ABC):
                     ),
                 },
                 "routing": {
-                    "host": urlparse(self.server_url).netloc,
-                    "path": urlparse(self.server_url).path,
+                    "host": host,
+                    "path": base_server_path,
                     "ingressAnnotations": ingress_annotations,
                     "tls": {
-                        "enabled": self.config.sessions.ingress.tls_secret is not None,
-                        "secretName": self.config.sessions.ingress.tls_secret,
+                        "enabled": tls_secret is not None,
+                        "secretName": tls_secret.name if tls_secret is not None else "",
                     },
                 },
                 "storage": storage,
@@ -395,11 +393,11 @@ class Renku1UserServer(UserServer):
         workspace_mount_path: PurePosixPath,
         work_dir: PurePosixPath,
         config: NotebooksConfig,
+        host: str,
         gitlab_project: Project | None,
         internal_gitlab_user: APIUser,
         using_default_image: bool = False,
         is_image_private: bool = False,
-        host: str | None = None,
         **_: dict,  # Required to ignore unused arguments, among which repositories
     ):
         repositories = [

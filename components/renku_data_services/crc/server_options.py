@@ -117,7 +117,7 @@ def generate_default_resource_pool(
         "gpu_request": "gpu",
     }
     class_names = _get_classname()
-    largest_attribute_options = getattr(getattr(server_options, largest_attribute), "options")
+    largest_attribute_options = getattr(server_options, largest_attribute).options
     max_storage = round(max(server_options.disk_request.options) / 1_000_000_000)
     for ival, val in enumerate(sorted(largest_attribute_options)):
         cls = {}
@@ -125,7 +125,7 @@ def generate_default_resource_pool(
             if largest_attribute == old_name:
                 cls[new_name] = val
             else:
-                options = getattr(getattr(server_options, old_name), "options")
+                options = getattr(server_options, old_name).options
                 try:
                     cls[new_name] = options[ival]
                 except IndexError:

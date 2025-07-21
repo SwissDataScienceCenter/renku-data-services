@@ -2,21 +2,26 @@
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from ulid import ULID
 
+from renku_data_services.base_models.nel import Nel
 from renku_data_services.search.user_query import (
     DateTimeCalc,
+    EmptyUserQueryVisitor,
+    FieldTerm,
     Helper,
     IdIs,
-    Nel,
     Order,
     OrderBy,
     PartialDate,
     PartialDateTime,
     PartialTime,
     RelativeDate,
+    Segment,
     Segments,
     SortableField,
+    Text,
     TypeIs,
     UserQuery,
 )
@@ -34,6 +39,14 @@ def end_of_day(d: datetime) -> datetime:
     return d.replace(hour=23, minute=59, second=59, microsecond=0)
 
 
+def test_render_keywords() -> None:
+    assert Segments.keyword_is("hello").render() == "keyword:hello"
+    assert Segments.keyword_is("hello-me").render() == "keyword:hello-me"
+    assert Segments.keyword_is("hello me").render() == 'keyword:"hello me"'
+    assert Segments.keyword_is("tl,dr", "data").render() == 'keyword:"tl,dr",data'
+    assert Segments.keyword_is("""a "and" b""", "data").render() == 'keyword:"a \\"and\\" b",data'
+
+
 def test_render_order_by() -> None:
     order = OrderBy(SortableField.fname, SortDirection.asc)
     assert order.render() == "name-asc"
@@ -49,42 +62,12 @@ def test_render_order() -> None:
     assert order.render() == "sort:name-asc,score-desc"
 
 
-def test_nel() -> None:
-    value = Nel(1)
-    assert value.to_list() == [1]
-
-    value = Nel(1, [2, 3])
-    assert value.to_list() == [1, 2, 3]
-
-    # sad, mypy doesn't catch this
-    value = Nel.of(1, 2, 3, "a")
-    assert value.to_list() == [1, 2, 3, "a"]
-
-    value = Nel.of(1, 2, 3, 4)
-    assert value.to_list() == [1, 2, 3, 4]
-
-    value = Nel.of(1, 2).append(Nel.of(3, 4))
-    assert value.to_list() == [1, 2, 3, 4]
-
-    nel = Nel.of(1, 2)
-    value = nel.append_list([])
-    assert value is nel
-
-    value = nel.append_list([3, 4])
-    assert value.to_list() == [1, 2, 3, 4]
-
-    nel = Nel.from_list([])
-    assert nel is None
-
-    nel = Nel.from_list([1, 2, 3])
-    assert nel == Nel.of(1, 2, 3)
-
-
 def test_helper_quote() -> None:
     assert Helper.quote("hello world") == '"hello world"'
     assert Helper.quote("hello ") == '"hello "'
     assert Helper.quote("1,2") == '"1,2"'
-    assert Helper.quote('x="3"') == '"x="3""'
+    assert Helper.quote('x="3"') == '"x=\\"3\\""'
+    assert Helper.quote("""a "and" b""") == '"a \\"and\\" b"'
 
 
 def test_type_is() -> None:
@@ -116,13 +99,13 @@ def test_partial_date_render() -> None:
 
 
 def test_partial_date_min_max() -> None:
-    assert str(PartialDate(2025, 2).max()) == "2025-02-28"
-    assert str(PartialDate(2024, 2).max()) == "2024-02-29"
-    assert str(PartialDate(2025, 2).min()) == "2025-02-01"
-    assert str(PartialDate(2021).max()) == "2021-12-31"
-    assert str(PartialDate(2021).min()) == "2021-01-01"
-    assert str(PartialDate(2025, 3, 7).max()) == "2025-03-07"
-    assert str(PartialDate(2025, 3, 7).min()) == "2025-03-07"
+    assert str(PartialDate(2025, 2).date_max()) == "2025-02-28"
+    assert str(PartialDate(2024, 2).date_max()) == "2024-02-29"
+    assert str(PartialDate(2025, 2).date_min()) == "2025-02-01"
+    assert str(PartialDate(2021).date_max()) == "2021-12-31"
+    assert str(PartialDate(2021).date_min()) == "2021-01-01"
+    assert str(PartialDate(2025, 3, 7).date_max()) == "2025-03-07"
+    assert str(PartialDate(2025, 3, 7).date_min()) == "2025-03-07"
 
 
 def test_partial_time_render() -> None:
@@ -132,12 +115,12 @@ def test_partial_time_render() -> None:
 
 
 def test_partial_time_min_max() -> None:
-    assert str(PartialTime(12).max()) == "12:59:59"
-    assert str(PartialTime(12).min()) == "12:00:00"
-    assert str(PartialTime(2, 30).max()) == "02:30:59"
-    assert str(PartialTime(2, 30).min()) == "02:30:00"
-    assert str(PartialTime(12, 30, 15).max()) == "12:30:15"
-    assert str(PartialTime(12, 30, 15).min()) == "12:30:15"
+    assert str(PartialTime(12).time_max()) == "12:59:59"
+    assert str(PartialTime(12).time_min()) == "12:00:00"
+    assert str(PartialTime(2, 30).time_max()) == "02:30:59"
+    assert str(PartialTime(2, 30).time_min()) == "02:30:00"
+    assert str(PartialTime(12, 30, 15).time_max()) == "12:30:15"
+    assert str(PartialTime(12, 30, 15).time_min()) == "12:30:15"
 
 
 def test_partial_datetime_render() -> None:
@@ -198,32 +181,30 @@ def test_resolve_date_calc() -> None:
     )
 
 
-def test_query_extract_order() -> None:
-    q = UserQuery.of(Segments.name_is("test"), Segments.text("some"), Segments.keyword_is("datascience"))
-    assert q.extract_order() == (
-        [Segments.name_is("test"), Segments.text("some"), Segments.keyword_is("datascience")],
-        None,
+class TestUserQueryTransform(EmptyUserQueryVisitor[UserQuery]):
+    def __init__(self, to_add: Segment) -> None:
+        self.segments: list[Segment] = []
+        self.to_add = to_add
+
+    async def visit_field_term(self, ft: FieldTerm) -> None:
+        self.segments.append(ft)
+
+    async def visit_order(self, order: Order) -> None:
+        self.segments.append(order)
+
+    async def visit_text(self, text: Text) -> None:
+        self.segments.append(text)
+
+    async def build(self) -> UserQuery:
+        self.segments.append(self.to_add)
+        return UserQuery(self.segments)
+
+
+@pytest.mark.asyncio
+async def test_transform() -> None:
+    q0 = UserQuery.of(Segments.name_is("john"), Segments.text("help"))
+    q = await q0.transform(
+        TestUserQueryTransform(Segments.type_is(EntityType.project)), TestUserQueryTransform(Segments.id_is("id-123"))
     )
 
-    q = UserQuery.of(
-        Segments.name_is("test"),
-        Segments.text("some"),
-        Segments.keyword_is("datascience"),
-        Segments.sort_by((SortableField.score, SortDirection.asc)),
-    )
-    assert q.extract_order() == (
-        [Segments.name_is("test"), Segments.text("some"), Segments.keyword_is("datascience")],
-        Segments.sort_by((SortableField.score, SortDirection.asc)),
-    )
-
-    q = UserQuery.of(
-        Segments.name_is("test"),
-        Segments.sort_by((SortableField.fname, SortDirection.desc)),
-        Segments.text("some"),
-        Segments.keyword_is("datascience"),
-        Segments.sort_by((SortableField.score, SortDirection.asc)),
-    )
-    assert q.extract_order() == (
-        [Segments.name_is("test"), Segments.text("some"), Segments.keyword_is("datascience")],
-        Segments.sort_by((SortableField.fname, SortDirection.desc), (SortableField.score, SortDirection.asc)),
-    )
+    assert q == UserQuery(q0.segments + [Segments.type_is(EntityType.project), Segments.id_is("id-123")])

@@ -7,10 +7,10 @@ from typing import TYPE_CHECKING
 from cryptography.hazmat.primitives.asymmetric import rsa
 from kubernetes import client as k8s_client
 from prometheus_client import Counter, Enum
-from sanic.log import logger
 from ulid import ULID
 
 from renku_data_services import base_models, errors
+from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import InternalServiceAdmin
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface
 from renku_data_services.secrets.models import OwnerReference, Secret
@@ -22,6 +22,8 @@ from renku_data_services.utils.cryptography import (
     encrypt_string,
     generate_random_encryption_key,
 )
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from renku_data_services.secrets.db import LowLevelUserSecretsRepo
@@ -83,7 +85,7 @@ async def create_k8s_secret(
                 decrypted_secrets[key] = b64encode(decrypted_value).decode()
     except Exception as e:
         # don't wrap the error, we don't want secrets accidentally leaking.
-        raise errors.SecretDecryptionError(message=f"An error occurred decrypting secrets: {str(type(e))}")
+        raise errors.SecretDecryptionError(message=f"An error occurred decrypting secrets: {str(type(e))}") from None
 
     owner_refs = []
     if owner_references:
@@ -112,7 +114,7 @@ async def create_k8s_secret(
                 sanitized_secret,
             )
         # don't wrap the error, we don't want secrets accidentally leaking.
-        raise errors.SecretCreationError(message=f"An error occurred creating secrets: {str(type(e))}")
+        raise errors.SecretCreationError(message=f"An error occurred creating secrets: {str(type(e))}") from None
 
 
 async def rotate_encryption_keys(

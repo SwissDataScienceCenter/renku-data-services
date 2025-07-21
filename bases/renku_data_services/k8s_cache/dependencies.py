@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 
-from renku_data_services.crc.db import ResourcePoolRepository
+from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.k8s_cache.config import Config
@@ -22,6 +22,7 @@ class DependencyManager:
     _metrics_repo: MetricsRepository | None = field(default=None, repr=False, init=False)
     _metrics: StagingMetricsService | None = field(default=None, repr=False, init=False)
     _rp_repo: ResourcePoolRepository | None = field(default=None, repr=False, init=False)
+    _cluster_repo: ClusterRepository | None = field(default=None, repr=False, init=False)
 
     @property
     def metrics_repo(self) -> MetricsRepository:
@@ -46,6 +47,12 @@ class DependencyManager:
             )
         return self._rp_repo
 
+    def cluster_repo(self) -> ClusterRepository:
+        """The resource pool repository."""
+        if not self._cluster_repo:
+            self._cluster_repo = ClusterRepository(session_maker=self.config.db.async_session_maker)
+        return self._cluster_repo
+
     @property
     def k8s_cache(self) -> K8sDbCache:
         """The DB adapter for the k8s cache."""
@@ -56,7 +63,7 @@ class DependencyManager:
         return self._k8s_cache
 
     @classmethod
-    def from_env(cls, prefix: str = "") -> "DependencyManager":
+    def from_env(cls) -> "DependencyManager":
         """Create a config from environment variables."""
         config = Config.from_env()
 

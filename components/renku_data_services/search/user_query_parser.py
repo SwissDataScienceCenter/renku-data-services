@@ -1,5 +1,7 @@
 """Parser for the user query ast."""
 
+from __future__ import annotations
+
 import datetime
 from typing import cast
 
@@ -16,19 +18,23 @@ from parsy import (
     test_char,
 )
 
+from renku_data_services.app_config import logging
 from renku_data_services.authz.models import Role, Visibility
+from renku_data_services.base_models.core import NamespaceSlug
+from renku_data_services.base_models.nel import Nel
 from renku_data_services.search.user_query import (
     Comparison,
     Created,
     CreatedByIs,
     DateTimeCalc,
+    DirectMemberIs,
     Field,
     Helper,
     IdIs,
+    InheritedMemberIs,
     KeywordIs,
     NameIs,
     NamespaceIs,
-    Nel,
     Order,
     OrderBy,
     PartialDate,
@@ -36,16 +42,20 @@ from renku_data_services.search.user_query import (
     PartialTime,
     RelativeDate,
     RoleIs,
-    Segment,
     SlugIs,
     SortableField,
     Text,
     TypeIs,
+    UserId,
+    Username,
     UserQuery,
     VisibilityIs,
 )
+from renku_data_services.search.user_query_process import CollapseMembers, CollapseText
 from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.solr_client import SortDirection
+
+logger = logging.getLogger(__name__)
 
 
 def _check_range(n: int, min: int, max: int, msg: str) -> Parser:
@@ -179,9 +189,20 @@ class _ParsePrimitives:
         Created
     )
     role_is: Parser = string(Field.role.value, lambda s: s.lower()) >> is_equal >> role_nel.map(RoleIs)
+
+    user_name: Parser = string("@") >> string_basic.map(NamespaceSlug.from_name).map(Username)
+    user_id: Parser = string_basic.map(UserId)
+    user_def_nel: Parser = (user_name | user_id).sep_by(comma, min=1).map(Nel.unsafe_from_list)
+    inherited_member_is: Parser = (
+        string(Field.inherited_member.value, lambda s: s.lower()) >> is_equal >> user_def_nel.map(InheritedMemberIs)
+    )
+    direct_member_is: Parser = (
+        string(Field.direct_member.value, lambda s: s.lower()) >> is_equal >> user_def_nel.map(DirectMemberIs)
+    )
+
     term_is: Parser = seq(from_enum(Field, lambda s: s.lower()) << is_equal, string_values).bind(_make_field_term)
 
-    field_term: Parser = type_is | visibility_is | role_is | created | term_is
+    field_term: Parser = type_is | visibility_is | role_is | inherited_member_is | direct_member_is | created | term_is
     free_text: Parser = test_char(lambda c: not c.isspace(), "string without spaces").at_least(1).concat().map(Text)
 
     segment: Parser = field_term | sort_term | free_text
@@ -193,31 +214,13 @@ class QueryParser:
     """Parsing user search queries."""
 
     @classmethod
-    def __collapse_text(cls, q: UserQuery) -> UserQuery:
-        """Collapses consecutive free text segments.
-
-        It is a bit hard to parse them directly as every term is separated by whitespace.
-        """
-        result: list[Segment] = []
-        current: Text | None = None
-        for s in q.segments:
-            match s:
-                case Text() as t:
-                    current = t if current is None else current.append(t)
-                case _:
-                    if current is not None:
-                        result.append(current)
-                        current = None
-                    result.append(s)
-
-        if current is not None:
-            result.append(current)
-
-        return UserQuery(result)
+    def parse_raw(cls, input: str) -> UserQuery:
+        """Parses the input string into a UserQuery, without any post processing."""
+        pp = _ParsePrimitives()
+        return cast(UserQuery, pp.query.parse(input.strip()))
 
     @classmethod
-    def parse(cls, input: str) -> UserQuery:
+    async def parse(cls, input: str) -> UserQuery:
         """Parses a user search query into its ast."""
-        pp = _ParsePrimitives()
-        res = pp.query.parse(input.strip())
-        return cls.__collapse_text(cast(UserQuery, res))
+        q = cls.parse_raw(input)
+        return await q.transform(CollapseMembers(), CollapseText())

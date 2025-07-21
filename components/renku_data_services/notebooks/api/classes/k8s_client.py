@@ -2,7 +2,6 @@
 
 import base64
 import json
-from contextlib import suppress
 from typing import TYPE_CHECKING, Any, Generic, Optional, TypeVar, cast
 
 import httpx
@@ -15,8 +14,8 @@ from kubernetes.client import V1Secret
 from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.errors import errors
-from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
-from renku_data_services.k8s.models import GVK, Cluster, ClusterId, K8sObject, K8sObjectFilter, K8sObjectMeta
+from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
+from renku_data_services.k8s.models import GVK, Cluster, K8sObject, K8sObjectFilter, K8sObjectMeta
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
 from renku_data_services.notebooks.constants import JUPYTER_SESSION_GVK
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
@@ -222,7 +221,7 @@ class NotebookK8sClient(Generic[_SessionType]):
         session_name = manifest.metadata.name
 
         session = await self.get_session(session_name, api_user.id)
-        if session:
+        if session is not None:
             # NOTE: session already exists
             return session
 
@@ -245,7 +244,7 @@ class NotebookK8sClient(Generic[_SessionType]):
         def _check_ready(obj: K8sObject | None) -> bool:
             return obj is None or obj.manifest.metadata.get("creationTimestamp") is None
 
-        refreshed_session = await retry_with_exponential_backoff_async(_check_ready)(self.__client.get)(session.meta)
+        refreshed_session = await retry_with_exponential_backoff_async(_check_ready)(self.__client.get)(session)
         if refreshed_session is not None:
             session = refreshed_session
 
@@ -281,7 +280,7 @@ class NotebookK8sClient(Generic[_SessionType]):
             return None
 
         return StatefulSet(
-            resource=statefulset.to_api_object(cluster.api), namespace=statefulset.meta.namespace, api=cluster.api
+            resource=statefulset.to_api_object(cluster.api), namespace=statefulset.namespace, api=cluster.api
         )
 
     async def patch_statefulset(
@@ -352,14 +351,14 @@ class NotebookK8sClient(Generic[_SessionType]):
             try:
                 # NOTE: calling pod.logs without a container name set crashes the library
                 clogs: list[str] = [clog async for clog in pod.logs(container=container, tail_lines=max_log_lines)]
-            except httpx.ResponseNotRead:
+            except (httpx.ResponseNotRead, httpx.HTTPStatusError):
                 # NOTE: This occurs when the container is still starting, but we try to read its logs
                 continue
-            except NotFoundError:
-                raise errors.MissingResourceError(message=f"The session pod {pod_name} does not exist.")
+            except NotFoundError as err:
+                raise errors.MissingResourceError(message=f"The session pod {pod_name} does not exist.") from err
             except ServerError as err:
                 if err.status == 404:
-                    raise errors.MissingResourceError(message=f"The session pod {pod_name} does not exist.")
+                    raise errors.MissingResourceError(message=f"The session pod {pod_name} does not exist.") from err
                 raise
             else:
                 logs[container] = "\n".join(clogs)
@@ -405,14 +404,15 @@ class NotebookK8sClient(Generic[_SessionType]):
         ]
         await secret.patch(patch, type="json")
 
-    async def create_secret(self, secret: V1Secret) -> V1Secret:
+    async def create_secret(self, secret: V1Secret, cluster: Cluster) -> V1Secret:
         """Create a secret."""
-        # TODO: LSA Does not break current code, but bad, as it may be different based on the cluster
+
         assert secret.metadata is not None
+
         secret_obj = K8sObject(
             name=secret.metadata.name,
-            namespace=self.namespace(),
-            cluster=self.cluster_id(),
+            namespace=cluster.namespace,
+            cluster=cluster.id,
             gvk=GVK(kind=Secret.kind, version=Secret.version),
             manifest=Box(sanitizer(secret)),
         )
@@ -454,37 +454,14 @@ class NotebookK8sClient(Generic[_SessionType]):
             type=result.manifest.get("type"),
         )
 
-    async def delete_secret(self, name: str) -> None:
+    async def delete_secret(self, name: str, cluster: Cluster) -> None:
         """Delete a secret."""
-        return await self.__client.delete(
-            # TODO: LSA Does not break current code, but bad, as it may be different based on the cluster
+
+        await self.__client.delete(
             K8sObjectMeta(
                 name=name,
-                namespace=self.namespace(),
-                cluster=self.cluster_id(),
+                namespace=cluster.namespace,
+                cluster=cluster.id,
                 gvk=GVK(kind=Secret.kind, version=Secret.version),
             )
         )
-
-    async def patch_secret(self, name: str, patch: dict[str, Any] | list[dict[str, Any]]) -> None:
-        """Patch a secret."""
-        # TODO: LSA Does not break current code, but bad, as it may be different based on the cluster
-        result = await self.__client.get(
-            K8sObjectMeta(
-                name=name,
-                namespace=self.namespace(),
-                cluster=self.cluster_id(),
-                gvk=GVK(kind=Secret.kind, version=Secret.version),
-            )
-        )
-        if result is None:
-            raise errors.MissingResourceError(message=f"Cannot find secret {name}.")
-        secret = result
-        assert isinstance(secret, Secret)
-
-        patch_type: str | None = None  # rfc7386 patch
-        if isinstance(patch, list):
-            patch_type = "json"  # rfc6902 patch
-
-        with suppress(NotFoundError):
-            await secret.patch(patch, type=patch_type)

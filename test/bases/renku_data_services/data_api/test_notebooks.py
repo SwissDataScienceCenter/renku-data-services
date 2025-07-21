@@ -14,7 +14,8 @@ import pytest_asyncio
 from kr8s import NotFoundError
 from sanic_testing.testing import SanicASGITestClient
 
-from renku_data_services.k8s.models import Cluster, ClusterId
+from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
+from renku_data_services.k8s.models import Cluster
 from renku_data_services.k8s_watcher import K8sWatcher, k8s_object_handler
 from renku_data_services.notebooks.api.classes.k8s_client import JupyterServerV1Alpha1Kr8s
 from renku_data_services.notebooks.constants import JUPYTER_SESSION_GVK
@@ -128,32 +129,38 @@ class AttributeDictionary(dict):
 
 
 @pytest.fixture
-def fake_gitlab_projects():
+def fake_gitlab_project_info():
+    return AttributeDictionary(
+        {
+            "path": "my-test",
+            "path_with_namespace": "test-namespace/my-test",
+            "branches": {"main": AttributeDictionary({})},
+            "commits": {"ee4b1c9fedc99abe5892ee95320bbd8471c5985b": AttributeDictionary({})},
+            "id": 5407,
+            "http_url_to_repo": "https://gitlab-url.com/test-namespace/my-test.git",
+            "web_url": "https://gitlab-url.com/test-namespace/my-test",
+        }
+    )
+
+
+@pytest.fixture
+def fake_gitlab_projects(fake_gitlab_project_info):
     class GitLabProject(AttributeDictionary):
         def __init__(self):
             super().__init__({})
 
         def get(self, name, default=None):
             if name not in self:
-                return AttributeDictionary(
-                    {
-                        "path": "my-test",
-                        "path_with_namespace": "test-namespace/my-test",
-                        "branches": {"main": AttributeDictionary({})},
-                        "commits": {"ee4b1c9fedc99abe5892ee95320bbd8471c5985b": AttributeDictionary({})},
-                        "id": 5407,
-                        "http_url_to_repo": "https://gitlab-url.com/test-namespace/my-test.git",
-                        "web_url": "https://gitlab-url.com/test-namespace/my-test",
-                    }
-                )
+                return fake_gitlab_project_info
             return super().get(name, default)
 
     return GitLabProject()
 
 
 @pytest.fixture()
-def fake_gitlab(mocker, fake_gitlab_projects):
+def fake_gitlab(mocker, fake_gitlab_projects, fake_gitlab_project_info):
     gitlab = mocker.patch("renku_data_services.notebooks.api.classes.user.Gitlab")
+    get_project = mocker.patch("renku_data_services.notebooks.api.classes.user._get_project")
     gitlab_mock = MagicMock()
     gitlab_mock.auth = MagicMock()
     gitlab_mock.projects = fake_gitlab_projects
@@ -162,6 +169,7 @@ def fake_gitlab(mocker, fake_gitlab_projects):
     )
     gitlab_mock.url = "https://gitlab-url.com"
     gitlab.return_value = gitlab_mock
+    get_project.return_value = fake_gitlab_project_info
     return gitlab
 
 
@@ -247,7 +255,7 @@ class TestNotebooks(ClusterRequired):
     async def k8s_watcher(self, amalthea, app_manager) -> AsyncGenerator[None, None]:
         clusters = [
             Cluster(
-                id=ClusterId("renkulab"),
+                id=DEFAULT_K8S_CLUSTER,
                 namespace=app_manager.config.nb_config.k8s.renku_namespace,
                 api=app_manager.config.nb_config._kr8s_api.current,
             )

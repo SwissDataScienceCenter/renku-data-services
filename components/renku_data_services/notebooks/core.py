@@ -10,10 +10,10 @@ import escapism
 import httpx
 from gitlab.const import Visibility as GitlabVisibility
 from gitlab.v4.objects.projects import Project as GitlabProject
-from sanic.log import logger
 from sanic.response import JSONResponse
 from ulid import ULID
 
+from renku_data_services.app_config import logging
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.errors import errors
@@ -38,6 +38,8 @@ from renku_data_services.notebooks.util.kubernetes_ import find_container, renku
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.storage.models import CloudStorage
 from renku_data_services.users.db import UserRepo
+
+logger = logging.getLogger(__name__)
 
 
 def notebooks_info(config: NotebooksConfig) -> dict:
@@ -390,10 +392,19 @@ async def launch_notebook_helper(
     else:
         raise user_errors.UserInputError(message="Cannot determine which Docker image to use.")
 
+    host = nb_config.sessions.ingress.host
     parsed_server_options: ServerOptions | None = None
     if resource_class_id is not None:
         # A resource class ID was passed in, validate with CRC service
         parsed_server_options = await nb_config.crc_validator.validate_class_storage(user, resource_class_id, storage)
+        k8s_cluster = await nb_config.k8s_client.cluster_by_class_id(resource_class_id, user)
+        if (
+            p := await k8s_cluster.get_ingress_parameters(
+                user, nb_config.cluster_rp, nb_config.sessions.ingress, server_name
+            )
+        ) is not None:
+            (_, _, _, ingress_host, _, _) = p
+            host = ingress_host
     elif server_options is not None:
         if isinstance(server_options, dict):
             requested_server_options = ServerOptions(
@@ -463,7 +474,7 @@ async def launch_notebook_helper(
                     )
                 )
         except errors.ValidationError as e:
-            raise user_errors.UserInputError(message=f"Couldn't load cloud storage config: {str(e)}")
+            raise user_errors.UserInputError(message=f"Couldn't load cloud storage config: {str(e)}") from e
         mount_points = set(s.mount_folder for s in storages if s.mount_folder and s.mount_folder != "/")
         if len(mount_points) != len(storages):
             raise user_errors.UserInputError(
@@ -504,6 +515,7 @@ async def launch_notebook_helper(
         is_image_private=is_image_private,
         repositories=[Repository.from_dict(r.model_dump()) for r in repositories],
         config=nb_config,
+        host=host,
         **extra_kwargs,
     )
 

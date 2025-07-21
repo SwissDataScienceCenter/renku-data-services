@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Any
 import sentry_sdk
 import uvloop
 from sanic import Request, Sanic
-from sanic.log import logger
 from sanic.response import BaseHTTPResponse
 from sanic.worker.loader import AppLoader
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
@@ -16,8 +15,9 @@ from sentry_sdk.integrations.grpc import GRPCIntegration
 from sentry_sdk.integrations.sanic import SanicIntegration, _context_enter, _context_exit, _set_transaction
 
 import renku_data_services.solr.entity_schema as entity_schema
+from renku_data_services.app_config import logging
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
-from renku_data_services.base_models.core import APIUser
+from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_api.prometheus import setup_app_metrics, setup_prometheus
@@ -36,6 +36,9 @@ if TYPE_CHECKING:
     import sentry_sdk._types
 
 
+logger = logging.getLogger(__name__)
+
+
 async def _solr_reindex(app: Sanic) -> None:
     """Run a solr reindex of all data.
 
@@ -43,7 +46,7 @@ async def _solr_reindex(app: Sanic) -> None:
     """
     config = DependencyManager.from_env()
     reprovision = config.search_reprovisioning
-    admin = APIUser(is_admin=True)
+    admin = InternalServiceAdmin(id=ServiceAdminId.search_reprovision)
     await reprovision.run_reprovision(admin)
 
 
@@ -60,7 +63,7 @@ def solr_reindex(app_name: str) -> None:
 def create_app() -> Sanic:
     """Create a Sanic application."""
     dependency_manager = DependencyManager.from_env()
-    app = Sanic(dependency_manager.app_name)
+    app = Sanic(dependency_manager.app_name, configure_logging=False)
 
     if "COVERAGE_RUN" in environ:
         app.config.TOUCHUP = False
@@ -128,6 +131,14 @@ def create_app() -> Sanic:
 
     app.register_middleware(validate_null_byte, "request")
 
+    @app.on_request
+    async def set_request_id(request: Request) -> None:
+        logging.set_request_id(str(request.id))
+
+    @app.middleware("response")
+    async def set_request_id_header(request: Request, response: BaseHTTPResponse) -> None:
+        response.headers["X-Request-ID"] = request.id
+
     @app.middleware("response")
     async def handle_head(request: Request, response: BaseHTTPResponse) -> None:
         """Make sure HEAD requests return an empty body."""
@@ -160,9 +171,17 @@ def create_app() -> Sanic:
     @app.main_process_ready
     async def ready(app: Sanic) -> None:
         """Application ready event handler."""
-        logger.info("starting events background job.")
         if getattr(app.ctx, "solr_reindex", False):
+            logger.info("Starting solr reindex, as required by migrations.")
             app.manager.manage("SolrReindex", solr_reindex, {"app_name": app.name}, transient=True)
+
+    @app.before_server_start
+    async def logging_setup1(app: Sanic) -> None:
+        logging.configure_logging(dependency_manager.config.log_cfg)
+
+    @app.main_process_ready
+    async def logging_setup2(app: Sanic) -> None:
+        logging.configure_logging(dependency_manager.config.log_cfg)
 
     return app
 

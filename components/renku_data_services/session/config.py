@@ -5,9 +5,11 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 from pydantic import ValidationError as PydanticValidationError
-from sanic.log import logger
 
+from renku_data_services.app_config import logging
 from renku_data_services.session import crs as session_crs
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass

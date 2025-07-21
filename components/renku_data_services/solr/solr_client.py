@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -26,8 +25,11 @@ from pydantic import (
     model_validator,
 )
 
+from renku_data_services.app_config import logging
 from renku_data_services.errors.errors import BaseError
 from renku_data_services.solr.solr_schema import CoreSchema, FieldName, SchemaCommandList
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -65,18 +67,14 @@ class SolrClientConfig:
         try:
             timeout = int(tstr) if tstr is not None else 600
         except ValueError:
-            logging.warning(f"SOLR_REQUEST_TIMEOUT is not an integer: {tstr}")
+            logger.warning(f"SOLR_REQUEST_TIMEOUT is not an integer: {tstr}")
             timeout = 600
 
         user = SolrUser(username=username, password=str(password)) if username is not None else None
         return cls(url, core, user, timeout)
 
     def __str__(self) -> str:
-        return (
-            f"SolrClientConfig(base_url={self.base_url}, "
-            f"core={self.core}, user={self.user}, "
-            f"timeout={self.timeout})"
-        )
+        return f"SolrClientConfig(base_url={self.base_url}, core={self.core}, user={self.user}, timeout={self.timeout})"
 
 
 class SolrClientException(BaseError, ABC):
@@ -330,7 +328,7 @@ class SolrBucketFacetResponse(BaseModel, frozen=True):
     ) -> SolrBucketFacetResponse:
         try:
             return handler(data)
-        except ValidationError:
+        except ValidationError as err:
             if isinstance(data, dict):
                 count: int | None = data.get("count")
                 if count is not None:
@@ -342,9 +340,9 @@ class SolrBucketFacetResponse(BaseModel, frozen=True):
 
                     return SolrBucketFacetResponse(count=count, buckets=buckets)
                 else:
-                    raise ValueError(f"No 'count' property in dict: {data}")
+                    raise ValueError(f"No 'count' property in dict: {data}") from err
             else:
-                raise ValueError(f"Expected a dict to, but got: {data}")
+                raise ValueError(f"Expected a dict to, but got: {data}") from err
 
 
 @final
@@ -652,14 +650,15 @@ class DefaultSolrClient(SolrClient):
         try:
             return await self.delegate.get("/get", params={"wt": "json", "ids": id})
         except ConnectError as e:
-            raise SolrClientConnectException(e)
+            raise SolrClientConnectException(e) from e
 
     async def query_raw(self, query: SolrQuery) -> Response:
         """Query documents and return the http response."""
         try:
+            logger.debug(f"Running solr query: {self.config.base_url}/solr/{self.config.core}")
             return await self.delegate.post("/query", params={"wt": "json"}, json=query.to_dict())
         except ConnectError as e:
-            raise SolrClientConnectException(e)
+            raise SolrClientConnectException(e) from e
 
     async def get(self, id: str) -> QueryResponse:
         """Get a document by id, returning a `QueryResponse`."""
@@ -680,7 +679,7 @@ class DefaultSolrClient(SolrClient):
     async def modify_schema(self, cmds: SchemaCommandList) -> Response:
         """Updates the schema with the given commands."""
         data = cmds.to_json()
-        logging.debug(f"modify schema: {data}")
+        logger.debug(f"modify schema: {data}")
         try:
             return await self.delegate.post(
                 "/schema",
@@ -689,7 +688,7 @@ class DefaultSolrClient(SolrClient):
                 headers={"Content-Type": "application/json"},
             )
         except ConnectError as e:
-            raise SolrClientConnectException(e)
+            raise SolrClientConnectException(e) from e
 
     async def upsert(self, docs: list[SolrDocument]) -> UpsertResponse:
         """Inserts or updates a document in SOLR.
@@ -699,7 +698,7 @@ class DefaultSolrClient(SolrClient):
         other outcomes are raised as an exception.
         """
         j = json.dumps([e.to_dict() for e in docs])
-        logging.debug(f"upserting: {j}")
+        logger.debug(f"upserting: {j}")
         try:
             res = await self.delegate.post(
                 "/update",
@@ -714,9 +713,9 @@ class DefaultSolrClient(SolrClient):
                 case 409:
                     return "VersionConflict"
                 case _:
-                    raise SolrClientUpsertException(docs, res)
+                    raise SolrClientUpsertException(docs, res) from None
         except ConnectError as e:
-            raise SolrClientConnectException(e)
+            raise SolrClientConnectException(e) from e
 
     async def get_schema(self) -> CoreSchema:
         """Return the current schema."""

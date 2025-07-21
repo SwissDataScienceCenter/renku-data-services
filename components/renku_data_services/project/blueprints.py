@@ -20,7 +20,7 @@ from renku_data_services.base_api.etag import extract_if_none_match, if_match_re
 from renku_data_services.base_api.misc import validate_body_root_model, validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.base_models.core import Slug
-from renku_data_services.base_models.metrics import MetricsService
+from renku_data_services.base_models.metrics import MetricsService, ProjectCreationType
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
 from renku_data_services.data_connectors.db import DataConnectorRepository
 from renku_data_services.errors import errors
@@ -82,7 +82,7 @@ class ProjectsBP(CustomBlueprint):
         async def _post(_: Request, user: base_models.APIUser, body: apispec.ProjectPost) -> JSONResponse:
             new_project = validate_unsaved_project(body, created_by=user.id or "")
             result = await self.project_repo.insert_project(user, new_project)
-            await self.metrics.project_created(user)
+            await self.metrics.project_created(user, metadata={"project_creation_kind": ProjectCreationType.new.value})
             if len(result.repositories) > 0:
                 await self.metrics.code_repo_linked_to_project(user)
             return validated_json(apispec.Project, self._dump_project(result), status=201)
@@ -109,7 +109,6 @@ class ProjectsBP(CustomBlueprint):
         """Get project migration by project v1 id."""
 
         @authenticate(self.authenticator)
-        @only_authenticated
         async def _get_migration(_: Request, user: base_models.APIUser, v1_id: int) -> JSONResponse:
             project = await self.project_migration_repo.get_migration_by_v1_id(user, v1_id)
             project_dump = self._dump_project(project)
@@ -130,6 +129,9 @@ class ProjectsBP(CustomBlueprint):
 
             result = await self.project_migration_repo.migrate_v1_project(
                 user, project=new_project, project_v1_id=v1_id, session_launcher=body.session_launcher
+            )
+            await self.metrics.project_created(
+                user, metadata={"project_creation_kind": ProjectCreationType.migrated.value}
             )
             return validated_json(apispec.Project, self._dump_project(result), status=201)
 
@@ -180,6 +182,9 @@ class ProjectsBP(CustomBlueprint):
                 project_repo=self.project_repo,
                 session_repo=self.session_repo,
                 data_connector_repo=self.data_connector_repo,
+            )
+            await self.metrics.project_created(
+                user, metadata={"project_creation_kind": ProjectCreationType.copied.value}
             )
             return validated_json(apispec.Project, self._dump_project(project), status=201)
 

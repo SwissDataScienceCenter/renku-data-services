@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import math
 import sys
 from asyncio.tasks import Task
@@ -11,6 +10,8 @@ from collections.abc import Callable, Coroutine, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, final
+
+from renku_data_services.app_config import logging
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +69,10 @@ class _TaskContext:
         """Resets the restarts counter to 0."""
         self.restarts = 0
 
-    def running_time(self, ref: datetime = datetime.now()) -> timedelta:
+    def running_time(self, ref: datetime | None = None) -> timedelta:
         """Return the time the task is running."""
+        if ref is None:
+            ref = datetime.now()
         return ref - self.started
 
     def to_view(self) -> TaskView:
@@ -110,14 +113,18 @@ class TaskManager:
         self.__running_tasks: dict[str, _TaskContext] = {}
         self.__max_retry_wait_seconds = max_retry_wait_seconds
 
-    def start_all(self, task_defs: TaskDefininions, start_time: datetime = datetime.now()) -> None:
+    def start_all(self, task_defs: TaskDefininions, start_time: datetime | None = None) -> None:
         """Registers all tasks."""
+        if start_time is None:
+            start_time = datetime.now()
         now = start_time
         for name, tf in task_defs.tasks:
             self.start(name, tf, now)
 
-    def start(self, name: str, tf: TaskFactory, now: datetime = datetime.now()) -> None:
+    def start(self, name: str, tf: TaskFactory, now: datetime | None = None) -> None:
         """Start a task associated to the given name."""
+        if now is None:
+            now = datetime.now()
         if name in self.__running_tasks:
             logger.warning(f"{name}: not starting task, it is already running.")
         else:

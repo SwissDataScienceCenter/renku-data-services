@@ -15,10 +15,10 @@ import httpx
 from kubernetes.client import V1ObjectMeta, V1Secret
 from kubernetes.utils.duration import format_duration
 from sanic import Request
-from sanic.log import logger
 from toml import dumps
 from yaml import safe_dump
 
+from renku_data_services.app_config import logging
 from renku_data_services.base_models import APIUser
 from renku_data_services.base_models.core import AnonymousAPIUser, AuthenticatedAPIUser
 from renku_data_services.base_models.metrics import MetricsService
@@ -61,6 +61,8 @@ from renku_data_services.project.models import Project, SessionSecret
 from renku_data_services.session.models import SessionLauncher
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.cryptography import get_encryption_key
+
+logger = logging.getLogger(__name__)
 
 
 async def get_extra_init_containers(
@@ -109,13 +111,16 @@ async def get_extra_containers(
 
 
 async def get_auth_secret_authenticated(
-    nb_config: NotebooksConfig, user: AuthenticatedAPIUser, server_name: str
+    nb_config: NotebooksConfig,
+    user: AuthenticatedAPIUser,
+    server_name: str,
+    base_server_url: str,
+    base_server_https_url: str,
+    base_server_path: str,
 ) -> ExtraSecret:
     """Get the extra secrets that need to be added to the session for an authenticated user."""
     secret_data = {}
-    base_server_url = nb_config.sessions.ingress.base_url(server_name)
-    base_server_path = nb_config.sessions.ingress.base_path(server_name)
-    base_server_https_url = nb_config.sessions.ingress.base_url(server_name, force_https=True)
+
     parsed_proxy_url = urlparse(urljoin(base_server_url + "/", "oauth2"))
     vol = ExtraVolume(
         name="renku-authorized-emails",
@@ -433,12 +438,20 @@ async def repositories_from_session(
     return repositories_from_project(project, git_providers)
 
 
-def get_culling(resource_pool: ResourcePool, nb_config: NotebooksConfig) -> Culling:
+def get_culling(
+    user: AuthenticatedAPIUser | AnonymousAPIUser, resource_pool: ResourcePool, nb_config: NotebooksConfig
+) -> Culling:
     """Create the culling specification for an AmaltheaSession."""
     idle_threshold_seconds = resource_pool.idle_threshold or nb_config.sessions.culling.registered.idle_seconds
-    hibernation_threshold_seconds = (
-        resource_pool.hibernation_threshold or nb_config.sessions.culling.registered.hibernated_seconds
-    )
+    if user.is_anonymous:
+        # NOTE: Anonymous sessions should not be hibernated at all, but there is no such option in Amalthea
+        # So in this case we set a very low hibernation threshold so the session is deleted quickly after
+        # it is hibernated.
+        hibernation_threshold_seconds = 1
+    else:
+        hibernation_threshold_seconds = (
+            resource_pool.hibernation_threshold or nb_config.sessions.culling.registered.hibernated_seconds
+        )
     return Culling(
         maxAge=format_duration(timedelta(seconds=nb_config.sessions.culling.registered.max_age_seconds)),
         maxFailedDuration=format_duration(timedelta(seconds=nb_config.sessions.culling.registered.failed_seconds)),
@@ -485,6 +498,7 @@ async def patch_session(
         raise errors.ProgrammingError(
             message=f"The session {session_id} being patched is missing the expected 'spec' field.", quiet=True
         )
+    cluster = await nb_config.k8s_v2_client.cluster_by_class_id(session.resource_class_id(), user)
 
     patch = AmaltheaSessionV1Alpha1Patch(spec=AmaltheaSessionV1Alpha1SpecPatch())
     is_getting_hibernated: bool = False
@@ -527,7 +541,7 @@ async def patch_session(
         patch.spec.affinity = node_affinity_from_resource_class(rc, nb_config.sessions.affinity_model)
         # Priority class (if a quota is being used)
         patch.spec.priorityClassName = rc.quota
-        patch.spec.culling = get_culling(rp, nb_config)
+        patch.spec.culling = get_culling(user, rp, nb_config)
 
     # If the session is being hibernated we do not need to patch anything else that is
     # not specifically called for in the request body, we can refresh things when the user resumes.
@@ -546,10 +560,12 @@ async def patch_session(
     if extra_containers:
         patch.spec.extraContainers = extra_containers
 
+    # Patching the image pull secret
     if isinstance(user, AuthenticatedAPIUser) and internal_gitlab_user.access_token is not None:
         image = session.spec.session.image
         server_name = session.metadata.name
         needs_pull_secret = await requires_image_pull_secret(nb_config, image, internal_gitlab_user)
+        logger.info(f"Session with ID {session_id} needs pull secret for image {image}: {needs_pull_secret}")
 
         if needs_pull_secret:
             image_pull_secret_name = f"{server_name}-image-secret"
@@ -558,14 +574,22 @@ async def patch_session(
             image_secret = get_gitlab_image_pull_secret(
                 nb_config, user, image_pull_secret_name, internal_gitlab_user.access_token
             )
-            if image_secret:
-                updated_secrets = [
-                    secret
-                    for secret in (session.spec.imagePullSecrets or [])
-                    if not secret.name.endswith("-image-secret")
-                ]
-                updated_secrets.append(ImagePullSecret(name=image_pull_secret_name, adopt=True))
-                patch.spec.imagePullSecrets = updated_secrets
+
+            if not image_secret:
+                logger.error(f"Failed to create image pull secret for session ID {session_id} with image {image}")
+                raise errors.ProgrammingError(
+                    message=f"We cannot retrive credentials for your private image {image}. "
+                    "In order to resolve this problem, you can try to log out and back in "
+                    "and/or check that you still have permissions for the image repository."
+                )
+            # Ensure the secret is created in the cluster
+            await nb_config.k8s_v2_client.create_secret(image_secret.secret, cluster)
+
+            updated_secrets = [
+                secret for secret in (session.spec.imagePullSecrets or []) if not secret.name.endswith("-image-secret")
+            ]
+            updated_secrets.append(ImagePullSecret(name=image_pull_secret_name, adopt=True))
+            patch.spec.imagePullSecrets = updated_secrets
 
     patch_serialized = patch.to_rfc7386()
     if len(patch_serialized) == 0:

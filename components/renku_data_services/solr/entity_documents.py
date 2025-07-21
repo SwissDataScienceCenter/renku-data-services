@@ -19,23 +19,21 @@ from pydantic import (
 from ulid import ULID
 
 from renku_data_services.authz.models import Visibility
-from renku_data_services.base_models.core import ResourceType, Slug
+from renku_data_services.base_models.core import (
+    DataConnectorSlug,
+    NamespacePath,
+    NamespaceSlug,
+    ProjectPath,
+    ProjectSlug,
+    ResourceType,
+    Slug,
+)
 from renku_data_services.solr.entity_schema import Fields
 from renku_data_services.solr.solr_client import DocVersion, DocVersions, ResponseBody
 
 
 def _str_to_slug(value: Any) -> Slug:
     if isinstance(value, str):
-        return Slug.from_name(value)
-    elif isinstance(value, Slug):
-        return value
-    raise errors.ValidationError(message="converting to slug in solr documents was not successful")
-
-
-def _str_to_slug_none(value: Any) -> Slug | None:
-    if value is None:
-        return None
-    elif isinstance(value, str):
         return Slug.from_name(value)
     elif isinstance(value, Slug):
         return value
@@ -71,9 +69,11 @@ class EntityType(StrEnum):
                 return ResourceType.data_connector
 
 
-class GlobalEntityDoc(BaseModel, ABC, frozen=True):
-    """Base class for an entity without a namespace."""
+class EntityDoc(BaseModel, ABC, frozen=True):
+    """Base class for an entity."""
 
+    path: str
+    slug: Annotated[Slug, BeforeValidator(_str_to_slug)]
     version: DocVersion = Field(
         serialization_alias="_version_",
         validation_alias=AliasChoices("version", "_version_"),
@@ -87,6 +87,10 @@ class GlobalEntityDoc(BaseModel, ABC, frozen=True):
         """Return the type of this entity."""
         ...
 
+    @field_serializer("slug", when_used="always")
+    def __serialize_slug(self, slug: Slug) -> str:
+        return slug.value
+
     def to_dict(self) -> dict[str, Any]:
         """Return the dict of this group."""
         dict = self.model_dump(by_alias=True, exclude_none=True, mode="json")
@@ -99,12 +103,6 @@ class GlobalEntityDoc(BaseModel, ABC, frozen=True):
         return self.model_copy(update={"version": DocVersions.not_exists(), "score": None})
 
 
-class EntityDoc(GlobalEntityDoc, ABC, frozen=True):
-    """Base class for entity document models."""
-
-    namespace: Annotated[Slug, BeforeValidator(_str_to_slug)]
-
-
 class User(EntityDoc, frozen=True):
     """Represents a renku user in SOLR."""
 
@@ -112,15 +110,17 @@ class User(EntityDoc, frozen=True):
     firstName: str | None = None
     lastName: str | None = None
     visibility: Annotated[Literal[Visibility.PUBLIC], BeforeValidator(_str_to_visibility_public)] = Visibility.PUBLIC
+    isNamespace: Annotated[Literal[True], BeforeValidator(lambda e: True)] = True
 
     @property
     def entity_type(self) -> EntityType:
         """Return the type of this entity."""
         return EntityType.user
 
-    @field_serializer("namespace", when_used="always")
-    def __serialize_namespace(self, namespace: Slug) -> str:
-        return namespace.value
+    @classmethod
+    def of(cls, id: str, slug: Slug, firstName: str | None = None, lastName: str | None = None) -> User:
+        """Create a new user from the given data."""
+        return User(path=slug.value, slug=slug, id=id, firstName=firstName, lastName=lastName)
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> User:
@@ -135,6 +135,7 @@ class Group(EntityDoc, frozen=True):
     name: str
     description: str | None = None
     visibility: Annotated[Literal[Visibility.PUBLIC], BeforeValidator(_str_to_visibility_public)] = Visibility.PUBLIC
+    isNamespace: Annotated[Literal[True], BeforeValidator(lambda e: True)] = True
 
     @property
     def entity_type(self) -> EntityType:
@@ -145,9 +146,10 @@ class Group(EntityDoc, frozen=True):
     def __serialize_id(self, id: ULID) -> str:
         return str(id)
 
-    @field_serializer("namespace", when_used="always")
-    def __serialize_namespace(self, namespace: Slug) -> str:
-        return namespace.value
+    @classmethod
+    def of(cls, id: ULID, slug: Slug, name: str, description: str | None = None) -> Group:
+        """Create a new group from the given data."""
+        return Group(path=slug.value, slug=slug, id=id, description=description, name=name)
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> Group:
@@ -160,13 +162,17 @@ class Project(EntityDoc, frozen=True):
 
     id: ULID
     name: str
-    slug: Annotated[Slug, BeforeValidator(_str_to_slug)]
     visibility: Visibility
+    namespace_path: str = Field(
+        serialization_alias="namespacePath",
+        validation_alias=AliasChoices("namespace_path", "namespacePath"),
+    )
     createdBy: str
     creationDate: datetime
     repositories: list[str] = Field(default_factory=list)
     description: str | None = None
     keywords: list[str] = Field(default_factory=list)
+    isNamespace: Annotated[Literal[True], BeforeValidator(lambda e: True)] = True
     namespaceDetails: ResponseBody | None = None
     creatorDetails: ResponseBody | None = None
 
@@ -175,17 +181,15 @@ class Project(EntityDoc, frozen=True):
         """Return the type of this entity."""
         return EntityType.project
 
-    @field_serializer("namespace", when_used="always")
-    def __serialize_namespace(self, namespace: Slug) -> str:
-        return namespace.value
+    @field_validator("keywords")
+    @classmethod
+    def _sort_keywords(cls, v: list[str]) -> list[str]:
+        v.sort()
+        return v
 
     @field_serializer("id", when_used="always")
     def __serialize_id(self, id: ULID) -> str:
         return str(id)
-
-    @field_serializer("slug", when_used="always")
-    def __serialize_slug(self, slug: Slug) -> str:
-        return slug.value
 
     @field_serializer("visibility", when_used="always")
     def __serialize_visibilty(self, visibility: Visibility) -> str:
@@ -200,26 +204,37 @@ class Project(EntityDoc, frozen=True):
     def _add_tzinfo(cls, v: datetime) -> datetime:
         return v.replace(tzinfo=UTC)
 
+    def in_namespace(self, ns: Group | User) -> Project:
+        """Set the namespace as given, returning a new object."""
+        p_slug = ProjectSlug(self.slug.value)
+        parent = NamespacePath(NamespaceSlug(ns.slug.value))
+        path = (parent / p_slug).serialize()
+        return self.model_copy(update={"path": path, "namespace_path": ns.path})
+
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> Project:
         """Create a Project from a dictionary."""
         return Project.model_validate(d)
 
 
-class DataConnector(GlobalEntityDoc, frozen=True):
+class DataConnector(EntityDoc, frozen=True):
     """Represents a global or non-global renku data connector in SOLR."""
 
     id: ULID
-    namespace: Annotated[Slug | None, BeforeValidator(_str_to_slug_none)] = None
+    namespace_path: str | None = Field(
+        serialization_alias="namespacePath",
+        validation_alias=AliasChoices("namespace_path", "namespacePath"),
+        default=None,
+    )
     name: str
     storageType: str
     readonly: bool
-    slug: Annotated[Slug, BeforeValidator(_str_to_slug)]
     visibility: Visibility
     createdBy: str
     creationDate: datetime
     description: str | None = None
     keywords: list[str] = Field(default_factory=list)
+    isNamespace: Annotated[Literal[False], BeforeValidator(lambda e: False)] = False
     namespaceDetails: ResponseBody | None = None
     creatorDetails: ResponseBody | None = None
 
@@ -228,17 +243,15 @@ class DataConnector(GlobalEntityDoc, frozen=True):
         """Return the type of this entity."""
         return EntityType.dataconnector
 
-    @field_serializer("namespace", when_used="always")
-    def __serialize_namespace(self, namespace: Slug) -> str:
-        return namespace.value
+    @field_validator("keywords")
+    @classmethod
+    def _sort_keywords(cls, v: list[str]) -> list[str]:
+        v.sort()
+        return v
 
     @field_serializer("id", when_used="always")
     def __serialize_id(self, id: ULID) -> str:
         return str(id)
-
-    @field_serializer("slug", when_used="always")
-    def __serialize_slug(self, slug: Slug) -> str:
-        return slug.value
 
     @field_serializer("visibility", when_used="always")
     def __serialize_visibilty(self, visibility: Visibility) -> str:
@@ -247,6 +260,25 @@ class DataConnector(GlobalEntityDoc, frozen=True):
     @field_serializer("creationDate", when_used="always")
     def __serialize_creation_date(self, creationDate: datetime) -> str:
         return creationDate.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def in_namespace(self, ns: Group | User | Project | None) -> DataConnector:
+        """Set the namespace as given, returning a new object."""
+        ns_path = ns.path if ns is not None else None
+        dc_slug = DataConnectorSlug(self.slug.value)
+
+        # I want to reuse the `"/".join(…)` to combine namespace + slug
+        match ns:
+            case Group() as g:
+                parent: NamespacePath | ProjectPath | None = NamespacePath(NamespaceSlug(g.slug.value))
+            case User() as u:
+                parent = NamespacePath(NamespaceSlug(u.slug.value))
+            case Project() as p:
+                parent = ProjectPath(NamespaceSlug(p.namespace_path), ProjectSlug(p.slug.value))
+            case None:
+                parent = None
+
+        path = (parent / dc_slug).serialize() if parent is not None else self.slug.value
+        return self.model_copy(update={"path": path, "namespace_path": ns_path})
 
     @field_validator("creationDate")
     @classmethod

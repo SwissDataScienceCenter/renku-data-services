@@ -74,16 +74,18 @@ def paginate(
         page_parameter = cast(int | str, query_args.get("page", default_page_number))
         try:
             page = int(page_parameter)
-        except ValueError:
-            raise errors.ValidationError(message=f"Invalid value for parameter 'page': {page_parameter}")
+        except ValueError as err:
+            raise errors.ValidationError(message=f"Invalid value for parameter 'page': {page_parameter}") from err
         if page < 1:
             raise errors.ValidationError(message="Parameter 'page' must be a natural number")
 
         per_page_parameter = cast(int | str, query_args.get("per_page", default_number_of_elements_per_page))
         try:
             per_page = int(per_page_parameter)
-        except ValueError:
-            raise errors.ValidationError(message=f"Invalid value for parameter 'per_page': {per_page_parameter}")
+        except ValueError as err:
+            raise errors.ValidationError(
+                message=f"Invalid value for parameter 'per_page': {per_page_parameter}"
+            ) from err
         if per_page < 1 or per_page > 100:
             raise errors.ValidationError(message="Parameter 'per_page' must be between 1 and 100")
 

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import multiprocessing.synchronize
-from collections.abc import AsyncIterable
+from collections.abc import AsyncIterable, Coroutine
 from copy import deepcopy
 from multiprocessing import Lock
 from multiprocessing.synchronize import Lock as LockType
@@ -18,15 +19,14 @@ from kubernetes.config.incluster_config import SERVICE_CERT_FILENAME, SERVICE_TO
 
 from renku_data_services.errors import errors
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface, K8sSchedudlingClientInterface
+from renku_data_services.k8s.models import APIObjectInCluster, K8sObjectFilter
 
 if TYPE_CHECKING:
+    from renku_data_services.k8s.constants import ClusterId
     from renku_data_services.k8s.models import (
         GVK,
-        APIObjectInCluster,
         Cluster,
-        ClusterId,
         K8sObject,
-        K8sObjectFilter,
         K8sObjectMeta,
     )
     from renku_data_services.k8s_watcher import K8sDbCache
@@ -98,6 +98,10 @@ class K8sSchedulingClient(K8sSchedudlingClientInterface):  # pragma:nocover
     def delete_priority_class(self, name: Any, **kwargs: Any) -> Any:
         """Delete a priority class."""
         return self.client.delete_priority_class(name, **kwargs)
+
+    def get_priority_class(self, name: Any, **kwargs: Any) -> Any:
+        """Get a priority class."""
+        return self.client.read_priority_class(name, **kwargs)
 
 
 class DummyCoreClient(K8sCoreClientInterface):
@@ -233,6 +237,11 @@ class DummySchedulingClient(K8sSchedudlingClientInterface):
                 raise client.ApiException(status=404)
             return removed_pc
 
+    def get_priority_class(self, name: Any, **kwargs: Any) -> Any:
+        """Get a priority class."""
+        with self._lock:
+            return self.pcs.get(name, None)
+
 
 class K8sClusterClient:
     """A wrapper around a kr8s k8s client, acts on all resources of a cluster."""
@@ -248,24 +257,23 @@ class K8sClusterClient:
     async def __list(self, _filter: K8sObjectFilter) -> AsyncIterable[APIObjectInCluster]:
         if _filter.cluster is not None and _filter.cluster != self.__cluster.id:
             return
-        if _filter.namespace is not None and _filter.namespace != self.__cluster.namespace:
-            return
+
         names = [_filter.name] if _filter.name is not None else []
 
         try:
-            res = await self.__cluster.api.async_get(
+            res = self.__cluster.api.async_get(
                 _filter.gvk.kr8s_kind,
                 *names,
                 label_selector=_filter.label_selector,
                 namespace=_filter.namespace,
             )
-        except (kr8s.ServerError, kr8s.APITimeoutError):
-            return
 
-        if not isinstance(res, list):
-            res = [res]
-        for r in res:
-            yield self.__cluster.with_api_object(r)
+            async for r in res:
+                yield APIObjectInCluster(r, self.__cluster.id)
+
+        except (kr8s.ServerError, kr8s.APITimeoutError, ValueError) as _e:
+            # ValueError is generated when the kind does not exist on the cluster
+            return
 
     async def __get_api_object(self, meta: K8sObjectFilter) -> APIObjectInCluster | None:
         return await anext(aiter(self.__list(meta)), None)
@@ -277,7 +285,7 @@ class K8sClusterClient:
         await api_obj.create()
         # if refresh isn't called, status and timestamp will be blank
         await api_obj.refresh()
-        return obj.meta.with_manifest(api_obj.to_dict())
+        return obj.with_manifest(api_obj.to_dict())
 
     async def patch(self, meta: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
         """Patch a k8s object.
@@ -312,8 +320,7 @@ class K8sClusterClient:
 
     async def list(self, _filter: K8sObjectFilter) -> AsyncIterable[K8sObject]:
         """List all k8s objects."""
-        results = self.__list(_filter)
-        async for r in results:
+        async for r in self.__list(_filter):
             yield r.to_k8s_object()
 
 
@@ -330,13 +337,13 @@ class K8SCachedClusterClient(K8sClusterClient):
 
     async def create(self, obj: K8sObject) -> K8sObject:
         """Create the k8s object."""
-        if obj.meta.gvk in self.__kinds_to_cache:
+        if obj.gvk in self.__kinds_to_cache:
             await self.__cache.upsert(obj)
         try:
             obj = await super().create(obj)
         except:
             # if there was an error creating the k8s object, we delete it from the db again to not have ghost entries
-            if obj.meta.gvk in self.__kinds_to_cache:
+            if obj.gvk in self.__kinds_to_cache:
                 await self.__cache.delete(obj)
             raise
         return obj
@@ -351,8 +358,12 @@ class K8SCachedClusterClient(K8sClusterClient):
     async def delete(self, meta: K8sObjectMeta) -> None:
         """Delete a k8s object."""
         await super().delete(meta)
-        if meta.gvk in self.__kinds_to_cache:
-            await self.__cache.delete(meta)
+        # NOTE: We use foreground deletion in the k8s client.
+        # This means that the parent resource is usually not deleted immediately and will
+        # wait for its children to be deleted before it is deleted.
+        # To avoid premature purging of resources from the cache we do not delete the resource here
+        # from the cache, rather we expect that the cache will sync itself properly and quickly purge
+        # stale resources.
 
     async def get(self, meta: K8sObjectMeta) -> K8sObject | None:
         """Get a specific k8s object, None is returned if the object does not exist."""
@@ -365,7 +376,16 @@ class K8SCachedClusterClient(K8sClusterClient):
 
     async def list(self, _filter: K8sObjectFilter) -> AsyncIterable[K8sObject]:
         """List all k8s objects."""
-        results = self.__cache.list(_filter) if _filter.gvk in self.__kinds_to_cache else super().list(_filter)
+
+        # Don't even go to the DB or Kubernetes if the cluster id is set and does not match our cluster.
+        if _filter.cluster is not None and _filter.cluster != self.get_cluster().id:
+            return
+
+        filter2 = deepcopy(_filter)
+        if filter2.cluster is None:
+            filter2.cluster = self.get_cluster().id
+
+        results = self.__cache.list(filter2) if _filter.gvk in self.__kinds_to_cache else super().list(filter2)
         async for res in results:
             yield res
 
@@ -373,11 +393,37 @@ class K8SCachedClusterClient(K8sClusterClient):
 class K8sClusterClientsPool:
     """A wrapper around a kr8s k8s client, acts on all resources over many clusters."""
 
-    def __init__(self, clusters: list[Cluster], cache: K8sDbCache, kinds_to_cache: list[GVK]) -> None:
-        self.__clients = {c.id: K8SCachedClusterClient(c, cache, kinds_to_cache) for c in clusters}
+    def __init__(
+        self, cache: K8sDbCache, kinds_to_cache: list[GVK], get_clusters: Coroutine[Any, Any, list[Cluster]]
+    ) -> None:
+        self.__clients: dict[ClusterId, K8sClusterClient] | None = None
+        self.__cache = cache
+        self.__kinds_to_cache = kinds_to_cache
+        self.__get_clusters = get_clusters
+        self.__lock = asyncio.Lock()
 
-    def __get_client_or_die(self, cluster_id: ClusterId) -> K8sClusterClient:
-        cluster_client = self.__clients.get(cluster_id)
+    async def __load(self) -> None:
+        # Avoid trying to take a lock when we have loaded the dictionary (99% of the time)
+        if self.__clients is not None:
+            return
+
+        async with self.__lock:
+            # We know it was none before getting the lock, but we might have been preempted by another coroutine which
+            # could have done the job by now, so check again, if still not set, load the value, otherwise we are done
+            if self.__clients is None:
+                clusters: list[Cluster] = await self.__get_clusters
+                self.__clients = {
+                    c.id: K8SCachedClusterClient(c, self.__cache, self.__kinds_to_cache) for c in clusters
+                }
+
+    async def __get_client_or_die(self, cluster_id: ClusterId) -> K8sClusterClient:
+        cluster_client = None
+        if self.__clients is None:
+            await self.__load()
+
+        if self.__clients is not None:
+            cluster_client = self.__clients.get(cluster_id)
+
         if cluster_client is None:
             raise errors.MissingResourceError(
                 message=f"Could not find cluster with id {cluster_id} in the list of clusters."
@@ -386,30 +432,40 @@ class K8sClusterClientsPool:
 
     def cluster_by_id(self, cluster_id: ClusterId) -> Cluster:
         """Return a cluster by its id."""
-        return self.__get_client_or_die(cluster_id).get_cluster()
+        _client = None
+        if self.__clients is not None:
+            _client = self.__clients.get(cluster_id)
+
+        if _client is not None:
+            return _client.get_cluster()
+
+        raise errors.MissingResourceError(
+            message=f"Could not find cluster with id {cluster_id} in the list of clusters."
+        )
 
     async def create(self, obj: K8sObject) -> K8sObject:
         """Create the k8s object."""
-        return await self.__get_client_or_die(obj.cluster).create(obj)
+        return await (await self.__get_client_or_die(obj.cluster)).create(obj)
 
     async def patch(self, meta: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
         """Patch a k8s object."""
-        return await self.__get_client_or_die(meta.cluster).patch(meta, patch)
+        return await (await self.__get_client_or_die(meta.cluster)).patch(meta, patch)
 
     async def delete(self, meta: K8sObjectMeta) -> None:
         """Delete a k8s object."""
-        await self.__get_client_or_die(meta.cluster).delete(meta)
+        await (await self.__get_client_or_die(meta.cluster)).delete(meta)
 
-    async def get(
-        self,
-        meta: K8sObjectMeta,
-    ) -> K8sObject | None:
+    async def get(self, meta: K8sObjectMeta) -> K8sObject | None:
         """Get a specific k8s object, None is returned if the object does not exist."""
-        return await self.__get_client_or_die(meta.cluster).get(meta)
+        return await (await self.__get_client_or_die(meta.cluster)).get(meta)
 
     async def list(self, _filter: K8sObjectFilter) -> AsyncIterable[K8sObject]:
         """List all k8s objects."""
-        cluster_clients = [v for v in self.__clients.values()]
-        for c in cluster_clients:
-            async for r in c.list(_filter):
-                yield r
+        if self.__clients is None:
+            await self.__load()
+
+        if self.__clients is not None:
+            cluster_clients = [v for v in self.__clients.values()]
+            for c in cluster_clients:
+                async for r in c.list(_filter):
+                    yield r

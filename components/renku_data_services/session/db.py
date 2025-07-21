@@ -8,13 +8,13 @@ from datetime import UTC, datetime
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
-from sanic.log import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import RESET
@@ -22,6 +22,8 @@ from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.session import constants, models
 from renku_data_services.session import orm as schemas
 from renku_data_services.session.k8s_client import ShipwrightClient
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from renku_data_services.session.config import BuildsConfig
@@ -752,10 +754,6 @@ class SessionRepository:
 
     async def get_build(self, user: base_models.APIUser, build_id: ULID) -> models.Build:
         """Get a specific build."""
-
-        if not user.is_authenticated or user.id is None:
-            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
-
         async with self.session_maker() as session, session.begin():
             stmt = select(schemas.BuildORM).where(schemas.BuildORM.id == build_id)
             result = await session.scalars(stmt)
@@ -772,7 +770,8 @@ class SessionRepository:
                 raise errors.MissingResourceError(message=not_found_message)
 
             # Check and refresh the status of in-progress builds
-            await self._refresh_build(build=build, session=session, user_id=user.id)
+            if user.id is not None:
+                await self._refresh_build(build=build, session=session, user_id=user.id)
 
             return build.dump()
 
@@ -1003,6 +1002,12 @@ class SessionRepository:
             # TODO: move this to its own method where build parameters determine args
             environment = build.environment
             environment.container_image = build.result_image
+            # An older version was hardcoding the values but we can and should
+            # rely on the defaults for args and command
+            if environment.command is not None:
+                environment.command = None
+            if environment.args is not None:
+                environment.args = None
 
         await session.flush()
         await session.refresh(build)

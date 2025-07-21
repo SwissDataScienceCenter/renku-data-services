@@ -24,7 +24,6 @@ from renku_data_services.crc.blueprints import (
 )
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_connectors.blueprints import DataConnectorsBP
-from renku_data_services.message_queue.blueprints import MessageQueueBP
 from renku_data_services.namespace.blueprints import GroupsBP
 from renku_data_services.notebooks.blueprints import NotebooksBP, NotebooksNewBP
 from renku_data_services.platform.blueprints import PlatformConfigBP
@@ -32,6 +31,7 @@ from renku_data_services.project.blueprints import ProjectsBP, ProjectSessionSec
 from renku_data_services.repositories.blueprints import RepositoriesBP
 from renku_data_services.search.blueprints import SearchBP
 from renku_data_services.search.reprovision import SearchReprovision
+from renku_data_services.search.solr_user_query import UsernameResolve
 from renku_data_services.session.blueprints import BuildsBP, EnvironmentsBP, SessionLaunchersBP
 from renku_data_services.storage.blueprints import StorageBP, StorageSchemaBP
 from renku_data_services.users.blueprints import KCUsersBP, UserPreferencesBP, UserSecretsBP
@@ -41,8 +41,8 @@ def str_to_slug(value: str) -> Slug:
     """Convert a str to Slug."""
     try:
         return Slug(value)
-    except errors.ValidationError:
-        raise ValueError("Couldn't parse slug")
+    except errors.ValidationError as err:
+        raise ValueError("Couldn't parse slug") from err
 
 
 def _patched_validate_body(
@@ -77,6 +77,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         rp_repo=dm.rp_repo,
         authenticator=dm.authenticator,
         user_repo=dm.user_repo,
+        cluster_repo=dm.cluster_repo,
     )
     classes = ClassesBP(name="classes", url_prefix=url_prefix, repo=dm.rp_repo, authenticator=dm.authenticator)
     quota = QuotaBP(
@@ -214,6 +215,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         user_repo=dm.kc_user_repo,
         data_connector_repo=dm.data_connector_repo,
         data_connector_secret_repo=dm.data_connector_secret_repo,
+        cluster_repo=dm.cluster_repo,
         internal_gitlab_authenticator=dm.gitlab_authenticator,
         metrics=dm.metrics,
     )
@@ -223,21 +225,11 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         platform_repo=dm.platform_repo,
         authenticator=dm.authenticator,
     )
-    message_queue = MessageQueueBP(
-        name="search",
-        url_prefix=url_prefix,
-        authenticator=dm.authenticator,
-        session_maker=dm.config.db.async_session_maker,
-        reprovisioning_repo=dm.reprovisioning_repo,
-        user_repo=dm.kc_user_repo,
-        group_repo=dm.group_repo,
-        project_repo=dm.project_repo,
-        authz=dm.authz,
-    )
     search = SearchBP(
         name="search2",
         url_prefix=url_prefix,
         authenticator=dm.authenticator,
+        username_resolve=UsernameResolve.db(dm.kc_user_repo),
         search_reprovision=SearchReprovision(
             search_updates_repo=dm.search_updates_repo,
             reprovisioning_repo=dm.reprovisioning_repo,
@@ -284,7 +276,6 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
             notebooks.blueprint(),
             notebooks_new.blueprint(),
             platform_config.blueprint(),
-            message_queue.blueprint(),
             search.blueprint(),
             data_connectors.blueprint(),
         ]

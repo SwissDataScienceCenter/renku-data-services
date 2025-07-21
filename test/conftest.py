@@ -1,7 +1,7 @@
 """Fixtures for testing."""
 
 import asyncio
-import logging
+import logging as ll
 import os
 import secrets
 import socket
@@ -24,6 +24,7 @@ from pytest_postgresql.janitor import DatabaseJanitor
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
+from renku_data_services.app_config import logging
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.db_config.config import DBConfig
@@ -33,6 +34,25 @@ from renku_data_services.solr.solr_client import SolrClientConfig
 from renku_data_services.solr.solr_migrate import SchemaMigrator
 from renku_data_services.users import models as user_preferences_models
 from test.utils import TestDependencyManager
+
+
+def __make_logging_config() -> logging.Config:
+    def_cfg = logging.Config(
+        root_level=ll.ERROR,
+        app_level=ll.ERROR,
+        format_style=logging.LogFormatStyle.plain,
+        override_levels={ll.ERROR: set(["alembic", "sanic"])},
+    )
+    env_cfg = logging.Config.from_env()
+    def_cfg.update_override_levels(env_cfg.override_levels)
+
+    test_cfg = logging.Config.from_env(prefix="TEST_")
+    def_cfg.update_override_levels(test_cfg.override_levels)
+    return def_cfg
+
+
+logging.configure_logging(__make_logging_config())
+
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +115,7 @@ async def authz_setup(monkeysession) -> AsyncGenerator[None, None]:
     try:
         proc.terminate()
     except Exception as err:
-        logging.error(f"Encountered error when shutting down Authzed DB for testing {err}")
+        logger.error(f"Encountered error when shutting down Authzed DB for testing {err}")
         proc.kill()
 
 
@@ -281,7 +301,7 @@ async def __wait_for_solr(host: str, port: int) -> None:
             except Exception as err:
                 print(err)
                 if tries >= 20:
-                    raise Exception(f"Cannot connect to solr, gave up after {tries} tries.")
+                    raise Exception(f"Cannot connect to solr, gave up after {tries} tries.") from err
                 else:
                     tries = tries + 1
                     await asyncio.sleep(1)

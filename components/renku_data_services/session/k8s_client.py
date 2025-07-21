@@ -9,7 +9,8 @@ from kr8s.asyncio.objects import APIObject, Pod
 
 from renku_data_services import errors
 from renku_data_services.errors.errors import CannotStartBuildError
-from renku_data_services.k8s.models import GVK, ClusterId, K8sObjectFilter, K8sObjectMeta
+from renku_data_services.k8s.constants import ClusterId
+from renku_data_services.k8s.models import GVK, K8sObjectFilter, K8sObjectMeta
 from renku_data_services.notebooks.api.classes.k8s_client import DEFAULT_K8S_CLUSTER
 from renku_data_services.notebooks.util.retries import retry_with_exponential_backoff_async
 from renku_data_services.session import crs, models
@@ -302,11 +303,11 @@ class ShipwrightClient:
             except httpx.ResponseNotRead:
                 # NOTE: This occurs when the container is still starting, but we try to read its logs
                 continue
-            except NotFoundError:
-                raise errors.MissingResourceError(message=f"The pod {name} does not exist.")
+            except NotFoundError as err:
+                raise errors.MissingResourceError(message=f"The pod {name} does not exist.") from err
             except ServerError as err:
                 if err.response is not None and err.response.status_code == 404:
-                    raise errors.MissingResourceError(message=f"The pod {name} does not exist.")
+                    raise errors.MissingResourceError(message=f"The pod {name} does not exist.") from err
                 raise
             else:
                 logs[container] = "\n".join(clogs)

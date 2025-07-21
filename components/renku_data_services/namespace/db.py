@@ -9,7 +9,6 @@ from contextlib import nullcontext
 from datetime import UTC, datetime
 from typing import Any, overload
 
-from sanic.log import logger
 from sqlalchemy import Select, delete, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
@@ -19,6 +18,7 @@ from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.authz.models import CheckPermissionItem, Member, MembershipChange, Role, Scope, UnsavedMember
 from renku_data_services.base_api.pagination import PaginationRequest, paginate_queries
@@ -31,11 +31,6 @@ from renku_data_services.base_models.core import (
     Slug,
 )
 from renku_data_services.data_connectors.models import DataConnector
-from renku_data_services.message_queue import events
-from renku_data_services.message_queue.avro_models.io.renku.events.v2 import GroupAdded, GroupRemoved, GroupUpdated
-from renku_data_services.message_queue.db import EventRepository
-from renku_data_services.message_queue.interface import IMessageQueue
-from renku_data_services.message_queue.redis_queue import dispatch_message
 from renku_data_services.namespace import models
 from renku_data_services.namespace import orm as schemas
 from renku_data_services.project.orm import ProjectORM
@@ -45,6 +40,8 @@ from renku_data_services.users import models as user_models
 from renku_data_services.users import orm as user_schemas
 from renku_data_services.utils.core import with_db_transaction
 
+logger = logging.getLogger(__name__)
+
 
 class GroupRepository:
     """Repository for groups."""
@@ -52,20 +49,15 @@ class GroupRepository:
     def __init__(
         self,
         session_maker: Callable[..., AsyncSession],
-        event_repo: EventRepository,
         group_authz: Authz,
-        message_queue: IMessageQueue,
         search_updates_repo: SearchUpdatesRepo,
     ) -> None:
         self.session_maker = session_maker
         self.authz: Authz = group_authz
-        self.event_repo: EventRepository = event_repo
-        self.message_queue: IMessageQueue = message_queue
         self.search_updates_repo = search_updates_repo
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.insert_many, ResourceType.user_namespace)
-    @dispatch_message(events.InsertUserNamespace)
     @update_search_document
     async def generate_user_namespaces(self, *, session: AsyncSession | None = None) -> list[user_models.UserInfo]:
         """Generate user namespaces if the user table has data and the namespaces table is empty."""
@@ -189,7 +181,6 @@ class GroupRepository:
         ]
 
     @with_db_transaction
-    @dispatch_message(GroupUpdated)
     @update_search_document
     async def update_group(
         self, user: base_models.APIUser, slug: Slug, patch: models.GroupPatch, *, session: AsyncSession | None = None
@@ -230,7 +221,6 @@ class GroupRepository:
         return group.dump()
 
     @with_db_transaction
-    @dispatch_message(events.GroupMembershipChanged)
     async def update_group_members(
         self,
         user: base_models.APIUser,
@@ -256,7 +246,6 @@ class GroupRepository:
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.delete, ResourceType.group)
-    @dispatch_message(GroupRemoved)
     @update_search_document
     async def delete_group(
         self, user: base_models.APIUser, slug: Slug, *, session: AsyncSession | None = None
@@ -283,7 +272,6 @@ class GroupRepository:
         return models.DeletedGroup(id=group.id)
 
     @with_db_transaction
-    @dispatch_message(events.GroupMembershipChanged)
     async def delete_group_member(
         self, user: base_models.APIUser, slug: Slug, user_id_to_delete: str, *, session: AsyncSession | None = None
     ) -> list[MembershipChange]:
@@ -298,7 +286,6 @@ class GroupRepository:
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.create, ResourceType.group)
-    @dispatch_message(GroupAdded)
     @update_search_document
     async def insert_group(
         self,
@@ -329,7 +316,7 @@ class GroupRepository:
                 raise errors.ValidationError(
                     message="The slug for the group should be unique but it already exists in the database",
                     detail="Please modify the slug field and then retry",
-                )
+                ) from err
             raise err
         # NOTE: This is needed to populate the relationship fields in the group after inserting the ID above
         await session.refresh(group)

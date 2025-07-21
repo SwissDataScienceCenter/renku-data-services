@@ -1,4 +1,3 @@
-import base64
 import random
 import string
 from collections.abc import Sequence
@@ -17,8 +16,6 @@ from ulid import ULID
 from renku_data_services import errors
 from renku_data_services.base_models.core import Slug
 from renku_data_services.data_api.dependencies import DependencyManager
-from renku_data_services.message_queue.avro_models.io.renku.events import v2
-from renku_data_services.message_queue.models import deserialize_binary
 from renku_data_services.migrations.core import downgrade_migrations_for_app, get_alembic_config, run_migrations_for_app
 from renku_data_services.namespace import orm as ns_schemas
 from renku_data_services.users import orm as user_schemas
@@ -37,14 +34,17 @@ async def test_unique_migration_head() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("downgrade_to, upgrade_to", [("base", "head"), ("fe3b7470d226", "8413f10ef77f")])
 async def test_upgrade_downgrade_cycle(
     app_manager_instance: DependencyManager,
     sanic_client_no_migrations: SanicASGITestClient,
     admin_headers: dict,
     admin_user: UserInfo,
+    downgrade_to: str,
+    upgrade_to: str,
 ) -> None:
     # Migrate to head and create a project
-    run_migrations_for_app("common", "head")
+    run_migrations_for_app("common", upgrade_to)
     await app_manager_instance.kc_user_repo.initialize(app_manager_instance.kc_api)
     await app_manager_instance.group_repo.generate_user_namespaces()
     payload: dict[str, Any] = {
@@ -53,11 +53,12 @@ async def test_upgrade_downgrade_cycle(
     }
     _, res = await sanic_client_no_migrations.post("/api/data/projects", headers=admin_headers, json=payload)
     assert res.status_code == 201
+    project_id = res.json["id"]
     # Migrate/downgrade a few times but end on head
-    downgrade_migrations_for_app("common", "base")
-    run_migrations_for_app("common", "head")
-    downgrade_migrations_for_app("common", "base")
-    run_migrations_for_app("common", "head")
+    downgrade_migrations_for_app("common", downgrade_to)
+    run_migrations_for_app("common", upgrade_to)
+    downgrade_migrations_for_app("common", downgrade_to)
+    run_migrations_for_app("common", upgrade_to)
     # Try to make the same project again
     # NOTE: The engine has to be disposed otherwise it caches the postgres types (i.e. enums)
     # from previous migrations and then trying to create a project below fails with the message
@@ -66,7 +67,15 @@ async def test_upgrade_downgrade_cycle(
     await app_manager_instance.kc_user_repo.initialize(app_manager_instance.kc_api)
     await app_manager_instance.group_repo.generate_user_namespaces()
     _, res = await sanic_client_no_migrations.post("/api/data/projects", headers=admin_headers, json=payload)
-    assert res.status_code == 201, res.json
+    assert res.status_code in [201, 409], res.json
+    if res.status_code == 409:
+        # NOTE: This means the project is still in the DB because the down migration was not going
+        # far enough to delete the projects table, so we delete the project and recreate it to make sure
+        # things are OK.
+        _, res = await sanic_client_no_migrations.delete(f"/api/data/projects/{project_id}", headers=admin_headers)
+        assert res.status_code == 204, res.json
+        _, res = await sanic_client_no_migrations.post("/api/data/projects", headers=admin_headers, json=payload)
+        assert res.status_code == 201, res.json
 
 
 # !IMPORTANT: This test can only be run on v2 of the authz schema
@@ -104,15 +113,6 @@ async def test_migration_to_f34b87ddd954(
     _, response = await sanic_client.get("/api/data/groups", headers=user_headers)
     assert response.status_code == 200
     assert len(response.json) == 0
-    # The database should have delete events for the groups
-    events_orm = await app_manager_instance.event_repo.get_pending_events()
-    group_removed_events = [
-        deserialize_binary(base64.b64decode(e.payload["payload"]), v2.GroupRemoved)
-        for e in events_orm
-        if e.queue == "group.removed"
-    ]
-    assert len(group_removed_events) == 2
-    assert set(added_group_ids) == {e.id for e in group_removed_events}
 
 
 @pytest.mark.asyncio
@@ -508,9 +508,9 @@ async def test_migration_to_75c83dd9d619(app_manager_instance: DependencyManager
     # The copied and the original env have the same name
     assert env1_row[2] == env2_row[2]
     # Check that the random environment is unchanged
-    random_env_row[0] == admin_user.id
-    random_env_row[1] == random_env_id
-    random_env_row[2] == "random env"
+    assert random_env_row[0] == random_env_id
+    assert random_env_row[1] == admin_user.id
+    assert random_env_row[2] == "random env"
     # Check that the orphaned cloned project's environment has been also decoupled
     orphan_launcher_row = find_by_col(launchers, custom_launcher_id_orphan_cloned, 0)
     assert orphan_launcher_row is not None

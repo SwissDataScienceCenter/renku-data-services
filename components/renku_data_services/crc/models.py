@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
-from typing import Any, Optional, Protocol
+from typing import TYPE_CHECKING, Any, Optional, Protocol
 from uuid import uuid4
 
 from ulid import ULID
 
 from renku_data_services import errors
 from renku_data_services.errors import ValidationError
+
+if TYPE_CHECKING:
+    from renku_data_services.crc.apispec import Protocol as CrcApiProtocol
 
 
 class ResourcesProtocol(Protocol):
@@ -156,25 +160,47 @@ class Quota(ResourcesCompareMixin):
     memory: int
     gpu: int
     gpu_kind: GpuKind = GpuKind.NVIDIA
-    id: Optional[str] = None
+    id: str
 
     @classmethod
     def from_dict(cls, data: dict) -> Quota:
         """Create the model from a plain dictionary."""
-        gpu_kind = GpuKind.NVIDIA
-        if "gpu_kind" in data:
-            gpu_kind = data["gpu_kind"] if isinstance(data["gpu_kind"], GpuKind) else GpuKind[data["gpu_kind"]]
-        return cls(**{**data, "gpu_kind": gpu_kind})
+        instance = deepcopy(data)
+
+        match instance.get("gpu_kind"):
+            case None:
+                instance["gpu_kind"] = GpuKind.NVIDIA
+            case GpuKind():
+                pass
+            case x:
+                instance["gpu_kind"] = GpuKind[x]
+
+        match instance.get("id"):
+            case None:
+                instance["id"] = str(uuid4())
+            case "":
+                instance["id"] = str(uuid4())
+
+        return cls(**instance)
 
     def is_resource_class_compatible(self, rc: ResourceClass) -> bool:
         """Determine if a resource class is compatible with the quota."""
         return rc <= self
 
-    def generate_id(self) -> Quota:
-        """Create a new quota with its ID set to an uuid."""
-        if self.id is not None:
-            return self
-        return self.from_dict({**asdict(self), "id": str(uuid4())})
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ClusterPatch:
+    """K8s Cluster settings patch."""
+
+    name: str | None
+    config_name: str | None
+    session_protocol: CrcApiProtocol | None
+    session_host: str | None
+    session_port: int | None
+    session_path: str | None
+    session_ingress_annotations: dict[str, Any] | None
+    session_tls_secret_name: str | None
+    session_storage_class: str | None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -183,20 +209,28 @@ class Cluster:
 
     name: str
     config_name: str
+    session_protocol: CrcApiProtocol
+    session_host: str
+    session_port: int
+    session_path: str
+    session_ingress_annotations: dict[str, Any]
+    session_tls_secret_name: str
+    session_storage_class: str | None
 
-    @classmethod
-    def from_dict(cls, data: dict) -> Cluster:
-        """Instantiate a Cluster from the dictionary."""
+    def to_cluster_patch(self) -> ClusterPatch:
+        """Convert to ClusterPatch."""
 
-        if "id" in data:
-            return SavedCluster(**data)
-        else:
-            return UnsavedCluster(**data)
-
-
-@dataclass(frozen=True, eq=True, kw_only=True)
-class UnsavedCluster(Cluster):
-    """Unsaved, memory-only K8s Cluster settings."""
+        return ClusterPatch(
+            name=self.name,
+            config_name=self.config_name,
+            session_protocol=self.session_protocol,
+            session_host=self.session_host,
+            session_port=self.session_port,
+            session_path=self.session_path,
+            session_ingress_annotations=self.session_ingress_annotations,
+            session_tls_secret_name=self.session_tls_secret_name,
+            session_storage_class=self.session_storage_class,
+        )
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -281,16 +315,27 @@ class ResourcePool:
         elif "classes" in data and isinstance(data["classes"], list):
             classes = [ResourceClass.from_dict(c) if isinstance(c, dict) else c for c in data["classes"]]
 
-        if "cluster" in data:
-            match data["cluster"]:
-                case dict():
-                    cluster = SavedCluster(**data["cluster"])
-                case SavedCluster():
-                    cluster = data["cluster"]
-                case None:
-                    cluster = None
-                case unknown:
-                    raise errors.ValidationError(message=f"Got unexpected cluster data {unknown} when creating model")
+        match tmp := data.get("cluster"):
+            case SavedCluster():
+                # This has to be before the dict() case, as this is also an instance of dict.
+                cluster = tmp
+            case dict():
+                cluster = SavedCluster(
+                    name=tmp["name"],
+                    config_name=tmp["config_name"],
+                    session_protocol=tmp["session_protocol"],
+                    session_host=tmp["session_host"],
+                    session_port=tmp["session_port"],
+                    session_path=tmp["session_path"],
+                    session_ingress_annotations=tmp["session_ingress_annotations"],
+                    session_tls_secret_name=tmp["session_tls_secret_name"],
+                    session_storage_class=tmp["session_storage_class"],
+                    id=tmp["id"],
+                )
+            case None:
+                cluster = None
+            case unknown:
+                raise errors.ValidationError(message=f"Got unexpected cluster data {unknown} when creating model")
 
         return cls(
             name=data["name"],

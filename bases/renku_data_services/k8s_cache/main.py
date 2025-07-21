@@ -1,25 +1,32 @@
 """The entrypoint for the k8s cache service."""
 
 import asyncio
-import logging
 
 import kr8s
 
-from renku_data_services.k8s.models import Cluster, ClusterId
+from renku_data_services.app_config import logging
+from renku_data_services.k8s.config import get_clusters
 from renku_data_services.k8s_cache.dependencies import DependencyManager
 from renku_data_services.k8s_watcher import K8sWatcher, k8s_object_handler
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 
+logger = logging.getLogger(__name__)
+
 
 async def main() -> None:
     """K8s cache entrypoint."""
 
-    logging.basicConfig(format="%(asctime)s %(levelname)s %(message)s", level=logging.INFO)
     dm = DependencyManager.from_env()
 
     kr8s_api = await kr8s.asyncio.api()
-    clusters = [Cluster(id=ClusterId("renkulab"), namespace=dm.config.k8s.renku_namespace, api=kr8s_api)]
+
+    clusters = await get_clusters(
+        kube_conf_root_dir=dm.config.k8s.kube_config_root,
+        namespace=dm.config.k8s.renku_namespace,
+        api=kr8s_api,
+        cluster_rp=dm.cluster_repo(),
+    )
 
     kinds = [AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK]
     if dm.config.image_builders.enabled:
@@ -31,7 +38,7 @@ async def main() -> None:
         db_cache=dm.k8s_cache,
     )
     await watcher.start()
-    logging.info("started watching resources")
+    logger.info("started watching resources")
     # create file for liveness probe
     with open("/tmp/cache_ready", "w") as f:  # nosec B108
         f.write("ready")

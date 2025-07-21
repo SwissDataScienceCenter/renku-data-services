@@ -30,11 +30,11 @@ from authzed.api.v1 import (
     ZedToken,
 )
 from authzed.api.v1.permission_service_pb2 import LOOKUP_PERMISSIONSHIP_HAS_PERMISSION
-from sanic.log import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
 from renku_data_services import base_models
+from renku_data_services.app_config import logging
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.authz.models import (
     Change,
@@ -66,6 +66,8 @@ from renku_data_services.namespace.models import (
 )
 from renku_data_services.project.models import DeletedProject, Project, ProjectUpdate
 from renku_data_services.users.models import DeletedUser, UserInfo, UserInfoUpdate
+
+logger = logging.getLogger(__name__)
 
 _P = ParamSpec("_P")
 
@@ -423,7 +425,7 @@ class Authz:
                 pair.HasField("item")
                 and pair.item.permissionship == CheckPermissionResponse.PERMISSIONSHIP_HAS_PERMISSION,
             )
-            for item, pair in zip(items, response.pairs)
+            for item, pair in zip(items, response.pairs, strict=True)
         ]
 
     async def resources_with_permission(

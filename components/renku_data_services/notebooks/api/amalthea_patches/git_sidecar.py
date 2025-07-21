@@ -1,5 +1,7 @@
 """Patches for the git sidecar container."""
 
+from __future__ import annotations
+
 import os
 from typing import TYPE_CHECKING, Any
 
@@ -8,7 +10,7 @@ if TYPE_CHECKING:
     from renku_data_services.notebooks.api.classes.server import UserServer
 
 
-async def main(server: "UserServer") -> list[dict[str, Any]]:
+async def main(server: UserServer) -> list[dict[str, Any]]:
     """Adds the git sidecar container to the session statefulset."""
     # NOTE: Sessions can be persisted only for registered users
     if not server.user.is_authenticated:
@@ -101,10 +103,10 @@ async def main(server: "UserServer") -> list[dict[str, Any]]:
                         ],
                         "securityContext": {
                             "allowPrivilegeEscalation": False,
-                            "fsGroup": 100,
                             "runAsGroup": 1000,
                             "runAsUser": 1000,
                             "runAsNonRoot": True,
+                            "capabilities": {"drop": ["ALL"]},
                         },
                         "volumeMounts": [volume_mount],
                         "livenessProbe": {
