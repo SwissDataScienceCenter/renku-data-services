@@ -8,6 +8,7 @@ import string
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import PurePosixPath
+import time
 from typing import Concatenate, ParamSpec, TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -136,16 +137,28 @@ class ProjectRepository:
             )
 
         async with self.session_maker() as session:
+            tt1 = time.time()
             stmt = select(schemas.ProjectORM).where(schemas.ProjectORM.template_id == project_id)
             result = await session.execute(stmt)
             project_orms = result.scalars().all()
+            tt2 = time.time()
+            print(f">>>>> get all took: {tt2 - tt1}")
 
+            tt1 = time.time()
             # NOTE: Show only those projects that user has access to
             scope = Scope.WRITE if only_writable else Scope.READ
             project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, scope=scope)
+            tt2 = time.time()
+            print(f">>>>> authzed took: {tt2 - tt1}")
+            tt1 = time.time()
             project_orms = [p for p in project_orms if p.id in project_ids]
-
-            return [p.dump() for p in project_orms]
+            tt2 = time.time()
+            print(f">>>>> filtering took: {tt2 - tt1}")
+            tt1 = time.time()
+            x = [p.dump() for p in project_orms]
+            tt2 = time.time()
+            print(f">>>>> dumping took: {tt2 - tt1}")
+            return x
 
     async def get_project_by_namespace_slug(
         self, user: base_models.APIUser, namespace: str, slug: Slug, with_documentation: bool = False
