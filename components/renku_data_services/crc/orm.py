@@ -1,5 +1,7 @@
 """SQLAlchemy schemas for the CRC database."""
 
+from __future__ import annotations
+
 from typing import Optional
 
 from sqlalchemy import JSON, BigInteger, Column, Identity, Integer, MetaData, String, Table
@@ -50,7 +52,7 @@ class UserORM(BaseORM):
     __tablename__ = "users"
     keycloak_id: Mapped[str] = mapped_column(String(50), unique=True, index=True)
     no_default_access: Mapped[bool] = mapped_column(default=False, insert_default=False)
-    resource_pools: Mapped[list["ResourcePoolORM"]] = relationship(
+    resource_pools: Mapped[list[ResourcePoolORM]] = relationship(
         secondary=resource_pools_users,
         back_populates="users",
         default_factory=list,
@@ -59,7 +61,7 @@ class UserORM(BaseORM):
     id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, init=False)
 
     @classmethod
-    def load(cls, user: base_models.User) -> "UserORM":
+    def load(cls, user: base_models.User) -> UserORM:
         """Create an ORM object from a user model."""
         return cls(keycloak_id=user.keycloak_id, no_default_access=user.no_default_access)
 
@@ -82,17 +84,17 @@ class ResourceClassORM(BaseORM):
     resource_pool_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("resource_pools.id", ondelete="CASCADE"), default=None, index=True
     )
-    resource_pool: Mapped[Optional["ResourcePoolORM"]] = relationship(
+    resource_pool: Mapped[Optional[ResourcePoolORM]] = relationship(
         back_populates="classes", default=None, lazy="joined"
     )
     id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, default=None, init=False)
-    tolerations: Mapped[list["TolerationORM"]] = relationship(
+    tolerations: Mapped[list[TolerationORM]] = relationship(
         back_populates="resource_class",
         default_factory=list,
         cascade="save-update, merge, delete",
         lazy="selectin",
     )
-    node_affinities: Mapped[list["NodeAffintyORM"]] = relationship(
+    node_affinities: Mapped[list[NodeAffintyORM]] = relationship(
         back_populates="resource_class",
         default_factory=list,
         cascade="save-update, merge, delete",
@@ -100,7 +102,7 @@ class ResourceClassORM(BaseORM):
     )
 
     @classmethod
-    def load(cls, resource_class: models.ResourceClass) -> "ResourceClassORM":
+    def load(cls, resource_class: models.ResourceClass) -> ResourceClassORM:
         """Create a ORM object from the resource class model."""
         return cls(
             name=resource_class.name,
@@ -175,7 +177,7 @@ class ClusterORM(BaseORM):
         )
 
     @classmethod
-    def load(cls, cluster: models.Cluster) -> "ClusterORM":
+    def load(cls, cluster: models.Cluster) -> ClusterORM:
         """Create an ORM object from the cluster model."""
         return ClusterORM(
             name=cluster.name,
@@ -197,13 +199,13 @@ class ResourcePoolORM(BaseORM):
     __tablename__ = "resource_pools"
     name: Mapped[str] = mapped_column(String(40), index=True)
     quota: Mapped[Optional[str]] = mapped_column(String(63), index=True, default=None)
-    users: Mapped[list["UserORM"]] = relationship(
+    users: Mapped[list[UserORM]] = relationship(
         secondary=resource_pools_users,
         back_populates="resource_pools",
         default_factory=list,
         repr=False,
     )
-    classes: Mapped[list["ResourceClassORM"]] = relationship(
+    classes: Mapped[list[ResourceClassORM]] = relationship(
         back_populates="resource_pool",
         default_factory=list,
         cascade="save-update, merge, delete",
@@ -224,7 +226,7 @@ class ResourcePoolORM(BaseORM):
     cluster: Mapped[Optional[ClusterORM]] = relationship(viewonly=True, default=None, lazy="selectin", init=False)
 
     @classmethod
-    def load(cls, resource_pool: models.ResourcePool) -> "ResourcePoolORM":
+    def load(cls, resource_pool: models.ResourcePool) -> ResourcePoolORM:
         """Create an ORM object from the resource pool model."""
         quota = None
         if resource_pool.quota is not None:
@@ -280,7 +282,7 @@ class TolerationORM(BaseORM):
 
     __tablename__ = "tolerations"
     key: Mapped[str] = mapped_column(String(63), index=True)
-    resource_class: Mapped[Optional["ResourceClassORM"]] = relationship(
+    resource_class: Mapped[Optional[ResourceClassORM]] = relationship(
         back_populates="tolerations", default=None, lazy="selectin"
     )
     resource_class_id: Mapped[Optional[int]] = mapped_column(
@@ -294,7 +296,7 @@ class NodeAffintyORM(BaseORM):
 
     __tablename__ = "node_affinities"
     key: Mapped[str] = mapped_column(String(63), index=True)
-    resource_class: Mapped[Optional["ResourceClassORM"]] = relationship(
+    resource_class: Mapped[Optional[ResourceClassORM]] = relationship(
         back_populates="node_affinities", default=None, lazy="selectin"
     )
     resource_class_id: Mapped[Optional[int]] = mapped_column(
@@ -304,7 +306,7 @@ class NodeAffintyORM(BaseORM):
     id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
 
     @classmethod
-    def load(cls, affinity: models.NodeAffinity) -> "NodeAffintyORM":
+    def load(cls, affinity: models.NodeAffinity) -> NodeAffintyORM:
         """Create an ORM object from the node affinity model."""
         return cls(
             key=affinity.key,

@@ -1,5 +1,7 @@
 """K8s cache config."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Self
 
@@ -31,7 +33,7 @@ class _MetricsConfig:
     enabled: bool
 
     @classmethod
-    def from_env(cls) -> "_MetricsConfig":
+    def from_env(cls) -> _MetricsConfig:
         """Create metrics config from environment variables."""
         enabled = os.environ.get("POSTHOG_ENABLED", "false").lower() == "true"
         return cls(enabled)
@@ -44,7 +46,7 @@ class _ImageBuilderConfig:
     enabled: bool
 
     @classmethod
-    def from_env(cls) -> "_ImageBuilderConfig":
+    def from_env(cls) -> _ImageBuilderConfig:
         """Load values from environment variables."""
         enabled = os.environ.get("IMAGE_BUILDERS_ENABLED", "false").lower() == "true"
         return cls(enabled=enabled)
@@ -60,7 +62,7 @@ class Config:
     image_builders: _ImageBuilderConfig
 
     @classmethod
-    def from_env(cls) -> "Config":
+    def from_env(cls) -> Config:
         """Create a config from environment variables."""
         db = DBConfig.from_env()
         k8s = _K8sConfig.from_env()

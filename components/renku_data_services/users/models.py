@@ -1,5 +1,7 @@
 """Base models for users."""
 
+from __future__ import annotations
+
 import json
 import re
 from collections.abc import Iterable
@@ -42,7 +44,7 @@ class UserInfoFieldUpdate:
     old_value: str | None = None
 
     @classmethod
-    def from_json_user_events(cls, val: Iterable[dict[str, Any]]) -> list["UserInfoFieldUpdate"]:
+    def from_json_user_events(cls, val: Iterable[dict[str, Any]]) -> list[UserInfoFieldUpdate]:
         """Generate a list of updates from a json response from Keycloak."""
         output: list[UserInfoFieldUpdate] = []
         for event in val:
@@ -133,7 +135,7 @@ class UserInfoFieldUpdate:
         return output
 
     @classmethod
-    def from_json_admin_events(cls, val: Iterable[dict[str, Any]]) -> list["UserInfoFieldUpdate"]:
+    def from_json_admin_events(cls, val: Iterable[dict[str, Any]]) -> list[UserInfoFieldUpdate]:
         """Generate a list of updates from a json response from Keycloak."""
         output: list[UserInfoFieldUpdate] = []
         for event in val:
@@ -218,7 +220,7 @@ class UnsavedUserInfo:
     email: str | None = None
 
     @classmethod
-    def from_kc_user_payload(cls, payload: dict[str, Any]) -> "UnsavedUserInfo":
+    def from_kc_user_payload(cls, payload: dict[str, Any]) -> UnsavedUserInfo:
         """Create a user object from the user payload from the Keycloak admin API."""
         return UnsavedUserInfo(
             id=payload["id"],
@@ -271,7 +273,7 @@ class UserPatch:
     email: str | None = None
 
     @classmethod
-    def from_unsaved_user_info(cls, user: UnsavedUserInfo) -> "UserPatch":
+    def from_unsaved_user_info(cls, user: UnsavedUserInfo) -> UserPatch:
         """Create a user patch from a UnsavedUserInfo instance."""
         return UserPatch(
             first_name=user.first_name,
@@ -300,7 +302,7 @@ class PinnedProjects(BaseModel):
     project_slugs: list[str] | None = None
 
     @classmethod
-    def from_dict(cls, data: dict) -> "PinnedProjects":
+    def from_dict(cls, data: dict) -> PinnedProjects:
         """Create model from a dict object."""
         return cls(project_slugs=data.get("project_slugs"))
 
