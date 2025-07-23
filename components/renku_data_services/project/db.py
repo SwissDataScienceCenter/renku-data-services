@@ -12,7 +12,7 @@ import time
 from typing import Concatenate, ParamSpec, TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
-from sqlalchemy import Select, delete, func, select, update
+from sqlalchemy import Select, delete, func, select, update, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer
 from sqlalchemy.sql.functions import coalesce
@@ -21,7 +21,7 @@ from ulid import ULID
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
-from renku_data_services.authz.models import CheckPermissionItem, Member, MembershipChange, Scope
+from renku_data_services.authz.models import CheckPermissionItem, Member, MembershipChange, Scope, Visibility
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models import RESET
 from renku_data_services.base_models.core import Slug
@@ -126,7 +126,7 @@ class ProjectRepository:
 
             return project_orm.dump(with_documentation=with_documentation)
 
-    async def get_all_copied_projects(
+    async def get_all_copied_projects2(
         self, user: base_models.APIUser, project_id: ULID, only_writable: bool
     ) -> list[models.Project]:
         """Get all projects that are copied from the specified project."""
@@ -137,6 +137,7 @@ class ProjectRepository:
             )
 
         async with self.session_maker() as session:
+            tt0 = time.time()
             tt1 = time.time()
             stmt = select(schemas.ProjectORM).where(schemas.ProjectORM.template_id == project_id)
             result = await session.execute(stmt)
@@ -158,6 +159,49 @@ class ProjectRepository:
             x = [p.dump() for p in project_orms]
             tt2 = time.time()
             print(f">>>>> dumping took: {tt2 - tt1}")
+            print(f">>>>> get_all_copied_projects took: {time.time() - tt0}")
+            return x
+
+    async def get_all_copied_projects(
+        self, user: base_models.APIUser, project_id: ULID, only_writable: bool
+    ) -> list[models.Project]:
+        """Get all projects that are copied from the specified project."""
+        authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.READ)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
+
+        async with self.session_maker() as session:
+            tt0 = time.time()
+
+            tt1 = time.time()
+            # NOTE: Show only those projects that user has access to
+            scope = Scope.WRITE if only_writable else Scope.NON_PUBLIC_READ
+            project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, scope=scope)
+            tt2 = time.time()
+            print(f">>>>> authzed took: {tt2 - tt1}")
+
+            tt1 = time.time()
+            cond = schemas.ProjectORM.id.in_(project_ids)
+            if scope == Scope.NON_PUBLIC_READ:
+                cond =  or_(cond, schemas.ProjectORM.visibility == Visibility.PUBLIC.value)
+
+            stmt = (
+                select(schemas.ProjectORM)
+                .where(schemas.ProjectORM.template_id == project_id)
+                .where(cond)
+            )
+            result = await session.execute(stmt)
+            project_orms = result.scalars().all()
+            tt2 = time.time()
+            print(f">>>>> get all took: {tt2 - tt1}")
+
+            tt1 = time.time()
+            x = [p.dump() for p in project_orms]
+            tt2 = time.time()
+            print(f">>>>> dumping took: {tt2 - tt1}")
+            print(f">>>>> get_all_copied_projects took: {time.time() - tt0}")
             return x
 
     async def get_project_by_namespace_slug(
