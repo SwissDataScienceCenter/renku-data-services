@@ -1076,6 +1076,8 @@ async def patch_session(
     if image_pull_secret_name:
         patch.spec.imagePullSecrets = [ImagePullSecret(name=image_pull_secret_name, adopt=True)]
 
+    logger.warning(f"patch: {patch}")
+
     patch_serialized = patch.to_rfc7386()
     if len(patch_serialized) == 0:
         return session
