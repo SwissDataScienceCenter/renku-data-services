@@ -1004,6 +1004,8 @@ async def patch_session(
     #         updated_secrets.append(ImagePullSecret(name=image_pull_secret_name, adopt=True))
     #         patch.spec.imagePullSecrets = updated_secrets
 
+    logger.warning(f"session extras: {session_extras}")
+
     # Construct session patch
     containers = None
     if session_extras.containers:
