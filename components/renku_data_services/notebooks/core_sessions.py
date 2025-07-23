@@ -1004,7 +1004,7 @@ async def patch_session(
     #         updated_secrets.append(ImagePullSecret(name=image_pull_secret_name, adopt=True))
     #         patch.spec.imagePullSecrets = updated_secrets
 
-    logger.warning(f"session extras: {session_extras}")
+    # logger.warning(f"session extras: {session_extras}")
 
     # Construct session patch
     containers = None
@@ -1017,7 +1017,7 @@ async def patch_session(
                 if candidate_c.name == c_to_add.name:
                     idx = i
                     break
-            if idx:
+            if idx is not None:
                 containers[idx] = c_to_add
             else:
                 containers.append(c_to_add)
@@ -1032,7 +1032,7 @@ async def patch_session(
                 if candidate_ic.name == ic_to_add.name:
                     idx = i
                     break
-            if idx:
+            if idx is not None:
                 init_containers[idx] = ic_to_add
             else:
                 init_containers.append(ic_to_add)
@@ -1047,7 +1047,7 @@ async def patch_session(
                 if candidate_v.name == v_to_add.name:
                     idx = i
                     break
-            if idx:
+            if idx is not None:
                 volumes[idx] = v_to_add
             else:
                 volumes.append(v_to_add)
@@ -1062,7 +1062,7 @@ async def patch_session(
                 if candidate_vm.name == vm_to_add.name:
                     idx = i
                     break
-            if idx:
+            if idx is not None:
                 volume_mounts[idx] = vm_to_add
             else:
                 volume_mounts.append(vm_to_add)
@@ -1074,11 +1074,10 @@ async def patch_session(
     for s in secrets_to_create:
         await nb_config.k8s_v2_client.create_secret(s.secret, cluster)
 
-    # secrets: list[ExtraSecret] | None = None
     if image_pull_secret_name:
         patch.spec.imagePullSecrets = [ImagePullSecret(name=image_pull_secret_name, adopt=True)]
 
-    logger.warning(f"patch: {patch}")
+    # logger.warning(f"patch: {patch}")
 
     patch_serialized = patch.to_rfc7386()
     if len(patch_serialized) == 0:
