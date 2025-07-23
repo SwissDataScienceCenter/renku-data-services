@@ -281,7 +281,7 @@ async def get_data_sources(
         if csr_id not in dcs:
             raise errors.MissingResourceError(
                 message=f"You have requested a cloud storage with ID {csr_id} which does not exist "
-                "or you dont have access to."
+                "or you don't have access to."
             )
         if csr.target_path is not None and not PurePosixPath(csr.target_path).is_absolute():
             csr.target_path = (work_dir / csr.target_path).as_posix()
@@ -619,49 +619,6 @@ async def start_session(
     # Extra containers
     session_extras = session_extras.concat(await get_extra_containers(nb_config, user, repositories, git_providers))
 
-    # extra_volume_mounts: list[ExtraVolumeMount] = []
-    # extra_volumes: list[ExtraVolume] = []
-    # extra_init_containers: list[InitContainer] = []
-    # user_secrets_container_patches = user_secrets_extras(
-    #     user=user,
-    #     config=nb_config,
-    #     secrets_mount_directory=secrets_mount_directory.as_posix(),
-    #     k8s_secret_name=f"{server_name}-secrets",
-    #     session_secrets=session_secrets,
-    # )
-    # if user_secrets_container_patches is not None:
-    #     (init_container_session_secret, volumes_session_secret, volume_mounts_session_secret) = (
-    #         user_secrets_container_patches
-    #     )
-    #     extra_volumes.extend(volumes_session_secret)
-    #     extra_volume_mounts.extend(volume_mounts_session_secret)
-    #     extra_init_containers.append(init_container_session_secret)
-
-    # secrets_to_create: list[ExtraSecret] = []
-    # data_sources, data_secrets, enc_secrets = await get_data_sources(
-    #     nb_config=nb_config,
-    #     server_name=server_name,
-    #     user=user,
-    #     data_connectors_stream=data_connectors_stream,
-    #     work_dir=work_dir,
-    #     cloud_storage_overrides=body.cloudstorage or [],
-    #     user_repo=user_repo,
-    # )
-    # secrets_to_create.extend(data_secrets)
-    # extra_init_containers_dc, extra_init_volumes_dc = await get_extra_init_containers(
-    #     nb_config,
-    #     user,
-    #     repositories,
-    #     git_providers,
-    #     storage_mount,
-    #     work_dir,
-    #     uid=environment.uid,
-    #     gid=environment.gid,
-    # )
-    # extra_containers = await get_extra_containers(nb_config, user, repositories, git_providers)
-    # extra_volumes.extend(extra_init_volumes_dc)
-    # extra_init_containers.extend(extra_init_containers_dc)
-
     # Ingress
     (
         base_server_path,
@@ -915,7 +872,7 @@ async def patch_session(
     )
 
     # Data connectors: skip
-    # TODO: how can we patch data connectors?
+    # TODO: how can we patch data connectors? Should we even patch them?
 
     # More init containers
     session_extras = session_extras.concat(
@@ -934,32 +891,6 @@ async def patch_session(
     # Extra containers
     session_extras = session_extras.concat(await get_extra_containers(nb_config, user, repositories, git_providers))
 
-    # # Patching the extra containers (includes the git proxy)
-    # git_providers = await nb_config.git_provider_helper.get_providers(user)
-    # repositories = await repositories_from_session(user, session, project_repo, git_providers)
-    # extra_containers = await get_extra_containers(
-    #     nb_config,
-    #     user,
-    #     repositories,
-    #     git_providers,
-    # )
-    # if extra_containers:
-    #     patch.spec.extraContainers = extra_containers
-
-    # Patching the extra init containers
-    # extra_init_containers = get_extra_init_containers_patch(
-    #     server_name=session.metadata.name,
-    #     existing_extra_init_containers=session.spec.initContainers,
-    # )
-
-    # user_secrets_container_patches = user_secrets_container(
-    #     user=user,
-    #     config=nb_config,
-    #     secrets_mount_directory=secrets_mount_directory.as_posix(),
-    #     k8s_secret_name=f"{session_id}-secrets",
-    #     session_secrets=session_secrets,
-    # )
-
     # Patching the image pull secret
     image = session.spec.session.image
     image_pull_secret_name = None
@@ -973,38 +904,6 @@ async def patch_session(
                 nb_config, user, image_pull_secret_name, internal_gitlab_user.access_token
             )
             session_extras = session_extras.concat(SessionExtras(secrets=[image_secret]))
-
-    # if isinstance(user, AuthenticatedAPIUser) and internal_gitlab_user.access_token is not None:
-    #     image = session.spec.session.image
-    #     server_name = session.metadata.name
-    #     needs_pull_secret = await requires_image_pull_secret(nb_config, image, internal_gitlab_user)
-    #     logger.info(f"Session with ID {session_id} needs pull secret for image {image}: {needs_pull_secret}")
-
-    #     if needs_pull_secret:
-    #         image_pull_secret_name = f"{server_name}-image-secret"
-
-    #         # Always create a fresh secret to ensure we have the latest token
-    #         image_secret = get_gitlab_image_pull_secret(
-    #             nb_config, user, image_pull_secret_name, internal_gitlab_user.access_token
-    #         )
-
-    #         if not image_secret:
-    #             logger.error(f"Failed to create image pull secret for session ID {session_id} with image {image}")
-    #             raise errors.ProgrammingError(
-    #                 message=f"We cannot retrive credentials for your private image {image}. "
-    #                 "In order to resolve this problem, you can try to log out and back in "
-    #                 "and/or check that you still have permissions for the image repository."
-    #             )
-    #         # Ensure the secret is created in the cluster
-    #         await nb_config.k8s_v2_client.create_secret(image_secret.secret, cluster)
-
-    #         updated_secrets = [
-    #             secret for secret in (session.spec.imagePullSecrets or []) if not secret.name.endswith("-image-secret") # noqa E501
-    #         ]
-    #         updated_secrets.append(ImagePullSecret(name=image_pull_secret_name, adopt=True))
-    #         patch.spec.imagePullSecrets = updated_secrets
-
-    # logger.warning(f"session extras: {session_extras}")
 
     # Construct session patch
     containers = None
@@ -1076,8 +975,6 @@ async def patch_session(
 
     if image_pull_secret_name:
         patch.spec.imagePullSecrets = [ImagePullSecret(name=image_pull_secret_name, adopt=True)]
-
-    # logger.warning(f"patch: {patch}")
 
     patch_serialized = patch.to_rfc7386()
     if len(patch_serialized) == 0:
