@@ -546,7 +546,7 @@ async def patch_session(
         # Priority class (if a quota is being used)
         patch.spec.priorityClassName = rc.quota
         patch.spec.culling = get_culling(user, rp, nb_config)
-        if rp.cluster:
+        if rp.cluster is not None:
             patch.spec.service_account_name = rp.cluster.service_account_name
 
     # If the session is being hibernated we do not need to patch anything else that is

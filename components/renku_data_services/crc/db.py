@@ -468,8 +468,7 @@ class ResourcePoolRepository(_Base):
                             cls.pop("matching", None)
                             if len(cls) == 0:
                                 raise errors.ValidationError(
-                                    message="More fields than the id of the class "
-                                    "should be provided when updating it"
+                                    message="More fields than the id of the class should be provided when updating it"
                                 )
                             new_classes_coroutines.append(
                                 self.update_resource_class(
@@ -888,7 +887,7 @@ class UserRepository(_Base):
             allowed_updates = set(["no_default_access"])
             if not set(kwargs.keys()).issubset(allowed_updates):
                 raise errors.ValidationError(
-                    message=f"Only the following fields {allowed_updates} " "can be updated for a resource pool user.."
+                    message=f"Only the following fields {allowed_updates} can be updated for a resource pool user.."
                 )
             if (no_default_access := kwargs.get("no_default_access")) is not None:
                 user.no_default_access = no_default_access
@@ -947,6 +946,9 @@ class ClusterRepository:
                     case "session_storage_class", "":
                         # If we received an empty string in the storage class, reset it to the default storage class by
                         # setting it to None.
+                        setattr(saved_cluster, key, None)
+                    case "service_account_name", "":
+                        # If we received an empty string in the service account name, set it back to None.
                         setattr(saved_cluster, key, None)
                     case _, None:
                         # Do not modify a value which has not been set in the patch

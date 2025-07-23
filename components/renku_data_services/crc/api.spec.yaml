@@ -992,6 +992,8 @@ components:
           $ref: "#/components/schemas/TlsSecretName"
         session_storage_class:
           $ref: "#/components/schemas/StorageClassName"
+        service_account_name:
+          $ref: "#/components/schemas/K8sResourceName"
       required: [ "name", "config_name", "session_protocol", "session_host", "session_port", "session_path", "session_ingress_annotations", "session_tls_secret_name" ]
     ClusterPatch:
       type: object
@@ -1015,6 +1017,8 @@ components:
           $ref: "#/components/schemas/TlsSecretName"
         session_storage_class:
           $ref: "#/components/schemas/StorageClassName"
+        service_account_name:
+          $ref: "#/components/schemas/K8sResourceNamePatch"
     ClusterWithId:
       type: object
       additionalProperties: false
@@ -1039,6 +1043,8 @@ components:
           $ref: "#/components/schemas/TlsSecretName"
         session_storage_class:
           $ref: "#/components/schemas/StorageClassName"
+        service_account_name:
+          type: string
       required: [ "name", "config_name", "session_protocol", "session_host", "session_port", "session_path", "session_ingress_annotations", "session_tls_secret_name", "id" ]
     ClustersWithId:
       type: array
@@ -1700,6 +1706,29 @@ components:
       example: some-label-1
       pattern: "^[a-z0-9A-Z][a-z0-9A-Z-_./]*[a-z0-9A-Z]$"
       minLength: 3
+      maxLength: 63
+    K8sResourceName:
+      type: string
+      description: |
+        A name of any K8s resource (i.e. Pod, Service, Secret, etc.).
+        This is pattern imposes the stricter rules applied to some resource type names
+        that need to follow DNS label standard and therefore can be used for all types.
+        Looser rules can be applied to a smaller subset of resource types.
+      example: some-k8s-resource
+      pattern: "^[a-z0-9][a-z0-9-]*[a-z0-9]$"
+      minLength: 1
+      maxLength: 63
+    K8sResourceNamePatch:
+      type: string
+      description: |
+        A name of any K8s resource (i.e. Pod, Service, Secret, etc.).
+        This is pattern imposes the stricter rules applied to some resource type names
+        that need to follow DNS label standard and therefore can be used for all types.
+        Looser rules can be applied to a smaller subset of resource types. An empty
+        string indicates that the value should be removed if present in the DB.
+      example: some-k8s-resource
+      pattern: "^[a-z0-9][a-z0-9-]*[a-z0-9]$"
+      minLength: 0
       maxLength: 63
     NodeAffinity:
       type: object
