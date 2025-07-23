@@ -37,7 +37,7 @@ resource_pools_users = Table(
 )
 
 
-class RPUserORM(BaseORM):
+class UserORM(BaseORM):
     """Stores the Keycloak user ID for controlling user access to resource pools.
 
     Used in combination with the `resource_pool_users` table this table provides information
@@ -59,7 +59,7 @@ class RPUserORM(BaseORM):
     id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, init=False)
 
     @classmethod
-    def load(cls, user: base_models.User) -> "RPUserORM":
+    def load(cls, user: base_models.User) -> "UserORM":
         """Create an ORM object from a user model."""
         return cls(keycloak_id=user.keycloak_id, no_default_access=user.no_default_access)
 
@@ -197,7 +197,7 @@ class ResourcePoolORM(BaseORM):
     __tablename__ = "resource_pools"
     name: Mapped[str] = mapped_column(String(40), index=True)
     quota: Mapped[Optional[str]] = mapped_column(String(63), index=True, default=None)
-    users: Mapped[list["RPUserORM"]] = relationship(
+    users: Mapped[list["UserORM"]] = relationship(
         secondary=resource_pools_users,
         back_populates="resource_pools",
         default_factory=list,
