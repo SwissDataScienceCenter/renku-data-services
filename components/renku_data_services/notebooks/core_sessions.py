@@ -91,7 +91,6 @@ async def get_extra_init_containers(
     work_dir: PurePosixPath,
     uid: int = 1000,
     gid: int = 1000,
-    # ) -> tuple[list[InitContainer], list[ExtraVolume]]:
 ) -> SessionExtraResources:
     """Get all extra init containers that should be added to an amalthea session."""
     # TODO: The above statement is not correct: the init container for user secrets is not included here
@@ -110,7 +109,6 @@ async def get_extra_init_containers(
     )
     if git_clone is not None:
         session_init_containers.append(InitContainer.model_validate(git_clone))
-    # return session_init_containers, extra_volumes
     return SessionExtraResources(
         init_containers=session_init_containers,
         volumes=extra_volumes,
@@ -122,7 +120,6 @@ async def get_extra_containers(
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     repositories: list[Repository],
     git_providers: list[GitProvider],
-    # ) -> list[ExtraContainer]:
 ) -> SessionExtraResources:
     """Get the extra containers added to amalthea sessions."""
     conts: list[ExtraContainer] = []
@@ -131,7 +128,6 @@ async def get_extra_containers(
     )
     if git_proxy_container:
         conts.append(ExtraContainer.model_validate(sanitizer(git_proxy_container)))
-    # return conts
     return SessionExtraResources(containers=conts)
 
 
@@ -244,7 +240,6 @@ async def get_data_sources(
     work_dir: PurePosixPath,
     cloud_storage_overrides: list[apispec.SessionCloudStoragePost],
     user_repo: UserRepo,
-    # ) -> tuple[list[DataSource], list[ExtraSecret], dict[str, list[DataConnectorSecret]]]:
 ) -> SessionExtraResources:
     """Generate cloud storage related resources."""
     data_sources: list[DataSource] = []
@@ -315,7 +310,6 @@ async def get_data_sources(
                 accessMode="ReadOnlyMany" if cs.readonly else "ReadWriteOnce",
             )
         )
-    # return data_sources, secrets, dcs_secrets
     return SessionExtraResources(
         data_sources=data_sources,
         secrets=secrets,
