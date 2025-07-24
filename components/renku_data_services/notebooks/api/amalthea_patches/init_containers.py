@@ -15,7 +15,7 @@ from renku_data_services.notebooks.api.amalthea_patches.utils import get_certifi
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.notebooks.crs import EmptyDir, ExtraVolume, ExtraVolumeMount, InitContainer, SecretAsVolume
-from renku_data_services.notebooks.models import SessionExtras
+from renku_data_services.notebooks.models import SessionExtraResources
 from renku_data_services.project import constants as project_constants
 from renku_data_services.project.models import SessionSecret
 
@@ -408,8 +408,7 @@ def user_secrets_extras(
     secrets_mount_directory: str,
     k8s_secret_name: str,
     session_secrets: list[SessionSecret],
-    # ) -> tuple[InitContainer, list[ExtraVolume], list[ExtraVolumeMount]] | None:
-) -> SessionExtras | None:
+) -> SessionExtraResources | None:
     """The session extras which decrypts user secrets to be mounted in the session."""
     if not session_secrets or user.is_anonymous:
         return None
@@ -459,7 +458,7 @@ def user_secrets_extras(
         )
     )
 
-    return SessionExtras(
+    return SessionExtraResources(
         init_containers=[init_container],
         volumes=[volume_k8s_secrets, volume_decrypted_secrets],
         volume_mounts=[decrypted_volume_mount],

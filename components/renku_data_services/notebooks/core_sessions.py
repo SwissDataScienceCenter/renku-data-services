@@ -64,7 +64,7 @@ from renku_data_services.notebooks.crs import (
     State,
     Storage,
 )
-from renku_data_services.notebooks.models import ExtraSecret, SessionExtras
+from renku_data_services.notebooks.models import ExtraSecret, SessionExtraResources
 from renku_data_services.notebooks.util.kubernetes_ import (
     renku_2_make_server_name,
 )
@@ -92,7 +92,7 @@ async def get_extra_init_containers(
     uid: int = 1000,
     gid: int = 1000,
     # ) -> tuple[list[InitContainer], list[ExtraVolume]]:
-) -> SessionExtras:
+) -> SessionExtraResources:
     """Get all extra init containers that should be added to an amalthea session."""
     # TODO: The above statement is not correct: the init container for user secrets is not included here
     cert_init, cert_vols = init_containers.certificates_container(nb_config)
@@ -111,7 +111,7 @@ async def get_extra_init_containers(
     if git_clone is not None:
         session_init_containers.append(InitContainer.model_validate(git_clone))
     # return session_init_containers, extra_volumes
-    return SessionExtras(
+    return SessionExtraResources(
         init_containers=session_init_containers,
         volumes=extra_volumes,
     )
@@ -123,7 +123,7 @@ async def get_extra_containers(
     repositories: list[Repository],
     git_providers: list[GitProvider],
     # ) -> list[ExtraContainer]:
-) -> SessionExtras:
+) -> SessionExtraResources:
     """Get the extra containers added to amalthea sessions."""
     conts: list[ExtraContainer] = []
     git_proxy_container = await git_proxy.main_container(
@@ -132,7 +132,7 @@ async def get_extra_containers(
     if git_proxy_container:
         conts.append(ExtraContainer.model_validate(sanitizer(git_proxy_container)))
     # return conts
-    return SessionExtras(containers=conts)
+    return SessionExtraResources(containers=conts)
 
 
 async def get_auth_secret_authenticated(
@@ -245,7 +245,7 @@ async def get_data_sources(
     cloud_storage_overrides: list[apispec.SessionCloudStoragePost],
     user_repo: UserRepo,
     # ) -> tuple[list[DataSource], list[ExtraSecret], dict[str, list[DataConnectorSecret]]]:
-) -> SessionExtras:
+) -> SessionExtraResources:
     """Generate cloud storage related resources."""
     data_sources: list[DataSource] = []
     secrets: list[ExtraSecret] = []
@@ -316,7 +316,7 @@ async def get_data_sources(
             )
         )
     # return data_sources, secrets, dcs_secrets
-    return SessionExtras(
+    return SessionExtraResources(
         data_sources=data_sources,
         secrets=secrets,
         data_connector_secrets=dcs_secrets,
@@ -578,7 +578,7 @@ async def start_session(
     repositories = repositories_from_project(project, git_providers)
 
     # User secrets
-    session_extras = SessionExtras()
+    session_extras = SessionExtraResources()
     session_extras = session_extras.concat(
         user_secrets_extras(
             user=user,
@@ -652,7 +652,7 @@ async def start_session(
     else:
         auth_secret = await get_auth_secret_anonymous(nb_config, server_name, request)
     session_extras = session_extras.concat(
-        SessionExtras(
+        SessionExtraResources(
             secrets=[auth_secret],
             volumes=[auth_secret.volume] if auth_secret.volume else None,
         )
@@ -668,7 +668,7 @@ async def start_session(
             image_secret = get_gitlab_image_pull_secret(
                 nb_config, user, image_pull_secret_name, internal_gitlab_user.access_token
             )
-            session_extras = session_extras.concat(SessionExtras(secrets=[image_secret]))
+            session_extras = session_extras.concat(SessionExtraResources(secrets=[image_secret]))
 
     # Raise an error if there are invalid environment variables in the request body
     verify_launcher_env_variable_overrides(launcher, body)
@@ -772,9 +772,9 @@ async def start_session(
 async def patch_session(
     body: apispec.SessionPatchRequest,
     session_id: str,
-    nb_config: NotebooksConfig,
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     internal_gitlab_user: APIUser,
+    nb_config: NotebooksConfig,
     project_repo: ProjectRepository,
     project_session_secret_repo: ProjectSessionSecretRepository,
     rp_repo: ResourcePoolRepository,
@@ -860,7 +860,7 @@ async def patch_session(
     repositories = repositories_from_project(project, git_providers)
 
     # User secrets
-    session_extras = SessionExtras()
+    session_extras = SessionExtraResources()
     session_extras = session_extras.concat(
         user_secrets_extras(
             user=user,
@@ -903,7 +903,7 @@ async def patch_session(
             image_secret = get_gitlab_image_pull_secret(
                 nb_config, user, image_pull_secret_name, internal_gitlab_user.access_token
             )
-            session_extras = session_extras.concat(SessionExtras(secrets=[image_secret]))
+            session_extras = session_extras.concat(SessionExtraResources(secrets=[image_secret]))
 
     # Construct session patch
     containers = None

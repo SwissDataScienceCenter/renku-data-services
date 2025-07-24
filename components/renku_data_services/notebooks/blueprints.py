@@ -282,9 +282,9 @@ class NotebooksNewBP(CustomBlueprint):
             new_session = await patch_session(
                 body=body,
                 session_id=session_id,
-                nb_config=self.nb_config,
                 user=user,
                 internal_gitlab_user=internal_gitlab_user,
+                nb_config=self.nb_config,
                 project_repo=self.project_repo,
                 project_session_secret_repo=self.project_session_secret_repo,
                 rp_repo=self.rp_repo,

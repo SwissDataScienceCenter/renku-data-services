@@ -124,8 +124,8 @@ class ExtraSecret:
 
 
 @dataclass(frozen=True, kw_only=True)
-class SessionExtras:
-    """Represents things to add to an amalthea session."""
+class SessionExtraResources:
+    """Represents extra resources to add to an amalthea session."""
 
     containers: list[ExtraContainer] | None = None
     data_connector_secrets: dict[str, list[DataConnectorSecret]] | None = None
@@ -135,11 +135,11 @@ class SessionExtras:
     volume_mounts: list[ExtraVolumeMount] | None = None
     volumes: list[ExtraVolume] | None = None
 
-    def concat(self, added_extras: "SessionExtras | None") -> "SessionExtras":
+    def concat(self, added_extras: "SessionExtraResources | None") -> "SessionExtraResources":
         """Concatenates these session extras with more session extras."""
         if added_extras is None:
             return self
-        return SessionExtras(
+        return SessionExtraResources(
             containers=self._extend_list(self.containers, added_extras.containers),
             data_connector_secrets=self._extend_dict(self.data_connector_secrets, added_extras.data_connector_secrets),
             data_sources=self._extend_list(self.data_sources, added_extras.data_sources),
