@@ -203,6 +203,12 @@ class BuildParametersORM(BaseORM):
 
     frontend_variant: Mapped[str] = mapped_column("frontend_variant", String(99))
 
+    repository_revision: Mapped[str | None] = mapped_column(
+        "repository_revision", String(500), nullable=True, default=None
+    )
+
+    context_dir: Mapped[str | None] = mapped_column("context_dir", String(500), nullable=True, default=None)
+
     def dump(self) -> models.BuildParameters:
         """Create a session build parameters model from the BuildParametersORM."""
         return models.BuildParameters(
@@ -210,6 +216,8 @@ class BuildParametersORM(BaseORM):
             repository=self.repository,
             builder_variant=self.builder_variant,
             frontend_variant=self.frontend_variant,
+            repository_revision=self.repository_revision,
+            context_dir=self.context_dir,
         )
 
 
