@@ -15,6 +15,7 @@ def validate_cluster(body: apispec.Cluster) -> models.Cluster:
         session_ingress_annotations=body.session_ingress_annotations.model_dump(),
         session_tls_secret_name=body.session_tls_secret_name,
         session_storage_class=body.session_storage_class,
+        service_account_name=body.service_account_name,
     )
 
 
@@ -33,4 +34,5 @@ def validate_cluster_patch(patch: apispec.ClusterPatch) -> models.ClusterPatch:
         else None,
         session_tls_secret_name=patch.session_tls_secret_name,
         session_storage_class=patch.session_storage_class,
+        service_account_name=patch.service_account_name,
     )
