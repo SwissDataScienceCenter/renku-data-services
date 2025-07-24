@@ -526,7 +526,7 @@ async def patch_session(
     # Resource class
     if body.resource_class_id is not None:
         new_cluster = await nb_config.k8s_v2_client.cluster_by_class_id(body.resource_class_id, user)
-        if cluster != cluster_from_resource_class:
+        if new_cluster.id != cluster.id:
             raise errors.ValidationError(
                 message=f"Cluster {cluster_from_resource_class} does not match cluster {cluster} from session"
             )
