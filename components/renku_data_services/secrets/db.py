@@ -3,7 +3,7 @@
 import random
 import string
 from collections.abc import AsyncGenerator, Callable, Sequence
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import cast
 
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -200,7 +200,11 @@ class UserSecretsRepo:
                     secret_service_public_key=self.secret_service_public_key,
                     secret_value=patch.secret_value,
                 )
-                secret.update(encrypted_value=encrypted_value, encrypted_key=encrypted_key)
+                secret.update(
+                    encrypted_value=encrypted_value,
+                    encrypted_key=encrypted_key,
+                    expiration_timestamp=patch.expiration_timestamp,
+                )
 
             return secret.dump()
 

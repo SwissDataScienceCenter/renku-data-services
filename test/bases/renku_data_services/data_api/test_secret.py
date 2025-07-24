@@ -27,14 +27,17 @@ from renku_data_services.utils.cryptography import (
 @pytest.fixture
 def create_secret(sanic_client: SanicASGITestClient, user_headers):
     async def create_secret_helper(
-        name: str, value: str, kind: str = "general", default_filename: str | None = None, expiration_timestamp: str | None = None
+        name: str,
+        value: str,
+        kind: str = "general",
+        default_filename: str | None = None,
+        expiration_timestamp: str | None = None,
     ) -> dict[str, Any]:
         payload = {"name": name, "value": value, "kind": kind}
         if default_filename:
             payload["default_filename"] = default_filename
         if expiration_timestamp:
             payload["expiration_timestamp"] = expiration_timestamp
-        
 
         _, response = await sanic_client.post("/api/data/user/secrets", headers=user_headers, json=payload)
 
@@ -101,7 +104,7 @@ async def test_get_one_secret(sanic_client: SanicASGITestClient, user_headers, c
     secret = await create_secret("secret-2", "value-2")
     await create_secret("secret-3", "value-3")
 
-    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret["id"]}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret['id']}", headers=user_headers)
     assert response.status_code == 200, response.text
     assert response.json is not None
     assert response.json["name"] == secret["name"]
@@ -115,13 +118,13 @@ async def test_get_one_secret_not_expired(sanic_client: SanicASGITestClient, use
     secret_1 = await create_secret("secret-1", "value-1", expiration_timestamp=expiration_timestamp)
     secret_2 = await create_secret("secret-2", "value-2", expiration_timestamp="2029-12-31")
 
-    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret_1["id"]}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret_1['id']}", headers=user_headers)
     assert response.status_code == 200, response.text
     assert response.json is not None
     assert response.json["name"] == "secret-1"
     assert response.json["id"] == secret_1["id"]
 
-    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret_2["id"]}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret_2['id']}", headers=user_headers)
     assert response.status_code == 200, response.text
     assert response.json is not None
     assert response.json["name"] == "secret-2"
@@ -129,7 +132,7 @@ async def test_get_one_secret_not_expired(sanic_client: SanicASGITestClient, use
 
     time.sleep(20)
 
-    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret_1["id"]}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret_1['id']}", headers=user_headers)
     assert response.status_code == 404
 
 
@@ -193,7 +196,7 @@ async def test_get_delete_a_secret(sanic_client: SanicASGITestClient, user_heade
     secret = await create_secret("secret-2", "value-2")
     await create_secret("secret-3", "value-3")
 
-    _, response = await sanic_client.delete(f"/api/data/user/secrets/{secret["id"]}", headers=user_headers)
+    _, response = await sanic_client.delete(f"/api/data/user/secrets/{secret['id']}", headers=user_headers)
     assert response.status_code == 204, response.text
 
     _, response = await sanic_client.get("/api/data/user/secrets", headers=user_headers)
@@ -209,12 +212,12 @@ async def test_get_update_a_secret(sanic_client: SanicASGITestClient, user_heade
     await create_secret("secret-3", "value-3")
 
     _, response = await sanic_client.patch(
-        f"/api/data/user/secrets/{secret["id"]}", headers=user_headers, json={"name": "new-name", "value": "new-value"}
+        f"/api/data/user/secrets/{secret['id']}", headers=user_headers, json={"name": "new-name", "value": "new-value"}
     )
     assert response.status_code == 422
 
     _, response = await sanic_client.patch(
-        f"/api/data/user/secrets/{secret["id"]}", headers=user_headers, json={"value": "new-value"}
+        f"/api/data/user/secrets/{secret['id']}", headers=user_headers, json={"value": "new-value"}
     )
     assert response.status_code == 200, response.text
     assert response.json is not None
@@ -223,7 +226,7 @@ async def test_get_update_a_secret(sanic_client: SanicASGITestClient, user_heade
     assert response.json["expiration_timestamp"] is None
     assert "value" not in response.json
 
-    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret["id"]}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret['id']}", headers=user_headers)
     assert response.status_code == 200, response.text
     assert response.json is not None
     assert response.json["id"] == secret["id"]
@@ -232,13 +235,13 @@ async def test_get_update_a_secret(sanic_client: SanicASGITestClient, user_heade
     assert "value" not in response.json
 
     _, response = await sanic_client.patch(
-        f"/api/data/user/secrets/{secret["id"]}",
+        f"/api/data/user/secrets/{secret['id']}",
         headers=user_headers,
         json={"value": "newest-value", "expiration_timestamp": "2029-12-31"},
     )
     assert response.status_code == 200, response.text
 
-    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret["id"]}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret['id']}", headers=user_headers)
     assert response.status_code == 200, response.text
     assert response.json is not None
     assert response.json["id"] == secret["id"]
@@ -255,7 +258,7 @@ async def test_cannot_get_another_user_secret(
     secret = await create_secret("secret-2", "value-2")
     await create_secret("secret-3", "value-3")
 
-    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret["id"]}", headers=admin_headers)
+    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret['id']}", headers=admin_headers)
     assert response.status_code == 404, response.text
     assert "cannot be found" in response.json["error"]["message"]
 
