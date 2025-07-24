@@ -648,6 +648,24 @@ components:
       type: string
       minLength: 1
       maxLength: 99
+    RepositoryRevision:
+      description: A git revision
+      type: string
+      minLength: 1
+      maxLength: 500
+    RepositoryRevisionPatch:
+      description: A git revision
+      type: string
+      maxLength: 500
+    BuildContextDir:
+      description: The relative path to a folder
+      type: string
+      minLength: 1
+      maxLength: 500
+    BuildContextDirPatch:
+      description: The relative path to a folder
+      type: string
+      maxLength: 500
     EnvironmentIdOnlyPatch:
       type: object
       properties:
@@ -704,6 +722,10 @@ components:
           $ref: "#/components/schemas/BuilderVariant"
         frontend_variant:
           $ref: "#/components/schemas/FrontendVariant"
+        repository_revision:
+          $ref: "#/components/schemas/RepositoryRevision"
+        context_dir:
+          $ref: "#/components/schemas/BuildContextDir"
       required:
         - repository
         - builder_variant
@@ -727,6 +749,10 @@ components:
           $ref: "#/components/schemas/BuilderVariant"
         frontend_variant:
           $ref: "#/components/schemas/FrontendVariant"
+        repository_revision:
+          $ref: "#/components/schemas/RepositoryRevisionPatch"
+        context_dir:
+          $ref: "#/components/schemas/BuildContextDirPatch"
     ContainerImage:
       description: A container image
       type: string
