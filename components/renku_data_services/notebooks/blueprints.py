@@ -56,6 +56,8 @@ from renku_data_services.notebooks.crs import (
     ReconcileStrategy,
     Session,
     SessionEnvItem,
+    ShmSizeStr,
+    SizeStr,
     Storage,
 )
 from renku_data_services.notebooks.errors.intermittent import AnonymousUserPatchError
@@ -409,6 +411,9 @@ class NotebooksNewBP(CustomBlueprint):
             storage_class = await cluster.get_storage_class(
                 user, self.cluster_repo, self.nb_config.sessions.storage.pvs_storage_class
             )
+            service_account_name: str | None = None
+            if resource_pool.cluster:
+                service_account_name = resource_pool.cluster.service_account_name
             manifest = AmaltheaSessionV1Alpha1(
                 metadata=Metadata(name=server_name, annotations=annotations),
                 spec=AmaltheaSessionSpec(
@@ -426,7 +431,7 @@ class NotebooksNewBP(CustomBlueprint):
                         port=environment.port,
                         storage=Storage(
                             className=storage_class,
-                            size=str(body.disk_storage) + "G",
+                            size=SizeStr(str(body.disk_storage) + "G"),
                             mountPath=storage_mount.as_posix(),
                         ),
                         workingDir=work_dir.as_posix(),
@@ -436,7 +441,7 @@ class NotebooksNewBP(CustomBlueprint):
                         extraVolumeMounts=extra_volume_mounts,
                         command=environment.command,
                         args=environment.args,
-                        shmSize="1G",
+                        shmSize=ShmSizeStr("1G"),
                         env=env,
                     ),
                     ingress=ingress,
@@ -457,6 +462,7 @@ class NotebooksNewBP(CustomBlueprint):
                         resource_class, self.nb_config.sessions.tolerations_model
                     ),
                     affinity=node_affinity_from_resource_class(resource_class, self.nb_config.sessions.affinity_model),
+                    serviceAccountName=service_account_name,
                 ),
             )
             for s in secrets_to_create:

@@ -13,7 +13,6 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 from kubernetes.client import V1ObjectMeta, V1Secret
-from kubernetes.utils.duration import format_duration
 from sanic import Request
 from toml import dumps
 from yaml import safe_dump
@@ -45,6 +44,10 @@ from renku_data_services.notebooks.crs import (
     ExtraVolumeMount,
     ImagePullSecret,
     InitContainer,
+    Limits,
+    LimitsStr,
+    Requests,
+    RequestsStr,
     Resources,
     SecretAsVolume,
     SecretAsVolumeItem,
@@ -225,6 +228,7 @@ async def get_data_sources(
     secrets: list[ExtraSecret] = []
     dcs: dict[str, RCloneStorage] = {}
     dcs_secrets: dict[str, list[DataConnectorSecret]] = {}
+    user_secret_key: str | None = None
     async for dc in data_connectors_stream:
         mount_folder = (
             dc.data_connector.storage.target_path
@@ -397,17 +401,17 @@ async def request_session_secret_creation(
 
 def resources_from_resource_class(resource_class: ResourceClass) -> Resources:
     """Convert the resource class to a k8s resources spec."""
-    requests: dict[str, str | int] = {
-        "cpu": str(round(resource_class.cpu * 1000)) + "m",
-        "memory": f"{resource_class.memory}Gi",
+    requests: dict[str, Requests | RequestsStr] = {
+        "cpu": RequestsStr(str(round(resource_class.cpu * 1000)) + "m"),
+        "memory": RequestsStr(f"{resource_class.memory}Gi"),
     }
-    limits: dict[str, str | int] = {"memory": f"{resource_class.memory}Gi"}
+    limits: dict[str, Limits | LimitsStr] = {"memory": LimitsStr(f"{resource_class.memory}Gi")}
     if resource_class.gpu > 0:
         gpu_name = GpuKind.NVIDIA.value + "/gpu"
-        requests[gpu_name] = resource_class.gpu
+        requests[gpu_name] = Requests(resource_class.gpu)
         # NOTE: GPUs have to be set in limits too since GPUs cannot be overcommited, if
         # not on some clusters this will cause the session to fully fail to start.
-        limits[gpu_name] = resource_class.gpu
+        limits[gpu_name] = Limits(resource_class.gpu)
     return Resources(requests=requests, limits=limits if len(limits) > 0 else None)
 
 
@@ -453,11 +457,11 @@ def get_culling(
             resource_pool.hibernation_threshold or nb_config.sessions.culling.registered.hibernated_seconds
         )
     return Culling(
-        maxAge=format_duration(timedelta(seconds=nb_config.sessions.culling.registered.max_age_seconds)),
-        maxFailedDuration=format_duration(timedelta(seconds=nb_config.sessions.culling.registered.failed_seconds)),
-        maxHibernatedDuration=format_duration(timedelta(seconds=hibernation_threshold_seconds)),
-        maxIdleDuration=format_duration(timedelta(seconds=idle_threshold_seconds)),
-        maxStartingDuration=format_duration(timedelta(seconds=nb_config.sessions.culling.registered.pending_seconds)),
+        maxAge=timedelta(seconds=nb_config.sessions.culling.registered.max_age_seconds),
+        maxFailedDuration=timedelta(seconds=nb_config.sessions.culling.registered.failed_seconds),
+        maxHibernatedDuration=timedelta(seconds=hibernation_threshold_seconds),
+        maxIdleDuration=timedelta(seconds=idle_threshold_seconds),
+        maxStartingDuration=timedelta(seconds=nb_config.sessions.culling.registered.pending_seconds),
     )
 
 
@@ -542,6 +546,8 @@ async def patch_session(
         # Priority class (if a quota is being used)
         patch.spec.priorityClassName = rc.quota
         patch.spec.culling = get_culling(user, rp, nb_config)
+        if rp.cluster is not None:
+            patch.spec.service_account_name = rp.cluster.service_account_name
 
     # If the session is being hibernated we do not need to patch anything else that is
     # not specifically called for in the request body, we can refresh things when the user resumes.
@@ -621,7 +627,7 @@ def _deduplicate_target_paths(dcs: dict[str, RCloneStorage]) -> dict[str, RClone
         if mount_folder_try not in mount_folders:
             return mount_folder_try
         raise errors.ValidationError(
-            message=f"Could not start session because two or more data connectors ({", ".join(mount_folders[mount_folder])}) share the same mount point '{mount_folder}'"  # noqa E501
+            message=f"Could not start session because two or more data connectors ({', '.join(mount_folders[mount_folder])}) share the same mount point '{mount_folder}'"  # noqa E501
         )
 
     for dc_id, dc in dcs.items():
