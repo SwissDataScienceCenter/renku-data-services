@@ -16,15 +16,15 @@ class ResourceQuotaClient(Protocol):
         """Get a resource quota."""
         ...
 
-    def create_resource_quota(self, namespace: str, body: V1ResourceQuota) -> V1ResourceQuota:
+    def create_resource_quota(self, namespace: str, body: V1ResourceQuota) -> None:
         """Create a resource quota."""
         ...
 
-    def delete_resource_quota(self, name: str, namespace: str) -> V1ResourceQuota | None:
+    def delete_resource_quota(self, name: str, namespace: str) -> None:
         """Delete a resource quota."""
         ...
 
-    def patch_resource_quota(self, name: str, namespace: str, body: V1ResourceQuota) -> V1ResourceQuota | None:
+    def patch_resource_quota(self, name: str, namespace: str, body: V1ResourceQuota) -> None:
         """Update a resource quota."""
         ...
 
@@ -32,11 +32,11 @@ class ResourceQuotaClient(Protocol):
 class SecretClient(Protocol):
     """Methods to manipulate Secret kubernetes resources."""
 
-    def create_secret(self, namespace: str, body: V1Secret) -> V1Secret:
+    def create_secret(self, namespace: str, body: V1Secret) -> None:
         """Create a secret."""
         ...
 
-    def patch_secret(self, name: str, namespace: str, body: V1Secret) -> V1Secret | None:
+    def patch_secret(self, name: str, namespace: str, body: V1Secret) -> None:
         """Patch an existing secret."""
         ...
 
@@ -52,6 +52,6 @@ class PriorityClassClient(Protocol):
         """Retrieve a priority class."""
         ...
 
-    def delete_priority_class(self, name: str, body: V1DeleteOptions) -> V1PriorityClass | None:
+    def delete_priority_class(self, name: str, body: V1DeleteOptions) -> None:
         """Delete a priority class."""
         ...

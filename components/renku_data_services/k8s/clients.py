@@ -53,33 +53,31 @@ class K8sCoreClient(ResourceQuotaClient, SecretClient):
         """List resource quotas."""
         return list(self.client.list_namespaced_resource_quota(namespace, label_selector=label_selector).items())
 
-    def create_resource_quota(self, namespace: str, body: client.V1ResourceQuota) -> client.V1ResourceQuota:
+    def create_resource_quota(self, namespace: str, body: client.V1ResourceQuota) -> None:
         """Create a resource quota."""
-        return self.client.create_namespaced_resource_quota(namespace, body)
+        self.client.create_namespaced_resource_quota(namespace, body)
 
-    def delete_resource_quota(self, name: str, namespace: str) -> client.V1ResourceQuota | None:
+    def delete_resource_quota(self, name: str, namespace: str) -> None:
         """Delete a resource quota."""
         try:
-            return self.client.delete_namespaced_resource_quota(name, namespace)
+            self.client.delete_namespaced_resource_quota(name, namespace)
         except client.ApiException as e:
             if e.status == 404:
                 # If the thing we are trying to delete is not there, we have the desired state so we can just go on.
                 return None
             raise
 
-    def patch_resource_quota(
-        self, name: str, namespace: str, body: client.V1ResourceQuota
-    ) -> client.V1ResourceQuota | None:
+    def patch_resource_quota(self, name: str, namespace: str, body: client.V1ResourceQuota) -> None:
         """Update a resource quota."""
-        return self.client.patch_namespaced_resource_quota(name, namespace, body)
+        self.client.patch_namespaced_resource_quota(name, namespace, body)
 
-    def create_secret(self, namespace: str, body: client.V1Secret) -> client.V1Secret:
+    def create_secret(self, namespace: str, body: client.V1Secret) -> None:
         """Create a secret."""
-        return self.client.create_namespaced_secret(namespace, body)
+        self.client.create_namespaced_secret(namespace, body)
 
-    def patch_secret(self, name: str, namespace: str, body: client.V1Secret) -> client.V1Secret | None:
+    def patch_secret(self, name: str, namespace: str, body: client.V1Secret) -> None:
         """Patch a secret."""
-        return self.client.patch_namespaced_secret(name, namespace, body)
+        self.client.patch_namespaced_secret(name, namespace, body)
 
 
 class K8sSchedulingClient(PriorityClassClient):
@@ -99,20 +97,17 @@ class K8sSchedulingClient(PriorityClassClient):
         """Create a priority class."""
         return self.client.create_priority_class(body)
 
-    def delete_priority_class(self, name: str, body: client.V1DeleteOptions) -> client.V1PriorityClass | None:
+    def delete_priority_class(self, name: str, body: client.V1DeleteOptions) -> None:
         """Delete a priority class."""
         try:
-            pc = self.client.read_priority_class(name)
+            self.client.read_priority_class(name)
             self.client.delete_priority_class(name, body=body)
-            return pc
         except client.ApiException as e:
             if e.status != 404:
                 # NOTE: The priorityclass is an owner of the resource quota so when the priority class is deleted the
                 # resource quota is also deleted. Also, we don't care if the thing we are trying to delete is not there
                 # we have the desired state so we can just go on.
                 raise
-
-        return None
 
     def read_priority_class(self, name: str) -> client.V1PriorityClass | None:
         """Get a priority class."""
@@ -156,7 +151,7 @@ class DummyCoreClient(ResourceQuotaClient, SecretClient):
         with self._lock:
             return list(self.quotas.values())
 
-    def create_resource_quota(self, namespace: str, body: client.V1ResourceQuota) -> client.V1ResourceQuota:
+    def create_resource_quota(self, namespace: str, body: client.V1ResourceQuota) -> None:
         """Create a resource quota."""
         with self._lock:
             if isinstance(body.metadata, dict):
@@ -165,17 +160,13 @@ class DummyCoreClient(ResourceQuotaClient, SecretClient):
             body.api_version = "v1"
             body.kind = "ResourceQuota"
             self.quotas[body.metadata.name] = body
-            return body
 
-    def delete_resource_quota(self, name: str, namespace: str) -> client.V1ResourceQuota | None:
+    def delete_resource_quota(self, name: str, namespace: str) -> None:
         """Delete a resource quota."""
         with self._lock:
-            removed_quota = self.quotas.pop(name, None)
-            return removed_quota
+            self.quotas.pop(name, None)
 
-    def patch_resource_quota(
-        self, name: str, namespace: str, body: client.V1ResourceQuota
-    ) -> client.V1ResourceQuota | None:
+    def patch_resource_quota(self, name: str, namespace: str, body: client.V1ResourceQuota) -> None:
         """Update a resource quota."""
         with self._lock:
             old_quota = self.quotas.get(name)
@@ -187,9 +178,8 @@ class DummyCoreClient(ResourceQuotaClient, SecretClient):
             if isinstance(body, dict):
                 new_quota.spec = client.V1ResourceQuota(**body).spec
             self.quotas[name] = new_quota
-            return new_quota
 
-    def create_secret(self, namespace: str, body: client.V1Secret) -> client.V1Secret:
+    def create_secret(self, namespace: str, body: client.V1Secret) -> None:
         """Create a secret."""
         with self._lock:
             if isinstance(body.metadata, dict):
@@ -198,9 +188,8 @@ class DummyCoreClient(ResourceQuotaClient, SecretClient):
             body.api_version = "v1"
             body.kind = "Secret"
             self.secrets[body.metadata.name] = body
-            return body
 
-    def patch_secret(self, name: str, namespace: str, body: client.V1Secret) -> client.V1Secret | None:
+    def patch_secret(self, name: str, namespace: str, body: client.V1Secret) -> None:
         """Patch a secret."""
         # NOTE: This is only needed if the create_namespaced_secret can raise a conflict 409 status code
         # error when it tries to create a secret that already exists. But the dummy client never raises
@@ -252,10 +241,10 @@ class DummySchedulingClient(PriorityClassClient):
         with self._lock:
             return self.pcs.get(name, None)
 
-    def delete_priority_class(self, name: str, body: client.V1DeleteOptions) -> client.V1PriorityClass | None:
+    def delete_priority_class(self, name: str, body: client.V1DeleteOptions) -> None:
         """Delete a priority class."""
         with self._lock:
-            return self.pcs.pop(name, None)
+            self.pcs.pop(name, None)
 
 
 class K8sClusterClient:
