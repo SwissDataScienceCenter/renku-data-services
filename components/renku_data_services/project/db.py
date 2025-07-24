@@ -11,7 +11,7 @@ from pathlib import PurePosixPath
 from typing import Concatenate, ParamSpec, TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
-from sqlalchemy import Select, delete, func, or_, select, update
+from sqlalchemy import ColumnElement, Select, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer
 from sqlalchemy.sql.functions import coalesce
@@ -140,7 +140,7 @@ class ProjectRepository:
             scope = Scope.WRITE if only_writable else Scope.NON_PUBLIC_READ
             project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, scope=scope)
 
-            cond = schemas.ProjectORM.id.in_(project_ids)
+            cond: ColumnElement[bool] = schemas.ProjectORM.id.in_(project_ids)
             if scope == Scope.NON_PUBLIC_READ:
                 cond = or_(cond, schemas.ProjectORM.visibility == Visibility.PUBLIC.value)
 
