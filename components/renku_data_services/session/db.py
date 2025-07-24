@@ -141,6 +141,8 @@ class SessionRepository:
                 builder_variant=environment.build_parameters.builder_variant,
                 frontend_variant=environment.build_parameters.frontend_variant,
                 repository=environment.build_parameters.repository,
+                repository_revision=environment.build_parameters.repository_revision,
+                context_dir=environment.build_parameters.context_dir,
             )
             session.add(new_build_parameters)
 
@@ -165,6 +167,8 @@ class SessionRepository:
             builder_variant=new_build_parameters_environment.builder_variant,
             frontend_variant=new_build_parameters_environment.frontend_variant,
             repository=new_build_parameters_environment.repository,
+            repository_revision=new_build_parameters_environment.repository_revision,
+            context_dir=new_build_parameters_environment.context_dir,
         )
         session.add(build_parameters_orm)
 
@@ -262,6 +266,14 @@ class SessionRepository:
             environment.build_parameters.builder_variant = build_parameters.builder_variant
         if build_parameters.frontend_variant is not None:
             environment.build_parameters.frontend_variant = build_parameters.frontend_variant
+        if build_parameters.repository_revision == "":
+            environment.build_parameters.repository_revision = None
+        elif build_parameters.repository_revision:
+            environment.build_parameters.repository_revision = build_parameters.repository_revision
+        if build_parameters.context_dir == "":
+            environment.build_parameters.context_dir = None
+        elif build_parameters.context_dir:
+            environment.build_parameters.context_dir = build_parameters.context_dir
 
     async def update_environment(
         self, user: base_models.APIUser, environment_id: ULID, patch: models.EnvironmentPatch
@@ -406,6 +418,8 @@ class SessionRepository:
                     builder_variant=launcher.environment.builder_variant,
                     frontend_variant=launcher.environment.frontend_variant,
                     repository=launcher.environment.repository,
+                    repository_revision=launcher.environment.repository_revision,
+                    context_dir=launcher.environment.context_dir,
                 )
                 session.add(build_parameters_orm)
 
@@ -700,6 +714,8 @@ class SessionRepository:
                     builder_variant=new_custom_built_environment.builder_variant,
                     frontend_variant=new_custom_built_environment.frontend_variant,
                     repository=new_custom_built_environment.repository,
+                    repository_revision=new_custom_built_environment.repository_revision,
+                    context_dir=new_custom_built_environment.context_dir,
                 )
                 session.add(build_parameters_orm)
 
@@ -1024,6 +1040,8 @@ class SessionRepository:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
         git_repository = build_parameters.repository
+        git_repository_revision = build_parameters.repository_revision
+        context_dir = build_parameters.context_dir
 
         output_image_prefix = (
             self.builds_config.build_output_image_prefix or constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
@@ -1072,6 +1090,8 @@ class SessionRepository:
             labels=labels,
             annotations=annotations,
             frontend=build_parameters.frontend_variant,
+            git_repository_revision=git_repository_revision,
+            context_dir=context_dir,
         )
 
     async def _get_environment_authorization(

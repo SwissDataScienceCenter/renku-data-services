@@ -67,6 +67,8 @@ def validate_unsaved_build_parameters(
         repository=environment.repository,
         builder_variant=environment.builder_variant,
         frontend_variant=environment.frontend_variant,
+        repository_revision=environment.repository_revision,
+        context_dir=environment.context_dir,
     )
 
 
@@ -91,6 +93,8 @@ def validate_build_parameters_patch(environment: apispec.BuildParametersPatch) -
         repository=environment.repository,
         builder_variant=environment.builder_variant,
         frontend_variant=environment.frontend_variant,
+        repository_revision=environment.repository_revision,
+        context_dir=environment.context_dir,
     )
 
 
