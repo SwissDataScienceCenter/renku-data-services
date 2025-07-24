@@ -7,8 +7,8 @@ from hypothesis import strategies as st
 from pydantic import ValidationError
 
 from renku_data_services import errors
-from renku_data_services.app_config import Config
 from renku_data_services.base_models.core import APIUser
+from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.migrations.core import run_migrations_for_app
 from test.components.renku_data_services.storage_models.hypothesis import (
     a_path,
@@ -34,11 +34,11 @@ def user():
 @pytest.mark.asyncio
 async def test_storage_insert_get(
     storage: dict[str, Any],
-    app_config_instance: Config,
+    app_manager_instance: DependencyManager,
     user: APIUser,
 ) -> None:
     run_migrations_for_app("common")
-    storage_repo = app_config_instance.storage_repo
+    storage_repo = app_manager_instance.storage_repo
     with contextlib.suppress(ValidationError, errors.ValidationError):
         await create_storage(storage, storage_repo, user=user)
 
@@ -50,11 +50,11 @@ async def test_storage_update_path(
     storage: dict[str, Any],
     new_source_path: str,
     new_target_path: str,
-    app_config_instance: Config,
+    app_manager_instance: DependencyManager,
     user: APIUser,
 ) -> None:
     run_migrations_for_app("common")
-    storage_repo = app_config_instance.storage_repo
+    storage_repo = app_manager_instance.storage_repo
     try:
         inserted_storage = await create_storage(storage, storage_repo, user)
         assert inserted_storage.storage_id is not None
@@ -75,11 +75,11 @@ async def test_storage_update_path(
 async def test_storage_update_config(
     storage: dict[str, Any],
     new_config: dict[str, Any],
-    app_config_instance: Config,
+    app_manager_instance: DependencyManager,
     user: APIUser,
 ) -> None:
     run_migrations_for_app("common")
-    storage_repo = app_config_instance.storage_repo
+    storage_repo = app_manager_instance.storage_repo
     try:
         inserted_storage = await create_storage(storage, storage_repo, user)
         assert inserted_storage.storage_id is not None
@@ -98,11 +98,11 @@ async def test_storage_update_config(
 @pytest.mark.asyncio
 async def test_storage_delete(
     storage: dict[str, Any],
-    app_config_instance: Config,
+    app_manager_instance: DependencyManager,
     user: APIUser,
 ) -> None:
     run_migrations_for_app("common")
-    storage_repo = app_config_instance.storage_repo
+    storage_repo = app_manager_instance.storage_repo
     try:
         inserted_storage = await create_storage(storage, storage_repo, user)
         assert inserted_storage.storage_id is not None

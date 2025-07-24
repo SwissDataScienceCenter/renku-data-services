@@ -71,26 +71,6 @@ paths:
           description: Server options such as CPU, memory, storage, etc.
       tags:
       - notebooks
-  "/notebooks/old/servers":
-    post:
-      summary: Launch a new session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LaunchNotebookRequestOld"
-      responses:
-        "201":
-          description: The project was created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/NotebookResponse"
-        default:
-          $ref: "#/components/responses/Error"
-      tags:
-        - notebooks
   "/notebooks/servers":
     post:
       summary: Launch a new session
@@ -99,7 +79,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/LaunchNotebookRequest"
+              $ref: "#/components/schemas/LaunchNotebookRequestOld"
       responses:
         "201":
           description: The project was created
@@ -439,6 +419,27 @@ components:
       - anonymous
       - registered
       type: object
+    EnvVariableOverrides:
+      description: Environment variable overrides for the session pod
+      type: array
+      items:
+        $ref: "#/components/schemas/EnvVarOverride"
+    EnvVarOverride:
+      description: Override an env variable defined in the session launcher
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 256
+          # based on https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap03.html#tag_03_235
+          pattern: "^[a-zA-Z_][a-zA-Z0-9_]*$"
+          example: MY_VAR
+        value:
+          type: string
+          maxLength: 500
+      required:
+        - name
+        - value
     ErrorResponse:
       type: object
       properties:
@@ -885,6 +886,8 @@ components:
           type: integer
         cloudstorage:
           $ref: "#/components/schemas/SessionCloudStoragePostList"
+        env_variable_overrides:
+          $ref: "#/components/schemas/EnvVariableOverrides"
       required:
         - launcher_id
       type: object

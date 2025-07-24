@@ -1,17 +1,24 @@
-import base64
+import random
+import string
+from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import pytest
 import sqlalchemy as sa
 from alembic.script import ScriptDirectory
 from sanic_testing.testing import SanicASGITestClient
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import bindparam
 from ulid import ULID
 
-from renku_data_services.app_config.config import Config
-from renku_data_services.message_queue.avro_models.io.renku.events import v2
-from renku_data_services.message_queue.models import deserialize_binary
+from renku_data_services import errors
+from renku_data_services.base_models.core import Slug
+from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.migrations.core import downgrade_migrations_for_app, get_alembic_config, run_migrations_for_app
+from renku_data_services.namespace import orm as ns_schemas
+from renku_data_services.users import orm as user_schemas
 from renku_data_services.users.models import UserInfo
 
 
@@ -27,36 +34,48 @@ async def test_unique_migration_head() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("downgrade_to, upgrade_to", [("base", "head"), ("fe3b7470d226", "8413f10ef77f")])
 async def test_upgrade_downgrade_cycle(
-    app_config_instance: Config,
+    app_manager_instance: DependencyManager,
     sanic_client_no_migrations: SanicASGITestClient,
     admin_headers: dict,
     admin_user: UserInfo,
+    downgrade_to: str,
+    upgrade_to: str,
 ) -> None:
     # Migrate to head and create a project
-    run_migrations_for_app("common", "head")
-    await app_config_instance.kc_user_repo.initialize(app_config_instance.kc_api)
-    await app_config_instance.group_repo.generate_user_namespaces()
+    run_migrations_for_app("common", upgrade_to)
+    await app_manager_instance.kc_user_repo.initialize(app_manager_instance.kc_api)
+    await app_manager_instance.group_repo.generate_user_namespaces()
     payload: dict[str, Any] = {
         "name": "test_project",
-        "namespace": admin_user.namespace.slug,
+        "namespace": admin_user.namespace.path.serialize(),
     }
     _, res = await sanic_client_no_migrations.post("/api/data/projects", headers=admin_headers, json=payload)
     assert res.status_code == 201
+    project_id = res.json["id"]
     # Migrate/downgrade a few times but end on head
-    downgrade_migrations_for_app("common", "base")
-    run_migrations_for_app("common", "head")
-    downgrade_migrations_for_app("common", "base")
-    run_migrations_for_app("common", "head")
+    downgrade_migrations_for_app("common", downgrade_to)
+    run_migrations_for_app("common", upgrade_to)
+    downgrade_migrations_for_app("common", downgrade_to)
+    run_migrations_for_app("common", upgrade_to)
     # Try to make the same project again
     # NOTE: The engine has to be disposed otherwise it caches the postgres types (i.e. enums)
     # from previous migrations and then trying to create a project below fails with the message
     # cache postgres lookup failed for type XXXX.
-    await app_config_instance.db.current._async_engine.dispose()
-    await app_config_instance.kc_user_repo.initialize(app_config_instance.kc_api)
-    await app_config_instance.group_repo.generate_user_namespaces()
+    await app_manager_instance.config.db.current._async_engine.dispose()
+    await app_manager_instance.kc_user_repo.initialize(app_manager_instance.kc_api)
+    await app_manager_instance.group_repo.generate_user_namespaces()
     _, res = await sanic_client_no_migrations.post("/api/data/projects", headers=admin_headers, json=payload)
-    assert res.status_code == 201, res.json
+    assert res.status_code in [201, 409], res.json
+    if res.status_code == 409:
+        # NOTE: This means the project is still in the DB because the down migration was not going
+        # far enough to delete the projects table, so we delete the project and recreate it to make sure
+        # things are OK.
+        _, res = await sanic_client_no_migrations.delete(f"/api/data/projects/{project_id}", headers=admin_headers)
+        assert res.status_code == 204, res.json
+        _, res = await sanic_client_no_migrations.post("/api/data/projects", headers=admin_headers, json=payload)
+        assert res.status_code == 201, res.json
 
 
 # !IMPORTANT: This test can only be run on v2 of the authz schema
@@ -64,13 +83,13 @@ async def test_upgrade_downgrade_cycle(
 @pytest.mark.asyncio
 async def test_migration_to_f34b87ddd954(
     sanic_client_no_migrations: SanicASGITestClient,
-    app_config_instance: Config,
+    app_manager_instance: DependencyManager,
     user_headers: dict,
     admin_headers: dict,
 ) -> None:
     run_migrations_for_app("common", "d8676f0cde53")
-    await app_config_instance.kc_user_repo.initialize(app_config_instance.kc_api)
-    await app_config_instance.group_repo.generate_user_namespaces()
+    await app_manager_instance.kc_user_repo.initialize(app_manager_instance.kc_api)
+    await app_manager_instance.group_repo.generate_user_namespaces()
     sanic_client = sanic_client_no_migrations
     payloads = [
         {
@@ -94,28 +113,21 @@ async def test_migration_to_f34b87ddd954(
     _, response = await sanic_client.get("/api/data/groups", headers=user_headers)
     assert response.status_code == 200
     assert len(response.json) == 0
-    # The database should have delete events for the groups
-    events_orm = await app_config_instance.event_repo.get_pending_events()
-    group_removed_events = [
-        deserialize_binary(base64.b64decode(e.payload["payload"]), v2.GroupRemoved)
-        for e in events_orm
-        if e.queue == "group.removed"
-    ]
-    assert len(group_removed_events) == 2
-    assert set(added_group_ids) == {e.id for e in group_removed_events}
 
 
 @pytest.mark.asyncio
-async def test_migration_to_1ef98b967767_and_086eb60b42c8(app_config_instance: Config, admin_user: UserInfo) -> None:
+async def test_migration_to_1ef98b967767_and_086eb60b42c8(
+    app_manager_instance: DependencyManager, admin_user: UserInfo
+) -> None:
     """Tests the migration of the session launchers."""
     run_migrations_for_app("common", "b8cbd62e85b9")
-    await app_config_instance.kc_user_repo.initialize(app_config_instance.kc_api)
-    await app_config_instance.group_repo.generate_user_namespaces()
+
     global_env_id = str(ULID())
     custom_launcher_id = str(ULID())
     global_launcher_id = str(ULID())
     project_id = str(ULID())
-    async with app_config_instance.db.async_session_maker() as session, session.begin():
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        await _generate_user_namespaces(session)
         await session.execute(
             sa.text(
                 "INSERT INTO "
@@ -178,7 +190,7 @@ async def test_migration_to_1ef98b967767_and_086eb60b42c8(app_config_instance: C
             )
         )
     run_migrations_for_app("common", "1ef98b967767")
-    async with app_config_instance.db.async_session_maker() as session, session.begin():
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
         res = await session.execute(
             sa.text("SELECT * FROM sessions.environments WHERE name = :name").bindparams(name="global env")
         )
@@ -200,7 +212,7 @@ async def test_migration_to_1ef98b967767_and_086eb60b42c8(app_config_instance: C
         "--ContentsManager.allow_hidden=true --ServerApp.allow_origin=*",
     ]
     assert global_env["environment_kind"] == "GLOBAL"
-    async with app_config_instance.db.async_session_maker() as session, session.begin():
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
         res = await session.execute(
             sa.text("SELECT * FROM sessions.environments WHERE name != :name").bindparams(name="global env")
         )
@@ -221,7 +233,7 @@ async def test_migration_to_1ef98b967767_and_086eb60b42c8(app_config_instance: C
         "--ContentsManager.allow_hidden=true --ServerApp.allow_origin=*",
     ]
     assert custom_env["environment_kind"] == "CUSTOM"
-    async with app_config_instance.db.async_session_maker() as session, session.begin():
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
         res = await session.execute(
             sa.text("SELECT * FROM sessions.launchers WHERE id = :id").bindparams(id=custom_launcher_id)
         )
@@ -231,7 +243,7 @@ async def test_migration_to_1ef98b967767_and_086eb60b42c8(app_config_instance: C
     assert custom_launcher["name"] == "custom"
     assert custom_launcher["project_id"] == project_id
     assert custom_launcher["environment_id"] == custom_env["id"]
-    async with app_config_instance.db.async_session_maker() as session, session.begin():
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
         res = await session.execute(
             sa.text("SELECT * FROM sessions.launchers WHERE id = :id").bindparams(id=global_launcher_id)
         )
@@ -242,7 +254,7 @@ async def test_migration_to_1ef98b967767_and_086eb60b42c8(app_config_instance: C
     assert global_launcher["project_id"] == project_id
     assert global_launcher["environment_id"] == global_env["id"]
     run_migrations_for_app("common", "086eb60b42c8")
-    async with app_config_instance.db.async_session_maker() as session, session.begin():
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
         res = await session.execute(
             sa.text("SELECT * FROM sessions.environments WHERE name = :name").bindparams(name="global env")
         )
@@ -255,3 +267,345 @@ async def test_migration_to_1ef98b967767_and_086eb60b42c8(app_config_instance: C
         '--ServerApp.token="" --ServerApp.password="" --ServerApp.allow_remote_access=true '
         '--ContentsManager.allow_hidden=true --ServerApp.allow_origin=* --ServerApp.root_dir="/home/jovyan/work"',
     ]
+
+
+@pytest.mark.asyncio
+async def test_migration_create_global_envs(
+    app_manager_instance: DependencyManager,
+    sanic_client_no_migrations: SanicASGITestClient,
+    admin_headers: dict,
+    admin_user: UserInfo,
+    tmpdir_factory,
+    monkeysession,
+) -> None:
+    run_migrations_for_app("common", "head")
+    envs = await app_manager_instance.session_repo.get_environments()
+    assert len(envs) == 2
+    assert any(e.name == "Python/Jupyter" for e in envs)
+    assert any(e.name == "Rstudio" for e in envs)
+
+
+@pytest.mark.asyncio
+async def test_migration_to_75c83dd9d619(app_manager_instance: DependencyManager, admin_user: UserInfo) -> None:
+    """Tests the migration for copying session environments of copied projects."""
+
+    async def insert_project(session: AsyncSession, payload: dict[str, Any]) -> None:
+        bindparams: list[sa.BindParameter] = []
+        cols: list[str] = list(payload.keys())
+        cols_joined = ", ".join(cols)
+        ids = ", ".join([":" + col for col in cols])
+        if "visibility" in payload:
+            bindparams.append(bindparam("visibility", literal_execute=True))
+        stmt = sa.text(
+            f"INSERT INTO projects.projects({cols_joined}) VALUES({ids})",
+        ).bindparams(*bindparams, **payload)
+        await session.execute(stmt)
+
+    async def insert_environment(session: AsyncSession, payload: dict[str, Any]) -> None:
+        bindparams: list[sa.BindParameter] = []
+        cols: list[str] = list(payload.keys())
+        cols_joined = ", ".join(cols)
+        ids = ", ".join([":" + col for col in cols])
+        if "command" in payload:
+            bindparams.append(bindparam("command", type_=JSONB))
+        if "args" in payload:
+            bindparams.append(bindparam("args", type_=JSONB))
+        if "environment_kind" in payload:
+            bindparams.append(bindparam("environment_kind", literal_execute=True))
+        stmt = sa.text(f"INSERT INTO sessions.environments({cols_joined}) VALUES ({ids})").bindparams(
+            *bindparams,
+            **payload,
+        )
+        await session.execute(stmt)
+
+    async def insert_session_launcher(session: AsyncSession, payload: dict[str, Any]) -> None:
+        cols: list[str] = list(payload.keys())
+        cols_joined = ", ".join(cols)
+        ids = ", ".join([":" + col for col in cols])
+        stmt = sa.text(f"INSERT INTO sessions.launchers({cols_joined}) VALUES ({ids})").bindparams(
+            **payload,
+        )
+        await session.execute(stmt)
+
+    def find_by_col(data: Sequence[sa.Row[Any]], id_value: Any, id_index: int) -> tuple | None:
+        for row in data:
+            if row.tuple()[id_index] == id_value:
+                return cast(tuple, row.tuple())
+        return None
+
+    run_migrations_for_app("common", "450ae3930996")
+
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        await _generate_user_namespaces(session)
+        # Create template project
+        project_id = str(ULID())
+        await insert_project(
+            session,
+            dict(
+                id=project_id,
+                name="test_project",
+                created_by_id=admin_user.id,
+                creation_date=datetime.now(UTC),
+                visibility="public",
+            ),
+        )
+        # Create clone project
+        cloned_project_id = str(ULID())
+        await insert_project(
+            session,
+            dict(
+                id=cloned_project_id,
+                name="cloned_project",
+                created_by_id="some-other-user-id",
+                creation_date=datetime.now(UTC),
+                visibility="public",
+                template_id=project_id,
+            ),
+        )
+        # Create a clone project that has removed its parent reference
+        cloned_project_orphan_id = str(ULID())
+        await insert_project(
+            session,
+            dict(
+                id=cloned_project_orphan_id,
+                name="cloned_project_orphan",
+                created_by_id="some-other-user-id",
+                creation_date=datetime.now(UTC),
+                visibility="public",
+            ),
+        )
+        # Create unrelated project
+        random_project_id = str(ULID())
+        await insert_project(
+            session,
+            dict(
+                id=random_project_id,
+                name="random_project",
+                created_by_id=admin_user.id,
+                creation_date=datetime.now(UTC),
+                visibility="public",
+            ),
+        )
+        # Create a single environment
+        custom_env_id = str(ULID())
+        await insert_environment(
+            session,
+            dict(
+                id=custom_env_id,
+                name="custom env",
+                created_by_id=admin_user.id,
+                creation_date=datetime.now(UTC),
+                container_image="env_image",
+                default_url="/env_url",
+                port=8888,
+                args=["arg1"],
+                command=["command1"],
+                uid=1000,
+                gid=1000,
+                environment_kind="CUSTOM",
+            ),
+        )
+        # Create an unrelated environment
+        random_env_id = str(ULID())
+        await insert_environment(
+            session,
+            dict(
+                id=random_env_id,
+                name="random env",
+                created_by_id=admin_user.id,
+                creation_date=datetime.now(UTC),
+                container_image="env_image",
+                default_url="/env_url",
+                port=8888,
+                args=["arg1"],
+                command=["command1"],
+                uid=1000,
+                gid=1000,
+                environment_kind="CUSTOM",
+            ),
+        )
+        # Create two session launchers for each project, but both are using the same env
+        custom_launcher_id = str(ULID())
+        await insert_session_launcher(
+            session,
+            dict(
+                id=custom_launcher_id,
+                name="custom",
+                created_by_id=admin_user.id,
+                creation_date=datetime.now(UTC),
+                environment_id=custom_env_id,
+                project_id=project_id,
+            ),
+        )
+        custom_launcher_id_cloned = str(ULID())
+        await insert_session_launcher(
+            session,
+            dict(
+                id=custom_launcher_id_cloned,
+                name="custom_for_cloned_project",
+                created_by_id=admin_user.id,
+                creation_date=datetime.now(UTC),
+                environment_id=custom_env_id,
+                project_id=cloned_project_id,
+            ),
+        )
+        # A session launcher for the cloned orphaned project
+        custom_launcher_id_orphan_cloned = str(ULID())
+        await insert_session_launcher(
+            session,
+            dict(
+                id=custom_launcher_id_orphan_cloned,
+                name="custom_for_cloned_orphaned_project",
+                created_by_id=admin_user.id,
+                creation_date=datetime.now(UTC),
+                environment_id=custom_env_id,
+                project_id=cloned_project_orphan_id,
+            ),
+        )
+        # Create an unrelated session launcher that should be unaffected by the migrations
+        random_launcher_id = str(ULID())
+        await insert_session_launcher(
+            session,
+            dict(
+                id=random_launcher_id,
+                name="random_launcher",
+                created_by_id=admin_user.id,
+                creation_date=datetime.now(UTC),
+                environment_id=random_env_id,
+                project_id=random_project_id,
+            ),
+        )
+    run_migrations_for_app("common", "75c83dd9d619")
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        launchers = (await session.execute(sa.text("SELECT id, environment_id, name FROM sessions.launchers"))).all()
+        envs = (
+            await session.execute(
+                sa.text("SELECT id, created_by_id, name FROM sessions.environments WHERE environment_kind = 'CUSTOM'")
+            )
+        ).all()
+    assert len(launchers) == 4
+    assert len(envs) == 4
+    # Filter the results from the DB
+    random_env_row = find_by_col(envs, random_env_id, 0)
+    assert random_env_row is not None
+    random_launcher_row = find_by_col(launchers, random_launcher_id, 0)
+    assert random_launcher_row is not None
+    custom_launcher_row = find_by_col(launchers, custom_launcher_id, 0)
+    assert custom_launcher_row is not None
+    custom_launcher_clone_row = find_by_col(launchers, custom_launcher_id_cloned, 0)
+    assert custom_launcher_clone_row is not None
+    env1_row = find_by_col(envs, custom_launcher_row[1], 0)
+    assert env1_row is not None
+    env2_row = find_by_col(envs, custom_launcher_clone_row[1], 0)
+    assert env2_row is not None
+    # Check that the session launcher for the cloned project is not using the same env as the parent
+    assert custom_launcher_row[0] != custom_launcher_clone_row[0]
+    assert custom_launcher_row[1] != custom_launcher_clone_row[1]
+    assert custom_launcher_row[2] != custom_launcher_clone_row[2]
+    # The copied and original env should have different ids and created_by fields
+    assert env1_row[0] != env2_row[0]
+    assert env1_row[1] != env2_row[1]
+    # The copied and the original env have the same name
+    assert env1_row[2] == env2_row[2]
+    # Check that the random environment is unchanged
+    assert random_env_row[0] == random_env_id
+    assert random_env_row[1] == admin_user.id
+    assert random_env_row[2] == "random env"
+    # Check that the orphaned cloned project's environment has been also decoupled
+    orphan_launcher_row = find_by_col(launchers, custom_launcher_id_orphan_cloned, 0)
+    assert orphan_launcher_row is not None
+    orphan_env_row = find_by_col(envs, orphan_launcher_row[1], 0)
+    assert orphan_env_row is not None
+    assert custom_launcher_row[0] != orphan_launcher_row[0]
+    assert custom_launcher_row[1] != orphan_launcher_row[1]
+    assert custom_launcher_row[2] != orphan_launcher_row[2]
+    assert env1_row[0] != orphan_env_row[0]
+    assert env1_row[1] != orphan_env_row[1]
+    assert env1_row[2] == orphan_env_row[2]
+
+
+async def _generate_user_namespaces(session: AsyncSession) -> list[UserInfo]:
+    """Generate user namespaces if the user table has data and the namespaces table is empty.
+
+    NOTE: This is copied from GroupRepository to retain the version compatible with db at a fixed point."""
+
+    async def _create_user_namespace_slug(
+        session: AsyncSession, user_slug: str, retry_enumerate: int = 0, retry_random: bool = False
+    ) -> str:
+        """Create a valid namespace slug for a user."""
+        nss = await session.scalars(
+            sa.select(ns_schemas.NamespaceORM.slug).where(ns_schemas.NamespaceORM.slug.startswith(user_slug))
+        )
+        nslist = nss.all()
+        if user_slug not in nslist:
+            return user_slug
+        if retry_enumerate:
+            for inc in range(1, retry_enumerate + 1):
+                slug = f"{user_slug}-{inc}"
+                if slug not in nslist:
+                    return slug
+        if retry_random:
+            suffix = "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(8)])  # nosec B311
+            slug = f"{user_slug}-{suffix}"
+            if slug not in nslist:
+                return slug
+
+        raise errors.ValidationError(message=f"Cannot create generate a unique namespace slug for the user {user_slug}")
+
+    async def _insert_user_namespace(
+        session: AsyncSession, user_id: str, user_slug: str, retry_enumerate: int = 0, retry_random: bool = False
+    ) -> ns_schemas.NamespaceORM:
+        """Insert a new namespace for the user and optionally retry different variations to avoid collisions."""
+        namespace = await _create_user_namespace_slug(session, user_slug, retry_enumerate, retry_random)
+        slug = Slug.from_name(namespace)
+        ns = ns_schemas.NamespaceORM(slug.value, user_id=user_id)
+        session.add(ns)
+        await session.flush()
+        await session.refresh(ns)
+        return ns
+
+    # NOTE: lock to make sure another instance of the data service cannot insert/update but can read
+    output: list[UserInfo] = []
+    await session.execute(sa.text("LOCK TABLE common.namespaces IN EXCLUSIVE MODE"))
+    at_least_one_namespace = (await session.execute(sa.select(ns_schemas.NamespaceORM).limit(1))).one_or_none()
+    if at_least_one_namespace:
+        return []
+
+    res = await session.scalars(sa.select(user_schemas.UserORM))
+    for user in res:
+        slug = Slug.from_user(user.email, user.first_name, user.last_name, user.keycloak_id)
+        ns = await _insert_user_namespace(session, user.keycloak_id, slug.value, retry_enumerate=10, retry_random=True)
+        user.namespace = ns
+        output.append(user.dump())
+
+    return output
+
+
+@pytest.mark.asyncio
+async def test_migration_to_dcb9648c3c15(app_manager_instance: DependencyManager, admin_user: UserInfo) -> None:
+    run_migrations_for_app("common", "042eeb50cd8e")
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        await session.execute(
+            sa.text(
+                "INSERT into "
+                "common.k8s_objects(name, namespace, manifest, deleted, kind, version, cluster, user_id) "
+                "VALUES ('name_pod', 'ns', '{}', FALSE, 'pod', 'v1', 'cluster', 'user_id')"
+            )
+        )
+        await session.execute(
+            sa.text(
+                "INSERT into "
+                "common.k8s_objects(name, namespace, manifest, deleted, kind, version, cluster, user_id) "
+                "VALUES ('name_js', 'ns', '{}', FALSE, 'jupyterserver', 'amalthea.dev/v1alpha1', 'cluster', 'user_id')"
+            )
+        )
+    run_migrations_for_app("common", "dcb9648c3c15")
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        k8s_objs = (await session.execute(sa.text('SELECT "group", version, kind FROM common.k8s_objects'))).all()
+    assert len(k8s_objs) == 2
+    assert k8s_objs[0].tuple()[0] is None
+    assert k8s_objs[0].tuple()[1] == "v1"
+    assert k8s_objs[0].tuple()[2] == "pod"
+    assert k8s_objs[1].tuple()[0] == "amalthea.dev"
+    assert k8s_objs[1].tuple()[1] == "v1alpha1"
+    assert k8s_objs[1].tuple()[2] == "jupyterserver"

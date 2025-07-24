@@ -9,24 +9,26 @@ from enum import Enum
 from typing import Any, NamedTuple
 
 from pydantic import BaseModel, Field
-from sanic.log import logger
 
-from renku_data_services.namespace.models import Namespace
+from renku_data_services.app_config import logging
+from renku_data_services.namespace.models import UserNamespace
+
+logger = logging.getLogger(__name__)
 
 
 class KeycloakEvent(Enum):
     """The Keycloak user events that result from the user registering or updating their personal information."""
 
-    REGISTER: str = "REGISTER"
-    UPDATE_PROFILE: str = "UPDATE_PROFILE"
+    REGISTER = "REGISTER"
+    UPDATE_PROFILE = "UPDATE_PROFILE"
 
 
 class KeycloakAdminEvent(Enum):
     """The Keycloak admin events used to keep users up to date."""
 
-    DELETE: str = "DELETE"
-    UPDATE: str = "UPDATE"
-    CREATE: str = "CREATE"
+    DELETE = "DELETE"
+    UPDATE = "UPDATE"
+    CREATE = "CREATE"
 
 
 @dataclass
@@ -40,7 +42,7 @@ class UserInfoFieldUpdate:
     old_value: str | None = None
 
     @classmethod
-    def from_json_user_events(self, val: Iterable[dict[str, Any]]) -> list["UserInfoFieldUpdate"]:
+    def from_json_user_events(cls, val: Iterable[dict[str, Any]]) -> list["UserInfoFieldUpdate"]:
         """Generate a list of updates from a json response from Keycloak."""
         output: list[UserInfoFieldUpdate] = []
         for event in val:
@@ -131,7 +133,7 @@ class UserInfoFieldUpdate:
         return output
 
     @classmethod
-    def from_json_admin_events(self, val: Iterable[dict[str, Any]]) -> list["UserInfoFieldUpdate"]:
+    def from_json_admin_events(cls, val: Iterable[dict[str, Any]]) -> list["UserInfoFieldUpdate"]:
         """Generate a list of updates from a json response from Keycloak."""
         output: list[UserInfoFieldUpdate] = []
         for event in val:
@@ -225,7 +227,7 @@ class UnsavedUserInfo:
             email=payload.get("email"),
         )
 
-    def _to_keycloak_dict(self) -> dict[str, Any]:
+    def to_keycloak_dict(self) -> dict[str, Any]:
         """Create a payload that would have been created by Keycloak for this user, used only for testing."""
 
         return {
@@ -257,7 +259,7 @@ class UnsavedUserInfo:
 class UserInfo(UnsavedUserInfo):
     """A tuple used to convey information about a user and their namespace."""
 
-    namespace: Namespace
+    namespace: UserNamespace
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -308,3 +310,4 @@ class UserPreferences(BaseModel):
 
     user_id: str = Field(min_length=3)
     pinned_projects: PinnedProjects
+    show_project_migration_banner: bool = True

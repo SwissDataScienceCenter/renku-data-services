@@ -2,13 +2,11 @@ import json
 import os
 import shutil
 import subprocess
-from base64 import b64decode
 from contextlib import AbstractContextManager
 from typing import Any
 
 import pytest
 import yaml
-from dataclasses_avroschema import AvroModel
 from kubernetes import client as k8s_client
 from kubernetes import config as k8s_config
 from kubernetes import watch
@@ -16,9 +14,6 @@ from sanic import Request
 from sanic_testing.testing import SanicASGITestClient, TestingResponse
 
 from renku_data_services.base_models import APIUser
-from renku_data_services.message_queue.avro_models.io.renku.events import v2
-from renku_data_services.message_queue.models import deserialize_binary
-from renku_data_services.message_queue.orm import EventORM
 
 
 async def create_rp(payload: dict[str, Any], test_client: SanicASGITestClient) -> tuple[Request, TestingResponse]:
@@ -40,41 +35,22 @@ async def create_user_preferences(
     )
 
 
+async def create_user_preferences_dismiss_banner(
+    test_client: SanicASGITestClient, api_user: APIUser
+) -> tuple[Request, TestingResponse]:
+    """Create user preferences by dismiss migration project banner"""
+    return await test_client.post(
+        "/api/data/user/preferences/dismiss_project_migration_banner",
+        headers={"Authorization": f"bearer {api_user.access_token}"},
+    )
+
+
 def merge_headers(*headers: dict[str, str]) -> dict[str, str]:
     """Merge multiple headers."""
     all_headers = dict()
     for h in headers:
         all_headers.update(**h)
     return all_headers
-
-
-def deserialize_event(event: EventORM) -> AvroModel:
-    """Deserialize an EventORM object."""
-    event_type_mapping = {
-        "group.added": v2.GroupAdded,
-        "group.removed": v2.GroupRemoved,
-        "group.updated": v2.GroupUpdated,
-        "memberGroup.added": v2.GroupMemberAdded,
-        "memberGroup.removed": v2.GroupMemberRemoved,
-        "memberGroup.updated": v2.GroupMemberUpdated,
-        "projectAuth.added": v2.ProjectMemberAdded,
-        "projectAuth.removed": v2.ProjectMemberRemoved,
-        "projectAuth.updated": v2.ProjectMemberUpdated,
-        "project.created": v2.ProjectCreated,
-        "project.removed": v2.ProjectRemoved,
-        "project.updated": v2.ProjectUpdated,
-        "user.added": v2.UserAdded,
-        "user.removed": v2.UserRemoved,
-        "user.updated": v2.UserUpdated,
-        "reprovisioning.started": v2.ReprovisioningStarted,
-        "reprovisioning.finished": v2.ReprovisioningFinished,
-    }
-
-    event_type = event_type_mapping.get(event.get_message_type())
-    if not event_type:
-        raise ValueError(f"Unsupported message type: {event.get_message_type()}")
-
-    return deserialize_binary(b64decode(event.payload["payload"]), event_type)
 
 
 def dataclass_to_str(object) -> str:
@@ -91,10 +67,12 @@ class K3DCluster(AbstractContextManager):
         cluster_name: str,
         k3s_image="latest",
         kubeconfig=".k3d-config.yaml",
-        extra_images=[],
+        extra_images: list[str] | None = None,
     ):
         self.cluster_name = cluster_name
         self.k3s_image = k3s_image
+        if extra_images is None:
+            extra_images = []
         self.extra_images = extra_images
         self.kubeconfig = kubeconfig
         self.env = os.environ.copy()
@@ -200,7 +178,7 @@ def setup_amalthea(install_name: str, app_name: str, version: str, cluster: K3DC
             watcher.stop()
             break
     else:
-        assert False, "Timeout waiting on amalthea to run"
+        raise AssertionError("Timeout waiting on amalthea to run") from None
 
 
 class ClusterRequired:

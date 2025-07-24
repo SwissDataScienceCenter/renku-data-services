@@ -1,36 +1,51 @@
 """Base models for secrets."""
 
-from dataclasses import dataclass
-from datetime import UTC, datetime
-from enum import Enum
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import StrEnum
 
 from kubernetes import client as k8s_client
-from pydantic import BaseModel, Field
 from ulid import ULID
 
 
-class SecretKind(Enum):
+class SecretKind(StrEnum):
     """Kind of secret. This should have the same values as users.apispec.SecretKind."""
 
     general = "general"
     storage = "storage"
 
 
-class UnsavedSecret(BaseModel):
-    """Secret objects not stored in the database."""
-
-    name: str
-    encrypted_value: bytes = Field(repr=False)
-    encrypted_key: bytes = Field(repr=False)
-    modification_date: datetime = Field(default_factory=lambda: datetime.now(UTC).replace(microsecond=0), init=False)
-    kind: SecretKind
-    expiration_timestamp: datetime | None = Field(default=None)
-
-
-class Secret(UnsavedSecret):
+@dataclass(frozen=True, eq=True, kw_only=True)
+class Secret:
     """Secret object stored in the database."""
 
-    id: ULID = Field()
+    id: ULID
+    name: str
+    default_filename: str
+    encrypted_value: bytes = field(repr=False)
+    encrypted_key: bytes = field(repr=False)
+    kind: SecretKind
+    modification_date: datetime
+
+    session_secret_slot_ids: list[ULID]
+    """List of session secret slot IDs where this user secret is used."""
+
+    data_connector_ids: list[ULID]
+    """List of data connector IDs where this user secret is used."""
+
+    def update_encrypted_value(self, encrypted_value: bytes, encrypted_key: bytes) -> "Secret":
+        """Returns a new secret instance with updated encrypted_value and encrypted_key."""
+        return Secret(
+            id=self.id,
+            name=self.name,
+            default_filename=self.default_filename,
+            encrypted_value=encrypted_value,
+            encrypted_key=encrypted_key,
+            kind=self.kind,
+            modification_date=self.modification_date,
+            session_secret_slot_ids=self.session_secret_slot_ids,
+            data_connector_ids=self.data_connector_ids,
+        )
 
 
 @dataclass
@@ -56,3 +71,22 @@ class OwnerReference:
             uid=self.uid,
             controller=True,
         )
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedSecret:
+    """Model to request the creation of a new user secret."""
+
+    name: str
+    default_filename: str | None
+    secret_value: str = field(repr=False)
+    kind: SecretKind
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SecretPatch:
+    """Model for changes requested on a user secret."""
+
+    name: str | None
+    default_filename: str | None
+    secret_value: str | None = field(repr=False)

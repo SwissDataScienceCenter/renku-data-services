@@ -8,13 +8,15 @@ from authzed.api.v1 import (
 )
 from ulid import ULID
 
-from renku_data_services.app_config import Config
-from renku_data_services.authz.authz import ResourceType, _AuthzConverter
+from renku_data_services.authz.authz import _AuthzConverter
 from renku_data_services.authz.models import Member, Role, Scope, Visibility
 from renku_data_services.base_models import APIUser
+from renku_data_services.base_models.core import NamespacePath, ResourceType
+from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.errors import errors
 from renku_data_services.migrations.core import run_migrations_for_app
-from renku_data_services.namespace.models import Namespace, NamespaceKind
+from renku_data_services.namespace.models import UserNamespace
+from renku_data_services.project import constants as project_constants
 from renku_data_services.project.models import Project
 
 admin_user = APIUser(is_admin=True, id="admin-id", access_token="some-token", full_name="admin")  # nosec B106
@@ -24,9 +26,9 @@ regular_user2 = APIUser(is_admin=False, id="user2-id", access_token="some-token2
 
 
 @pytest_asyncio.fixture
-async def bootstrap_admins(app_config_instance: Config, event_loop) -> None:
+async def bootstrap_admins(app_manager_instance: DependencyManager, event_loop) -> None:
     run_migrations_for_app("common")
-    authz = app_config_instance.authz
+    authz = app_manager_instance.authz
     admins = [admin_user]
     rels: list[RelationshipUpdate] = []
     for admin in admins:
@@ -43,24 +45,26 @@ async def bootstrap_admins(app_config_instance: Config, event_loop) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("public_project", [True, False])
-async def test_adding_deleting_project(app_config_instance: Config, bootstrap_admins, public_project: bool) -> None:
+async def test_adding_deleting_project(
+    app_manager_instance: DependencyManager, bootstrap_admins, public_project: bool
+) -> None:
     project_owner = regular_user1
     assert project_owner.id
-    authz = app_config_instance.authz
+    authz = app_manager_instance.authz
     project_id = ULID()
     project = Project(
         id=project_id,
         name=project_id,
         slug="slug",
-        namespace=Namespace(
-            "namespace",
-            "namespace",
-            NamespaceKind.user,
+        namespace=UserNamespace(
+            id="namespace",
             created_by=project_owner.id,
             underlying_resource_id=project_owner.id,
+            path=NamespacePath.from_strings("namespace"),
         ),
         visibility=Visibility.PUBLIC if public_project else Visibility.PRIVATE,
         created_by=project_owner.id,
+        secrets_mount_directory=project_constants.DEFAULT_SESSION_SECRETS_MOUNT_DIR,
     )
     authz_changes = authz._add_project(project)
     await authz.client.WriteRelationships(authz_changes.apply)
@@ -93,23 +97,22 @@ async def test_adding_deleting_project(app_config_instance: Config, bootstrap_ad
 @pytest.mark.parametrize("public_project", [True, False])
 @pytest.mark.parametrize("granted_role", [Role.VIEWER, Role.EDITOR, Role.OWNER])
 async def test_granting_access(
-    app_config_instance: Config, bootstrap_admins, public_project: bool, granted_role: Role
+    app_manager_instance: DependencyManager, bootstrap_admins, public_project: bool, granted_role: Role
 ) -> None:
     project_owner = regular_user1
     assert project_owner.id
     assert regular_user2.id
-    authz = app_config_instance.authz
+    authz = app_manager_instance.authz
     project_id = ULID()
     project = Project(
         id=project_id,
         name=project_id,
         slug="slug",
-        namespace=Namespace(
-            "namespace",
-            "namespace",
-            NamespaceKind.user,
+        namespace=UserNamespace(
+            id="namespace",
             created_by=project_owner.id,
             underlying_resource_id=project_owner.id,
+            path=NamespacePath.from_strings("namespace"),
         ),
         visibility=Visibility.PUBLIC if public_project else Visibility.PRIVATE,
         created_by=project_owner.id,
@@ -139,22 +142,23 @@ async def test_granting_access(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("public_project", [True, False])
-async def test_listing_users_with_access(app_config_instance: Config, public_project: bool, bootstrap_admins) -> None:
+async def test_listing_users_with_access(
+    app_manager_instance: DependencyManager, public_project: bool, bootstrap_admins
+) -> None:
     project_owner = regular_user1
     assert project_owner.id
     assert regular_user2.id
-    authz = app_config_instance.authz
+    authz = app_manager_instance.authz
     project1_id = ULID()
     project1 = Project(
         id=project1_id,
         name=str(project1_id),
         slug=str(project1_id),
-        namespace=Namespace(
-            project_owner.id,
-            project_owner.id,
-            NamespaceKind.user,
+        namespace=UserNamespace(
+            id=project_owner.id,
             created_by=project_owner.id,
             underlying_resource_id=project_owner.id,
+            path=[project_owner.id],
         ),
         visibility=Visibility.PUBLIC if public_project else Visibility.PRIVATE,
         created_by=project_owner.id,
@@ -164,12 +168,11 @@ async def test_listing_users_with_access(app_config_instance: Config, public_pro
         id=project2_id,
         name=str(project2_id),
         slug=str(project2_id),
-        namespace=Namespace(
-            regular_user2.id,
-            regular_user2.id,
-            NamespaceKind.user,
+        namespace=UserNamespace(
+            id=regular_user2.id,
             created_by=regular_user2.id,
             underlying_resource_id=regular_user2.id,
+            path=[regular_user2.id],
         ),
         visibility=Visibility.PRIVATE,
         created_by=regular_user2.id,
@@ -187,8 +190,8 @@ async def test_listing_users_with_access(app_config_instance: Config, public_pro
 
 
 @pytest.mark.asyncio
-async def test_listing_projects_with_access(app_config_instance: Config, bootstrap_admins) -> None:
-    authz = app_config_instance.authz
+async def test_listing_projects_with_access(app_manager_instance: DependencyManager, bootstrap_admins) -> None:
+    authz = app_manager_instance.authz
     public_project_id = ULID()
     private_project_id1 = ULID()
     private_project_id2 = ULID()
@@ -198,12 +201,11 @@ async def test_listing_projects_with_access(app_config_instance: Config, bootstr
     private_project_id2_str = str(private_project_id2)
 
     project_owner = regular_user1
-    namespace = Namespace(
-        project_owner.id,
-        project_owner.id,
-        NamespaceKind.user,
+    namespace = UserNamespace(
+        id=project_owner.id,
         created_by=project_owner.id,
         underlying_resource_id=project_owner.id,
+        path=[project_owner.id],
     )
     assert project_owner.id
     assert regular_user2.id
@@ -306,3 +308,65 @@ async def test_listing_projects_with_access(app_config_instance: Config, bootstr
     assert private_project_id1_str not in set(
         await authz.resources_with_permission(admin_user, admin_user.id, ResourceType.project, Scope.DELETE)
     )
+
+
+@pytest.mark.asyncio
+async def test_listing_non_public_projects(app_manager_instance: DependencyManager, bootstrap_admins) -> None:
+    authz = app_manager_instance.authz
+    public_project_id = ULID()
+    private_project_id1 = ULID()
+    private_project_id2 = ULID()
+
+    public_project_id_str = str(public_project_id)
+    private_project_id1_str = str(private_project_id1)
+    private_project_id2_str = str(private_project_id2)
+
+    namespace = UserNamespace(
+        id=ULID(),
+        created_by=str(regular_user1.id),
+        underlying_resource_id=str(ULID()),
+        path=NamespacePath.from_strings("ns-121"),
+    )
+    assert regular_user1.id
+    assert regular_user2.id
+    public_project = Project(
+        id=public_project_id,
+        name=public_project_id_str,
+        slug=public_project_id_str,
+        namespace=namespace,
+        visibility=Visibility.PUBLIC,
+        created_by=regular_user1.id,
+    )
+    private_project1 = Project(
+        id=private_project_id1,
+        name=private_project_id1_str,
+        slug=private_project_id1_str,
+        namespace=namespace,
+        visibility=Visibility.PRIVATE,
+        created_by=regular_user1.id,
+    )
+    private_project2 = Project(
+        id=private_project_id2,
+        name=private_project_id2_str,
+        slug=private_project_id2_str,
+        namespace=namespace,
+        visibility=Visibility.PRIVATE,
+        created_by=regular_user2.id,
+    )
+    for p in [public_project, private_project1, private_project2]:
+        changes = authz._add_project(p)
+        await authz.client.WriteRelationships(changes.apply)
+
+    ids_user1 = await authz.resources_with_permission(
+        admin_user, regular_user1.id, ResourceType.project, Scope.NON_PUBLIC_READ
+    )
+    ids_user2 = await authz.resources_with_permission(
+        admin_user, regular_user2.id, ResourceType.project, Scope.NON_PUBLIC_READ
+    )
+    assert private_project_id1_str in set(ids_user1)
+    assert private_project_id2_str not in set(ids_user1)
+    assert public_project_id_str not in set(ids_user1)
+
+    assert private_project_id2_str in set(ids_user2)
+    assert private_project_id1_str not in set(ids_user2)
+    assert public_project_id_str not in set(ids_user2)

@@ -18,19 +18,28 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_api.etag import extract_if_none_match, if_match_required
 from renku_data_services.base_api.misc import validate_body_root_model, validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
+from renku_data_services.base_models.core import (
+    DataConnectorInProjectPath,
+    DataConnectorPath,
+    NamespacePath,
+    ProjectPath,
+    Slug,
+)
+from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors.core import (
     dump_storage_with_sensitive_fields,
+    prevalidate_unsaved_global_data_connector,
     validate_data_connector_patch,
     validate_data_connector_secrets_patch,
     validate_unsaved_data_connector,
 )
 from renku_data_services.data_connectors.db import (
-    DataConnectorProjectLinkRepository,
     DataConnectorRepository,
     DataConnectorSecretRepository,
 )
+from renku_data_services.errors import errors
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.utils.core import get_openbis_pat
 
@@ -40,9 +49,9 @@ class DataConnectorsBP(CustomBlueprint):
     """Handlers for manipulating data connectors."""
 
     data_connector_repo: DataConnectorRepository
-    data_connector_to_project_link_repo: DataConnectorProjectLinkRepository
     data_connector_secret_repo: DataConnectorSecretRepository
     authenticator: base_models.Authenticator
+    metrics: MetricsService
 
     def get_all(self) -> BlueprintFactoryResponse:
         """List data connectors."""
@@ -57,10 +66,21 @@ class DataConnectorsBP(CustomBlueprint):
             query: apispec.DataConnectorsGetQuery,
             validator: RCloneValidator,
         ) -> tuple[list[dict[str, Any]], int]:
+            ns_segments = query.namespace.split("/")
+            ns: None | NamespacePath | ProjectPath
+            if len(ns_segments) == 0 or (len(ns_segments) == 1 and len(ns_segments[0]) == 0):
+                ns = None
+            elif len(ns_segments) == 1 and len(ns_segments[0]) > 0:
+                ns = NamespacePath.from_strings(*ns_segments)
+            elif len(ns_segments) == 2:
+                ns = ProjectPath.from_strings(*ns_segments)
+            else:
+                raise errors.ValidationError(
+                    message="Got an unexpected number of path segments for the data connector namespace"
+                    " in the request query parameter, expected 0, 1 or 2"
+                )
             data_connectors, total_num = await self.data_connector_repo.get_data_connectors(
-                user=user,
-                pagination=pagination,
-                namespace=query.namespace,
+                user=user, pagination=pagination, namespace=ns
             )
             return [
                 validate_and_dump(
@@ -82,7 +102,10 @@ class DataConnectorsBP(CustomBlueprint):
             _: Request, user: base_models.APIUser, body: apispec.DataConnectorPost, validator: RCloneValidator
         ) -> JSONResponse:
             data_connector = validate_unsaved_data_connector(body, validator=validator)
-            result = await self.data_connector_repo.insert_data_connector(user=user, data_connector=data_connector)
+            result = await self.data_connector_repo.insert_namespaced_data_connector(
+                user=user, data_connector=data_connector
+            )
+            await self.metrics.data_connector_created(user)
             return validated_json(
                 apispec.DataConnector,
                 self._dump_data_connector(result, validator=validator),
@@ -90,6 +113,27 @@ class DataConnectorsBP(CustomBlueprint):
             )
 
         return "/data_connectors", ["POST"], _post
+
+    def post_global(self) -> BlueprintFactoryResponse:
+        """Create a new global data connector."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @validate(json=apispec.GlobalDataConnectorPost)
+        async def _post_global(
+            _: Request, user: base_models.APIUser, body: apispec.GlobalDataConnectorPost, validator: RCloneValidator
+        ) -> JSONResponse:
+            data_connector = await prevalidate_unsaved_global_data_connector(body, validator=validator)
+            result, inserted = await self.data_connector_repo.insert_global_data_connector(
+                user=user, data_connector=data_connector, validator=validator
+            )
+            return validated_json(
+                apispec.DataConnector,
+                self._dump_data_connector(result, validator=validator),
+                status=201 if inserted else 200,
+            )
+
+        return "/data_connectors/global", ["POST"], _post_global
 
     def get_one(self) -> BlueprintFactoryResponse:
         """Get a specific data connector."""
@@ -115,6 +159,32 @@ class DataConnectorsBP(CustomBlueprint):
 
         return "/data_connectors/<data_connector_id:ulid>", ["GET"], _get_one
 
+    def get_one_global_by_slug(self) -> BlueprintFactoryResponse:
+        """Get a specific global data connector by slug."""
+
+        @authenticate(self.authenticator)
+        @extract_if_none_match
+        async def _get_one_global_by_slug(
+            _: Request,
+            user: base_models.APIUser,
+            slug: Slug,
+            etag: str | None,
+            validator: RCloneValidator,
+        ) -> HTTPResponse:
+            data_connector = await self.data_connector_repo.get_global_data_connector_by_slug(user=user, slug=slug)
+
+            if data_connector.etag == etag:
+                return HTTPResponse(status=304)
+
+            headers = {"ETag": data_connector.etag}
+            return validated_json(
+                apispec.DataConnector,
+                self._dump_data_connector(data_connector, validator=validator),
+                headers=headers,
+            )
+
+        return "/data_connectors/global/<slug:renku_slug>", ["GET"], _get_one_global_by_slug
+
     def get_one_by_slug(self) -> BlueprintFactoryResponse:
         """Get a specific data connector by namespace/entity slug."""
 
@@ -124,12 +194,13 @@ class DataConnectorsBP(CustomBlueprint):
             _: Request,
             user: base_models.APIUser,
             namespace: str,
-            slug: str,
+            slug: Slug,
             etag: str | None,
             validator: RCloneValidator,
         ) -> HTTPResponse:
             data_connector = await self.data_connector_repo.get_data_connector_by_slug(
-                user=user, namespace=namespace, slug=slug
+                user=user,
+                path=DataConnectorPath.from_strings(namespace, slug.value),
             )
 
             if data_connector.etag == etag:
@@ -143,6 +214,43 @@ class DataConnectorsBP(CustomBlueprint):
             )
 
         return "/namespaces/<namespace>/data_connectors/<slug:renku_slug>", ["GET"], _get_one_by_slug
+
+    def get_one_by_slug_from_project_namespace(self) -> BlueprintFactoryResponse:
+        """Get a specific data connector by namespace/project_slug/dc_slug slug."""
+
+        @authenticate(self.authenticator)
+        @extract_if_none_match
+        async def _get_one_from_project_namespace(
+            _: Request,
+            user: base_models.APIUser,
+            ns_slug: Slug,
+            project_slug: Slug,
+            dc_slug: Slug,
+            etag: str | None,
+            validator: RCloneValidator,
+        ) -> HTTPResponse:
+            dc_path = DataConnectorInProjectPath.from_strings(
+                ns_slug.value,
+                project_slug.value,
+                dc_slug.value,
+            )
+            data_connector = await self.data_connector_repo.get_data_connector_by_slug(user=user, path=dc_path)
+
+            if data_connector.etag == etag:
+                return HTTPResponse(status=304)
+
+            headers = {"ETag": data_connector.etag}
+            return validated_json(
+                apispec.DataConnector,
+                self._dump_data_connector(data_connector, validator=validator),
+                headers=headers,
+            )
+
+        return (
+            "/namespaces/<ns_slug:renku_slug>/projects/<project_slug:renku_slug>/data_connectors/<dc_slug:renku_slug>",
+            ["GET"],
+            _get_one_from_project_namespace,
+        )
 
     def patch(self) -> BlueprintFactoryResponse:
         """Partially update a data connector."""
@@ -210,9 +318,7 @@ class DataConnectorsBP(CustomBlueprint):
             user: base_models.APIUser,
             data_connector_id: ULID,
         ) -> JSONResponse:
-            links = await self.data_connector_to_project_link_repo.get_links_from(
-                user=user, data_connector_id=data_connector_id
-            )
+            links = await self.data_connector_repo.get_links_from(user=user, data_connector_id=data_connector_id)
             return validated_json(
                 apispec.DataConnectorToProjectLinksList,
                 [self._dump_data_connector_to_project_link(link) for link in links],
@@ -236,7 +342,8 @@ class DataConnectorsBP(CustomBlueprint):
                 data_connector_id=data_connector_id,
                 project_id=ULID.from_str(body.project_id),
             )
-            link = await self.data_connector_to_project_link_repo.insert_link(user=user, link=unsaved_link)
+            link = await self.data_connector_repo.insert_link(user=user, link=unsaved_link)
+            await self.metrics.data_connector_linked(user)
             return validated_json(
                 apispec.DataConnectorToProjectLink, self._dump_data_connector_to_project_link(link), status=201
             )
@@ -254,9 +361,7 @@ class DataConnectorsBP(CustomBlueprint):
             data_connector_id: ULID,
             link_id: ULID,
         ) -> HTTPResponse:
-            await self.data_connector_to_project_link_repo.delete_link(
-                user=user, data_connector_id=data_connector_id, link_id=link_id
-            )
+            await self.data_connector_repo.delete_link(user=user, data_connector_id=data_connector_id, link_id=link_id)
             return HTTPResponse(status=204)
 
         return (
@@ -274,13 +379,33 @@ class DataConnectorsBP(CustomBlueprint):
             user: base_models.APIUser,
             project_id: ULID,
         ) -> JSONResponse:
-            links = await self.data_connector_to_project_link_repo.get_links_to(user=user, project_id=project_id)
+            links = await self.data_connector_repo.get_links_to(user=user, project_id=project_id)
             return validated_json(
                 apispec.DataConnectorToProjectLinksList,
                 [self._dump_data_connector_to_project_link(link) for link in links],
             )
 
         return "/projects/<project_id:ulid>/data_connector_links", ["GET"], _get_all_data_connectors_links_to_project
+
+    def get_inaccessible_data_connectors_links_to_project(self) -> BlueprintFactoryResponse:
+        """The number of data connector links in a given project the user has no access to."""
+
+        @authenticate(self.authenticator)
+        async def _get_inaccessible_data_connectors_links_to_project(
+            _: Request,
+            user: base_models.APIUser,
+            project_id: ULID,
+        ) -> JSONResponse:
+            link_ids = await self.data_connector_repo.get_inaccessible_links_to_project(
+                user=user, project_id=project_id
+            )
+            return validated_json(apispec.InaccessibleDataConnectorLinks, {"count": len(link_ids)})
+
+        return (
+            "/projects/<project_id:ulid>/inaccessible_data_connector_links",
+            ["GET"],
+            _get_inaccessible_data_connectors_links_to_project,
+        )
 
     def get_secrets(self) -> BlueprintFactoryResponse:
         """List all saved secrets for a data connector."""
@@ -386,13 +511,28 @@ class DataConnectorsBP(CustomBlueprint):
         return "/data_connectors/<data_connector_id:ulid>/secrets", ["DELETE"], _delete_secrets
 
     @staticmethod
-    def _dump_data_connector(data_connector: models.DataConnector, validator: RCloneValidator) -> dict[str, Any]:
+    def _dump_data_connector(
+        data_connector: models.DataConnector | models.GlobalDataConnector, validator: RCloneValidator
+    ) -> dict[str, Any]:
         """Dumps a data connector for API responses."""
         storage = dump_storage_with_sensitive_fields(data_connector.storage, validator=validator)
+        if data_connector.namespace is None:
+            return dict(
+                id=str(data_connector.id),
+                name=data_connector.name,
+                slug=data_connector.slug,
+                storage=storage,
+                creation_date=data_connector.creation_date,
+                created_by=data_connector.created_by,
+                visibility=data_connector.visibility.value,
+                description=data_connector.description,
+                etag=data_connector.etag,
+                keywords=data_connector.keywords or [],
+            )
         return dict(
             id=str(data_connector.id),
             name=data_connector.name,
-            namespace=data_connector.namespace.slug,
+            namespace=data_connector.namespace.path.serialize(),
             slug=data_connector.slug,
             storage=storage,
             # secrets=,

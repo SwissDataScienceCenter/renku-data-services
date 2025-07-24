@@ -1,16 +1,19 @@
 """Fixtures for testing."""
 
 import asyncio
-import logging
+import logging as ll
 import os
 import secrets
 import socket
+import stat
 import subprocess
-from collections.abc import AsyncGenerator, Iterator
+from collections.abc import AsyncGenerator
+from distutils.dir_util import copy_tree
 from multiprocessing import Lock
 from pathlib import Path
 from uuid import uuid4
 
+import httpx
 import pytest
 import pytest_asyncio
 import uvloop
@@ -21,12 +24,37 @@ from pytest_postgresql.janitor import DatabaseJanitor
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
-from renku_data_services.app_config import Config as DataConfig
+from renku_data_services.app_config import logging
 from renku_data_services.authz.config import AuthzConfig
+from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.db_config.config import DBConfig
-from renku_data_services.secrets.config import Config as SecretsConfig
+from renku_data_services.secrets_storage_api.dependencies import DependencyManager as SecretsDependencyManager
+from renku_data_services.solr import entity_schema
+from renku_data_services.solr.solr_client import SolrClientConfig
+from renku_data_services.solr.solr_migrate import SchemaMigrator
 from renku_data_services.users import models as user_preferences_models
-from test.utils import TestAppConfig
+from test.utils import TestDependencyManager
+
+
+def __make_logging_config() -> logging.Config:
+    def_cfg = logging.Config(
+        root_level=ll.ERROR,
+        app_level=ll.ERROR,
+        format_style=logging.LogFormatStyle.plain,
+        override_levels={ll.ERROR: set(["alembic", "sanic"])},
+    )
+    env_cfg = logging.Config.from_env()
+    def_cfg.update_override_levels(env_cfg.override_levels)
+
+    test_cfg = logging.Config.from_env(prefix="TEST_")
+    def_cfg.update_override_levels(test_cfg.override_levels)
+    return def_cfg
+
+
+logging.configure_logging(__make_logging_config())
+
+
+logger = logging.getLogger(__name__)
 
 settings.register_profile("ci", deadline=400, max_examples=5)
 settings.register_profile("dev", deadline=200, max_examples=5)
@@ -57,8 +85,7 @@ async def monkeysession():
     mpatch.undo()
 
 
-@pytest_asyncio.fixture(scope="session")
-async def free_port() -> int:
+def free_port() -> int:
     lock = Lock()
     with lock, socket.socket() as s:
         s.bind(("", 0))
@@ -67,8 +94,8 @@ async def free_port() -> int:
 
 
 @pytest_asyncio.fixture(scope="session")
-async def authz_setup(monkeysession, free_port) -> AsyncGenerator[None, None]:
-    port = free_port
+async def authz_setup(monkeysession) -> AsyncGenerator[None, None]:
+    port = free_port()
     proc = subprocess.Popen(
         [
             "spicedb",
@@ -88,13 +115,13 @@ async def authz_setup(monkeysession, free_port) -> AsyncGenerator[None, None]:
     try:
         proc.terminate()
     except Exception as err:
-        logging.error(f"Encountered error when shutting down Authzed DB for testing {err}")
+        logger.error(f"Encountered error when shutting down Authzed DB for testing {err}")
         proc.kill()
 
 
 @pytest_asyncio.fixture
 async def db_config(monkeypatch, worker_id, authz_setup) -> AsyncGenerator[DBConfig, None]:
-    db_name = str(ULID()).lower() + "_" + worker_id
+    db_name = "R_" + str(ULID()).lower() + "_" + worker_id
     user = os.getenv("DB_USER", "renku")
     host = os.getenv("DB_HOST", "127.0.0.1")
     port = os.getenv("DB_PORT", "5432")
@@ -116,8 +143,8 @@ async def db_config(monkeypatch, worker_id, authz_setup) -> AsyncGenerator[DBCon
 
 
 @pytest_asyncio.fixture
-async def db_instance(monkeysession, worker_id, app_config, event_loop) -> AsyncGenerator[DBConfig, None]:
-    db_name = str(ULID()).lower() + "_" + worker_id
+async def db_instance(monkeysession, worker_id, app_manager, event_loop) -> AsyncGenerator[DBConfig, None]:
+    db_name = "R_" + str(ULID()).lower() + "_" + worker_id
     user = os.getenv("DB_USER", "renku")
     host = os.getenv("DB_HOST", "127.0.0.1")
     port = os.getenv("DB_PORT", "5432")
@@ -135,17 +162,17 @@ async def db_instance(monkeysession, worker_id, app_config, event_loop) -> Async
         template_dbname="renku_template",
     ):
         db = DBConfig.from_env()
-        app_config.db.push(db)
+        app_manager.config.db.push(db)
         yield db
-        await app_config.db.pop()
+        await app_manager.config.db.pop()
 
 
 @pytest_asyncio.fixture
-async def authz_instance(app_config, monkeypatch) -> Iterator[AuthzConfig]:
+async def authz_instance(app_manager: DependencyManager, monkeypatch) -> AsyncGenerator[AuthzConfig]:
     monkeypatch.setenv("AUTHZ_DB_KEY", f"renku-{uuid4().hex}")
-    app_config.authz_config.push(AuthzConfig.from_env())
-    yield app_config.authz_config
-    app_config.authz_config.pop()
+    app_manager.config.authz_config.push(AuthzConfig.from_env())
+    yield app_manager.config.authz_config
+    app_manager.config.authz_config.pop()
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -185,29 +212,31 @@ async def dummy_users():
 
 
 @pytest_asyncio.fixture(scope="session")
-async def app_config(
+async def app_manager(
     authz_setup, monkeysession, worker_id, secrets_key_pair, dummy_users
-) -> AsyncGenerator[DataConfig, None]:
+) -> AsyncGenerator[DependencyManager, None]:
     monkeysession.setenv("DUMMY_STORES", "true")
     monkeysession.setenv("MAX_PINNED_PROJECTS", "5")
     monkeysession.setenv("NB_SERVER_OPTIONS__DEFAULTS_PATH", "server_defaults.json")
     monkeysession.setenv("NB_SERVER_OPTIONS__UI_CHOICES_PATH", "server_options.json")
 
-    config = TestAppConfig.from_env(dummy_users)
+    dm = TestDependencyManager.from_env(dummy_users)
+
     app_name = "app_" + str(ULID()).lower() + "_" + worker_id
-    config.app_name = app_name
-    yield config
+    dm.app_name = app_name
+    yield dm
 
 
 @pytest_asyncio.fixture
-async def app_config_instance(app_config, db_instance, authz_instance) -> AsyncGenerator[DataConfig, None]:
-    yield app_config
+async def app_manager_instance(app_manager, db_instance, authz_instance) -> AsyncGenerator[DependencyManager, None]:
+    app_manager.metrics.reset_mock()
+    yield app_manager
 
 
 @pytest_asyncio.fixture
-async def secrets_storage_app_config(
+async def secrets_storage_app_manager(
     db_config: DBConfig, secrets_key_pair, monkeypatch, tmp_path
-) -> AsyncGenerator[DataConfig, None]:
+) -> AsyncGenerator[SecretsDependencyManager, None]:
     encryption_key_path = tmp_path / "encryption-key"
     encryption_key_path.write_bytes(secrets.token_bytes(32))
 
@@ -216,8 +245,8 @@ async def secrets_storage_app_config(
     monkeypatch.setenv("DB_NAME", db_config.db_name)
     monkeypatch.setenv("MAX_PINNED_PROJECTS", "5")
 
-    config = SecretsConfig.from_env()
-    yield config
+    dm = SecretsDependencyManager.from_env()
+    yield dm
 
 
 @pytest_asyncio.fixture
@@ -264,3 +293,113 @@ def pytest_runtest_setup(item):
             pytest.mark.skipif(not os.getenv("PYTEST_FORCE_RUN_MYSKIPS", False) and condition, reason=reason),
             append=False,
         )
+
+
+@pytest.fixture(scope="session")
+def solr_bin_path():
+    solr_bin = os.getenv("SOLR_BIN_PATH")
+    if solr_bin is None:
+        solr_bin = "solr"
+    return solr_bin
+
+
+async def __wait_for_solr(host: str, port: int) -> None:
+    tries = 0
+    with httpx.Client() as c:
+        while True:
+            try:
+                c.get(f"http://{host}:{port}/solr")
+                return None
+            except Exception as err:
+                print(err)
+                if tries >= 20:
+                    raise Exception(f"Cannot connect to solr, gave up after {tries} tries.") from err
+                else:
+                    tries = tries + 1
+                    await asyncio.sleep(1)
+
+
+@pytest_asyncio.fixture(scope="session")
+async def solr_instance(tmp_path_factory, monkeysession, solr_bin_path):
+    solr_root = tmp_path_factory.mktemp("solr")
+    solr_bin = solr_bin_path
+    port = free_port()
+    logger.info(f"Starting SOLR at port {port}")
+    args = [
+        solr_bin,
+        "start",
+        "-f",
+        "--jvm-opts",
+        "-Xmx256M -Xms256M",
+        "--host",
+        "localhost",
+        "--port",
+        f"{port}",
+        "-s",
+        f"{solr_root}",
+        "-t",
+        f"{solr_root}",
+        "--user-managed",
+    ]
+    logger.info(f"Starting SOLR via: {args}")
+    proc = subprocess.Popen(
+        args,
+        env={"PATH": os.getenv("PATH", ""), "SOLR_LOGS_DIR": f"{solr_root}", "SOLR_ULIMIT_CHECKS": "false"},
+    )
+    monkeysession.setenv("SOLR_TEST_PORT", f"{port}")
+    monkeysession.setenv("SOLR_ROOT_DIR", solr_root)
+    monkeysession.setenv("SOLR_URL", f"http://localhost:{port}")
+
+    await __wait_for_solr("localhost", port)
+
+    yield
+    try:
+        proc.terminate()
+    except Exception as err:
+        logger.error(f"Encountered error when shutting down solr for testing {err}")
+        proc.kill()
+
+
+@pytest.fixture
+def solr_core(solr_instance, monkeypatch):
+    core_name = "test_core_" + str(ULID()).lower()[-12:]
+    monkeypatch.setenv("SOLR_TEST_CORE", core_name)
+    monkeypatch.setenv("SOLR_CORE", core_name)
+    return core_name
+
+
+@pytest.fixture()
+def solr_config(solr_core, solr_bin_path):
+    core = solr_core
+    solr_port = os.getenv("SOLR_TEST_PORT")
+    if solr_port is None:
+        raise ValueError("No SOLR_TEST_PORT env variable found")
+
+    solr_url = f"http://localhost:{solr_port}"
+    solr_config = SolrClientConfig(base_url=solr_url, core=core)
+    solr_bin = solr_bin_path
+    result = subprocess.run([solr_bin, "create", "--solr-url", solr_url, "-c", core])
+    result.check_returncode()
+
+    # Unfortunately, solr creates core directories with only read permissions
+    # Then changing the schema via the api fails, because it can't write to that file
+    root_dir = os.getenv("SOLR_ROOT_DIR")
+    conf_file = f"{root_dir}/{core}/conf/managed-schema.xml"
+    os.chmod(conf_file, stat.S_IRUSR | stat.S_IWUSR | stat.S_IROTH | stat.S_IRGRP)
+
+    # we also need to create the configset/_default directory to make
+    # core-admin commands work
+    if not os.path.isdir(f"{root_dir}/configsets/_default"):
+        os.makedirs(f"{root_dir}/configsets/_default")
+        copy_tree(f"{root_dir}/{core}/conf", f"{root_dir}/configsets/_default/conf")
+
+    return solr_config
+
+
+@pytest_asyncio.fixture()
+async def solr_search(solr_config, app_manager):
+    migrator = SchemaMigrator(solr_config)
+    result = await migrator.migrate(entity_schema.all_migrations)
+    assert result.migrations_run == len(entity_schema.all_migrations)
+
+    return solr_config

@@ -1,5 +1,7 @@
 """Patches for the git proxy container."""
 
+from __future__ import annotations
+
 import json
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
@@ -67,11 +69,11 @@ async def main_container(
     container = client.V1Container(
         image=config.sessions.git_proxy.image,
         security_context={
-            "fsGroup": 100,
             "runAsGroup": 1000,
             "runAsUser": 1000,
             "allowPrivilegeEscalation": False,
             "runAsNonRoot": True,
+            "capabilities": {"drop": ["ALL"]},
         },
         name="git-proxy",
         env=env,
@@ -97,7 +99,7 @@ async def main_container(
     return container
 
 
-async def main(server: "UserServer") -> list[dict[str, Any]]:
+async def main(server: UserServer) -> list[dict[str, Any]]:
     """The patch that adds the git proxy container to a session statefulset."""
     repositories = await server.repositories()
     if not server.user.is_authenticated or not repositories:

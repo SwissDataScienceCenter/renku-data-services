@@ -10,15 +10,15 @@ from renku_data_services.errors import errors
 from renku_data_services.namespace.apispec import GroupRole
 
 if TYPE_CHECKING:
-    from renku_data_services.authz.authz import ResourceType
+    from renku_data_services.base_models.core import ResourceType
 
 
 class Role(Enum):
     """Membership role."""
 
-    OWNER: str = "owner"
-    VIEWER: str = "viewer"
-    EDITOR: str = "editor"
+    OWNER = "owner"
+    VIEWER = "viewer"
+    EDITOR = "editor"
 
     @classmethod
     def from_group_role(cls, role: GroupRole) -> "Role":
@@ -36,11 +36,11 @@ class Role(Enum):
     def to_group_role(self) -> GroupRole:
         """Convert a group role into an authorization role."""
         match self:
-            case self.OWNER:
+            case Role.OWNER:
                 return GroupRole.owner
-            case self.EDITOR:
+            case Role.EDITOR:
                 return GroupRole.editor
-            case self.VIEWER:
+            case Role.VIEWER:
                 return GroupRole.viewer
             case _:
                 raise errors.ProgrammingError(message=f"Could not convert role {self} into a group role")
@@ -49,13 +49,18 @@ class Role(Enum):
 class Scope(Enum):
     """Types of permissions - i.e. scope."""
 
-    READ: str = "read"
-    WRITE: str = "write"
-    DELETE: str = "delete"
-    CHANGE_MEMBERSHIP: str = "change_membership"
-    READ_CHILDREN: str = "read_children"
-    ADD_LINK: str = "add_link"
-    IS_ADMIN: str = "is_admin"
+    READ = "read"
+    WRITE = "write"
+    DELETE = "delete"
+    CHANGE_MEMBERSHIP = "change_membership"
+    READ_CHILDREN = "read_children"
+    ADD_LINK = "add_link"
+    IS_ADMIN = "is_admin"
+    NON_PUBLIC_READ = "non_public_read"
+    EXCLUSIVE_MEMBER = "exclusive_member"
+    EXCLUSIVE_EDITOR = "exclusive_editor"
+    EXCLUSIVE_OWNER = "exclusive_owner"
+    DIRECT_MEMBER = "direct_member"
 
 
 @dataclass
@@ -80,9 +85,9 @@ class Member(UnsavedMember):
 class Change(Enum):
     """The type of change executed on a specific resource."""
 
-    UPDATE: str = "update"
-    ADD: str = "add"
-    REMOVE: str = "remove"
+    UPDATE = "update"
+    ADD = "add"
+    REMOVE = "remove"
 
 
 @dataclass
@@ -96,8 +101,8 @@ class MembershipChange:
 class Visibility(Enum):
     """The visibility of a resource."""
 
-    PUBLIC: str = "public"
-    PRIVATE: str = "private"
+    PUBLIC = "public"
+    PRIVATE = "private"
 
 
 @dataclass
