@@ -92,7 +92,7 @@ async def git_clone_container_v2(
         },
     ]
     if user.is_authenticated:
-        env.append({"name": f"{prefix}GIT_PROXY_PORT", "value": config.sessions.git_proxy.port})
+        env.append({"name": f"{prefix}GIT_PROXY_PORT", "value": str(config.sessions.git_proxy.port)})
         if user.email:
             env.append(
                 {"name": f"{prefix}USER__EMAIL", "value": user.email},
