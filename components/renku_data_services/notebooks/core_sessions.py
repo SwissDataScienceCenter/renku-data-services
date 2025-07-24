@@ -529,6 +529,14 @@ async def patch_session(
 
     # Resource class
     if body.resource_class_id is not None:
+        new_cluster = await nb_config.k8s_v2_client.cluster_by_class_id(body.resource_class_id, user)
+        if new_cluster.id != cluster.id:
+            raise errors.ValidationError(
+                message=(
+                    f"The requested resource class {body.resource_class_id} is not in the "
+                    f"same cluster {cluster.id} as the current resource class {session.resource_class_id()}."
+                )
+            )
         rp = await rp_repo.get_resource_pool_from_class(user, body.resource_class_id)
         rc = rp.get_resource_class(body.resource_class_id)
         if not rc:
