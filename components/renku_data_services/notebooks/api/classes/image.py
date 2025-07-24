@@ -16,10 +16,10 @@ from renku_data_services.errors import errors
 class ManifestTypes(Enum):
     """The mime types for docker image manifests."""
 
-    docker_v2: str = "application/vnd.docker.distribution.manifest.v2+json"
-    docker_v2_list: str = "application/vnd.docker.distribution.manifest.list.v2+json"
-    oci_v1_manifest: str = "application/vnd.oci.image.manifest.v1+json"
-    oci_v1_index: str = "application/vnd.oci.image.index.v1+json"
+    docker_v2 = "application/vnd.docker.distribution.manifest.v2+json"
+    docker_v2_list = "application/vnd.docker.distribution.manifest.list.v2+json"
+    oci_v1_manifest = "application/vnd.oci.image.manifest.v1+json"
+    oci_v1_index = "application/vnd.oci.image.index.v1+json"
 
 
 DEFAULT_PLATFORM_ARCHITECTURE = "amd64"

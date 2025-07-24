@@ -300,6 +300,219 @@ def v2_schema() -> SpiceDBSchema:
     )
 
 
+@pytest.fixture
+def v5_schema() -> SpiceDBSchema:
+    return SpiceDBSchema(
+        schemas._v5,
+        relationships=[
+            "project:p1#owner@user:u1",
+            "project:p1#public_viewer@user:*",
+            "project:p1#public_viewer@anonymous_user:*",
+            "project:p2#owner@user:u1",
+            "project:p3#editor@user:u2",
+            "project:p4#project_namespace@group:g1",
+            "group:g1#editor@user:u1",
+            "project:p5#viewer@user:u3",
+            "project:p6#owner@user:u4",
+            "project:p6#public_viewer@user:*",
+            "project:p6#public_viewer@anonymous_user:*",
+        ],
+        assertions={
+            "assertTrue": [
+                "project:p2#non_public_read@user:u1",
+                "project:p3#non_public_read@user:u2",
+                "project:p4#non_public_read@user:u1",
+                "project:p5#non_public_read@user:u3",
+            ],
+            "assertFalse": [
+                "project:p1#non_public_read@user:u1",
+                "project:p1#non_public_read@user:u2",
+                "project:p1#non_public_read@user:u3",
+                "project:p2#non_public_read@user:u2",
+                "project:p2#non_public_read@user:u3",
+                "project:p3#non_public_read@user:u1",
+                "project:p3#non_public_read@user:u3",
+                "project:p4#non_public_read@user:u2",
+                "project:p4#non_public_read@user:u3",
+                "project:p5#non_public_read@user:u1",
+                "project:p5#non_public_read@user:u2",
+                "project:p6#non_public_read@user:u4",
+            ],
+        },
+        validation={},
+    )
+
+
+@pytest.fixture
+def v6_schema() -> SpiceDBSchema:
+    return SpiceDBSchema(
+        schemas._v6,
+        relationships=[
+            # there is an an admin
+            "platform:renku#admin@user:admin1",
+            # user namespaces
+            "user_namespace:user1#owner@user:user1",
+            "user_namespace:user2#owner@user:user2",
+            # project1 is public and owned by user1
+            "project:project1#owner@user:user1",
+            "project:project1#project_namespace@user_namespace:user1",
+            "project:project1#public_viewer@user:*",
+            "project:project1#public_viewer@anonymous_user:*",
+            "project:project1#project_platform@platform:renku",
+            # project2 is private, in group1 which is also private
+            "project:project2#owner@user:user2",
+            "project:project2#project_namespace@group:group1",
+            # project2 has other generic members
+            "project:project2#viewer@user:project2_viewer",
+            "project:project2#editor@user:project2_editor",
+            "project:project2#project_platform@platform:renku",
+            # user2 is owner of group1
+            "group:group1#owner@user:user2",
+            # group1 has other generic members
+            "group:group1#owner@user:group1_owner",
+            "group:group1#editor@user:group1_editor",
+            "group:group1#viewer@user:group1_viewer",
+            # dc1 is owned by project1
+            "data_connector:dc1#data_connector_namespace@project:project1",
+            "data_connector:dc1#data_connector_platform@platform:renku",
+            # dc2 is owned by group1
+            "data_connector:dc2#data_connector_namespace@group:group1",
+            "data_connector:dc2#data_connector_platform@platform:renku",
+            # dc3 is owned by user1 and is private
+            "data_connector:dc3#data_connector_namespace@user_namespace:user1",
+            "data_connector:dc3#data_connector_platform@platform:renku",
+            # dc4 is owned by user1 and is public
+            "data_connector:dc4#data_connector_namespace@user_namespace:user1",
+            "data_connector:dc4#data_connector_platform@platform:renku",
+            "data_connector:dc4#public_viewer@user:*",
+            "data_connector:dc4#public_viewer@anonymous_user:*",
+        ],
+        assertions={
+            "assertTrue": [
+                # admins can do everything to all data connectors
+                "data_connector:dc1#delete@user:admin1",
+                "data_connector:dc2#delete@user:admin1",
+                "data_connector:dc3#delete@user:admin1",
+                "data_connector:dc4#delete@user:admin1",
+                "data_connector:dc1#write@user:admin1",
+                "data_connector:dc2#write@user:admin1",
+                "data_connector:dc3#write@user:admin1",
+                "data_connector:dc4#write@user:admin1",
+                "data_connector:dc1#read@user:admin1",
+                "data_connector:dc2#read@user:admin1",
+                "data_connector:dc3#read@user:admin1",
+                "data_connector:dc4#read@user:admin1",
+                # user1 can do everything on dc1 since it is owned by the project that user1 owns
+                "data_connector:dc1#delete@user:user1",
+                "data_connector:dc1#write@user:user1",
+                "data_connector:dc1#read@user:user1",
+                # user1 can read dc3 because it is owned by user1
+                "data_connector:dc3#delete@user:user1",
+                "data_connector:dc3#write@user:user1",
+                "data_connector:dc3#read@user:user1",
+                # user1 can read dc4 because it is owned by user1
+                "data_connector:dc4#delete@user:user1",
+                "data_connector:dc4#write@user:user1",
+                "data_connector:dc4#read@user:user1",
+                # user2 has full access on dc2 because they own the group that owns the dc
+                "data_connector:dc2#delete@user:user2",
+                "data_connector:dc2#write@user:user2",
+                "data_connector:dc2#read@user:user2",
+                # user2 has read access on dc4 because the dc is public
+                "data_connector:dc4#read@user:user2",
+                # anonymous user checks
+                "data_connector:dc4#read@user:ANON",
+                "data_connector:dc4#read@anonymous_user:ANON",
+            ],
+            "assertFalse": [
+                # user1 has no access to dc2 since the dc is owned by group1 which is private
+                # and user1 has no affiliation with group1
+                "data_connector:dc2#delete@user:user1",
+                "data_connector:dc2#write@user:user1",
+                "data_connector:dc2#read@user:user1",
+                # user2 has no access to dc1 because the dc is not public
+                # and user2 has no access to the project that owns the dc
+                "data_connector:dc1#read@user:user2",
+                # user2 has no edit or write access to dc1
+                "data_connector:dc1#delete@user:user2",
+                "data_connector:dc1#write@user:user2",
+                # user2 has no access to dc3 because it is owned by user1 and is private
+                "data_connector:dc3#delete@user:user2",
+                "data_connector:dc3#write@user:user2",
+                "data_connector:dc3#read@user:user2",
+                # user2 does not have write or delete permissions on dc4
+                "data_connector:dc4#delete@user:user2",
+                "data_connector:dc4#write@user:user2",
+                # user2 can read dc1 because it is owned by a public project
+                # anonymous user checks
+                "data_connector:dc1#read@user:ANON",
+                "data_connector:dc2#read@user:ANON",
+                "data_connector:dc3#read@user:ANON",
+                "data_connector:dc1#read@anonymous_user:ANON",
+                "data_connector:dc2#read@anonymous_user:ANON",
+                "data_connector:dc3#read@anonymous_user:ANON",
+            ],
+        },
+    )
+
+
+@pytest.fixture
+def v7_schema() -> SpiceDBSchema:
+    return SpiceDBSchema(
+        schemas._v7,
+        relationships=[
+            # public project p1, owner=u1
+            "project:p1#owner@user:u1",
+            "project:p1#public_viewer@user:*",
+            "project:p1#public_viewer@anonymous_user:*",
+            "project:p1#editor@user:u11",
+            "project:p1#viewer@user:u12",
+            # private project p2, owner=u2
+            "project:p2#owner@user:u2",
+            "project:p2#editor@user:u21",
+            "project:p2#viewer@user:u22",
+            # private project p3, owner=g1 (group), group owner=u3
+            "project:p3#project_namespace@group:g1",
+            "group:g1#owner@user:u3",
+            "group:g1#editor@user:u4",
+            "group:g1#viewer@user:u5",
+        ],
+        assertions={
+            "assertTrue": [
+                "project:p1#exclusive_owner@user:u1",
+                "project:p1#exclusive_editor@user:u11",
+                "project:p1#exclusive_member@user:u1",
+                "project:p1#exclusive_member@user:u11",
+                "project:p1#exclusive_member@user:u12",
+                "project:p2#exclusive_owner@user:u2",
+                "project:p2#exclusive_editor@user:u21",
+                "project:p2#exclusive_member@user:u2",
+                "project:p2#exclusive_member@user:u21",
+                "project:p2#exclusive_member@user:u22",
+                "project:p3#exclusive_owner@user:u3",
+                "group:g1#exclusive_owner@user:u3",
+                "project:p3#exclusive_editor@user:u4",
+                "group:g1#exclusive_editor@user:u4",
+                "project:p3#exclusive_member@user:u5",
+                "project:p3#exclusive_member@user:u4",
+                "project:p3#exclusive_member@user:u3",
+                "group:g1#exclusive_member@user:u5",
+                "group:g1#exclusive_member@user:u4",
+                "group:g1#exclusive_member@user:u3",
+            ],
+            "assertFalse": [
+                "project:p1#exclusive_owner@user:u2",
+                "project:p1#exclusive_editor@user:u1",
+                "project:p1#exclusive_editor@user:u12",
+                "project:p2#exclusive_owner@user:u1",
+                "project:p2#exclusive_editor@user:u2",
+                "project:p2#exclusive_editor@user:u22",
+            ],
+        },
+        validation={},
+    )
+
+
 def test_v1_schema(tmp_path: Path, v1_schema: SpiceDBSchema) -> None:
     validation_file = tmp_path / "validate.yaml"
     v1_schema.to_yaml(validation_file)
@@ -309,4 +522,22 @@ def test_v1_schema(tmp_path: Path, v1_schema: SpiceDBSchema) -> None:
 def test_v2_schema(tmp_path: Path, v2_schema: SpiceDBSchema) -> None:
     validation_file = tmp_path / "validate.yaml"
     v2_schema.to_yaml(validation_file)
+    check_call(["zed", "validate", validation_file.as_uri()])
+
+
+def test_v5_schema(tmp_path: Path, v5_schema: SpiceDBSchema) -> None:
+    validation_file = tmp_path / "validate.yaml"
+    v5_schema.to_yaml(validation_file)
+    check_call(["zed", "validate", validation_file.as_uri()])
+
+
+def test_v6_schema(tmp_path: Path, v6_schema: SpiceDBSchema) -> None:
+    validation_file = tmp_path / "validate.yaml"
+    v6_schema.to_yaml(validation_file)
+    check_call(["zed", "validate", validation_file.as_uri()])
+
+
+def test_v7_schema(tmp_path: Path, v7_schema: SpiceDBSchema) -> None:
+    validation_file = tmp_path / "validate.yaml"
+    v7_schema.to_yaml(validation_file)
     check_call(["zed", "validate", validation_file.as_uri()])

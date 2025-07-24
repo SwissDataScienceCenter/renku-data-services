@@ -6,16 +6,16 @@
 	"workspaceFolder": "/workspace",
 	"shutdownAction": "stopCompose",
 	"features": {
-		"ghcr.io/devcontainers-contrib/features/poetry:2": {},
-		"ghcr.io/devcontainers-contrib/features/bash-command:1": {
+		"ghcr.io/devcontainers-extra/features/poetry:2": {},
+		"ghcr.io/devcontainers-extra/features/bash-command:1": {
 			"command": "poetry self add poetry-polylith-plugin"
 		},
 		"ghcr.io/devcontainers/features/docker-in-docker:2": {},
-		"ghcr.io/devcontainers-contrib/features/gh-release:1": {
+		"ghcr.io/devcontainers-extra/features/gh-release:1": {
 			"repo": "authzed/zed",
 			"binaryNames": "zed"
 		},
-		"ghcr.io/devcontainers-contrib/features/spicedb:1": {},
+		"ghcr.io/devcontainers-extra/features/spicedb:1": {},
 		"ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {
 			"minikube": "none"
 		},
@@ -23,28 +23,38 @@
 			"jqVersion": "latest",
 			"yqVersion": "latest"
 		},
-		"ghcr.io/dhoeric/features/k9s:1": {},
+		"ghcr.io/dhoeric/features/k9s:1": {
+			"version": "0.40.9"
+		},
 		"ghcr.io/EliiseS/devcontainer-features/bash-profile:1": {
 			"command": "alias k=kubectl"
 		},
-		"ghcr.io/devcontainers-contrib/features/rclone:1": {},
-		"./k3d": {}
+		"./k3d": {},
+		"ghcr.io/devcontainers/features/java:1": {
+			"version": "21",
+			"jdkDistro": "open"
+		},
+		"./solr": {},
+		"ghcr.io/devcontainers/features/go:1": {},
+		"./rclone": {
+			"rclone_repository": "https://github.com/SwissDataScienceCenter/rclone.git",
+			"rclone_ref": "v1.70.0+renku-1"
+		}
 	},
 	"overrideFeatureInstallOrder": [
-		"ghcr.io/devcontainers-contrib/features/poetry",
-		"ghcr.io/devcontainers-contrib/features/bash-command"
+		"ghcr.io/devcontainers-extra/features/poetry",
+		"ghcr.io/devcontainers-extra/features/bash-command"
 	],
 	"postCreateCommand": "poetry install --with dev && mkdir -p /home/vscode/.config/k9s",
 	"customizations": {
 		"vscode": {
 			"extensions": [
+				"charliermarsh.ruff",
+				"matangover.mypy",
+				"ms-python.mypy-type-checker",
 				"ms-python.python",
-				"ms-python.flake8",
-				"ms-python.black-formatter",
-				"ms-python.isort",
 				"ms-python.vscode-pylance",
-				"ms-vscode.makefile-tools",
-				"matangover.mypy"
+				"ms-vscode.makefile-tools"
 			]
 		}
 	}

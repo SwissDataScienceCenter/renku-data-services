@@ -1,16 +1,23 @@
 """SQLAlchemy schemas for the CRC database."""
 
-import logging
 from typing import Optional
 
-from sqlalchemy import BigInteger, Column, Identity, Integer, MetaData, String, Table
+from sqlalchemy import JSON, BigInteger, Column, Identity, Integer, MetaData, String, Table
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
+from ulid import ULID
 
 import renku_data_services.base_models as base_models
+from renku_data_services.app_config import logging
 from renku_data_services.crc import models
+from renku_data_services.crc.apispec import Protocol as CrcApiProtocol
 from renku_data_services.errors import errors
+from renku_data_services.utils.sqlalchemy import ULIDType
 
+logger = logging.getLogger(__name__)
+
+JSONVariant = JSON().with_variant(JSONB(), "postgresql")
 metadata_obj = MetaData(schema="resource_pools")  # Has to match alembic ini section name
 
 
@@ -133,6 +140,57 @@ class ResourceClassORM(BaseORM):
         )
 
 
+class ClusterORM(BaseORM):
+    """Cluster definition."""
+
+    __tablename__ = "clusters"
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    name: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    config_name: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    session_protocol: Mapped[str] = mapped_column(String(10))
+    session_host: Mapped[str] = mapped_column(String(256))
+    session_port: Mapped[int] = mapped_column(Integer)
+    session_path: Mapped[str] = mapped_column(String())
+    session_ingress_annotations: Mapped[dict[str, str]] = mapped_column(JSONVariant)
+    session_tls_secret_name: Mapped[str] = mapped_column(String(256))
+    session_storage_class: Mapped[str | None] = mapped_column(String(256))
+    # NOTE: The service account name is expected to point to a service account that already exists
+    # in the cluster in the namespace where the sessions will be launched.
+    service_account_name: Mapped[str | None] = mapped_column(String(256), default=None, nullable=True)
+
+    def dump(self) -> models.SavedCluster:
+        """Create a cluster model from the ORM object."""
+        return models.SavedCluster(
+            id=self.id,
+            name=self.name,
+            config_name=self.config_name,
+            session_protocol=CrcApiProtocol[self.session_protocol],
+            session_host=self.session_host,
+            session_port=self.session_port,
+            session_path=self.session_path,
+            session_ingress_annotations=self.session_ingress_annotations,
+            session_tls_secret_name=self.session_tls_secret_name,
+            session_storage_class=self.session_storage_class,
+            service_account_name=self.service_account_name,
+        )
+
+    @classmethod
+    def load(cls, cluster: models.Cluster) -> "ClusterORM":
+        """Create an ORM object from the cluster model."""
+        return ClusterORM(
+            name=cluster.name,
+            config_name=cluster.config_name,
+            service_account_name=cluster.service_account_name,
+            session_protocol=cluster.session_protocol.value,
+            session_host=cluster.session_host,
+            session_port=cluster.session_port,
+            session_path=cluster.session_path,
+            session_ingress_annotations=cluster.session_ingress_annotations,
+            session_tls_secret_name=cluster.session_tls_secret_name,
+            session_storage_class=cluster.session_storage_class,
+        )
+
+
 class ResourcePoolORM(BaseORM):
     """Resource pool specifies a set of resource classes, users that can access them and a quota."""
 
@@ -140,7 +198,10 @@ class ResourcePoolORM(BaseORM):
     name: Mapped[str] = mapped_column(String(40), index=True)
     quota: Mapped[Optional[str]] = mapped_column(String(63), index=True, default=None)
     users: Mapped[list["RPUserORM"]] = relationship(
-        secondary=resource_pools_users, back_populates="resource_pools", default_factory=list
+        secondary=resource_pools_users,
+        back_populates="resource_pools",
+        default_factory=list,
+        repr=False,
     )
     classes: Mapped[list["ResourceClassORM"]] = relationship(
         back_populates="resource_pool",
@@ -157,13 +218,22 @@ class ResourcePoolORM(BaseORM):
     default: Mapped[bool] = mapped_column(default=False, index=True)
     public: Mapped[bool] = mapped_column(default=False, index=True)
     id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
+    cluster_id: Mapped[Optional[ULID]] = mapped_column(
+        ForeignKey(ClusterORM.id, ondelete="SET NULL"), default=None, index=True
+    )
+    cluster: Mapped[Optional[ClusterORM]] = relationship(viewonly=True, default=None, lazy="selectin", init=False)
 
     @classmethod
     def load(cls, resource_pool: models.ResourcePool) -> "ResourcePoolORM":
         """Create an ORM object from the resource pool model."""
         quota = None
-        if isinstance(resource_pool.quota, models.Quota):
+        if resource_pool.quota is not None:
             quota = resource_pool.quota.id
+
+        cluster_id = None
+        if resource_pool.cluster is not None:
+            cluster_id = resource_pool.cluster.id
+
         return cls(
             name=resource_pool.name,
             quota=quota,
@@ -172,6 +242,7 @@ class ResourcePoolORM(BaseORM):
             hibernation_threshold=resource_pool.hibernation_threshold,
             public=resource_pool.public,
             default=resource_pool.default,
+            cluster_id=cluster_id,
         )
 
     def dump(
@@ -179,17 +250,18 @@ class ResourcePoolORM(BaseORM):
     ) -> models.ResourcePool:
         """Create a resource pool model from the ORM object and a quota."""
         classes: list[ResourceClassORM] = self.classes
-        if quota and quota.id != self.quota:
+        if quota is not None and quota.id != self.quota:
             raise errors.BaseError(
                 message="Unexpected error when dumping a resource pool ORM.",
                 detail=f"The quota name in the database {self.quota} and Kubernetes {quota.id} do not match.",
             )
         if (quota is None and self.quota is not None) or (quota is not None and self.quota is None):
-            logging.error(
+            logger.error(
                 f"Unexpected error when dumping resource pool ORM with ID {self.id}. "
                 f"The quota in the database {self.quota} and Kubernetes {quota} do not match. "
                 f"Using the quota {quota} in the response."
             )
+        cluster = None if self.cluster is None else self.cluster.dump()
         return models.ResourcePool(
             id=self.id,
             name=self.name,
@@ -199,6 +271,7 @@ class ResourcePoolORM(BaseORM):
             hibernation_threshold=self.hibernation_threshold,
             public=self.public,
             default=self.default,
+            cluster=cluster,
         )
 
 

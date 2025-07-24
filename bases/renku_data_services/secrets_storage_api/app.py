@@ -6,22 +6,22 @@ from renku_data_services.base_api.error_handler import CustomErrorHandler
 from renku_data_services.base_api.misc import MiscBP
 from renku_data_services.secrets import apispec
 from renku_data_services.secrets.blueprints import K8sSecretsBP
-from renku_data_services.secrets.config import Config
+from renku_data_services.secrets_storage_api.dependencies import DependencyManager
 
 
-def register_all_handlers(app: Sanic, config: Config) -> Sanic:
+def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
     """Register all handlers on the application."""
     url_prefix = "/api/secrets"
     secrets_storage = K8sSecretsBP(
         name="secrets_storage_api",
         url_prefix=url_prefix,
-        user_secrets_repo=config.user_secrets_repo,
-        authenticator=config.authenticator,
-        secret_service_private_key=config.secrets_service_private_key,
-        previous_secret_service_private_key=config.previous_secrets_service_private_key,
-        core_client=config.core_client,
+        user_secrets_repo=dm.user_secrets_repo,
+        authenticator=dm.authenticator,
+        secret_service_private_key=dm.config.secrets.private_key,
+        previous_secret_service_private_key=dm.config.secrets.previous_private_key,
+        core_client=dm.core_client,
     )
-    misc = MiscBP(name="misc", url_prefix=url_prefix, apispec=config.spec, version=config.version)
+    misc = MiscBP(name="misc", url_prefix=url_prefix, apispec=dm.config.spec, version=dm.config.version)
     app.blueprint([secrets_storage.blueprint(), misc.blueprint()])
 
     app.error_handler = CustomErrorHandler(apispec)

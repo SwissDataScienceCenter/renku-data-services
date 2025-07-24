@@ -8,7 +8,12 @@ on:
       - "v*"
   pull_request:
     branches:
-
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
 env:
   DEVCONTAINER_REGISTRY: ghcr.io
   DEVCONTAINER_IMAGE_NAME: ${{ github.repository }}/devcontainer
@@ -85,32 +90,8 @@ jobs:
       - name: Style checks
         uses: devcontainers/ci@v0.3
         with:
-          runCmd: make style_checks
-          push: never
-          skipContainerUserIdUpdate: false
-          cacheFrom: ${{ needs.build-devcontainer.outputs.image_repository }}:${{ needs.build-devcontainer.outputs.image_tag }}
-  optional-checks:
-    runs-on: ubuntu-latest
-    needs:
-      - build-devcontainer
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/cache/restore@v4
-        name: Restore cache
-        with:
-          path: ${{ env.CACHE_PATH }}
-          key: ${{ env.CACHE_KEY }}
-      - name: Set Git config
-        shell: bash
-        run: |
-          git config --add user.name "Renku Bot"
-          git config --add user.email "renku@datascience.ch"
-      - name: Check Avro Schemas are up to date
-        uses: devcontainers/ci@v0.3
-        with:
-          runCmd: make check_avro
+          runCmd: |
+            make style_checks && poetry run pre-commit run --all-files --show-diff-on-failure --hook-stage manual
           push: never
           skipContainerUserIdUpdate: false
           cacheFrom: ${{ needs.build-devcontainer.outputs.image_repository }}:${{ needs.build-devcontainer.outputs.image_tag }}
@@ -235,16 +216,35 @@ jobs:
     needs:
       - test-main
       - test-schemathesis
+    strategy:
+      matrix:
+        include:
+          - service: "Data Service API"
+            image-name: renku/renku-data-service
+            dockerfile: ./projects/renku_data_service/Dockerfile
+            name: renku-data-services
+          - service: "Secrets Storage"
+            image-name: renku/secrets-storage
+            dockerfile: ./projects/secrets_storage/Dockerfile
+            name: secrets-storage
+          - service: "K8s Watcher"
+            image-name: renku/data-service-k8s-watcher
+            dockerfile: ./projects/k8s_watcher/Dockerfile
+            name: k8s-watcher
+          - service: "Data Tasks"
+            image-name: renku/data-service-data-tasks
+            dockerfile: ./projects/renku_data_tasks/Dockerfile
+            name: data-tasks
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Docker meta data services
+      - name: Docker meta ${{ matrix.service }}
         id: meta
         uses: docker/metadata-action@v5
         with:
           # list of Docker images to use as base name for tags
           images: |
-            renku/renku-data-service
+            ${{ matrix.image-name }}
           # generate Docker tags based on the following events/attributes
           tags: |
             type=ref,event=branch
@@ -261,64 +261,29 @@ jobs:
         with:
           username: ${{ secrets.RENKU_DOCKER_USERNAME }}
           password: ${{ secrets.RENKU_DOCKER_PASSWORD }}
-      - name: Build and push data services
-        uses: docker/build-push-action@v4
+      - name: Build and push ${{ matrix.service }}
+        uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./projects/renku_data_service/Dockerfile
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=renku/renku-data-service:buildcache
-          cache-to: type=registry,ref=renku/renku-data-service:buildcache,mode=max
-      - name: Docker meta background jobs
-        id: meta-background-jobs
-        uses: docker/metadata-action@v5
+          cache-from: type=registry,ref=${{ matrix.image-name }}:buildcache
+          cache-to: type=registry,ref=${{ matrix.image-name}}:buildcache,mode=max
+          provenance: false
+      - name: Scan image ${{ matrix.service }}
+        uses: snyk/actions/docker@master
+        continue-on-error: true
         with:
-          # list of Docker images to use as base name for tags
-          images: |
-            renku/data-service-background-jobs
-          # generate Docker tags based on the following events/attributes
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha
-      - name: Build and push background jobs
-        uses: docker/build-push-action@v4
+          image: ${{ steps.meta.outputs.tags}}
+          args: --file=${{ matrix.dockerfile }} --severity-threshold=high --sarif-file-output=${{ matrix.name }}.sarif
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      - name: Upload Snyk report
+        uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
         with:
-          context: .
-          file: ./projects/background_jobs/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta-background-jobs.outputs.tags }}
-          labels: ${{ steps.meta-background-jobs.outputs.labels }}
-          cache-from: type=registry,ref=renku/data-service-background-jobs:buildcache
-          cache-to: type=registry,ref=renku/data-service-background-jobs:buildcache,mode=max
-      - name: Docker meta secrets
-        id: meta-secrets-storage
-        uses: docker/metadata-action@v5
-        with:
-          # list of Docker images to use as base name for tags
-          images: |
-            renku/secrets-storage
-          # generate Docker tags based on the following events/attributes
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha
-      - name: Build and push secrets image
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          file: ./projects/secrets_storage/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta-secrets-storage.outputs.tags }}
-          labels: ${{ steps.meta-secrets-storage.outputs.labels }}
-          cache-from: type=registry,ref=renku/secrets-storage:buildcache
-          cache-to: type=registry,ref=renku/secrets-storage:buildcache,mode=max
+          sarif_file: ${{ matrix.name }}.sarif
+          category: snyk_${{ matrix.name }}

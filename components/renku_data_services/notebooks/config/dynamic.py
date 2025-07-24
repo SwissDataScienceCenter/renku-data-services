@@ -10,7 +10,8 @@ from urllib.parse import urlunparse
 
 import yaml
 
-from ..api.schemas.config_server_options import ServerOptionsChoices, ServerOptionsDefaults
+from renku_data_services.notebooks.api.schemas.config_server_options import ServerOptionsChoices, ServerOptionsDefaults
+from renku_data_services.notebooks.crs import Affinity, Toleration
 
 latest_version: str = "1.25.3"
 
@@ -37,13 +38,15 @@ def _parse_value_as_float(val: Any) -> float:
 class CPUEnforcement(str, Enum):
     """CPU enforcement policies."""
 
-    LAX: str = "lax"  # CPU limit equals 3x cpu request
-    STRICT: str = "strict"  # CPU limit equals cpu request
-    OFF: str = "off"  # no CPU limit at all
+    LAX = "lax"  # CPU limit equals 3x cpu request
+    STRICT = "strict"  # CPU limit equals cpu request
+    OFF = "off"  # no CPU limit at all
 
 
 @dataclass
-class _ServerOptionsConfig:
+class ServerOptionsConfig:
+    """Config class for server options."""
+
     defaults: dict[str, str | bool | int | float] = field(init=False)
     ui_choices: dict[str, Any] = field(init=False)
     defaults_path: str = "/etc/renku-notebooks/server_options/server_defaults.json"
@@ -57,14 +60,17 @@ class _ServerOptionsConfig:
 
     @property
     def lfs_auto_fetch_default(self) -> bool:
+        """Whether lfs autofetch is enabled or not."""
         return str(self.defaults.get("lfs_auto_fetch", "false")).lower() == "true"
 
     @property
     def default_url_default(self) -> str:
+        """Default url (path) for session."""
         return str(self.defaults.get("defaultUrl", "/lab"))
 
     @classmethod
     def from_env(cls) -> Self:
+        """Load config from environment variables."""
         return cls(
             os.environ["NB_SERVER_OPTIONS__DEFAULTS_PATH"],
             os.environ["NB_SERVER_OPTIONS__UI_CHOICES_PATH"],
@@ -205,7 +211,7 @@ class _CustomCaCertsConfig:
     def from_env(cls) -> Self:
         return cls(
             image=os.environ.get("NB_SESSIONS__CA_CERTS__IMAGE", "renku/certificates:0.0.2"),
-            path=os.environ.get("NB_SESSIONS__CA_CERTS__PATH", "/auth/realms/Renku/.well-known/openid-configuration"),
+            path=os.environ.get("NB_SESSIONS__CA_CERTS__PATH", "/usr/local/share/ca-certificates"),
             secrets=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__CA_CERTS__SECRETS", "[]"))),
         )
 
@@ -258,14 +264,15 @@ class _SessionIngress:
             annotations=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__INGRESS__ANNOTATIONS", "{}"))),
         )
 
-    def base_path(self, server_name: str) -> str:
+    @staticmethod
+    def base_path(server_name: str) -> str:
         return f"/sessions/{server_name}"
 
     def base_url(self, server_name: str, force_https: bool = False) -> str:
         scheme = "https" if self.tls_secret else "http"
         if force_https:
             scheme = "https"
-        return urlunparse((scheme, self.host, self.base_path(server_name), None, None, None))
+        return str(urlunparse((scheme, self.host, self.base_path(server_name), None, None, None)))
 
 
 @dataclass
@@ -444,6 +451,14 @@ class _SessionConfig:
             tolerations=yaml.safe_load(StringIO(os.environ.get("", "[]"))),
         )
 
+    @property
+    def affinity_model(self) -> Affinity:
+        return Affinity.model_validate(self.affinity)
+
+    @property
+    def tolerations_model(self) -> list[Toleration]:
+        return [Toleration.model_validate(tol) for tol in self.tolerations]
+
 
 @dataclass
 class _K8sConfig:
@@ -458,7 +473,7 @@ class _K8sConfig:
 
 @dataclass
 class _DynamicConfig:
-    server_options: _ServerOptionsConfig
+    server_options: ServerOptionsConfig
     sessions: _SessionConfig
     amalthea: _AmaltheaConfig
     sentry: _SentryConfig
@@ -471,7 +486,7 @@ class _DynamicConfig:
     @classmethod
     def from_env(cls) -> Self:
         return cls(
-            server_options=_ServerOptionsConfig.from_env(),
+            server_options=ServerOptionsConfig.from_env(),
             sessions=_SessionConfig.from_env(),
             amalthea=_AmaltheaConfig.from_env(),
             sentry=_SentryConfig.from_env("NB_SENTRY_"),

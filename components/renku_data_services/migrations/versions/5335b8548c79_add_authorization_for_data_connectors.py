@@ -6,13 +6,14 @@ Create Date: 2024-09-12 13:11:11.087316
 
 """
 
-import logging
-
 import sqlalchemy as sa
 from alembic import op
 
+from renku_data_services.app_config import logging
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.authz.schemas import generate_v4
+
+logger = logging.getLogger(__name__)
 
 # revision identifiers, used by Alembic.
 revision = "5335b8548c79"
@@ -36,7 +37,7 @@ def upgrade() -> None:
         v4 = generate_v4(project_ids)
         responses = v4.upgrade(client)
         tx.commit()
-        logging.info(
+        logger.info(
             f"Finished upgrading the Authz schema to version 4 in Alembic revision {revision}, response: {responses}"
         )
 
@@ -56,6 +57,6 @@ def downgrade() -> None:
         v4 = generate_v4(project_ids)
         responses = v4.downgrade(client)
         tx.commit()
-        logging.info(
+        logger.info(
             f"Finished downgrading the Authz schema from version 4 in Alembic revision {revision}, response: {responses}"
         )

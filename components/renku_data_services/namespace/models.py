@@ -1,12 +1,15 @@
 """Group models."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
+from typing import Final
 
 from ulid import ULID
 
 from renku_data_services.authz.models import Role
+from renku_data_services.base_models.core import NamespacePath, ProjectPath, ResourceType
+from renku_data_services.errors import errors
 
 
 @dataclass(kw_only=True)
@@ -55,25 +58,63 @@ class GroupMemberDetails:
     last_name: str | None = None
 
 
-class NamespaceKind(str, Enum):
+class NamespaceKind(StrEnum):
     """Allowed kinds of namespaces."""
 
-    group: str = "group"
-    user: str = "user"
+    group = "group"
+    user = "user"
+    project = "project"  # For now only applicable to data connectors
+
+    def to_resource_type(self) -> ResourceType:
+        """Conver the namespace kind to the corresponding resource type."""
+        if self == NamespaceKind.group:
+            return ResourceType.group
+        elif self == NamespaceKind.user:
+            return ResourceType.user_namespace
+        elif self == NamespaceKind.project:
+            return ResourceType.project
+        raise errors.ProgrammingError(message=f"Unhandled namespace kind {self}")
 
 
-@dataclass
+@dataclass(frozen=True, kw_only=True)
 class Namespace:
     """A renku namespace."""
 
     id: ULID
-    slug: str
     kind: NamespaceKind
     created_by: str
-    underlying_resource_id: ULID | str  # The user or group ID depending on the Namespace kind
+    path: NamespacePath | ProjectPath
+    underlying_resource_id: ULID | str  # The user, group or project ID depending on the Namespace kind
     latest_slug: str | None = None
     name: str | None = None
     creation_date: datetime | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class UserNamespace(Namespace):
+    """A renku user namespace."""
+
+    path: NamespacePath
+    underlying_resource_id: str  # This corresponds to the keycloak user ID - which is not a ULID
+    kind: Final[NamespaceKind] = field(default=NamespaceKind.user, init=False)
+
+
+@dataclass(frozen=True, kw_only=True)
+class GroupNamespace(Namespace):
+    """A renku group namespace."""
+
+    path: NamespacePath
+    underlying_resource_id: ULID
+    kind: Final[NamespaceKind] = field(default=NamespaceKind.group, init=False)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ProjectNamespace(Namespace):
+    """A renku project namespace."""
+
+    path: ProjectPath
+    underlying_resource_id: ULID
+    kind: Final[NamespaceKind] = field(default=NamespaceKind.project, init=False)
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -91,14 +132,6 @@ class GroupUpdate:
 
     old: Group
     new: Group
-
-
-@dataclass
-class NamespaceUpdate:
-    """Information about the update of a namespace."""
-
-    old: Namespace
-    new: Namespace
 
 
 @dataclass

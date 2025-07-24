@@ -1,10 +1,8 @@
 """Utilities for notebooks."""
 
-import httpx
-
 import renku_data_services.crc.models as crc_models
-from renku_data_services.base_models.core import AuthenticatedAPIUser
 from renku_data_services.notebooks.crs import (
+    Affinity,
     MatchExpression,
     NodeAffinity,
     NodeSelectorTerm,
@@ -13,7 +11,6 @@ from renku_data_services.notebooks.crs import (
     RequiredDuringSchedulingIgnoredDuringExecution,
     Toleration,
 )
-from renku_data_services.utils.cryptography import get_encryption_key
 
 
 def merge_node_affinities(
@@ -57,9 +54,12 @@ def merge_node_affinities(
     return output
 
 
-def node_affinity_from_resource_class(resource_class: crc_models.ResourceClass) -> NodeAffinity:
+def node_affinity_from_resource_class(
+    resource_class: crc_models.ResourceClass,
+    default_affinity: Affinity,
+) -> Affinity:
     """Generate an affinity from the affinities stored in a resource class."""
-    output = NodeAffinity()
+    rc_node_affinity = NodeAffinity()
     required_expr = [
         MatchExpression(key=affinity.key, operator="Exists")
         for affinity in resource_class.node_affinities
@@ -71,17 +71,19 @@ def node_affinity_from_resource_class(resource_class: crc_models.ResourceClass) 
         if not affinity.required_during_scheduling
     ]
     if required_expr:
-        output.requiredDuringSchedulingIgnoredDuringExecution = RequiredDuringSchedulingIgnoredDuringExecution(
-            nodeSelectorTerms=[
-                # NOTE: Node selector terms are ORed by kubernetes
-                NodeSelectorTerm(
-                    # NOTE: matchExpression terms are ANDed by kubernetes
-                    matchExpressions=required_expr,
-                )
-            ]
+        rc_node_affinity.requiredDuringSchedulingIgnoredDuringExecution = (
+            RequiredDuringSchedulingIgnoredDuringExecution(
+                nodeSelectorTerms=[
+                    # NOTE: Node selector terms are ORed by kubernetes
+                    NodeSelectorTerm(
+                        # NOTE: matchExpression terms are ANDed by kubernetes
+                        matchExpressions=required_expr,
+                    )
+                ]
+            )
         )
     if preferred_expr:
-        output.preferredDuringSchedulingIgnoredDuringExecution = [
+        rc_node_affinity.preferredDuringSchedulingIgnoredDuringExecution = [
             PreferredDuringSchedulingIgnoredDuringExecutionItem(
                 weight=1,
                 preference=Preference(
@@ -90,27 +92,21 @@ def node_affinity_from_resource_class(resource_class: crc_models.ResourceClass) 
                 ),
             )
         ]
-    return output
+
+    affinity = default_affinity.model_copy(deep=True)
+    if affinity.nodeAffinity:
+        affinity.nodeAffinity = merge_node_affinities(affinity.nodeAffinity, rc_node_affinity)
+    else:
+        affinity.nodeAffinity = rc_node_affinity
+    return affinity
 
 
-def tolerations_from_resource_class(resource_class: crc_models.ResourceClass) -> list[Toleration]:
+def tolerations_from_resource_class(
+    resource_class: crc_models.ResourceClass, default_tolerations: list[Toleration]
+) -> list[Toleration]:
     """Generate tolerations from the list of tolerations of a resource class."""
     output: list[Toleration] = []
+    output.extend(default_tolerations)
     for tol in resource_class.tolerations:
         output.append(Toleration(key=tol, operator="Exists"))
     return output
-
-
-async def get_user_secret(data_svc_url: str, user: AuthenticatedAPIUser) -> str | None:
-    """Get the user secret key from the secret service."""
-
-    async with httpx.AsyncClient(timeout=5) as client:
-        response = await client.get(
-            f"{data_svc_url}/user/secret_key",
-            headers={"Authorization": f"Bearer {user.access_token}"},
-        )
-        if response.status_code != 200:
-            return None
-        user_key = response.json()
-
-        return get_encryption_key(user_key["secret_key"].encode(), user.id.encode()).decode("utf-8")

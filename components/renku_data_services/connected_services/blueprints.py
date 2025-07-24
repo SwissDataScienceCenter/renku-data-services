@@ -5,12 +5,12 @@ from typing import Any
 from urllib.parse import unquote, urlparse, urlunparse
 
 from sanic import HTTPResponse, Request, json, redirect
-from sanic.log import logger
 from sanic.response import JSONResponse
 from sanic_ext import validate
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
+from renku_data_services.app_config import logging
 from renku_data_services.base_api.auth import authenticate, only_admins, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_query
@@ -20,6 +20,8 @@ from renku_data_services.connected_services import apispec
 from renku_data_services.connected_services.apispec_base import AuthorizeParams, CallbackParams
 from renku_data_services.connected_services.core import validate_oauth2_client_patch
 from renku_data_services.connected_services.db import ConnectedServicesRepository
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(kw_only=True)

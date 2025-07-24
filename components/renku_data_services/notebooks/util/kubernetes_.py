@@ -24,18 +24,20 @@ from hashlib import md5
 from typing import Any, TypeAlias, cast
 
 import escapism
-from kubernetes.client import V1Container
+from box.box import Box
 
 from renku_data_services.base_models.core import AnonymousAPIUser, AuthenticatedAPIUser, Slug
 from renku_data_services.notebooks.crs import Patch, PatchType
 
 
-def renku_1_make_server_name(safe_username: str, namespace: str, project: str, branch: str, commit_sha: str) -> str:
+def renku_1_make_server_name(
+    safe_username: str, namespace: str, project: str, branch: str, commit_sha: str, cluster_id: str
+) -> str:
     """Form a unique server name for Renku 1.0 sessions.
 
     This is used in naming all the k8s resources created by amalthea.
     """
-    server_string_for_hashing = f"{safe_username}-{namespace}-{project}-{branch}-{commit_sha}"
+    server_string_for_hashing = f"{safe_username}-{namespace}-{project}-{branch}-{commit_sha}-{cluster_id}"
     server_hash = md5(server_string_for_hashing.encode(), usedforsecurity=False).hexdigest().lower()
     prefix = _make_server_name_prefix(safe_username)
     # NOTE: A K8s object name can only contain lowercase alphanumeric characters, hyphens, or dots.
@@ -52,7 +54,9 @@ def renku_1_make_server_name(safe_username: str, namespace: str, project: str, b
     )
 
 
-def renku_2_make_server_name(user: AuthenticatedAPIUser | AnonymousAPIUser, project_id: str, launcher_id: str) -> str:
+def renku_2_make_server_name(
+    user: AuthenticatedAPIUser | AnonymousAPIUser, project_id: str, launcher_id: str, cluster_id: str
+) -> str:
     """Form a unique server name for Renku 2.0 sessions.
 
     This is used in naming all the k8s resources created by amalthea.
@@ -61,31 +65,21 @@ def renku_2_make_server_name(user: AuthenticatedAPIUser | AnonymousAPIUser, proj
     safe_username = safe_username.lower()
     safe_username = re.sub(r"[^a-z0-9-]", "-", safe_username)
     prefix = _make_server_name_prefix(safe_username)
-    server_string_for_hashing = f"{user.id}-{project_id}-{launcher_id}"
+    server_string_for_hashing = f"{user.id}-{project_id}-{launcher_id}-{cluster_id}"
     server_hash = md5(server_string_for_hashing.encode(), usedforsecurity=False).hexdigest().lower()
     # NOTE: A K8s object name can only contain lowercase alphanumeric characters, hyphens, or dots.
     # Must be no more than 63 characters because the name is used to create a k8s Service and Services
-    # have more restrictions for their names beacuse their names have to make a valid hostname.
+    # have more restrictions for their names because their names have to make a valid hostname.
     # NOTE: We use server name as a label value, so, server name must be less than 63 characters.
     # !NOTE: For now we limit the server name to a max of 25 characters.
     # NOTE: This is 12 + 1 + 12 = 25 characters
     return f"{prefix[:12]}-{server_hash[:12]}"
 
 
-def find_env_var(container: V1Container, env_name: str) -> tuple[int, str] | None:
+def find_env_var(env_vars: list[Box], env_name: str) -> tuple[int, Box] | None:
     """Find the index and value of a specific environment variable by name from a Kubernetes container."""
-    env_var = next(
-        filter(
-            lambda x: x[1].name == env_name,
-            enumerate(container.env),
-        ),
-        None,
-    )
-    if not env_var:
-        return None
-    ind = env_var[0]
-    val = env_var[1].value
-    return ind, val
+    filtered = (env_var for env_var in enumerate(env_vars) if env_var[1].name == env_name)
+    return next(filtered, None)
 
 
 def _make_server_name_prefix(safe_username: str) -> str:
@@ -110,8 +104,8 @@ MergePatch: TypeAlias = dict[str, Any]
 class PatchKind(StrEnum):
     """Content types for different json patches."""
 
-    json: str = "application/json-patch+json"
-    merge: str = "application/merge-patch+json"
+    json = "application/json-patch+json"
+    merge = "application/merge-patch+json"
 
 
 def find_container(patches: list[Patch], container_name: str) -> dict[str, Any] | None:

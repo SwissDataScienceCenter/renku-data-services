@@ -2,17 +2,17 @@
 
 import asyncio
 from base64 import b64encode
+from typing import TYPE_CHECKING
 
 from cryptography.hazmat.primitives.asymmetric import rsa
 from kubernetes import client as k8s_client
 from prometheus_client import Counter, Enum
-from sanic.log import logger
 from ulid import ULID
 
 from renku_data_services import base_models, errors
+from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import InternalServiceAdmin
 from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface
-from renku_data_services.secrets.db import UserSecretsRepo
 from renku_data_services.secrets.models import OwnerReference, Secret
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.cryptography import (
@@ -23,6 +23,11 @@ from renku_data_services.utils.cryptography import (
     generate_random_encryption_key,
 )
 
+logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from renku_data_services.secrets.db import LowLevelUserSecretsRepo
+
 
 async def create_k8s_secret(
     user: base_models.APIUser,
@@ -30,11 +35,11 @@ async def create_k8s_secret(
     namespace: str,
     secret_ids: list[ULID],
     owner_references: list[OwnerReference],
-    secrets_repo: UserSecretsRepo,
+    secrets_repo: "LowLevelUserSecretsRepo",
     secret_service_private_key: rsa.RSAPrivateKey,
     previous_secret_service_private_key: rsa.RSAPrivateKey | None,
     core_client: K8sCoreClientInterface,
-    key_mapping: dict[str, str] | None,
+    key_mapping: dict[str, str | list[str]] | None,
 ) -> None:
     """Creates a single k8s secret from a list of user secrets stored in the DB."""
     secrets = await secrets_repo.get_secrets_by_ids(requested_by=user, secret_ids=secret_ids)
@@ -44,10 +49,17 @@ async def create_k8s_secret(
     if len(missing_secret_ids) > 0:
         raise errors.MissingResourceError(message=f"Couldn't find secrets with ids {', '.join(missing_secret_ids)}")
 
-    if key_mapping:
-        if set(key_mapping) != requested_secret_ids:
+    def ensure_list(value: str | list[str]) -> list[str]:
+        return [value] if isinstance(value, str) else value
+
+    key_mapping_with_lists_only = {key: ensure_list(key_mapping[key]) for key in key_mapping} if key_mapping else None
+
+    if key_mapping_with_lists_only:
+        if key_mapping_with_lists_only.keys() != requested_secret_ids:
             raise errors.ValidationError(message="Key mapping must include all requested secret IDs")
-        if len(key_mapping) != len(set(key_mapping.values())):
+
+        all_keys = [key for value in key_mapping_with_lists_only.values() for key in value]
+        if len(all_keys) != len(set(all_keys)):
             raise errors.ValidationError(message="Key mapping values are not unique")
 
     decrypted_secrets = {}
@@ -63,11 +75,17 @@ async def create_k8s_secret(
                     raise
 
             decrypted_value = decrypt_string(decryption_key, user.id, secret.encrypted_value).encode()  # type: ignore
-            key = secret.name if not key_mapping else key_mapping[str(secret.id)]
-            decrypted_secrets[key] = b64encode(decrypted_value).decode()
+
+            keys = (
+                key_mapping_with_lists_only[str(secret.id)]
+                if key_mapping_with_lists_only
+                else [secret.default_filename]
+            )
+            for key in keys:
+                decrypted_secrets[key] = b64encode(decrypted_value).decode()
     except Exception as e:
         # don't wrap the error, we don't want secrets accidentally leaking.
-        raise errors.SecretDecryptionError(message=f"An error occurred decrypting secrets: {str(type(e))}")
+        raise errors.SecretDecryptionError(message=f"An error occurred decrypting secrets: {str(type(e))}") from None
 
     owner_refs = []
     if owner_references:
@@ -96,14 +114,14 @@ async def create_k8s_secret(
                 sanitized_secret,
             )
         # don't wrap the error, we don't want secrets accidentally leaking.
-        raise errors.SecretCreationError(message=f"An error occurred creating secrets: {str(type(e))}")
+        raise errors.SecretCreationError(message=f"An error occurred creating secrets: {str(type(e))}") from None
 
 
 async def rotate_encryption_keys(
     requested_by: InternalServiceAdmin,
     new_key: rsa.RSAPrivateKey,
     old_key: rsa.RSAPrivateKey,
-    secrets_repo: UserSecretsRepo,
+    secrets_repo: "LowLevelUserSecretsRepo",
     batch_size: int = 100,
 ) -> None:
     """Rotate all secrets to a new private key.
@@ -128,7 +146,7 @@ async def rotate_encryption_keys(
                 if new_secret is not None:
                     updated_secrets.append(new_secret)
 
-            await secrets_repo.update_secrets(requested_by, updated_secrets)
+            await secrets_repo.update_secret_values(requested_by, updated_secrets)
             processed_secrets_metrics.inc(len(updated_secrets))
     except:
         running_metrics.state("errored")
@@ -153,12 +171,12 @@ async def rotate_single_encryption_key(
         decryption_key = decrypt_rsa(old_key, secret.encrypted_key)
         decrypted_value = decrypt_string(decryption_key, user_id, secret.encrypted_value).encode()
         new_encryption_key = generate_random_encryption_key()
-        secret.encrypted_value = encrypt_string(new_encryption_key, user_id, decrypted_value.decode())
-        secret.encrypted_key = encrypt_rsa(new_key.public_key(), new_encryption_key)
+        encrypted_value = encrypt_string(new_encryption_key, user_id, decrypted_value.decode())
+        encrypted_key = encrypt_rsa(new_key.public_key(), new_encryption_key)
+        return secret.update_encrypted_value(encrypted_value=encrypted_value, encrypted_key=encrypted_key)
     except Exception as e:
         logger.error(f"Couldn't decrypt secret {secret.name}({secret.id}): {e}")
         return None
-    return secret
 
 
 async def encrypt_user_secret(

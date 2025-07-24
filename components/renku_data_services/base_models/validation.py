@@ -15,10 +15,14 @@ def validate_and_dump(
     model: type[BaseModel],
     data: Any,
     exclude_none: bool = True,
+    **kwargs: Any,
 ) -> Any:
-    """Validate and dump with a pydantic model, ensuring proper validation errors."""
+    """Validate and dump with a pydantic model, ensuring proper validation errors.
+
+    kwargs are passed on to the pydantic model `model_dump` method.
+    """
     try:
-        body = model.model_validate(data).model_dump(exclude_none=exclude_none, mode="json")
+        body = model.model_validate(data).model_dump(exclude_none=exclude_none, mode="json", **kwargs)
     except PydanticValidationError as err:
         parts = [".".join(str(i) for i in field["loc"]) + ": " + field["msg"] for field in err.errors()]
         message = (
@@ -36,11 +40,12 @@ def validated_json(
     content_type: str = "application/json",
     dumps: Callable[..., str] | None = None,
     exclude_none: bool = True,
+    model_dump_kwargs: dict[str, Any] | None = None,
     **kwargs: Any,
 ) -> JSONResponse:
     """Creates a JSON response with data validation.
 
     If the input data fails validation, an HTTP status code 500 will be raised.
     """
-    body = validate_and_dump(model, data, exclude_none)
+    body = validate_and_dump(model, data, exclude_none, **(model_dump_kwargs or {}))
     return json(body, status=status, headers=headers, content_type=content_type, dumps=dumps, **kwargs)

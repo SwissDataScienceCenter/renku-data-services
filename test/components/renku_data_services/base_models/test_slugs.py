@@ -38,7 +38,6 @@ def test_slug_generation_from_invalid_name(input: str, expected: str) -> None:
     ],
 )
 def test_valid_slug(input: str, expected: str) -> None:
-    assert Slug(input).value == expected
     assert Slug.from_name(input).value == expected
 
 

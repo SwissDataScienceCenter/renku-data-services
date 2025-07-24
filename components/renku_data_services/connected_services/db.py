@@ -7,8 +7,7 @@ from typing import Any
 from urllib.parse import urljoin
 
 from authlib.integrations.base_client import InvalidTokenError
-from authlib.integrations.httpx_client import AsyncOAuth2Client
-from sanic.log import logger
+from authlib.integrations.httpx_client import AsyncOAuth2Client, OAuthError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -16,6 +15,7 @@ from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from renku_data_services.app_config import logging
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.connected_services import apispec, models
 from renku_data_services.connected_services import orm as schemas
@@ -27,6 +27,8 @@ from renku_data_services.connected_services.provider_adapters import (
 )
 from renku_data_services.connected_services.utils import generate_code_verifier
 from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
+
+logger = logging.getLogger(__name__)
 
 
 class ConnectedServicesRepository:
@@ -63,7 +65,7 @@ class ConnectedServicesRepository:
             client = result.one_or_none()
             if client is None:
                 raise errors.MissingResourceError(
-                    message=f"OAuth2 Client with id '{provider_id}' does not exist or you do not have access to it."  # noqa: E501
+                    message=f"OAuth2 Client with id '{provider_id}' does not exist or you do not have access to it."
                 )
             return client.dump(user_is_admin=user.is_admin)
 
@@ -302,7 +304,7 @@ class ConnectedServicesRepository:
         """Get one OAuth2 connection from the database."""
         if not user.is_authenticated or user.id is None:
             raise errors.MissingResourceError(
-                message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."  # noqa: E501
+                message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."
             )
 
         async with self.session_maker() as session:
@@ -343,7 +345,16 @@ class ConnectedServicesRepository:
     ) -> models.OAuth2TokenSet:
         """Get the OAuth2 access token from one connection from the database."""
         async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (oauth2_client, _, _):
-            await oauth2_client.ensure_active_token(oauth2_client.token)
+            try:
+                await oauth2_client.ensure_active_token(oauth2_client.token)
+            except OAuthError as err:
+                if err.error == "bad_refresh_token":
+                    raise errors.InvalidTokenError(
+                        message="The refresh token for the connected service has expired or is invalid.",
+                        detail=f"Please reconnect your integration for the service with ID {str(connection_id)} "
+                        "and try again.",
+                    ) from err
+                raise
             token_model = models.OAuth2TokenSet.from_dict(oauth2_client.token)
             return token_model
 
@@ -360,7 +371,16 @@ class ConnectedServicesRepository:
             if connection.client.kind == ProviderKind.github and isinstance(adapter, GitHubAdapter):
                 request_url = urljoin(adapter.api_url, "user/installations")
                 params = dict(page=pagination.page, per_page=pagination.per_page)
-                response = await oauth2_client.get(request_url, params=params, headers=adapter.api_common_headers)
+                try:
+                    response = await oauth2_client.get(request_url, params=params, headers=adapter.api_common_headers)
+                except OAuthError as err:
+                    if err.error == "bad_refresh_token":
+                        raise errors.InvalidTokenError(
+                            message="The refresh token for the connected service has expired or is invalid.",
+                            detail=f"Please reconnect your integration for the service with ID {str(connection_id)} "
+                            "and try again.",
+                        ) from err
+                    raise
 
                 if response.status_code > 200:
                     raise errors.UnauthorizedError(message="Could not get installation information.")
@@ -376,7 +396,7 @@ class ConnectedServicesRepository:
         """Get the AsyncOAuth2Client for the given connection_id and user."""
         if not user.is_authenticated or user.id is None:
             raise errors.MissingResourceError(
-                message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."  # noqa: E501
+                message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."
             )
 
         async with self.session_maker() as session:

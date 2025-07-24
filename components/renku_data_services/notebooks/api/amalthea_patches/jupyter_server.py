@@ -1,4 +1,6 @@
-"""Patches the modify the jupyter container in the session."""
+"""Patches to modify the jupyter container in the session."""
+
+from __future__ import annotations
 
 import base64
 import json
@@ -15,7 +17,7 @@ if TYPE_CHECKING:
     from renku_data_services.notebooks.api.classes.server import UserServer
 
 
-def env(server: "UserServer") -> list[dict[str, Any]]:
+def env(server: UserServer) -> list[dict[str, Any]]:
     """Injects environment variables in the jupyter container in the session.
 
     Amalthea always makes the jupyter server the first container in the statefulset
@@ -93,8 +95,7 @@ def env(server: "UserServer") -> list[dict[str, Any]]:
 
 def args() -> list[dict[str, Any]]:
     """Sets the arguments for running the jupyter container."""
-    patches = []
-    patches.append(
+    patches = [
         {
             "type": "application/json-patch+json",
             "patch": [
@@ -105,11 +106,11 @@ def args() -> list[dict[str, Any]]:
                 }
             ],
         }
-    )
+    ]
     return patches
 
 
-def image_pull_secret(server: "UserServer", access_token: str | None) -> list[dict[str, Any]]:
+def image_pull_secret(server: UserServer, access_token: str | None) -> list[dict[str, Any]]:
     """Adds an image pull secret to the session if the session image is not public."""
     patches = []
     if isinstance(server.user, AuthenticatedAPIUser) and server.is_image_private and access_token:
@@ -138,7 +139,7 @@ def image_pull_secret(server: "UserServer", access_token: str | None) -> list[di
                             "kind": "Secret",
                             "metadata": {
                                 "name": image_pull_secret_name,
-                                "namespace": server._k8s_client.preferred_namespace,
+                                "namespace": server.k8s_namespace(),
                             },
                             "type": "kubernetes.io/dockerconfigjson",
                         },
@@ -177,7 +178,7 @@ def disable_service_links() -> list[dict[str, Any]]:
     ]
 
 
-def rstudio_env_variables(server: "UserServer") -> list[dict[str, Any]]:
+def rstudio_env_variables(server: UserServer) -> list[dict[str, Any]]:
     """Makes sure environment variables propagate for R and Rstudio.
 
     Since we cannot be certain that R/Rstudio is or isn't used we inject this every time
@@ -233,7 +234,7 @@ def rstudio_env_variables(server: "UserServer") -> list[dict[str, Any]]:
     ]
 
 
-def user_secrets(server: "UserServer") -> list[dict[str, Any]]:
+def user_secrets(server: UserServer) -> list[dict[str, Any]]:
     """Patches to add volumes and corresponding mount volumes to the main container for user-requested secrets."""
 
     if server.user_secrets is None:

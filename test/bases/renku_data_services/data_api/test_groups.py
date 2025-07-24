@@ -1,28 +1,19 @@
-from base64 import b64decode
 from datetime import datetime
 
 import pytest
 from sanic_testing.testing import SanicASGITestClient
 
-from renku_data_services.app_config.config import Config
 from renku_data_services.authz.models import Role, Visibility
-from renku_data_services.message_queue.avro_models.io.renku.events.v2 import (
-    GroupAdded,
-    GroupMemberAdded,
-    GroupMemberRemoved,
-    GroupMemberUpdated,
-    GroupRemoved,
-    GroupUpdated,
-)
-from renku_data_services.message_queue.models import deserialize_binary
+from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.users.models import UserInfo
 from test.bases.renku_data_services.data_api.utils import merge_headers
 
 
 @pytest.mark.asyncio
 async def test_group_creation_basic(
-    sanic_client: SanicASGITestClient, user_headers: dict[str, str], app_config: Config
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str], app_manager: DependencyManager
 ) -> None:
+    await app_manager.search_updates_repo.clear_all()
     payload = {
         "name": "Group1",
         "slug": "group-1",
@@ -38,23 +29,15 @@ async def test_group_creation_basic(
     assert group["description"] == payload["description"]
     assert group["created_by"] == "user"
     datetime.fromisoformat(group["creation_date"])
+    app_manager.metrics.group_created.assert_called_once()
 
-    events = await app_config.event_repo.get_pending_events()
-
-    group_events = [e for e in events if e.get_message_type() == "group.added"]
-    assert len(group_events) == 1
-    group_event = deserialize_binary(b64decode(group_events[0].payload["payload"]), GroupAdded)
-    assert group_event.id == group["id"]
-    assert group_event.name == group["name"]
-    assert group_event.description == group["description"]
-    assert group_event.namespace == group["slug"]
-
-    group_events = [e for e in events if e.get_message_type() == "memberGroup.added"]
-    assert len(group_events) == 1
-    group_event = deserialize_binary(b64decode(group_events[0].payload["payload"]), GroupMemberAdded)
-    assert group_event.userId == "user"
-    assert group_event.groupId == group["id"]
-    assert group_event.role.value == "OWNER"
+    search_updates = await app_manager.search_updates_repo.select_next(20)
+    assert len(search_updates) == 1
+    assert search_updates[0].payload["id"] == group["id"]
+    assert search_updates[0].payload["name"] == group["name"]
+    assert search_updates[0].payload["description"] == group["description"]
+    assert search_updates[0].payload["slug"] == group["slug"]
+    assert search_updates[0].payload["path"] == group["slug"]
 
     _, response = await sanic_client.get("/api/data/groups", headers=user_headers)
     group = response.json
@@ -103,8 +86,26 @@ async def test_group_pagination(
 
 
 @pytest.mark.asyncio
+async def test_get_single_group(sanic_client, user_headers) -> None:
+    payload = {
+        "name": "Group1",
+        "slug": "group-1",
+        "description": "Group 1 Description",
+    }
+    _, response = await sanic_client.post("/api/data/groups", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    _, response = await sanic_client.get("/api/data/groups/%3f", headers=user_headers)
+    assert response.status_code == 404, response.text
+    _, response = await sanic_client.get("/api/data/groups/group-1", headers=user_headers)
+    assert response.status_code == 200, response.text
+    group = response.json
+    assert group["name"] == payload["name"]
+    assert group["slug"] == payload["slug"]
+
+
+@pytest.mark.asyncio
 async def test_group_patch_delete(
-    sanic_client: SanicASGITestClient, user_headers: dict[str, str], app_config: Config
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str], app_manager: DependencyManager
 ) -> None:
     payload = {
         "name": "GroupOther",
@@ -129,6 +130,7 @@ async def test_group_patch_delete(
         "slug": "group-2",
         "description": "Group 2 Description",
     }
+    await app_manager.search_updates_repo.clear_all()
 
     _, response = await sanic_client.patch("/api/data/groups/group-1", headers=user_headers, json=new_payload)
     assert response.status_code == 200, response.text
@@ -137,16 +139,14 @@ async def test_group_patch_delete(
     assert group["slug"] == new_payload["slug"]
     assert group["description"] == new_payload["description"]
 
-    events = await app_config.event_repo.get_pending_events()
+    search_updates = await app_manager.search_updates_repo.select_next(20)
+    assert len(search_updates) == 1
+    assert search_updates[0].payload["slug"] == group["slug"]
+    assert search_updates[0].payload["path"] == group["slug"]
+    for k in ["id", "name", "description"]:
+        assert search_updates[0].payload[k] == group[k]
 
-    group_events = [e for e in events if e.get_message_type() == "group.updated"]
-    assert len(group_events) == 1
-    group_event = deserialize_binary(b64decode(group_events[0].payload["payload"]), GroupUpdated)
-    assert group_event.id == group["id"]
-    assert group_event.name == group["name"]
-    assert group_event.description == group["description"]
-    assert group_event.namespace == group["slug"]
-
+    await app_manager.search_updates_repo.clear_all()
     new_payload = {"slug": "group-other"}
     _, response = await sanic_client.patch("/api/data/groups/group-1", headers=user_headers, json=new_payload)
     assert response.status_code == 409  # The latest slug must be used to patch it is now group-2
@@ -154,12 +154,10 @@ async def test_group_patch_delete(
     _, response = await sanic_client.delete("/api/data/groups/group-2", headers=user_headers)
     assert response.status_code == 204
 
-    events = await app_config.event_repo.get_pending_events()
-
-    group_events = [e for e in events if e.get_message_type() == "group.removed"]
-    assert len(group_events) == 1
-    group_event = deserialize_binary(b64decode(group_events[0].payload["payload"]), GroupRemoved)
-    assert group_event.id == group["id"]
+    search_updates = await app_manager.search_updates_repo.select_next(20)
+    assert len(search_updates) == 1
+    assert search_updates[0].payload["id"] == group["id"]
+    assert search_updates[0].payload["deleted"]
 
     _, response = await sanic_client.get("/api/data/groups/group-2", headers=user_headers)
     assert response.status_code == 404
@@ -167,7 +165,7 @@ async def test_group_patch_delete(
 
 @pytest.mark.asyncio
 async def test_group_members(
-    sanic_client: SanicASGITestClient, user_headers: dict[str, str], app_config: Config
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str], app_manager: DependencyManager
 ) -> None:
     payload = {
         "name": "Group1",
@@ -176,16 +174,19 @@ async def test_group_members(
     }
     _, response = await sanic_client.post("/api/data/groups", headers=user_headers, json=payload)
     assert response.status_code == 201, response.text
-    group = response.json
     _, response = await sanic_client.get("/api/data/groups/group-1/members", headers=user_headers)
     assert response.status_code == 200, response.text
     members = response.json
     assert len(members) == 1
     assert members[0]["id"] == "user"
     assert members[0]["role"] == "owner"
+
+    await app_manager.search_updates_repo.clear_all()
+
     new_members = [{"id": "member-1", "role": "viewer"}]
     _, response = await sanic_client.patch("/api/data/groups/group-1/members", headers=user_headers, json=new_members)
     assert response.status_code == 200
+    app_manager.metrics.group_member_added.assert_called_once()
     _, response = await sanic_client.get("/api/data/groups/group-1/members", headers=user_headers)
     assert response.status_code == 200, response.text
     members = response.json
@@ -194,14 +195,8 @@ async def test_group_members(
     assert member_1 is not None
     assert member_1["role"] == "viewer"
 
-    events = await app_config.event_repo.get_pending_events()
-
-    group_events = sorted([e for e in events if e.get_message_type() == "memberGroup.added"], key=lambda e: e.id)
-    assert len(group_events) == 2
-    group_event = deserialize_binary(b64decode(group_events[1].payload["payload"]), GroupMemberAdded)
-    assert group_event.userId == member_1["id"]
-    assert group_event.groupId == group["id"]
-    assert group_event.role.value == "VIEWER"
+    search_updates = await app_manager.search_updates_repo.select_next(20)
+    assert len(search_updates) == 0
 
 
 @pytest.mark.asyncio
@@ -209,7 +204,7 @@ async def test_removing_single_group_owner_not_allowed(
     sanic_client: SanicASGITestClient,
     user_headers: dict[str, str],
     member_1_headers: dict[str, str],
-    app_config: Config,
+    app_manager: DependencyManager,
 ) -> None:
     payload = {
         "name": "Group1",
@@ -219,12 +214,14 @@ async def test_removing_single_group_owner_not_allowed(
     # Create a group
     _, response = await sanic_client.post("/api/data/groups", headers=user_headers, json=payload)
     assert response.status_code == 201, response.text
-    group = response.json
 
     _, response = await sanic_client.get("/api/data/groups/group-1/members", headers=user_headers)
     assert response.status_code == 200, response.text
     res_json = response.json
     assert len(res_json) == 1
+
+    await app_manager.search_updates_repo.clear_all()
+
     # Add a member
     new_members = [{"id": "member-1", "role": "editor"}]
     _, response = await sanic_client.patch("/api/data/groups/group-1/members", headers=user_headers, json=new_members)
@@ -241,26 +238,15 @@ async def test_removing_single_group_owner_not_allowed(
     _, response = await sanic_client.patch("/api/data/groups/group-1/members", headers=user_headers, json=new_members)
     assert response.status_code == 200
 
-    events = await app_config.event_repo.get_pending_events()
-
-    group_events = [e for e in events if e.get_message_type() == "memberGroup.updated"]
-    assert len(group_events) == 1
-    group_event = deserialize_binary(b64decode(group_events[0].payload["payload"]), GroupMemberUpdated)
-    assert group_event.userId == "member-1"
-    assert group_event.groupId == group["id"]
-    assert group_event.role.value == "OWNER"
+    search_updates = await app_manager.search_updates_repo.select_next(20)
+    assert len(search_updates) == 0
 
     # Removing the original owner now works
     _, response = await sanic_client.delete("/api/data/groups/group-1/members/user", headers=user_headers)
     assert response.status_code == 204
 
-    events = await app_config.event_repo.get_pending_events()
-
-    group_events = [e for e in events if e.get_message_type() == "memberGroup.removed"]
-    assert len(group_events) == 1
-    group_event = deserialize_binary(b64decode(group_events[0].payload["payload"]), GroupMemberRemoved)
-    assert group_event.userId == "user"
-    assert group_event.groupId == group["id"]
+    search_updates = await app_manager.search_updates_repo.select_next(20)
+    assert len(search_updates) == 0
 
     # Check that only one member remains
     _, response = await sanic_client.get("/api/data/groups/group-1/members", headers=member_1_headers)
@@ -271,11 +257,27 @@ async def test_removing_single_group_owner_not_allowed(
 
 
 @pytest.mark.asyncio
+async def test_delete_group_member_invalid(sanic_client: SanicASGITestClient, user_headers: dict[str, str]) -> None:
+    payload = {
+        "name": "demo group",
+        "slug": "demo-group",
+    }
+    _, response = await sanic_client.post("/api/data/groups", headers=user_headers, json=payload)
+    assert response.status_code == 201, response.text
+    group = response.json
+    group_slug = group["slug"]
+
+    _, response = await sanic_client.delete(f"/api/data/groups/{group_slug}/members/%3A", headers=user_headers)
+
+    assert response.status_code == 422, response.text
+
+
+@pytest.mark.asyncio
 async def test_cannot_change_role_for_last_group_owner(
     sanic_client: SanicASGITestClient,
     user_headers: dict[str, str],
     regular_user: UserInfo,
-    app_config: Config,
+    app_manager: DependencyManager,
     member_1_headers: dict[str, str],
 ) -> None:
     payload = {

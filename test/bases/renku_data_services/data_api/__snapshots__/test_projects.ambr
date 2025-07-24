@@ -1,0 +1,95 @@
+# serializer version: 1
+# name: test_get_all_projects_with_pagination
+  list([
+    dict({
+      'created_by': 'user',
+      'is_template': False,
+      'keywords': list([
+      ]),
+      'name': 'Project 1',
+      'namespace': 'user.doe',
+      'repositories': list([
+      ]),
+      'secrets_mount_directory': '/secrets',
+      'slug': 'project-1',
+      'visibility': 'private',
+    }),
+  ])
+# ---
+# name: test_project_copy_basics
+  dict({
+    'created_by': 'user',
+    'description': 'Template project',
+    'is_template': False,
+    'keywords': list([
+      'tag 1',
+      'tag 2',
+    ]),
+    'name': 'Renku Native Project',
+    'namespace': 'user.doe',
+    'repositories': list([
+      'http://repository-1.ch',
+      'http://repository-2.ch',
+    ]),
+    'secrets_mount_directory': '/secrets',
+    'slug': 'project-slug',
+    'visibility': 'public',
+  })
+# ---
+# name: test_project_copy_basics.1
+  dict({
+    'created_by': 'user',
+    'description': 'Template project',
+    'documentation': 'test documentation',
+    'is_template': False,
+    'keywords': list([
+      'tag 1',
+      'tag 2',
+    ]),
+    'name': 'Renku Native Project',
+    'namespace': 'user.doe',
+    'repositories': list([
+      'http://repository-1.ch',
+      'http://repository-2.ch',
+    ]),
+    'secrets_mount_directory': '/secrets',
+    'slug': 'project-slug',
+    'visibility': 'public',
+  })
+# ---
+# name: test_project_copy_creates_new_build_and_environment_instances
+  dict({
+    'description': 'A session launcher.',
+    'disk_storage': 42,
+    'name': 'Launcher',
+    'resource_class_id': 1,
+  })
+# ---
+# name: test_project_copy_creates_new_build_and_environment_instances.1
+  dict({
+    'build_parameters': dict({
+      'builder_variant': 'python',
+      'frontend_variant': 'vscodium',
+      'repository': 'https://github.com/some/repo',
+    }),
+    'container_image': 'image:unknown-at-the-moment',
+    'default_url': '/',
+    'description': 'Generated environment for Launcher',
+    'environment_image_source': 'build',
+    'environment_kind': 'CUSTOM',
+    'gid': 1000,
+    'is_archived': False,
+    'mount_directory': '/home/renku/work',
+    'name': 'Launcher',
+    'port': 8888,
+    'uid': 1000,
+    'working_directory': '/home/renku/work',
+  })
+# ---
+# name: test_project_copy_creates_new_build_and_environment_instances.2
+  dict({
+    'builder_variant': 'python',
+    'frontend_variant': 'vscodium',
+    'repository': 'https://github.com/some/repo',
+  })
+# ---

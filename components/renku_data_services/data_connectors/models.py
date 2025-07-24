@@ -2,16 +2,23 @@
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 from ulid import ULID
 
 from renku_data_services.authz.models import Visibility
-from renku_data_services.namespace.models import Namespace
-from renku_data_services.utils.etag import compute_etag_from_timestamp
+from renku_data_services.base_models.core import (
+    DataConnectorInProjectPath,
+    DataConnectorPath,
+    DataConnectorSlug,
+    NamespacePath,
+    ProjectPath,
+)
+from renku_data_services.namespace.models import GroupNamespace, ProjectNamespace, UserNamespace
+from renku_data_services.utils.etag import compute_etag_from_fields
 
 if TYPE_CHECKING:
-    from renku_data_services.storage.rclone import RCloneOption
+    from renku_data_services.data_connectors.apispec import RCloneOption
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -45,20 +52,51 @@ class DataConnector(BaseDataConnector):
     """Data connector model."""
 
     id: ULID
-    namespace: Namespace
+    namespace: UserNamespace | GroupNamespace | ProjectNamespace
     updated_at: datetime
 
     @property
     def etag(self) -> str:
         """Entity tag value for this data connector object."""
-        return compute_etag_from_timestamp(self.updated_at, include_quotes=True)
+        return compute_etag_from_fields(self.updated_at, self.path.serialize())
+
+    @property
+    def path(self) -> DataConnectorPath | DataConnectorInProjectPath:
+        """The full path (i.e. sequence of slugs) for the data connector including group or user and/or project."""
+        return self.namespace.path / DataConnectorSlug(self.slug)
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedDataConnector(BaseDataConnector):
     """A data connector that hasn't been stored in the database."""
 
-    namespace: str
+    namespace: NamespacePath | ProjectPath
+
+    @property
+    def path(self) -> DataConnectorPath | DataConnectorInProjectPath:
+        """The full path (i.e. sequence of slugs) for the data connector including group or user and/or project."""
+        return self.namespace / DataConnectorSlug(self.slug)
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class GlobalDataConnector(BaseDataConnector):
+    """Global data connector model."""
+
+    id: ULID
+    namespace: Final[None] = field(default=None, init=False)
+    updated_at: datetime
+
+    @property
+    def etag(self) -> str:
+        """Entity tag value for this data connector object."""
+        return compute_etag_from_fields(self.updated_at)
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedGlobalDataConnector(BaseDataConnector):
+    """Global data connector model."""
+
+    namespace: None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -84,7 +122,7 @@ class DataConnectorPatch:
     """Model for changes requested on a data connector."""
 
     name: str | None
-    namespace: str | None
+    namespace: NamespacePath | ProjectPath | None
     slug: str | None
     visibility: Visibility | None
     description: str | None
@@ -103,8 +141,8 @@ class CloudStorageCoreWithSensitiveFields(CloudStorageCore):
 class DataConnectorUpdate:
     """Information about the update of a data connector."""
 
-    old: DataConnector
-    new: DataConnector
+    old: DataConnector | GlobalDataConnector
+    new: DataConnector | GlobalDataConnector
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -156,5 +194,5 @@ class DataConnectorPermissions:
 class DataConnectorWithSecrets:
     """A data connector with its secrets."""
 
-    data_connector: DataConnector
+    data_connector: DataConnector | GlobalDataConnector
     secrets: list[DataConnectorSecret] = field(default_factory=list)

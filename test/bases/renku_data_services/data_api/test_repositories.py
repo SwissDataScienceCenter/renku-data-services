@@ -8,19 +8,19 @@ import pytest_asyncio
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 
-from renku_data_services.app_config import Config
 from renku_data_services.connected_services.dummy_async_oauth2_client import DummyAsyncOAuth2Client
 from renku_data_services.data_api.app import register_all_handlers
+from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.migrations.core import run_migrations_for_app
 from test.utils import SanicReusableASGITestClient
 
 
 @pytest_asyncio.fixture(scope="session")
-async def oauth2_test_client_setup(app_config: Config) -> SanicASGITestClient:
-    app_config.async_oauth2_client_class = DummyAsyncOAuth2Client
-    app_config.connected_services_repo.async_oauth2_client_class = DummyAsyncOAuth2Client
-    app = Sanic(app_config.app_name)
-    app = register_all_handlers(app, app_config)
+async def oauth2_test_client_setup(app_manager: DependencyManager) -> SanicASGITestClient:
+    app_manager.async_oauth2_client_class = DummyAsyncOAuth2Client
+    app_manager.connected_services_repo.async_oauth2_client_class = DummyAsyncOAuth2Client
+    app = Sanic(app_manager.app_name)
+    app = register_all_handlers(app, app_manager)
     async with SanicReusableASGITestClient(app) as client:
         yield client
 
@@ -88,9 +88,12 @@ def create_oauth2_connection(oauth2_test_client: SanicASGITestClient, user_heade
 
 @pytest.mark.asyncio
 async def test_get_repository_without_connection(
-    oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_provider
+    mocker, oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_provider
 ):
     """Test getting internal Gitlab repository."""
+    http_client = mocker.patch("renku_data_services.repositories.db.HttpClient")
+    http_client.return_value = DummyAsyncOAuth2Client()
+
     await create_oauth2_provider("provider_1")
     repository_url = "https://example.org/username/my_repo.git"
 
@@ -139,3 +142,19 @@ async def test_get_one_repository_not_found(
     assert result.get("connection_id") == connection["id"]
     assert result.get("provider_id") == "provider_1"
     assert result.get("repository_metadata") is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "repository_url,status_code",
+    [
+        ("https://github.com/SwissDataScienceCenter/renku.git", 200),
+        ("https://example.org/does-not-exist.git", 404),
+        ("http://foobar", 404),
+    ],
+)
+async def test_get_one_repository_probe(sanic_client: SanicASGITestClient, repository_url, status_code):
+    repository_url_param = quote_plus(repository_url)
+    _, response = await sanic_client.get(f"/api/data/repositories/{repository_url_param}/probe")
+
+    assert response.status_code == status_code, response.text

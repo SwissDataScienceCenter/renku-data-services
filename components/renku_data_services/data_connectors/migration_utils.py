@@ -14,7 +14,7 @@ from renku_data_services.authz.authz import Authz, ResourceType, Role
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import Slug
 from renku_data_services.data_connectors import models
-from renku_data_services.data_connectors.db import DataConnectorProjectLinkRepository, DataConnectorRepository
+from renku_data_services.data_connectors.db import DataConnectorRepository
 from renku_data_services.namespace.models import NamespaceKind
 from renku_data_services.project import models as projects_models
 from renku_data_services.project import orm as projects_schemas
@@ -30,13 +30,11 @@ class DataConnectorMigrationTool:
         self,
         session_maker: Callable[..., AsyncSession],
         data_connector_repo: DataConnectorRepository,
-        data_connector_project_link_repo: DataConnectorProjectLinkRepository,
         project_repo: ProjectRepository,
         authz: Authz,
     ) -> None:
         self.session_maker = session_maker
         self.data_connector_repo = data_connector_repo
-        self.data_connector_project_link_repo = data_connector_project_link_repo
         self.project_repo = project_repo
         self.authz = authz
 
@@ -78,7 +76,7 @@ class DataConnectorMigrationTool:
             data_connector_id=data_connector.id,
             project_id=project_id,
         )
-        await self.data_connector_project_link_repo.insert_link(user=data_connector_owner, link=unsaved_link)
+        await self.data_connector_repo.insert_link(user=data_connector_owner, link=unsaved_link)
 
         # Remove the storage_v2 from the database
         await self._delete_storage_v2(requested_by=requested_by, storage_id=storage.storage_id)
@@ -101,7 +99,7 @@ class DataConnectorMigrationTool:
 
         if not isinstance(project.namespace.underlying_resource_id, ULID):
             raise errors.ProgrammingError(
-                message=f"Group namespace {project.namespace.slug} has an invalid underlying resource id {project.namespace.underlying_resource_id}."  # noqa E501
+                message=f"Group namespace {project.namespace} has an invalid underlying resource id {project.namespace.underlying_resource_id}."  # noqa E501
             )
 
         group_id = project.namespace.underlying_resource_id
@@ -154,14 +152,14 @@ class DataConnectorMigrationTool:
         )
         unsaved_data_connector = models.UnsavedDataConnector(
             name=storage.name,
-            namespace=project.namespace.slug,
+            namespace=project.path,
             slug=data_connector_slug,
             visibility=project.visibility,
             created_by="",
             storage=unsaved_storage,
         )
 
-        data_connector = await self.data_connector_repo.insert_data_connector(
+        data_connector = await self.data_connector_repo.insert_namespaced_data_connector(
             user=user, data_connector=unsaved_data_connector
         )
         return data_connector
