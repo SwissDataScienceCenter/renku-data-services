@@ -525,6 +525,11 @@ async def patch_session(
 
     # Resource class
     if body.resource_class_id is not None:
+        cluster_from_resource_class = await nb_config.k8s_v2_client.cluster_by_class_id(body.resource_class_id, user)
+        if cluster != cluster_from_resource_class:
+            raise errors.ValidationError(
+                message=f"Cluster {cluster_from_resource_class} does not match cluster {cluster} from session"
+            )
         rp = await rp_repo.get_resource_pool_from_class(user, body.resource_class_id)
         rc = rp.get_resource_class(body.resource_class_id)
         if not rc:
