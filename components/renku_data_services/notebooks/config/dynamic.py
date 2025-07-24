@@ -108,8 +108,8 @@ class _GitConfig:
 class _GitProxyConfig:
     renku_client_secret: str = field(repr=False)
     sentry: _SentryConfig = field(default_factory=_SentryConfig.from_env)
-    port: int = 8080
-    health_port: int = 8081
+    port: int = 65480
+    health_port: int = 65481
     image: str = f"renku/git-https-proxy:{latest_version}"
     renku_client_id: str = "renku"
 
@@ -119,8 +119,8 @@ class _GitProxyConfig:
             renku_client_secret=os.environ["NB_SESSIONS__GIT_PROXY__RENKU_CLIENT_SECRET"],
             renku_client_id=os.environ.get("NB_SESSIONS__GIT_PROXY__RENKU_CLIENT_ID", "renku"),
             sentry=_SentryConfig.from_env(prefix="NB_SESSIONS__GIT_PROXY__"),
-            port=_parse_value_as_int(os.environ.get("NB_SESSIONS__GIT_PROXY__PORT", 8080)),
-            health_port=_parse_value_as_int(os.environ.get("NB_SESSIONS__GIT_PROXY__HEALTH_PORT", 8081)),
+            port=_parse_value_as_int(os.environ.get("NB_SESSIONS__GIT_PROXY__PORT", 65480)),
+            health_port=_parse_value_as_int(os.environ.get("NB_SESSIONS__GIT_PROXY__HEALTH_PORT", 65481)),
             image=os.environ.get("NB_SESSIONS__GIT_PROXY__IMAGE", f"renku/git-https-proxy:{latest_version}"),
         )
 
