@@ -357,7 +357,10 @@ class NotebookK8sClient(Generic[_SessionType]):
             except NotFoundError as err:
                 raise errors.MissingResourceError(message=f"The session pod {pod_name} does not exist.") from err
             except ServerError as err:
-                if err.status == 404:
+                if err.response is not None and err.response.status_code == 400:
+                    # NOTE: This occurs when the target container is not yet running, but we try to read its logs
+                    continue
+                if err.response is not None and err.response.status_code == 404:
                     raise errors.MissingResourceError(message=f"The session pod {pod_name} does not exist.") from err
                 raise
             else:
