@@ -214,6 +214,8 @@ async def git_clone_container(server: UserServer) -> dict[str, Any] | None:
         },
     ]
     if server.user.is_authenticated:
+        env.append({"name": f"{prefix}GIT_PROXY_PORT", "value": server.config.sessions.git_proxy.port})
+    if server.user.is_authenticated:
         if server.user.email:
             env.append(
                 {"name": f"{prefix}USER__EMAIL", "value": server.user.email},
