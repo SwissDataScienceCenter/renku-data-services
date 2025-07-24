@@ -90,3 +90,4 @@ class SecretPatch:
     name: str | None
     default_filename: str | None
     secret_value: str | None = field(repr=False)
+    expiration_timestamp: datetime | None

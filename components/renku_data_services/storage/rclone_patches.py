@@ -259,90 +259,60 @@ def apply_patches(spec: list[dict[str, Any]]) -> None:
 
 
 def __patch_schema_add_openbis_type(spec: list[dict[str, Any]]) -> None:
-        """Adds a fake type to help with setting up openBIS storage."""
-        spec.append(
-            {
-                "Name": "openbis",
-                "Description": "openBIS",
-                "Prefix": "openbis",
-                "Options": [
-                    {
-                        "Name": "host",
-                        "Help": 'openBIS host to connect to.\n\nE.g. "openbis-eln-lims.ethz.ch".',
-                        "Provider": "",
-                        "Default": "",
-                        "Value": None,
-                        "Examples": [
-                            {
-                                "Value": "openbis-eln-lims.ethz.ch",
-                                "Help": "Public openBIS demo instance",
-                                "Provider": "",
-                            },
-                        ],
-                        "ShortOpt": "",
-                        "Hide": 0,
-                        "Required": True,
-                        "IsPassword": False,
-                        "NoPrefix": False,
-                        "Advanced": False,
-                        "Exclusive": False,
-                        "Sensitive": False,
-                        "DefaultStr": "",
-                        "ValueStr": "",
-                        "Type": "string",
-                    },
-                    {
-                        "Name": "session_token",
-                        "Help": "openBIS session token",
-                        "Provider": "",
-                        "Default": "",
-                        "Value": None,
-                        "ShortOpt": "",
-                        "Hide": 0,
-                        "Required": True,
-                        "IsPassword": True,
-                        "NoPrefix": False,
-                        "Advanced": False,
-                        "Exclusive": False,
-                        "Sensitive": True,
-                        "DefaultStr": "",
-                        "ValueStr": "",
-                        "Type": "string",
-                    },
-                ],
-                "CommandHelp": None,
-                "Aliases": None,
-                "Hide": False,
-                "MetadataInfo": None,
-            }
-        )
-
-    @staticmethod
-    def __patch_schema_remove_oauth_propeties(spec: list[dict[str, Any]]) -> None:
-        """Removes OAuth2 fields since we can't do an oauth flow in the rclone CSI."""
-        providers = [
-            "acd",
-            "box",
-            "drive",
-            "dropbox",
-            "gcs",
-            "gphotos",
-            "hidrive",
-            "jottacloud",
-            "mailru",
-            "onedrive",
-            "pcloud",
-            "pikpak",
-            "premiumzeme",
-            "putio",
-            "sharefile",
-            "yandex",
-            "zoho",
-        ]
-        for storage in spec:
-            if storage["Prefix"] in providers:
-                options = []
-                for option in storage["Options"]:
-                    if option["Name"] not in ["client_id", "client_secret"]:
-                        options.append(option)
-                storage["Options"] = options
+    """Adds a fake type to help with setting up openBIS storage."""
+    spec.append(
+        {
+            "Name": "openbis",
+            "Description": "openBIS",
+            "Prefix": "openbis",
+            "Options": [
+                {
+                    "Name": "host",
+                    "Help": 'openBIS host to connect to.\n\nE.g. "openbis-eln-lims.ethz.ch".',
+                    "Provider": "",
+                    "Default": "",
+                    "Value": None,
+                    "Examples": [
+                        {
+                            "Value": "openbis-eln-lims.ethz.ch",
+                            "Help": "Public openBIS demo instance",
+                            "Provider": "",
+                        },
+                    ],
+                    "ShortOpt": "",
+                    "Hide": 0,
+                    "Required": True,
+                    "IsPassword": False,
+                    "NoPrefix": False,
+                    "Advanced": False,
+                    "Exclusive": False,
+                    "Sensitive": False,
+                    "DefaultStr": "",
+                    "ValueStr": "",
+                    "Type": "string",
+                },
+                {
+                    "Name": "session_token",
+                    "Help": "openBIS session token",
+                    "Provider": "",
+                    "Default": "",
+                    "Value": None,
+                    "ShortOpt": "",
+                    "Hide": 0,
+                    "Required": True,
+                    "IsPassword": True,
+                    "NoPrefix": False,
+                    "Advanced": False,
+                    "Exclusive": False,
+                    "Sensitive": True,
+                    "DefaultStr": "",
+                    "ValueStr": "",
+                    "Type": "string",
+                },
+            ],
+            "CommandHelp": None,
+            "Aliases": None,
+            "Hide": False,
+            "MetadataInfo": None,
+        }
+    )

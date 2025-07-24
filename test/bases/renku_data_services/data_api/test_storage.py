@@ -12,8 +12,8 @@ from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.storage.rclone import RCloneValidator
-from renku_data_services.utils.core import get_openbis_session_token
 from renku_data_services.storage.rclone_patches import BANNED_STORAGE, OAUTH_PROVIDERS
+from renku_data_services.utils.core import get_openbis_session_token
 from test.utils import SanicReusableASGITestClient
 
 _valid_storage: dict[str, Any] = {

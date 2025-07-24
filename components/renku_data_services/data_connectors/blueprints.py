@@ -9,7 +9,7 @@ from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
 from ulid import ULID
 
-from renku_data_services import base_models, errors
+from renku_data_services import base_models
 from renku_data_services.base_api.auth import (
     authenticate,
     only_authenticated,
@@ -471,7 +471,7 @@ class DataConnectorsBP(CustomBlueprint):
                                     openbis_pat[1],
                                 )
                             except Exception as e:
-                                raise errors.ProgrammingError(message=str(e))
+                                raise errors.ProgrammingError(message=str(e)) from e
                         raise errors.ValidationError(message="The openBIS session token must be a string value.")
 
                     raise errors.ValidationError(message="The openBIS storage has only one secret: session_token")

@@ -840,7 +840,9 @@ class ProjectSessionSecretRepository:
                 )
                 if session_launcher_secret_orm := existing_secrets_as_dict.get(slot_id):
                     session_launcher_secret_orm.secret.update(
-                        encrypted_value=encrypted_value, encrypted_key=encrypted_key
+                        encrypted_value=encrypted_value,
+                        encrypted_key=encrypted_key,
+                        expiration_timestamp=session_launcher_secret_orm.secret.expiration_timestamp,
                     )
                 else:
                     name = secret_slot.name

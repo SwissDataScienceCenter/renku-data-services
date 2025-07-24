@@ -21,4 +21,5 @@ def validate_secret_patch(patch: apispec.SecretPatch) -> SecretPatch:
         name=patch.name,
         default_filename=patch.default_filename,
         secret_value=patch.value,
+        expiration_timestamp=patch.expiration_timestamp,
     )
