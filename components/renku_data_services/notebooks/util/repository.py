@@ -3,7 +3,10 @@
 from typing import Any, Optional, cast
 
 import requests
-from sanic.log import logger
+
+from renku_data_services.app_config import logging
+
+logger = logging.getLogger(__name__)
 
 
 def get_status(hostname: str, server_name: str, access_token: Optional[str]) -> dict[str, Any]:

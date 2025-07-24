@@ -1,27 +1,28 @@
 """Database adapters and helpers for users."""
 
+from __future__ import annotations
+
 import secrets
-from collections.abc import AsyncGenerator, Callable
+from abc import abstractmethod
+from collections.abc import AsyncGenerator, Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
-from sanic.log import logger
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services import base_models
+from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.base_api.auth import APIUser, only_authenticated
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
+from renku_data_services.base_models.nel import Nel
 from renku_data_services.errors import errors
-from renku_data_services.message_queue import events
-from renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
-from renku_data_services.message_queue.db import EventRepository
-from renku_data_services.message_queue.interface import IMessageQueue
-from renku_data_services.message_queue.redis_queue import dispatch_message
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.namespace.orm import NamespaceORM
+from renku_data_services.search.db import SearchUpdatesRepo
+from renku_data_services.search.decorators import update_search_document
 from renku_data_services.users.config import UserPreferencesConfig
 from renku_data_services.users.kc_api import IKeycloakAPI
 from renku_data_services.users.models import (
@@ -39,22 +40,57 @@ from renku_data_services.users.orm import LastKeycloakEventTimestamp, UserORM, U
 from renku_data_services.utils.core import with_db_transaction
 from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
 
+logger = logging.getLogger(__name__)
+
+
+class UsernameResolver(Protocol):
+    """Resolve usernames to their ids."""
+
+    @abstractmethod
+    async def resolve_usernames(self, names: Nel[str]) -> Mapping[str, str]:
+        """Return a map of username->user_id tuples."""
+        ...
+
+
+class DbUsernameResolver(UsernameResolver, Protocol):
+    """Resolve usernames using the database."""
+
+    @abstractmethod
+    def make_session(self) -> AsyncSession:
+        """Create a db session."""
+        ...
+
+    async def resolve_usernames(self, names: Nel[str]) -> dict[str, str]:
+        """Resolve usernames to their user ids."""
+        async with self.make_session() as session, session.begin():
+            result = await session.execute(
+                select(NamespaceORM.slug, NamespaceORM.user_id).where(
+                    NamespaceORM.slug.in_(names), NamespaceORM.user_id.is_not(None)
+                )
+            )
+            ret: dict[str, str] = {}
+            for slug, id in result:
+                ret.update({slug: id})
+
+            return ret
+
 
 @dataclass
-class UserRepo:
+class UserRepo(DbUsernameResolver):
     """An adapter for accessing users from the database."""
 
     session_maker: Callable[..., AsyncSession]
-    message_queue: IMessageQueue
-    event_repo: EventRepository
     group_repo: GroupRepository
+    search_updates_repo: SearchUpdatesRepo
     encryption_key: bytes | None = field(repr=False)
     authz: Authz
 
     def __post_init__(self) -> None:
-        self._users_sync = UsersSync(
-            self.session_maker, self.message_queue, self.event_repo, self.group_repo, self, self.authz
-        )
+        self._users_sync = UsersSync(self.session_maker, self.group_repo, self, self.authz)
+
+    def make_session(self) -> AsyncSession:
+        """Create a db session."""
+        return self.session_maker()
 
     async def initialize(self, kc_api: IKeycloakAPI) -> None:
         """Do a total sync of users from Keycloak if there is nothing in the DB."""
@@ -145,7 +181,7 @@ class UserRepo:
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.delete, ResourceType.user)
-    @dispatch_message(avro_schema_v2.UserRemoved)
+    @update_search_document
     async def _remove_user(
         self, requested_by: APIUser, user_id: str, *, session: AsyncSession | None = None
     ) -> DeletedUser | None:
@@ -191,18 +227,15 @@ class UsersSync:
     def __init__(
         self,
         session_maker: Callable[..., AsyncSession],
-        message_queue: IMessageQueue,
-        event_repo: EventRepository,
         group_repo: GroupRepository,
         user_repo: UserRepo,
         authz: Authz,
     ) -> None:
         self.session_maker = session_maker
-        self.message_queue: IMessageQueue = message_queue
-        self.event_repo: EventRepository = event_repo
         self.group_repo = group_repo
         self.user_repo = user_repo
         self.authz = authz
+        self.search_updates_repo = user_repo.search_updates_repo
 
     async def _get_user(self, id: str) -> UserInfo | None:
         """Get a specific user."""
@@ -214,7 +247,7 @@ class UsersSync:
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.update_or_insert, ResourceType.user)
-    @dispatch_message(events.UpdateOrInsertUser)
+    @update_search_document
     async def update_or_insert_user(
         self, user: UnsavedUserInfo, *, session: AsyncSession | None = None
     ) -> UserInfoUpdate:
@@ -381,7 +414,7 @@ class UserPreferencesRepository:
             user_preferences = res.one_or_none()
 
             if user_preferences is None:
-                raise errors.MissingResourceError(message="Preferences not found for user.", quiet=True)
+                raise errors.MissingResourceError(message="Preferences not found for user.")
             return user_preferences.dump()
 
     @only_authenticated
@@ -405,7 +438,8 @@ class UserPreferencesRepository:
 
             if user_preferences is None:
                 new_preferences = UserPreferences(
-                    user_id=cast(str, requested_by.id), pinned_projects=PinnedProjects(project_slugs=[project_slug])
+                    user_id=cast(str, requested_by.id),
+                    pinned_projects=PinnedProjects(project_slugs=[project_slug]),
                 )
                 user_preferences = UserPreferencesORM.load(new_preferences)
                 session.add(user_preferences)
@@ -442,7 +476,7 @@ class UserPreferencesRepository:
             user_preferences = res.one_or_none()
 
             if user_preferences is None:
-                raise errors.MissingResourceError(message="Preferences not found for user.", quiet=True)
+                raise errors.MissingResourceError(message="Preferences not found for user.")
 
             project_slugs: list[str]
             project_slugs = user_preferences.pinned_projects.get("project_slugs", [])
@@ -454,4 +488,39 @@ class UserPreferencesRepository:
 
             pinned_projects = PinnedProjects(project_slugs=new_project_slugs).model_dump()
             user_preferences.pinned_projects = pinned_projects
+            return user_preferences.dump()
+
+    @only_authenticated
+    async def add_dismiss_project_migration_banner(self, requested_by: base_models.APIUser) -> UserPreferences:
+        """Set the dismiss project migration banner to true."""
+        async with self.session_maker() as session, session.begin():
+            result = await session.scalars(
+                select(UserPreferencesORM).where(UserPreferencesORM.user_id == cast(str, requested_by.id))
+            )
+            user_preferences_orm = result.one_or_none()
+            if user_preferences_orm is None:
+                user_preferences_orm = UserPreferencesORM(
+                    user_id=cast(str, requested_by.id),
+                    pinned_projects={"project_slugs": []},
+                    show_project_migration_banner=False,
+                )
+                session.add(user_preferences_orm)
+            else:
+                user_preferences_orm.show_project_migration_banner = False
+
+            await session.flush()
+            await session.refresh(user_preferences_orm)
+            return user_preferences_orm.dump()
+
+    @only_authenticated
+    async def remove_dismiss_project_migration_banner(self, requested_by: APIUser) -> UserPreferences:
+        """Removes dismiss project migration banner from the user's preferences."""
+        async with self.session_maker() as session, session.begin():
+            res = await session.scalars(select(UserPreferencesORM).where(UserPreferencesORM.user_id == requested_by.id))
+            user_preferences = res.one_or_none()
+
+            if user_preferences is None:
+                raise errors.MissingResourceError(message="Preferences not found for user.", quiet=True)
+
+            user_preferences.show_project_migration_banner = True
             return user_preferences.dump()

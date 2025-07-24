@@ -3,6 +3,10 @@
 This document details the structure of the code in this repository.
 For information on how to set up a dev environment and run code, consult the [readme](/README.md).
 
+### Coding guidelines
+
+These can be found in our [wiki](https://github.com/SwissDataScienceCenter/renku-data-services/wiki/Coding-guidelines).
+
 ### Architecture
 
 #### Polylith
@@ -11,13 +15,14 @@ Data Services follows a [polylith](https://polylith.gitbook.io/polylith) approac
 * `components` contain all the application code, divided into modules based on entity types
 * `bases` contains the glue code to bring the different components together into a single unit/api. The
   entrypoint of applications is usually a `main.py` in one of the bases
-* `projects` contains the Dockerfiles and pyproject.toml's for each deployed service
+* `projects` contains the Dockerfiles and pyproject.toml for each deployed service
 
 #### Bases/Projects
 There are three independent services/deployments (projects/bases):
 * Renku Data Services (`data_api`): The main CRUD service for persisting data in postgres
 * Secrets Storage (`secrets_storage_api`): Handles loading user secrets securely when needed
-* Background Jobs (`background_jobs`): Kubernetes cronjobs for recurring tasks
+* Data Tasks (`data_tasks`): Regular background tasks
+* K8s cache (`k8s_cache`): Caches Kubernetes objects so as to not overload the Kubernetes API
 
 #### Components
 Within components, there are the following modules:
@@ -27,13 +32,14 @@ Within components, there are the following modules:
 * *base_api*: Common functionality shared by different APIs
 * *base_models*: Common functionality shared by all domain models
 * *base_orm*: Common functionality shared by database object relational models
-* *connected_services*: Code concerning third-party integrations (e.g. Gitlab/Github)
+* *connected_services*: Code concerning third-party integrations (e.g. Gitlab/GitHub)
 * *crc*: Compute resource controls code, dealing with resource classes and resource pools for interactive compute
 * *db_config*: Database configuration
 * *errors*: Common application error types shared by all apis
 * *k8s*: Kubernetes client code
 * *message_queue*: Redis streams messaging code
 * *migrations*: Database migrations
+* *metrics*: Store metrics data in a staging table
 * *namespace*: Code for handling namespaces (user/groups)
 * *platform*: Renku platform configuration code
 * *project*: Code for Project entities
@@ -96,17 +102,13 @@ environment can be created:
    environment.
 2. In another terminal, run `vm-run` (headless) to start a vm running
    necessary external services, like the PostgreSQL database.
-3. Potentially run `poetry-fix-cfg` to alter the `pyvenv.cfg` so that
-   poetry will use the env built by nix
+3. Run `poetry install` to install the python venv
 
-Then `make run`, `make tests` etc can be used as usual.
+Then `make run`, `make tests` etc. can be used as usual.
 
 The environment also contains other useful tools, like ruff-lsp,
 pyright and more. Instead of a vm, a development environment using
 NixOS containers is also available.
-
-The first invocation will take a while for the first run, as the
-python environment is being built. Subsequent calls are then instant.
 
 It will run a bash shell, check out [direnv](https://direnv.net/) and
 the [use flake](https://direnv.net/man/direnv-stdlib.1.html#codeuse-flake-ltinstallablegtcode)
@@ -120,9 +122,33 @@ surrounding services to run).
 * Run a specific test e.g.: `poetry run pytest test/bases/renku_data_services/data_api/test_data_connectors.py::test_create_openbis_data_connector`
 * Also run tests marked with `@pytest.mark.myskip`: `PYTEST_FORCE_RUN_MYSKIPS=1 make tests`
 
+We use [Syrupy](https://github.com/syrupy-project/syrupy) for snapshotting data in tests.
+
+To update the snapshot data, run the following command in the devcontainer:
+```bash
+$ poetry run pytest -m "not schemathesis" -n auto --snapshot-update
+```
+
+### Directly from PyCharm
+
+From the root folder of the repository, run:
+
+1. `devcontainer build --workspace-folder .`
+2. `devcontainer up --workspace-folder .`
+3. `make schemas`
+4. `make amalthea_schema`
+
+> **WARNING:**
+>
+> Be careful with the kubernetes environment in your shell, as in case of badly setup tests and environment you might try
+> to run some tests against your default cluster.
+
+Then you can run the test as usual directly from PyCharm by clicking on the green arrow next to a specific test, or a
+whole test suite or part of the test hierarchy.
+
 ## Migrations
 
-We use Alembic for migrations and we have a single version table for all schemas. This version table
+We use Alembic for migrations, and we have a single version table for all schemas. This version table
 is used by Alembic to determine what migrations have been applied or not and it resides in the `common`
 schema. That is why all the Alembic commands include the `--name common` argument.
 

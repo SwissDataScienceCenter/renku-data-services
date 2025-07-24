@@ -200,19 +200,3 @@ class UtilityEventLoop:
         self._thread.join()
         del self._loop
         del self._thread
-
-
-logging_config: dict = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "loggers": {
-        "alembic": {
-            "level": "INFO",
-            "qualname": "alembic",
-        },
-        "sqlalchemy": {
-            "level": "WARN",
-            "qualname": "sqlalchemy.engine",
-        },
-    },
-}

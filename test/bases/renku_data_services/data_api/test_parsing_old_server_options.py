@@ -3,7 +3,7 @@ from io import StringIO
 from yaml import safe_load
 
 from renku_data_services.crc import models
-from renku_data_services.data_api.server_options import (
+from renku_data_services.crc.server_options import (
     ServerOptions,
     ServerOptionsDefaults,
     generate_default_resource_pool,

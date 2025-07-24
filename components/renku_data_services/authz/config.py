@@ -17,12 +17,12 @@ class AuthzConfig:
     no_tls_connection: bool = False  # If set to true it means the communication to authzed is unencrypted
 
     @classmethod
-    def from_env(cls, prefix: str = "") -> "AuthzConfig":
+    def from_env(cls) -> "AuthzConfig":
         """Create a configuration from environment variables."""
-        host = os.environ[f"{prefix}AUTHZ_DB_HOST"]
-        grpc_port = os.environ.get(f"{prefix}AUTHZ_DB_GRPC_PORT", "50051")
-        key = os.environ[f"{prefix}AUTHZ_DB_KEY"]
-        no_tls_connection = os.environ.get(f"{prefix}AUTHZ_DB_NO_TLS_CONNECTION", "false").lower() == "true"
+        host = os.environ["AUTHZ_DB_HOST"]
+        grpc_port = os.environ.get("AUTHZ_DB_GRPC_PORT", "50051")
+        key = os.environ["AUTHZ_DB_KEY"]
+        no_tls_connection = os.environ.get("AUTHZ_DB_NO_TLS_CONNECTION", "false").lower() == "true"
         return cls(host, int(grpc_port), key, no_tls_connection)
 
     def authz_client(self) -> SyncClient:

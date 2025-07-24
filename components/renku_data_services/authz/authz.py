@@ -30,11 +30,11 @@ from authzed.api.v1 import (
     ZedToken,
 )
 from authzed.api.v1.permission_service_pb2 import LOOKUP_PERMISSIONSHIP_HAS_PERMISSION
-from sanic.log import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
 from renku_data_services import base_models
+from renku_data_services.app_config import logging
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.authz.models import (
     Change,
@@ -45,24 +45,29 @@ from renku_data_services.authz.models import (
     Scope,
     Visibility,
 )
-from renku_data_services.base_models.core import InternalServiceAdmin
+from renku_data_services.base_models.core import InternalServiceAdmin, ResourceType
 from renku_data_services.data_connectors.models import (
     DataConnector,
     DataConnectorToProjectLink,
     DataConnectorUpdate,
     DeletedDataConnector,
+    GlobalDataConnector,
 )
 from renku_data_services.errors import errors
 from renku_data_services.namespace.models import (
     DeletedGroup,
     Group,
+    GroupNamespace,
     GroupUpdate,
     Namespace,
     NamespaceKind,
-    NamespaceUpdate,
+    ProjectNamespace,
+    UserNamespace,
 )
 from renku_data_services.project.models import DeletedProject, Project, ProjectUpdate
 from renku_data_services.users.models import DeletedUser, UserInfo, UserInfoUpdate
+
+logger = logging.getLogger(__name__)
 
 _P = ParamSpec("_P")
 
@@ -88,6 +93,7 @@ _AuthzChangeFuncResult = TypeVar(
     | UserInfo
     | DeletedUser
     | DataConnector
+    | GlobalDataConnector
     | DataConnectorUpdate
     | DeletedDataConnector
     | DataConnectorToProjectLink
@@ -118,18 +124,18 @@ class _AuthzChange:
 class _Relation(StrEnum):
     """Relations for Authzed."""
 
-    owner: str = "owner"
-    editor: str = "editor"
-    viewer: str = "viewer"
-    public_viewer: str = "public_viewer"
-    admin: str = "admin"
-    project_platform: str = "project_platform"
-    group_platform: str = "group_platform"
-    user_namespace_platform: str = "user_namespace_platform"
-    project_namespace: str = "project_namespace"
-    data_connector_platform: str = "data_connector_platform"
-    data_connector_namespace: str = "data_connector_namespace"
-    linked_to: str = "linked_to"
+    owner = "owner"
+    editor = "editor"
+    viewer = "viewer"
+    public_viewer = "public_viewer"
+    admin = "admin"
+    project_platform = "project_platform"
+    group_platform = "group_platform"
+    user_namespace_platform = "user_namespace_platform"
+    project_namespace = "project_namespace"
+    data_connector_platform = "data_connector_platform"
+    data_connector_namespace = "data_connector_namespace"
+    linked_to = "linked_to"
 
     @classmethod
     def from_role(cls, role: Role) -> "_Relation":
@@ -153,28 +159,16 @@ class _Relation(StrEnum):
         raise errors.ProgrammingError(message=f"Cannot map relation {self} to any role")
 
 
-class ResourceType(StrEnum):
-    """All possible resources stored in Authzed."""
-
-    project: str = "project"
-    user: str = "user"
-    anonymous_user: str = "anonymous_user"
-    platform: str = "platform"
-    group: str = "group"
-    user_namespace: str = "user_namespace"
-    data_connector: str = "data_connector"
-
-
 class AuthzOperation(StrEnum):
     """The type of change that requires authorization database update."""
 
-    create: str = "create"
-    delete: str = "delete"
-    update: str = "update"
-    update_or_insert: str = "update_or_insert"
-    insert_many: str = "insert_many"
-    create_link: str = "create_link"
-    delete_link: str = "delete_link"
+    create = "create"
+    delete = "delete"
+    update = "update"
+    update_or_insert = "update_or_insert"
+    insert_many = "insert_many"
+    create_link = "create_link"
+    delete_link = "delete_link"
 
 
 class _AuthzConverter:
@@ -210,10 +204,12 @@ class _AuthzConverter:
 
     @staticmethod
     def group(id: ULID) -> ObjectReference:
+        """The id should be the id of the GroupORM object in the DB."""
         return ObjectReference(object_type=ResourceType.group, object_id=str(id))
 
     @staticmethod
     def user_namespace(id: ULID) -> ObjectReference:
+        """The id should be the id of the NamespaceORM object in the DB."""
         return ObjectReference(object_type=ResourceType.user_namespace, object_id=str(id))
 
     @staticmethod
@@ -276,6 +272,7 @@ def _is_allowed_on_resource(
                 | DeletedGroup
                 | Namespace
                 | DataConnector
+                | GlobalDataConnector
                 | DeletedDataConnector
                 | None
             ) = None
@@ -287,7 +284,7 @@ def _is_allowed_on_resource(
                 case ResourceType.user_namespace if isinstance(potential_resource, Namespace):
                     resource = potential_resource
                 case ResourceType.data_connector if isinstance(
-                    potential_resource, (DataConnector, DeletedDataConnector)
+                    potential_resource, (DataConnector, GlobalDataConnector, DeletedDataConnector)
                 ):
                     resource = potential_resource
                 case _:
@@ -428,7 +425,7 @@ class Authz:
                 pair.HasField("item")
                 and pair.item.permissionship == CheckPermissionResponse.PERMISSIONSHIP_HAS_PERMISSION,
             )
-            for item, pair in zip(items, response.pairs)
+            for item, pair in zip(items, response.pairs, strict=True)
         ]
 
     async def resources_with_permission(
@@ -600,121 +597,125 @@ class Authz:
     ]:
         """A decorator that updates the authorization database for different types of operations."""
 
-        def _extract_user_from_args(*args: _P.args, **kwargs: _P.kwargs) -> base_models.APIUser:
-            if len(args) == 0:
-                user_kwarg = kwargs.get("user")
-                requested_by_kwarg = kwargs.get("requested_by")
-                if isinstance(user_kwarg, base_models.APIUser) and isinstance(requested_by_kwarg, base_models.APIUser):
-                    raise errors.ProgrammingError(
-                        message="The decorator for authorization database changes found two APIUser parameters in the "
-                        "'user' and 'requested_by' keyword arguments but expected only one of them to be present."
-                    )
-                potential_user = user_kwarg if isinstance(user_kwarg, base_models.APIUser) else requested_by_kwarg
-            else:
-                potential_user = args[0]
-            if not isinstance(potential_user, base_models.APIUser):
-                raise errors.ProgrammingError(
-                    message="The decorator for authorization database changes could not find APIUser in the function "
-                    f"arguments, the type of the argument that was found is {type(potential_user)}."
-                )
-            return potential_user
-
-        async def _get_authz_change(
-            db_repo: _WithAuthz,
-            operation: AuthzOperation,
-            resource: ResourceType,
-            result: _AuthzChangeFuncResult,
-            *func_args: _P.args,
-            **func_kwargs: _P.kwargs,
-        ) -> _AuthzChange:
-            authz_change = _AuthzChange()
-            match operation, resource:
-                case AuthzOperation.create, ResourceType.project if isinstance(result, Project):
-                    authz_change = db_repo.authz._add_project(result)
-                case AuthzOperation.delete, ResourceType.project if isinstance(result, DeletedProject):
-                    user = _extract_user_from_args(*func_args, **func_kwargs)
-                    authz_change = await db_repo.authz._remove_project(user, result)
-                case AuthzOperation.delete, ResourceType.project if result is None:
-                    # NOTE: This means that the project does not exist in the first place so nothing was deleted
-                    pass
-                case AuthzOperation.update, ResourceType.project if isinstance(result, ProjectUpdate):
-                    authz_change = _AuthzChange()
-                    if result.old.visibility != result.new.visibility:
-                        user = _extract_user_from_args(*func_args, **func_kwargs)
-                        authz_change.extend(await db_repo.authz._update_project_visibility(user, result.new))
-                    if result.old.namespace.id != result.new.namespace.id:
-                        user = _extract_user_from_args(*func_args, **func_kwargs)
-                        authz_change.extend(await db_repo.authz._update_project_namespace(user, result.new))
-                case AuthzOperation.create, ResourceType.group if isinstance(result, Group):
-                    authz_change = db_repo.authz._add_group(result)
-                case AuthzOperation.delete, ResourceType.group if isinstance(result, DeletedGroup):
-                    user = _extract_user_from_args(*func_args, **func_kwargs)
-                    authz_change = await db_repo.authz._remove_group(user, result)
-                case AuthzOperation.delete, ResourceType.group if result is None:
-                    # NOTE: This means that the group does not exist in the first place so nothing was deleted
-                    pass
-                case AuthzOperation.update_or_insert, ResourceType.user if isinstance(result, UserInfoUpdate):
-                    if result.old is None:
-                        authz_change = db_repo.authz._add_user_namespace(result.new.namespace)
-                case AuthzOperation.delete, ResourceType.user if isinstance(result, DeletedUser):
-                    user = _extract_user_from_args(*func_args, **func_kwargs)
-                    authz_change = await db_repo.authz._remove_user_namespace(result.id)
-                    authz_change.extend(await db_repo.authz._remove_user(user, result))
-                case AuthzOperation.delete, ResourceType.user if result is None:
-                    # NOTE: This means that the user does not exist in the first place so nothing was deleted
-                    pass
-                case AuthzOperation.insert_many, ResourceType.user_namespace if isinstance(result, list):
-                    for res in result:
-                        if not isinstance(res, UserInfo):
-                            raise errors.ProgrammingError(
-                                message="Expected list of UserInfo when generating authorization "
-                                f"database updates for inserting namespaces but found {type(res)}"
-                            )
-                        authz_change.extend(db_repo.authz._add_user_namespace(res.namespace))
-                case AuthzOperation.create, ResourceType.data_connector if isinstance(result, DataConnector):
-                    authz_change = db_repo.authz._add_data_connector(result)
-                case AuthzOperation.delete, ResourceType.data_connector if result is None:
-                    # NOTE: This means that the data connector does not exist in the first place so nothing was deleted
-                    pass
-                case AuthzOperation.delete, ResourceType.data_connector if isinstance(result, DeletedDataConnector):
-                    user = _extract_user_from_args(*func_args, **func_kwargs)
-                    authz_change = await db_repo.authz._remove_data_connector(user, result)
-                case AuthzOperation.update, ResourceType.data_connector if isinstance(result, DataConnectorUpdate):
-                    authz_change = _AuthzChange()
-                    if result.old.visibility != result.new.visibility:
-                        user = _extract_user_from_args(*func_args, **func_kwargs)
-                        authz_change.extend(await db_repo.authz._update_data_connector_visibility(user, result.new))
-                    if result.old.namespace.id != result.new.namespace.id:
-                        user = _extract_user_from_args(*func_args, **func_kwargs)
-                        authz_change.extend(await db_repo.authz._update_data_connector_namespace(user, result.new))
-                case AuthzOperation.create_link, ResourceType.data_connector if isinstance(
-                    result, DataConnectorToProjectLink
-                ):
-                    user = _extract_user_from_args(*func_args, **func_kwargs)
-                    authz_change = await db_repo.authz._add_data_connector_to_project_link(user, result)
-                case AuthzOperation.delete_link, ResourceType.data_connector if result is None:
-                    # NOTE: This means that the link does not exist in the first place so nothing was deleted
-                    pass
-                case AuthzOperation.delete_link, ResourceType.data_connector if isinstance(
-                    result, DataConnectorToProjectLink
-                ):
-                    user = _extract_user_from_args(*func_args, **func_kwargs)
-                    authz_change = await db_repo.authz._remove_data_connector_to_project_link(user, result)
-                case _:
-                    resource_id: str | ULID | None = "unknown"
-                    if isinstance(result, (Project, Namespace, Group, DataConnector)):
-                        resource_id = result.id
-                    elif isinstance(result, (ProjectUpdate, NamespaceUpdate, GroupUpdate, DataConnectorUpdate)):
-                        resource_id = result.new.id
-                    raise errors.ProgrammingError(
-                        message=f"Encountered an unknown authorization operation {op} on resource {resource} "
-                        f"with ID {resource_id} when updating the authorization database",
-                    )
-            return authz_change
-
         def decorator(
             f: Callable[Concatenate[_WithAuthz, _P], Awaitable[_AuthzChangeFuncResult]],
         ) -> Callable[Concatenate[_WithAuthz, _P], Awaitable[_AuthzChangeFuncResult]]:
+            def _extract_user_from_args(*args: _P.args, **kwargs: _P.kwargs) -> base_models.APIUser:
+                if len(args) == 0:
+                    user_kwarg = kwargs.get("user")
+                    requested_by_kwarg = kwargs.get("requested_by")
+                    if isinstance(user_kwarg, base_models.APIUser) and isinstance(
+                        requested_by_kwarg, base_models.APIUser
+                    ):
+                        raise errors.ProgrammingError(
+                            message="The decorator for authorization database changes found two APIUser parameters in"
+                            " the 'user' and 'requested_by' keyword arguments but expected only one of them to be "
+                            "present."
+                        )
+                    potential_user = user_kwarg if isinstance(user_kwarg, base_models.APIUser) else requested_by_kwarg
+                else:
+                    potential_user = args[0]
+                if not isinstance(potential_user, base_models.APIUser):
+                    raise errors.ProgrammingError(
+                        message="The decorator for authorization database changes could not find APIUser in the "
+                        f"function arguments, the type of the argument that was found is {type(potential_user)}."
+                    )
+                return potential_user
+
+            async def _get_authz_change(
+                db_repo: _WithAuthz,
+                operation: AuthzOperation,
+                resource: ResourceType,
+                result: _AuthzChangeFuncResult,
+                *func_args: _P.args,
+                **func_kwargs: _P.kwargs,
+            ) -> _AuthzChange:
+                authz_change = _AuthzChange()
+                match operation, resource:
+                    case AuthzOperation.create, ResourceType.project if isinstance(result, Project):
+                        authz_change = db_repo.authz._add_project(result)
+                    case AuthzOperation.delete, ResourceType.project if isinstance(result, DeletedProject):
+                        user = _extract_user_from_args(*func_args, **func_kwargs)
+                        authz_change = await db_repo.authz._remove_project(user, result)
+                    case AuthzOperation.delete, ResourceType.project if result is None:
+                        # NOTE: This means that the project does not exist in the first place so nothing was deleted
+                        pass
+                    case AuthzOperation.update, ResourceType.project if isinstance(result, ProjectUpdate):
+                        authz_change = _AuthzChange()
+                        if result.old.visibility != result.new.visibility:
+                            user = _extract_user_from_args(*func_args, **func_kwargs)
+                            authz_change.extend(await db_repo.authz._update_project_visibility(user, result.new))
+                        if result.old.namespace.id != result.new.namespace.id:
+                            user = _extract_user_from_args(*func_args, **func_kwargs)
+                            authz_change.extend(await db_repo.authz._update_project_namespace(user, result.new))
+                    case AuthzOperation.create, ResourceType.group if isinstance(result, Group):
+                        authz_change = db_repo.authz._add_group(result)
+                    case AuthzOperation.delete, ResourceType.group if isinstance(result, DeletedGroup):
+                        user = _extract_user_from_args(*func_args, **func_kwargs)
+                        authz_change = await db_repo.authz._remove_group(user, result)
+                    case AuthzOperation.delete, ResourceType.group if result is None:
+                        # NOTE: This means that the group does not exist in the first place so nothing was deleted
+                        pass
+                    case AuthzOperation.update_or_insert, ResourceType.user if isinstance(result, UserInfoUpdate):
+                        if result.old is None:
+                            authz_change = db_repo.authz._add_user_namespace(result.new.namespace)
+                    case AuthzOperation.delete, ResourceType.user if isinstance(result, DeletedUser):
+                        user = _extract_user_from_args(*func_args, **func_kwargs)
+                        authz_change = await db_repo.authz._remove_user_namespace(result.id)
+                        authz_change.extend(await db_repo.authz._remove_user(user, result))
+                    case AuthzOperation.delete, ResourceType.user if result is None:
+                        # NOTE: This means that the user does not exist in the first place so nothing was deleted
+                        pass
+                    case AuthzOperation.insert_many, ResourceType.user_namespace if isinstance(result, list):
+                        for res in result:
+                            if not isinstance(res, UserInfo):
+                                raise errors.ProgrammingError(
+                                    message="Expected list of UserInfo when generating authorization "
+                                    f"database updates for inserting namespaces but found {type(res)}"
+                                )
+                            authz_change.extend(db_repo.authz._add_user_namespace(res.namespace))
+                    case AuthzOperation.create, ResourceType.data_connector if isinstance(result, DataConnector):
+                        authz_change = db_repo.authz._add_data_connector(result)
+                    case AuthzOperation.create, ResourceType.data_connector if isinstance(result, GlobalDataConnector):
+                        authz_change = db_repo.authz._add_global_data_connector(result)
+                    case AuthzOperation.delete, ResourceType.data_connector if result is None:
+                        # NOTE: This means that the dc does not exist in the first place so nothing was deleted
+                        pass
+                    case AuthzOperation.delete, ResourceType.data_connector if isinstance(result, DeletedDataConnector):
+                        user = _extract_user_from_args(*func_args, **func_kwargs)
+                        authz_change = await db_repo.authz._remove_data_connector(user, result)
+                    case AuthzOperation.update, ResourceType.data_connector if isinstance(result, DataConnectorUpdate):
+                        authz_change = _AuthzChange()
+                        if result.old.visibility != result.new.visibility:
+                            user = _extract_user_from_args(*func_args, **func_kwargs)
+                            authz_change.extend(await db_repo.authz._update_data_connector_visibility(user, result.new))
+                        if result.old.namespace != result.new.namespace:
+                            user = _extract_user_from_args(*func_args, **func_kwargs)
+                            if isinstance(result.new, GlobalDataConnector):
+                                raise errors.ValidationError(
+                                    message=f"Updating the namespace of a global data connector is not supported ('{result.new.id}')"  # noqa E501
+                                )
+                            authz_change.extend(await db_repo.authz._update_data_connector_namespace(user, result.new))
+                    case AuthzOperation.delete_link, ResourceType.data_connector if result is None:
+                        # NOTE: This means that the link does not exist in the first place so nothing was deleted
+                        pass
+                    case AuthzOperation.delete_link, ResourceType.data_connector if isinstance(
+                        result, DataConnectorToProjectLink
+                    ):
+                        user = _extract_user_from_args(*func_args, **func_kwargs)
+                        authz_change = await db_repo.authz._remove_data_connector_to_project_link(user, result)
+                    case _:
+                        resource_id: str | ULID | None = "unknown"
+                        if isinstance(result, (Project, Namespace, Group, DataConnector)):
+                            resource_id = result.id
+                        elif isinstance(result, (ProjectUpdate, GroupUpdate, DataConnectorUpdate)):
+                            resource_id = result.new.id
+                        raise errors.ProgrammingError(
+                            message=f"Encountered an unknown authorization operation {op} on resource {resource} "
+                            f"with ID {resource_id} when updating the authorization database",
+                        )
+                return authz_change
+
             @wraps(f)
             async def decorated_function(
                 db_repo: _WithAuthz, *args: _P.args, **kwargs: _P.kwargs
@@ -1570,25 +1571,67 @@ class Authz:
 
     def _add_data_connector(self, data_connector: DataConnector) -> _AuthzChange:
         """Create the new data connector and associated resources and relations in the DB."""
-        creator = SubjectReference(object=_AuthzConverter.user(data_connector.created_by))
         data_connector_res = _AuthzConverter.data_connector(data_connector.id)
-        creator_is_owner = Relationship(resource=data_connector_res, relation=_Relation.owner.value, subject=creator)
+        match data_connector.namespace:
+            case ProjectNamespace():
+                owned_by = _AuthzConverter.project(data_connector.namespace.underlying_resource_id)
+            case UserNamespace():
+                owned_by = _AuthzConverter.user_namespace(data_connector.namespace.id)
+            case GroupNamespace():
+                owned_by = _AuthzConverter.group(data_connector.namespace.underlying_resource_id)
+            case _:
+                raise errors.ProgrammingError(
+                    message="Tried to match unexpected data connector namespace kind", quiet=True
+                )
+        owner = Relationship(
+            resource=data_connector_res,
+            relation=_Relation.data_connector_namespace,
+            subject=SubjectReference(object=owned_by),
+        )
         all_users = SubjectReference(object=_AuthzConverter.all_users())
         all_anon_users = SubjectReference(object=_AuthzConverter.anonymous_users())
-        data_connector_namespace = SubjectReference(
-            object=_AuthzConverter.user_namespace(data_connector.namespace.id)
-            if data_connector.namespace.kind == NamespaceKind.user
-            else _AuthzConverter.group(cast(ULID, data_connector.namespace.underlying_resource_id))
-        )
         data_connector_in_platform = Relationship(
             resource=data_connector_res,
             relation=_Relation.data_connector_platform,
             subject=SubjectReference(object=self._platform),
         )
-        data_connector_in_namespace = Relationship(
-            resource=data_connector_res, relation=_Relation.data_connector_namespace, subject=data_connector_namespace
+        relationships = [owner, data_connector_in_platform]
+        if data_connector.visibility == Visibility.PUBLIC:
+            all_users_are_viewers = Relationship(
+                resource=data_connector_res,
+                relation=_Relation.public_viewer.value,
+                subject=all_users,
+            )
+            all_anon_users_are_viewers = Relationship(
+                resource=data_connector_res,
+                relation=_Relation.public_viewer.value,
+                subject=all_anon_users,
+            )
+            relationships.extend([all_users_are_viewers, all_anon_users_are_viewers])
+        apply = WriteRelationshipsRequest(
+            updates=[
+                RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=i) for i in relationships
+            ]
         )
-        relationships = [creator_is_owner, data_connector_in_platform, data_connector_in_namespace]
+        undo = WriteRelationshipsRequest(
+            updates=[
+                RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=i) for i in relationships
+            ]
+        )
+        return _AuthzChange(apply=apply, undo=undo)
+
+    def _add_global_data_connector(self, data_connector: GlobalDataConnector) -> _AuthzChange:
+        """Create the new global data connector and associated resources and relations in the DB."""
+        data_connector_res = _AuthzConverter.data_connector(data_connector.id)
+
+        all_users = SubjectReference(object=_AuthzConverter.all_users())
+        all_anon_users = SubjectReference(object=_AuthzConverter.anonymous_users())
+        data_connector_in_platform = Relationship(
+            resource=data_connector_res,
+            relation=_Relation.data_connector_platform,
+            subject=SubjectReference(object=self._platform),
+        )
+        relationships = [data_connector_in_platform]
         if data_connector.visibility == Visibility.PUBLIC:
             all_users_are_viewers = Relationship(
                 resource=data_connector_res,
@@ -1671,7 +1714,11 @@ class Authz:
     # NOTE changing visibility is the same access level as removal
     @_is_allowed_on_resource(Scope.DELETE, ResourceType.data_connector)
     async def _update_data_connector_visibility(
-        self, user: base_models.APIUser, data_connector: DataConnector, *, zed_token: ZedToken | None = None
+        self,
+        user: base_models.APIUser,
+        data_connector: DataConnector | GlobalDataConnector,
+        *,
+        zed_token: ZedToken | None = None,
     ) -> _AuthzChange:
         """Update the visibility of the data connector in the authorization database."""
         data_connector_id_str = str(data_connector.id)
@@ -1761,7 +1808,11 @@ class Authz:
     # NOTE changing namespace is the same access level as removal
     @_is_allowed_on_resource(Scope.DELETE, ResourceType.data_connector)
     async def _update_data_connector_namespace(
-        self, user: base_models.APIUser, data_connector: DataConnector, *, zed_token: ZedToken | None = None
+        self,
+        user: base_models.APIUser,
+        data_connector: DataConnector,
+        *,
+        zed_token: ZedToken | None = None,
     ) -> _AuthzChange:
         """Update the namespace of the data connector in the authorization database."""
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
@@ -1784,13 +1835,24 @@ class Authz:
                 message=f"The data connector with ID {data_connector.id} whose namespace is being updated "
                 "does not currently have a namespace."
             )
-        if current_namespace.relationship.subject.object.object_id == data_connector.namespace.id:
+        match data_connector.namespace:
+            case UserNamespace():
+                new_namespace_owner = _AuthzConverter.user_namespace(data_connector.namespace.id)
+                new_namespace_id = data_connector.namespace.id
+            case GroupNamespace():
+                new_namespace_owner = _AuthzConverter.group(data_connector.namespace.underlying_resource_id)
+                new_namespace_id = data_connector.namespace.underlying_resource_id
+            case ProjectNamespace():
+                new_namespace_owner = _AuthzConverter.project(data_connector.namespace.underlying_resource_id)
+                new_namespace_id = data_connector.namespace.underlying_resource_id
+            case x:
+                raise errors.ProgrammingError(
+                    message=f"Received unknown namespace kind {x} when updating namespace of a data connector."
+                )
+
+        if current_namespace.relationship.subject.object.object_id == new_namespace_id:
             return _AuthzChange()
-        new_namespace_sub = (
-            SubjectReference(object=_AuthzConverter.group(data_connector.namespace.id))
-            if data_connector.namespace.kind == NamespaceKind.group
-            else SubjectReference(object=_AuthzConverter.user_namespace(data_connector.namespace.id))
-        )
+        new_namespace_sub = SubjectReference(object=new_namespace_owner)
         old_namespace_sub = (
             SubjectReference(
                 object=_AuthzConverter.group(ULID.from_str(current_namespace.relationship.subject.object.object_id))
@@ -1823,47 +1885,6 @@ class Authz:
             ]
         )
         return _AuthzChange(apply=apply_change, undo=undo_change)
-
-    async def _add_data_connector_to_project_link(
-        self, user: base_models.APIUser, link: DataConnectorToProjectLink
-    ) -> _AuthzChange:
-        """Links a data connector to a project."""
-        # NOTE: we manually check for permissions here since it is not trivially expressed through decorators
-        allowed_from = await self.has_permission(
-            user, ResourceType.data_connector, link.data_connector_id, Scope.ADD_LINK
-        )
-        if not allowed_from:
-            raise errors.MissingResourceError(
-                message=f"The user with ID {user.id} cannot perform operation {Scope.ADD_LINK} "
-                f"on {ResourceType.data_connector.value} "
-                f"with ID {link.data_connector_id} or the resource does not exist."
-            )
-        allowed_to = await self.has_permission(user, ResourceType.project, link.project_id, Scope.WRITE)
-        if not allowed_to:
-            raise errors.MissingResourceError(
-                message=f"The user with ID {user.id} cannot perform operation {Scope.WRITE} "
-                f"on {ResourceType.project.value} "
-                f"with ID {link.project_id} or the resource does not exist."
-            )
-
-        data_connector_res = _AuthzConverter.data_connector(link.data_connector_id)
-        project_subject = SubjectReference(object=_AuthzConverter.project(link.project_id))
-        relationship = Relationship(
-            resource=data_connector_res,
-            relation=_Relation.linked_to.value,
-            subject=project_subject,
-        )
-        apply = WriteRelationshipsRequest(
-            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=relationship)]
-        )
-        undo = WriteRelationshipsRequest(
-            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=relationship)]
-        )
-        change = _AuthzChange(
-            apply=apply,
-            undo=undo,
-        )
-        return change
 
     async def _remove_data_connector_to_project_link(
         self, user: base_models.APIUser, link: DataConnectorToProjectLink

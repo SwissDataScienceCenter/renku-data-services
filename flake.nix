@@ -1,9 +1,9 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/release-24.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     devshell-tools.url = "github:eikek/devshell-tools";
-    poetry2nix.url = "github:nix-community/poetry2nix";
+    devshell-tools.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs = inputs @ {
@@ -11,14 +11,16 @@
     nixpkgs,
     flake-utils,
     devshell-tools,
-    poetry2nix,
   }:
     {
       nixosConfigurations = let
+        system = flake-utils.lib.system.x86_64-linux;
         services = {
           services.dev-postgres = {
             enable = true;
-            databases = ["renku"];
+            databases = ["renku_test"];
+            init-script = ./.devcontainer/generate_ulid_func.sql;
+            pkg = nixpkgs.legacyPackages.${system}.postgresql_16;
             pgweb = {
               enable = true;
               database = "renku";
@@ -31,10 +33,15 @@
             enable = true;
             openapi-spec = "http://localhost:8000/api/data/spec.json";
           };
+          services.dev-solr = {
+            enable = true;
+            cores = ["renku-search-dev"];
+            heap = 1024;
+          };
         };
       in {
         rdsdev-vm = devshell-tools.lib.mkVm {
-          system = flake-utils.lib.system.x86_64-linux;
+          inherit system;
           modules = [
             {
               virtualisation.memorySize = 2048;
@@ -55,114 +62,174 @@
       pkgs = nixpkgs.legacyPackages.${system};
       devshellToolsPkgs = devshell-tools.packages.${system};
 
-      poetryLib = poetry2nix.lib.mkPoetry2Nix {inherit pkgs;};
-      p2n-args = {
-        projectDir = ./.;
-        python = pkgs.python312;
-        editablePackageSources = {
-          bases = ./bases;
-          components = ./components;
+      rclone-sdsc = pkgs.rclone.overrideAttrs (old: {
+        version = "1.70.0";
+        vendorHash = "sha256-9yEWEM96cRUzp1mRXEzxvOaBZQsf7Zifoe163OtJCPw=";
+        nativeInstallCheckInputs = [];
+        src = pkgs.fetchFromGitHub {
+          owner = "SwissDataScienceCenter";
+          repo = "rclone";
+          rev = "v1.70.0+renku-1";
+          sha256 = "sha256-JJk3H9aExACIxSGwZYgZzuefeoZtJrTUrv7ffk+Xpzg=";
         };
-        extraPackages = p: [
-          p.ruff-lsp
-        ];
-        overrides = let
-          add-setuptools = name: final: prev:
-            prev.${name}.overridePythonAttrs (old: {buildInputs = (old.buildInputs or []) ++ [prev.setuptools];});
-          add-poetry = name: final: prev:
-            prev.${name}.overridePythonAttrs (old: {buildInputs = (old.buildInputs or []) ++ [prev.poetry];});
-        in
-          poetryLib.defaultPoetryOverrides.extend
-          (final: prev: {
-            appier = add-setuptools "appier" final prev;
-            inflector = add-setuptools "inflector" final prev;
-            google-api = add-setuptools "google-api" final prev;
-            sanic-ext = add-setuptools "sanic-ext" final prev;
-            undictify = add-setuptools "undictify" final prev;
-            types-cffi = add-setuptools "types-cffi" final prev;
-            avro-preprocessor = add-setuptools "avro-preprocessor" final prev;
-            authzed = add-poetry "authzed" final prev;
-            dataclasses-avroschema = add-poetry "dataclasses-avroschema" final prev;
-            datamodel-code-generator = add-poetry "datamodel-code-generator" final prev;
-            kubernetes-asyncio = add-setuptools "kubernetes-asyncio" final prev;
-            prometheus-sanic =
-              prev.prometheus-sanic.overridePythonAttrs
-              (
-                old: {
-                  buildInputs = (old.buildInputs or []) ++ [prev.poetry prev.poetry-core];
-                  # fix the wrong dependency
-                  # see https://github.com/nix-community/poetry2nix/issues/1694
-                  postPatch = ''
-                    substituteInPlace pyproject.toml --replace "poetry.masonry" "poetry.core.masonry"
-                  '';
-                }
-              );
-          });
-      };
+      });
 
-      projectEnv = poetryLib.mkPoetryEnv p2n-args;
+      ruff = pkgs.ruff.overrideAttrs (old: rec {
+        pname = "ruff";
+        version = "0.8.6";
+        src = pkgs.fetchFromGitHub {
+          owner = "astral-sh";
+          repo = "ruff";
+          tag = "0.8.6";
+          hash = "sha256-9YvHmNiKdf5hKqy9tToFSQZM2DNLoIiChcfjQay8wbU=";
+        };
+        cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
+          inherit src;
+          name = "${pname}-${version}";
+          hash = "sha256-aTzTCDCMhG4cKD9wFNHv6A3VBUifnKgI8a6kelc3bAM=";
+        };
+      });
 
-      devSettings = {
-        CORS_ALLOW_ALL_ORIGINS = "true";
-        DB_USER = "dev";
-        DB_NAME = "renku";
-        DB_PASSWORD = "dev";
-        AUTHZ_DB_KEY = "dev";
-        AUTHZ_DB_NO_TLS_CONNECTION = "true";
-        AUTHZ_DB_GRPC_PORT = "50051";
-        ALEMBIC_CONFIG = "./components/renku_data_services/migrations/alembic.ini";
-
-        # necessary for poetry run … as it might need to compile stuff
-        # ONLY WHEN NOT using python from nix dev environment
-        #LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
+      poetrySettings = {
+        LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
         POETRY_VIRTUALENVS_PREFER_ACTIVE_PYTHON = "true";
         POETRY_VIRTUALENVS_OPTIONS_SYSTEM_SITE_PACKAGES = "true";
+        POETRY_INSTALLER_NO_BINARY = "ruff";
       };
+      devSettings =
+        poetrySettings
+        // {
+          CORS_ALLOW_ALL_ORIGINS = "true";
+          DB_USER = "dev";
+          DB_NAME = "renku";
+          DB_PASSWORD = "dev";
+          PGPASSWORD = "dev";
+          PSQLRC = pkgs.writeText "rsdrc.sql" ''
+            SET SEARCH_PATH TO authz,common,connected_services,events,platform,projects,public,resource_pools,secrets,sessions,storage,users
+          '';
+          AUTHZ_DB_KEY = "dev";
+          AUTHZ_DB_NO_TLS_CONNECTION = "true";
+          AUTHZ_DB_GRPC_PORT = "50051";
 
-      fix-poetry-cfg = pkgs.writeShellScriptBin "poetry-fix-cfg" ''
-        python_exec="$(which python)"
-        python_bin="$(dirname "$python_exec")"
-        python_env="$(dirname "$python_bin")"
+          DUMMY_STORES = "true";
 
-        env_path="$(poetry env info -p)"
-        if [ -z "$env_path" ]; then
-          poetry env use "$python_exec"
-          env_path="$(poetry env info -p)"
-        fi
-        env_cfg="$env_path/pyvenv.cfg"
+          ZED_ENDPOINT = "localhost:50051";
+          ZED_TOKEN = "dev";
 
-        if [ ! -r "$env_path/pyvenv.cfg.bak" ]; then
-          cp "$env_path/pyvenv.cfg" "$env_path/pyvenv.cfg.bak"
-        fi
+          SOLR_BIN_PATH = "${devshellToolsPkgs.solr}/bin/solr";
 
-        echo "Fix paths in: $env_cfg"
-        ${pkgs.gnused}/bin/sed -i -E "s,home = (.*)$,home = $python_bin,g" "$env_cfg"
-        ${pkgs.gnused}/bin/sed -i -E "s,base-prefix = (.*)$,base-prefix = $python_env,g" "$env_cfg"
-        ${pkgs.gnused}/bin/sed -i -E "s,base-exec-prefix = (.*)$,base-exec-prefix = $python_env,g" "$env_cfg"
-        ${pkgs.gnused}/bin/sed -i -E "s,base-executable = (.*)$,base-executable = $python_exec,g" "$env_cfg"
-      '';
+          shellHook = ''
+            export FLAKE_ROOT="$(git rev-parse --show-toplevel)"
+            export PATH="$FLAKE_ROOT/.venv/bin:$PATH"
+            export ALEMBIC_CONFIG="$FLAKE_ROOT/components/renku_data_services/migrations/alembic.ini"
+            export NB_SERVER_OPTIONS__DEFAULTS_PATH="$FLAKE_ROOT/server_defaults.json"
+            export NB_SERVER_OPTIONS__UI_CHOICES_PATH="$FLAKE_ROOT/server_options.json"
+          '';
+        };
+
       commonPackages = with pkgs; [
         redis
-        postgresql
+        postgresql_16
         jq
         devshellToolsPkgs.openapi-docs
+        devshellToolsPkgs.solr
+        devshellToolsPkgs.postgres-fg
         spicedb
+        cargo
+        rustc
         spicedb-zed
         ruff
-        ruff-lsp
         poetry
-        pyright
-        mypy
-        rclone
-        fix-poetry-cfg
+        python313
+        basedpyright
+        rclone-sdsc
+        (
+          writeShellScriptBin "pg" ''
+            psql -h $DB_HOST -p $DB_PORT -U dev $DB_NAME
+          ''
+        )
+        (writeShellScriptBin "pyfix" ''
+          poetry run ruff check --fix
+          poetry run ruff format
+        '')
+        (
+          writeShellScriptBin "poetry-setup" ''
+            venv_path="$(poetry env info -p)"
+            if [ "$1" == "-c" ]; then
+               echo "Removing virtual env at $venv_path"
+               rm -rf "$venv_path"/*
+            fi
+            poetry install
+            if ! poetry self show --addons | grep poetry-multiproject-plugin > /dev/null; then
+                poetry self add poetry-multiproject-plugin
+            fi
+            if ! poetry self show --addons | grep poetry-polylith-plugin > /dev/null; then
+                poetry self add poetry-polylith-plugin
+            fi
+          ''
+        )
+        (
+          writeShellScriptBin "zedl" ''
+            ${spicedb-zed}/bin/zed --no-verify-ca --insecure --endpoint ''$ZED_ENDPOINT --token ''$ZED_TOKEN $@
+          ''
+        )
       ];
     in {
       formatter = pkgs.alejandra;
 
       devShells = rec {
         default = vm;
-        vm = projectEnv.env.overrideAttrs (oldAttrs:
-          devSettings
+        devcontainer = pkgs.mkShell (poetrySettings
+          // {
+            buildInputs =
+              commonPackages
+              ++ [
+                pkgs.devcontainer
+                (pkgs.writeShellScriptBin "devc" ''
+                  devcontainer exec --workspace-folder $FLAKE_ROOT \
+                    --remote-env POETRY_VIRTUALENVS_IN_PROJECT=false \
+                    -- bash -c "$@"
+                '')
+                (pkgs.writeShellScriptBin "devcontainer-up" ''
+                  devcontainer up --workspace-folder $FLAKE_ROOT \
+                    --remote-env POETRY_VIRTUALENVS_IN_PROJECT=false
+                '')
+                (pkgs.writeShellScriptBin "devcontainer-build" ''
+                  devcontainer build --workspace-folder $FLAKE_ROOT \
+                    --remote-env POETRY_VIRTUALENVS_IN_PROJECT=false
+                '')
+                (pkgs.writeShellScriptBin "devcontainer-destroy" ''
+                  set -e
+                  docker stop $(docker ps -a -q)
+                  docker container ls -f "name=renku-data-services_*" -a -q | xargs docker rm -f
+                  docker volume ls -f "name=renku-data-services_*" -q | xargs docker volume rm -f
+                '')
+                (pkgs.writeShellScriptBin "devcontainer-main-tests" ''
+                  devcontainer exec --workspace-folder $FLAKE_ROOT \
+                    --remote-env POETRY_VIRTUALENVS_IN_PROJECT=false \
+                    -- bash -c "make main_tests"
+                '')
+                (pkgs.writeShellScriptBin "devcontainer-schemathesis" ''
+                  devcontainer exec --workspace-folder $FLAKE_ROOT \
+                    --remote-env POETRY_VIRTUALENVS_IN_PROJECT=false \
+                    --remote-env HYPOTHESIS_PROFILE=ci \
+                    -- bash -c "make schemathesis_tests"
+                '')
+                (pkgs.writeShellScriptBin "devcontainer-pytest" ''
+                  devcontainer exec --workspace-folder $FLAKE_ROOT \
+                     --remote-env POETRY_VIRTUALENVS_IN_PROJECT=false \
+                     --remote-env HYPOTHESIS_PROFILE=ci \
+                     --remote-env DUMMY_STORES=true \
+                     -- bash -c "poetry run pytest --no-cov -p no:warnings -s \"$@\""
+                '')
+              ];
+
+            shellHook = ''
+              export FLAKE_ROOT="$(git rev-parse --show-toplevel)"
+              export PATH="$FLAKE_ROOT/.venv/bin:$PATH"
+            '';
+          });
+        vm = pkgs.mkShell (devSettings
           // {
             buildInputs =
               commonPackages
@@ -174,6 +241,8 @@
             DB_HOST = "localhost";
             DB_PORT = "15432";
             AUTHZ_DB_HOST = "localhost";
+            SOLR_URL = "http://localhost:18983";
+            SOLR_CORE = "renku-search-dev";
           });
 
         cnt = let
@@ -183,7 +252,7 @@
             ${pkgs.socat}/bin/socat TCP-LISTEN:50051,fork TCP:rsdevcnt:50051
           '';
         in
-          projectEnv.env.overrideAttrs (oldAttrs:
+          pkgs.mkShell (
             devSettings
             // {
               buildInputs =
@@ -196,7 +265,10 @@
               DB_HOST = "rsdevcnt";
               DB_PORT = "5432";
               AUTHZ_DB_HOST = "localhost";
-            });
+              SOLR_URL = "http://rsdevcnt:8983";
+              SOLR_CORE = "renku-search-dev";
+            }
+          );
       };
     });
 }

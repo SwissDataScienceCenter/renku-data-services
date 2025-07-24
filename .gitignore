@@ -88,3 +88,7 @@ result
 *.gz
 *.tgz
 .dmypy.json
+
+# VScode local config
+.vscode/*
+!.vscode/settings.json

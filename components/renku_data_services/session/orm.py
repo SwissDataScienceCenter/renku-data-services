@@ -3,12 +3,13 @@
 from datetime import datetime
 from pathlib import PurePosixPath
 
-from sqlalchemy import JSON, DateTime, MetaData, String, func
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, MetaData, String, false, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
 from ulid import ULID
 
+from renku_data_services import errors
 from renku_data_services.crc.orm import ResourceClassORM
 from renku_data_services.project.orm import ProjectORM
 from renku_data_services.session import models
@@ -55,6 +56,10 @@ class EnvironmentORM(BaseORM):
     uid: Mapped[int] = mapped_column("uid")
     gid: Mapped[int] = mapped_column("gid")
     environment_kind: Mapped[models.EnvironmentKind] = mapped_column("environment_kind")
+    environment_image_source: Mapped[models.EnvironmentImageSource] = mapped_column(
+        "environment_image_source", server_default="image", nullable=False
+    )
+
     args: Mapped[list[str] | None] = mapped_column("args", JSONVariant, nullable=True)
     command: Mapped[list[str] | None] = mapped_column("command", JSONVariant, nullable=True)
 
@@ -62,6 +67,19 @@ class EnvironmentORM(BaseORM):
         "creation_date", DateTime(timezone=True), default=func.now(), nullable=False
     )
     """Creation date and time."""
+
+    is_archived: Mapped[bool] = mapped_column(
+        "is_archived", Boolean(), default=False, server_default=false(), nullable=False
+    )
+
+    build_parameters_id: Mapped[ULID | None] = mapped_column(
+        "build_parameters_id",
+        ForeignKey("build_parameters.id", ondelete="CASCADE", name="environments_build_parameters_id_fk"),
+        nullable=True,
+        server_default=None,
+        default=None,
+    )
+    build_parameters: Mapped["BuildParametersORM"] = relationship(lazy="joined", default=None)
 
     def dump(self) -> models.Environment:
         """Create a session environment model from the EnvironmentORM."""
@@ -81,6 +99,10 @@ class EnvironmentORM(BaseORM):
             port=self.port,
             args=self.args,
             command=self.command,
+            is_archived=self.is_archived,
+            environment_image_source=self.environment_image_source,
+            build_parameters=self.build_parameters.dump() if self.build_parameters else None,
+            build_parameters_id=self.build_parameters_id,
         )
 
 
@@ -128,6 +150,14 @@ class SessionLauncherORM(BaseORM):
     )
     """Id of the resource class."""
 
+    disk_storage: Mapped[int | None] = mapped_column("disk_storage", BigInteger, default=None, nullable=True)
+    """Default value for requested disk storage."""
+
+    env_variables: Mapped[dict[str, str | None] | None] = mapped_column(
+        "env_variables", JSONVariant, default=None, nullable=True
+    )
+    """Environment variables to set in the session."""
+
     @classmethod
     def load(cls, launcher: models.SessionLauncher) -> "SessionLauncherORM":
         """Create SessionLauncherORM from the session launcher model."""
@@ -139,6 +169,8 @@ class SessionLauncherORM(BaseORM):
             project_id=launcher.project_id,
             environment_id=launcher.environment.id,
             resource_class_id=launcher.resource_class_id,
+            disk_storage=launcher.disk_storage,
+            env_variables=models.EnvVar.to_dict(launcher.env_variables) if launcher.env_variables else None,
         )
 
     def dump(self) -> models.SessionLauncher:
@@ -151,5 +183,98 @@ class SessionLauncherORM(BaseORM):
             creation_date=self.creation_date,
             description=self.description,
             resource_class_id=self.resource_class_id,
+            disk_storage=self.disk_storage,
+            env_variables=models.EnvVar.from_dict(self.env_variables) if self.env_variables else None,
             environment=self.environment.dump(),
+        )
+
+
+class BuildParametersORM(BaseORM):
+    """A Renku 2.0 session build parameters."""
+
+    __tablename__ = "build_parameters"
+
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    """Id of this session build parameters object."""
+
+    repository: Mapped[str] = mapped_column("repository", String(500))
+
+    builder_variant: Mapped[str] = mapped_column("builder_variant", String(99))
+
+    frontend_variant: Mapped[str] = mapped_column("frontend_variant", String(99))
+
+    repository_revision: Mapped[str | None] = mapped_column(
+        "repository_revision", String(500), nullable=True, default=None
+    )
+
+    context_dir: Mapped[str | None] = mapped_column("context_dir", String(500), nullable=True, default=None)
+
+    def dump(self) -> models.BuildParameters:
+        """Create a session build parameters model from the BuildParametersORM."""
+        return models.BuildParameters(
+            id=self.id,
+            repository=self.repository,
+            builder_variant=self.builder_variant,
+            frontend_variant=self.frontend_variant,
+            repository_revision=self.repository_revision,
+            context_dir=self.context_dir,
+        )
+
+
+class BuildORM(BaseORM):
+    """A build of a container image."""
+
+    __tablename__ = "builds"
+
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    """ID of this container image build."""
+
+    environment_id: Mapped[ULID] = mapped_column("environment_id", ForeignKey(EnvironmentORM.id, ondelete="CASCADE"))
+    environment: Mapped[EnvironmentORM] = relationship(init=False, repr=False, lazy="selectin")
+
+    status: Mapped[models.BuildStatus] = mapped_column("status")
+
+    created_at: Mapped[datetime] = mapped_column(
+        "created_at", DateTime(timezone=True), default=func.now(), nullable=False
+    )
+
+    result_image: Mapped[str | None] = mapped_column("result_image", String(500), default=None)
+
+    completed_at: Mapped[datetime | None] = mapped_column("completed_at", DateTime(timezone=True), default=None)
+
+    result_repository_url: Mapped[str | None] = mapped_column("result_repository_url", String(500), default=None)
+
+    result_repository_git_commit_sha: Mapped[str | None] = mapped_column(
+        "result_repository_git_commit_sha", String(100), default=None
+    )
+
+    error_reason: Mapped[str | None] = mapped_column("error_reason", String(500), default=None)
+
+    def dump(self) -> models.Build:
+        """Create a build object from the ORM object."""
+        result = self._dump_result()
+        return models.Build(
+            id=self.id,
+            environment_id=self.environment_id,
+            created_at=self.created_at,
+            status=self.status,
+            result=result,
+            error_reason=self.error_reason,
+        )
+
+    def _dump_result(self) -> models.BuildResult | None:
+        if self.status != models.BuildStatus.succeeded:
+            return None
+        if (
+            self.result_image is None
+            or self.completed_at is None
+            or self.result_repository_url is None
+            or self.result_repository_git_commit_sha is None
+        ):
+            raise errors.ProgrammingError(message=f"Build with id '{self.id}' is invalid.")
+        return models.BuildResult(
+            image=self.result_image,
+            completed_at=self.completed_at,
+            repository_url=self.result_repository_url,
+            repository_git_commit_sha=self.result_repository_git_commit_sha,
         )
