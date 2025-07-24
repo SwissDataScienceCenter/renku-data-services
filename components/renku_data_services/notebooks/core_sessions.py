@@ -740,7 +740,6 @@ async def start_session(
     else:
         try:
             await request_session_secret_creation(user, nb_config, session, session_secrets)
-            # await request_dc_secret_creation(user, nb_config, session, enc_secrets)
             data_connector_secrets = session_extras.data_connector_secrets or dict()
             await request_dc_secret_creation(user, nb_config, session, data_connector_secrets)
         except Exception:
