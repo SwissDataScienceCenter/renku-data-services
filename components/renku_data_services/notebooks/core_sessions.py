@@ -849,7 +849,6 @@ async def patch_session(
     session_secrets = await project_session_secret_repo.get_all_session_secrets_from_project(
         user=user, project_id=project.id
     )
-    # data_connectors_stream = data_connector_secret_repo.get_data_connectors_with_secrets(user, project.id)
     git_providers = await nb_config.git_provider_helper.get_providers(user=user)
     repositories = repositories_from_project(project, git_providers)
 
@@ -866,7 +865,11 @@ async def patch_session(
     )
 
     # Data connectors: skip
-    # TODO: how can we patch data connectors? Should we even patch them?
+    # TODO: How can we patch data connectors? Should we even patch them?
+    # TODO: The fact that `start_session()` accepts overrides for data connectors
+    # TODO: but that we do not save these overrides (e.g. as annotations) means that
+    # TODO: we cannot patch data connectors upon resume.
+    # TODO: If we did, we would lose the user's provided overrides (e.g. unsaved credentials).
 
     # More init containers
     session_extras = session_extras.concat(
