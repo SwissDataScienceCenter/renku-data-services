@@ -296,6 +296,7 @@ class AmaltheaSessionV1Alpha1SpecSessionPatch(BaseCRD):
     shmSize: int | str | None = None
     storage: Storage | None = None
     imagePullPolicy: ImagePullPolicy | None = None
+    extraVolumeMounts: list[ExtraVolumeMount] | None = None
 
 
 class AmaltheaSessionV1Alpha1SpecPatch(BaseCRD):
