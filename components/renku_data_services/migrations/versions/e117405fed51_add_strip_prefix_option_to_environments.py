@@ -1,7 +1,7 @@
 """add strip prefix option to environments
 
 Revision ID: e117405fed51
-Revises: a1f7f5fbec9a
+Revises: ca3731b65787
 Create Date: 2025-03-27 16:48:51.460749
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "e117405fed51"
-down_revision = "a1f7f5fbec9a"
+down_revision = "ca3731b65787"
 branch_labels = None
 depends_on = None
 

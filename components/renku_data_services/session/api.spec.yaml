@@ -912,10 +912,10 @@ components:
         If set to true the default url and the base path where sessions are
         served will be removed from all URL paths before the requests reach
         the server running in the session. So the server in the session will
-        receive HTTP requests whose base path will be "/". However this will 
-        not work unless the server running inside the session can be made 
+        receive HTTP requests whose base path will be "/". However this will
+        not work unless the server running inside the session can be made
         aware that paths are rewritten. For example, if the application/server
-        running in the session serves a HTML page that then loads javascript 
+        running in the session serves a HTML page that then loads javascript
         and CSS, the path where these assets should be loaded from in the browser
         will not be "/" but it has to include the prefix that was stripped. And
         the server from the session that generated the HTML page needs to know
