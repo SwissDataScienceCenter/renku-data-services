@@ -5,7 +5,6 @@ import os
 import kr8s
 import yaml
 
-import renku_data_services.k8s.constants
 from renku_data_services.app_config import logging
 from renku_data_services.crc.db import ClusterRepository
 from renku_data_services.k8s import models as k8s_models
@@ -105,7 +104,7 @@ async def get_clusters(
         try:
             kube_config = KubeConfigYaml(f"{kube_conf_root_dir}/{filename}")
             cluster = k8s_models.Cluster(
-                id=renku_data_services.k8s.constants.ClusterId(str(db_cluster.id)),
+                id=db_cluster.id,
                 namespace=kube_config.api().namespace,
                 api=kube_config.api(),
             )

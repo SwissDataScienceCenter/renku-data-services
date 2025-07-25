@@ -606,7 +606,7 @@ async def launch_notebook(
         launch_request.project,
         launch_request.branch,
         launch_request.commit_sha,
-        cluster.id,
+        str(cluster.id),
     )
     project_slug = f"{launch_request.namespace}/{launch_request.project}"
     gitlab_client = NotebooksGitlabClient(config.git.url, internal_gitlab_user.access_token)

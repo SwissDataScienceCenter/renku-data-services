@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Any, Self, cast
 from box import Box
 from kr8s._api import Api
 from kr8s.asyncio.objects import APIObject
-from ulid import ULID
 
 from renku_data_services.base_models import APIUser
 from renku_data_services.errors import MissingResourceError, errors
@@ -134,7 +133,7 @@ class Cluster:
     ) -> str | None:
         """Get the default storage class for the cluster."""
         try:
-            cluster = await cluster_repo.select(ULID.from_str(self.id))
+            cluster = await cluster_repo.select(self.id)
             storage_class = cluster.session_storage_class
         except (MissingResourceError, ValueError) as _e:
             storage_class = default_storage_class
@@ -148,7 +147,7 @@ class Cluster:
         tls_name = None
 
         try:
-            cluster = await cluster_repo.select(ULID.from_str(self.id))
+            cluster = await cluster_repo.select(self.id)
 
             host = cluster.session_host
             base_server_path = f"{cluster.session_path}/{server_name}"

@@ -258,7 +258,7 @@ class NotebooksNewBP(CustomBlueprint):
             # the user when selecting a different resource class from a different resource pool.
             cluster = await self.nb_config.k8s_v2_client.cluster_by_class_id(body.resource_class_id, user)
             server_name = renku_2_make_server_name(
-                user=user, project_id=str(launcher.project_id), launcher_id=body.launcher_id, cluster_id=cluster.id
+                user=user, project_id=str(launcher.project_id), launcher_id=body.launcher_id, cluster_id=str(cluster.id)
             )
             existing_session = await self.nb_config.k8s_v2_client.get_session(server_name, user.id)
             if existing_session is not None and existing_session.spec is not None:

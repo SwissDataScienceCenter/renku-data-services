@@ -9,10 +9,9 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Optional, Protocol
 from uuid import uuid4
 
-from ulid import ULID
-
 from renku_data_services import errors
 from renku_data_services.errors import ValidationError
+from renku_data_services.k8s.constants import ClusterId
 
 if TYPE_CHECKING:
     from renku_data_services.crc.apispec import Protocol as CrcApiProtocol
@@ -237,7 +236,7 @@ class Cluster:
 class SavedCluster(Cluster):
     """K8s Cluster settings from the DB."""
 
-    id: ULID
+    id: ClusterId
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
