@@ -11,6 +11,7 @@ from ulid import ULID
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.crc.db import ClusterRepository
 from renku_data_services.k8s.client_interfaces import SecretClient
 from renku_data_services.secrets import apispec
 from renku_data_services.secrets.core import create_k8s_secret
@@ -24,6 +25,7 @@ class K8sSecretsBP(CustomBlueprint):
 
     authenticator: base_models.Authenticator
     user_secrets_repo: LowLevelUserSecretsRepo
+    cluster_repo: ClusterRepository
     secret_service_private_key: rsa.RSAPrivateKey
     previous_secret_service_private_key: rsa.RSAPrivateKey | None
     core_client: SecretClient
