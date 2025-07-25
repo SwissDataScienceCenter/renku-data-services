@@ -88,7 +88,7 @@ class KubeConfigYaml(KubeConfig):
                     break
 
 
-async def get_clusters(
+def get_clusters(
     kube_conf_root_dir: str, namespace: str, api: kr8s.asyncio.Api, cluster_rp: ClusterRepository
 ) -> list[k8s_models.Cluster]:
     """Get all clusters accessible to the application."""
@@ -99,7 +99,13 @@ async def get_clusters(
         logger.warning(f"Cannot open directory '{kube_conf_root_dir}', ignoring kube configs...")
         return clusters
 
-    async for db_cluster in cluster_rp.select_all():
+    # Run async code in sync context
+    db_clusters = kr8s._async_utils.run_sync(cluster_rp.select_all)()
+    assert isinstance(db_clusters, list)
+    for cluster in db_clusters:
+        assert isinstance(cluster, k8s_models.Cluster)
+
+    for db_cluster in db_clusters:
         filename = db_cluster.config_name
         try:
             kube_config = KubeConfigYaml(f"{kube_conf_root_dir}/{filename}")

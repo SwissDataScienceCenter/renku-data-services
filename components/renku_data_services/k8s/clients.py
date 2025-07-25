@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 import contextlib
 import multiprocessing.synchronize
-from collections.abc import AsyncIterable, Coroutine
+from collections.abc import AsyncIterable
 from copy import deepcopy
 from multiprocessing import Lock
 from multiprocessing.synchronize import Lock as LockType
@@ -397,36 +396,13 @@ class K8SCachedClusterClient(K8sClusterClient):
 class K8sClusterClientsPool:
     """A wrapper around a kr8s k8s client, acts on all resources over many clusters."""
 
-    def __init__(
-        self, cache: K8sDbCache, kinds_to_cache: list[GVK], get_clusters: Coroutine[Any, Any, list[Cluster]]
-    ) -> None:
-        self.__clients: dict[ClusterId, K8sClusterClient] | None = None
+    def __init__(self, cache: K8sDbCache, kinds_to_cache: list[GVK], clusters: list[Cluster]) -> None:
+        self.__clients = {c.id: K8SCachedClusterClient(c, cache, kinds_to_cache) for c in clusters}
         self.__cache = cache
         self.__kinds_to_cache = kinds_to_cache
-        self.__get_clusters = get_clusters
-        self.__lock = asyncio.Lock()
-
-    async def __load(self) -> None:
-        # Avoid trying to take a lock when we have loaded the dictionary (99% of the time)
-        if self.__clients is not None:
-            return
-
-        async with self.__lock:
-            # We know it was none before getting the lock, but we might have been preempted by another coroutine which
-            # could have done the job by now, so check again, if still not set, load the value, otherwise we are done
-            if self.__clients is None:
-                clusters: list[Cluster] = await self.__get_clusters
-                self.__clients = {
-                    c.id: K8SCachedClusterClient(c, self.__cache, self.__kinds_to_cache) for c in clusters
-                }
 
     async def __get_client_or_die(self, cluster_id: ClusterId) -> K8sClusterClient:
-        cluster_client = None
-        if self.__clients is None:
-            await self.__load()
-
-        if self.__clients is not None:
-            cluster_client = self.__clients.get(cluster_id)
+        cluster_client = self.__clients.get(cluster_id)
 
         if cluster_client is None:
             raise errors.MissingResourceError(
@@ -436,9 +412,7 @@ class K8sClusterClientsPool:
 
     def cluster_by_id(self, cluster_id: ClusterId) -> Cluster:
         """Return a cluster by its id."""
-        _client = None
-        if self.__clients is not None:
-            _client = self.__clients.get(cluster_id)
+        _client = self.__clients.get(cluster_id)
 
         if _client is not None:
             return _client.get_cluster()
@@ -465,11 +439,7 @@ class K8sClusterClientsPool:
 
     async def list(self, _filter: K8sObjectFilter) -> AsyncIterable[K8sObject]:
         """List all k8s objects."""
-        if self.__clients is None:
-            await self.__load()
-
-        if self.__clients is not None:
-            cluster_clients = [v for v in self.__clients.values()]
-            for c in cluster_clients:
-                async for r in c.list(_filter):
-                    yield r
+        cluster_clients = [v for v in self.__clients.values()]
+        for c in cluster_clients:
+            async for r in c.list(_filter):
+                yield r
