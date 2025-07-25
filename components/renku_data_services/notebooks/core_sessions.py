@@ -1,7 +1,10 @@
 """A selection of core functions for AmaltheaSessions."""
 
 import json
-from collections.abc import AsyncIterator, MutableMapping
+import os
+import random
+import string
+from collections.abc import AsyncIterator
 from datetime import timedelta
 from pathlib import PurePosixPath
 from typing import cast
@@ -9,12 +12,13 @@ from urllib.parse import urlparse
 
 import httpx
 from kubernetes.client import V1ObjectMeta, V1Secret
-from kubernetes.utils.duration import format_duration
 from sanic import Request
 from yaml import safe_dump
 
+from renku_data_services.app_config import logging
 from renku_data_services.base_models import APIUser
 from renku_data_services.base_models.core import AnonymousAPIUser, AuthenticatedAPIUser
+from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.crc.models import GpuKind, ResourceClass, ResourcePool
 from renku_data_services.data_connectors.models import DataConnectorSecret, DataConnectorWithSecrets
@@ -22,7 +26,7 @@ from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec
 from renku_data_services.notebooks.api.amalthea_patches import git_proxy, init_containers
 from renku_data_services.notebooks.api.classes.image import Image
-from renku_data_services.notebooks.api.classes.k8s_client import sanitize_for_serialization
+from renku_data_services.notebooks.api.classes.k8s_client import sanitizer
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_data_services.notebooks.config import NotebooksConfig
@@ -37,8 +41,10 @@ from renku_data_services.notebooks.crs import (
     ExtraVolume,
     ImagePullSecret,
     InitContainer,
-    Quantity,
-    QuantityInt,
+    Limits,
+    LimitsStr,
+    Requests,
+    RequestsStr,
     Resources,
     SecretAsVolume,
     SecretAsVolumeItem,
@@ -56,6 +62,8 @@ from renku_data_services.session.models import SessionLauncher
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.cryptography import get_encryption_key
 
+logger = logging.getLogger(__name__)
+
 
 async def get_extra_init_containers(
     nb_config: NotebooksConfig,
@@ -69,8 +77,8 @@ async def get_extra_init_containers(
 ) -> tuple[list[InitContainer], list[ExtraVolume]]:
     """Get all extra init containers that should be added to an amalthea session."""
     cert_init, cert_vols = init_containers.certificates_container(nb_config)
-    session_init_containers = [InitContainer.model_validate(sanitize_for_serialization(cert_init))]
-    extra_volumes = [ExtraVolume.model_validate(sanitize_for_serialization(volume)) for volume in cert_vols]
+    session_init_containers = [InitContainer.model_validate(sanitizer(cert_init))]
+    extra_volumes = [ExtraVolume.model_validate(sanitizer(volume)) for volume in cert_vols]
     git_clone = await init_containers.git_clone_container_v2(
         user=user,
         config=nb_config,
@@ -98,23 +106,54 @@ async def get_extra_containers(
         user=user, config=nb_config, repositories=repositories, git_providers=git_providers
     )
     if git_proxy_container:
-        conts.append(ExtraContainer.model_validate(sanitize_for_serialization(git_proxy_container)))
+        conts.append(ExtraContainer.model_validate(sanitizer(git_proxy_container)))
     return conts
 
 
-def get_auth_secret_authenticated(
-    nb_config: NotebooksConfig, user: AuthenticatedAPIUser, server_name: str
+async def get_auth_secret_authenticated(
+    nb_config: NotebooksConfig,
+    user: AuthenticatedAPIUser,
+    server_name: str,
+    base_server_url: str,
+    base_server_https_url: str,
+    base_server_path: str,
 ) -> ExtraSecret:
-    """The secrets needed for the OAuth2 proxy in the session."""
-    secret_data = {
-        "OIDC_CLIENT_ID": nb_config.sessions.oidc.client_id,
-        "OIDC_ISSUER_URL": nb_config.sessions.oidc.issuer_url,
-        "OIDC_CLIENT_SECRET": nb_config.sessions.oidc.client_secret,
-        "AUTHORIZED_EMAILS": user.email,
-        "ALLOW_UNVERIFIED_EMAILS": str(nb_config.sessions.oidc.allow_unverified_email).lower(),
-    }
-    secret = V1Secret(metadata=V1ObjectMeta(name=f"{server_name}-auth"), string_data=secret_data)
-    return ExtraSecret(secret)
+    """Get the extra secrets that need to be added to the session for an authenticated user."""
+    secret_data = {}
+
+    parsed_proxy_url = urlparse(urljoin(base_server_url + "/", "oauth2"))
+    vol = ExtraVolume(
+        name="renku-authorized-emails",
+        secret=SecretAsVolume(
+            secretName=server_name,
+            items=[SecretAsVolumeItem(key="authorized_emails", path="authorized_emails")],
+        ),
+    )
+    secret_data["auth"] = dumps(
+        {
+            "provider": "oidc",
+            "client_id": nb_config.sessions.oidc.client_id,
+            "oidc_issuer_url": nb_config.sessions.oidc.issuer_url,
+            "session_cookie_minimal": True,
+            "skip_provider_button": True,
+            # NOTE: If the redirect url is not HTTPS then some or identity providers will fail.
+            "redirect_url": urljoin(base_server_https_url + "/", "oauth2/callback"),
+            "cookie_path": base_server_path,
+            "proxy_prefix": parsed_proxy_url.path,
+            "authenticated_emails_file": "/authorized_emails",
+            "client_secret": nb_config.sessions.oidc.client_secret,
+            "cookie_secret": base64.urlsafe_b64encode(os.urandom(32)).decode(),
+            "insecure_oidc_allow_unverified_email": nb_config.sessions.oidc.allow_unverified_email,
+        }
+    )
+    secret_data["authorized_emails"] = user.email
+    secret = V1Secret(metadata=V1ObjectMeta(name=server_name), string_data=secret_data)
+    vol_mount = ExtraVolumeMount(
+        name="renku-authorized-emails",
+        mountPath="/authorized_emails",
+        subPath="authorized_emails",
+    )
+    return ExtraSecret(secret, vol, vol_mount)
 
 
 def get_auth_secret_anonymous(nb_config: NotebooksConfig, server_name: str, request: Request) -> ExtraSecret:
@@ -129,16 +168,17 @@ def get_auth_secret_anonymous(nb_config: NotebooksConfig, server_name: str, requ
             "in order to launch an anonymous session."
         )
     # NOTE: Amalthea looks for the token value first in the cookie and then in the authorization header
-    secret_data = {}
-    secret_data["auth"] = safe_dump(
-        {
-            "authproxy": {
-                "token": session_id,
-                "cookie_key": nb_config.session_id_cookie_name,
-                "verbose": True,
+    secret_data = {
+        "auth": safe_dump(
+            {
+                "authproxy": {
+                    "token": session_id,
+                    "cookie_key": nb_config.session_id_cookie_name,
+                    "verbose": True,
+                }
             }
-        }
-    )
+        )
+    }
     secret = V1Secret(metadata=V1ObjectMeta(name=server_name), string_data=secret_data)
     return ExtraSecret(secret)
 
@@ -148,7 +188,7 @@ def get_gitlab_image_pull_secret(
 ) -> ExtraSecret:
     """Create a Kubernetes secret for private GitLab registry authentication."""
 
-    preferred_namespace = nb_config.k8s_client.preferred_namespace
+    k8s_namespace = nb_config.k8s_client.namespace()
 
     registry_secret = {
         "auths": {
@@ -163,7 +203,7 @@ def get_gitlab_image_pull_secret(
 
     secret_data = {".dockerconfigjson": registry_secret}
     secret = V1Secret(
-        metadata=V1ObjectMeta(name=image_pull_secret_name, namespace=preferred_namespace),
+        metadata=V1ObjectMeta(name=image_pull_secret_name, namespace=k8s_namespace),
         string_data=secret_data,
         type="kubernetes.io/dockerconfigjson",
     )
@@ -185,12 +225,16 @@ async def get_data_sources(
     secrets: list[ExtraSecret] = []
     dcs: dict[str, RCloneStorage] = {}
     dcs_secrets: dict[str, list[DataConnectorSecret]] = {}
+    user_secret_key: str | None = None
     async for dc in data_connectors_stream:
+        mount_folder = (
+            dc.data_connector.storage.target_path
+            if PurePosixPath(dc.data_connector.storage.target_path).is_absolute()
+            else (work_dir / dc.data_connector.storage.target_path).as_posix()
+        )
         dcs[str(dc.data_connector.id)] = RCloneStorage(
             source_path=dc.data_connector.storage.source_path,
-            mount_folder=dc.data_connector.storage.target_path
-            if PurePosixPath(dc.data_connector.storage.target_path).is_absolute()
-            else (work_dir / dc.data_connector.storage.target_path).as_posix(),
+            mount_folder=mount_folder,
             configuration=dc.data_connector.storage.configuration,
             readonly=dc.data_connector.storage.readonly,
             name=dc.data_connector.name,
@@ -211,12 +255,15 @@ async def get_data_sources(
         if csr_id not in dcs:
             raise errors.MissingResourceError(
                 message=f"You have requested a cloud storage with ID {csr_id} which does not exist "
-                "or you dont have access to.",
-                quiet=True,
+                "or you dont have access to."
             )
         if csr.target_path is not None and not PurePosixPath(csr.target_path).is_absolute():
             csr.target_path = (work_dir / csr.target_path).as_posix()
         dcs[csr_id] = dcs[csr_id].with_override(csr)
+
+    # Handle potential duplicate target_path
+    dcs = _deduplicate_target_paths(dcs)
+
     for cs_id, cs in dcs.items():
         secret_name = f"{server_name}-ds-{cs_id.lower()}"
         secret_key_needed = len(dcs_secrets.get(cs_id, [])) > 0
@@ -230,7 +277,7 @@ async def get_data_sources(
         secret = ExtraSecret(
             cs.secret(
                 secret_name,
-                nb_config.k8s_client.preferred_namespace,
+                nb_config.k8s_client.namespace(),
                 user_secret_key=user_secret_key if secret_key_needed else None,
             )
         )
@@ -267,7 +314,7 @@ async def request_dc_secret_creation(
             continue
         request_data = {
             "name": f"{manifest.metadata.name}-ds-{s_id.lower()}-secrets",
-            "namespace": nb_config.k8s_v2_client.preferred_namespace,
+            "namespace": nb_config.k8s_v2_client.namespace(),
             "secret_ids": [str(secret.secret_id) for secret in secrets],
             "owner_references": [owner_reference],
             "key_mapping": {str(secret.secret_id): secret.name for secret in secrets},
@@ -331,7 +378,7 @@ async def request_session_secret_creation(
         key_mapping[secret_id].append(s.secret_slot.filename)
     request_data = {
         "name": f"{manifest.metadata.name}-secrets",
-        "namespace": nb_config.k8s_v2_client.preferred_namespace,
+        "namespace": nb_config.k8s_v2_client.namespace(),
         "secret_ids": [str(s.secret_id) for s in session_secrets],
         "owner_references": [owner_reference],
         "key_mapping": key_mapping,
@@ -351,17 +398,17 @@ async def request_session_secret_creation(
 
 def resources_from_resource_class(resource_class: ResourceClass) -> Resources:
     """Convert the resource class to a k8s resources spec."""
-    requests: MutableMapping[str, Quantity | QuantityInt] = {
-        "cpu": Quantity(str(round(resource_class.cpu * 1000)) + "m"),
-        "memory": Quantity(f"{resource_class.memory}Gi"),
+    requests: dict[str, Requests | RequestsStr] = {
+        "cpu": RequestsStr(str(round(resource_class.cpu * 1000)) + "m"),
+        "memory": RequestsStr(f"{resource_class.memory}Gi"),
     }
-    limits: MutableMapping[str, Quantity | QuantityInt] = {"memory": Quantity(f"{resource_class.memory}Gi")}
+    limits: dict[str, Limits | LimitsStr] = {"memory": LimitsStr(f"{resource_class.memory}Gi")}
     if resource_class.gpu > 0:
         gpu_name = GpuKind.NVIDIA.value + "/gpu"
-        requests[gpu_name] = QuantityInt(resource_class.gpu)
+        requests[gpu_name] = Requests(resource_class.gpu)
         # NOTE: GPUs have to be set in limits too since GPUs cannot be overcommited, if
         # not on some clusters this will cause the session to fully fail to start.
-        limits[gpu_name] = QuantityInt(resource_class.gpu)
+        limits[gpu_name] = Limits(resource_class.gpu)
     return Resources(requests=requests, limits=limits if len(limits) > 0 else None)
 
 
@@ -392,12 +439,20 @@ async def repositories_from_session(
     return repositories_from_project(project, git_providers)
 
 
-def get_culling(resource_pool: ResourcePool, nb_config: NotebooksConfig) -> Culling:
+def get_culling(
+    user: AuthenticatedAPIUser | AnonymousAPIUser, resource_pool: ResourcePool, nb_config: NotebooksConfig
+) -> Culling:
     """Create the culling specification for an AmaltheaSession."""
     idle_threshold_seconds = resource_pool.idle_threshold or nb_config.sessions.culling.registered.idle_seconds
-    hibernation_threshold_seconds = (
-        resource_pool.hibernation_threshold or nb_config.sessions.culling.registered.hibernated_seconds
-    )
+    if user.is_anonymous:
+        # NOTE: Anonymous sessions should not be hibernated at all, but there is no such option in Amalthea
+        # So in this case we set a very low hibernation threshold so the session is deleted quickly after
+        # it is hibernated.
+        hibernation_threshold_seconds = 1
+    else:
+        hibernation_threshold_seconds = (
+            resource_pool.hibernation_threshold or nb_config.sessions.culling.registered.hibernated_seconds
+        )
     return Culling(
         maxAge=timedelta(seconds=nb_config.sessions.culling.registered.max_age_seconds),
         maxFailedDuration=timedelta(seconds=nb_config.sessions.culling.registered.failed_seconds),
@@ -434,15 +489,17 @@ async def patch_session(
     internal_gitlab_user: APIUser,
     rp_repo: ResourcePoolRepository,
     project_repo: ProjectRepository,
+    metrics: MetricsService,
 ) -> AmaltheaSessionV1Alpha1:
     """Patch an Amalthea session."""
-    session = await nb_config.k8s_v2_client.get_server(session_id, user.id)
+    session = await nb_config.k8s_v2_client.get_session(session_id, user.id)
     if session is None:
-        raise errors.MissingResourceError(message=f"The session with ID {session_id} does not exist", quiet=True)
+        raise errors.MissingResourceError(message=f"The session with ID {session_id} does not exist")
     if session.spec is None:
         raise errors.ProgrammingError(
             message=f"The session {session_id} being patched is missing the expected 'spec' field.", quiet=True
         )
+    cluster = await nb_config.k8s_v2_client.cluster_by_class_id(session.resource_class_id(), user)
 
     patch = AmaltheaSessionV1Alpha1Patch(spec=AmaltheaSessionV1Alpha1SpecPatch())
     is_getting_hibernated: bool = False
@@ -465,34 +522,42 @@ async def patch_session(
     ):
         # Session is being resumed
         patch.spec.hibernated = False
+        await metrics.user_requested_session_resume(user, metadata={"session_id": session_id})
 
     # Resource class
     if body.resource_class_id is not None:
+        new_cluster = await nb_config.k8s_v2_client.cluster_by_class_id(body.resource_class_id, user)
+        if new_cluster.id != cluster.id:
+            raise errors.ValidationError(
+                message=(
+                    f"The requested resource class {body.resource_class_id} is not in the "
+                    f"same cluster {cluster.id} as the current resource class {session.resource_class_id()}."
+                )
+            )
         rp = await rp_repo.get_resource_pool_from_class(user, body.resource_class_id)
         rc = rp.get_resource_class(body.resource_class_id)
         if not rc:
             raise errors.MissingResourceError(
-                message=f"The resource class you requested with ID {body.resource_class_id} does not exist",
-                quiet=True,
+                message=f"The resource class you requested with ID {body.resource_class_id} does not exist"
             )
         if not patch.spec.session:
             patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()
         patch.spec.session.resources = resources_from_resource_class(rc)
         # Tolerations
         tolerations = tolerations_from_resource_class(rc, nb_config.sessions.tolerations_model)
-        if tolerations:
-            patch.spec.tolerations = tolerations
+        patch.spec.tolerations = tolerations
         # Affinities
         patch.spec.affinity = node_affinity_from_resource_class(rc, nb_config.sessions.affinity_model)
         # Priority class (if a quota is being used)
-        if rc.quota:
-            patch.spec.priorityClassName = rc.quota
-        patch.spec.culling = get_culling(rp, nb_config)
+        patch.spec.priorityClassName = rc.quota
+        patch.spec.culling = get_culling(user, rp, nb_config)
+        if rp.cluster is not None:
+            patch.spec.service_account_name = rp.cluster.service_account_name
 
     # If the session is being hibernated we do not need to patch anything else that is
     # not specifically called for in the request body, we can refresh things when the user resumes.
     if is_getting_hibernated:
-        return await nb_config.k8s_v2_client.patch_server(session_id, user.id, patch.to_rfc7386())
+        return await nb_config.k8s_v2_client.patch_session(session_id, user.id, patch.to_rfc7386())
 
     # Patching the extra containers (includes the git proxy)
     git_providers = await nb_config.git_provider_helper.get_providers(user)
@@ -506,10 +571,12 @@ async def patch_session(
     if extra_containers:
         patch.spec.extraContainers = extra_containers
 
+    # Patching the image pull secret
     if isinstance(user, AuthenticatedAPIUser) and internal_gitlab_user.access_token is not None:
         image = session.spec.session.image
         server_name = session.metadata.name
         needs_pull_secret = await requires_image_pull_secret(nb_config, image, internal_gitlab_user)
+        logger.info(f"Session with ID {session_id} needs pull secret for image {image}: {needs_pull_secret}")
 
         if needs_pull_secret:
             image_pull_secret_name = f"{server_name}-image-secret"
@@ -518,17 +585,71 @@ async def patch_session(
             image_secret = get_gitlab_image_pull_secret(
                 nb_config, user, image_pull_secret_name, internal_gitlab_user.access_token
             )
-            if image_secret:
-                updated_secrets = [
-                    secret
-                    for secret in (session.spec.imagePullSecrets or [])
-                    if not secret.name.endswith("-image-secret")
-                ]
-                updated_secrets.append(ImagePullSecret(name=image_pull_secret_name, adopt=True))
-                patch.spec.imagePullSecrets = updated_secrets
+
+            if not image_secret:
+                logger.error(f"Failed to create image pull secret for session ID {session_id} with image {image}")
+                raise errors.ProgrammingError(
+                    message=f"We cannot retrive credentials for your private image {image}. "
+                    "In order to resolve this problem, you can try to log out and back in "
+                    "and/or check that you still have permissions for the image repository."
+                )
+            # Ensure the secret is created in the cluster
+            await nb_config.k8s_v2_client.create_secret(image_secret.secret, cluster)
+
+            updated_secrets = [
+                secret for secret in (session.spec.imagePullSecrets or []) if not secret.name.endswith("-image-secret")
+            ]
+            updated_secrets.append(ImagePullSecret(name=image_pull_secret_name, adopt=True))
+            patch.spec.imagePullSecrets = updated_secrets
 
     patch_serialized = patch.to_rfc7386()
     if len(patch_serialized) == 0:
         return session
 
-    return await nb_config.k8s_v2_client.patch_server(session_id, user.id, patch_serialized)
+    return await nb_config.k8s_v2_client.patch_session(session_id, user.id, patch_serialized)
+
+
+def _deduplicate_target_paths(dcs: dict[str, RCloneStorage]) -> dict[str, RCloneStorage]:
+    """Ensures that the target paths for all storages are unique.
+
+    This method will attempt to de-duplicate the target_path for all items passed in,
+    and raise an error if it fails to generate unique target_path.
+    """
+    result_dcs: dict[str, RCloneStorage] = {}
+    mount_folders: dict[str, list[str]] = {}
+
+    def _find_mount_folder(dc: RCloneStorage) -> str:
+        mount_folder = dc.mount_folder
+        if mount_folder not in mount_folders:
+            return mount_folder
+        # 1. Try with a "-1", "-2", etc. suffix
+        mount_folder_try = f"{mount_folder}-{len(mount_folders[mount_folder])}"
+        if mount_folder_try not in mount_folders:
+            return mount_folder_try
+        # 2. Try with a random suffix
+        suffix = "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(4)])  # nosec B311
+        mount_folder_try = f"{mount_folder}-{suffix}"
+        if mount_folder_try not in mount_folders:
+            return mount_folder_try
+        raise errors.ValidationError(
+            message=f"Could not start session because two or more data connectors ({', '.join(mount_folders[mount_folder])}) share the same mount point '{mount_folder}'"  # noqa E501
+        )
+
+    for dc_id, dc in dcs.items():
+        original_mount_folder = dc.mount_folder
+        new_mount_folder = _find_mount_folder(dc)
+        # Keep track of the original mount folder here
+        if new_mount_folder != original_mount_folder:
+            logger.warning(f"Re-assigning data connector {dc_id} to mount point '{new_mount_folder}'")
+            dc_ids = mount_folders.get(original_mount_folder, [])
+            dc_ids.append(dc_id)
+            mount_folders[original_mount_folder] = dc_ids
+        # Keep track of the assigned mount folder here
+        dc_ids = mount_folders.get(new_mount_folder, [])
+        dc_ids.append(dc_id)
+        mount_folders[new_mount_folder] = dc_ids
+        result_dcs[dc_id] = dc.with_override(
+            override=apispec.SessionCloudStoragePost(storage_id=dc_id, target_path=new_mount_folder)
+        )
+
+    return result_dcs

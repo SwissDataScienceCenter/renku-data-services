@@ -12,6 +12,7 @@ from renku_data_services.search.apispec import (
 from renku_data_services.search.apispec import (
     SearchEntity,
     UserOrGroup,
+    UserOrGroupOrProject,
 )
 from renku_data_services.search.apispec import (
     SearchProject as ProjectApi,
@@ -51,7 +52,12 @@ def from_visibility(v: Visibility) -> VisibilityApi:
 def from_user(user: UserDocument) -> UserApi:
     """Creates an apispec user from a solr user document."""
     return UserApi(
-        id=user.id, namespace=user.namespace.value, firstName=user.firstName, lastName=user.lastName, score=user.score
+        id=user.id,
+        slug=user.slug.value,
+        path=user.path,
+        firstName=user.firstName,
+        lastName=user.lastName,
+        score=user.score,
     )
 
 
@@ -60,7 +66,8 @@ def from_group(group: GroupDocument) -> GroupApi:
     return GroupApi(
         id=str(group.id),
         name=group.name,
-        namespace=group.namespace.value,
+        slug=group.slug.value,
+        path=group.path,
         description=group.description,
         score=group.score,
     )
@@ -73,11 +80,19 @@ def __creator_details(e: ProjectDocument | DataConnectorDocument) -> UserApi | N
         return None
 
 
-def __namespace_details(d: ProjectDocument | DataConnectorDocument) -> UserOrGroup | None:
+def __namespace_details(d: ProjectDocument) -> UserOrGroup | None:
     if d.namespaceDetails is not None and d.namespaceDetails.docs != []:
         e = EntityDocReader.from_dict(d.namespaceDetails.docs[0])
         if e is not None:
             return UserOrGroup(cast(UserApi | GroupApi, from_entity(e).root))
+    return None
+
+
+def __namespace_details_dc(d: DataConnectorDocument) -> UserOrGroupOrProject | None:
+    if d.namespaceDetails is not None and d.namespaceDetails.docs != []:
+        e = EntityDocReader.from_dict(d.namespaceDetails.docs[0])
+        if e is not None:
+            return UserOrGroupOrProject(cast(UserApi | GroupApi | ProjectApi, from_entity(e).root))
     return None
 
 
@@ -87,6 +102,7 @@ def from_project(project: ProjectDocument) -> ProjectApi:
         id=str(project.id),
         name=project.name,
         slug=project.slug.value,
+        path=project.path,
         namespace=__namespace_details(project),
         repositories=project.repositories,
         visibility=from_visibility(project.visibility),
@@ -104,7 +120,8 @@ def from_data_connector(dc: DataConnectorDocument) -> DataConnectorApi:
         id=str(dc.id),
         name=dc.name,
         slug=dc.slug.value,
-        namespace=__namespace_details(dc),
+        path=dc.path,
+        namespace=__namespace_details_dc(dc),
         visibility=from_visibility(dc.visibility),
         description=dc.description,
         createdBy=__creator_details(dc),

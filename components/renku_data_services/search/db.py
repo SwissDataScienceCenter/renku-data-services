@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
 from renku_data_services.base_models.core import Slug
-from renku_data_services.data_connectors.models import DataConnector
+from renku_data_services.data_connectors.models import DataConnector, GlobalDataConnector
 from renku_data_services.namespace.models import Group
 from renku_data_services.project.models import Project
 from renku_data_services.search.models import DeleteDoc, Entity
@@ -26,7 +26,8 @@ from renku_data_services.users.models import UserInfo
 
 def _user_to_entity_doc(user: UserInfo) -> UserDoc:
     return UserDoc(
-        namespace=user.namespace.path.first,
+        path=user.namespace.path.serialize(),
+        slug=user.namespace.path.first,
         id=user.id,
         firstName=user.first_name,
         lastName=user.last_name,
@@ -36,7 +37,8 @@ def _user_to_entity_doc(user: UserInfo) -> UserDoc:
 
 def _group_to_entity_doc(group: Group) -> GroupDoc:
     return GroupDoc(
-        namespace=Slug.from_name(group.slug),
+        path=group.slug,
+        slug=Slug(group.slug),
         id=group.id,
         name=group.name,
         description=group.description,
@@ -46,7 +48,8 @@ def _group_to_entity_doc(group: Group) -> GroupDoc:
 
 def _project_to_entity_doc(p: Project) -> ProjectDoc:
     return ProjectDoc(
-        namespace=p.namespace.path.first,
+        namespace_path=p.namespace.path.serialize(),
+        path=p.path.serialize(),
         id=p.id,
         name=p.name,
         slug=Slug.from_name(p.slug),
@@ -60,9 +63,12 @@ def _project_to_entity_doc(p: Project) -> ProjectDoc:
     )
 
 
-def _dataconnector_to_entity_doc(dc: DataConnector) -> DataConnectorDoc:
+def _dataconnector_to_entity_doc(dc: DataConnector | GlobalDataConnector) -> DataConnectorDoc:
+    ns = dc.namespace.path.serialize() if isinstance(dc, DataConnector) else None
+    pt = dc.path.serialize() if isinstance(dc, DataConnector) else dc.slug
     return DataConnectorDoc(
         id=dc.id,
+        path=pt,
         name=dc.name,
         storageType=dc.storage.storage_type,
         readonly=dc.storage.readonly,
@@ -70,7 +76,7 @@ def _dataconnector_to_entity_doc(dc: DataConnector) -> DataConnectorDoc:
         visibility=dc.visibility,
         createdBy=dc.created_by,
         creationDate=dc.creation_date,
-        namespace=dc.namespace.path.first,
+        namespace_path=ns,
         description=dc.description,
         keywords=dc.keywords if dc.keywords is not None else [],
         version=DocVersions.off(),
@@ -121,6 +127,15 @@ class SearchUpdatesRepo:
                 }
 
             case DataConnector() as d:
+                dc = _dataconnector_to_entity_doc(d)
+                return {
+                    "entity_id": str(dc.id),
+                    "entity_type": "DataConnector",
+                    "created_at": started,
+                    "payload": json.dumps(dc.to_dict()),
+                }
+
+            case GlobalDataConnector() as d:
                 dc = _dataconnector_to_entity_doc(d)
                 return {
                     "entity_id": str(dc.id),

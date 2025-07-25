@@ -7,14 +7,19 @@ from sanic.response import JSONResponse
 
 import renku_data_services.base_models as base_models
 import renku_data_services.search.core as core
+from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz
 from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_query
+from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.search.apispec import SearchQuery
 from renku_data_services.search.reprovision import SearchReprovision
+from renku_data_services.search.solr_user_query import UsernameResolve
 from renku_data_services.search.user_query_parser import QueryParser
 from renku_data_services.solr.solr_client import SolrClientConfig
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(kw_only=True)
@@ -25,6 +30,8 @@ class SearchBP(CustomBlueprint):
     solr_config: SolrClientConfig
     search_reprovision: SearchReprovision
     authz: Authz
+    username_resolve: UsernameResolve
+    metrics: MetricsService
 
     def post(self) -> BlueprintFactoryResponse:
         """Start a new reprovisioning."""
@@ -35,7 +42,7 @@ class SearchBP(CustomBlueprint):
             reprovisioning = await self.search_reprovision.acquire_reprovision()
 
             request.app.add_task(
-                self.search_reprovision.init_reprovision(requested_by=user, reprovisioning=reprovisioning),
+                self.search_reprovision.init_reprovision(user, reprovisioning=reprovisioning),
                 name=f"reprovisioning-{reprovisioning.id}",
             )
 
@@ -74,8 +81,13 @@ class SearchBP(CustomBlueprint):
         async def _query(_: Request, user: base_models.APIUser, query: SearchQuery) -> HTTPResponse | JSONResponse:
             per_page = query.per_page
             offset = (query.page - 1) * per_page
-            uq = QueryParser.parse(query.q)
-            result = await core.query(self.authz.client, self.solr_config, uq, user, per_page, offset)
+            uq = await QueryParser.parse(query.q)
+            logger.debug(f"Running search query: {query}")
+
+            result = await core.query(
+                self.authz.client, self.username_resolve, self.solr_config, uq, user, per_page, offset
+            )
+            await self.metrics.search_queried(user)
             return json(
                 result.model_dump(by_alias=True, exclude_none=True, mode="json"),
                 headers={

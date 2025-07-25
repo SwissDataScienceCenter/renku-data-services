@@ -1,5 +1,6 @@
+import warnings
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 from httpx import Response
@@ -7,9 +8,14 @@ from sanic_testing.testing import SanicASGITestClient
 
 from renku_data_services.authz.models import Visibility
 from renku_data_services.base_models.core import NamespacePath, ProjectPath
+from renku_data_services.data_connectors import core
 from renku_data_services.namespace.models import NamespaceKind
+from renku_data_services.storage.rclone import RCloneDOIMetadata
 from renku_data_services.users.models import UserInfo
 from test.bases.renku_data_services.data_api.utils import merge_headers
+
+if TYPE_CHECKING:
+    from pytest import MonkeyPatch
 
 
 async def create_data_connector(
@@ -32,7 +38,9 @@ async def create_data_connector(
 
 
 @pytest.mark.asyncio
-async def test_post_data_connector(sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers) -> None:
+async def test_post_data_connector(
+    sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers, app_manager
+) -> None:
     payload = {
         "name": "My data connector",
         "slug": "my-data-connector",
@@ -69,6 +77,7 @@ async def test_post_data_connector(sanic_client: SanicASGITestClient, regular_us
     assert data_connector.get("visibility") == "public"
     assert data_connector.get("description") == "A data connector"
     assert set(data_connector.get("keywords")) == {"keyword 1", "keyword.2", "keyword-3", "KEYWORD_4"}
+    app_manager.metrics.data_connector_created.assert_called_once()
 
     # Check that we can retrieve the data connector
     _, response = await sanic_client.get(f"/api/data/data_connectors/{data_connector['id']}", headers=user_headers)
@@ -84,6 +93,186 @@ async def test_post_data_connector(sanic_client: SanicASGITestClient, regular_us
     assert response.status_code == 200, response.text
     assert response.json is not None
     assert response.json.get("id") == data_connector["id"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "doi", ["10.5281/zenodo.2600782", "doi:10.5281/zenodo.2600782", "https://doi.org/10.5281/zenodo.2600782"]
+)
+async def test_post_global_data_connector(
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str], monkeypatch: "MonkeyPatch", doi: str
+) -> None:
+    # The DOI resolver seems to block requests from GitHub action runners, so we mock its response
+    metadata = RCloneDOIMetadata(
+        DOI="10.5281/zenodo.2600782",
+        URL="https://doi.org/10.5281/zenodo.2600782",
+        metadataURL="https://zenodo.org/api/records/3542869",
+        provider="zenodo",
+    )
+    _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
+
+    payload = {
+        "storage": {
+            "configuration": {"type": "doi", "doi": doi},
+            "source_path": "",
+            "target_path": "",
+        },
+    }
+
+    _, response = await sanic_client.post("/api/data/data_connectors/global", headers=user_headers, json=payload)
+
+    assert response.status_code == 201, response.text
+    assert response.json is not None
+    data_connector = response.json
+    assert data_connector.get("name") == "SwissDataScienceCenter/renku-python: Version 0.7.2"
+    assert data_connector.get("slug") == "doi-10.5281-zenodo.2600782"
+    assert data_connector.get("storage") is not None
+    storage = data_connector["storage"]
+    assert storage.get("storage_type") == "doi"
+    assert storage.get("source_path") == "/"
+    assert storage.get("target_path") == "swissdatasciencecenter-renku-p-doi-10.5281-zenodo.2600782"
+    assert storage.get("readonly") is True
+    assert data_connector.get("visibility") == "public"
+    assert data_connector.get("description") is not None
+    assert set(data_connector.get("keywords")) == set()
+
+    # Check that we can retrieve the data connector
+    _, response = await sanic_client.get(f"/api/data/data_connectors/{data_connector['id']}", headers=user_headers)
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == data_connector["id"]
+
+    # Check that we can retrieve the data connector by slug
+    _, response = await sanic_client.get(
+        f"/api/data/data_connectors/global/{data_connector['slug']}",
+        headers=user_headers,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == data_connector["id"]
+
+
+@pytest.mark.asyncio
+async def test_post_global_data_connector_dataverse(
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str], monkeypatch: "MonkeyPatch"
+) -> None:
+    # The DOI resolver seems to block requests from GitHub action runners, so we mock its response
+    metadata = RCloneDOIMetadata(
+        DOI="10.7910/DVN/2SA6SN",
+        URL="https://doi.org/10.7910/DVN/2SA6SN",
+        metadataURL="https://dataverse.harvard.edu/api/datasets/:persistentId/?persistentId=doi%3A10.7910%2FDVN%2F2SA6SN",
+        provider="dataverse",
+    )
+    _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
+
+    doi = "10.7910/DVN/2SA6SN"
+    payload = {
+        "storage": {
+            "configuration": {"type": "doi", "doi": doi},
+            "source_path": "",
+            "target_path": "",
+        },
+    }
+
+    _, response = await sanic_client.post("/api/data/data_connectors/global", headers=user_headers, json=payload)
+
+    assert response.status_code == 201, response.text
+    assert response.json is not None
+    data_connector = response.json
+    assert data_connector.get("name") == "Dataset metadata of known Dataverse installations, August 2024"
+    assert data_connector.get("slug") == "doi-10.7910-dvn-2sa6sn"
+    assert data_connector.get("storage") is not None
+    storage = data_connector["storage"]
+    assert storage.get("storage_type") == "doi"
+    assert storage.get("source_path") == "/"
+    assert storage.get("target_path") == "dataset-metadata-of-known-data-doi-10.7910-dvn-2sa6sn"
+    assert storage.get("readonly") is True
+    assert data_connector.get("visibility") == "public"
+    assert data_connector.get("description") is not None
+    assert set(data_connector.get("keywords")) == {"dataset metadata", "dataverse", "metadata blocks"}
+
+
+@pytest.mark.asyncio
+async def test_post_global_data_connector_unauthorized(
+    sanic_client: SanicASGITestClient,
+) -> None:
+    payload = {
+        "storage": {
+            "configuration": {"type": "doi", "doi": "10.5281/zenodo.15174623"},
+            "source_path": "",
+            "target_path": "",
+        },
+    }
+
+    _, response = await sanic_client.post("/api/data/data_connectors/global", json=payload)
+
+    assert response.status_code == 401, response.text
+
+
+@pytest.mark.asyncio
+async def test_post_global_data_connector_invalid_doi(
+    sanic_client: SanicASGITestClient,
+    user_headers,
+) -> None:
+    payload = {
+        "storage": {
+            "configuration": {"type": "doi", "doi": "foo/bar"},
+            "source_path": "",
+            "target_path": "",
+        },
+    }
+
+    _, response = await sanic_client.post("/api/data/data_connectors/global", headers=user_headers, json=payload)
+
+    assert response.status_code == 422, response.text
+
+
+@pytest.mark.asyncio
+async def test_post_global_data_connector_no_duplicates(
+    sanic_client: SanicASGITestClient, user_headers: dict[str, str], monkeypatch: "MonkeyPatch"
+) -> None:
+    # The DOI resolver seems to block requests from GitHub action runners, so we mock its response
+    metadata = RCloneDOIMetadata(
+        DOI="10.5281/zenodo.2600782",
+        URL="https://doi.org/10.5281/zenodo.2600782",
+        metadataURL="https://zenodo.org/api/records/3542869",
+        provider="zenodo",
+    )
+    _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
+
+    doi = "10.5281/zenodo.2600782"
+    payload = {
+        "storage": {
+            "configuration": {"type": "doi", "doi": doi},
+            "source_path": "",
+            "target_path": "",
+        },
+    }
+
+    _, response = await sanic_client.post("/api/data/data_connectors/global", headers=user_headers, json=payload)
+
+    assert response.status_code == 201, response.text
+    assert response.json is not None
+    data_connector = response.json
+    data_connector_id = data_connector["id"]
+    assert data_connector.get("name") == "SwissDataScienceCenter/renku-python: Version 0.7.2"
+    assert data_connector.get("slug") == "doi-10.5281-zenodo.2600782"
+
+    # Check that posting the same DOI returns the same data connector ULID
+    doi = "https://doi.org/10.5281/zenodo.2600782"
+    payload = {
+        "storage": {
+            "configuration": {"type": "doi", "doi": doi},
+            "source_path": "",
+            "target_path": "",
+        },
+    }
+
+    _, response = await sanic_client.post("/api/data/data_connectors/global", headers=user_headers, json=payload)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == data_connector_id
 
 
 @pytest.mark.asyncio
@@ -171,16 +360,14 @@ async def test_post_data_connector_with_invalid_visibility(sanic_client: SanicAS
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("keyword", ["invalid chars '", "Nön English"])
-async def test_post_data_connector_with_invalid_keywords(
-    sanic_client: SanicASGITestClient, user_headers, keyword
-) -> None:
+async def test_post_data_connector_with_invalid_keywords(sanic_client: SanicASGITestClient, user_headers) -> None:
+    keyword = "this keyword is way too long........................................................................"
     payload = {"keywords": [keyword]}
 
     _, response = await sanic_client.post("/api/data/data_connectors", headers=user_headers, json=payload)
 
     assert response.status_code == 422, response.text
-    assert "String should match pattern '^[A-Za-z0-9\\s\\-_.]*$'" in response.json["error"]["message"]
+    assert "String should have at most 99 characters" in response.json["error"]["message"]
 
 
 @pytest.mark.asyncio
@@ -731,6 +918,65 @@ async def test_patch_data_connector_slug(
 
 
 @pytest.mark.asyncio
+async def test_patch_global_data_connector(
+    sanic_client: SanicASGITestClient,
+    user_headers: dict[str, str],
+    admin_headers: dict[str, str],
+    monkeypatch: "MonkeyPatch",
+) -> None:
+    # The DOI resolver seems to block requests from GitHub action runners, so we mock its response
+    metadata = RCloneDOIMetadata(
+        DOI="10.5281/zenodo.2600782",
+        URL="https://doi.org/10.5281/zenodo.2600782",
+        metadataURL="https://zenodo.org/api/records/3542869",
+        provider="zenodo",
+    )
+    _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
+
+    doi = "10.5281/zenodo.2600782"
+    payload = {
+        "storage": {
+            "configuration": {"type": "doi", "doi": doi},
+            "source_path": "",
+            "target_path": "",
+        },
+    }
+
+    _, response = await sanic_client.post("/api/data/data_connectors/global", headers=user_headers, json=payload)
+
+    assert response.status_code == 201, response.text
+    assert response.json is not None
+    data_connector = response.json
+    data_connector_id = data_connector["id"]
+    assert data_connector.get("name") == "SwissDataScienceCenter/renku-python: Version 0.7.2"
+
+    # Check that a regular user cannot patch a global data connector
+    headers = merge_headers(user_headers, {"If-Match": data_connector["etag"]})
+    payload = {"name": "New name", "description": "new description"}
+
+    _, response = await sanic_client.patch(
+        f"/api/data/data_connectors/{data_connector_id}", headers=headers, json=payload
+    )
+
+    assert response.status_code == 404, response.text
+
+    # Check that an admin user can delete a global data connector
+    headers = merge_headers(admin_headers, {"If-Match": data_connector["etag"]})
+
+    _, response = await sanic_client.patch(
+        f"/api/data/data_connectors/{data_connector_id}", headers=headers, json=payload
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == data_connector_id
+    assert response.json.get("name") == "New name"
+    assert response.json.get("slug") == data_connector["slug"]
+    assert response.json.get("description") == "new description"
+    assert response.json.get("storage") == data_connector["storage"]
+
+
+@pytest.mark.asyncio
 async def test_delete_data_connector(sanic_client: SanicASGITestClient, create_data_connector, user_headers) -> None:
     await create_data_connector("Data connector 1")
     data_connector = await create_data_connector("Data connector 2")
@@ -745,6 +991,54 @@ async def test_delete_data_connector(sanic_client: SanicASGITestClient, create_d
 
     assert response.status_code == 200, response.text
     assert {dc["name"] for dc in response.json} == {"Data connector 1", "Data connector 3"}
+
+
+@pytest.mark.asyncio
+async def test_delete_global_data_connector(
+    sanic_client: SanicASGITestClient,
+    user_headers: dict[str, str],
+    admin_headers: dict[str, str],
+    monkeypatch: "MonkeyPatch",
+) -> None:
+    # The DOI resolver seems to block requests from GitHub action runners, so we mock its response
+    metadata = RCloneDOIMetadata(
+        DOI="10.5281/zenodo.2600782",
+        URL="https://doi.org/10.5281/zenodo.2600782",
+        metadataURL="https://zenodo.org/api/records/3542869",
+        provider="zenodo",
+    )
+    _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
+
+    doi = "10.5281/zenodo.2600782"
+    payload = {
+        "storage": {
+            "configuration": {"type": "doi", "doi": doi},
+            "source_path": "",
+            "target_path": "",
+        },
+    }
+
+    _, response = await sanic_client.post("/api/data/data_connectors/global", headers=user_headers, json=payload)
+
+    assert response.status_code == 201, response.text
+    assert response.json is not None
+    data_connector = response.json
+    data_connector_id = data_connector["id"]
+
+    # Check that a regular user cannot delete a global data connector
+    _, response = await sanic_client.delete(f"/api/data/data_connectors/{data_connector_id}", headers=user_headers)
+
+    assert response.status_code == 404, response.text
+
+    # Check that an admin user can delete a global data connector
+    _, response = await sanic_client.delete(f"/api/data/data_connectors/{data_connector_id}", headers=admin_headers)
+
+    assert response.status_code == 204, response.text
+
+    _, response = await sanic_client.get("/api/data/data_connectors")
+
+    assert response.status_code == 200, response.text
+    assert {dc["name"] for dc in response.json} == set()
 
 
 @pytest.mark.asyncio
@@ -911,6 +1205,7 @@ async def test_post_data_connector_project_link_public_data_connector(
     user_headers,
     member_1_headers,
     member_1_user,
+    app_manager,
 ) -> None:
     data_connector = await create_data_connector(
         "Data connector 1", user=member_1_user, headers=member_1_headers, visibility="public"
@@ -936,6 +1231,7 @@ async def test_post_data_connector_project_link_public_data_connector(
     assert link.get("data_connector_id") == data_connector_id
     assert link.get("project_id") == project_id
     assert link.get("created_by") == "user"
+    app_manager.metrics.data_connector_linked.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -1434,6 +1730,47 @@ async def test_creating_dc_in_project(sanic_client, user_headers) -> None:
     assert response.status_code == 200, response.text
     assert len(response.json) == 1
     assert response.json[0]["namespace"] == dc_namespace
+
+
+@pytest.mark.asyncio
+async def test_creating_dc_in_project_no_leak_to_other_project(sanic_client, user_headers, member_1_headers) -> None:
+    # Create a project owned by member_1
+    payload = {
+        "name": "Project 1",
+        "namespace": "member-1.doe",
+        "slug": "project-1",
+    }
+    _, res = await sanic_client.post("/api/data/projects", headers=member_1_headers, json=payload)
+    assert res.status_code == 201, res.text
+
+    payload = {
+        "name": "Project 1",
+        "namespace": "user.doe",
+        "slug": "project-1",
+    }
+    _, res = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
+    assert res.status_code == 201, res.text
+    project = res.json
+    project_path = f"{project['namespace']}/{project['slug']}"
+
+    payload = {
+        "name": "My data connector",
+        "namespace": project_path,
+        "slug": "my-dc",
+        "storage": {
+            "configuration": {"type": "s3", "endpoint": "http://s3.aws.com"},
+            "source_path": "giab",
+            "target_path": "giab",
+        },
+    }
+    _, res = await sanic_client.post("/api/data/data_connectors", headers=user_headers, json=payload)
+    assert res.status_code == 201, res.text
+    assert res.json is not None
+    dc = res.json
+    assert dc.get("id") is not None
+    assert dc.get("name") == "My data connector"
+    assert dc.get("namespace") == project_path
+    assert dc.get("slug") == "my-dc"
 
 
 @pytest.mark.asyncio
@@ -2002,3 +2339,33 @@ async def test_move_data_connector(
             # The user, the source and the destination namespace
             expected_namespaces = 3
     assert len(response.json) == expected_namespaces
+
+
+def test_description_cleanup() -> None:
+    description_html = """<h1>A description</h1>
+    <p>Some more text...</p>
+    """
+
+    description_text = core._html_to_text(description_html)
+
+    expected = """A description\nSome more text..."""
+    assert description_text == expected
+
+
+def _mock_get_doi_metadata(metadata: RCloneDOIMetadata, sanic_client: SanicASGITestClient, monkeypatch: "MonkeyPatch"):
+    """Mock the RCloneValidator.get_doi_metadata method."""
+
+    # The DOI resolver seems to block requests from GitHub action runners, so we mock its response
+    validator = sanic_client.sanic_app.ctx._dependencies.r_clone_validator
+    _orig_get_doi_metadata = validator.get_doi_metadata
+
+    async def _mock_get_doi_metadata(*args, **kwargs) -> RCloneDOIMetadata:
+        doi_metadata = await _orig_get_doi_metadata(*args, **kwargs)
+        if doi_metadata is not None:
+            assert doi_metadata == metadata
+            return doi_metadata
+
+        warnings.warn("Could not retrieve DOI metadata, returning saved one", stacklevel=2)
+        return metadata
+
+    monkeypatch.setattr(validator, "get_doi_metadata", _mock_get_doi_metadata)

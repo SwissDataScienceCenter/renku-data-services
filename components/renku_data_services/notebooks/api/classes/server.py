@@ -1,15 +1,14 @@
 """Jupyter server models."""
 
-from abc import ABC
 from collections.abc import Sequence
 from itertools import chain
 from pathlib import PurePosixPath
 from typing import Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
 from gitlab.v4.objects.projects import Project
-from sanic.log import logger
 
+from renku_data_services.app_config import logging
 from renku_data_services.base_models import AnonymousAPIUser, AuthenticatedAPIUser
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.notebooks.api.amalthea_patches import cloudstorage as cloudstorage_patches
@@ -21,18 +20,20 @@ from renku_data_services.notebooks.api.amalthea_patches import inject_certificat
 from renku_data_services.notebooks.api.amalthea_patches import jupyter_server as jupyter_server_patches
 from renku_data_services.notebooks.api.amalthea_patches import ssh as ssh_patches
 from renku_data_services.notebooks.api.classes.cloud_storage import ICloudStorageRequest
-from renku_data_services.notebooks.api.classes.k8s_client import K8sClient
+from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClient
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.api.schemas.secrets import K8sUserSecrets
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
 from renku_data_services.notebooks.config import NotebooksConfig
-from renku_data_services.notebooks.constants import JUPYTER_SESSION_KIND, JUPYTER_SESSION_VERSION
+from renku_data_services.notebooks.constants import JUPYTER_SESSION_GVK
 from renku_data_services.notebooks.crs import JupyterServerV1Alpha1
 from renku_data_services.notebooks.errors.programming import DuplicateEnvironmentVariableError
 from renku_data_services.notebooks.errors.user import MissingResourceError
 
+logger = logging.getLogger(__name__)
 
-class UserServer(ABC):
+
+class UserServer:
     """Represents a Renku server session."""
 
     def __init__(
@@ -44,18 +45,19 @@ class UserServer(ABC):
         environment_variables: dict[str, str],
         user_secrets: K8sUserSecrets | None,
         cloudstorage: Sequence[ICloudStorageRequest],
-        k8s_client: K8sClient,
+        k8s_client: NotebookK8sClient[JupyterServerV1Alpha1],
         workspace_mount_path: PurePosixPath,
         work_dir: PurePosixPath,
         config: NotebooksConfig,
         internal_gitlab_user: APIUser,
+        host: str,
         using_default_image: bool = False,
         is_image_private: bool = False,
         repositories: list[Repository] | None = None,
     ):
         self._user = user
         self.server_name = server_name
-        self._k8s_client: K8sClient[JupyterServerV1Alpha1] = k8s_client
+        self._k8s_client = k8s_client
         self.safe_username = self._user.id
         self.image = image
         self.server_options = server_options
@@ -66,6 +68,7 @@ class UserServer(ABC):
         self.work_dir = work_dir
         self.cloudstorage = cloudstorage
         self.is_image_private = is_image_private
+        self.host = host
         self.config = config
         self.internal_gitlab_user = internal_gitlab_user
 
@@ -90,15 +93,18 @@ class UserServer(ABC):
         self._git_providers: list[GitProvider] | None = None
         self._has_configured_git_providers = False
 
+        self.server_url = f"https://{self.host}/sessions/{self.server_name}"
+        if not self._user.is_authenticated:
+            self.server_url = f"{self.server_url}?token={self._user.id}"
+
+    def k8s_namespace(self) -> str:
+        """Get the preferred namespace for a server."""
+        return self._k8s_client.namespace()
+
     @property
     def user(self) -> AnonymousAPIUser | AuthenticatedAPIUser:
         """Getter for server's user."""
         return self._user
-
-    @property
-    def k8s_client(self) -> K8sClient:
-        """Return server's k8s client."""
-        return self._k8s_client
 
     async def repositories(self) -> list[Repository]:
         """Get the list of repositories in the project."""
@@ -116,19 +122,6 @@ class UserServer(ABC):
             self._has_configured_git_providers = True
 
         return self._repositories
-
-    @property
-    def server_url(self) -> str:
-        """The URL where a user can access their session."""
-        if self._user.is_authenticated:
-            return urljoin(
-                f"https://{self.config.sessions.ingress.host}",
-                f"sessions/{self.server_name}",
-            )
-        return urljoin(
-            f"https://{self.config.sessions.ingress.host}",
-            f"sessions/{self.server_name}?token={self._user.id}",
-        )
 
     async def git_providers(self) -> list[GitProvider]:
         """The list of git providers."""
@@ -158,7 +151,7 @@ class UserServer(ABC):
             )
         session_manifest = await self._get_session_manifest()
         manifest = JupyterServerV1Alpha1.model_validate(session_manifest)
-        return await self._k8s_client.create_server(manifest, self.safe_username)
+        return await self._k8s_client.create_session(manifest, self.user)
 
     @staticmethod
     def _check_environment_variables_overrides(patches_list: list[dict[str, Any]]) -> None:
@@ -188,8 +181,7 @@ class UserServer(ABC):
 
     def _get_start_errors(self) -> list[str]:
         """Check if there are any errors before starting the server."""
-        errors: list[str]
-        errors = []
+        errors: list[str] = []
         if self.image is None:
             errors.append(f"image {self.image} does not exist or cannot be accessed")
         return errors
@@ -205,6 +197,8 @@ class UserServer(ABC):
                 "size": self.server_options.storage,
                 "pvc": {
                     "enabled": True,
+                    # We should check against the cluster, but as this is only used by V1 sessions, we ignore this
+                    # use-case.
                     "storageClassName": self.config.sessions.storage.pvs_storage_class,
                     "mountPath": self.workspace_mount_path.as_posix(),
                 },
@@ -235,10 +229,23 @@ class UserServer(ABC):
                 "token": self._user.id,
                 "oidc": {"enabled": False},
             }
+
+        cluster = await self.config.k8s_client.cluster_by_class_id(self.server_options.resource_class_id, self._user)
+        (
+            base_server_path,
+            base_server_url,
+            base_server_https_url,
+            host,
+            tls_secret,
+            ingress_annotations,
+        ) = await cluster.get_ingress_parameters(
+            self._user, self.config.cluster_rp, self.config.sessions.ingress, self.server_name
+        )
+
         # Combine everything into the manifest
         manifest = {
-            "apiVersion": JUPYTER_SESSION_VERSION,
-            "kind": JUPYTER_SESSION_KIND,
+            "apiVersion": JUPYTER_SESSION_GVK.group_version,
+            "kind": JUPYTER_SESSION_GVK.kind,
             "metadata": {
                 "name": self.server_name,
                 "labels": self.get_labels(),
@@ -264,12 +271,12 @@ class UserServer(ABC):
                     ),
                 },
                 "routing": {
-                    "host": urlparse(self.server_url).netloc,
-                    "path": urlparse(self.server_url).path,
-                    "ingressAnnotations": self.config.sessions.ingress.annotations,
+                    "host": host,
+                    "path": base_server_path,
+                    "ingressAnnotations": ingress_annotations,
                     "tls": {
-                        "enabled": self.config.sessions.ingress.tls_secret is not None,
-                        "secretName": self.config.sessions.ingress.tls_secret,
+                        "enabled": tls_secret is not None,
+                        "secretName": tls_secret.name if tls_secret is not None else "",
                     },
                 },
                 "storage": storage,
@@ -373,39 +380,36 @@ class Renku1UserServer(UserServer):
         self,
         user: AnonymousAPIUser | AuthenticatedAPIUser,
         server_name: str,
-        namespace: str,
+        gl_namespace: str,
         project: str,
         branch: str,
         commit_sha: str,
-        notebook: str | None,  # TODO: Is this value actually needed?
         image: str | None,
         server_options: ServerOptions,
         environment_variables: dict[str, str],
         user_secrets: K8sUserSecrets | None,
         cloudstorage: Sequence[ICloudStorageRequest],
-        k8s_client: K8sClient,
+        k8s_client: NotebookK8sClient,
         workspace_mount_path: PurePosixPath,
         work_dir: PurePosixPath,
         config: NotebooksConfig,
+        host: str,
         gitlab_project: Project | None,
         internal_gitlab_user: APIUser,
         using_default_image: bool = False,
         is_image_private: bool = False,
-        **_: dict,
+        **_: dict,  # Required to ignore unused arguments, among which repositories
     ):
-        self.gitlab_project = gitlab_project
-        self.internal_gitlab_user = internal_gitlab_user
-        self.gitlab_project_name = f"{namespace}/{project}"
-        single_repository = (
+        repositories = [
             Repository(
-                url=self.gitlab_project.http_url_to_repo,
-                dirname=self.gitlab_project.path,
+                url=p.http_url_to_repo,
+                dirname=p.path,
                 branch=branch,
                 commit_sha=commit_sha,
             )
-            if self.gitlab_project is not None
-            else None
-        )
+            for p in [gitlab_project]
+            if p is not None
+        ]
 
         super().__init__(
             user=user,
@@ -420,18 +424,18 @@ class Renku1UserServer(UserServer):
             work_dir=work_dir,
             using_default_image=using_default_image,
             is_image_private=is_image_private,
-            repositories=[single_repository] if single_repository is not None else [],
+            repositories=repositories,
+            host=host,
             config=config,
             internal_gitlab_user=internal_gitlab_user,
         )
 
-        self.namespace = namespace
+        self.gl_namespace = gl_namespace
         self.project = project
         self.branch = branch
         self.commit_sha = commit_sha
-        self.notebook = notebook
         self.git_host = urlparse(config.git.url).netloc
-        self.single_repository = single_repository
+        self.gitlab_project = gitlab_project
 
     def _get_start_errors(self) -> list[str]:
         """Check if there are any errors before starting the server."""
@@ -486,7 +490,7 @@ class Renku1UserServer(UserServer):
         annotations[f"{prefix}commit-sha"] = self.commit_sha
         annotations[f"{prefix}branch"] = self.branch
         annotations[f"{prefix}git-host"] = self.git_host
-        annotations[f"{prefix}namespace"] = self.namespace
+        annotations[f"{prefix}namespace"] = self.gl_namespace
         annotations[f"{prefix}projectName"] = self.project
         if self.gitlab_project is not None:
             annotations[f"{prefix}gitlabProjectId"] = str(self.gitlab_project.id)

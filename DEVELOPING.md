@@ -3,6 +3,10 @@
 This document details the structure of the code in this repository.
 For information on how to set up a dev environment and run code, consult the [readme](/README.md).
 
+### Coding guidelines
+
+These can be found in our [wiki](https://github.com/SwissDataScienceCenter/renku-data-services/wiki/Coding-guidelines).
+
 ### Architecture
 
 #### Polylith
@@ -17,7 +21,8 @@ Data Services follows a [polylith](https://polylith.gitbook.io/polylith) approac
 There are three independent services/deployments (projects/bases):
 * Renku Data Services (`data_api`): The main CRUD service for persisting data in postgres
 * Secrets Storage (`secrets_storage_api`): Handles loading user secrets securely when needed
-* Background Jobs (`background_jobs`): Kubernetes cronjobs for recurring tasks
+* Data Tasks (`data_tasks`): Regular background tasks
+* K8s cache (`k8s_cache`): Caches Kubernetes objects so as to not overload the Kubernetes API
 
 #### Components
 Within components, there are the following modules:
@@ -34,6 +39,7 @@ Within components, there are the following modules:
 * *k8s*: Kubernetes client code
 * *message_queue*: Redis streams messaging code
 * *migrations*: Database migrations
+* *metrics*: Store metrics data in a staging table
 * *namespace*: Code for handling namespaces (user/groups)
 * *platform*: Renku platform configuration code
 * *project*: Code for Project entities

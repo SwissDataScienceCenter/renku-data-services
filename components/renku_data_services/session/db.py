@@ -8,13 +8,13 @@ from datetime import UTC, datetime
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
-from sanic.log import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import RESET
@@ -23,8 +23,10 @@ from renku_data_services.session import constants, models
 from renku_data_services.session import orm as schemas
 from renku_data_services.session.k8s_client import ShipwrightClient
 
+logger = logging.getLogger(__name__)
+
 if TYPE_CHECKING:
-    from renku_data_services.app_config.config import BuildsConfig
+    from renku_data_services.session.config import BuildsConfig
 
 
 class SessionRepository:
@@ -141,6 +143,8 @@ class SessionRepository:
                 builder_variant=environment.build_parameters.builder_variant,
                 frontend_variant=environment.build_parameters.frontend_variant,
                 repository=environment.build_parameters.repository,
+                repository_revision=environment.build_parameters.repository_revision,
+                context_dir=environment.build_parameters.context_dir,
             )
             session.add(new_build_parameters)
 
@@ -165,6 +169,8 @@ class SessionRepository:
             builder_variant=new_build_parameters_environment.builder_variant,
             frontend_variant=new_build_parameters_environment.frontend_variant,
             repository=new_build_parameters_environment.repository,
+            repository_revision=new_build_parameters_environment.repository_revision,
+            context_dir=new_build_parameters_environment.context_dir,
         )
         session.add(build_parameters_orm)
 
@@ -266,6 +272,14 @@ class SessionRepository:
             environment.build_parameters.builder_variant = build_parameters.builder_variant
         if build_parameters.frontend_variant is not None:
             environment.build_parameters.frontend_variant = build_parameters.frontend_variant
+        if build_parameters.repository_revision == "":
+            environment.build_parameters.repository_revision = None
+        elif build_parameters.repository_revision:
+            environment.build_parameters.repository_revision = build_parameters.repository_revision
+        if build_parameters.context_dir == "":
+            environment.build_parameters.context_dir = None
+        elif build_parameters.context_dir:
+            environment.build_parameters.context_dir = build_parameters.context_dir
 
     async def update_environment(
         self, user: base_models.APIUser, environment_id: ULID, patch: models.EnvironmentPatch
@@ -411,6 +425,8 @@ class SessionRepository:
                     builder_variant=launcher.environment.builder_variant,
                     frontend_variant=launcher.environment.frontend_variant,
                     repository=launcher.environment.repository,
+                    repository_revision=launcher.environment.repository_revision,
+                    context_dir=launcher.environment.context_dir,
                 )
                 session.add(build_parameters_orm)
 
@@ -419,12 +435,12 @@ class SessionRepository:
                     created_by_id=user.id,
                     description=f"Generated environment for {launcher.name}",
                     container_image="image:unknown-at-the-moment",  # TODO: This should come from the build
-                    default_url="/lab",  # TODO: This should come from the build
-                    port=8888,  # TODO: This should come from the build
-                    working_directory=None,  # TODO: This should come from the build
-                    mount_directory=None,  # TODO: This should come from the build
-                    uid=1000,  # TODO: This should come from the build
-                    gid=1000,  # TODO: This should come from the build
+                    default_url=constants.DEFAULT_URLS.get(launcher.environment.frontend_variant, "/"),
+                    port=constants.BUILD_PORT,  # TODO: This should come from the build
+                    working_directory=constants.BUILD_WORKING_DIRECTORY,  # TODO: This should come from the build
+                    mount_directory=constants.BUILD_MOUNT_DIRECTORY,  # TODO: This should come from the build
+                    uid=constants.BUILD_UID,  # TODO: This should come from the build
+                    gid=constants.BUILD_GID,  # TODO: This should come from the build
                     environment_kind=models.EnvironmentKind.CUSTOM,
                     command=None,  # TODO: This should come from the build
                     args=None,  # TODO: This should come from the build
@@ -707,6 +723,8 @@ class SessionRepository:
                     builder_variant=new_custom_built_environment.builder_variant,
                     frontend_variant=new_custom_built_environment.frontend_variant,
                     repository=new_custom_built_environment.repository,
+                    repository_revision=new_custom_built_environment.repository_revision,
+                    context_dir=new_custom_built_environment.context_dir,
                 )
                 session.add(build_parameters_orm)
 
@@ -762,7 +780,6 @@ class SessionRepository:
 
     async def get_build(self, user: base_models.APIUser, build_id: ULID) -> models.Build:
         """Get a specific build."""
-
         async with self.session_maker() as session, session.begin():
             stmt = select(schemas.BuildORM).where(schemas.BuildORM.id == build_id)
             result = await session.scalars(stmt)
@@ -779,12 +796,16 @@ class SessionRepository:
                 raise errors.MissingResourceError(message=not_found_message)
 
             # Check and refresh the status of in-progress builds
-            await self._refresh_build(build=build, session=session)
+            if user.id is not None:
+                await self._refresh_build(build=build, session=session, user_id=user.id)
 
             return build.dump()
 
     async def get_environment_builds(self, user: base_models.APIUser, environment_id: ULID) -> list[models.Build]:
         """Get all builds from a session environment."""
+
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session, session.begin():
             environment = await session.scalar(
@@ -813,7 +834,7 @@ class SessionRepository:
 
             # Check and refresh the status of in-progress builds
             for build in builds:
-                await self._refresh_build(build=build, session=session)
+                await self._refresh_build(build=build, session=session, user_id=user.id)
 
             return [build.dump() for build in builds]
 
@@ -858,7 +879,7 @@ class SessionRepository:
                 .order_by(schemas.BuildORM.id.desc())
             )
             async for item in in_progress_builds:
-                await self._refresh_build(build=item, session=session)
+                await self._refresh_build(build=item, session=session, user_id=user.id)
                 if item.status == models.BuildStatus.in_progress:
                     raise errors.ConflictError(
                         message=f"Session environment with id '{build.environment_id}' already has a build in progress."
@@ -879,7 +900,7 @@ class SessionRepository:
             params = self._get_buildrun_params(
                 user=user, build=result, build_parameters=build_parameters, launcher=launcher
             )
-            await self.shipwright_client.create_image_build(params=params)
+            await self.shipwright_client.create_image_build(params=params, user_id=user.id)
         else:
             logger.error("Shipwright client is None")
 
@@ -906,7 +927,7 @@ class SessionRepository:
                 raise errors.MissingResourceError(message=not_found_message)
 
             # Check and refresh the status of in-progress builds
-            await self._refresh_build(build=build, session=session)
+            await self._refresh_build(build=build, session=session, user_id=user.id)
 
             if build.status == models.BuildStatus.succeeded or build.status == models.BuildStatus.failed:
                 raise errors.ValidationError(
@@ -923,7 +944,7 @@ class SessionRepository:
         build_model = build.dump()
 
         if self.shipwright_client is not None:
-            await self.shipwright_client.cancel_build_run(name=build_model.k8s_name)
+            await self.shipwright_client.cancel_build_run(name=build_model.k8s_name, user_id=user.id)
         else:
             logger.error("Shipwright client is None")
 
@@ -971,10 +992,10 @@ class SessionRepository:
             raise errors.MissingResourceError(message=f"Build with id '{build_id}' does not have logs.")
 
         return await self.shipwright_client.get_image_build_logs(
-            buildrun_name=build_model.k8s_name, max_log_lines=max_log_lines
+            buildrun_name=build_model.k8s_name, user_id=user.id, max_log_lines=max_log_lines
         )
 
-    async def _refresh_build(self, build: schemas.BuildORM, session: AsyncSession) -> None:
+    async def _refresh_build(self, build: schemas.BuildORM, session: AsyncSession, user_id: str) -> None:
         """Refresh the status of a build by querying Shipwright."""
         if build.status != models.BuildStatus.in_progress:
             return
@@ -985,7 +1006,9 @@ class SessionRepository:
             return
 
         # TODO: consider how we can parallelize calls to `shipwright_client` for refreshes.
-        status_update = await self.shipwright_client.update_image_build_status(buildrun_name=build.dump().k8s_name)
+        status_update = await self.shipwright_client.update_image_build_status(
+            buildrun_name=build.dump().k8s_name, user_id=user_id
+        )
 
         if status_update.update is None:
             return
@@ -1005,14 +1028,12 @@ class SessionRepository:
             # TODO: move this to its own method where build parameters determine args
             environment = build.environment
             environment.container_image = build.result_image
-            environment.default_url = "/"
-            environment.port = 8888
-            environment.mount_directory = PurePosixPath("/home/ubuntu/work")
-            environment.working_directory = PurePosixPath("/home/ubuntu/work")
-            environment.uid = 1000
-            environment.gid = 1000
-            environment.command = ["bash"]
-            environment.args = ["/entrypoint.sh"]
+            # An older version was hardcoding the values but we can and should
+            # rely on the defaults for args and command
+            if environment.command is not None:
+                environment.command = None
+            if environment.args is not None:
+                environment.args = None
 
         await session.flush()
         await session.refresh(build)
@@ -1029,9 +1050,8 @@ class SessionRepository:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
         git_repository = build_parameters.repository
-
-        # TODO: define the run image from `build_parameters`
-        run_image = self.builds_config.vscodium_python_run_image or constants.BUILD_VSCODIUM_PYTHON_DEFAULT_RUN_IMAGE
+        git_repository_revision = build_parameters.repository_revision
+        context_dir = build_parameters.context_dir
 
         output_image_prefix = (
             self.builds_config.build_output_image_prefix or constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
@@ -1067,7 +1087,8 @@ class SessionRepository:
         return models.ShipwrightBuildRunParams(
             name=build.k8s_name,
             git_repository=git_repository,
-            run_image=run_image,
+            build_image=constants.BUILD_BUILDER_IMAGE,
+            run_image=constants.BUILD_RUN_IMAGE,
             output_image=output_image,
             build_strategy_name=build_strategy_name,
             push_secret_name=push_secret_name,
@@ -1078,6 +1099,9 @@ class SessionRepository:
             tolerations=self.builds_config.tolerations,
             labels=labels,
             annotations=annotations,
+            frontend=build_parameters.frontend_variant,
+            git_repository_revision=git_repository_revision,
+            context_dir=context_dir,
         )
 
     async def _get_environment_authorization(

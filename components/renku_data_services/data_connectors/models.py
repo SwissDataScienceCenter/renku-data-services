@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 from ulid import ULID
 
@@ -79,6 +79,27 @@ class UnsavedDataConnector(BaseDataConnector):
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
+class GlobalDataConnector(BaseDataConnector):
+    """Global data connector model."""
+
+    id: ULID
+    namespace: Final[None] = field(default=None, init=False)
+    updated_at: datetime
+
+    @property
+    def etag(self) -> str:
+        """Entity tag value for this data connector object."""
+        return compute_etag_from_fields(self.updated_at)
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedGlobalDataConnector(BaseDataConnector):
+    """Global data connector model."""
+
+    namespace: None = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
 class DeletedDataConnector:
     """A dataconnector that has been deleted."""
 
@@ -113,7 +134,6 @@ class DataConnectorPatch:
 class CloudStorageCoreWithSensitiveFields(CloudStorageCore):
     """Remote storage configuration model with sensitive fields."""
 
-    # sensitive_fields: list["RCloneOption"]
     sensitive_fields: list["RCloneOption"]
 
 
@@ -121,8 +141,8 @@ class CloudStorageCoreWithSensitiveFields(CloudStorageCore):
 class DataConnectorUpdate:
     """Information about the update of a data connector."""
 
-    old: DataConnector
-    new: DataConnector
+    old: DataConnector | GlobalDataConnector
+    new: DataConnector | GlobalDataConnector
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -174,5 +194,5 @@ class DataConnectorPermissions:
 class DataConnectorWithSecrets:
     """A data connector with its secrets."""
 
-    data_connector: DataConnector
+    data_connector: DataConnector | GlobalDataConnector
     secrets: list[DataConnectorSecret] = field(default_factory=list)

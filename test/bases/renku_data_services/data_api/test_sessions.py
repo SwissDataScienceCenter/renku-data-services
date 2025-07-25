@@ -9,8 +9,8 @@ from sanic_testing.testing import SanicASGITestClient, TestingResponse
 from syrupy.filters import props
 
 from renku_data_services import errors
-from renku_data_services.app_config.config import Config
 from renku_data_services.crc.apispec import ResourcePool
+from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.session.models import EnvVar
 from renku_data_services.users.models import UserInfo
 
@@ -20,7 +20,7 @@ def launch_session(
     sanic_client: SanicASGITestClient,
     user_headers: dict,
     regular_user: UserInfo,
-    app_config: Config,
+    app_manager: DependencyManager,
     request: FixtureRequest,
     event_loop: AbstractEventLoop,
 ):
@@ -35,7 +35,9 @@ def launch_session(
         session_id: str = res.json.get("name", "unknown")
 
         def cleanup():
-            event_loop.run_until_complete(app_config.nb_config.k8s_v2_client.delete_server(session_id, user.id))
+            event_loop.run_until_complete(
+                app_manager.config.nb_config.k8s_v2_client.delete_session(session_id, user.id)
+            )
 
         # request.addfinalizer(cleanup)
         return res
@@ -411,7 +413,9 @@ def test_env_variable_validation():
 
 
 @pytest.mark.asyncio
-async def test_post_session_launcher(sanic_client, admin_headers, create_project, create_resource_pool) -> None:
+async def test_post_session_launcher(
+    sanic_client, admin_headers, create_project, create_resource_pool, app_manager
+) -> None:
     project = await create_project("Some project")
 
     resource_pool = await create_resource_pool(admin=True)
@@ -447,6 +451,7 @@ async def test_post_session_launcher(sanic_client, admin_headers, create_project
     assert res.json.get("resource_class_id") == resource_pool["classes"][0]["id"]
     assert res.json.get("disk_storage") == 2
     assert res.json.get("env_variables") == [{"name": "KEY_NUMBER_1", "value": "a value"}]
+    app_manager.metrics.session_launcher_created.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -485,6 +490,50 @@ async def test_post_session_launcher_with_environment_build(
         "repository": "https://github.com/some/repo",
         "builder_variant": "python",
         "frontend_variant": "vscodium",
+    }
+    assert environment.get("environment_image_source") == "build"
+    assert environment.get("container_image") == "image:unknown-at-the-moment"
+
+
+@pytest.mark.asyncio
+async def test_post_session_launcher_with_advanced_environment_build(
+    sanic_client: SanicASGITestClient,
+    user_headers: dict[str, str],
+    create_project,
+) -> None:
+    project = await create_project("Some project")
+
+    payload = {
+        "name": "Launcher 1",
+        "project_id": project["id"],
+        "description": "A session launcher.",
+        "environment": {
+            "repository": "https://github.com/some/repo",
+            "builder_variant": "python",
+            "frontend_variant": "vscodium",
+            "repository_revision": "some-branch",
+            "context_dir": "path/to/context",
+            "environment_image_source": "build",
+        },
+    }
+
+    _, response = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
+
+    assert response.status_code == 201, response.text
+    assert response.json is not None
+    assert response.json.get("name") == "Launcher 1"
+    assert response.json.get("project_id") == project["id"]
+    assert response.json.get("description") == "A session launcher."
+    environment = response.json.get("environment", {})
+    assert environment.get("id") is not None
+    assert environment.get("name") == "Launcher 1"
+    assert environment.get("environment_kind") == "CUSTOM"
+    assert environment.get("build_parameters") == {
+        "repository": "https://github.com/some/repo",
+        "builder_variant": "python",
+        "frontend_variant": "vscodium",
+        "repository_revision": "some-branch",
+        "context_dir": "path/to/context",
     }
     assert environment.get("environment_image_source") == "build"
     assert environment.get("container_image") == "image:unknown-at-the-moment"
@@ -1069,6 +1118,132 @@ async def test_patch_session_launcher_keeps_unset_values(
     assert environment.get("id") is not None
 
 
+@pytest.mark.asyncio
+async def test_patch_session_launcher_with_advanced_environment_build(
+    sanic_client: SanicASGITestClient,
+    user_headers: dict[str, str],
+    create_project,
+    create_resource_pool,
+) -> None:
+    project = await create_project("Some project")
+
+    payload = {
+        "name": "Launcher 1",
+        "project_id": project["id"],
+        "description": "A session launcher.",
+        "environment": {
+            "repository": "https://github.com/some/repo",
+            "builder_variant": "python",
+            "frontend_variant": "vscodium",
+            "environment_image_source": "build",
+        },
+    }
+
+    _, res = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
+
+    assert res.status_code == 201, res.text
+    assert res.json is not None
+    assert res.json.get("id") is not None
+    launcher_id = res.json["id"]
+    assert res.json.get("name") == "Launcher 1"
+    assert res.json.get("project_id") == project["id"]
+    assert res.json.get("description") == "A session launcher."
+    environment = res.json.get("environment", {})
+    assert environment["id"] is not None
+    environment_id = environment.get("id")
+    assert environment.get("name") == "Launcher 1"
+    assert environment.get("environment_kind") == "CUSTOM"
+    assert environment.get("build_parameters") == {
+        "repository": "https://github.com/some/repo",
+        "builder_variant": "python",
+        "frontend_variant": "vscodium",
+    }
+    assert environment.get("environment_image_source") == "build"
+    assert environment.get("container_image") == "image:unknown-at-the-moment"
+
+    patch_payload = {
+        "environment": {"build_parameters": {"context_dir": "some/path", "repository_revision": "some-branch"}}
+    }
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher_id}", headers=user_headers, json=patch_payload
+    )
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    assert res.json.get("id") == launcher_id
+    assert res.json.get("name") == "Launcher 1"
+    assert res.json.get("project_id") == project["id"]
+    assert res.json.get("description") == "A session launcher."
+    environment = res.json.get("environment", {})
+    assert environment["id"] == environment_id
+    assert environment.get("name") == "Launcher 1"
+    assert environment.get("environment_kind") == "CUSTOM"
+    assert environment.get("build_parameters") == {
+        "repository": "https://github.com/some/repo",
+        "builder_variant": "python",
+        "frontend_variant": "vscodium",
+        "context_dir": "some/path",
+        "repository_revision": "some-branch",
+    }
+    assert environment.get("environment_image_source") == "build"
+    assert environment.get("container_image") == "image:unknown-at-the-moment"
+
+    # Check that we can reset the advanced parameters
+    patch_payload = {
+        "environment": {
+            "build_parameters": {
+                "context_dir": "",
+            }
+        }
+    }
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher_id}", headers=user_headers, json=patch_payload
+    )
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    assert res.json.get("id") == launcher_id
+    assert res.json.get("name") == "Launcher 1"
+    assert res.json.get("project_id") == project["id"]
+    assert res.json.get("description") == "A session launcher."
+    environment = res.json.get("environment", {})
+    assert environment["id"] == environment_id
+    assert environment.get("name") == "Launcher 1"
+    assert environment.get("environment_kind") == "CUSTOM"
+    assert environment.get("build_parameters") == {
+        "repository": "https://github.com/some/repo",
+        "builder_variant": "python",
+        "frontend_variant": "vscodium",
+        "repository_revision": "some-branch",
+    }
+    assert environment.get("environment_image_source") == "build"
+    assert environment.get("container_image") == "image:unknown-at-the-moment"
+
+    patch_payload = {
+        "environment": {
+            "build_parameters": {"frontend_variant": "jupyterlab", "context_dir": "", "repository_revision": ""}
+        }
+    }
+    _, res = await sanic_client.patch(
+        f"/api/data/session_launchers/{launcher_id}", headers=user_headers, json=patch_payload
+    )
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    assert res.json.get("id") == launcher_id
+    assert res.json.get("name") == "Launcher 1"
+    assert res.json.get("project_id") == project["id"]
+    assert res.json.get("description") == "A session launcher."
+    environment = res.json.get("environment", {})
+    assert environment["id"] == environment_id
+    assert environment.get("name") == "Launcher 1"
+    assert environment.get("environment_kind") == "CUSTOM"
+    assert environment.get("build_parameters") == {
+        "repository": "https://github.com/some/repo",
+        "builder_variant": "python",
+        "frontend_variant": "jupyterlab",
+    }
+    assert environment.get("environment_image_source") == "build"
+    assert environment.get("container_image") == "image:unknown-at-the-moment"
+
+
 @pytest.fixture
 def anonymous_user_headers() -> dict[str, str]:
     return {"Renku-Auth-Anon-Id": "some-random-value-1234"}
@@ -1081,14 +1256,14 @@ async def test_starting_session_anonymous(
     create_project,
     create_session_launcher,
     user_headers,
-    app_config: Config,
+    app_manager: DependencyManager,
     admin_headers,
     launch_session,
     anonymous_user_headers,
 ) -> None:
     _, res = await sanic_client.post(
         "/api/data/resource_pools",
-        json=ResourcePool.model_validate(app_config.default_resource_pool, from_attributes=True).model_dump(
+        json=ResourcePool.model_validate(app_manager.default_resource_pool, from_attributes=True).model_dump(
             mode="json", exclude_none=True
         ),
         headers=admin_headers,

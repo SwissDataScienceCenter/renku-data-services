@@ -6,13 +6,21 @@ from typing import Concatenate, ParamSpec, Protocol, TypeVar, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from renku_data_services.data_connectors.models import DataConnector, DataConnectorUpdate, DeletedDataConnector
+from renku_data_services.app_config import logging
+from renku_data_services.data_connectors.models import (
+    DataConnector,
+    DataConnectorUpdate,
+    DeletedDataConnector,
+    GlobalDataConnector,
+)
 from renku_data_services.errors import errors
 from renku_data_services.namespace.models import DeletedGroup, Group
 from renku_data_services.project.models import DeletedProject, Project, ProjectUpdate
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.models import DeleteDoc
 from renku_data_services.users.models import DeletedUser, UserInfo, UserInfoUpdate
+
+logger = logging.getLogger(__name__)
 
 
 class WithSearchUpdateRepo(Protocol):
@@ -77,6 +85,9 @@ def update_search_document(
             case DataConnector() as dc:
                 await self.search_updates_repo.upsert(dc)
 
+            case GlobalDataConnector() as dc:
+                await self.search_updates_repo.upsert(dc)
+
             case DataConnectorUpdate() as dc:
                 await self.search_updates_repo.upsert(dc.new)
 
@@ -90,6 +101,12 @@ def update_search_document(
                         users = cast(list[UserInfo], els)
                         for u in users:
                             await self.search_updates_repo.upsert(u)
+
+            case _:
+                error = errors.ProgrammingError(
+                    message=f"Encountered unhandled search document of type '{result.__class__.__name__}'"
+                )
+                logger.error(error)
 
         return result
 

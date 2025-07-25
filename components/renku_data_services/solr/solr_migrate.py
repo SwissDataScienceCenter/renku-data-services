@@ -1,12 +1,12 @@
 """Manage solr schema migrations."""
 
-import logging
 from dataclasses import dataclass
 from typing import Any, Self
 
 import pydantic
 from pydantic import AliasChoices, BaseModel
 
+from renku_data_services.app_config import logging
 from renku_data_services.solr.solr_client import (
     DefaultSolrAdminClient,
     DefaultSolrClient,
@@ -30,6 +30,8 @@ from renku_data_services.solr.solr_schema import (
     SchemaCommand,
     SchemaCommandList,
 )
+
+logger = logging.getLogger(__name__)
 
 logger = logging.Logger(__name__)
 
@@ -200,14 +202,14 @@ class SchemaMigrator:
                 )
 
             if initial_doc.migration_running_b:
-                logging.info("A solr migration is already running")
+                logger.info("A solr migration is already running")
                 return MigrateResult.empty()
             else:
                 initial_doc.migration_running_b = True
                 update_result = await client.upsert([initial_doc])
                 match update_result:
                     case "VersionConflict":
-                        logging.info("Another solr migration just begun. Skipping this one.")
+                        logger.info("Another solr migration just begun. Skipping this one.")
                         return MigrateResult.empty()
                     case UpsertSuccess():
                         try:
@@ -224,12 +226,12 @@ class SchemaMigrator:
     async def __doMigrate(
         self, client: DefaultSolrClient, migrations: list[SchemaMigration], initialDoc: VersionDoc
     ) -> MigrateResult:
-        logging.info(
+        logger.info(
             f"Core {self.__config.core}: Found current schema version: "
             f"{initialDoc.current_schema_version_l} using {self.__docId}"
         )
         remain = [e for e in migrations if e.version > initialDoc.current_schema_version_l]
-        logging.info(f"There are {len(remain)} migrations to run")
+        logger.info(f"There are {len(remain)} migrations to run")
         if remain == []:
             return MigrateResult.empty(version=initialDoc.current_schema_version_l)
 
@@ -252,7 +254,7 @@ class SchemaMigrator:
     ) -> MigrationState:
         cmds = m.align_with(state.solr_schema)
         if cmds.is_empty():
-            logging.info(f"Migration {m.version} seems to be applied. Skipping it")
+            logger.info(f"Migration {m.version} seems to be applied. Skipping it")
             v = await self.__upsert_version(client, state.doc, m.version)
             return state.model_copy(update={"skippedMigrations": state.skipped_migrations + 1, "doc": v})
         else:
@@ -265,7 +267,7 @@ class SchemaMigrator:
             return MigrationState(solr_schema=schema, doc=doc, skipped_migrations=state.skipped_migrations)
 
     async def __upsert_version(self, client: DefaultSolrClient, current: VersionDoc, next: int) -> VersionDoc:
-        logging.info(f"core {self.__config.core}: set schema migration version to {next}")
+        logger.info(f"core {self.__config.core}: set schema migration version to {next}")
         next_doc = current.model_copy(update={"current_schema_version_l": next})
         update_result = await client.upsert([next_doc])
         match update_result:

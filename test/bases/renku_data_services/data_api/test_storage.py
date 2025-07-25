@@ -7,9 +7,9 @@ from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 from syrupy.filters import props
 
-from renku_data_services.app_config import Config
 from renku_data_services.authn.dummy import DummyAuthenticator
 from renku_data_services.data_api.app import register_all_handlers
+from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.storage.rclone_patches import BANNED_STORAGE, OAUTH_PROVIDERS
@@ -34,11 +34,11 @@ def valid_storage_payload() -> dict[str, Any]:
 
 
 @pytest_asyncio.fixture(scope="session")
-async def storage_test_client_setup(app_config: Config) -> SanicASGITestClient:
+async def storage_test_client_setup(app_manager: DependencyManager) -> SanicASGITestClient:
     gitlab_auth = DummyAuthenticator()
-    app_config.gitlab_authenticator = gitlab_auth
-    app = Sanic(app_config.app_name)
-    app = register_all_handlers(app, app_config)
+    app_manager.gitlab_authenticator = gitlab_auth
+    app = Sanic(app_manager.app_name)
+    app = register_all_handlers(app, app_manager)
     validator = RCloneValidator()
     app.ext.dependency(validator)
     async with SanicReusableASGITestClient(app) as client:
@@ -48,7 +48,7 @@ async def storage_test_client_setup(app_config: Config) -> SanicASGITestClient:
 @pytest_asyncio.fixture
 async def storage_test_client(
     storage_test_client_setup,
-    app_config_instance: Config,
+    app_manager_instance: DependencyManager,
 ) -> SanicASGITestClient:
     run_migrations_for_app("common")
     yield storage_test_client_setup
@@ -636,3 +636,11 @@ async def test_storage_schema_patches(storage_test_client, snapshot) -> None:
     assert any(s["prefix"] == "polybox" for s in schema)
     assert any(s["prefix"] == "switchDrive" for s in schema)
     assert schema == snapshot
+
+
+@pytest.mark.asyncio
+async def test_storage_validate_connection_supports_doi(storage_test_client) -> None:
+    storage_test_client, _ = storage_test_client
+    payload = {"configuration": {"type": "doi", "doi": "10.5281/zenodo.15174623"}, "source_path": ""}
+    _, res = await storage_test_client.post("/api/data/storage_schema/test_connection", json=payload)
+    assert res.status_code == 204, res.text

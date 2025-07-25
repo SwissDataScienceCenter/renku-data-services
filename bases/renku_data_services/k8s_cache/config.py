@@ -6,18 +6,48 @@ from typing import Self
 from kubernetes.client.api_client import os
 
 from renku_data_services.db_config.config import DBConfig
-from renku_data_services.k8s_watcher.db import K8sDbCache
 
 
 @dataclass
 class _K8sConfig:
     """Defines the k8s client and namespace."""
 
-    renku_namespace: str = "default"
+    # This is used only for the main/local/default cluster
+    renku_namespace: str
+    kube_config_root: str
 
     @classmethod
     def from_env(cls) -> Self:
-        return cls(renku_namespace=os.environ.get("KUBERNETES_NAMESPACE", "default"))
+        return cls(
+            renku_namespace=os.environ.get("KUBERNETES_NAMESPACE", "default"),
+            kube_config_root=os.environ.get("K8S_CONFIGS_ROOT", "/secrets/kube_configs"),
+        )
+
+
+@dataclass
+class _MetricsConfig:
+    """Configuration for metrics."""
+
+    enabled: bool
+
+    @classmethod
+    def from_env(cls) -> "_MetricsConfig":
+        """Create metrics config from environment variables."""
+        enabled = os.environ.get("POSTHOG_ENABLED", "false").lower() == "true"
+        return cls(enabled)
+
+
+@dataclass
+class _ImageBuilderConfig:
+    """Configuration for image builders."""
+
+    enabled: bool
+
+    @classmethod
+    def from_env(cls) -> "_ImageBuilderConfig":
+        """Load values from environment variables."""
+        enabled = os.environ.get("IMAGE_BUILDERS_ENABLED", "false").lower() == "true"
+        return cls(enabled=enabled)
 
 
 @dataclass
@@ -26,21 +56,21 @@ class Config:
 
     db: DBConfig
     k8s: _K8sConfig
-    _k8s_cache: K8sDbCache | None = None
-
-    @property
-    def k8s_cache(self) -> K8sDbCache:
-        """The DB adapter for the k8s cache."""
-        if not self._k8s_cache:
-            self._k8s_cache = K8sDbCache(
-                session_maker=self.db.async_session_maker,
-            )
-        return self._k8s_cache
+    metrics: _MetricsConfig
+    image_builders: _ImageBuilderConfig
 
     @classmethod
-    def from_env(cls, prefix: str = "") -> "Config":
+    def from_env(cls) -> "Config":
         """Create a config from environment variables."""
-        db = DBConfig.from_env(prefix)
-        k8s_config = _K8sConfig.from_env()
+        db = DBConfig.from_env()
+        k8s = _K8sConfig.from_env()
+        metrics = _MetricsConfig.from_env()
 
-        return cls(db=db, k8s=k8s_config)
+        image_builders = _ImageBuilderConfig.from_env()
+
+        return cls(
+            db=db,
+            k8s=k8s,
+            metrics=metrics,
+            image_builders=image_builders,
+        )

@@ -1,16 +1,14 @@
 """Business logic for sessions."""
 
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING, Union, cast
+from typing import Union, cast
 
 from ulid import ULID
 
 from renku_data_services import errors
 from renku_data_services.base_models.core import RESET, ResetType
 from renku_data_services.session import apispec, models
-
-if TYPE_CHECKING:
-    from renku_data_services.app_config.config import BuildsConfig
+from renku_data_services.session.config import BuildsConfig
 
 
 def validate_unsaved_environment(
@@ -70,6 +68,8 @@ def validate_unsaved_build_parameters(
         repository=environment.repository,
         builder_variant=environment.builder_variant,
         frontend_variant=environment.frontend_variant,
+        repository_revision=environment.repository_revision,
+        context_dir=environment.context_dir,
     )
 
 
@@ -94,6 +94,8 @@ def validate_build_parameters_patch(environment: apispec.BuildParametersPatch) -
         repository=environment.repository,
         builder_variant=environment.builder_variant,
         frontend_variant=environment.frontend_variant,
+        repository_revision=environment.repository_revision,
+        context_dir=environment.context_dir,
     )
 
 

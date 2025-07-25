@@ -5,21 +5,17 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from datetime import datetime, timedelta
-from typing import Any, cast
+from typing import Any, cast, override
 from urllib.parse import urlunparse
 
 from kubernetes.utils import parse_duration, parse_quantity
-from pydantic import BaseModel, Field, field_serializer, field_validator
+from kubernetes.utils.duration import format_duration
+from pydantic import BaseModel, Field, field_serializer, field_validator, model_serializer
 from ulid import ULID
 
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec
-from renku_data_services.notebooks.constants import (
-    AMALTHEA_SESSION_KIND,
-    AMALTHEA_SESSION_VERSION,
-    JUPYTER_SESSION_KIND,
-    JUPYTER_SESSION_VERSION,
-)
+from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
 from renku_data_services.notebooks.cr_amalthea_session import (
     Affinity,
     Authentication,
@@ -45,27 +41,29 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     Requests7,
     RequiredDuringSchedulingIgnoredDuringExecution,
     SecretRef,
-    ShmSize,
-    ShmSize1,
+    Session,
     Size,
-    Size1,
-    Spec,
     State,
     Status,
     Storage,
     TlsSecret,
     Toleration,
 )
-from renku_data_services.notebooks.cr_amalthea_session import CloningConfigSecretRef as SecretRefKey
-from renku_data_services.notebooks.cr_amalthea_session import Culling as _Culling
+from renku_data_services.notebooks.cr_amalthea_session import (
+    Culling as _ASCulling,
+)
 from renku_data_services.notebooks.cr_amalthea_session import EnvItem2 as SessionEnvItem
 from renku_data_services.notebooks.cr_amalthea_session import Item4 as SecretAsVolumeItem
+from renku_data_services.notebooks.cr_amalthea_session import Limits6 as Limits
+from renku_data_services.notebooks.cr_amalthea_session import Limits7 as LimitsStr
 from renku_data_services.notebooks.cr_amalthea_session import Model as _ASModel
-from renku_data_services.notebooks.cr_amalthea_session import Resources3 as _Resources
+from renku_data_services.notebooks.cr_amalthea_session import Requests6 as Requests
+from renku_data_services.notebooks.cr_amalthea_session import Requests7 as RequestsStr
+from renku_data_services.notebooks.cr_amalthea_session import Resources3 as Resources
 from renku_data_services.notebooks.cr_amalthea_session import Secret1 as SecretAsVolume
-from renku_data_services.notebooks.cr_amalthea_session import SecretRef as SecretRefWhole
-from renku_data_services.notebooks.cr_amalthea_session import Session as _Session
-from renku_data_services.notebooks.cr_amalthea_session import Spec as _AmaltheaSessionSpec
+from renku_data_services.notebooks.cr_amalthea_session import ShmSize1 as ShmSizeStr
+from renku_data_services.notebooks.cr_amalthea_session import Size1 as SizeStr
+from renku_data_services.notebooks.cr_amalthea_session import Spec as _ASSpec
 from renku_data_services.notebooks.cr_amalthea_session import Type as AuthenticationType
 from renku_data_services.notebooks.cr_amalthea_session import Type1 as CodeRepositoryType
 from renku_data_services.notebooks.cr_base import BaseCRD
@@ -105,7 +103,7 @@ class ComputeResources(BaseModel):
     def _convert_k8s_cpu(cls, val: Any) -> Any:
         if val is None:
             return None
-        if isinstance(val, (Quantity, QuantityInt)):
+        if hasattr(val, "root"):
             val = val.root
         return float(parse_quantity(val))
 
@@ -114,7 +112,7 @@ class ComputeResources(BaseModel):
     def _convert_k8s_gpu(cls, val: Any) -> Any:
         if val is None:
             return None
-        if isinstance(val, (Quantity, QuantityInt)):
+        if hasattr(val, "root"):
             val = val.root
         return round(parse_quantity(val), ndigits=None)
 
@@ -125,7 +123,6 @@ class ComputeResources(BaseModel):
         if val is None:
             return None
         if hasattr(val, "root"):
-            # NOTE: This is for pydantic classes that wrap the resource quantities like Quantity or QuantityInt
             val = val.root
         return round(parse_quantity(val) / 1_000_000_000, ndigits=None)
 
@@ -133,8 +130,8 @@ class ComputeResources(BaseModel):
 class JupyterServerV1Alpha1(_JSModel):
     """Jupyter server CRD."""
 
-    kind: str = JUPYTER_SESSION_KIND
-    apiVersion: str = JUPYTER_SESSION_VERSION
+    kind: str = JUPYTER_SESSION_GVK.kind
+    apiVersion: str = JUPYTER_SESSION_GVK.group_version
     metadata: Metadata
 
     def get_compute_resources(self) -> ComputeResources:
@@ -145,21 +142,51 @@ class JupyterServerV1Alpha1(_JSModel):
         resource_requests["storage"] = self.spec.storage.size
         return ComputeResources.model_validate(resource_requests)
 
+    def resource_class_id(self) -> int:
+        """Get the resource class from the annotations."""
+        if "renku.io/resourceClassId" not in self.metadata.annotations:
+            raise errors.ProgrammingError(
+                message=f"The session with name {self.metadata.name} is missing its renku.io/resourceClassId annotation"
+            )
+        i = int(self.metadata.annotations["renku.io/resourceClassId"])
+        return i
+
+
+class Culling(_ASCulling):
+    """Amalthea session culling configuration."""
+
+    @field_serializer("*", mode="wrap")
+    def __serialize_duration_field(self, val: Any, nxt: Any, _info: Any) -> Any:
+        if isinstance(val, timedelta):
+            return format_duration(val)
+        return nxt(val)
+
+    @field_validator("*", mode="wrap")
+    @classmethod
+    def __deserialize_duration(cls, val: Any, handler: Any) -> Any:
+        if isinstance(val, str):
+            return safe_parse_duration(val)
+        return handler(val)
+
+
+class AmaltheaSessionSpec(_ASSpec):
+    """Amalthea session specification."""
+
+    culling: Culling | None = None
+
 
 class AmaltheaSessionV1Alpha1(_ASModel):
     """Amalthea session CRD."""
 
-    kind: str = AMALTHEA_SESSION_KIND
-    apiVersion: str = AMALTHEA_SESSION_VERSION
+    kind: str = AMALTHEA_SESSION_GVK.kind
+    apiVersion: str = AMALTHEA_SESSION_GVK.group_version
     # Here we overwrite the default from ASModel because it is too weakly typed
     metadata: Metadata  # type: ignore[assignment]
-    spec: AmaltheaSessionSpec | None = None
+    spec: AmaltheaSessionSpec
 
     def get_compute_resources(self) -> ComputeResources:
         """Convert the k8s resource requests and storage into usable values."""
-        if self.spec is None:
-            return ComputeResources()
-        resource_requests: Mapping[str, float | int] = {"storage": parse_quantity(self.spec.session.storage.size.root)}
+        resource_requests: dict = {}
         if self.spec.session.resources is not None:
             reqs = self.spec.session.resources.requests or {}
             reqs = {k: parse_quantity(v.root) for k, v in reqs.items()}
@@ -187,7 +214,6 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             )
         return cast(ULID, ULID.from_str(self.metadata.annotations["renku.io/launcher_id"]))
 
-    @property
     def resource_class_id(self) -> int:
         """Get the resource class from the annotations."""
         if "renku.io/resource_class_id" not in self.metadata.annotations:
@@ -226,7 +252,14 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             total_containers += self.status.containerCounts.total or 0
 
         if self.status.state in [State.Running, State.Hibernated, State.Failed]:
-            state = apispec.State3(self.status.state.value.lower())
+            # Amalthea is sometimes slow when (un)hibernating and still shows the old status, so we patch it here
+            # so the client sees the correct state
+            if not self.spec.hibernated and self.status.state == State.Hibernated:
+                state = apispec.State3.starting
+            elif self.spec.hibernated and self.status.state == State.Running:
+                state = apispec.State3.hibernated
+            else:
+                state = apispec.State3(self.status.state.value.lower())
         elif self.status.state == State.RunningDegraded:
             state = apispec.State3.running
         elif self.status.state == State.NotReady and self.metadata.deletionTimestamp is not None:
@@ -280,7 +313,7 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             url=url,
             project_id=str(self.project_id),
             launcher_id=str(self.launcher_id),
-            resource_class_id=self.resource_class_id,
+            resource_class_id=self.resource_class_id(),
         )
 
     @property
@@ -324,6 +357,7 @@ class AmaltheaSessionV1Alpha1SpecPatch(BaseCRD):
     affinity: Affinity | None = None
     session: AmaltheaSessionV1Alpha1SpecSessionPatch | None = None
     culling: Culling | None = None
+    service_account_name: str | None = None
 
 
 class AmaltheaSessionV1Alpha1Patch(BaseCRD):
@@ -405,6 +439,8 @@ def safe_parse_duration(val: Any) -> timedelta:
     This does not make the whole thing 100% foolproof but it eliminates errors like the above which
     we have seen in production.
     """
+    if isinstance(val, timedelta):
+        return val
     m = re.match(r"^([0-9]+)(h|m|s|ms)$", str(val))
     if m is not None:
         num = m.group(1)

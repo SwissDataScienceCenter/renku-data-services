@@ -50,6 +50,7 @@ class FrontendVariant(StrEnum):
     """The environment frontend choice."""
 
     vscodium = "vscodium"
+    jupyterlab = "jupyterlab"
 
 
 @dataclass(kw_only=True, frozen=True, eq=True)
@@ -59,6 +60,8 @@ class UnsavedBuildParameters:
     repository: str
     builder_variant: str
     frontend_variant: str
+    repository_revision: str | None = None
+    context_dir: str | None = None
 
 
 @dataclass(kw_only=True, frozen=True, eq=True)
@@ -128,6 +131,8 @@ class BuildParametersPatch:
     repository: str | None = None
     builder_variant: str | None = None
     frontend_variant: str | None = None
+    repository_revision: str | None = None
+    context_dir: str | None = None
 
 
 @dataclass(eq=True, kw_only=True)
@@ -306,6 +311,10 @@ class ShipwrightBuildRunParams:
     tolerations: list[crs.Toleration] | None = None
     labels: dict[str, str] | None = None
     annotations: dict[str, str] | None = None
+    frontend: str = FrontendVariant.vscodium.value
+    build_image: str | None = None
+    git_repository_revision: str | None = None
+    context_dir: str | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

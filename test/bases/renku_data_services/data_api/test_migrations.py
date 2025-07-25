@@ -1,4 +1,3 @@
-import base64
 import random
 import string
 from collections.abc import Sequence
@@ -15,10 +14,8 @@ from sqlalchemy.sql import bindparam
 from ulid import ULID
 
 from renku_data_services import errors
-from renku_data_services.app_config.config import Config
 from renku_data_services.base_models.core import Slug
-from renku_data_services.message_queue.avro_models.io.renku.events import v2
-from renku_data_services.message_queue.models import deserialize_binary
+from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.migrations.core import downgrade_migrations_for_app, get_alembic_config, run_migrations_for_app
 from renku_data_services.namespace import orm as ns_schemas
 from renku_data_services.users import orm as user_schemas
@@ -37,36 +34,48 @@ async def test_unique_migration_head() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("downgrade_to, upgrade_to", [("base", "head"), ("fe3b7470d226", "8413f10ef77f")])
 async def test_upgrade_downgrade_cycle(
-    app_config_instance: Config,
+    app_manager_instance: DependencyManager,
     sanic_client_no_migrations: SanicASGITestClient,
     admin_headers: dict,
     admin_user: UserInfo,
+    downgrade_to: str,
+    upgrade_to: str,
 ) -> None:
     # Migrate to head and create a project
-    run_migrations_for_app("common", "head")
-    await app_config_instance.kc_user_repo.initialize(app_config_instance.kc_api)
-    await app_config_instance.group_repo.generate_user_namespaces()
+    run_migrations_for_app("common", upgrade_to)
+    await app_manager_instance.kc_user_repo.initialize(app_manager_instance.kc_api)
+    await app_manager_instance.group_repo.generate_user_namespaces()
     payload: dict[str, Any] = {
         "name": "test_project",
         "namespace": admin_user.namespace.path.serialize(),
     }
     _, res = await sanic_client_no_migrations.post("/api/data/projects", headers=admin_headers, json=payload)
     assert res.status_code == 201
+    project_id = res.json["id"]
     # Migrate/downgrade a few times but end on head
-    downgrade_migrations_for_app("common", "base")
-    run_migrations_for_app("common", "head")
-    downgrade_migrations_for_app("common", "base")
-    run_migrations_for_app("common", "head")
+    downgrade_migrations_for_app("common", downgrade_to)
+    run_migrations_for_app("common", upgrade_to)
+    downgrade_migrations_for_app("common", downgrade_to)
+    run_migrations_for_app("common", upgrade_to)
     # Try to make the same project again
     # NOTE: The engine has to be disposed otherwise it caches the postgres types (i.e. enums)
     # from previous migrations and then trying to create a project below fails with the message
     # cache postgres lookup failed for type XXXX.
-    await app_config_instance.db.current._async_engine.dispose()
-    await app_config_instance.kc_user_repo.initialize(app_config_instance.kc_api)
-    await app_config_instance.group_repo.generate_user_namespaces()
+    await app_manager_instance.config.db.current._async_engine.dispose()
+    await app_manager_instance.kc_user_repo.initialize(app_manager_instance.kc_api)
+    await app_manager_instance.group_repo.generate_user_namespaces()
     _, res = await sanic_client_no_migrations.post("/api/data/projects", headers=admin_headers, json=payload)
-    assert res.status_code == 201, res.json
+    assert res.status_code in [201, 409], res.json
+    if res.status_code == 409:
+        # NOTE: This means the project is still in the DB because the down migration was not going
+        # far enough to delete the projects table, so we delete the project and recreate it to make sure
+        # things are OK.
+        _, res = await sanic_client_no_migrations.delete(f"/api/data/projects/{project_id}", headers=admin_headers)
+        assert res.status_code == 204, res.json
+        _, res = await sanic_client_no_migrations.post("/api/data/projects", headers=admin_headers, json=payload)
+        assert res.status_code == 201, res.json
 
 
 # !IMPORTANT: This test can only be run on v2 of the authz schema
@@ -74,13 +83,13 @@ async def test_upgrade_downgrade_cycle(
 @pytest.mark.asyncio
 async def test_migration_to_f34b87ddd954(
     sanic_client_no_migrations: SanicASGITestClient,
-    app_config_instance: Config,
+    app_manager_instance: DependencyManager,
     user_headers: dict,
     admin_headers: dict,
 ) -> None:
     run_migrations_for_app("common", "d8676f0cde53")
-    await app_config_instance.kc_user_repo.initialize(app_config_instance.kc_api)
-    await app_config_instance.group_repo.generate_user_namespaces()
+    await app_manager_instance.kc_user_repo.initialize(app_manager_instance.kc_api)
+    await app_manager_instance.group_repo.generate_user_namespaces()
     sanic_client = sanic_client_no_migrations
     payloads = [
         {
@@ -104,19 +113,12 @@ async def test_migration_to_f34b87ddd954(
     _, response = await sanic_client.get("/api/data/groups", headers=user_headers)
     assert response.status_code == 200
     assert len(response.json) == 0
-    # The database should have delete events for the groups
-    events_orm = await app_config_instance.event_repo.get_pending_events()
-    group_removed_events = [
-        deserialize_binary(base64.b64decode(e.payload["payload"]), v2.GroupRemoved)
-        for e in events_orm
-        if e.queue == "group.removed"
-    ]
-    assert len(group_removed_events) == 2
-    assert set(added_group_ids) == {e.id for e in group_removed_events}
 
 
 @pytest.mark.asyncio
-async def test_migration_to_1ef98b967767_and_086eb60b42c8(app_config_instance: Config, admin_user: UserInfo) -> None:
+async def test_migration_to_1ef98b967767_and_086eb60b42c8(
+    app_manager_instance: DependencyManager, admin_user: UserInfo
+) -> None:
     """Tests the migration of the session launchers."""
     run_migrations_for_app("common", "b8cbd62e85b9")
 
@@ -124,7 +126,7 @@ async def test_migration_to_1ef98b967767_and_086eb60b42c8(app_config_instance: C
     custom_launcher_id = str(ULID())
     global_launcher_id = str(ULID())
     project_id = str(ULID())
-    async with app_config_instance.db.async_session_maker() as session, session.begin():
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
         await _generate_user_namespaces(session)
         await session.execute(
             sa.text(
@@ -188,7 +190,7 @@ async def test_migration_to_1ef98b967767_and_086eb60b42c8(app_config_instance: C
             )
         )
     run_migrations_for_app("common", "1ef98b967767")
-    async with app_config_instance.db.async_session_maker() as session, session.begin():
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
         res = await session.execute(
             sa.text("SELECT * FROM sessions.environments WHERE name = :name").bindparams(name="global env")
         )
@@ -210,7 +212,7 @@ async def test_migration_to_1ef98b967767_and_086eb60b42c8(app_config_instance: C
         "--ContentsManager.allow_hidden=true --ServerApp.allow_origin=*",
     ]
     assert global_env["environment_kind"] == "GLOBAL"
-    async with app_config_instance.db.async_session_maker() as session, session.begin():
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
         res = await session.execute(
             sa.text("SELECT * FROM sessions.environments WHERE name != :name").bindparams(name="global env")
         )
@@ -231,7 +233,7 @@ async def test_migration_to_1ef98b967767_and_086eb60b42c8(app_config_instance: C
         "--ContentsManager.allow_hidden=true --ServerApp.allow_origin=*",
     ]
     assert custom_env["environment_kind"] == "CUSTOM"
-    async with app_config_instance.db.async_session_maker() as session, session.begin():
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
         res = await session.execute(
             sa.text("SELECT * FROM sessions.launchers WHERE id = :id").bindparams(id=custom_launcher_id)
         )
@@ -241,7 +243,7 @@ async def test_migration_to_1ef98b967767_and_086eb60b42c8(app_config_instance: C
     assert custom_launcher["name"] == "custom"
     assert custom_launcher["project_id"] == project_id
     assert custom_launcher["environment_id"] == custom_env["id"]
-    async with app_config_instance.db.async_session_maker() as session, session.begin():
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
         res = await session.execute(
             sa.text("SELECT * FROM sessions.launchers WHERE id = :id").bindparams(id=global_launcher_id)
         )
@@ -252,7 +254,7 @@ async def test_migration_to_1ef98b967767_and_086eb60b42c8(app_config_instance: C
     assert global_launcher["project_id"] == project_id
     assert global_launcher["environment_id"] == global_env["id"]
     run_migrations_for_app("common", "086eb60b42c8")
-    async with app_config_instance.db.async_session_maker() as session, session.begin():
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
         res = await session.execute(
             sa.text("SELECT * FROM sessions.environments WHERE name = :name").bindparams(name="global env")
         )
@@ -269,7 +271,7 @@ async def test_migration_to_1ef98b967767_and_086eb60b42c8(app_config_instance: C
 
 @pytest.mark.asyncio
 async def test_migration_create_global_envs(
-    app_config_instance: Config,
+    app_manager_instance: DependencyManager,
     sanic_client_no_migrations: SanicASGITestClient,
     admin_headers: dict,
     admin_user: UserInfo,
@@ -277,14 +279,14 @@ async def test_migration_create_global_envs(
     monkeysession,
 ) -> None:
     run_migrations_for_app("common", "head")
-    envs = await app_config_instance.session_repo.get_environments()
+    envs = await app_manager_instance.session_repo.get_environments()
     assert len(envs) == 2
     assert any(e.name == "Python/Jupyter" for e in envs)
     assert any(e.name == "Rstudio" for e in envs)
 
 
 @pytest.mark.asyncio
-async def test_migration_to_75c83dd9d619(app_config_instance: Config, admin_user: UserInfo) -> None:
+async def test_migration_to_75c83dd9d619(app_manager_instance: DependencyManager, admin_user: UserInfo) -> None:
     """Tests the migration for copying session environments of copied projects."""
 
     async def insert_project(session: AsyncSession, payload: dict[str, Any]) -> None:
@@ -333,7 +335,7 @@ async def test_migration_to_75c83dd9d619(app_config_instance: Config, admin_user
 
     run_migrations_for_app("common", "450ae3930996")
 
-    async with app_config_instance.db.async_session_maker() as session, session.begin():
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
         await _generate_user_namespaces(session)
         # Create template project
         project_id = str(ULID())
@@ -474,7 +476,7 @@ async def test_migration_to_75c83dd9d619(app_config_instance: Config, admin_user
             ),
         )
     run_migrations_for_app("common", "75c83dd9d619")
-    async with app_config_instance.db.async_session_maker() as session, session.begin():
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
         launchers = (await session.execute(sa.text("SELECT id, environment_id, name FROM sessions.launchers"))).all()
         envs = (
             await session.execute(
@@ -506,9 +508,9 @@ async def test_migration_to_75c83dd9d619(app_config_instance: Config, admin_user
     # The copied and the original env have the same name
     assert env1_row[2] == env2_row[2]
     # Check that the random environment is unchanged
-    random_env_row[0] == admin_user.id
-    random_env_row[1] == random_env_id
-    random_env_row[2] == "random env"
+    assert random_env_row[0] == random_env_id
+    assert random_env_row[1] == admin_user.id
+    assert random_env_row[2] == "random env"
     # Check that the orphaned cloned project's environment has been also decoupled
     orphan_launcher_row = find_by_col(launchers, custom_launcher_id_orphan_cloned, 0)
     assert orphan_launcher_row is not None
@@ -577,3 +579,33 @@ async def _generate_user_namespaces(session: AsyncSession) -> list[UserInfo]:
         output.append(user.dump())
 
     return output
+
+
+@pytest.mark.asyncio
+async def test_migration_to_dcb9648c3c15(app_manager_instance: DependencyManager, admin_user: UserInfo) -> None:
+    run_migrations_for_app("common", "042eeb50cd8e")
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        await session.execute(
+            sa.text(
+                "INSERT into "
+                "common.k8s_objects(name, namespace, manifest, deleted, kind, version, cluster, user_id) "
+                "VALUES ('name_pod', 'ns', '{}', FALSE, 'pod', 'v1', 'cluster', 'user_id')"
+            )
+        )
+        await session.execute(
+            sa.text(
+                "INSERT into "
+                "common.k8s_objects(name, namespace, manifest, deleted, kind, version, cluster, user_id) "
+                "VALUES ('name_js', 'ns', '{}', FALSE, 'jupyterserver', 'amalthea.dev/v1alpha1', 'cluster', 'user_id')"
+            )
+        )
+    run_migrations_for_app("common", "dcb9648c3c15")
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        k8s_objs = (await session.execute(sa.text('SELECT "group", version, kind FROM common.k8s_objects'))).all()
+    assert len(k8s_objs) == 2
+    assert k8s_objs[0].tuple()[0] is None
+    assert k8s_objs[0].tuple()[1] == "v1"
+    assert k8s_objs[0].tuple()[2] == "pod"
+    assert k8s_objs[1].tuple()[0] == "amalthea.dev"
+    assert k8s_objs[1].tuple()[1] == "v1alpha1"
+    assert k8s_objs[1].tuple()[2] == "jupyterserver"

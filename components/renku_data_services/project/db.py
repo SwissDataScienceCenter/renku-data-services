@@ -11,7 +11,7 @@ from pathlib import PurePosixPath
 from typing import Concatenate, ParamSpec, TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
-from sqlalchemy import Select, delete, func, select, update
+from sqlalchemy import ColumnElement, Select, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer
 from sqlalchemy.sql.functions import coalesce
@@ -20,15 +20,10 @@ from ulid import ULID
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
-from renku_data_services.authz.models import CheckPermissionItem, Member, MembershipChange, Scope
+from renku_data_services.authz.models import CheckPermissionItem, Member, MembershipChange, Scope, Visibility
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models import RESET
 from renku_data_services.base_models.core import Slug
-from renku_data_services.message_queue import events
-from renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
-from renku_data_services.message_queue.db import EventRepository
-from renku_data_services.message_queue.interface import IMessageQueue
-from renku_data_services.message_queue.redis_queue import dispatch_message
 from renku_data_services.namespace import orm as ns_schemas
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project import apispec as project_apispec
@@ -56,15 +51,11 @@ class ProjectRepository:
     def __init__(
         self,
         session_maker: Callable[..., AsyncSession],
-        message_queue: IMessageQueue,
-        event_repo: EventRepository,
         group_repo: GroupRepository,
         search_updates_repo: SearchUpdatesRepo,
         authz: Authz,
     ) -> None:
         self.session_maker = session_maker
-        self.message_queue: IMessageQueue = message_queue
-        self.event_repo: EventRepository = event_repo
         self.group_repo: GroupRepository = group_repo
         self.search_updates_repo: SearchUpdatesRepo = search_updates_repo
         self.authz = authz
@@ -145,14 +136,17 @@ class ProjectRepository:
             )
 
         async with self.session_maker() as session:
-            stmt = select(schemas.ProjectORM).where(schemas.ProjectORM.template_id == project_id)
+            # NOTE: Show only those projects that user has access to
+            scope = Scope.WRITE if only_writable else Scope.NON_PUBLIC_READ
+            project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, scope=scope)
+
+            cond: ColumnElement[bool] = schemas.ProjectORM.id.in_(project_ids)
+            if scope == Scope.NON_PUBLIC_READ:
+                cond = or_(cond, schemas.ProjectORM.visibility == Visibility.PUBLIC.value)
+
+            stmt = select(schemas.ProjectORM).where(schemas.ProjectORM.template_id == project_id).where(cond)
             result = await session.execute(stmt)
             project_orms = result.scalars().all()
-
-            # NOTE: Show only those projects that user has access to
-            scope = Scope.WRITE if only_writable else Scope.READ
-            project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, scope=scope)
-            project_orms = [p for p in project_orms if p.id in project_ids]
 
             return [p.dump() for p in project_orms]
 
@@ -227,7 +221,6 @@ class ProjectRepository:
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.create, ResourceType.project)
     @update_search_document
-    @dispatch_message(avro_schema_v2.ProjectCreated)
     async def insert_project(
         self,
         user: base_models.APIUser,
@@ -299,7 +292,6 @@ class ProjectRepository:
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.update, ResourceType.project)
-    @dispatch_message(avro_schema_v2.ProjectUpdated)
     @update_search_document
     async def update_project(
         self,
@@ -417,7 +409,6 @@ class ProjectRepository:
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.delete, ResourceType.project)
-    @dispatch_message(avro_schema_v2.ProjectRemoved)
     @update_search_document
     async def delete_project(
         self, user: base_models.APIUser, project_id: ULID, *, session: AsyncSession | None = None
@@ -521,14 +512,10 @@ class ProjectMemberRepository:
     def __init__(
         self,
         session_maker: Callable[..., AsyncSession],
-        event_repo: EventRepository,
         authz: Authz,
-        message_queue: IMessageQueue,
     ) -> None:
         self.session_maker = session_maker
-        self.event_repo = event_repo
         self.authz = authz
-        self.message_queue = message_queue
 
     @with_db_transaction
     @_project_exists
@@ -542,7 +529,6 @@ class ProjectMemberRepository:
 
     @with_db_transaction
     @_project_exists
-    @dispatch_message(events.ProjectMembershipChanged)
     async def update_members(
         self,
         user: base_models.APIUser,
@@ -573,7 +559,6 @@ class ProjectMemberRepository:
 
     @with_db_transaction
     @_project_exists
-    @dispatch_message(events.ProjectMembershipChanged)
     async def delete_members(
         self, user: base_models.APIUser, project_id: ULID, user_ids: list[str], *, session: AsyncSession | None = None
     ) -> list[MembershipChange]:
@@ -913,21 +898,29 @@ class ProjectMigrationRepository:
         self,
         session_maker: Callable[..., AsyncSession],
         authz: Authz,
-        message_queue: IMessageQueue,
-        event_repo: EventRepository,
         project_repo: ProjectRepository,
         session_repo: SessionRepository,
     ) -> None:
         self.session_maker = session_maker
         self.authz = authz
-        self.message_queue: IMessageQueue = message_queue
         self.project_repo = project_repo
-        self.event_repo: EventRepository = event_repo
         self.session_repo = session_repo
+
+    async def get_project_migrations(
+        self,
+        user: base_models.APIUser,
+    ) -> AsyncGenerator[models.ProjectMigrationInfo, None]:
+        """Get all project migrations from the database."""
+        project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
+
+        async with self.session_maker() as session:
+            stmt = select(schemas.ProjectMigrationsORM).where(schemas.ProjectMigrationsORM.project_id.in_(project_ids))
+            result = await session.stream_scalars(stmt)
+            async for migration in result:
+                yield migration.dump()
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.create, ResourceType.project)
-    @dispatch_message(avro_schema_v2.ProjectCreated)
     async def migrate_v1_project(
         self,
         user: base_models.APIUser,
@@ -1002,9 +995,6 @@ class ProjectMigrationRepository:
 
     async def get_migration_by_v1_id(self, user: base_models.APIUser, v1_id: int) -> models.Project:
         """Retrieve all migration records for a given project v1 ID."""
-        if user.id is None:
-            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
-
         async with self.session_maker() as session:
             stmt = select(schemas.ProjectMigrationsORM).where(schemas.ProjectMigrationsORM.project_v1_id == v1_id)
             result = await session.execute(stmt)
@@ -1014,7 +1004,9 @@ class ProjectMigrationRepository:
                 raise errors.MissingResourceError(message=f"Migration for project v1 with id '{v1_id}' does not exist.")
 
             # NOTE: Show only those projects that user has access to
-            allowed_projects = await self.authz.resources_with_direct_membership(user, ResourceType.project)
+            allowed_projects = await self.authz.resources_with_permission(
+                user, user.id, ResourceType.project, Scope.READ
+            )
             project_id_list = [project_ids.project_id]
             stmt = select(schemas.ProjectORM)
             stmt = stmt.where(schemas.ProjectORM.id.in_(project_id_list))

@@ -15,10 +15,10 @@ charts:
         contextPath: .
         dockerfilePath: projects/renku_data_service/Dockerfile
         valuesPath: dataService.image
-      data-service-background-jobs:
+      data-service-data-tasks:
         contextPath: .
-        dockerfilePath: projects/background_jobs/Dockerfile
-        valuesPath: dataService.backgroundJobs.image
+        dockerfilePath: projects/renku_data_tasks/Dockerfile
+        valuesPath: dataService.dataTasks.image
       secrets-storage:
         contextPath: .
         dockerfilePath: projects/secrets_storage/Dockerfile

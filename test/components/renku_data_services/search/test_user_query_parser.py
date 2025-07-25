@@ -1,21 +1,25 @@
 """Tests for the query parser."""
 
 import datetime
+import random
+import string
 
 import pytest
 from parsy import ParseError
 
 from renku_data_services.authz.models import Role, Visibility
+from renku_data_services.base_models.nel import Nel
 from renku_data_services.search.user_query import (
     Comparison,
     Created,
     CreatedByIs,
     DateTimeCalc,
+    DirectMemberIs,
     IdIs,
+    InheritedMemberIs,
     KeywordIs,
     NameIs,
     NamespaceIs,
-    Nel,
     Order,
     OrderBy,
     PartialDate,
@@ -23,19 +27,44 @@ from renku_data_services.search.user_query import (
     PartialTime,
     RelativeDate,
     RoleIs,
-    Segments,
     SlugIs,
     SortableField,
     Text,
     TypeIs,
+    UserId,
+    Username,
     UserQuery,
     VisibilityIs,
+)
+from renku_data_services.search.user_query import (
+    Segments as S,
 )
 from renku_data_services.search.user_query_parser import QueryParser, _DateTimeParser, _ParsePrimitives
 from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.solr_client import SortDirection
 
 pp = _ParsePrimitives()
+
+
+def test_user_name() -> None:
+    assert pp.user_name.parse("@hello") == Username.from_name("hello")
+    assert pp.user_name.parse("@test.me") == Username.from_name("test.me")
+    with pytest.raises(ParseError):
+        pp.user_name.parse("help")
+    with pytest.raises(ParseError):
+        pp.user_name.parse("@t - a")
+
+
+def test_inherited_member_is() -> None:
+    assert pp.inherited_member_is.parse("inherited_member:@hello") == InheritedMemberIs(
+        Nel(Username.from_name("hello"))
+    )
+    assert pp.inherited_member_is.parse("inherited_member:hello") == InheritedMemberIs(Nel(UserId("hello")))
+
+
+def test_direct_member_is() -> None:
+    assert pp.direct_member_is.parse("direct_member:@hello") == DirectMemberIs(Nel(Username.from_name("hello")))
+    assert pp.direct_member_is.parse("direct_member:hello") == DirectMemberIs(Nel(UserId("hello")))
 
 
 def test_sortable_field() -> None:
@@ -164,6 +193,10 @@ def test_field_term() -> None:
     assert pp.field_term.parse("createdBy:test") == CreatedByIs(Nel("test"))
     assert pp.field_term.parse("role:owner") == RoleIs(Nel(Role.OWNER))
     assert pp.field_term.parse("role:viewer") == RoleIs(Nel(Role.VIEWER))
+    assert pp.field_term.parse("direct_member:@john") == DirectMemberIs(Nel(Username.from_name("john")))
+    assert pp.field_term.parse("direct_member:123-456") == DirectMemberIs(Nel(UserId("123-456")))
+    assert pp.field_term.parse("inherited_member:@john") == InheritedMemberIs(Nel(Username.from_name("john")))
+    assert pp.field_term.parse("inherited_member:123-456") == InheritedMemberIs(Nel(UserId("123-456")))
 
 
 def test_free_text() -> None:
@@ -190,21 +223,24 @@ def test_segment() -> None:
     assert pp.segment.parse("keyword:test") == KeywordIs(Nel("test"))
     assert pp.segment.parse("namespace:test") == NamespaceIs(Nel("test"))
     assert pp.segment.parse("createdBy:test") == CreatedByIs(Nel("test"))
+    assert pp.segment.parse("direct_member:@john") == DirectMemberIs(Nel(Username.from_name("john")))
+    assert pp.segment.parse("direct_member:123-456") == DirectMemberIs(Nel(UserId("123-456")))
+    assert pp.segment.parse("inherited_member:@john") == InheritedMemberIs(Nel(Username.from_name("john")))
+    assert pp.segment.parse("inherited_member:123-456") == InheritedMemberIs(Nel(UserId("123-456")))
 
     assert pp.segment.parse("name:") == Text("name:")
 
 
-def test_query() -> None:
+@pytest.mark.asyncio
+async def test_query() -> None:
     assert pp.query.parse("") == UserQuery([])
 
-    q = UserQuery(
-        [
-            Created(Comparison.is_greater_than, Nel(DateTimeCalc(RelativeDate.today, -7, False))),
-            Text("some"),
-            SlugIs(Nel("bad slug")),
-            Text("text"),
-            Order(Nel(OrderBy(SortableField.score, SortDirection.asc))),
-        ]
+    q = UserQuery.of(
+        S.created(Comparison.is_greater_than, DateTimeCalc(RelativeDate.today, -7, False)),
+        S.text("some"),
+        S.slug_is("bad slug"),
+        S.text("text"),
+        S.order(OrderBy(SortableField.score, SortDirection.asc)),
     )
     qstr = 'created>today-7d some slug:"bad slug" text sort:score-asc'
     assert pp.query.parse(qstr) == q
@@ -212,19 +248,53 @@ def test_query() -> None:
 
     q = UserQuery(
         [
-            Segments.name_is("al"),
-            Segments.text("hello world hello"),
-            Segments.sort_by((SortableField.score, SortDirection.desc)),
+            S.name_is("al"),
+            S.text("hello world hello"),
+            S.sort_by((SortableField.score, SortDirection.desc)),
         ]
     )
     qstr = "name:al hello world hello sort:score-desc"
-    assert QueryParser.parse(qstr) == q
+    assert await QueryParser.parse(qstr) == q
     assert q.render() == qstr
 
-    # TODO any random string must parse successfully
-    # rlen = random.randint(0, 50)
-    # rstr = "".join(random.choices(string.printable, k=rlen))
-    # pp.query.parse(rstr)
+
+@pytest.mark.asyncio
+async def test_collapse_member_and_text_query() -> None:
+    q = UserQuery.of(
+        S.name_is("al"),
+        S.text("hello this world"),
+        S.direct_member_is(Username.from_name("jane"), Username.from_name("joe")),
+    )
+    qstr = "name:al hello  direct_member:@jane this world direct_member:@joe"
+    assert await QueryParser.parse(qstr) == q
+    assert q.render() == "name:al hello this world direct_member:@jane,@joe"
+
+
+@pytest.mark.asyncio
+async def test_restrict_members_query() -> None:
+    q = UserQuery.of(
+        S.name_is("al"),
+        S.text("hello"),
+        S.direct_member_is(
+            Username.from_name("jane"), Username.from_name("joe"), Username.from_name("jeff"), UserId("123")
+        ),
+    )
+    qstr = "name:al  direct_member:@jane hello direct_member:@joe,@jeff,123,456,@wuff"
+    assert (await QueryParser.parse(qstr)) == q
+
+
+@pytest.mark.asyncio
+async def test_invalid_query() -> None:
+    result = await QueryParser.parse("type:uu:ue:")
+    assert result == UserQuery([Text("type:uu:ue:")])
+
+
+@pytest.mark.asyncio
+async def test_random_query() -> None:
+    """Any random string must parse successfully."""
+    rlen = random.randint(0, 50)
+    rstr = "".join(random.choices(string.printable, k=rlen))
+    await QueryParser.parse(rstr)
 
 
 def test_string_basic() -> None:

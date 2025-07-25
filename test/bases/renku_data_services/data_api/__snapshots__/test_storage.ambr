@@ -704,6 +704,74 @@
         }),
         dict({
           'advanced': True,
+          'default': 8388608.0,
+          'default_str': '8Mi',
+          'exclusive': False,
+          'help': '''
+            Cutoff for switching to multipart copy.
+            
+            Any files larger than this that need to be server-side copied will be
+            copied in chunks of chunk_size using the put block list API.
+            
+            Files smaller than this limit will be copied with the Copy Blob API.
+          ''',
+          'ispassword': False,
+          'name': 'copy_cutoff',
+          'required': False,
+          'sensitive': False,
+          'type': 'SizeSuffix',
+        }),
+        dict({
+          'advanced': True,
+          'default': 512.0,
+          'default_str': '512',
+          'exclusive': False,
+          'help': '''
+            Concurrency for multipart copy.
+            
+            This is the number of chunks of the same file that are copied
+            concurrently.
+            
+            These chunks are not buffered in memory and Microsoft recommends
+            setting this value to greater than 1000 in the azcopy documentation.
+            
+            https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-optimize#increase-concurrency
+            
+            In tests, copy speed increases almost linearly with copy
+            concurrency.
+          ''',
+          'ispassword': False,
+          'name': 'copy_concurrency',
+          'required': False,
+          'sensitive': False,
+          'type': 'int',
+        }),
+        dict({
+          'advanced': True,
+          'default': True,
+          'default_str': 'true',
+          'exclusive': False,
+          'help': '''
+            Whether to use the Copy Blob API when copying to the same storage account.
+            
+            If true (the default) then rclone will use the Copy Blob API for
+            copies to the same storage account even when the size is above the
+            copy_cutoff.
+            
+            Rclone assumes that the same storage account means the same config
+            and does not check for the same storage account in different configs.
+            
+            There should be no need to change this value.
+  
+          ''',
+          'ispassword': False,
+          'name': 'use_copy_blob',
+          'required': False,
+          'sensitive': False,
+          'type': 'bool',
+        }),
+        dict({
+          'advanced': True,
           'default': 5000.0,
           'default_str': '5000',
           'exclusive': False,
@@ -1313,6 +1381,48 @@
           'required': False,
           'sensitive': True,
           'type': 'string',
+        }),
+        dict({
+          'advanced': True,
+          'default': False,
+          'default_str': 'false',
+          'exclusive': False,
+          'help': '''
+            Skip requesting Microsoft Entra instance metadata
+            This should be set true only by applications authenticating in
+            disconnected clouds, or private clouds such as Azure Stack.
+            It determines whether rclone requests Microsoft Entra instance
+            metadata from `https://login.microsoft.com/` before
+            authenticating.
+            Setting this to true will skip this request, making you responsible
+            for ensuring the configured authority is valid and trustworthy.
+  
+          ''',
+          'ispassword': False,
+          'name': 'disable_instance_discovery',
+          'required': False,
+          'sensitive': False,
+          'type': 'bool',
+        }),
+        dict({
+          'advanced': True,
+          'default': False,
+          'default_str': 'false',
+          'exclusive': False,
+          'help': '''
+            Use Azure CLI tool az for authentication
+            Set to use the [Azure CLI tool az](https://learn.microsoft.com/en-us/cli/azure/)
+            as the sole means of authentication.
+            Setting this can be useful if you wish to use the az CLI on a host with
+            a System Managed Identity that you do not want to use.
+            Don't set env_auth at the same time.
+  
+          ''',
+          'ispassword': False,
+          'name': 'use_az',
+          'required': False,
+          'sensitive': False,
+          'type': 'bool',
         }),
         dict({
           'advanced': True,
@@ -2110,6 +2220,85 @@
         }),
         dict({
           'advanced': True,
+          'default': True,
+          'default_str': 'true',
+          'exclusive': False,
+          'help': 'Cloudinary handles media formats as a file attribute and strips it from the name, which is unlike most other file systems',
+          'ispassword': False,
+          'name': 'adjust_media_files_extensions',
+          'required': False,
+          'sensitive': False,
+          'type': 'bool',
+        }),
+        dict({
+          'advanced': True,
+          'default': list([
+            '3ds',
+            '3g2',
+            '3gp',
+            'ai',
+            'arw',
+            'avi',
+            'avif',
+            'bmp',
+            'bw',
+            'cr2',
+            'cr3',
+            'djvu',
+            'dng',
+            'eps3',
+            'fbx',
+            'flif',
+            'flv',
+            'gif',
+            'glb',
+            'gltf',
+            'hdp',
+            'heic',
+            'heif',
+            'ico',
+            'indd',
+            'jp2',
+            'jpe',
+            'jpeg',
+            'jpg',
+            'jxl',
+            'jxr',
+            'm2ts',
+            'mov',
+            'mp4',
+            'mpeg',
+            'mts',
+            'mxf',
+            'obj',
+            'ogv',
+            'pdf',
+            'ply',
+            'png',
+            'psd',
+            'svg',
+            'tga',
+            'tif',
+            'tiff',
+            'ts',
+            'u3ma',
+            'usdz',
+            'wdp',
+            'webm',
+            'webp',
+            'wmv',
+          ]),
+          'default_str': '[3ds 3g2 3gp ai arw avi avif bmp bw cr2 cr3 djvu dng eps3 fbx flif flv gif glb gltf hdp heic heif ico indd jp2 jpe jpeg jpg jxl jxr m2ts mov mp4 mpeg mts mxf obj ogv pdf ply png psd svg tga tif tiff ts u3ma usdz wdp webm webp wmv]',
+          'exclusive': False,
+          'help': 'Cloudinary supported media extensions',
+          'ispassword': False,
+          'name': 'media_extensions',
+          'required': False,
+          'sensitive': False,
+          'type': 'stringArray',
+        }),
+        dict({
+          'advanced': True,
           'default': '',
           'default_str': '',
           'exclusive': False,
@@ -2122,6 +2311,89 @@
         }),
       ]),
       'prefix': 'cloudinary',
+    }),
+    dict({
+      'description': 'DOI datasets',
+      'name': 'doi',
+      'options': list([
+        dict({
+          'advanced': False,
+          'default': '',
+          'default_str': '',
+          'exclusive': False,
+          'help': 'The DOI or the doi.org URL.',
+          'ispassword': False,
+          'name': 'doi',
+          'required': True,
+          'sensitive': False,
+          'type': 'string',
+        }),
+        dict({
+          'advanced': True,
+          'default': '',
+          'default_str': '',
+          'examples': list([
+            dict({
+              'help': 'Auto-detect provider',
+              'value': 'auto',
+            }),
+            dict({
+              'help': 'Zenodo',
+              'value': 'zenodo',
+            }),
+            dict({
+              'help': 'Dataverse',
+              'value': 'dataverse',
+            }),
+            dict({
+              'help': 'Invenio',
+              'value': 'invenio',
+            }),
+          ]),
+          'exclusive': False,
+          'help': '''
+            DOI provider.
+            
+            The DOI provider can be set when rclone does not automatically recognize a supported DOI provider.
+          ''',
+          'ispassword': False,
+          'name': 'provider',
+          'required': False,
+          'sensitive': False,
+          'type': 'string',
+        }),
+        dict({
+          'advanced': True,
+          'default': '',
+          'default_str': '',
+          'exclusive': False,
+          'help': '''
+            The URL of the DOI resolver API to use.
+            
+            The DOI resolver can be set for testing or for cases when the the canonical DOI resolver API cannot be used.
+            
+            Defaults to "https://doi.org/api".
+          ''',
+          'ispassword': False,
+          'name': 'doi_resolver_api_url',
+          'required': False,
+          'sensitive': False,
+          'type': 'string',
+        }),
+        dict({
+          'advanced': True,
+          'default': '',
+          'default_str': '',
+          'exclusive': False,
+          'help': 'Description of the remote.',
+          'ispassword': False,
+          'name': 'description',
+          'required': False,
+          'sensitive': False,
+          'type': 'string',
+        }),
+      ]),
+      'prefix': 'doi',
     }),
     dict({
       'description': 'Google Drive',
@@ -3326,6 +3598,68 @@
         }),
         dict({
           'advanced': True,
+          'default': list([
+            'html',
+            'md',
+          ]),
+          'default_str': 'html,md',
+          'exclusive': False,
+          'help': '''
+            Comma separated list of preferred formats for exporting files
+            
+            Certain Dropbox files can only be accessed by exporting them to another format.
+            These include Dropbox Paper documents.
+            
+            For each such file, rclone will choose the first format on this list that Dropbox
+            considers valid. If none is valid, it will choose Dropbox's default format.
+            
+            Known formats include: "html", "md" (markdown)
+          ''',
+          'ispassword': False,
+          'name': 'export_formats',
+          'required': False,
+          'sensitive': False,
+          'type': 'CommaSepList',
+        }),
+        dict({
+          'advanced': True,
+          'default': False,
+          'default_str': 'false',
+          'exclusive': False,
+          'help': '''
+            Skip exportable files in all listings.
+            
+            If given, exportable files practically become invisible to rclone.
+          ''',
+          'ispassword': False,
+          'name': 'skip_exports',
+          'required': False,
+          'sensitive': False,
+          'type': 'bool',
+        }),
+        dict({
+          'advanced': True,
+          'default': False,
+          'default_str': 'false',
+          'exclusive': False,
+          'help': '''
+            Show all exportable files in listings.
+            
+            Adding this flag will allow all exportable files to be server side copied.
+            Note that rclone doesn't add extensions to the exportable file names in this mode.
+            
+            Do **not** use this flag when trying to download exportable files - rclone
+            will fail to download them.
+  
+          ''',
+          'ispassword': False,
+          'name': 'show_all_exports',
+          'required': False,
+          'sensitive': False,
+          'type': 'bool',
+        }),
+        dict({
+          'advanced': True,
           'default': 'sync',
           'default_str': 'sync',
           'exclusive': False,
@@ -3413,7 +3747,7 @@
           'default': 600000000000.0,
           'default_str': '10m0s',
           'exclusive': False,
-          'help': 'Max time to wait for a batch to finish committing',
+          'help': 'Max time to wait for a batch to finish committing. (no longer used)',
           'ispassword': False,
           'name': 'batch_commit_timeout',
           'required': False,
@@ -3687,6 +4021,53 @@
         }),
       ]),
       'prefix': 'filefabric',
+    }),
+    dict({
+      'description': 'FileLu Cloud Storage',
+      'name': 'filelu',
+      'options': list([
+        dict({
+          'advanced': False,
+          'default': '',
+          'default_str': '',
+          'exclusive': False,
+          'help': 'Your FileLu Rclone key from My Account',
+          'ispassword': False,
+          'name': 'key',
+          'required': True,
+          'sensitive': True,
+          'type': 'string',
+        }),
+        dict({
+          'advanced': True,
+          'default': 536870910.0,
+          'default_str': 'Slash,LtGt,DoubleQuote,SingleQuote,BackQuote,Dollar,Colon,Question,Asterisk,Pipe,Hash,Percent,BackSlash,CrLf,Del,Ctl,LeftSpace,LeftPeriod,LeftTilde,LeftCrLfHtVt,RightSpace,RightPeriod,RightCrLfHtVt,InvalidUtf8,Dot,SquareBracket,Semicolon,Exclamation',
+          'exclusive': False,
+          'help': '''
+            The encoding for the backend.
+            
+            See the [encoding section in the overview](/overview/#encoding) for more info.
+          ''',
+          'ispassword': False,
+          'name': 'encoding',
+          'required': False,
+          'sensitive': False,
+          'type': 'Encoding',
+        }),
+        dict({
+          'advanced': True,
+          'default': '',
+          'default_str': '',
+          'exclusive': False,
+          'help': 'Description of the remote.',
+          'ispassword': False,
+          'name': 'description',
+          'required': False,
+          'sensitive': False,
+          'type': 'string',
+        }),
+      ]),
+      'prefix': 'filelu',
     }),
     dict({
       'description': 'Files.com',
@@ -4072,6 +4453,23 @@
           ''',
           'ispassword': False,
           'name': 'socks_proxy',
+          'required': False,
+          'sensitive': False,
+          'type': 'string',
+        }),
+        dict({
+          'advanced': True,
+          'default': '',
+          'default_str': '',
+          'exclusive': False,
+          'help': '''
+            URL for HTTP CONNECT proxy
+            
+            Set this to a URL for an HTTP proxy which supports the HTTP CONNECT verb.
+  
+          ''',
+          'ispassword': False,
+          'name': 'http_proxy',
           'required': False,
           'sensitive': False,
           'type': 'string',
@@ -5020,7 +5418,7 @@
             The Google API will deliver images and video which aren't full
             resolution, and/or have EXIF data missing.
             
-            However if you ue the gphotosdl proxy tnen you can download original,
+            However if you use the gphotosdl proxy then you can download original,
             unchanged images.
             
             This runs a headless browser in the background.
@@ -5149,7 +5547,7 @@
           'default': 600000000000.0,
           'default_str': '10m0s',
           'exclusive': False,
-          'help': 'Max time to wait for a batch to finish committing',
+          'help': 'Max time to wait for a batch to finish committing. (no longer used)',
           'ispassword': False,
           'name': 'batch_commit_timeout',
           'required': False,
@@ -5956,6 +6354,38 @@
           'required': False,
           'sensitive': False,
           'type': 'string',
+        }),
+        dict({
+          'advanced': True,
+          'default': list([
+          ]),
+          'default_str': '[]',
+          'exclusive': False,
+          'help': '''
+            Metadata to be set on the IA item, this is different from file-level metadata that can be set using --metadata-set.
+            Format is key=value and the 'x-archive-meta-' prefix is automatically added.
+          ''',
+          'ispassword': False,
+          'name': 'item_metadata',
+          'required': False,
+          'sensitive': False,
+          'type': 'stringArray',
+        }),
+        dict({
+          'advanced': False,
+          'default': True,
+          'default_str': 'true',
+          'exclusive': False,
+          'help': '''
+            Whether to trigger derive on the IA item or not. If set to false, the item will not be derived by IA upon upload.
+            The derive process produces a number of secondary files from an upload to make an upload more usable on the web.
+            Setting this to false is useful for uploading files that are already in a format that IA can display or reduce burden on IA's infrastructure.
+          ''',
+          'ispassword': False,
+          'name': 'item_derive',
+          'required': False,
+          'sensitive': False,
+          'type': 'bool',
         }),
         dict({
           'advanced': True,
@@ -6976,6 +7406,30 @@
         }),
         dict({
           'advanced': True,
+          'default': -1.0,
+          'default_str': 'off',
+          'exclusive': False,
+          'help': '''
+            Cutoff for switching to chunked upload.
+            
+            Any files larger than this will be uploaded in chunks of chunk_size.
+            
+            This is disabled by default as uploading using single part uploads
+            causes rclone to use twice the storage on Onedrive business as when
+            rclone sets the modification time after the upload Onedrive creates a
+            new version.
+            
+            See: https://github.com/rclone/rclone/issues/1716
+  
+          ''',
+          'ispassword': False,
+          'name': 'upload_cutoff',
+          'required': False,
+          'sensitive': False,
+          'type': 'SizeSuffix',
+        }),
+        dict({
+          'advanced': True,
           'default': 10485760.0,
           'default_str': '10Mi',
           'exclusive': False,
@@ -7543,6 +7997,32 @@
           'required': False,
           'sensitive': False,
           'type': 'SizeSuffix',
+        }),
+        dict({
+          'advanced': True,
+          'default': 'private',
+          'default_str': 'private',
+          'examples': list([
+            dict({
+              'help': 'The file or folder access can be granted in a way that will allow select users to view, read or write what is absolutely essential for them.',
+              'value': 'private',
+            }),
+            dict({
+              'help': 'The file or folder can be downloaded by anyone from a web browser. The link can be shared in any way,',
+              'value': 'public',
+            }),
+            dict({
+              'help': 'The file or folder can be accessed has the same restrictions as  Public if the user knows the URL of the file or folder link in order to access the contents',
+              'value': 'hidden',
+            }),
+          ]),
+          'exclusive': False,
+          'help': 'Files and folders will be uploaded with this access permission (default private)',
+          'ispassword': False,
+          'name': 'access',
+          'required': False,
+          'sensitive': False,
+          'type': 'string',
         }),
         dict({
           'advanced': True,
@@ -9367,7 +9847,7 @@
       'prefix': 'quatrix',
     }),
     dict({
-      'description': 'Amazon S3 Compliant Storage Providers including AWS, Alibaba, ArvanCloud, Ceph, ChinaMobile, Cloudflare, DigitalOcean, Dreamhost, GCS, HuaweiOBS, IBMCOS, IDrive, IONOS, LyveCloud, Leviia, Liara, Linode, Magalu, Minio, Netease, Outscale, Petabox, RackCorp, Rclone, Scaleway, SeaweedFS, Selectel, StackPath, Storj, Synology, TencentCOS, Wasabi, Qiniu and others',
+      'description': 'Amazon S3 Compliant Storage Providers including AWS, Alibaba, ArvanCloud, Ceph, ChinaMobile, Cloudflare, DigitalOcean, Dreamhost, Exaba, FlashBlade, GCS, HuaweiOBS, IBMCOS, IDrive, IONOS, LyveCloud, Leviia, Liara, Linode, Magalu, Mega, Minio, Netease, Outscale, Petabox, RackCorp, Rclone, Scaleway, SeaweedFS, Selectel, StackPath, Storj, Synology, TencentCOS, Wasabi, Qiniu and others',
       'name': 's3',
       'options': list([
         dict({
@@ -9408,6 +9888,14 @@
               'value': 'Dreamhost',
             }),
             dict({
+              'help': 'Exaba Object Storage',
+              'value': 'Exaba',
+            }),
+            dict({
+              'help': 'Pure Storage FlashBlade Object Storage',
+              'value': 'FlashBlade',
+            }),
+            dict({
               'help': 'Google Cloud Storage',
               'value': 'GCS',
             }),
@@ -9446,6 +9934,10 @@
             dict({
               'help': 'Magalu Object Storage',
               'value': 'Magalu',
+            }),
+            dict({
+              'help': 'MEGA S4 Object Storage',
+              'value': 'Mega',
             }),
             dict({
               'help': 'Minio Object Storage',
@@ -10258,7 +10750,7 @@
           ''',
           'ispassword': False,
           'name': 'region',
-          'provider': '!AWS,Alibaba,ArvanCloud,ChinaMobile,Cloudflare,IONOS,Petabox,Liara,Linode,Magalu,Qiniu,RackCorp,Scaleway,Selectel,Storj,Synology,TencentCOS,HuaweiOBS,IDrive',
+          'provider': '!AWS,Alibaba,ArvanCloud,ChinaMobile,Cloudflare,FlashBlade,IONOS,Petabox,Liara,Linode,Magalu,Qiniu,RackCorp,Scaleway,Selectel,Storj,Synology,TencentCOS,HuaweiOBS,IDrive,Mega',
           'required': False,
           'sensitive': False,
           'type': 'string',
@@ -10932,6 +11424,25 @@
           'advanced': False,
           'default': '',
           'default_str': '',
+          'exclusive': False,
+          'help': '''
+            Endpoint for Lyve Cloud S3 API.
+            Required when using an S3 clone. Please type in your LyveCloud endpoint.
+            Examples:
+            - s3.us-west-1.{account_name}.lyve.seagate.com (US West 1 - California)
+            - s3.eu-west-1.{account_name}.lyve.seagate.com (EU West 1 - Ireland)
+          ''',
+          'ispassword': False,
+          'name': 'endpoint',
+          'provider': 'LyveCloud',
+          'required': True,
+          'sensitive': False,
+          'type': 'string',
+        }),
+        dict({
+          'advanced': False,
+          'default': '',
+          'default_str': '',
           'examples': list([
             dict({
               'help': 'São Paulo, SP (BR), br-se1',
@@ -11578,21 +12089,6 @@
               'value': 'localhost:8333',
             }),
             dict({
-              'help': 'Seagate Lyve Cloud US East 1 (Virginia)',
-              'provider': 'LyveCloud',
-              'value': 's3.us-east-1.lyvecloud.seagate.com',
-            }),
-            dict({
-              'help': 'Seagate Lyve Cloud US West 1 (California)',
-              'provider': 'LyveCloud',
-              'value': 's3.us-west-1.lyvecloud.seagate.com',
-            }),
-            dict({
-              'help': 'Seagate Lyve Cloud AP Southeast 1 (Singapore)',
-              'provider': 'LyveCloud',
-              'value': 's3.ap-southeast-1.lyvecloud.seagate.com',
-            }),
-            dict({
               'help': 'Outscale EU West 2 (Paris)',
               'provider': 'Outscale',
               'value': 'oos.eu-west-2.outscale.com',
@@ -11702,6 +12198,26 @@
               'provider': 'ArvanCloud',
               'value': 's3.ir-tbz-sh1.arvanstorage.ir',
             }),
+            dict({
+              'help': 'Mega S4 eu-central-1 (Amsterdam)',
+              'provider': 'Mega',
+              'value': 's3.eu-central-1.s4.mega.io',
+            }),
+            dict({
+              'help': 'Mega S4 eu-central-2 (Bettembourg)',
+              'provider': 'Mega',
+              'value': 's3.eu-central-2.s4.mega.io',
+            }),
+            dict({
+              'help': 'Mega S4 ca-central-1 (Montreal)',
+              'provider': 'Mega',
+              'value': 's3.ca-central-1.s4.mega.io',
+            }),
+            dict({
+              'help': 'Mega S4 ca-west-1 (Vancouver)',
+              'provider': 'Mega',
+              'value': 's3.ca-west-1.s4.mega.io',
+            }),
           ]),
           'exclusive': False,
           'help': '''
@@ -11711,7 +12227,7 @@
           ''',
           'ispassword': False,
           'name': 'endpoint',
-          'provider': '!AWS,ArvanCloud,IBMCOS,IDrive,IONOS,TencentCOS,HuaweiOBS,Alibaba,ChinaMobile,GCS,Liara,Linode,Magalu,Scaleway,Selectel,StackPath,Storj,Synology,RackCorp,Qiniu,Petabox,Switch',
+          'provider': '!AWS,ArvanCloud,IBMCOS,IDrive,IONOS,TencentCOS,HuaweiOBS,Alibaba,ChinaMobile,GCS,Liara,Linode,LyveCloud,Magalu,Scaleway,Selectel,StackPath,Storj,Synology,RackCorp,Qiniu,Petabox,Switch',
           'required': True,
           'sensitive': False,
           'type': 'string',
@@ -12305,7 +12821,7 @@
           ''',
           'ispassword': False,
           'name': 'location_constraint',
-          'provider': '!AWS,Alibaba,ArvanCloud,HuaweiOBS,ChinaMobile,Cloudflare,IBMCOS,IDrive,IONOS,Leviia,Liara,Linode,Magalu,Outscale,Qiniu,RackCorp,Scaleway,Selectel,StackPath,Storj,TencentCOS,Petabox',
+          'provider': '!AWS,Alibaba,ArvanCloud,HuaweiOBS,ChinaMobile,Cloudflare,FlashBlade,IBMCOS,IDrive,IONOS,Leviia,Liara,Linode,Magalu,Outscale,Qiniu,RackCorp,Scaleway,Selectel,StackPath,Storj,TencentCOS,Petabox,Mega',
           'required': False,
           'sensitive': False,
           'type': 'string',
@@ -12428,7 +12944,7 @@
           ''',
           'ispassword': False,
           'name': 'acl',
-          'provider': '!Storj,Selectel,Synology,Cloudflare',
+          'provider': '!Storj,Selectel,Synology,Cloudflare,FlashBlade,Mega',
           'required': False,
           'sensitive': False,
           'type': 'string',
@@ -12483,6 +12999,7 @@
           ''',
           'ispassword': False,
           'name': 'bucket_acl',
+          'provider': '!Storj,Selectel,Synology,Cloudflare,FlashBlade',
           'required': False,
           'sensitive': False,
           'type': 'string',
@@ -13768,6 +14285,58 @@
         }),
         dict({
           'advanced': True,
+          'default': dict({
+            'valid': False,
+            'value': False,
+          }),
+          'default_str': 'unset',
+          'exclusive': False,
+          'help': '''
+            Set if rclone should add x-id URL parameters.
+            
+            You can change this if you want to disable the AWS SDK from
+            adding x-id URL parameters.
+            
+            This shouldn't be necessary in normal operation.
+            
+            This should be automatically set correctly for all providers rclone
+            knows about - please make a bug report if not.
+  
+          ''',
+          'ispassword': False,
+          'name': 'use_x_id',
+          'required': False,
+          'sensitive': False,
+          'type': 'Tristate',
+        }),
+        dict({
+          'advanced': True,
+          'default': dict({
+            'valid': False,
+            'value': False,
+          }),
+          'default_str': 'unset',
+          'exclusive': False,
+          'help': '''
+            Set if rclone should include Accept-Encoding as part of the signature.
+            
+            You can change this if you want to stop rclone including
+            Accept-Encoding as part of the signature.
+            
+            This shouldn't be necessary in normal operation.
+            
+            This should be automatically set correctly for all providers rclone
+            knows about - please make a bug report if not.
+  
+          ''',
+          'ispassword': False,
+          'name': 'sign_accept_encoding',
+          'required': False,
+          'sensitive': False,
+          'type': 'Tristate',
+        }),
+        dict({
+          'advanced': True,
           'default': False,
           'default_str': 'false',
           'exclusive': False,
@@ -13833,6 +14402,32 @@
           'required': False,
           'sensitive': False,
           'type': 'Bits',
+        }),
+        dict({
+          'advanced': False,
+          'default': '',
+          'default_str': '',
+          'exclusive': False,
+          'help': 'IBM API Key to be used to obtain IAM token',
+          'ispassword': False,
+          'name': 'ibm_api_key',
+          'provider': 'IBMCOS',
+          'required': False,
+          'sensitive': False,
+          'type': 'string',
+        }),
+        dict({
+          'advanced': False,
+          'default': '',
+          'default_str': '',
+          'exclusive': False,
+          'help': 'IBM service instance id',
+          'ispassword': False,
+          'name': 'ibm_resource_instance_id',
+          'provider': 'IBMCOS',
+          'required': False,
+          'sensitive': False,
+          'type': 'string',
         }),
         dict({
           'advanced': True,
@@ -14812,6 +15407,23 @@
         }),
         dict({
           'advanced': True,
+          'default': '',
+          'default_str': '',
+          'exclusive': False,
+          'help': '''
+            URL for HTTP CONNECT proxy
+            
+            Set this to a URL for an HTTP proxy which supports the HTTP CONNECT verb.
+  
+          ''',
+          'ispassword': False,
+          'name': 'http_proxy',
+          'required': False,
+          'sensitive': False,
+          'type': 'string',
+        }),
+        dict({
+          'advanced': True,
           'default': False,
           'default_str': 'false',
           'exclusive': False,
@@ -15212,6 +15824,26 @@
           'required': False,
           'sensitive': True,
           'type': 'string',
+        }),
+        dict({
+          'advanced': False,
+          'default': False,
+          'default_str': 'false',
+          'exclusive': False,
+          'help': '''
+            Use Kerberos authentication.
+            
+            If set, rclone will use Kerberos authentication instead of NTLM. This
+            requires a valid Kerberos configuration and credentials cache to be
+            available, either in the default locations or as specified by the
+            KRB5_CONFIG and KRB5CCNAME environment variables.
+  
+          ''',
+          'ispassword': False,
+          'name': 'use_kerberos',
+          'required': False,
+          'sensitive': False,
+          'type': 'bool',
         }),
         dict({
           'advanced': True,
@@ -16431,8 +17063,12 @@
               'value': 'nextcloud',
             }),
             dict({
-              'help': 'Owncloud',
+              'help': 'Owncloud 10 PHP based WebDAV server',
               'value': 'owncloud',
+            }),
+            dict({
+              'help': 'ownCloud Infinite Scale',
+              'value': 'infinitescale',
             }),
             dict({
               'help': 'Sharepoint Online, authenticated by Microsoft account',

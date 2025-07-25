@@ -458,6 +458,57 @@
         "Type": "int"
       },
       {
+        "Name": "copy_cutoff",
+        "FieldName": "",
+        "Help": "Cutoff for switching to multipart copy.\n\nAny files larger than this that need to be server-side copied will be\ncopied in chunks of chunk_size using the put block list API.\n\nFiles smaller than this limit will be copied with the Copy Blob API.",
+        "Default": 8388608,
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "8Mi",
+        "ValueStr": "8Mi",
+        "Type": "SizeSuffix"
+      },
+      {
+        "Name": "copy_concurrency",
+        "FieldName": "",
+        "Help": "Concurrency for multipart copy.\n\nThis is the number of chunks of the same file that are copied\nconcurrently.\n\nThese chunks are not buffered in memory and Microsoft recommends\nsetting this value to greater than 1000 in the azcopy documentation.\n\nhttps://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-optimize#increase-concurrency\n\nIn tests, copy speed increases almost linearly with copy\nconcurrency.",
+        "Default": 512,
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "512",
+        "ValueStr": "512",
+        "Type": "int"
+      },
+      {
+        "Name": "use_copy_blob",
+        "FieldName": "",
+        "Help": "Whether to use the Copy Blob API when copying to the same storage account.\n\nIf true (the default) then rclone will use the Copy Blob API for\ncopies to the same storage account even when the size is above the\ncopy_cutoff.\n\nRclone assumes that the same storage account means the same config\nand does not check for the same storage account in different configs.\n\nThere should be no need to change this value.\n",
+        "Default": true,
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "true",
+        "ValueStr": "true",
+        "Type": "bool"
+      },
+      {
         "Name": "list_chunk",
         "FieldName": "",
         "Help": "Size of blob list.\n\nThis sets the number of blobs requested in each listing chunk. Default\nis the maximum, 5000. \"List blobs\" requests are permitted 2 minutes\nper megabyte to complete. If an operation is taking longer than 2\nminutes per megabyte on average, it will time out (\n[source](https://docs.microsoft.com/en-us/rest/api/storageservices/setting-timeouts-for-blob-service-operations#exceptions-to-default-timeout-interval)\n). This can be used to limit the number of blobs items to return, to\navoid the time out.",
@@ -1039,6 +1090,40 @@
         "DefaultStr": "",
         "ValueStr": "",
         "Type": "string"
+      },
+      {
+        "Name": "disable_instance_discovery",
+        "FieldName": "",
+        "Help": "Skip requesting Microsoft Entra instance metadata\nThis should be set true only by applications authenticating in\ndisconnected clouds, or private clouds such as Azure Stack.\nIt determines whether rclone requests Microsoft Entra instance\nmetadata from `https://login.microsoft.com/` before\nauthenticating.\nSetting this to true will skip this request, making you responsible\nfor ensuring the configured authority is valid and trustworthy.\n",
+        "Default": false,
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "false",
+        "ValueStr": "false",
+        "Type": "bool"
+      },
+      {
+        "Name": "use_az",
+        "FieldName": "",
+        "Help": "Use Azure CLI tool az for authentication\nSet to use the [Azure CLI tool az](https://learn.microsoft.com/en-us/cli/azure/)\nas the sole means of authentication.\nSetting this can be useful if you wish to use the az CLI on a host with\na System Managed Identity that you do not want to use.\nDon't set env_auth at the same time.\n",
+        "Default": false,
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "false",
+        "ValueStr": "false",
+        "Type": "bool"
       },
       {
         "Name": "endpoint",
@@ -2604,6 +2689,95 @@
         "Type": "Duration"
       },
       {
+        "Name": "adjust_media_files_extensions",
+        "FieldName": "",
+        "Help": "Cloudinary handles media formats as a file attribute and strips it from the name, which is unlike most other file systems",
+        "Default": true,
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "true",
+        "ValueStr": "true",
+        "Type": "bool"
+      },
+      {
+        "Name": "media_extensions",
+        "FieldName": "",
+        "Help": "Cloudinary supported media extensions",
+        "Default": [
+          "3ds",
+          "3g2",
+          "3gp",
+          "ai",
+          "arw",
+          "avi",
+          "avif",
+          "bmp",
+          "bw",
+          "cr2",
+          "cr3",
+          "djvu",
+          "dng",
+          "eps3",
+          "fbx",
+          "flif",
+          "flv",
+          "gif",
+          "glb",
+          "gltf",
+          "hdp",
+          "heic",
+          "heif",
+          "ico",
+          "indd",
+          "jp2",
+          "jpe",
+          "jpeg",
+          "jpg",
+          "jxl",
+          "jxr",
+          "m2ts",
+          "mov",
+          "mp4",
+          "mpeg",
+          "mts",
+          "mxf",
+          "obj",
+          "ogv",
+          "pdf",
+          "ply",
+          "png",
+          "psd",
+          "svg",
+          "tga",
+          "tif",
+          "tiff",
+          "ts",
+          "u3ma",
+          "usdz",
+          "wdp",
+          "webm",
+          "webp",
+          "wmv"
+        ],
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "[3ds 3g2 3gp ai arw avi avif bmp bw cr2 cr3 djvu dng eps3 fbx flif flv gif glb gltf hdp heic heif ico indd jp2 jpe jpeg jpg jxl jxr m2ts mov mp4 mpeg mts mxf obj ogv pdf ply png psd svg tga tif tiff ts u3ma usdz wdp webm webp wmv]",
+        "ValueStr": "3ds,3g2,3gp,ai,arw,avi,avif,bmp,bw,cr2,cr3,djvu,dng,eps3,fbx,flif,flv,gif,glb,gltf,hdp,heic,heif,ico,indd,jp2,jpe,jpeg,jpg,jxl,jxr,m2ts,mov,mp4,mpeg,mts,mxf,obj,ogv,pdf,ply,png,psd,svg,tga,tif,tiff,ts,u3ma,usdz,wdp,webm,webp,wmv",
+        "Type": "stringArray"
+      },
+      {
         "Name": "description",
         "FieldName": "",
         "Help": "Description of the remote.",
@@ -3074,6 +3248,116 @@
       "System": null,
       "Help": "Any metadata supported by the underlying remote is read and written."
     }
+  },
+  {
+    "Name": "doi",
+    "Description": "DOI datasets",
+    "Prefix": "doi",
+    "Options": [
+      {
+        "Name": "doi",
+        "FieldName": "",
+        "Help": "The DOI or the doi.org URL.",
+        "Default": "",
+        "Value": null,
+        "Hide": 0,
+        "Required": true,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": false,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "",
+        "ValueStr": "",
+        "Type": "string"
+      },
+      {
+        "Name": "provider",
+        "FieldName": "",
+        "Help": "DOI provider.\n\nThe DOI provider can be set when rclone does not automatically recognize a supported DOI provider.",
+        "Default": "",
+        "Value": null,
+        "Examples": [
+          {
+            "Value": "auto",
+            "Help": "Auto-detect provider"
+          },
+          {
+            "Value": "zenodo",
+            "Help": "Zenodo"
+          },
+          {
+            "Value": "dataverse",
+            "Help": "Dataverse"
+          },
+          {
+            "Value": "invenio",
+            "Help": "Invenio"
+          }
+        ],
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "",
+        "ValueStr": "",
+        "Type": "string"
+      },
+      {
+        "Name": "doi_resolver_api_url",
+        "FieldName": "",
+        "Help": "The URL of the DOI resolver API to use.\n\nThe DOI resolver can be set for testing or for cases when the the canonical DOI resolver API cannot be used.\n\nDefaults to \"https://doi.org/api\".",
+        "Default": "",
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "",
+        "ValueStr": "",
+        "Type": "string"
+      },
+      {
+        "Name": "description",
+        "FieldName": "",
+        "Help": "Description of the remote.",
+        "Default": "",
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "",
+        "ValueStr": "",
+        "Type": "string"
+      }
+    ],
+    "CommandHelp": [
+      {
+        "Name": "metadata",
+        "Short": "Show metadata about the DOI.",
+        "Long": "This command returns a JSON object with some information about the DOI.\n\n    rclone backend medatadata doi: \n\nIt returns a JSON object representing metadata about the DOI.\n",
+        "Opts": null
+      },
+      {
+        "Name": "set",
+        "Short": "Set command for updating the config parameters.",
+        "Long": "This set command can be used to update the config parameters\nfor a running doi backend.\n\nUsage Examples:\n\n    rclone backend set doi: [-o opt_name=opt_value] [-o opt_name2=opt_value2]\n    rclone rc backend/command command=set fs=doi: [-o opt_name=opt_value] [-o opt_name2=opt_value2]\n    rclone rc backend/command command=set fs=doi: -o doi=NEW_DOI\n\nThe option keys are named as they are in the config file.\n\nThis rebuilds the connection to the doi backend when it is called with\nthe new parameters. Only new parameters need be passed as the values\nwill default to those currently in use.\n\nIt doesn't return anything.\n",
+        "Opts": null
+      }
+    ],
+    "Aliases": null,
+    "Hide": false,
+    "MetadataInfo": null
   },
   {
     "Name": "drive",
@@ -4092,6 +4376,12 @@
         "Opts": null
       },
       {
+        "Name": "moveid",
+        "Short": "Move files by ID",
+        "Long": "This command moves files by ID\n\nUsage:\n\n    rclone backend moveid drive: ID path\n    rclone backend moveid drive: ID1 path1 ID2 path2\n\nIt moves the drive file with ID given to the path (an rclone path which\nwill be passed internally to rclone moveto).\n\nThe path should end with a / to indicate move the file as named to\nthis directory. If it doesn't end with a / then the last path\ncomponent will be used as the file name.\n\nIf the destination is a drive backend then server-side moving will be\nattempted if possible.\n\nUse the --interactive/-i or --dry-run flag to see what would be moved beforehand.\n",
+        "Opts": null
+      },
+      {
         "Name": "exportformats",
         "Short": "Dump the export formats for debug purposes",
         "Long": "",
@@ -4423,6 +4713,60 @@
         "Type": "string"
       },
       {
+        "Name": "export_formats",
+        "FieldName": "",
+        "Help": "Comma separated list of preferred formats for exporting files\n\nCertain Dropbox files can only be accessed by exporting them to another format.\nThese include Dropbox Paper documents.\n\nFor each such file, rclone will choose the first format on this list that Dropbox\nconsiders valid. If none is valid, it will choose Dropbox's default format.\n\nKnown formats include: \"html\", \"md\" (markdown)",
+        "Default": [
+          "html",
+          "md"
+        ],
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "html,md",
+        "ValueStr": "html,md",
+        "Type": "CommaSepList"
+      },
+      {
+        "Name": "skip_exports",
+        "FieldName": "",
+        "Help": "Skip exportable files in all listings.\n\nIf given, exportable files practically become invisible to rclone.",
+        "Default": false,
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "false",
+        "ValueStr": "false",
+        "Type": "bool"
+      },
+      {
+        "Name": "show_all_exports",
+        "FieldName": "",
+        "Help": "Show all exportable files in listings.\n\nAdding this flag will allow all exportable files to be server side copied.\nNote that rclone doesn't add extensions to the exportable file names in this mode.\n\nDo **not** use this flag when trying to download exportable files - rclone\nwill fail to download them.\n",
+        "Default": false,
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "false",
+        "ValueStr": "false",
+        "Type": "bool"
+      },
+      {
         "Name": "batch_mode",
         "FieldName": "",
         "Help": "Upload file batching sync|async|off.\n\nThis sets the batch mode used by rclone.\n\nFor full info see [the main docs](https://rclone.org/dropbox/#batch-mode)\n\nThis has 3 possible values\n\n- off - no batching\n- sync - batch uploads and check completion (default)\n- async - batch upload and don't check completion\n\nRclone will close any outstanding batches when it exits which may make\na delay on quit.\n",
@@ -4476,10 +4820,10 @@
       {
         "Name": "batch_commit_timeout",
         "FieldName": "",
-        "Help": "Max time to wait for a batch to finish committing",
+        "Help": "Max time to wait for a batch to finish committing. (no longer used)",
         "Default": 600000000000,
         "Value": null,
-        "Hide": 0,
+        "Hide": 3,
         "Required": false,
         "IsPassword": false,
         "NoPrefix": false,
@@ -4779,6 +5123,68 @@
         "Sensitive": false,
         "DefaultStr": "Slash,Del,Ctl,InvalidUtf8,Dot",
         "ValueStr": "Slash,Del,Ctl,InvalidUtf8,Dot",
+        "Type": "Encoding"
+      },
+      {
+        "Name": "description",
+        "FieldName": "",
+        "Help": "Description of the remote.",
+        "Default": "",
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "",
+        "ValueStr": "",
+        "Type": "string"
+      }
+    ],
+    "CommandHelp": null,
+    "Aliases": null,
+    "Hide": false,
+    "MetadataInfo": null
+  },
+  {
+    "Name": "filelu",
+    "Description": "FileLu Cloud Storage",
+    "Prefix": "filelu",
+    "Options": [
+      {
+        "Name": "key",
+        "FieldName": "",
+        "Help": "Your FileLu Rclone key from My Account",
+        "Default": "",
+        "Value": null,
+        "Hide": 0,
+        "Required": true,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": false,
+        "Exclusive": false,
+        "Sensitive": true,
+        "DefaultStr": "",
+        "ValueStr": "",
+        "Type": "string"
+      },
+      {
+        "Name": "encoding",
+        "FieldName": "",
+        "Help": "The encoding for the backend.\n\nSee the [encoding section in the overview](/overview/#encoding) for more info.",
+        "Default": 536870910,
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "Slash,LtGt,DoubleQuote,SingleQuote,BackQuote,Dollar,Colon,Question,Asterisk,Pipe,Hash,Percent,BackSlash,CrLf,Del,Ctl,LeftSpace,LeftPeriod,LeftTilde,LeftCrLfHtVt,RightSpace,RightPeriod,RightCrLfHtVt,InvalidUtf8,Dot,SquareBracket,Semicolon,Exclamation",
+        "ValueStr": "Slash,LtGt,DoubleQuote,SingleQuote,BackQuote,Dollar,Colon,Question,Asterisk,Pipe,Hash,Percent,BackSlash,CrLf,Del,Ctl,LeftSpace,LeftPeriod,LeftTilde,LeftCrLfHtVt,RightSpace,RightPeriod,RightCrLfHtVt,InvalidUtf8,Dot,SquareBracket,Semicolon,Exclamation",
         "Type": "Encoding"
       },
       {
@@ -5249,6 +5655,23 @@
         "Name": "socks_proxy",
         "FieldName": "",
         "Help": "Socks 5 proxy host.\n\t\t\nSupports the format user:pass@host:port, user@host:port, host:port.\n\t\t\nExample:\n\t\t\n    myUser:myPass@localhost:9005\n",
+        "Default": "",
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "",
+        "ValueStr": "",
+        "Type": "string"
+      },
+      {
+        "Name": "http_proxy",
+        "FieldName": "",
+        "Help": "URL for HTTP CONNECT proxy\n\nSet this to a URL for an HTTP proxy which supports the HTTP CONNECT verb.\n",
         "Default": "",
         "Value": null,
         "Hide": 0,
@@ -6277,7 +6700,7 @@
       {
         "Name": "proxy",
         "FieldName": "",
-        "Help": "Use the gphotosdl proxy for downloading the full resolution images\n\nThe Google API will deliver images and video which aren't full\nresolution, and/or have EXIF data missing.\n\nHowever if you ue the gphotosdl proxy tnen you can download original,\nunchanged images.\n\nThis runs a headless browser in the background.\n\nDownload the software from [gphotosdl](https://github.com/rclone/gphotosdl)\n\nFirst run with\n\n    gphotosdl -login\n\nThen once you have logged into google photos close the browser window\nand run\n\n    gphotosdl\n\nThen supply the parameter `--gphotos-proxy \"http://localhost:8282\"` to make\nrclone use the proxy.\n",
+        "Help": "Use the gphotosdl proxy for downloading the full resolution images\n\nThe Google API will deliver images and video which aren't full\nresolution, and/or have EXIF data missing.\n\nHowever if you use the gphotosdl proxy then you can download original,\nunchanged images.\n\nThis runs a headless browser in the background.\n\nDownload the software from [gphotosdl](https://github.com/rclone/gphotosdl)\n\nFirst run with\n\n    gphotosdl -login\n\nThen once you have logged into google photos close the browser window\nand run\n\n    gphotosdl\n\nThen supply the parameter `--gphotos-proxy \"http://localhost:8282\"` to make\nrclone use the proxy.\n",
         "Default": "",
         "Value": null,
         "Hide": 0,
@@ -6362,10 +6785,10 @@
       {
         "Name": "batch_commit_timeout",
         "FieldName": "",
-        "Help": "Max time to wait for a batch to finish committing",
+        "Help": "Max time to wait for a batch to finish committing. (no longer used)",
         "Default": 600000000000,
         "Value": null,
-        "Hide": 0,
+        "Hide": 3,
         "Required": false,
         "IsPassword": false,
         "NoPrefix": false,
@@ -7517,6 +7940,40 @@
         "DefaultStr": "https://archive.org",
         "ValueStr": "https://archive.org",
         "Type": "string"
+      },
+      {
+        "Name": "item_metadata",
+        "FieldName": "",
+        "Help": "Metadata to be set on the IA item, this is different from file-level metadata that can be set using --metadata-set.\nFormat is key=value and the 'x-archive-meta-' prefix is automatically added.",
+        "Default": [],
+        "Value": null,
+        "Hide": 2,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "[]",
+        "ValueStr": "",
+        "Type": "stringArray"
+      },
+      {
+        "Name": "item_derive",
+        "FieldName": "",
+        "Help": "Whether to trigger derive on the IA item or not. If set to false, the item will not be derived by IA upon upload.\nThe derive process produces a number of secondary files from an upload to make an upload more usable on the web.\nSetting this to false is useful for uploading files that are already in a format that IA can display or reduce burden on IA's infrastructure.",
+        "Default": true,
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": false,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "true",
+        "ValueStr": "true",
+        "Type": "bool"
       },
       {
         "Name": "disable_checksum",
@@ -9352,6 +9809,23 @@
         "Type": "string"
       },
       {
+        "Name": "upload_cutoff",
+        "FieldName": "",
+        "Help": "Cutoff for switching to chunked upload.\n\nAny files larger than this will be uploaded in chunks of chunk_size.\n\nThis is disabled by default as uploading using single part uploads\ncauses rclone to use twice the storage on Onedrive business as when\nrclone sets the modification time after the upload Onedrive creates a\nnew version.\n\nSee: https://github.com/rclone/rclone/issues/1716\n",
+        "Default": -1,
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "off",
+        "ValueStr": "off",
+        "Type": "SizeSuffix"
+      },
+      {
         "Name": "chunk_size",
         "FieldName": "",
         "Help": "Chunk size to upload files with - must be multiple of 320k (327,680 bytes).\n\nAbove this size files will be chunked - must be multiple of 320k (327,680 bytes) and\nshould not exceed 250M (262,144,000 bytes) else you may encounter \\\"Microsoft.SharePoint.Client.InvalidClientQueryException: The request message is too big.\\\"\nNote that the chunks will be buffered into memory.",
@@ -9985,6 +10459,37 @@
         "DefaultStr": "10Mi",
         "ValueStr": "10Mi",
         "Type": "SizeSuffix"
+      },
+      {
+        "Name": "access",
+        "FieldName": "",
+        "Help": "Files and folders will be uploaded with this access permission (default private)",
+        "Default": "private",
+        "Value": null,
+        "Examples": [
+          {
+            "Value": "private",
+            "Help": "The file or folder access can be granted in a way that will allow select users to view, read or write what is absolutely essential for them."
+          },
+          {
+            "Value": "public",
+            "Help": "The file or folder can be downloaded by anyone from a web browser. The link can be shared in any way,"
+          },
+          {
+            "Value": "hidden",
+            "Help": "The file or folder can be accessed has the same restrictions as  Public if the user knows the URL of the file or folder link in order to access the contents"
+          }
+        ],
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "private",
+        "ValueStr": "private",
+        "Type": "string"
       },
       {
         "Name": "description",
@@ -12082,7 +12587,7 @@
   },
   {
     "Name": "s3",
-    "Description": "Amazon S3 Compliant Storage Providers including AWS, Alibaba, ArvanCloud, Ceph, ChinaMobile, Cloudflare, DigitalOcean, Dreamhost, GCS, HuaweiOBS, IBMCOS, IDrive, IONOS, LyveCloud, Leviia, Liara, Linode, Magalu, Minio, Netease, Outscale, Petabox, RackCorp, Rclone, Scaleway, SeaweedFS, Selectel, StackPath, Storj, Synology, TencentCOS, Wasabi, Qiniu and others",
+    "Description": "Amazon S3 Compliant Storage Providers including AWS, Alibaba, ArvanCloud, Ceph, ChinaMobile, Cloudflare, DigitalOcean, Dreamhost, Exaba, FlashBlade, GCS, HuaweiOBS, IBMCOS, IDrive, IONOS, LyveCloud, Leviia, Liara, Linode, Magalu, Mega, Minio, Netease, Outscale, Petabox, RackCorp, Rclone, Scaleway, SeaweedFS, Selectel, StackPath, Storj, Synology, TencentCOS, Wasabi, Qiniu and others",
     "Prefix": "s3",
     "Options": [
       {
@@ -12125,6 +12630,14 @@
             "Help": "Dreamhost DreamObjects"
           },
           {
+            "Value": "Exaba",
+            "Help": "Exaba Object Storage"
+          },
+          {
+            "Value": "FlashBlade",
+            "Help": "Pure Storage FlashBlade Object Storage"
+          },
+          {
             "Value": "GCS",
             "Help": "Google Cloud Storage"
           },
@@ -12163,6 +12676,10 @@
           {
             "Value": "Magalu",
             "Help": "Magalu Object Storage"
+          },
+          {
+            "Value": "Mega",
+            "Help": "MEGA S4 Object Storage"
           },
           {
             "Value": "Minio",
@@ -12885,7 +13402,7 @@
         "Name": "region",
         "FieldName": "",
         "Help": "Region to connect to.\n\nLeave blank if you are using an S3 clone and you don't have a region.",
-        "Provider": "!AWS,Alibaba,ArvanCloud,ChinaMobile,Cloudflare,IONOS,Petabox,Liara,Linode,Magalu,Qiniu,RackCorp,Scaleway,Selectel,Storj,Synology,TencentCOS,HuaweiOBS,IDrive",
+        "Provider": "!AWS,Alibaba,ArvanCloud,ChinaMobile,Cloudflare,FlashBlade,IONOS,Petabox,Liara,Linode,Magalu,Qiniu,RackCorp,Scaleway,Selectel,Storj,Synology,TencentCOS,HuaweiOBS,IDrive,Mega",
         "Default": "",
         "Value": null,
         "Examples": [
@@ -13594,6 +14111,24 @@
       {
         "Name": "endpoint",
         "FieldName": "",
+        "Help": "Endpoint for Lyve Cloud S3 API.\nRequired when using an S3 clone. Please type in your LyveCloud endpoint.\nExamples:\n- s3.us-west-1.{account_name}.lyve.seagate.com (US West 1 - California)\n- s3.eu-west-1.{account_name}.lyve.seagate.com (EU West 1 - Ireland)",
+        "Provider": "LyveCloud",
+        "Default": "",
+        "Value": null,
+        "Hide": 0,
+        "Required": true,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": false,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "",
+        "ValueStr": "",
+        "Type": "string"
+      },
+      {
+        "Name": "endpoint",
+        "FieldName": "",
         "Help": "Endpoint for Magalu Object Storage API.",
         "Provider": "Magalu",
         "Default": "",
@@ -14239,7 +14774,7 @@
         "Name": "endpoint",
         "FieldName": "",
         "Help": "Endpoint for S3 API.\n\nRequired when using an S3 clone.",
-        "Provider": "!AWS,ArvanCloud,IBMCOS,IDrive,IONOS,TencentCOS,HuaweiOBS,Alibaba,ChinaMobile,GCS,Liara,Linode,Magalu,Scaleway,Selectel,StackPath,Storj,Synology,RackCorp,Qiniu,Petabox",
+        "Provider": "!AWS,ArvanCloud,IBMCOS,IDrive,IONOS,TencentCOS,HuaweiOBS,Alibaba,ChinaMobile,GCS,Liara,Linode,LyveCloud,Magalu,Scaleway,Selectel,StackPath,Storj,Synology,RackCorp,Qiniu,Petabox",
         "Default": "",
         "Value": null,
         "Examples": [
@@ -14302,21 +14837,6 @@
             "Value": "localhost:8333",
             "Help": "SeaweedFS S3 localhost",
             "Provider": "SeaweedFS"
-          },
-          {
-            "Value": "s3.us-east-1.lyvecloud.seagate.com",
-            "Help": "Seagate Lyve Cloud US East 1 (Virginia)",
-            "Provider": "LyveCloud"
-          },
-          {
-            "Value": "s3.us-west-1.lyvecloud.seagate.com",
-            "Help": "Seagate Lyve Cloud US West 1 (California)",
-            "Provider": "LyveCloud"
-          },
-          {
-            "Value": "s3.ap-southeast-1.lyvecloud.seagate.com",
-            "Help": "Seagate Lyve Cloud AP Southeast 1 (Singapore)",
-            "Provider": "LyveCloud"
           },
           {
             "Value": "oos.eu-west-2.outscale.com",
@@ -14427,6 +14947,26 @@
             "Value": "s3.ir-tbz-sh1.arvanstorage.ir",
             "Help": "ArvanCloud Tabriz Iran (Shahriar) endpoint",
             "Provider": "ArvanCloud"
+          },
+          {
+            "Value": "s3.eu-central-1.s4.mega.io",
+            "Help": "Mega S4 eu-central-1 (Amsterdam)",
+            "Provider": "Mega"
+          },
+          {
+            "Value": "s3.eu-central-2.s4.mega.io",
+            "Help": "Mega S4 eu-central-2 (Bettembourg)",
+            "Provider": "Mega"
+          },
+          {
+            "Value": "s3.ca-central-1.s4.mega.io",
+            "Help": "Mega S4 ca-central-1 (Montreal)",
+            "Provider": "Mega"
+          },
+          {
+            "Value": "s3.ca-west-1.s4.mega.io",
+            "Help": "Mega S4 ca-west-1 (Vancouver)",
+            "Provider": "Mega"
           }
         ],
         "Hide": 0,
@@ -15028,7 +15568,7 @@
         "Name": "location_constraint",
         "FieldName": "",
         "Help": "Location constraint - must be set to match the Region.\n\nLeave blank if not sure. Used when creating buckets only.",
-        "Provider": "!AWS,Alibaba,ArvanCloud,HuaweiOBS,ChinaMobile,Cloudflare,IBMCOS,IDrive,IONOS,Leviia,Liara,Linode,Magalu,Outscale,Qiniu,RackCorp,Scaleway,Selectel,StackPath,Storj,TencentCOS,Petabox",
+        "Provider": "!AWS,Alibaba,ArvanCloud,HuaweiOBS,ChinaMobile,Cloudflare,FlashBlade,IBMCOS,IDrive,IONOS,Leviia,Liara,Linode,Magalu,Outscale,Qiniu,RackCorp,Scaleway,Selectel,StackPath,Storj,TencentCOS,Petabox,Mega",
         "Default": "",
         "Value": null,
         "Hide": 0,
@@ -15046,7 +15586,7 @@
         "Name": "acl",
         "FieldName": "",
         "Help": "Canned ACL used when creating buckets and storing or copying objects.\n\nThis ACL is used for creating objects and if bucket_acl isn't set, for creating buckets too.\n\nFor more info visit https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html#canned-acl\n\nNote that this ACL is applied when server-side copying objects as S3\ndoesn't copy the ACL from the source but rather writes a fresh one.\n\nIf the acl is an empty string then no X-Amz-Acl: header is added and\nthe default (private) will be used.\n",
-        "Provider": "!Storj,Selectel,Synology,Cloudflare",
+        "Provider": "!Storj,Selectel,Synology,Cloudflare,FlashBlade,Mega",
         "Default": "",
         "Value": null,
         "Examples": [
@@ -15121,6 +15661,7 @@
         "Name": "bucket_acl",
         "FieldName": "",
         "Help": "Canned ACL used when creating buckets.\n\nFor more info visit https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html#canned-acl\n\nNote that this ACL is applied when only when creating buckets.  If it\nisn't set then \"acl\" is used instead.\n\nIf the \"acl\" and \"bucket_acl\" are empty strings then no X-Amz-Acl:\nheader is added and the default (private) will be used.\n",
+        "Provider": "!Storj,Selectel,Synology,Cloudflare,FlashBlade",
         "Default": "",
         "Value": null,
         "Examples": [
@@ -16331,6 +16872,46 @@
         "Type": "Tristate"
       },
       {
+        "Name": "use_x_id",
+        "FieldName": "",
+        "Help": "Set if rclone should add x-id URL parameters.\n\nYou can change this if you want to disable the AWS SDK from\nadding x-id URL parameters.\n\nThis shouldn't be necessary in normal operation.\n\nThis should be automatically set correctly for all providers rclone\nknows about - please make a bug report if not.\n",
+        "Default": {
+          "Value": false,
+          "Valid": false
+        },
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "unset",
+        "ValueStr": "unset",
+        "Type": "Tristate"
+      },
+      {
+        "Name": "sign_accept_encoding",
+        "FieldName": "",
+        "Help": "Set if rclone should include Accept-Encoding as part of the signature.\n\nYou can change this if you want to stop rclone including\nAccept-Encoding as part of the signature.\n\nThis shouldn't be necessary in normal operation.\n\nThis should be automatically set correctly for all providers rclone\nknows about - please make a bug report if not.\n",
+        "Default": {
+          "Value": false,
+          "Valid": false
+        },
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "unset",
+        "ValueStr": "unset",
+        "Type": "Tristate"
+      },
+      {
         "Name": "directory_bucket",
         "FieldName": "",
         "Help": "Set to use AWS Directory Buckets\n\nIf you are using an AWS Directory Bucket then set this flag.\n\nThis will ensure no `Content-Md5` headers are sent and ensure `ETag`\nheaders are not interpreted as MD5 sums. `X-Amz-Meta-Md5chksum` will\nbe set on all objects whether single or multipart uploaded.\n\nThis also sets `no_check_bucket = true`.\n\nNote that Directory Buckets do not support:\n\n- Versioning\n- `Content-Encoding: gzip`\n\nRclone limitations with Directory Buckets:\n\n- rclone does not support creating Directory Buckets with `rclone mkdir`\n- ... or removing them with `rclone rmdir` yet\n- Directory Buckets do not appear when doing `rclone lsf` at the top level.\n- Rclone can't remove auto created directories yet. In theory this should\n  work with `directory_markers = true` but it doesn't.\n- Directories don't seem to appear in recursive (ListR) listings.\n",
@@ -16366,6 +16947,42 @@
         "Type": "Bits"
       },
       {
+        "Name": "ibm_api_key",
+        "FieldName": "",
+        "Help": "IBM API Key to be used to obtain IAM token",
+        "Provider": "IBMCOS",
+        "Default": "",
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": false,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "",
+        "ValueStr": "",
+        "Type": "string"
+      },
+      {
+        "Name": "ibm_resource_instance_id",
+        "FieldName": "",
+        "Help": "IBM service instance id",
+        "Provider": "IBMCOS",
+        "Default": "",
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": false,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "",
+        "ValueStr": "",
+        "Type": "string"
+      },
+      {
         "Name": "description",
         "FieldName": "",
         "Help": "Description of the remote.",
@@ -16387,7 +17004,7 @@
       {
         "Name": "restore",
         "Short": "Restore objects from GLACIER or INTELLIGENT-TIERING archive tier",
-        "Long": "This command can be used to restore one or more objects from GLACIER to normal storage \nor from INTELLIGENT-TIERING Archive Access / Deep Archive Access tier to the Frequent Access tier.\n\nUsage Examples:\n\n    rclone backend restore s3:bucket/path/to/object -o priority=PRIORITY -o lifetime=DAYS\n    rclone backend restore s3:bucket/path/to/directory -o priority=PRIORITY -o lifetime=DAYS\n    rclone backend restore s3:bucket -o priority=PRIORITY -o lifetime=DAYS\n    rclone backend restore s3:bucket/path/to/directory -o priority=PRIORITY\n\nThis flag also obeys the filters. Test first with --interactive/-i or --dry-run flags\n\n    rclone --interactive backend restore --include \"*.txt\" s3:bucket/path -o priority=Standard -o lifetime=1\n\nAll the objects shown will be marked for restore, then\n\n    rclone backend restore --include \"*.txt\" s3:bucket/path -o priority=Standard -o lifetime=1\n\nIt returns a list of status dictionaries with Remote and Status\nkeys. The Status will be OK if it was successful or an error message\nif not.\n\n    [\n        {\n            \"Status\": \"OK\",\n            \"Remote\": \"test.txt\"\n        },\n        {\n            \"Status\": \"OK\",\n            \"Remote\": \"test/file4.txt\"\n        }\n    ]\n\n",
+        "Long": "This command can be used to restore one or more objects from GLACIER to normal storage \nor from INTELLIGENT-TIERING Archive Access / Deep Archive Access tier to the Frequent Access tier.\n\nUsage Examples:\n\n    rclone backend restore s3:bucket/path/to/ --include /object -o priority=PRIORITY -o lifetime=DAYS\n    rclone backend restore s3:bucket/path/to/directory -o priority=PRIORITY -o lifetime=DAYS\n    rclone backend restore s3:bucket -o priority=PRIORITY -o lifetime=DAYS\n    rclone backend restore s3:bucket/path/to/directory -o priority=PRIORITY\n\nThis flag also obeys the filters. Test first with --interactive/-i or --dry-run flags\n\n    rclone --interactive backend restore --include \"*.txt\" s3:bucket/path -o priority=Standard -o lifetime=1\n\nAll the objects shown will be marked for restore, then\n\n    rclone backend restore --include \"*.txt\" s3:bucket/path -o priority=Standard -o lifetime=1\n\nIt returns a list of status dictionaries with Remote and Status\nkeys. The Status will be OK if it was successful or an error message\nif not.\n\n    [\n        {\n            \"Status\": \"OK\",\n            \"Remote\": \"test.txt\"\n        },\n        {\n            \"Status\": \"OK\",\n            \"Remote\": \"test/file4.txt\"\n        }\n    ]\n\n",
         "Opts": {
           "description": "The optional description for the job.",
           "lifetime": "Lifetime of the active copy in days, ignored for INTELLIGENT-TIERING storage",
@@ -17330,6 +17947,23 @@
         "Type": "string"
       },
       {
+        "Name": "http_proxy",
+        "FieldName": "",
+        "Help": "URL for HTTP CONNECT proxy\n\nSet this to a URL for an HTTP proxy which supports the HTTP CONNECT verb.\n",
+        "Default": "",
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "",
+        "ValueStr": "",
+        "Type": "string"
+      },
+      {
         "Name": "copy_is_hardlink",
         "FieldName": "",
         "Help": "Set to enable server side copies using hardlinks.\n\nThe SFTP protocol does not define a copy command so normally server\nside copies are not allowed with the sftp backend.\n\nHowever the SFTP protocol does support hardlinking, and if you enable\nthis flag then the sftp backend will support server side copies. These\nwill be implemented by doing a hardlink from the source to the\ndestination.\n\nNot all sftp servers support this.\n\nNote that hardlinking two files together will use no additional space\nas the source and the destination will be the same file.\n\nThis feature may be useful backups made with --copy-dest.",
@@ -17808,6 +18442,23 @@
         "DefaultStr": "",
         "ValueStr": "",
         "Type": "string"
+      },
+      {
+        "Name": "use_kerberos",
+        "FieldName": "",
+        "Help": "Use Kerberos authentication.\n\nIf set, rclone will use Kerberos authentication instead of NTLM. This\nrequires a valid Kerberos configuration and credentials cache to be\navailable, either in the default locations or as specified by the\nKRB5_CONFIG and KRB5CCNAME environment variables.\n",
+        "Default": false,
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": false,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "false",
+        "ValueStr": "false",
+        "Type": "bool"
       },
       {
         "Name": "idle_timeout",
@@ -19323,7 +19974,11 @@
           },
           {
             "Value": "owncloud",
-            "Help": "Owncloud"
+            "Help": "Owncloud 10 PHP based WebDAV server"
+          },
+          {
+            "Value": "infinitescale",
+            "Help": "ownCloud Infinite Scale"
           },
           {
             "Value": "sharepoint",

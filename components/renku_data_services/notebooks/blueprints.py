@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 from pathlib import PurePosixPath
-from urllib.parse import urlparse
 
 from sanic import Request, empty, exceptions, json
 from sanic.response import HTTPResponse, JSONResponse
@@ -13,7 +12,8 @@ from renku_data_services import base_models
 from renku_data_services.base_api.auth import authenticate, authenticate_2
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser, Authenticator
-from renku_data_services.crc.db import ResourcePoolRepository
+from renku_data_services.base_models.metrics import MetricsService
+from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
     DataConnectorSecretRepository,
@@ -21,7 +21,6 @@ from renku_data_services.data_connectors.db import (
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec, core
 from renku_data_services.notebooks.api.amalthea_patches.init_containers import user_secrets_container
-from renku_data_services.notebooks.api.classes.repository import Repository
 from renku_data_services.notebooks.api.schemas.config_server_options import ServerOptionsEndpointResponse
 from renku_data_services.notebooks.api.schemas.logs import ServerLogs
 from renku_data_services.notebooks.config import NotebooksConfig
@@ -35,6 +34,7 @@ from renku_data_services.notebooks.core_sessions import (
     get_gitlab_image_pull_secret,
     get_launcher_env_variables,
     patch_session,
+    repositories_from_project,
     request_dc_secret_creation,
     request_session_secret_creation,
     requires_image_pull_secret,
@@ -58,8 +58,9 @@ from renku_data_services.notebooks.crs import (
     ReconcileStrategy,
     Session,
     SessionEnvItem,
+    ShmSizeStr,
+    SizeStr,
     Storage,
-    TlsSecret,
 )
 from renku_data_services.notebooks.errors.intermittent import AnonymousUserPatchError
 from renku_data_services.notebooks.models import ExtraSecret
@@ -175,7 +176,7 @@ class NotebooksBP(CustomBlueprint):
             try:
                 await core.stop_server(self.nb_config, user, server_name)
             except errors.MissingResourceError as err:
-                raise exceptions.NotFound(message=err.message)
+                raise exceptions.NotFound(message=err.message) from err
             return HTTPResponse(status=204)
 
         return "/notebooks/servers/<server_name>", ["DELETE"], _stop_server
@@ -200,7 +201,7 @@ class NotebooksBP(CustomBlueprint):
             try:
                 logs = await core.server_logs(self.nb_config, user, server_name, max_lines)
             except errors.MissingResourceError as err:
-                raise exceptions.NotFound(message=err.message)
+                raise exceptions.NotFound(message=err.message) from err
             return json(ServerLogs().dump(logs))
 
         return "/notebooks/logs/<server_name>", ["GET"], _server_logs
@@ -241,6 +242,8 @@ class NotebooksNewBP(CustomBlueprint):
     user_repo: UserRepo
     data_connector_repo: DataConnectorRepository
     data_connector_secret_repo: DataConnectorSecretRepository
+    metrics: MetricsService
+    cluster_repo: ClusterRepository
 
     def start(self) -> BlueprintFactoryResponse:
         """Start a session with the new operator."""
@@ -253,13 +256,15 @@ class NotebooksNewBP(CustomBlueprint):
             internal_gitlab_user: APIUser,
             body: apispec.SessionPostRequest,
         ) -> JSONResponse:
-            # gitlab_client = NotebooksGitlabClient(self.nb_config.git.url, internal_gitlab_user.access_token)
             launcher = await self.session_repo.get_launcher(user, ULID.from_str(body.launcher_id))
             project = await self.project_repo.get_project(user=user, project_id=launcher.project_id)
+            # We have to use body.resource_class_id and not launcher.resource_class_id as it may have been overridden by
+            # the user when selecting a different resource class from a different resource pool.
+            cluster = await self.nb_config.k8s_v2_client.cluster_by_class_id(body.resource_class_id, user)
             server_name = renku_2_make_server_name(
-                user=user, project_id=str(launcher.project_id), launcher_id=body.launcher_id
+                user=user, project_id=str(launcher.project_id), launcher_id=body.launcher_id, cluster_id=cluster.id
             )
-            existing_session = await self.nb_config.k8s_v2_client.get_server(server_name, user.id)
+            existing_session = await self.nb_config.k8s_v2_client.get_session(server_name, user.id)
             if existing_session is not None and existing_session.spec is not None:
                 return json(existing_session.as_apispec().model_dump(exclude_none=True, mode="json"))
             environment = launcher.environment
@@ -295,14 +300,7 @@ class NotebooksNewBP(CustomBlueprint):
             )
             data_connectors_stream = self.data_connector_secret_repo.get_data_connectors_with_secrets(user, project.id)
             git_providers = await self.nb_config.git_provider_helper.get_providers(user=user)
-            repositories: list[Repository] = []
-            for repo in project.repositories:
-                found_provider_id: str | None = None
-                for provider in git_providers:
-                    if urlparse(provider.url).netloc == urlparse(repo).netloc:
-                        found_provider_id = provider.id
-                        break
-                repositories.append(Repository(url=repo, provider=found_provider_id))
+            repositories = repositories_from_project(project, git_providers)
 
             # User secrets
             extra_volume_mounts: list[ExtraVolumeMount] = []
@@ -348,25 +346,35 @@ class NotebooksNewBP(CustomBlueprint):
             extra_volumes.extend(extra_init_volumes_dc)
             extra_init_containers.extend(extra_init_containers_dc)
 
-            base_server_url = self.nb_config.sessions.ingress.base_url(server_name)
-            base_server_path = self.nb_config.sessions.ingress.base_path(server_name)
-            ui_path: str = (
-                f"{base_server_path.rstrip('/')}/{environment.default_url.lstrip('/')}"
-                if len(environment.default_url) > 0
-                else base_server_path
+            (
+                base_server_path,
+                base_server_url,
+                base_server_https_url,
+                host,
+                tls_secret,
+                ingress_annotations,
+            ) = await cluster.get_ingress_parameters(
+                user, self.cluster_repo, self.nb_config.sessions.ingress, server_name
             )
+
+            ui_path = f"{base_server_path}/{environment.default_url.lstrip('/')}"
+
+            ingress = Ingress(
+                host=host,
+                ingressClassName=ingress_annotations.get("kubernetes.io/ingress.class"),
+                annotations=ingress_annotations,
+                tlsSecret=tls_secret,
+                pathPrefix=base_server_path,
+            )
+
             annotations: dict[str, str] = {
                 "renku.io/project_id": str(launcher.project_id),
                 "renku.io/launcher_id": body.launcher_id,
                 "renku.io/resource_class_id": str(body.resource_class_id or default_resource_class.id),
             }
             if isinstance(user, AuthenticatedAPIUser):
-                auth_secret = get_auth_secret_authenticated(self.nb_config, user, server_name)
-                authentication = Authentication(
-                    enabled=True,
-                    type=AuthenticationType.oidc,
-                    secretRef=auth_secret.key_ref(),
-                    extraVolumeMounts=[auth_secret.volume_mount] if auth_secret.volume_mount else [],
+                auth_secret = await get_auth_secret_authenticated(
+                    self.nb_config, user, server_name, base_server_url, base_server_https_url, base_server_path
                 )
             else:
                 auth_secret = get_auth_secret_anonymous(self.nb_config, server_name, request)
@@ -408,6 +416,12 @@ class NotebooksNewBP(CustomBlueprint):
             if launcher_env_variables:
                 env.extend(launcher_env_variables)
 
+            storage_class = await cluster.get_storage_class(
+                user, self.cluster_repo, self.nb_config.sessions.storage.pvs_storage_class
+            )
+            service_account_name: str | None = None
+            if resource_pool.cluster:
+                service_account_name = resource_pool.cluster.service_account_name
             manifest = AmaltheaSessionV1Alpha1(
                 metadata=Metadata(name=server_name, annotations=annotations),
                 spec=AmaltheaSessionSpec(
@@ -424,8 +438,8 @@ class NotebooksNewBP(CustomBlueprint):
                         urlPath=ui_path,
                         port=environment.port,
                         storage=Storage(
-                            className=self.nb_config.sessions.storage.pvs_storage_class,
-                            size=Quantity(str(body.disk_storage) + "G"),
+                            className=storage_class,
+                            size=SizeStr(str(body.disk_storage) + "G"),
                             mountPath=storage_mount.as_posix(),
                         ),
                         workingDir=work_dir.as_posix(),
@@ -435,47 +449,60 @@ class NotebooksNewBP(CustomBlueprint):
                         extraVolumeMounts=extra_volume_mounts,
                         command=environment.command,
                         args=environment.args,
-                        shmSize=Quantity("1G"),
+                        shmSize=ShmSizeStr("1G"),
                         stripURLPath=environment.strip_path_prefix,
                         env=env,
                     ),
-                    ingress=Ingress(
-                        host=self.nb_config.sessions.ingress.host,
-                        ingressClassName=self.nb_config.sessions.ingress.annotations.get("kubernetes.io/ingress.class"),
-                        annotations=self.nb_config.sessions.ingress.annotations,
-                        tlsSecret=TlsSecret(adopt=False, name=self.nb_config.sessions.ingress.tls_secret)
-                        if self.nb_config.sessions.ingress.tls_secret is not None
-                        else None,
-                        pathPrefix=base_server_path,
-                    ),
+                    ingress=ingress,
                     extraContainers=extra_containers,
                     initContainers=extra_init_containers,
                     extraVolumes=extra_volumes,
-                    culling=get_culling(resource_pool, self.nb_config),
-                    authentication=authentication,
+                    culling=get_culling(user, resource_pool, self.nb_config),
+                    authentication=Authentication(
+                        enabled=True,
+                        type=AuthenticationType.oauth2proxy
+                        if isinstance(user, AuthenticatedAPIUser)
+                        else AuthenticationType.token,
+                        secretRef=auth_secret.key_ref("auth"),
+                        extraVolumeMounts=[auth_secret.volume_mount] if auth_secret.volume_mount else [],
+                    ),
                     dataSources=data_sources,
                     tolerations=tolerations_from_resource_class(
                         resource_class, self.nb_config.sessions.tolerations_model
                     ),
                     affinity=node_affinity_from_resource_class(resource_class, self.nb_config.sessions.affinity_model),
+                    serviceAccountName=service_account_name,
                 ),
             )
             for s in secrets_to_create:
-                await self.nb_config.k8s_v2_client.create_secret(s.secret)
+                await self.nb_config.k8s_v2_client.create_secret(s.secret, cluster)
             try:
-                manifest = await self.nb_config.k8s_v2_client.create_server(manifest, user.id)
-            except Exception:
+                manifest = await self.nb_config.k8s_v2_client.create_session(manifest, user)
+            except Exception as err:
                 for s in secrets_to_create:
-                    await self.nb_config.k8s_v2_client.delete_secret(s.secret.metadata.name)
-                raise errors.ProgrammingError(message="Could not start the amalthea session")
+                    await self.nb_config.k8s_v2_client.delete_secret(s.secret.metadata.name, cluster)
+                raise errors.ProgrammingError(message="Could not start the amalthea session") from err
             else:
                 try:
                     await request_session_secret_creation(user, self.nb_config, manifest, session_secrets)
                     await request_dc_secret_creation(user, self.nb_config, manifest, enc_secrets)
                 except Exception:
-                    await self.nb_config.k8s_v2_client.delete_server(server_name, user.id)
+                    await self.nb_config.k8s_v2_client.delete_session(server_name, user.id)
                     raise
 
+            await self.metrics.user_requested_session_launch(
+                user=user,
+                metadata={
+                    "cpu": int(resource_class.cpu * 1000),
+                    "memory": resource_class.memory,
+                    "gpu": resource_class.gpu,
+                    "storage": body.disk_storage,
+                    "resource_class_id": resource_class.id,
+                    "resource_pool_id": resource_pool.id or "",
+                    "resource_class_name": f"{resource_pool.name}.{resource_class.name}",
+                    "session_id": server_name,
+                },
+            )
             return json(manifest.as_apispec().model_dump(mode="json", exclude_none=True), 201)
 
         return "/sessions", ["POST"], _handler
@@ -485,7 +512,7 @@ class NotebooksNewBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _handler(_: Request, user: AuthenticatedAPIUser | AnonymousAPIUser) -> HTTPResponse:
-            sessions = await self.nb_config.k8s_v2_client.list_servers(user.id)
+            sessions = await self.nb_config.k8s_v2_client.list_sessions(user.id)
             output: list[dict] = []
             for session in sessions:
                 output.append(session.as_apispec().model_dump(exclude_none=True, mode="json"))
@@ -498,7 +525,7 @@ class NotebooksNewBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _handler(_: Request, user: AuthenticatedAPIUser | AnonymousAPIUser, session_id: str) -> HTTPResponse:
-            session = await self.nb_config.k8s_v2_client.get_server(session_id, user.id)
+            session = await self.nb_config.k8s_v2_client.get_session(session_id, user.id)
             if session is None:
                 raise errors.ValidationError(message=f"The session with ID {session_id} does not exist.", quiet=True)
             return json(session.as_apispec().model_dump(exclude_none=True, mode="json"))
@@ -510,7 +537,8 @@ class NotebooksNewBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _handler(_: Request, user: AuthenticatedAPIUser | AnonymousAPIUser, session_id: str) -> HTTPResponse:
-            await self.nb_config.k8s_v2_client.delete_server(session_id, user.id)
+            await self.nb_config.k8s_v2_client.delete_session(session_id, user.id)
+            await self.metrics.session_stopped(user, metadata={"session_id": session_id})
             return empty()
 
         return "/sessions/<session_id>", ["DELETE"], _handler
@@ -535,6 +563,7 @@ class NotebooksNewBP(CustomBlueprint):
                 internal_gitlab_user,
                 rp_repo=self.rp_repo,
                 project_repo=self.project_repo,
+                metrics=self.metrics,
             )
             return json(new_session.as_apispec().model_dump(exclude_none=True, mode="json"))
 
@@ -551,7 +580,7 @@ class NotebooksNewBP(CustomBlueprint):
             session_id: str,
             query: apispec.SessionsSessionIdLogsGetParametersQuery,
         ) -> HTTPResponse:
-            logs = await self.nb_config.k8s_v2_client.get_server_logs(session_id, user.id, query.max_lines)
+            logs = await self.nb_config.k8s_v2_client.get_session_logs(session_id, user.id, query.max_lines)
             return json(apispec.SessionLogsResponse.model_validate(logs).model_dump(exclude_none=True))
 
         return "/sessions/<session_id>/logs", ["GET"], _handler

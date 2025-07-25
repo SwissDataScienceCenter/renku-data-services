@@ -1,5 +1,7 @@
 """Parser for the user query ast."""
 
+from __future__ import annotations
+
 import datetime
 from typing import cast
 
@@ -16,20 +18,23 @@ from parsy import (
     test_char,
 )
 
+from renku_data_services.app_config import logging
 from renku_data_services.authz.models import Role, Visibility
+from renku_data_services.base_models.core import NamespaceSlug
+from renku_data_services.base_models.nel import Nel
 from renku_data_services.search.user_query import (
     Comparison,
     Created,
     CreatedByIs,
     DateTimeCalc,
+    DirectMemberIs,
     Field,
-    FieldTerm,
     Helper,
     IdIs,
+    InheritedMemberIs,
     KeywordIs,
     NameIs,
     NamespaceIs,
-    Nel,
     Order,
     OrderBy,
     PartialDate,
@@ -37,16 +42,20 @@ from renku_data_services.search.user_query import (
     PartialTime,
     RelativeDate,
     RoleIs,
-    Segment,
     SlugIs,
     SortableField,
     Text,
     TypeIs,
+    UserId,
+    Username,
     UserQuery,
     VisibilityIs,
 )
+from renku_data_services.search.user_query_process import CollapseMembers, CollapseText
 from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.solr_client import SortDirection
+
+logger = logging.getLogger(__name__)
 
 
 def _check_range(n: int, min: int, max: int, msg: str) -> Parser:
@@ -72,35 +81,42 @@ def _check_minute(m: int) -> Parser:
     return _check_range(m, 0, 59, "Expect a minute or second 0-59")
 
 
-def _create_datetime_calc(ref: PartialDateTime | RelativeDate, sep: str, days: int) -> DateTimeCalc:
+# Parser[DateTimeCalc]
+def _create_datetime_calc(args: tuple[PartialDateTime | RelativeDate, str, int]) -> Parser:
+    ref: PartialDateTime | RelativeDate = args[0]
+    sep: str = args[1]
+    days: int = args[2]
     match sep:
         case "+":
-            return DateTimeCalc(ref, days.__abs__(), False)
+            return success(DateTimeCalc(ref, days.__abs__(), False))
         case "-":
-            return DateTimeCalc(ref, days.__abs__() * -1, False)
+            return success(DateTimeCalc(ref, days.__abs__() * -1, False))
         case "/":
-            return DateTimeCalc(ref, days.__abs__(), True)
+            return success(DateTimeCalc(ref, days.__abs__(), True))
         case _:
-            raise
+            return fail(f"Invalid date-time separator: {sep}")
 
 
-def _make_field_term(field: str, values: Nel[str]) -> FieldTerm:
+# Parser[FieldTerm]
+def _make_field_term(args: tuple[str, Nel[str]]) -> Parser:
+    field: str = args[0]
+    values: Nel[str] = args[1]
     f = Field(field.lower())
     match f:
         case Field.fname:
-            return NameIs(values)
+            return success(NameIs(values))
         case Field.slug:
-            return SlugIs(values)
+            return success(SlugIs(values))
         case Field.id:
-            return IdIs(values)
+            return success(IdIs(values))
         case Field.keyword:
-            return KeywordIs(values)
+            return success(KeywordIs(values))
         case Field.namespace:
-            return NamespaceIs(values)
+            return success(NamespaceIs(values))
         case Field.created_by:
-            return CreatedByIs(values)
+            return success(CreatedByIs(values))
         case _:
-            raise Exception(f"invalid field name: {field}")
+            return fail(f"Invalid field name: {field}")
 
 
 class _DateTimeParser:
@@ -124,9 +140,7 @@ class _DateTimeParser:
 
     relative_date: Parser = from_enum(RelativeDate, lambda s: s.lower())
 
-    datetime_calc: Parser = seq(partial_datetime | relative_date, char_from("+-/"), ndays).combine(
-        _create_datetime_calc
-    )
+    datetime_calc: Parser = seq(partial_datetime | relative_date, char_from("+-/"), ndays).bind(_create_datetime_calc)
 
     datetime_ref: Parser = datetime_calc | partial_datetime | relative_date
 
@@ -175,9 +189,20 @@ class _ParsePrimitives:
         Created
     )
     role_is: Parser = string(Field.role.value, lambda s: s.lower()) >> is_equal >> role_nel.map(RoleIs)
-    term_is: Parser = seq(from_enum(Field, lambda s: s.lower()) << is_equal, string_values).combine(_make_field_term)
 
-    field_term: Parser = type_is | visibility_is | role_is | created | term_is
+    user_name: Parser = string("@") >> string_basic.map(NamespaceSlug.from_name).map(Username)
+    user_id: Parser = string_basic.map(UserId)
+    user_def_nel: Parser = (user_name | user_id).sep_by(comma, min=1).map(Nel.unsafe_from_list)
+    inherited_member_is: Parser = (
+        string(Field.inherited_member.value, lambda s: s.lower()) >> is_equal >> user_def_nel.map(InheritedMemberIs)
+    )
+    direct_member_is: Parser = (
+        string(Field.direct_member.value, lambda s: s.lower()) >> is_equal >> user_def_nel.map(DirectMemberIs)
+    )
+
+    term_is: Parser = seq(from_enum(Field, lambda s: s.lower()) << is_equal, string_values).bind(_make_field_term)
+
+    field_term: Parser = type_is | visibility_is | role_is | inherited_member_is | direct_member_is | created | term_is
     free_text: Parser = test_char(lambda c: not c.isspace(), "string without spaces").at_least(1).concat().map(Text)
 
     segment: Parser = field_term | sort_term | free_text
@@ -189,31 +214,13 @@ class QueryParser:
     """Parsing user search queries."""
 
     @classmethod
-    def __collapse_text(cls, q: UserQuery) -> UserQuery:
-        """Collapses consecutive free text segments.
-
-        It is a bit hard to parse them directly as every term is separated by whitespace.
-        """
-        result: list[Segment] = []
-        current: Text | None = None
-        for s in q.segments:
-            match s:
-                case Text() as t:
-                    current = t if current is None else current.append(t)
-                case _:
-                    if current is not None:
-                        result.append(current)
-                        current = None
-                    result.append(s)
-
-        if current is not None:
-            result.append(current)
-
-        return UserQuery(result)
+    def parse_raw(cls, input: str) -> UserQuery:
+        """Parses the input string into a UserQuery, without any post processing."""
+        pp = _ParsePrimitives()
+        return cast(UserQuery, pp.query.parse(input.strip()))
 
     @classmethod
-    def parse(cls, input: str) -> UserQuery:
+    async def parse(cls, input: str) -> UserQuery:
         """Parses a user search query into its ast."""
-        pp = _ParsePrimitives()
-        res = pp.query.parse(input.strip())
-        return cls.__collapse_text(cast(UserQuery, res))
+        q = cls.parse_raw(input)
+        return await q.transform(CollapseMembers(), CollapseText())

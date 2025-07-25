@@ -2,7 +2,6 @@
 
 import asyncio
 import time
-from base64 import b64decode
 from typing import Any
 
 import pytest
@@ -12,12 +11,9 @@ from sqlalchemy import select
 from syrupy.filters import props
 from ulid import ULID
 
-from renku_data_services.app_config.config import Config
-from renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
-from renku_data_services.message_queue.avro_models.io.renku.events.v2.member_role import MemberRole
-from renku_data_services.message_queue.models import deserialize_binary
+from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.users.models import UserInfo
-from test.bases.renku_data_services.data_api.utils import deserialize_event, merge_headers
+from test.bases.renku_data_services.data_api.utils import merge_headers
 
 
 @pytest.fixture
@@ -47,7 +43,7 @@ def update_project(sanic_client, user_headers, get_project):
 
 
 @pytest.mark.asyncio
-async def test_project_creation(sanic_client, user_headers, regular_user: UserInfo, app_config) -> None:
+async def test_project_creation(sanic_client, user_headers, regular_user: UserInfo, app_manager) -> None:
     payload = {
         "name": "Renku Native Project",
         "slug": "project-slug",
@@ -60,8 +56,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
         "secrets_mount_directory": "/etc/renku_secrets",
     }
 
-    await app_config.event_repo.delete_all_events()
-    await app_config.search_updates_repo.clear_all()
+    await app_manager.search_updates_repo.clear_all()
 
     _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
 
@@ -81,28 +76,13 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
     assert "template_id" not in project or project["template_id"] is None
     assert project["is_template"] is False
     assert project["secrets_mount_directory"] == "/etc/renku_secrets"
+    app_manager.metrics.project_created.assert_called_once()
     project_id = project["id"]
 
-    events = await app_config.event_repo.get_pending_events()
-    assert len(events) == 2
-    search_updates = await app_config.search_updates_repo.select_next(10)
+    search_updates = await app_manager.search_updates_repo.select_next(10)
     assert len(search_updates) == 1
     for e in search_updates:
         assert e.entity_type == "Project"
-
-    project_created_event = next((e for e in events if e.get_message_type() == "project.created"), None)
-    assert project_created_event
-    created_event = deserialize_binary(
-        b64decode(project_created_event.payload["payload"]), avro_schema_v2.ProjectCreated
-    )
-    assert created_event.name == payload["name"]
-    assert created_event.slug == payload["slug"]
-    assert created_event.repositories == payload["repositories"]
-    project_auth_added = next((e for e in events if e.get_message_type() == "projectAuth.added"), None)
-    assert project_auth_added
-    auth_event = deserialize_binary(b64decode(project_auth_added.payload["payload"]), avro_schema_v2.ProjectMemberAdded)
-    assert auth_event.userId == "user"
-    assert auth_event.role == MemberRole.OWNER
 
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
 
@@ -180,12 +160,12 @@ async def test_create_project_with_invalid_visibility(sanic_client, user_headers
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("keyword", ["invalid chars '", "Nön English"])
-async def test_create_project_with_invalid_keywords(sanic_client, user_headers, keyword) -> None:
+async def test_create_project_with_invalid_keywords(sanic_client, user_headers) -> None:
+    keyword = "this keyword is way too long........................................................................"
     _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json={"keywords": [keyword]})
 
     assert response.status_code == 422, response.text
-    assert "String should match pattern '^[A-Za-z0-9\\s\\-_.]*$'" in response.json["error"]["message"]
+    assert "String should have at most 99 characters" in response.json["error"]["message"]
 
 
 @pytest.mark.asyncio
@@ -378,8 +358,8 @@ async def test_result_is_sorted_by_creation_date(create_project, sanic_client, u
 
 
 @pytest.mark.asyncio
-async def test_delete_project(create_project, sanic_client, user_headers, app_config) -> None:
-    await app_config.search_updates_repo.clear_all()
+async def test_delete_project(create_project, sanic_client, user_headers, app_manager) -> None:
+    await app_manager.search_updates_repo.clear_all()
 
     # Create some projects
     await create_project("Project 1")
@@ -394,17 +374,8 @@ async def test_delete_project(create_project, sanic_client, user_headers, app_co
 
     assert response.status_code == 204, response.text
 
-    events = await app_config.event_repo.get_pending_events()
-    assert len(events) == 15
-    project_removed_event = next((e for e in events if e.get_message_type() == "project.removed"), None)
-    assert project_removed_event
-    removed_event = deserialize_binary(
-        b64decode(project_removed_event.payload["payload"]), avro_schema_v2.ProjectRemoved
-    )
-    assert removed_event.id == project_id
-
     # Check search updates
-    search_updates = await app_config.search_updates_repo.select_next(20)
+    search_updates = await app_manager.search_updates_repo.select_next(20)
     assert len(search_updates) == 5
     assert len(set([e.entity_id for e in search_updates])) == 5
     deleted_project = next(x for x in search_updates if x.entity_id == project["id"])
@@ -418,8 +389,8 @@ async def test_delete_project(create_project, sanic_client, user_headers, app_co
 
 
 @pytest.mark.asyncio
-async def test_patch_project(create_project, get_project, sanic_client, user_headers, app_config) -> None:
-    await app_config.search_updates_repo.clear_all()
+async def test_patch_project(create_project, get_project, sanic_client, user_headers, app_manager) -> None:
+    await app_manager.search_updates_repo.clear_all()
     # Create some projects
     await create_project("Project 1")
     project = await create_project("Project 2", repositories=["http://renkulab.io/repository-0"], keywords=["keyword"])
@@ -442,20 +413,9 @@ async def test_patch_project(create_project, get_project, sanic_client, user_hea
     assert response.status_code == 200, response.text
 
     # Check search updates
-    search_updates = await app_config.search_updates_repo.select_next(20)
+    search_updates = await app_manager.search_updates_repo.select_next(20)
     assert len(search_updates) == 3
     assert len(set([e.entity_id for e in search_updates])) == 3
-
-    events = await app_config.event_repo.get_pending_events()
-    assert len(events) == 11
-    project_updated_event = next((e for e in events if e.get_message_type() == "project.updated"), None)
-    assert project_updated_event
-    updated_event = deserialize_binary(
-        b64decode(project_updated_event.payload["payload"]), avro_schema_v2.ProjectUpdated
-    )
-    assert updated_event.name == patch["name"]
-    assert updated_event.description == patch["description"]
-    assert updated_event.repositories == patch["repositories"]
 
     # Get the project
     project = await get_project(project_id=project_id)
@@ -483,7 +443,7 @@ async def test_patch_project(create_project, get_project, sanic_client, user_hea
 
 @pytest.mark.asyncio
 async def test_keywords_are_not_modified_in_patch(
-    create_project, get_project, sanic_client, user_headers, app_config
+    create_project, get_project, sanic_client, user_headers, app_manager
 ) -> None:
     # Create some projects
     await create_project("Project 1")
@@ -508,7 +468,7 @@ async def test_keywords_are_not_modified_in_patch(
 
 @pytest.mark.asyncio
 async def test_keywords_are_deleted_in_patch(
-    create_project, get_project, sanic_client, user_headers, app_config
+    create_project, get_project, sanic_client, user_headers, app_manager
 ) -> None:
     # Create some projects
     await create_project("Project 1")
@@ -899,7 +859,7 @@ async def test_add_project_members(
     sanic_client,
     regular_user,
     user_headers,
-    app_config,
+    app_manager,
     member_1_user: UserInfo,
     member_2_user: UserInfo,
 ) -> None:
@@ -938,7 +898,9 @@ async def test_add_project_members(
 
 
 @pytest.mark.asyncio
-async def test_delete_project_members(create_project, sanic_client, user_headers, app_config: Config) -> None:
+async def test_delete_project_members(
+    create_project, sanic_client, user_headers, app_manager: DependencyManager
+) -> None:
     project = await create_project("Project 1")
     project_id = project["id"]
 
@@ -964,7 +926,7 @@ async def test_delete_project_members(create_project, sanic_client, user_headers
 
 
 @pytest.mark.asyncio
-async def test_null_byte_middleware(sanic_client, user_headers, regular_user, app_config) -> None:
+async def test_null_byte_middleware(sanic_client, user_headers, regular_user, app_manager) -> None:
     payload = {
         "name": "Renku Native \x00Project",
         "slug": "project-slug",
@@ -1151,7 +1113,7 @@ async def test_get_project_permissions_cascading_from_group(
 
 @pytest.mark.asyncio
 async def test_project_slug_case(
-    app_config: Config,
+    app_manager: DependencyManager,
     create_project,
     create_group,
     sanic_client,
@@ -1181,7 +1143,7 @@ async def test_project_slug_case(
     assert res.status_code == 422
     # Change the slug of the project to be upper case in the DB
     uppercase_slug = "NEW_project_SLUG"
-    async with app_config.db.async_session_maker() as session, session.begin():
+    async with app_manager.config.db.async_session_maker() as session, session.begin():
         stmt = select(ProjectORM).where(ProjectORM.id == project_id)
         proj_orm = await session.scalar(stmt)
         assert proj_orm is not None
@@ -1212,9 +1174,9 @@ async def test_project_slug_case(
 
 @pytest.mark.asyncio
 async def test_project_copy_basics(
-    sanic_client, app_config, user_headers, regular_user, create_project, snapshot
+    sanic_client, app_manager, user_headers, regular_user, create_project, snapshot
 ) -> None:
-    await app_config.search_updates_repo.clear_all()
+    await app_manager.search_updates_repo.clear_all()
     await create_project("Project 1")
     project = await create_project(
         "Project 2",
@@ -1233,8 +1195,6 @@ async def test_project_copy_basics(
         "namespace": regular_user.namespace.path.serialize(),
     }
 
-    await app_config.event_repo.delete_all_events()
-
     _, response = await sanic_client.post(f"/api/data/projects/{project_id}/copies", headers=user_headers, json=payload)
 
     assert response.status_code == 201, response.text
@@ -1251,25 +1211,13 @@ async def test_project_copy_basics(
     assert copy_project == snapshot(exclude=props("id", "updated_at", "creation_date", "etag", "template_id"))
 
     # Check search updates
-    search_updates = await app_config.search_updates_repo.select_next(20)
+    search_updates = await app_manager.search_updates_repo.select_next(20)
     assert len(search_updates) == 4
     assert len(set([e.entity_type for e in search_updates])) == 1
     assert search_updates[0].entity_type == "Project"
     search_doc = next(x for x in search_updates if x.entity_id == copy_project["id"])
     assert search_doc.payload["slug"] == "project-slug"
     assert search_doc.payload["name"] == "Renku Native Project"
-
-    events = await app_config.event_repo.get_pending_events()
-    assert len(events) == 2
-    project_created_event = next(e for e in events if e.get_message_type() == "project.created")
-    project_created = deserialize_event(project_created_event)
-    assert project_created.name == payload["name"]
-    assert project_created.slug == payload["slug"]
-    assert project_created.repositories == project["repositories"]
-    project_auth_added_event = next(e for e in events if e.get_message_type() == "projectAuth.added")
-    project_auth_added = deserialize_event(project_auth_added_event)
-    assert project_auth_added.userId == "user"
-    assert project_auth_added.role == MemberRole.OWNER
 
     project_id = copy_project["id"]
 
@@ -1831,7 +1779,7 @@ async def test_get_project_after_group_moved(
 @pytest.mark.asyncio
 async def test_migrate_v1_project(
     sanic_client,
-    app_config,
+    app_manager,
     user_headers,
     regular_user: UserInfo,
 ) -> None:
@@ -1852,8 +1800,6 @@ async def test_migrate_v1_project(
             "default_url": "/lab",
         },
     }
-
-    await app_config.event_repo.delete_all_events()
 
     _, response = await sanic_client.post(
         f"/api/data/renku_v1_projects/{v1_id}/migrations", headers=user_headers, json=v1_project
@@ -1901,3 +1847,8 @@ async def test_migrate_v1_project(
     migrated_project = response.json
     assert migrated_project["v1_id"] == v1_id
     assert migrated_project["project_id"] == project_id
+
+    _, response = await sanic_client.get("/api/data/renku_v1_projects/migrations", headers=user_headers)
+    assert response.status_code == 200, response.text
+    migrated_projects = response.json
+    assert {project_migration["v1_id"] for project_migration in migrated_projects} == {1122}

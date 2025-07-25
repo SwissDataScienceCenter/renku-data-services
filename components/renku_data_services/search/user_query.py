@@ -4,67 +4,19 @@ from __future__ import annotations
 
 import calendar
 from abc import ABC, abstractmethod
-from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from dataclasses import field as data_field
 from datetime import date, datetime, time, timedelta, tzinfo
 from enum import StrEnum
-from typing import Self
+from typing import Self, override
 
 from renku_data_services.authz.models import Role, Visibility
+from renku_data_services.base_models.core import NamespaceSlug
+from renku_data_services.base_models.nel import Nel
+from renku_data_services.namespace.models import UserNamespace
 from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.solr.solr_client import SortDirection
-
-
-@dataclass
-class Nel[A]:
-    """A non empty list."""
-
-    value: A
-    more_values: list[A] = data_field(default_factory=list)
-
-    @classmethod
-    def of(cls, el: A, *args: A) -> Nel[A]:
-        """Constructor using varargs."""
-        return Nel(value=el, more_values=list(args))
-
-    @classmethod
-    def unsafe_from_list(cls, els: list[A]) -> Nel[A]:
-        """Creates a non-empty list from a list, failing if the argument is empty."""
-        return Nel(els[0], els[1:])
-
-    @classmethod
-    def from_list(cls, els: list[A]) -> Nel[A] | None:
-        """Creates a non-empty list from a list."""
-        if els == []:
-            return None
-        else:
-            return cls.unsafe_from_list(els)
-
-    def append(self, other: Self) -> Self:
-        """Append other to this list."""
-        return self.append_list(other.to_list())
-
-    def append_list(self, other: list[A]) -> Self:
-        """Append other to this list."""
-        if other == []:
-            return self
-        else:
-            return type(self)(self.value, self.more_values + other)
-
-    def to_list(self) -> list[A]:
-        """Convert to a list."""
-        return [self.value] + self.more_values
-
-    def mk_string(self, sep: str, f: Callable[[A], str] = str) -> str:
-        """Create a str from all elements mapped over f."""
-        return sep.join([f(x) for x in self.to_list()])
-
-    def map[B](self, f: Callable[[A], B]) -> Nel[B]:
-        """Maps `f` over this list."""
-        head = f(self.value)
-        rest = [f(x) for x in self.more_values]
-        return Nel(head, rest)
+from renku_data_services.users.models import UserInfo
 
 
 class Helper:
@@ -80,7 +32,7 @@ class Helper:
         """Wraps input in quotes if necessary."""
         for c in input:
             if not Helper.is_valid_char(c):
-                return f'"{input.replace('"', '"')}"'
+                return f'"{input.replace('"', '\\"')}"'
         return input
 
 
@@ -97,6 +49,8 @@ class Field(StrEnum):
     role = "role"
     keyword = "keyword"
     namespace = "namespace"
+    direct_member = "direct_member"
+    inherited_member = "inherited_member"
 
 
 class Comparison(StrEnum):
@@ -105,6 +59,47 @@ class Comparison(StrEnum):
     is_equal = ":"
     is_lower_than = "<"
     is_greater_than = ">"
+
+
+@dataclass(eq=True, frozen=True)
+class Username:
+    """A user identifier: username slug."""
+
+    slug: NamespaceSlug
+    __hashvalue: int | None = field(init=False, repr=False, default=None)
+
+    def render(self) -> str:
+        """Render the query part of this value."""
+        return f"@{self.slug.value}"
+
+    @classmethod
+    def from_name(cls, s: str) -> Username:
+        """Create a Username from a string."""
+        return Username(NamespaceSlug.from_name(s))
+
+    @classmethod
+    def from_user_namespace(cls, ns: UserNamespace) -> Username:
+        """Create a Username from a UserNamespace."""
+        return Username(ns.path.first)
+
+    @classmethod
+    def from_user_info(cls, u: UserInfo) -> Username:
+        """Create a Username from a UserInfo."""
+        return cls.from_user_namespace(u.namespace)
+
+
+@dataclass(eq=True, frozen=True)
+class UserId:
+    """A user identifier (the keycloak one)."""
+
+    id: str
+
+    def render(self) -> str:
+        """Renders the query representation of this value."""
+        return self.id
+
+
+type UserDef = Username | UserId
 
 
 @dataclass
@@ -128,13 +123,26 @@ class PartialDate:
         """Return whether all optional parts are set."""
         return self.month is not None and self.dayOfMonth is not None
 
-    def max(self) -> date:
+    def max(self) -> PartialDate:
         """Set missing parts to the maximum value."""
         m = self.month or 12
         (_, dom) = calendar.monthrange(self.year, m)
-        return date(self.year, m, self.dayOfMonth or dom)
+        return PartialDate(self.year, m, self.dayOfMonth or dom)
 
-    def min(self) -> date:
+    def min(self) -> PartialDate:
+        """Set missing parts to the lowest value."""
+        return PartialDate(
+            self.year,
+            self.month or 1,
+            self.dayOfMonth or 1,
+        )
+
+    def date_max(self) -> date:
+        """Set missing parts to the maximum value."""
+        dm = self.max()
+        return date(dm.year, dm.month or 0, dm.dayOfMonth or 0)
+
+    def date_min(self) -> date:
         """Set missing parts to the lowest value."""
         return date(
             self.year,
@@ -160,11 +168,19 @@ class PartialTime:
             res += f":{self.second:02}"
         return res
 
-    def max(self) -> time:
+    def max(self) -> PartialTime:
+        """Set missing parts to the highest value."""
+        return PartialTime(self.hour, self.minute or 59, self.second or 59)
+
+    def min(self) -> PartialTime:
+        """Set missing parts to the lowest value."""
+        return PartialTime(self.hour, self.minute or 0, self.second or 0)
+
+    def time_max(self) -> time:
         """Set missing parts to the highest value."""
         return time(self.hour, self.minute or 59, self.second or 59)
 
-    def min(self) -> time:
+    def time_min(self) -> time:
         """Set missing parts to the lowest value."""
         return time(self.hour, self.minute or 0, self.second or 0)
 
@@ -186,16 +202,24 @@ class PartialDateTime:
             res += ""
         return res
 
+    def max(self) -> PartialDateTime:
+        """Set missing parts to the highest value."""
+        return PartialDateTime(self.date.max(), (self.time or PartialTime(23)).max())
+
+    def min(self) -> PartialDateTime:
+        """Set missing parts to the lowest value."""
+        return PartialDateTime(self.date.min(), (self.time or PartialTime(0)).min())
+
     def datetime_max(self, default_zone: tzinfo) -> datetime:
         """Set missing parts to the highest value."""
-        d = self.date.max()
-        t = (self.time or PartialTime(23, 59, 59)).max()
+        d = self.date.date_max()
+        t = (self.time or PartialTime(23, 59, 59)).time_max()
         return datetime(d.year, d.month, d.day, t.hour, t.minute, t.second, 0, self.zone or default_zone, fold=t.fold)
 
     def datetime_min(self, default_zone: tzinfo) -> datetime:
         """Set missing parts to the lowest value."""
-        d = self.date.min()
-        t = (self.time or PartialTime(0)).min()
+        d = self.date.date_min()
+        t = (self.time or PartialTime(0)).time_min()
         return datetime(d.year, d.month, d.day, t.hour, t.minute, t.second, 0, self.zone or default_zone, fold=t.fold)
 
     def with_zone(self, zone: tzinfo) -> Self:
@@ -268,7 +292,16 @@ class DateTimeCalc:
 type DateTimeRef = PartialDateTime | RelativeDate | DateTimeCalc
 
 
-class FieldComparison(ABC):
+class SegmentBase(ABC):
+    """Base class for a query segment."""
+
+    @abstractmethod
+    async def accept(self, visitor: SegmentVisitior) -> None:
+        """Apply this to the visitor."""
+        ...
+
+
+class FieldComparison(SegmentBase):
     """A query part for a specific field."""
 
     @property
@@ -292,6 +325,54 @@ class FieldComparison(ABC):
 
 
 @dataclass
+class InheritedMemberIs(FieldComparison):
+    """Check for membership of a given user."""
+
+    users: Nel[UserDef]
+
+    @property
+    def field(self) -> Field:
+        """The field name."""
+        return Field.inherited_member
+
+    @property
+    def cmp(self) -> Comparison:
+        """The comparison to use."""
+        return Comparison.is_equal
+
+    def _render_value(self) -> str:
+        return self.users.map(lambda u: u.render()).mk_string(",")
+
+    async def accept(self, visitor: SegmentVisitior) -> None:
+        """Apply this to the visitor."""
+        return await visitor.visit_inherited_member_is(self)
+
+
+@dataclass
+class DirectMemberIs(FieldComparison):
+    """Check for direct membership of a given user."""
+
+    users: Nel[UserDef]
+
+    @property
+    def field(self) -> Field:
+        """The field name."""
+        return Field.direct_member
+
+    @property
+    def cmp(self) -> Comparison:
+        """The comparison to use."""
+        return Comparison.is_equal
+
+    def _render_value(self) -> str:
+        return self.users.map(lambda u: u.render()).mk_string(",")
+
+    async def accept(self, visitor: SegmentVisitior) -> None:
+        """Apply this to the visitor."""
+        return await visitor.visit_direct_member_is(self)
+
+
+@dataclass
 class TypeIs(FieldComparison):
     """Compare the type property against a list of values."""
 
@@ -309,6 +390,10 @@ class TypeIs(FieldComparison):
 
     def _render_value(self) -> str:
         return self.values.mk_string(",")
+
+    async def accept(self, visitor: SegmentVisitior) -> None:
+        """Apply this to the visitor."""
+        return await visitor.visit_type_is(self)
 
 
 @dataclass
@@ -330,6 +415,10 @@ class IdIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",", Helper.quote)
 
+    async def accept(self, visitor: SegmentVisitior) -> None:
+        """Apply this to the visitor."""
+        return await visitor.visit_id_is(self)
+
 
 @dataclass
 class NameIs(FieldComparison):
@@ -349,6 +438,10 @@ class NameIs(FieldComparison):
 
     def _render_value(self) -> str:
         return self.values.mk_string(",", Helper.quote)
+
+    async def accept(self, visitor: SegmentVisitior) -> None:
+        """Apply this to the visitor."""
+        return await visitor.visit_name_is(self)
 
 
 @dataclass
@@ -370,6 +463,10 @@ class SlugIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",", Helper.quote)
 
+    async def accept(self, visitor: SegmentVisitior) -> None:
+        """Apply this to the visitor."""
+        return await visitor.visit_slug_is(self)
+
 
 @dataclass
 class KeywordIs(FieldComparison):
@@ -389,6 +486,10 @@ class KeywordIs(FieldComparison):
 
     def _render_value(self) -> str:
         return self.values.mk_string(",", Helper.quote)
+
+    async def accept(self, visitor: SegmentVisitior) -> None:
+        """Apply this to the visitor."""
+        return await visitor.visit_keyword_is(self)
 
 
 @dataclass
@@ -410,6 +511,10 @@ class NamespaceIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",", Helper.quote)
 
+    async def accept(self, visitor: SegmentVisitior) -> None:
+        """Apply this to the visitor."""
+        return await visitor.visit_namespace_is(self)
+
 
 @dataclass
 class VisibilityIs(FieldComparison):
@@ -430,6 +535,10 @@ class VisibilityIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",")
 
+    async def accept(self, visitor: SegmentVisitior) -> None:
+        """Apply this to the visitor."""
+        return await visitor.visit_visibility_is(self)
+
 
 @dataclass
 class CreatedByIs(FieldComparison):
@@ -449,6 +558,10 @@ class CreatedByIs(FieldComparison):
 
     def _render_value(self) -> str:
         return self.values.mk_string(",", Helper.quote)
+
+    async def accept(self, visitor: SegmentVisitior) -> None:
+        """Apply this to the visitor."""
+        return await visitor.visit_created_by_is(self)
 
 
 @dataclass
@@ -489,6 +602,10 @@ class Created(FieldComparison):
         nel = Nel(value, list(args))
         return Created(Comparison.is_greater_than, nel)
 
+    async def accept(self, visitor: SegmentVisitior) -> None:
+        """Apply this to the visitor."""
+        return await visitor.visit_created(self)
+
 
 @dataclass
 class RoleIs(FieldComparison):
@@ -509,9 +626,13 @@ class RoleIs(FieldComparison):
     def _render_value(self) -> str:
         return self.values.mk_string(",")
 
+    async def accept(self, visitor: SegmentVisitior) -> None:
+        """Apply this to the visitor."""
+        return await visitor.visit_role_is(self)
+
 
 @dataclass
-class Text:
+class Text(SegmentBase):
     """A query part that is not corresponding to a specific field."""
 
     value: str
@@ -528,6 +649,10 @@ class Text:
             return self
         else:
             return type(self)(self.value + " " + next.value)
+
+    async def accept(self, visitor: SegmentVisitior) -> None:
+        """Apply this to the visitor."""
+        return await visitor.visit_text(self)
 
 
 class SortableField(StrEnum):
@@ -556,7 +681,7 @@ class OrderBy:
 
 
 @dataclass
-class Order:
+class Order(SegmentBase):
     """A query part for defining how to order results."""
 
     fields: Nel[OrderBy]
@@ -569,9 +694,24 @@ class Order:
         """Append the field list of `other` to this."""
         return type(self)(self.fields.append(other.fields))
 
+    async def accept(self, visitor: SegmentVisitior) -> None:
+        """Apply this to the visitor."""
+        return await visitor.visit_order(self)
+
 
 type FieldTerm = (
-    TypeIs | IdIs | NameIs | SlugIs | VisibilityIs | KeywordIs | NamespaceIs | CreatedByIs | Created | RoleIs
+    TypeIs
+    | IdIs
+    | NameIs
+    | SlugIs
+    | VisibilityIs
+    | KeywordIs
+    | NamespaceIs
+    | CreatedByIs
+    | Created
+    | RoleIs
+    | InheritedMemberIs
+    | DirectMemberIs
 )
 
 
@@ -580,6 +720,21 @@ type Segment = FieldTerm | Text | Order
 
 class Segments:
     """Helpers for creating segments."""
+
+    @classmethod
+    def order(cls, o: OrderBy, *args: OrderBy) -> Segment:
+        """Return an order segment."""
+        return Order(Nel(o, list(args)))
+
+    @classmethod
+    def inherited_member_is(cls, user: UserDef, *args: UserDef) -> Segment:
+        """Return member-is query segment."""
+        return InheritedMemberIs(Nel(user, list(args)))
+
+    @classmethod
+    def direct_member_is(cls, user: UserDef, *args: UserDef) -> Segment:
+        """Return member-is query segment."""
+        return DirectMemberIs(Nel(user, list(args)))
 
     @classmethod
     def text(cls, text: str) -> Segment:
@@ -676,17 +831,194 @@ class UserQuery:
         """Return the string representation of this query."""
         return " ".join([e.render() for e in self.segments])
 
-    def extract_order(self) -> tuple[list[FieldTerm | Text], Order | None]:
-        """Extracts all sort segments into a single OrderBy value."""
-        segs: list[FieldTerm | Text] = []
-        orders: list[OrderBy] = []
+    async def accept[T](self, visitor: UserQueryVisitor[T]) -> T:
+        """Apply the visitor."""
         for s in self.segments:
-            match s:
-                case Order() as o:
-                    orders.extend(o.fields.to_list())
+            await s.accept(visitor)
+        return await visitor.build()
 
-                case f:
-                    segs.append(f)
+    async def transform(self, visitor: UserQueryVisitor[UserQuery], *args: UserQueryVisitor[UserQuery]) -> UserQuery:
+        """Apply this query to the given transformations sequentially."""
+        transforms: list[UserQueryVisitor[UserQuery]] = [visitor]
+        transforms.extend(list(args))
 
-        sort = Nel.from_list(orders)
-        return (segs, Order(sort) if sort is not None else None)
+        acc = self
+        [acc := await acc.accept(t) for t in transforms]
+        return acc
+
+
+class SegmentVisitior(ABC):
+    """A visitor for a query segment."""
+
+    @abstractmethod
+    async def visit_order(self, order: Order) -> None:
+        """Visit order."""
+        ...
+
+    @abstractmethod
+    async def visit_text(self, text: Text) -> None:
+        """Visit text."""
+        ...
+
+    @abstractmethod
+    async def visit_type_is(self, ft: TypeIs) -> None:
+        """Visit type-is."""
+        ...
+
+    @abstractmethod
+    async def visit_id_is(self, ft: IdIs) -> None:
+        """Visit id-is."""
+        ...
+
+    @abstractmethod
+    async def visit_name_is(self, ft: NameIs) -> None:
+        """Visit name-is."""
+        ...
+
+    @abstractmethod
+    async def visit_slug_is(self, ft: SlugIs) -> None:
+        """Visit slug-is."""
+        ...
+
+    @abstractmethod
+    async def visit_visibility_is(self, ft: VisibilityIs) -> None:
+        """Visit visibility-is."""
+        ...
+
+    @abstractmethod
+    async def visit_keyword_is(self, ft: KeywordIs) -> None:
+        """Visit keyword-is."""
+        ...
+
+    @abstractmethod
+    async def visit_namespace_is(self, ft: NamespaceIs) -> None:
+        """Visit namespace-is."""
+        ...
+
+    @abstractmethod
+    async def visit_created_by_is(self, ft: CreatedByIs) -> None:
+        """Visit created-by-is."""
+        ...
+
+    @abstractmethod
+    async def visit_created(self, ft: Created) -> None:
+        """Visit created."""
+        ...
+
+    @abstractmethod
+    async def visit_role_is(self, ft: RoleIs) -> None:
+        """Visit role-is."""
+        ...
+
+    @abstractmethod
+    async def visit_direct_member_is(self, ft: DirectMemberIs) -> None:
+        """Visit direct-member-is."""
+        ...
+
+    @abstractmethod
+    async def visit_inherited_member_is(self, ft: InheritedMemberIs) -> None:
+        """Visit inherited-member-is."""
+        ...
+
+
+class UserQueryVisitor[T](SegmentVisitior):
+    """A visitor to transform user queries."""
+
+    @abstractmethod
+    async def build(self) -> T:
+        """Return the value."""
+        ...
+
+
+class UserQueryFieldTermVisitor[T](UserQueryVisitor[T]):
+    """A variant of a visitor dispatching on the base union type Segment.
+
+    Every concrete visit_ method forwards to the `visit_field_term` method.
+    """
+
+    @abstractmethod
+    async def visit_field_term(self, ft: FieldTerm) -> None:
+        """Visit a field term query segment."""
+        ...
+
+    @override
+    async def visit_created(self, ft: Created) -> None:
+        """Forwards to `visit_field_term`."""
+        return await self.visit_field_term(ft)
+
+    @override
+    async def visit_created_by_is(self, ft: CreatedByIs) -> None:
+        """Forwards to `visit_field_term`."""
+        return await self.visit_field_term(ft)
+
+    @override
+    async def visit_direct_member_is(self, ft: DirectMemberIs) -> None:
+        """Forwards to `visit_field_term`."""
+        return await self.visit_field_term(ft)
+
+    @override
+    async def visit_id_is(self, ft: IdIs) -> None:
+        """Forwards to `visit_field_term`."""
+        return await self.visit_field_term(ft)
+
+    @override
+    async def visit_keyword_is(self, ft: KeywordIs) -> None:
+        """Forwards to `visit_field_term`."""
+        return await self.visit_field_term(ft)
+
+    @override
+    async def visit_inherited_member_is(self, ft: InheritedMemberIs) -> None:
+        """Forwards to `visit_field_term`."""
+        return await self.visit_field_term(ft)
+
+    @override
+    async def visit_name_is(self, ft: NameIs) -> None:
+        """Forwards to `visit_field_term`."""
+        return await self.visit_field_term(ft)
+
+    @override
+    async def visit_namespace_is(self, ft: NamespaceIs) -> None:
+        """Forwards to `visit_field_term`."""
+        return await self.visit_field_term(ft)
+
+    @override
+    async def visit_role_is(self, ft: RoleIs) -> None:
+        """Forwards to `visit_field_term`."""
+        return await self.visit_field_term(ft)
+
+    @override
+    async def visit_slug_is(self, ft: SlugIs) -> None:
+        """Forwards to `visit_field_term`."""
+        return await self.visit_field_term(ft)
+
+    @override
+    async def visit_type_is(self, ft: TypeIs) -> None:
+        """Forwards to `visit_field_term`."""
+        return await self.visit_field_term(ft)
+
+    @override
+    async def visit_visibility_is(self, ft: VisibilityIs) -> None:
+        """Forwards to `visit_field_term`."""
+        return await self.visit_field_term(ft)
+
+
+class EmptyUserQueryVisitor[T](UserQueryFieldTermVisitor[T]):
+    """A visitor with every method doing nothing.
+
+    The `build` method is left to implement by subclasses.
+    """
+
+    @override
+    async def visit_field_term(self, ft: FieldTerm) -> None:
+        """Visit field-term node."""
+        return None
+
+    @override
+    async def visit_order(self, order: Order) -> None:
+        """Visit order node."""
+        return None
+
+    @override
+    async def visit_text(self, text: Text) -> None:
+        """Visit text node."""
+        return None

@@ -9,10 +9,13 @@ from renku_data_services.authz.authz import Authz
 from renku_data_services.authz.models import Visibility
 from renku_data_services.base_models.core import APIUser, NamespacePath
 from renku_data_services.data_connectors.db import DataConnectorRepository
-from renku_data_services.data_connectors.models import CloudStorageCore, DataConnector, UnsavedDataConnector
-from renku_data_services.message_queue.db import EventRepository, ReprovisioningRepository
-from renku_data_services.message_queue.interface import IMessageQueue
-from renku_data_services.message_queue.models import Event
+from renku_data_services.data_connectors.models import (
+    CloudStorageCore,
+    DataConnector,
+    GlobalDataConnector,
+    UnsavedDataConnector,
+)
+from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.namespace.models import Group, UnsavedGroup, UserNamespace
@@ -31,11 +34,6 @@ user_namespace = UserNamespace(
 )
 
 
-class NoneMessageQueue(IMessageQueue):
-    async def send_message(self, event: Event) -> None:
-        return None
-
-
 @dataclass
 class Setup:
     group_repo: GroupRepository
@@ -46,16 +44,14 @@ class Setup:
     search_reprovision: SearchReprovision
 
 
-def make_setup(app_config_instance, solr_config) -> Setup:
+def make_setup(app_manager_instance, solr_config) -> Setup:
     run_migrations_for_app("common")
-    mq = NoneMessageQueue()
-    sess = app_config_instance.db.async_session_maker
-    events = EventRepository(sess, mq)
+    sess = app_manager_instance.config.db.async_session_maker
     search_updates = SearchUpdatesRepo(sess)
-    authz = Authz(app_config_instance.authz_config)
-    gr = GroupRepository(sess, events, authz, mq, search_updates)
-    ur = UserRepo(sess, mq, events, gr, search_updates, None, authz)
-    pr = ProjectRepository(sess, mq, events, gr, search_updates, authz)
+    authz = Authz(app_manager_instance.config.authz_config)
+    gr = GroupRepository(sess, authz, search_updates)
+    ur = UserRepo(sess, gr, search_updates, None, authz)
+    pr = ProjectRepository(sess, gr, search_updates, authz)
     dcr = DataConnectorRepository(sess, authz, pr, gr, search_updates)
     sr = SearchReprovision(
         search_updates_repo=search_updates,
@@ -93,7 +89,7 @@ async def make_data_connectors(setup: Setup, count: int = 10) -> list[DataConnec
                 storage_type="s3", configuration={}, source_path="a", target_path="b", readonly=True
             ),
         )
-        dc = await setup.data_connector_repo.insert_data_connector(admin, dc)
+        dc = await setup.data_connector_repo.insert_namespaced_data_connector(admin, dc)
         result.append(dc)
     assert len(result) == count
     result.sort(key=lambda e: e.id)
@@ -131,15 +127,15 @@ async def make_projects(setup: Setup, count: int) -> list[Project]:
     return result
 
 
-async def get_all_connectors(setup: Setup, per_page: int) -> list[DataConnector]:
+async def get_all_connectors(setup: Setup, per_page: int) -> list[DataConnector | GlobalDataConnector]:
     result = [item async for item in setup.search_reprovision._get_all_data_connectors(admin, per_page=per_page)]
     result.sort(key=lambda e: e.id)
     return result
 
 
 @pytest.mark.asyncio
-async def test_get_data_connectors(app_config_instance) -> None:
-    setup = make_setup(app_config_instance, solr_config={})
+async def test_get_data_connectors(app_manager_instance) -> None:
+    setup = make_setup(app_manager_instance, solr_config={})
     inserted_dcs = await make_data_connectors(setup, 10)
 
     dcs = await get_all_connectors(setup, per_page=20)
@@ -156,14 +152,14 @@ async def test_get_data_connectors(app_config_instance) -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_reprovision(app_config_instance, solr_search) -> None:
-    setup = make_setup(app_config_instance, solr_search)
+async def test_run_reprovision(app_manager_instance, solr_search, admin_user) -> None:
+    setup = make_setup(app_manager_instance, solr_search)
     dcs = await make_data_connectors(setup, 5)
     groups = await make_groups(setup, 4)
     projects = await make_projects(setup, 3)
     users = [item async for item in setup.user_repo.get_all_users(admin)]
 
-    count = await setup.search_reprovision.run_reprovision(admin)
+    count = await setup.search_reprovision.run_reprovision(admin_user)
 
     next = await setup.search_update_repo.select_next(20)
 

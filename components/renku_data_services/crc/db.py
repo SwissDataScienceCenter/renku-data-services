@@ -7,8 +7,8 @@ it all in one place.
 """
 
 from asyncio import gather
-from collections.abc import Callable, Collection, Coroutine, Sequence
-from dataclasses import dataclass, field
+from collections.abc import AsyncGenerator, Callable, Collection, Coroutine, Sequence
+from dataclasses import asdict, dataclass, field
 from functools import wraps
 from typing import Any, Concatenate, Optional, ParamSpec, TypeVar, cast
 
@@ -16,11 +16,15 @@ from sqlalchemy import NullPool, delete, false, select, true
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select, and_, not_, or_
+from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
+from renku_data_services.crc.apispec import Protocol as CrcProtocol
+from renku_data_services.crc.models import Cluster, ClusterPatch, SavedCluster
+from renku_data_services.crc.orm import ClusterORM
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.users.db import UserRepo
 
@@ -148,6 +152,10 @@ def _only_admins(
 class ResourcePoolRepository(_Base):
     """The adapter used for accessing resource pools with SQLAlchemy."""
 
+    def __init__(self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository):
+        super().__init__(session_maker, quotas_repo)
+        self.__cluster_repo = ClusterRepository(session_maker=self.session_maker)
+
     async def initialize(self, async_connection_url: str, rp: models.ResourcePool) -> None:
         """Add the default resource pool if it does not already exist."""
         engine = create_async_engine(async_connection_url, poolclass=NullPool)
@@ -168,7 +176,11 @@ class ResourcePoolRepository(_Base):
     ) -> list[models.ResourcePool]:
         """Get resource pools from database."""
         async with self.session_maker() as session:
-            stmt = select(schemas.ResourcePoolORM).options(selectinload(schemas.ResourcePoolORM.classes))
+            stmt = (
+                select(schemas.ResourcePoolORM)
+                .options(selectinload(schemas.ResourcePoolORM.classes))
+                .options(selectinload(schemas.ResourcePoolORM.cluster))
+            )
             if name is not None:
                 stmt = stmt.where(schemas.ResourcePoolORM.name == name)
             if id is not None:
@@ -192,6 +204,7 @@ class ResourcePoolRepository(_Base):
                 select(schemas.ResourcePoolORM)
                 .where(schemas.ResourcePoolORM.classes.any(schemas.ResourceClassORM.id == resource_class_id))
                 .options(selectinload(schemas.ResourcePoolORM.classes))
+                .options(selectinload(schemas.ResourcePoolORM.cluster))
             )
             # NOTE: The line below ensures that the right users can access the right resources, do not remove.
             stmt = _resource_pool_access_control(api_user, stmt)
@@ -275,14 +288,15 @@ class ResourcePoolRepository(_Base):
     ) -> models.ResourcePool:
         """Insert resource pool into database."""
         quota = None
-        if resource_pool.quota:
+        if resource_pool.quota is not None:
             for rc in resource_pool.classes:
                 if not resource_pool.quota.is_resource_class_compatible(rc):
                     raise errors.ValidationError(
                         message=f"The quota {quota} is not compatible with resource class {rc}"
                     )
-            quota = self.quotas_repo.create_quota(resource_pool.quota)
+            quota = self.quotas_repo.create_quota(models.Quota.from_dict(asdict(resource_pool.quota)))
             resource_pool = resource_pool.set_quota(quota)
+
         orm = schemas.ResourcePoolORM.load(resource_pool)
         async with self.session_maker() as session, session.begin():
             if orm.idle_threshold == 0:
@@ -298,7 +312,11 @@ class ResourcePoolRepository(_Base):
                         message="There can only be one default resource pool and one already exists."
                     )
             session.add(orm)
-        return orm.dump(quota)
+
+            await session.flush()
+            await session.refresh(orm)
+
+            return orm.dump(quota)
 
     async def get_classes(
         self,
@@ -332,7 +350,7 @@ class ResourcePoolRepository(_Base):
         """Get a specific resource class by its ID."""
         classes = await self.get_classes(api_user, id)
         if len(classes) == 0:
-            raise errors.MissingResourceError(message=f"The resource class with ID {id} cannot be found", quiet=True)
+            raise errors.MissingResourceError(message=f"The resource class with ID {id} cannot be found")
         return classes[0]
 
     @_only_admins
@@ -372,7 +390,6 @@ class ResourcePoolRepository(_Base):
     @_only_admins
     async def update_resource_pool(self, api_user: base_models.APIUser, id: int, **kwargs: Any) -> models.ResourcePool:
         """Update an existing resource pool in the database."""
-        rp: Optional[schemas.ResourcePoolORM] = None
         async with self.session_maker() as session, session.begin():
             stmt = (
                 select(schemas.ResourcePoolORM)
@@ -391,6 +408,8 @@ class ResourcePoolRepository(_Base):
                 kwargs["idle_threshold"] = None
             if kwargs.get("hibernation_threshold") == 0:
                 kwargs["hibernation_threshold"] = None
+            if kwargs.get("cluster_id") == "":
+                kwargs["cluster_id"] = None
             # NOTE: The .update method on the model validates the update to the resource pool
             old_rp_model = rp.dump(quota)
             new_rp_model = old_rp_model.update(**kwargs)
@@ -399,6 +418,17 @@ class ResourcePoolRepository(_Base):
                 match key:
                     case "name" | "public" | "default" | "idle_threshold" | "hibernation_threshold":
                         setattr(rp, key, val)
+                    case "cluster_id":
+                        cluster_id = val
+                        cluster = None
+
+                        if cluster_id is not None:
+                            cluster = await self.__cluster_repo.select(
+                                api_user=api_user, cluster_id=ULID.from_str(cluster_id)
+                            )
+
+                        rp.cluster_id = cluster_id
+                        new_rp_model = new_rp_model.update(cluster=cluster)
                     case "quota":
                         if val is None:
                             continue
@@ -408,23 +438,28 @@ class ResourcePoolRepository(_Base):
                         # 2. a quota exists and can only be updated, not replaced (the ids, if provided, must match)
 
                         new_id = val.get("id")
-
-                        if quota and quota.id is not None and new_id is not None and quota.id != new_id:
-                            raise errors.ValidationError(
-                                message="The ID of an existing quota cannot be updated, "
-                                f"please remove the ID field from the request or use ID {quota.id}."
-                            )
+                        quota_id = quota.id if quota is not None else None
 
                         # the id must match for update
-                        if quota:
-                            val["id"] = quota.id or new_id
+                        match (quota_id, new_id):
+                            case (None, _):
+                                pass
+                            case (quota_id, None):
+                                val["id"] = quota_id
+                            case (quota_id, new_id):
+                                if quota_id != new_id:
+                                    raise errors.ValidationError(
+                                        message="The ID of an existing quota cannot be updated, "
+                                        f"please remove the ID field from the request or use ID {quota_id}."
+                                    )
 
                         new_quota = models.Quota.from_dict(val)
 
-                        if new_id or quota:
-                            new_quota = self.quotas_repo.update_quota(new_quota)
-                        else:
+                        if new_id is None and quota is None:
                             new_quota = self.quotas_repo.create_quota(new_quota)
+                        else:
+                            new_quota = self.quotas_repo.update_quota(new_quota)
+
                         rp.quota = new_quota.id
                         new_rp_model = new_rp_model.update(quota=new_quota)
                     case "classes":
@@ -433,8 +468,7 @@ class ResourcePoolRepository(_Base):
                             cls.pop("matching", None)
                             if len(cls) == 0:
                                 raise errors.ValidationError(
-                                    message="More fields than the id of the class "
-                                    "should be provided when updating it"
+                                    message="More fields than the id of the class should be provided when updating it"
                                 )
                             new_classes_coroutines.append(
                                 self.update_resource_class(
@@ -853,8 +887,86 @@ class UserRepository(_Base):
             allowed_updates = set(["no_default_access"])
             if not set(kwargs.keys()).issubset(allowed_updates):
                 raise errors.ValidationError(
-                    message=f"Only the following fields {allowed_updates} " "can be updated for a resource pool user.."
+                    message=f"Only the following fields {allowed_updates} can be updated for a resource pool user.."
                 )
             if (no_default_access := kwargs.get("no_default_access")) is not None:
                 user.no_default_access = no_default_access
             return user.dump()
+
+
+@dataclass
+class ClusterRepository:
+    """Repository for cluster configurations."""
+
+    session_maker: Callable[..., AsyncSession]
+
+    async def select_all(self) -> AsyncGenerator[SavedCluster, Any]:
+        """Get cluster configurations from the database."""
+        async with self.session_maker() as session:
+            clusters = await session.stream_scalars(select(ClusterORM))
+            async for cluster in clusters:
+                yield cluster.dump()
+
+    async def select(self, api_user: base_models.APIUser, cluster_id: ULID) -> SavedCluster:
+        """Get cluster configurations from the database."""
+
+        async with self.session_maker() as session:
+            r = await session.scalars(select(ClusterORM).where(ClusterORM.id == cluster_id))
+            cluster = r.one_or_none()
+            if cluster is None:
+                raise errors.MissingResourceError(message=f"Cluster definition id='{cluster_id}' does not exist.")
+
+            return cluster.dump()
+
+    @_only_admins
+    async def insert(self, api_user: base_models.APIUser, cluster: Cluster) -> Cluster:
+        """Creates a new cluster configuration."""
+
+        cluster_orm = ClusterORM.load(cluster)
+        async with self.session_maker() as session, session.begin():
+            session.add(cluster_orm)
+            await session.flush()
+            await session.refresh(cluster_orm)
+
+            return cluster_orm.dump()
+
+    @_only_admins
+    async def update(self, api_user: base_models.APIUser, cluster: ClusterPatch, cluster_id: ULID) -> Cluster:
+        """Updates a cluster configuration."""
+
+        async with self.session_maker() as session, session.begin():
+            saved_cluster = (await session.scalars(select(ClusterORM).where(ClusterORM.id == cluster_id))).one_or_none()
+            if saved_cluster is None:
+                raise errors.MissingResourceError(message=f"Cluster definition id='{cluster_id}' does not exist.")
+
+            for key, value in asdict(cluster).items():
+                match key, value:
+                    case "session_protocol", CrcProtocol():
+                        setattr(saved_cluster, key, value.value)
+                    case "session_storage_class", "":
+                        # If we received an empty string in the storage class, reset it to the default storage class by
+                        # setting it to None.
+                        setattr(saved_cluster, key, None)
+                    case "service_account_name", "":
+                        # If we received an empty string in the service account name, set it back to None.
+                        setattr(saved_cluster, key, None)
+                    case _, None:
+                        # Do not modify a value which has not been set in the patch
+                        pass
+                    case _, _:
+                        setattr(saved_cluster, key, value)
+
+            await session.flush()
+            await session.refresh(saved_cluster)
+
+            return saved_cluster.dump()
+
+    @_only_admins
+    async def delete(self, api_user: base_models.APIUser, cluster_id: ULID) -> None:
+        """Get cluster configurations from the database."""
+
+        async with self.session_maker() as session, session.begin():
+            r = await session.scalars(select(ClusterORM).where(ClusterORM.id == cluster_id))
+            cluster = r.one_or_none()
+            if cluster is not None:
+                await session.delete(cluster)
