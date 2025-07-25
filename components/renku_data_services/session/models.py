@@ -89,6 +89,7 @@ class UnsavedEnvironment:
     args: list[str] | None = None
     command: list[str] | None = None
     is_archived: bool = False
+    strip_path_prefix: bool = False
 
     def __post_init__(self) -> None:
         if self.working_directory and not self.working_directory.is_absolute():
@@ -152,6 +153,7 @@ class EnvironmentPatch:
     is_archived: bool | None = None
     build_parameters: BuildParametersPatch | None = None
     environment_image_source: EnvironmentImageSource | None = None
+    strip_path_prefix: bool | None = None
 
 
 # TODO: Verify that these limits are compatible with k8s

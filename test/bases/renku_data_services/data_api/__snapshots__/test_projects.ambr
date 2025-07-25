@@ -82,6 +82,7 @@
     'mount_directory': '/home/renku/work',
     'name': 'Launcher',
     'port': 8888,
+    'strip_path_prefix': False,
     'uid': 1000,
     'working_directory': '/home/renku/work',
   })

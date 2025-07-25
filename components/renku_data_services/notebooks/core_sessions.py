@@ -159,7 +159,7 @@ async def get_auth_secret_authenticated(
     return ExtraSecret(secret, vol, vol_mount)
 
 
-async def get_auth_secret_anonymous(nb_config: NotebooksConfig, server_name: str, request: Request) -> ExtraSecret:
+def get_auth_secret_anonymous(nb_config: NotebooksConfig, server_name: str, request: Request) -> ExtraSecret:
     """Get the extra secrets that need to be added to the session for an anonymous user."""
     # NOTE: We extract the session cookie value here in order to avoid creating a cookie.
     # The gateway encrypts and signs cookies so the user ID injected in the request headers does not

@@ -1493,3 +1493,29 @@ async def test_patch_build(sanic_client: SanicASGITestClient, user_headers, crea
     assert response.json.get("created_at") is not None
     assert response.json.get("status") == "cancelled"
     assert response.json.get("result") is None
+
+
+@pytest.mark.asyncio
+async def test_patch_strip_prefix(
+    sanic_client: SanicASGITestClient, admin_headers, create_project, create_session_launcher
+) -> None:
+    project = await create_project("Project 1")
+    launcher = await create_session_launcher("Launcher 1", project_id=project["id"])
+    launcher_id = launcher["id"]
+    assert "environment" in launcher
+    env = launcher["environment"]
+    assert not env["strip_path_prefix"]
+
+    payload = {
+        "environment": {
+            "strip_path_prefix": True,
+        },
+    }
+
+    _, res = await sanic_client.patch(f"/api/data/session_launchers/{launcher_id}", headers=admin_headers, json=payload)
+
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    assert "environment" in res.json
+    env = res.json["environment"]
+    assert env.get("strip_path_prefix")
