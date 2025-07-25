@@ -26,7 +26,7 @@ from renku_data_services.crc.models import GpuKind, ResourceClass, ResourcePool
 from renku_data_services.data_connectors.models import DataConnectorSecret, DataConnectorWithSecrets
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec
-from renku_data_services.notebooks.api.amalthea_patches import git_proxy, init_containers
+from renku_data_services.notebooks.api.amalthea_patches import api_proxy, git_proxy, init_containers
 from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.classes.k8s_client import sanitizer
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
@@ -99,6 +99,7 @@ async def get_extra_init_containers(
 
 async def get_extra_containers(
     nb_config: NotebooksConfig,
+    session_id: str,
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     repositories: list[Repository],
     git_providers: list[GitProvider],
@@ -110,6 +111,9 @@ async def get_extra_containers(
     )
     if git_proxy_container:
         conts.append(ExtraContainer.model_validate(sanitizer(git_proxy_container)))
+    api_proxy_container = api_proxy.main_container(session_id=session_id, user=user, config=nb_config)
+    if api_proxy_container:
+        conts.append(ExtraContainer.model_validate(sanitizer(api_proxy_container)))
     return conts
 
 
@@ -567,6 +571,7 @@ async def patch_session(
     repositories = await repositories_from_session(user, session, project_repo, git_providers)
     extra_containers = await get_extra_containers(
         nb_config,
+        session_id,
         user,
         repositories,
         git_providers,
