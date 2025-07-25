@@ -1,67 +1,59 @@
 """Required interfaces for k8s clients."""
 
-from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Protocol
 
 
-class K8sCoreClientInterface(ABC):
-    """Defines what functionality is required for the core k8s client."""
+class ResourceQuotaClient(Protocol):
+    """Methods to manipulate ResourceQuota kubernetes resources."""
 
-    @abstractmethod
-    def read_namespaced_resource_quota(self, name: Any, namespace: Any, **kwargs: Any) -> Any:
-        """Get a resource quota."""
-        ...
-
-    @abstractmethod
     def list_namespaced_resource_quota(self, namespace: Any, **kwargs: Any) -> Any:
         """List resource quotas."""
         ...
 
-    @abstractmethod
+    def read_namespaced_resource_quota(self, name: Any, namespace: Any, **kwargs: Any) -> Any:
+        """Get a resource quota."""
+        ...
+
     def create_namespaced_resource_quota(self, namespace: Any, body: Any, **kwargs: Any) -> Any:
         """Create a resource quota."""
         ...
 
-    @abstractmethod
     def delete_namespaced_resource_quota(self, name: Any, namespace: Any, **kwargs: Any) -> Any:
         """Delete a resource quota."""
         ...
 
-    @abstractmethod
     def patch_namespaced_resource_quota(self, name: Any, namespace: Any, body: Any, **kwargs: Any) -> Any:
         """Update a resource quota."""
         ...
 
-    @abstractmethod
+
+class SecretClient(Protocol):
+    """Methods to manipulate Secret kubernetes resources."""
+
     def delete_namespaced_secret(self, name: Any, namespace: Any, **kwargs: Any) -> Any:
         """Delete a secret."""
         ...
 
-    @abstractmethod
     def create_namespaced_secret(self, namespace: Any, body: Any, **kwargs: Any) -> Any:
         """Create a secret."""
         ...
 
-    @abstractmethod
     def patch_namespaced_secret(self, name: Any, namespace: Any, body: Any, **kwargs: Any) -> Any:
         """Patch an existing secret."""
         ...
 
 
-class K8sSchedudlingClientInterface(ABC):
-    """Defines what functionality is required for the scheduling k8s client."""
+class PriorityClassClient(Protocol):
+    """Methods to manipulate Priority Class kubernetes resources."""
 
-    @abstractmethod
     def create_priority_class(self, body: Any, **kwargs: Any) -> Any:
         """Create a priority class."""
         ...
 
-    @abstractmethod
     def delete_priority_class(self, name: Any, **kwargs: Any) -> Any:
         """Delete a priority class."""
         ...
 
-    @abstractmethod
     def get_priority_class(self, name: Any, **kwargs: Any) -> Any:
         """Retrieve a priority class."""
         ...

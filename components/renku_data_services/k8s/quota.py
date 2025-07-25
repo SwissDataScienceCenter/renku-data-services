@@ -9,15 +9,15 @@ from kubernetes.utils.quantity import parse_quantity
 
 from renku_data_services import errors
 from renku_data_services.crc import models
-from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface, K8sSchedudlingClientInterface
+from renku_data_services.k8s.client_interfaces import PriorityClassClient, ResourceQuotaClient
 
 
 @dataclass
 class QuotaRepository:
     """Adapter for CRUD operations on resource quotas and priority classes in k8s."""
 
-    core_client: K8sCoreClientInterface
-    scheduling_client: K8sSchedudlingClientInterface
+    core_client: ResourceQuotaClient
+    scheduling_client: PriorityClassClient
     namespace: str = "default"
     _label_name: str = field(init=False, default="app")
     _label_value: str = field(init=False, default="renku")

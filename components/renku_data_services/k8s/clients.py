@@ -18,7 +18,7 @@ from kubernetes.config.config_exception import ConfigException
 from kubernetes.config.incluster_config import SERVICE_CERT_FILENAME, SERVICE_TOKEN_FILENAME, InClusterConfigLoader
 
 from renku_data_services.errors import errors
-from renku_data_services.k8s.client_interfaces import K8sCoreClientInterface, K8sSchedudlingClientInterface
+from renku_data_services.k8s.client_interfaces import PriorityClassClient, ResourceQuotaClient, SecretClient
 from renku_data_services.k8s.models import APIObjectInCluster, K8sObjectFilter
 
 if TYPE_CHECKING:
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from renku_data_services.k8s_watcher import K8sDbCache
 
 
-class K8sCoreClient(K8sCoreClientInterface):  # pragma:nocover
+class K8sCoreClient(ResourceQuotaClient):  # pragma:nocover
     """Real k8s core API client that exposes the required functions."""
 
     def __init__(self) -> None:
@@ -78,7 +78,7 @@ class K8sCoreClient(K8sCoreClientInterface):  # pragma:nocover
         return self.client.patch_namespaced_secret(name, namespace, body, **kwargs)
 
 
-class K8sSchedulingClient(K8sSchedudlingClientInterface):  # pragma:nocover
+class K8sSchedulingClient(PriorityClassClient):  # pragma:nocover
     """Real k8s scheduling API client that exposes the required functions."""
 
     def __init__(self) -> None:
@@ -104,7 +104,7 @@ class K8sSchedulingClient(K8sSchedudlingClientInterface):  # pragma:nocover
         return self.client.read_priority_class(name, **kwargs)
 
 
-class DummyCoreClient(K8sCoreClientInterface):
+class DummyCoreClient(ResourceQuotaClient, SecretClient):
     """Dummy k8s core API client that does not require a k8s cluster.
 
     Not suitable for production - to be used only for testing and development.
@@ -198,7 +198,7 @@ class DummyCoreClient(K8sCoreClientInterface):
             return removed_secret
 
 
-class DummySchedulingClient(K8sSchedudlingClientInterface):
+class DummySchedulingClient(PriorityClassClient):
     """Dummy k8s scheduling API client that does not require a k8s cluster.
 
     Not suitable for production - to be used only for testing and development.
