@@ -1,5 +1,7 @@
 """Dependencies management of secrets storage."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 
 from jwt import PyJWKClient
@@ -7,6 +9,7 @@ from jwt import PyJWKClient
 from renku_data_services import base_models, errors
 from renku_data_services.authn.dummy import DummyAuthenticator
 from renku_data_services.authn.keycloak import KeycloakAuthenticator
+from renku_data_services.crc.db import ClusterRepository
 from renku_data_services.k8s.client_interfaces import SecretClient
 from renku_data_services.k8s.clients import DummyCoreClient, K8sCoreClient
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo
@@ -22,6 +25,7 @@ class DependencyManager:
     config: Config
     core_client: SecretClient
     _user_secrets_repo: LowLevelUserSecretsRepo | None = field(default=None, repr=False, init=False)
+    cluster_repo: ClusterRepository
 
     @property
     def user_secrets_repo(self) -> LowLevelUserSecretsRepo:
@@ -33,11 +37,12 @@ class DependencyManager:
         return self._user_secrets_repo
 
     @classmethod
-    def from_env(cls) -> "DependencyManager":
+    def from_env(cls) -> DependencyManager:
         """Create a config from environment variables."""
         authenticator: base_models.Authenticator
         core_client: SecretClient
         config = Config.from_env()
+        cluster_repo = ClusterRepository(session_maker=config.db.async_session_maker)
 
         if config.dummy_stores:
             authenticator = DummyAuthenticator()
@@ -61,4 +66,5 @@ class DependencyManager:
             config=config,
             authenticator=authenticator,
             core_client=core_client,
+            cluster_repo=cluster_repo,
         )

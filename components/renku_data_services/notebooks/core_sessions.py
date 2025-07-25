@@ -15,6 +15,7 @@ import httpx
 from kubernetes.client import V1ObjectMeta, V1Secret
 from sanic import Request
 from toml import dumps
+from ulid import ULID
 from yaml import safe_dump
 
 from renku_data_services.app_config import logging
@@ -312,6 +313,11 @@ async def request_dc_secret_creation(
     }
     secrets_url = nb_config.user_secrets.secrets_storage_service_url + "/api/secrets/kubernetes"
     headers = {"Authorization": f"bearer {user.access_token}"}
+
+    cluster_id = None
+    if (cluster := await nb_config.k8s_v2_client.cluster_by_class_id(manifest.resource_class_id(), user)) is not None:
+        cluster_id = ULID.from_str(cluster.id)
+
     for s_id, secrets in dc_secrets.items():
         if len(secrets) == 0:
             continue
@@ -321,6 +327,7 @@ async def request_dc_secret_creation(
             "secret_ids": [str(secret.secret_id) for secret in secrets],
             "owner_references": [owner_reference],
             "key_mapping": {str(secret.secret_id): secret.name for secret in secrets},
+            "cluster_id": cluster_id,
         }
         async with httpx.AsyncClient(timeout=10) as client:
             res = await client.post(secrets_url, headers=headers, json=request_data)
@@ -379,12 +386,18 @@ async def request_session_secret_creation(
         if secret_id not in key_mapping:
             key_mapping[secret_id] = list()
         key_mapping[secret_id].append(s.secret_slot.filename)
+
+    cluster_id = None
+    if (cluster := await nb_config.k8s_v2_client.cluster_by_class_id(manifest.resource_class_id(), user)) is not None:
+        cluster_id = ULID.from_str(cluster.id)
+
     request_data = {
         "name": f"{manifest.metadata.name}-secrets",
         "namespace": nb_config.k8s_v2_client.namespace(),
         "secret_ids": [str(s.secret_id) for s in session_secrets],
         "owner_references": [owner_reference],
         "key_mapping": key_mapping,
+        "cluster_id": cluster_id,
     }
     secrets_url = nb_config.user_secrets.secrets_storage_service_url + "/api/secrets/kubernetes"
     headers = {"Authorization": f"bearer {user.access_token}"}
