@@ -401,7 +401,7 @@ class K8sClusterClientsPool:
         self.__cache = cache
         self.__kinds_to_cache = kinds_to_cache
 
-    async def __get_client_or_die(self, cluster_id: ClusterId) -> K8sClusterClient:
+    def __get_client_or_die(self, cluster_id: ClusterId) -> K8sClusterClient:
         cluster_client = self.__clients.get(cluster_id)
 
         if cluster_client is None:
@@ -412,30 +412,23 @@ class K8sClusterClientsPool:
 
     def cluster_by_id(self, cluster_id: ClusterId) -> Cluster:
         """Return a cluster by its id."""
-        _client = self.__clients.get(cluster_id)
-
-        if _client is not None:
-            return _client.get_cluster()
-
-        raise errors.MissingResourceError(
-            message=f"Could not find cluster with id {cluster_id} in the list of clusters."
-        )
+        return self.__get_client_or_die(cluster_id).get_cluster()
 
     async def create(self, obj: K8sObject) -> K8sObject:
         """Create the k8s object."""
-        return await (await self.__get_client_or_die(obj.cluster)).create(obj)
+        return await self.__get_client_or_die(obj.cluster).create(obj)
 
     async def patch(self, meta: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
         """Patch a k8s object."""
-        return await (await self.__get_client_or_die(meta.cluster)).patch(meta, patch)
+        return await self.__get_client_or_die(meta.cluster).patch(meta, patch)
 
     async def delete(self, meta: K8sObjectMeta) -> None:
         """Delete a k8s object."""
-        await (await self.__get_client_or_die(meta.cluster)).delete(meta)
+        await self.__get_client_or_die(meta.cluster).delete(meta)
 
     async def get(self, meta: K8sObjectMeta) -> K8sObject | None:
         """Get a specific k8s object, None is returned if the object does not exist."""
-        return await (await self.__get_client_or_die(meta.cluster)).get(meta)
+        return await self.__get_client_or_die(meta.cluster).get(meta)
 
     async def list(self, _filter: K8sObjectFilter) -> AsyncIterable[K8sObject]:
         """List all k8s objects."""
