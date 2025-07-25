@@ -1,5 +1,7 @@
 """An abstraction over the kr8s kubernetes client and the k8s-watcher."""
 
+from __future__ import annotations
+
 import base64
 import json
 from typing import TYPE_CHECKING, Any, Generic, Optional, TypeVar, cast
@@ -50,7 +52,7 @@ class NotebookK8sClient(Generic[_SessionType]):
 
     def __init__(
         self,
-        client: "K8sClusterClientsPool",
+        client: K8sClusterClientsPool,
         rp_repo: ResourcePoolRepository,
         session_type: type[_SessionType],
         username_label: str,

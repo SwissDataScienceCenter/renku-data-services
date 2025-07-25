@@ -173,16 +173,18 @@ class NotebooksConfig:
         k8s_config = _K8sConfig.from_env()
         k8s_db_cache = K8sDbCache(db_config.async_session_maker)
         cluster_rp = ClusterRepository(db_config.async_session_maker)
+
         client = K8sClusterClientsPool(
-            get_clusters=get_clusters(
+            cache=k8s_db_cache,
+            kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
+            clusters=get_clusters(
                 kube_conf_root_dir=kube_config_root,
                 namespace=k8s_config.renku_namespace,
                 api=kr8s_api,
                 cluster_rp=cluster_rp,
             ),
-            cache=k8s_db_cache,
-            kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
         )
+
         k8s_client = NotebookK8sClient(
             client=client,
             rp_repo=rp_repo,

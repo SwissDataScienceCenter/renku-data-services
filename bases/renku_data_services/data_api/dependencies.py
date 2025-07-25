@@ -1,5 +1,7 @@
 """Dependency management for data api."""
 
+from __future__ import annotations
+
 import functools
 import os
 from dataclasses import dataclass, field
@@ -203,7 +205,7 @@ class DependencyManager:
             self.default_resource_pool = generate_default_resource_pool(options, defaults)
 
     @classmethod
-    def from_env(cls) -> "DependencyManager":
+    def from_env(cls) -> DependencyManager:
         """Create a config from environment variables."""
 
         user_store: base_models.UserStore
@@ -260,7 +262,7 @@ class DependencyManager:
                 kr8s_api = KubeConfigEnv().api()
                 k8s_db_cache = K8sDbCache(config.db.async_session_maker)
                 client = K8sClusterClientsPool(
-                    get_clusters=get_clusters(
+                    clusters=get_clusters(
                         kube_conf_root_dir=config.k8s_config_root,
                         namespace=config.k8s_namespace,
                         api=kr8s_api,
