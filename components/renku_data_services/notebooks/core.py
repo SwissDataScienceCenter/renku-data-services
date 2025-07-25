@@ -397,14 +397,9 @@ async def launch_notebook_helper(
     if resource_class_id is not None:
         # A resource class ID was passed in, validate with CRC service
         parsed_server_options = await nb_config.crc_validator.validate_class_storage(user, resource_class_id, storage)
-        k8s_cluster = await nb_config.k8s_client.cluster_by_class_id(resource_class_id, user)
-        if (
-            p := await k8s_cluster.get_ingress_parameters(
-                user, nb_config.cluster_rp, nb_config.sessions.ingress, server_name
-            )
-        ) is not None:
-            (_, _, _, ingress_host, _, _) = p
-            host = ingress_host
+        cluster = await nb_config.k8s_client.cluster_by_class_id(resource_class_id, user)
+        cluster_settings = await cluster.settings(nb_config.cluster_rp)
+        (_, _, _, host, _, _) = cluster_settings.get_ingress_parameters(server_name)
     elif server_options is not None:
         if isinstance(server_options, dict):
             requested_server_options = ServerOptions(

@@ -6,9 +6,11 @@ import kr8s
 import yaml
 
 from renku_data_services.app_config import logging
+from renku_data_services.crc import models
 from renku_data_services.crc.db import ClusterRepository
 from renku_data_services.k8s import models as k8s_models
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
+from renku_data_services.notebooks.config.dynamic import _SessionIngress
 
 logger = logging.getLogger(__name__)
 
@@ -89,11 +91,21 @@ class KubeConfigYaml(KubeConfig):
 
 
 def get_clusters(
-    kube_conf_root_dir: str, namespace: str, api: kr8s.asyncio.Api, cluster_rp: ClusterRepository
-) -> list[k8s_models.Cluster]:
+    kube_conf_root_dir: str,
+    namespace: str,
+    api: kr8s.asyncio.Api,
+    cluster_rp: ClusterRepository,
+    main_ingress: _SessionIngress,
+) -> list[k8s_models.ClusterConnection]:
     """Get all clusters accessible to the application."""
 
-    clusters = [k8s_models.Cluster(id=DEFAULT_K8S_CLUSTER, namespace=namespace, api=api)]
+    clusters = [
+        k8s_models.ClusterConnection(
+            id=DEFAULT_K8S_CLUSTER,
+            namespace=namespace,
+            api=api,
+        )
+    ]
 
     if not os.path.exists(kube_conf_root_dir):
         logger.warning(f"Cannot open directory '{kube_conf_root_dir}', ignoring kube configs...")
@@ -103,13 +115,13 @@ def get_clusters(
     db_clusters = kr8s._async_utils.run_sync(cluster_rp.select_all)()
     assert isinstance(db_clusters, list)
     for cluster in db_clusters:
-        assert isinstance(cluster, k8s_models.Cluster)
+        assert isinstance(cluster, models.SavedClusterSettings)
 
     for db_cluster in db_clusters:
         filename = db_cluster.config_name
         try:
             kube_config = KubeConfigYaml(f"{kube_conf_root_dir}/{filename}")
-            cluster = k8s_models.Cluster(
+            cluster = k8s_models.ClusterConnection(
                 id=db_cluster.id,
                 namespace=kube_config.api().namespace,
                 api=kube_config.api(),

@@ -231,6 +231,7 @@ class UserServer:
             }
 
         cluster = await self.config.k8s_client.cluster_by_class_id(self.server_options.resource_class_id, self._user)
+        cluster_settings = await cluster.settings(self.config.cluster_rp)
         (
             base_server_path,
             base_server_url,
@@ -238,9 +239,7 @@ class UserServer:
             host,
             tls_secret,
             ingress_annotations,
-        ) = await cluster.get_ingress_parameters(
-            self._user, self.config.cluster_rp, self.config.sessions.ingress, self.server_name
-        )
+        ) = cluster_settings.get_ingress_parameters(self.server_name)
 
         # Combine everything into the manifest
         manifest = {

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
 from typing import Optional
 
 from sqlalchemy import JSON, BigInteger, Column, Identity, Integer, MetaData, String, Table
@@ -14,7 +13,7 @@ from ulid import ULID
 import renku_data_services.base_models as base_models
 from renku_data_services.app_config import logging
 from renku_data_services.crc import models
-from renku_data_services.crc.apispec import Protocol as CrcApiProtocol
+from renku_data_services.crc.models import ClusterSettings, SavedClusterSettings, SessionProtocol
 from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import ClusterId
 from renku_data_services.utils.sqlalchemy import ULIDType
@@ -159,25 +158,35 @@ class ClusterORM(BaseORM):
     session_tls_secret_name: Mapped[str] = mapped_column(String(256))
     session_storage_class: Mapped[str | None] = mapped_column(String(256))
 
-    def dump(self) -> models.SavedCluster:
+    def dump(self) -> SavedClusterSettings:
         """Create a cluster model from the ORM object."""
-        return models.SavedCluster(
-            id=ClusterId(self.id),
+        return SavedClusterSettings(
             name=self.name,
             config_name=self.config_name,
-            session_protocol=CrcApiProtocol[self.session_protocol],
+            session_protocol=SessionProtocol(self.session_protocol),
             session_host=self.session_host,
             session_port=self.session_port,
             session_path=self.session_path,
             session_ingress_annotations=self.session_ingress_annotations,
             session_tls_secret_name=self.session_tls_secret_name,
             session_storage_class=self.session_storage_class,
+            id=ClusterId(self.id),
         )
 
     @classmethod
-    def load(cls, cluster: models.Cluster) -> ClusterORM:
+    def load(cls, cluster: ClusterSettings) -> ClusterORM:
         """Create an ORM object from the cluster model."""
-        return ClusterORM(**{**asdict(cluster), "session_protocol": cluster.session_protocol.value})
+        return ClusterORM(
+            name=cluster.name,
+            config_name=cluster.config_name,
+            session_protocol=str(cluster.session_protocol.value),
+            session_host=cluster.session_host,
+            session_port=cluster.session_port,
+            session_path=cluster.session_path,
+            session_ingress_annotations=cluster.session_ingress_annotations,
+            session_tls_secret_name=cluster.session_tls_secret_name,
+            session_storage_class=cluster.session_storage_class,
+        )
 
 
 class ResourcePoolORM(BaseORM):

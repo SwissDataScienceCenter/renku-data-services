@@ -22,8 +22,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
-from renku_data_services.crc.apispec import Protocol as CrcProtocol
-from renku_data_services.crc.models import Cluster, ClusterPatch, SavedCluster
+from renku_data_services.crc.models import ClusterPatch, ClusterSettings, SavedClusterSettings, SessionProtocol
 from renku_data_services.crc.orm import ClusterORM
 from renku_data_services.k8s.quota import QuotaRepository
 from renku_data_services.users.db import UserRepo
@@ -879,7 +878,7 @@ class UserRepository(_Base):
             if not user:
                 user = schemas.UserORM(keycloak_id=keycloak_id)
                 session.add(user)
-            allowed_updates = set(["no_default_access"])
+            allowed_updates = {"no_default_access"}
             if not set(kwargs.keys()).issubset(allowed_updates):
                 raise errors.ValidationError(
                     message=f"Only the following fields {allowed_updates} " "can be updated for a resource pool user.."
@@ -895,7 +894,7 @@ class ClusterRepository:
 
     session_maker: Callable[..., AsyncSession]
 
-    async def select_all(self, cluster_id: ULID | None = None) -> AsyncGenerator[SavedCluster, Any]:
+    async def select_all(self, cluster_id: ULID | None = None) -> AsyncGenerator[SavedClusterSettings, Any]:
         """Get cluster configurations from the database."""
         async with self.session_maker() as session:
             query = select(ClusterORM)
@@ -906,7 +905,7 @@ class ClusterRepository:
             async for cluster in clusters:
                 yield cluster.dump()
 
-    async def select(self, cluster_id: ULID) -> SavedCluster:
+    async def select(self, cluster_id: ULID) -> SavedClusterSettings:
         """Get cluster configurations from the database."""
         async for cluster in self.select_all(cluster_id):
             return cluster
@@ -914,7 +913,7 @@ class ClusterRepository:
         raise errors.MissingResourceError(message=f"Cluster definition id='{cluster_id}' does not exist.")
 
     @_only_admins
-    async def insert(self, api_user: base_models.APIUser, cluster: Cluster) -> Cluster:
+    async def insert(self, api_user: base_models.APIUser, cluster: ClusterSettings) -> ClusterSettings:
         """Creates a new cluster configuration."""
 
         cluster_orm = ClusterORM.load(cluster)
@@ -926,7 +925,7 @@ class ClusterRepository:
             return cluster_orm.dump()
 
     @_only_admins
-    async def update(self, api_user: base_models.APIUser, cluster: ClusterPatch, cluster_id: ULID) -> Cluster:
+    async def update(self, api_user: base_models.APIUser, cluster: ClusterPatch, cluster_id: ULID) -> ClusterSettings:
         """Updates a cluster configuration."""
 
         async with self.session_maker() as session, session.begin():
@@ -936,7 +935,7 @@ class ClusterRepository:
 
             for key, value in asdict(cluster).items():
                 match key, value:
-                    case "session_protocol", CrcProtocol():
+                    case "session_protocol", SessionProtocol():
                         setattr(saved_cluster, key, value.value)
                     case "session_storage_class", "":
                         # If we received an empty string in the storage class, reset it to the default storage class by

@@ -26,6 +26,7 @@ async def main() -> None:
         namespace=dm.config.k8s.renku_namespace,
         api=kr8s_api,
         cluster_rp=dm.cluster_repo(),
+        main_ingress=dm.config.k8s.ingress,
     )
 
     kinds = [AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK]
