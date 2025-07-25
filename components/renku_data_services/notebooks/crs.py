@@ -370,67 +370,6 @@ class AmaltheaSessionV1Alpha1Patch(BaseCRD):
         return self.model_dump(exclude_none=True)
 
 
-class QuantityInt(Requests6, Limits6, Size, ShmSize):
-    """K8s integer quantity of bytes or whole cores/gpus, used in resource requests, limits, etc."""
-
-    # NOTE: The inheritance is to keep mypy happy. With this and the covariant collections i.e.
-    # Mapping and Sequence in the automatically generated CRDs we can use one type rather than all
-    # the different named ones which are actually all identical.
-    root: int = Field(..., gt=0)
-
-
-class Quantity(Requests7, Limits7, Size1, ShmSize1):
-    """K8s string quantity for memory, cpu, gpu used in requests, limits, etc."""
-
-    # NOTE: The inheritance is to keep mypy happy. With this and the covariant collections i.e.
-    # Mapping and Sequence in the automatically generated CRDs we can use one type rather than all
-    # the different named ones which are actually all identical.
-    pass
-
-
-class Culling(_Culling):
-    """The culling specification for a session."""
-
-    @field_serializer("*", when_used="always", mode="plain")
-    def _serialize_dt(self, val: timedelta | None) -> str | None:
-        if not val:
-            return None
-        return f"{round(val.total_seconds())}s"
-
-    @field_validator("*", mode="plain")
-    @classmethod
-    def _deserialize_dt(cls, val: Any) -> timedelta | None:
-        if val is None:
-            return None
-        if isinstance(val, timedelta):
-            return val
-        if isinstance(val, str):
-            # NOTE: parse_duration below can only deal with numbers of up to 5 digits
-            # so it will parse 10000s but not 100000s - this is a limitation inherited from k8s' go library.
-            return safe_parse_duration(val)
-        return cast(timedelta, parse_duration(val))
-
-
-class Resources(_Resources):
-    """The resource requests and limits for a session."""
-
-    limits: Mapping[str, Quantity | QuantityInt] | None = None
-    requests: Mapping[str, Quantity | QuantityInt] | None = None
-
-
-class Session(_Session):
-    """The session portion of the specification."""
-
-    resources: Resources
-
-
-class AmaltheaSessionSpec(_AmaltheaSessionSpec):
-    """The specification for an AmaltheaSession."""
-
-    session: Session
-    culling: Culling | None = None
-
-
 def safe_parse_duration(val: Any) -> timedelta:
     """Required because parse_duration from k8s can only deal with values with up to 5 digits.
 

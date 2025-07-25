@@ -1,5 +1,6 @@
 """A selection of core functions for AmaltheaSessions."""
 
+import base64
 import json
 import os
 import random
@@ -8,11 +9,12 @@ from collections.abc import AsyncIterator
 from datetime import timedelta
 from pathlib import PurePosixPath
 from typing import cast
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx
 from kubernetes.client import V1ObjectMeta, V1Secret
 from sanic import Request
+from toml import dumps
 from yaml import safe_dump
 
 from renku_data_services.app_config import logging
@@ -39,6 +41,7 @@ from renku_data_services.notebooks.crs import (
     DataSource,
     ExtraContainer,
     ExtraVolume,
+    ExtraVolumeMount,
     ImagePullSecret,
     InitContainer,
     Limits,

@@ -53,8 +53,6 @@ from renku_data_services.notebooks.crs import (
     Ingress,
     InitContainer,
     Metadata,
-    Quantity,
-    QuantityInt,
     ReconcileStrategy,
     Session,
     SessionEnvItem,
@@ -378,12 +376,6 @@ class NotebooksNewBP(CustomBlueprint):
                 )
             else:
                 auth_secret = get_auth_secret_anonymous(self.nb_config, server_name, request)
-                authentication = Authentication(
-                    enabled=True,
-                    type=AuthenticationType.token,
-                    secretRef=auth_secret.key_ref("auth"),
-                    extraVolumeMounts=[auth_secret.volume_mount] if auth_secret.volume_mount else [],
-                )
             if auth_secret.volume:
                 extra_volumes.append(auth_secret.volume)
 
