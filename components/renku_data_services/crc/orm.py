@@ -13,7 +13,7 @@ from ulid import ULID
 import renku_data_services.base_models as base_models
 from renku_data_services.app_config import logging
 from renku_data_services.crc import models
-from renku_data_services.crc.apispec import Protocol as CrcApiProtocol
+from renku_data_services.crc.models import ClusterSettings, SavedClusterSettings, SessionProtocol
 from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import ClusterId
 from renku_data_services.utils.sqlalchemy import ULIDType
@@ -161,13 +161,12 @@ class ClusterORM(BaseORM):
     # in the cluster in the namespace where the sessions will be launched.
     service_account_name: Mapped[str | None] = mapped_column(String(256), default=None, nullable=True)
 
-    def dump(self) -> models.SavedCluster:
+    def dump(self) -> SavedClusterSettings:
         """Create a cluster model from the ORM object."""
-        return models.SavedCluster(
-            id=ClusterId(self.id),
+        return SavedClusterSettings(
             name=self.name,
             config_name=self.config_name,
-            session_protocol=CrcApiProtocol[self.session_protocol],
+            session_protocol=SessionProtocol(self.session_protocol),
             session_host=self.session_host,
             session_port=self.session_port,
             session_path=self.session_path,
@@ -175,16 +174,17 @@ class ClusterORM(BaseORM):
             session_tls_secret_name=self.session_tls_secret_name,
             session_storage_class=self.session_storage_class,
             service_account_name=self.service_account_name,
+            id=ClusterId(self.id),
         )
 
     @classmethod
-    def load(cls, cluster: models.Cluster) -> ClusterORM:
+    def load(cls, cluster: ClusterSettings) -> ClusterORM:
         """Create an ORM object from the cluster model."""
         return ClusterORM(
             name=cluster.name,
             config_name=cluster.config_name,
             service_account_name=cluster.service_account_name,
-            session_protocol=cluster.session_protocol.value,
+            session_protocol=str(cluster.session_protocol.value),
             session_host=cluster.session_host,
             session_port=cluster.session_port,
             session_path=cluster.session_path,

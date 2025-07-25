@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from renku_data_services.k8s.constants import ClusterId
     from renku_data_services.k8s.models import (
         GVK,
-        Cluster,
+        ClusterConnection,
         K8sObject,
         K8sObjectMeta,
     )
@@ -249,11 +249,11 @@ class DummySchedulingClient(PriorityClassClient):
 class K8sClusterClient:
     """A wrapper around a kr8s k8s client, acts on all resources of a cluster."""
 
-    def __init__(self, cluster: Cluster) -> None:
+    def __init__(self, cluster: ClusterConnection) -> None:
         self.__cluster = cluster
         assert self.__cluster.api is not None
 
-    def get_cluster(self) -> Cluster:
+    def get_cluster(self) -> ClusterConnection:
         """Return a cluster object."""
         return self.__cluster
 
@@ -333,7 +333,7 @@ class K8SCachedClusterClient(K8sClusterClient):
     Provides access to a cache for listing and reading resources but fallback to the cluster for other operations.
     """
 
-    def __init__(self, cluster: Cluster, cache: K8sDbCache, kinds_to_cache: list[GVK]) -> None:
+    def __init__(self, cluster: ClusterConnection, cache: K8sDbCache, kinds_to_cache: list[GVK]) -> None:
         super().__init__(cluster)
         self.__cache = cache
         self.__kinds_to_cache = set(kinds_to_cache)
@@ -396,7 +396,7 @@ class K8SCachedClusterClient(K8sClusterClient):
 class K8sClusterClientsPool:
     """A wrapper around a kr8s k8s client, acts on all resources over many clusters."""
 
-    def __init__(self, cache: K8sDbCache, kinds_to_cache: list[GVK], clusters: list[Cluster]) -> None:
+    def __init__(self, cache: K8sDbCache, kinds_to_cache: list[GVK], clusters: list[ClusterConnection]) -> None:
         self.__clients = {c.id: K8SCachedClusterClient(c, cache, kinds_to_cache) for c in clusters}
         self.__cache = cache
         self.__kinds_to_cache = kinds_to_cache
@@ -410,7 +410,7 @@ class K8sClusterClientsPool:
             )
         return cluster_client
 
-    def cluster_by_id(self, cluster_id: ClusterId) -> Cluster:
+    def cluster_by_id(self, cluster_id: ClusterId) -> ClusterConnection:
         """Return a cluster by its id."""
         return self.__get_client_or_die(cluster_id).get_cluster()
 

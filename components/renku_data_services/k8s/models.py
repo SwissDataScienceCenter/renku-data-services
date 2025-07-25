@@ -3,20 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Self, cast
+from typing import Any, Self, cast
 
 from box import Box
 from kr8s._api import Api
 from kr8s.asyncio.objects import APIObject
 
-from renku_data_services.base_models import APIUser
-from renku_data_services.errors import MissingResourceError, errors
+from renku_data_services.crc.db import ClusterRepository
+from renku_data_services.crc.models import SavedClusterSettings
+from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import DUMMY_TASK_RUN_USER_ID, ClusterId
-from renku_data_services.notebooks.cr_amalthea_session import TlsSecret
-
-if TYPE_CHECKING:
-    from renku_data_services.crc.db import ClusterRepository
-    from renku_data_services.notebooks.config.dynamic import _SessionIngress
 
 
 class K8sObjectMeta:
@@ -116,9 +112,9 @@ class K8sObjectFilter:
     user_id: str | None = None
 
 
-@dataclass(eq=True, frozen=True)
-class Cluster:
-    """Representation of a k8s cluster."""
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ClusterConnection:
+    """K8s Cluster wrapper."""
 
     id: ClusterId
     namespace: str
@@ -128,47 +124,9 @@ class Cluster:
         """Create an API object associated with the cluster."""
         return APIObjectInCluster(obj, self.id)
 
-    async def get_storage_class(
-        self, user: APIUser, cluster_repo: ClusterRepository, default_storage_class: str | None
-    ) -> str | None:
-        """Get the default storage class for the cluster."""
-        try:
-            cluster = await cluster_repo.select(self.id)
-            storage_class = cluster.session_storage_class
-        except (MissingResourceError, ValueError) as _e:
-            storage_class = default_storage_class
-
-        return storage_class
-
-    async def get_ingress_parameters(
-        self, user: APIUser, cluster_repo: ClusterRepository, main_ingress: _SessionIngress, server_name: str
-    ) -> tuple[str, str, str, str, TlsSecret | None, dict[str, str]]:
-        """Returns the ingress parameters of the cluster."""
-        tls_name = None
-
-        try:
-            cluster = await cluster_repo.select(self.id)
-
-            host = cluster.session_host
-            base_server_path = f"{cluster.session_path}/{server_name}"
-            base_server_url = f"{cluster.session_protocol.value}://{host}:{cluster.session_port}{base_server_path}"
-            base_server_https_url = base_server_url
-            tls_name = cluster.session_tls_secret_name
-            ingress_annotations = cluster.session_ingress_annotations
-        except (MissingResourceError, ValueError) as _e:
-            # Fallback to global, main cluster parameters
-            host = main_ingress.host
-            base_server_path = main_ingress.base_path(server_name)
-            base_server_url = main_ingress.base_url(server_name)
-            base_server_https_url = main_ingress.base_url(server_name, force_https=True)
-            ingress_annotations = main_ingress.annotations
-
-            if main_ingress.tls_secret is not None:
-                tls_name = main_ingress.tls_secret
-
-        tls_secret = None if tls_name is None else TlsSecret(adopt=False, name=tls_name)
-
-        return base_server_path, base_server_url, base_server_https_url, host, tls_secret, ingress_annotations
+    async def settings(self, cluster_rp: ClusterRepository) -> SavedClusterSettings:
+        """Retrieve cluster settings from the DB."""
+        return await cluster_rp.select(self.id)
 
 
 @dataclass(kw_only=True, frozen=True)

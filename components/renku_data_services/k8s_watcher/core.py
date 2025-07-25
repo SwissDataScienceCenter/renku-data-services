@@ -7,22 +7,19 @@ import contextlib
 from asyncio import CancelledError, Task
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
 
 from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import APIUser, InternalServiceAdmin, ServiceAdminId
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.k8s.clients import K8sClusterClient
-from renku_data_services.k8s.models import GVK, K8sObject, K8sObjectFilter
+from renku_data_services.k8s.constants import ClusterId
+from renku_data_services.k8s.models import GVK, APIObjectInCluster, ClusterConnection, K8sObject, K8sObjectFilter
 from renku_data_services.k8s_watcher.db import K8sDbCache
 from renku_data_services.notebooks.crs import State
 
 logger = logging.getLogger(__name__)
 
-if TYPE_CHECKING:
-    from renku_data_services.k8s.constants import ClusterId
-    from renku_data_services.k8s.models import APIObjectInCluster, Cluster
 
 type EventHandler = Callable[[APIObjectInCluster, str], Awaitable[None]]
 type SyncFunc = Callable[[], Awaitable[None]]
@@ -36,7 +33,7 @@ class K8sWatcher:
     def __init__(
         self,
         handler: EventHandler,
-        clusters: dict[ClusterId, Cluster],
+        clusters: dict[ClusterId, ClusterConnection],
         kinds: list[GVK],
         db_cache: K8sDbCache,
     ) -> None:
@@ -50,7 +47,7 @@ class K8sWatcher:
         self.__sync_period_seconds = 600
         self.__cache = db_cache
 
-    async def __sync(self, cluster: Cluster, kind: GVK) -> None:
+    async def __sync(self, cluster: ClusterConnection, kind: GVK) -> None:
         """Upsert K8s objects in the cache and remove deleted objects from the cache."""
         clnt = K8sClusterClient(cluster)
         fltr = K8sObjectFilter(gvk=kind, cluster=cluster.id, namespace=cluster.namespace)
@@ -66,7 +63,7 @@ class K8sWatcher:
                 continue
             await self.__cache.delete(cache_obj)
 
-    async def __full_sync(self, cluster: Cluster) -> None:
+    async def __full_sync(self, cluster: ClusterConnection) -> None:
         """Run the full sync if it has never run or at the required interval."""
         last_sync = self.__full_sync_times.get(cluster.id)
         since_last_sync = datetime.now() - last_sync if last_sync is not None else None
@@ -79,13 +76,13 @@ class K8sWatcher:
         self.__full_sync_times[cluster.id] = datetime.now()
         self.__full_sync_running.remove(cluster.id)
 
-    async def __periodic_full_sync(self, cluster: Cluster) -> None:
+    async def __periodic_full_sync(self, cluster: ClusterConnection) -> None:
         """Keeps trying to run the full sync."""
         while True:
             await self.__full_sync(cluster)
             await asyncio.sleep(self.__sync_period_seconds / 10)
 
-    async def __watch_kind(self, kind: GVK, cluster: Cluster) -> None:
+    async def __watch_kind(self, kind: GVK, cluster: ClusterConnection) -> None:
         while True:
             try:
                 watch = cluster.api.async_watch(kind=kind.kr8s_kind, namespace=cluster.namespace)
@@ -106,7 +103,7 @@ class K8sWatcher:
                 await asyncio.sleep(1)
                 pass
 
-    def __run_single(self, cluster: Cluster) -> list[Task]:
+    def __run_single(self, cluster: ClusterConnection) -> list[Task]:
         # The loops and error handling here will need some testing and love
         tasks = []
         for kind in self.__kinds:

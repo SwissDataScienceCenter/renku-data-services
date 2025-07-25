@@ -8,6 +8,7 @@ from typing import Self
 from kubernetes.client.api_client import os
 
 from renku_data_services.db_config.config import DBConfig
+from renku_data_services.notebooks.config.dynamic import _SessionIngress
 
 
 @dataclass
@@ -16,6 +17,8 @@ class _K8sConfig:
 
     # This is used only for the main/local/default cluster
     renku_namespace: str
+    ingress: _SessionIngress
+
     kube_config_root: str
 
     @classmethod
@@ -23,6 +26,7 @@ class _K8sConfig:
         return cls(
             renku_namespace=os.environ.get("KUBERNETES_NAMESPACE", "default"),
             kube_config_root=os.environ.get("K8S_CONFIGS_ROOT", "/secrets/kube_configs"),
+            ingress=_SessionIngress.from_env(),
         )
 
 

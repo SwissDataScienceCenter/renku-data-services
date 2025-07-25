@@ -259,6 +259,7 @@ class NotebooksNewBP(CustomBlueprint):
             # We have to use body.resource_class_id and not launcher.resource_class_id as it may have been overridden by
             # the user when selecting a different resource class from a different resource pool.
             cluster = await self.nb_config.k8s_v2_client.cluster_by_class_id(body.resource_class_id, user)
+            cluster_settings = await cluster.settings(self.cluster_repo)
             server_name = renku_2_make_server_name(
                 user=user, project_id=str(launcher.project_id), launcher_id=body.launcher_id, cluster_id=str(cluster.id)
             )
@@ -351,9 +352,7 @@ class NotebooksNewBP(CustomBlueprint):
                 host,
                 tls_secret,
                 ingress_annotations,
-            ) = await cluster.get_ingress_parameters(
-                user, self.cluster_repo, self.nb_config.sessions.ingress, server_name
-            )
+            ) = cluster_settings.get_ingress_parameters(server_name)
 
             ui_path = f"{base_server_path}/{environment.default_url.lstrip('/')}"
 
@@ -408,9 +407,7 @@ class NotebooksNewBP(CustomBlueprint):
             if launcher_env_variables:
                 env.extend(launcher_env_variables)
 
-            storage_class = await cluster.get_storage_class(
-                user, self.cluster_repo, self.nb_config.sessions.storage.pvs_storage_class
-            )
+            storage_class = cluster_settings.get_storage_class(self.nb_config.sessions.storage.pvs_storage_class)
             service_account_name: str | None = None
             if resource_pool.cluster:
                 service_account_name = resource_pool.cluster.service_account_name

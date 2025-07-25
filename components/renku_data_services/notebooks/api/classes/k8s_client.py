@@ -17,7 +17,7 @@ from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
-from renku_data_services.k8s.models import GVK, Cluster, K8sObject, K8sObjectFilter, K8sObjectMeta
+from renku_data_services.k8s.models import GVK, ClusterConnection, K8sObject, K8sObjectFilter, K8sObjectMeta
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
 from renku_data_services.notebooks.constants import JUPYTER_SESSION_GVK
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
@@ -179,7 +179,7 @@ class NotebookK8sClient(Generic[_SessionType]):
         """Cluster id of the main cluster."""
         return DEFAULT_K8S_CLUSTER
 
-    async def cluster_by_class_id(self, class_id: int | None, api_user: APIUser) -> Cluster:
+    async def cluster_by_class_id(self, class_id: int | None, api_user: APIUser) -> ClusterConnection:
         """Return the cluster associated with the given resource class id."""
         cluster_id = self.cluster_id()
 
@@ -409,7 +409,7 @@ class NotebookK8sClient(Generic[_SessionType]):
         ]
         await secret.patch(patch, type="json")
 
-    async def create_secret(self, secret: V1Secret, cluster: Cluster) -> V1Secret:
+    async def create_secret(self, secret: V1Secret, cluster: ClusterConnection) -> V1Secret:
         """Create a secret."""
 
         assert secret.metadata is not None
@@ -459,7 +459,7 @@ class NotebookK8sClient(Generic[_SessionType]):
             type=result.manifest.get("type"),
         )
 
-    async def delete_secret(self, name: str, cluster: Cluster) -> None:
+    async def delete_secret(self, name: str, cluster: ClusterConnection) -> None:
         """Delete a secret."""
 
         await self.__client.delete(
