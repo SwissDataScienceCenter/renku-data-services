@@ -182,7 +182,6 @@ class NotebooksConfig:
                 namespace=k8s_config.renku_namespace,
                 api=kr8s_api,
                 cluster_rp=cluster_rp,
-                main_ingress=sessions_config.ingress,
             ),
         )
 

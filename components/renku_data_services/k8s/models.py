@@ -124,9 +124,12 @@ class ClusterConnection:
         """Create an API object associated with the cluster."""
         return APIObjectInCluster(obj, self.id)
 
-    async def settings(self, cluster_rp: ClusterRepository) -> SavedClusterSettings:
+    async def settings(self, cluster_rp: ClusterRepository) -> SavedClusterSettings | None:
         """Retrieve cluster settings from the DB."""
-        return await cluster_rp.select(self.id)
+        try:
+            return await cluster_rp.select(self.id)
+        except errors.MissingResourceError:
+            return None
 
 
 @dataclass(kw_only=True, frozen=True)

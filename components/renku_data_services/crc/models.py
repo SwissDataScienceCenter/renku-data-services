@@ -243,12 +243,10 @@ class SavedClusterSettings(ClusterSettings):
 
     id: ClusterId
 
-    def get_storage_class(self, default_storage_class: str | None) -> str | None:
+    def get_storage_class(self) -> str | None:
         """Get the default storage class for the cluster."""
-        if self.session_storage_class is not None:
-            return self.session_storage_class
-        else:
-            return default_storage_class
+
+        return self.session_storage_class
 
     def get_ingress_parameters(self, server_name: str) -> tuple[str, str, str, str, TlsSecret | None, dict[str, str]]:
         """Returns the ingress parameters of the cluster."""
