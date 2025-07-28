@@ -26,6 +26,7 @@ from renku_data_services.notebooks.api.schemas.secrets import K8sUserSecrets
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
 from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.notebooks.constants import JUPYTER_SESSION_GVK
+from renku_data_services.notebooks.cr_amalthea_session import TlsSecret
 from renku_data_services.notebooks.crs import JupyterServerV1Alpha1
 from renku_data_services.notebooks.errors.programming import DuplicateEnvironmentVariableError
 from renku_data_services.notebooks.errors.user import MissingResourceError
@@ -232,14 +233,26 @@ class UserServer:
 
         cluster = await self.config.k8s_client.cluster_by_class_id(self.server_options.resource_class_id, self._user)
         cluster_settings = await cluster.settings(self.config.cluster_rp)
-        (
-            base_server_path,
-            base_server_url,
-            base_server_https_url,
-            host,
-            tls_secret,
-            ingress_annotations,
-        ) = cluster_settings.get_ingress_parameters(self.server_name)
+        if cluster_settings is not None:
+            (
+                base_server_path,
+                _,
+                _,
+                host,
+                tls_secret,
+                ingress_annotations,
+            ) = cluster_settings.get_ingress_parameters(self.server_name)
+        else:
+            # Fallback to global, main cluster parameters
+            host = self.config.sessions.ingress.host
+            base_server_path = self.config.sessions.ingress.base_path(self.server_name)
+            ingress_annotations = self.config.sessions.ingress.annotations
+
+            if self.config.sessions.ingress.tls_secret is not None:
+                tls_name = self.config.sessions.ingress.tls_secret
+            else:
+                tls_name = None
+            tls_secret = None if tls_name is None else TlsSecret(adopt=False, name=tls_name)
 
         # Combine everything into the manifest
         manifest = {

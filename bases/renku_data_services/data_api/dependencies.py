@@ -267,7 +267,6 @@ class DependencyManager:
                         namespace=config.k8s_namespace,
                         api=kr8s_api,
                         cluster_rp=cluster_repo,
-                        main_ingress=config.nb_config.sessions.ingress,
                     ),
                     cache=k8s_db_cache,
                     kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],

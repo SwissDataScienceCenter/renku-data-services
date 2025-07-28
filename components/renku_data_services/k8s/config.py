@@ -10,7 +10,6 @@ from renku_data_services.crc import models
 from renku_data_services.crc.db import ClusterRepository
 from renku_data_services.k8s import models as k8s_models
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
-from renku_data_services.notebooks.config.dynamic import _SessionIngress
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +94,6 @@ def get_clusters(
     namespace: str,
     api: kr8s.asyncio.Api,
     cluster_rp: ClusterRepository,
-    main_ingress: _SessionIngress,
 ) -> list[k8s_models.ClusterConnection]:
     """Get all clusters accessible to the application."""
 

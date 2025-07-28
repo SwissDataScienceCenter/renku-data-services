@@ -41,6 +41,7 @@ from renku_data_services.notebooks.core_sessions import (
     resources_from_resource_class,
     verify_launcher_env_variable_overrides,
 )
+from renku_data_services.notebooks.cr_amalthea_session import TlsSecret
 from renku_data_services.notebooks.crs import (
     AmaltheaSessionSpec,
     AmaltheaSessionV1Alpha1,
@@ -345,14 +346,32 @@ class NotebooksNewBP(CustomBlueprint):
             extra_volumes.extend(extra_init_volumes_dc)
             extra_init_containers.extend(extra_init_containers_dc)
 
-            (
-                base_server_path,
-                base_server_url,
-                base_server_https_url,
-                host,
-                tls_secret,
-                ingress_annotations,
-            ) = cluster_settings.get_ingress_parameters(server_name)
+            if cluster_settings is not None:
+                (
+                    base_server_path,
+                    base_server_url,
+                    base_server_https_url,
+                    host,
+                    tls_secret,
+                    ingress_annotations,
+                ) = cluster_settings.get_ingress_parameters(server_name)
+                storage_class = cluster_settings.get_storage_class()
+                service_account_name = cluster_settings.service_account_name
+            else:
+                # Fallback to global, main cluster parameters
+                host = self.nb_config.sessions.ingress.host
+                base_server_path = self.nb_config.sessions.ingress.base_path(server_name)
+                base_server_url = self.nb_config.sessions.ingress.base_url(server_name)
+                base_server_https_url = self.nb_config.sessions.ingress.base_url(server_name, force_https=True)
+                storage_class = self.nb_config.sessions.storage.pvs_storage_class
+                service_account_name = None
+                ingress_annotations = self.nb_config.sessions.ingress.annotations
+
+                if self.nb_config.sessions.ingress.tls_secret is not None:
+                    tls_name = self.nb_config.sessions.ingress.tls_secret
+                else:
+                    tls_name = None
+                tls_secret = None if tls_name is None else TlsSecret(adopt=False, name=tls_name)
 
             ui_path = f"{base_server_path}/{environment.default_url.lstrip('/')}"
 
@@ -407,10 +426,6 @@ class NotebooksNewBP(CustomBlueprint):
             if launcher_env_variables:
                 env.extend(launcher_env_variables)
 
-            storage_class = cluster_settings.get_storage_class(self.nb_config.sessions.storage.pvs_storage_class)
-            service_account_name: str | None = None
-            if resource_pool.cluster:
-                service_account_name = resource_pool.cluster.service_account_name
             manifest = AmaltheaSessionV1Alpha1(
                 metadata=Metadata(name=server_name, annotations=annotations),
                 spec=AmaltheaSessionSpec(
