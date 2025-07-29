@@ -9,8 +9,6 @@ from box import Box
 from kr8s._api import Api
 from kr8s.asyncio.objects import APIObject
 
-from renku_data_services.crc.db import ClusterRepository
-from renku_data_services.crc.models import SavedClusterSettings
 from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import DUMMY_TASK_RUN_USER_ID, ClusterId
 
@@ -123,13 +121,6 @@ class ClusterConnection:
     def with_api_object(self, obj: APIObject) -> APIObjectInCluster:
         """Create an API object associated with the cluster."""
         return APIObjectInCluster(obj, self.id)
-
-    async def settings(self, cluster_rp: ClusterRepository) -> SavedClusterSettings | None:
-        """Retrieve cluster settings from the DB."""
-        try:
-            return await cluster_rp.select(self.id)
-        except errors.MissingResourceError:
-            return None
 
 
 @dataclass(kw_only=True, frozen=True)

@@ -11,6 +11,7 @@ from gitlab.v4.objects.projects import Project
 from renku_data_services.app_config import logging
 from renku_data_services.base_models import AnonymousAPIUser, AuthenticatedAPIUser
 from renku_data_services.base_models.core import APIUser
+from renku_data_services.errors import errors
 from renku_data_services.notebooks.api.amalthea_patches import cloudstorage as cloudstorage_patches
 from renku_data_services.notebooks.api.amalthea_patches import general as general_patches
 from renku_data_services.notebooks.api.amalthea_patches import git_proxy as git_proxy_patches
@@ -232,8 +233,8 @@ class UserServer:
             }
 
         cluster = await self.config.k8s_client.cluster_by_class_id(self.server_options.resource_class_id, self._user)
-        cluster_settings = await cluster.settings(self.config.cluster_rp)
-        if cluster_settings is not None:
+        try:
+            cluster_settings = await self.config.cluster_rp.select(cluster.id)
             (
                 base_server_path,
                 _,
@@ -242,7 +243,7 @@ class UserServer:
                 tls_secret,
                 ingress_annotations,
             ) = cluster_settings.get_ingress_parameters(self.server_name)
-        else:
+        except errors.MissingResourceError:
             # Fallback to global, main cluster parameters
             host = self.config.sessions.ingress.host
             base_server_path = self.config.sessions.ingress.base_path(self.server_name)

@@ -1,8 +1,13 @@
 """Required interfaces for k8s clients."""
 
-from typing import Protocol
+from __future__ import annotations
+
+from collections.abc import AsyncIterable
+from typing import Any, Protocol
 
 from kubernetes_asyncio.client import V1DeleteOptions, V1PriorityClass, V1ResourceQuota, V1Secret
+
+from renku_data_services.k8s.models import K8sObject, K8sObjectFilter, K8sObjectMeta
 
 
 class ResourceQuotaClient(Protocol):
@@ -54,4 +59,33 @@ class PriorityClassClient(Protocol):
 
     def delete_priority_class(self, name: str, body: V1DeleteOptions) -> None:
         """Delete a priority class."""
+        ...
+
+
+class K8sClient(Protocol):
+    """Methods to manipulate resources on a Kubernetes cluster."""
+
+    async def create(self, obj: K8sObject) -> K8sObject:
+        """Create the k8s object."""
+        ...
+
+    async def patch(self, meta: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
+        """Patch a k8s object.
+
+        If the patch is a list we assume that we have a rfc6902 json patch like
+        `[{ "op": "add", "path": "/a/b/c", "value": [ "foo", "bar" ] }]`.
+        If the patch is a dictionary then it is considered to be a rfc7386 json merge patch.
+        """
+        ...
+
+    async def delete(self, meta: K8sObjectMeta) -> None:
+        """Delete a k8s object."""
+        ...
+
+    async def get(self, meta: K8sObjectMeta) -> K8sObject | None:
+        """Get a specific k8s object, None is returned if the object does not exist."""
+        ...
+
+    def list(self, _filter: K8sObjectFilter) -> AsyncIterable[K8sObject]:
+        """List all k8s objects."""
         ...
