@@ -1,6 +1,7 @@
 """Base config for k8s."""
 
 import os
+from threading import Lock
 
 import kr8s
 import yaml
@@ -10,6 +11,7 @@ from renku_data_services.crc import models
 from renku_data_services.crc.db import ClusterRepository
 from renku_data_services.k8s import models as k8s_models
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
+from renku_data_services.k8s.models import ClusterConnection
 
 logger = logging.getLogger(__name__)
 
@@ -89,43 +91,54 @@ class KubeConfigYaml(KubeConfig):
                     break
 
 
+_clusters_lock: Lock = Lock()
+_clusters: list[ClusterConnection] | None = None
+
+
 def get_clusters(
     kube_conf_root_dir: str,
     namespace: str,
     api: kr8s.asyncio.Api,
     cluster_rp: ClusterRepository,
-) -> list[k8s_models.ClusterConnection]:
+) -> list[ClusterConnection]:
     """Get all clusters accessible to the application."""
+    global _clusters
 
-    clusters = [
-        k8s_models.ClusterConnection(
-            id=DEFAULT_K8S_CLUSTER,
-            namespace=namespace,
-            api=api,
-        )
-    ]
+    _clusters_lock.acquire()
 
-    if not os.path.exists(kube_conf_root_dir):
-        logger.warning(f"Cannot open directory '{kube_conf_root_dir}', ignoring kube configs...")
-        return clusters
-
-    # Run async code in sync context
-    db_clusters = kr8s._async_utils.run_sync(cluster_rp.select_all)()
-    for cluster in db_clusters:
-        assert isinstance(cluster, models.SavedClusterSettings)
-
-    for db_cluster in db_clusters:
-        filename = db_cluster.config_name
-        try:
-            kube_config = KubeConfigYaml(f"{kube_conf_root_dir}/{filename}")
-            cluster = k8s_models.ClusterConnection(
-                id=db_cluster.id,
-                namespace=kube_config.api().namespace,
-                api=kube_config.api(),
+    if _clusters is None:
+        _clusters = [
+            k8s_models.ClusterConnection(
+                id=DEFAULT_K8S_CLUSTER,
+                namespace=namespace,
+                api=api,
             )
-            clusters.append(cluster)
-            logger.info(f"Successfully loaded Kubernetes config: '{kube_conf_root_dir}/{filename}'")
-        except Exception as e:
-            logger.warning(f"Failed while loading '{kube_conf_root_dir}/{filename}', ignoring kube config. Error: {e}")
+        ]
 
-    return clusters
+        if os.path.exists(kube_conf_root_dir):
+            # Run async code in sync context
+            db_clusters = kr8s._async_utils.run_sync(cluster_rp.select_all)()
+            for cluster in db_clusters:
+                assert isinstance(cluster, models.SavedClusterSettings)
+
+            for db_cluster in db_clusters:
+                filename = db_cluster.config_name
+                try:
+                    kube_config = KubeConfigYaml(f"{kube_conf_root_dir}/{filename}")
+                    cluster = k8s_models.ClusterConnection(
+                        id=db_cluster.id,
+                        namespace=kube_config.api().namespace,
+                        api=kube_config.api(),
+                    )
+                    _clusters.append(cluster)
+                    logger.info(f"Successfully loaded Kubernetes config: '{kube_conf_root_dir}/{filename}'")
+                except Exception as e:
+                    logger.warning(
+                        f"Failed while loading '{kube_conf_root_dir}/{filename}', ignoring kube config. Error: {e}"
+                    )
+        else:
+            logger.warning(f"Cannot open directory '{kube_conf_root_dir}', ignoring kube configs...")
+
+    _clusters_lock.release()
+
+    return _clusters
