@@ -52,7 +52,7 @@ class ResourcePoolsBP(CustomBlueprint):
         async def _post(_: Request, user: base_models.APIUser, body: apispec.ResourcePool) -> HTTPResponse:
             cluster = None
             if body.cluster_id is not None:
-                cluster = await self.cluster_repo.select(cluster_id=ULID.from_str(body.cluster_id))
+                cluster = await self.cluster_repo.select(ULID.from_str(body.cluster_id))
             rp = models.ResourcePool.from_dict({**body.model_dump(exclude_none=True), "cluster": cluster})
 
             res = await self.rp_repo.insert_resource_pool(api_user=user, resource_pool=rp)

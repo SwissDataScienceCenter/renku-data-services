@@ -17,7 +17,7 @@ from kubernetes.config.config_exception import ConfigException
 from kubernetes.config.incluster_config import SERVICE_CERT_FILENAME, SERVICE_TOKEN_FILENAME, InClusterConfigLoader
 
 from renku_data_services.errors import errors
-from renku_data_services.k8s.client_interfaces import PriorityClassClient, ResourceQuotaClient, SecretClient
+from renku_data_services.k8s.client_interfaces import K8sClient, PriorityClassClient, ResourceQuotaClient, SecretClient
 from renku_data_services.k8s.models import APIObjectInCluster, K8sObjectFilter
 
 if TYPE_CHECKING:
@@ -246,7 +246,7 @@ class DummySchedulingClient(PriorityClassClient):
             self.pcs.pop(name, None)
 
 
-class K8sClusterClient:
+class K8sClusterClient(K8sClient):
     """A wrapper around a kr8s k8s client, acts on all resources of a cluster."""
 
     def __init__(self, cluster: ClusterConnection) -> None:
@@ -393,13 +393,11 @@ class K8SCachedClusterClient(K8sClusterClient):
             yield res
 
 
-class K8sClusterClientsPool:
+class K8sClusterClientsPool(K8sClient):
     """A wrapper around a kr8s k8s client, acts on all resources over many clusters."""
 
     def __init__(self, cache: K8sDbCache, kinds_to_cache: list[GVK], clusters: list[ClusterConnection]) -> None:
         self.__clients = {c.id: K8SCachedClusterClient(c, cache, kinds_to_cache) for c in clusters}
-        self.__cache = cache
-        self.__kinds_to_cache = kinds_to_cache
 
     def __get_client_or_die(self, cluster_id: ClusterId) -> K8sClusterClient:
         cluster_client = self.__clients.get(cluster_id)
