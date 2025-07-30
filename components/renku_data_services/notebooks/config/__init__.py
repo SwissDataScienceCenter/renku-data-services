@@ -18,8 +18,7 @@ from renku_data_services.k8s.clients import (
     K8sSchedulingClient,
 )
 from renku_data_services.k8s.config import KubeConfigEnv, get_clusters
-from renku_data_services.k8s.db import K8sDbCache
-from renku_data_services.k8s.quota import QuotaRepository
+from renku_data_services.k8s.db import K8sDbCache, QuotaRepository
 from renku_data_services.notebooks.api.classes.data_service import (
     CRCValidator,
     DummyCRCValidator,

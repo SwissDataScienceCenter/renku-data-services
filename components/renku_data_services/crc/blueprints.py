@@ -16,7 +16,7 @@ from renku_data_services.base_models.validation import validated_json
 from renku_data_services.crc import apispec, models
 from renku_data_services.crc.core import validate_cluster, validate_cluster_patch
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository, UserRepository
-from renku_data_services.k8s.quota import QuotaRepository
+from renku_data_services.k8s.db import QuotaRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.models import UserInfo
 

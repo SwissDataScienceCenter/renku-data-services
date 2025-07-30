@@ -24,7 +24,7 @@ from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
 from renku_data_services.crc.models import ClusterPatch, ClusterSettings, SavedClusterSettings, SessionProtocol
 from renku_data_services.crc.orm import ClusterORM
-from renku_data_services.k8s.quota import QuotaRepository
+from renku_data_services.k8s.db import QuotaRepository
 from renku_data_services.users.db import UserRepo
 
 

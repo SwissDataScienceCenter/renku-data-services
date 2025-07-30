@@ -17,7 +17,7 @@ from kubernetes.client import (
 
 from renku_data_services.crc import models
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient
-from renku_data_services.k8s.quota import QuotaRepository
+from renku_data_services.k8s.db import QuotaRepository
 from renku_data_services.notebooks.api.classes.auth import RenkuTokens
 from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClient
 from renku_data_services.notebooks.util.kubernetes_ import find_env_var
