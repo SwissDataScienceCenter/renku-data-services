@@ -14,7 +14,7 @@ from renku_data_services.crc.db import ClusterRepository
 from renku_data_services.k8s.client_interfaces import SecretClient
 from renku_data_services.k8s.clients import DummyCoreClient, K8sClusterClientsPool, K8sSecretClient
 from renku_data_services.k8s.config import KubeConfigEnv, get_clusters
-from renku_data_services.k8s_watcher import K8sDbCache
+from renku_data_services.k8s.db import K8sDbCache
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo
 from renku_data_services.secrets_storage_api.config import Config

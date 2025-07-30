@@ -16,7 +16,7 @@ from sanic_testing.testing import SanicASGITestClient
 
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
 from renku_data_services.k8s.models import ClusterConnection
-from renku_data_services.k8s_watcher import K8sWatcher, k8s_object_handler
+from renku_data_services.k8s.watcher import K8sWatcher, k8s_object_handler
 from renku_data_services.notebooks.api.classes.k8s_client import JupyterServerV1Alpha1Kr8s
 from renku_data_services.notebooks.constants import JUPYTER_SESSION_GVK
 

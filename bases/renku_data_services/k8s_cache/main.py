@@ -6,8 +6,8 @@ import kr8s
 
 from renku_data_services.app_config import logging
 from renku_data_services.k8s.config import get_clusters
+from renku_data_services.k8s.watcher import K8sWatcher, k8s_object_handler
 from renku_data_services.k8s_cache.dependencies import DependencyManager
-from renku_data_services.k8s_watcher import K8sWatcher, k8s_object_handler
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 
