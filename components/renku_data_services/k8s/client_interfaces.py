@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections.abc import AsyncIterable
 from typing import Any, Protocol
 
-from kubernetes_asyncio.client import V1DeleteOptions, V1PriorityClass, V1ResourceQuota, V1Secret
+from kubernetes_asyncio.client import V1DeleteOptions, V1PriorityClass, V1ResourceQuota
 
-from renku_data_services.k8s.models import K8sObject, K8sObjectFilter, K8sObjectMeta
+from renku_data_services.k8s.models import K8sObject, K8sObjectFilter, K8sObjectMeta, K8sSecret
 
 
 class ResourceQuotaClient(Protocol):
@@ -37,12 +37,16 @@ class ResourceQuotaClient(Protocol):
 class SecretClient(Protocol):
     """Methods to manipulate Secret kubernetes resources."""
 
-    def create_secret(self, namespace: str, body: V1Secret) -> None:
+    async def create_secret(self, secret: K8sSecret) -> K8sSecret:
         """Create a secret."""
         ...
 
-    def patch_secret(self, name: str, namespace: str, body: V1Secret) -> None:
+    async def patch_secret(self, secret: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
         """Patch an existing secret."""
+        ...
+
+    async def delete_secret(self, secret: K8sObjectMeta) -> None:
+        """Delete a secret."""
         ...
 
 

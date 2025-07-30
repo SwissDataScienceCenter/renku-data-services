@@ -19,6 +19,7 @@ from renku_data_services.data_connectors.db import (
     DataConnectorSecretRepository,
 )
 from renku_data_services.errors import errors
+from renku_data_services.k8s.models import K8sSecret
 from renku_data_services.notebooks import apispec, core
 from renku_data_services.notebooks.api.amalthea_patches.init_containers import user_secrets_container
 from renku_data_services.notebooks.api.schemas.config_server_options import ServerOptionsEndpointResponse
@@ -483,12 +484,12 @@ class NotebooksNewBP(CustomBlueprint):
                 ),
             )
             for s in secrets_to_create:
-                await self.nb_config.k8s_v2_client.create_secret(s.secret, cluster)
+                await self.nb_config.k8s_v2_client.create_secret(K8sSecret.from_v1_secret(s.secret, cluster.id))
             try:
                 manifest = await self.nb_config.k8s_v2_client.create_session(manifest, user)
             except Exception as err:
                 for s in secrets_to_create:
-                    await self.nb_config.k8s_v2_client.delete_secret(s.secret.metadata.name, cluster)
+                    await self.nb_config.k8s_v2_client.delete_secret(K8sSecret.from_v1_secret(s.secret, cluster.id))
                 raise errors.ProgrammingError(message="Could not start the amalthea session") from err
             else:
                 try:

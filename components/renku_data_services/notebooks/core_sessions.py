@@ -25,10 +25,10 @@ from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.crc.models import GpuKind, ResourceClass, ResourcePool
 from renku_data_services.data_connectors.models import DataConnectorSecret, DataConnectorWithSecrets
 from renku_data_services.errors import errors
+from renku_data_services.k8s.models import K8sSecret, sanitizer
 from renku_data_services.notebooks import apispec
 from renku_data_services.notebooks.api.amalthea_patches import git_proxy, init_containers
 from renku_data_services.notebooks.api.classes.image import Image
-from renku_data_services.notebooks.api.classes.k8s_client import sanitizer
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_data_services.notebooks.config import NotebooksConfig
@@ -609,7 +609,7 @@ async def patch_session(
                     "and/or check that you still have permissions for the image repository."
                 )
             # Ensure the secret is created in the cluster
-            await nb_config.k8s_v2_client.create_secret(image_secret.secret, cluster)
+            await nb_config.k8s_v2_client.create_secret(K8sSecret.from_v1_secret(image_secret.secret, cluster.id))
 
             updated_secrets = [
                 secret for secret in (session.spec.imagePullSecrets or []) if not secret.name.endswith("-image-secret")

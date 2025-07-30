@@ -5,12 +5,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Self, cast
 
+import kubernetes
 from box import Box
 from kr8s._api import Api
 from kr8s.asyncio.objects import APIObject
+from kr8s.objects import Secret
+from kubernetes_asyncio.client import V1Secret
 
 from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import DUMMY_TASK_RUN_USER_ID, ClusterId
+
+sanitizer = kubernetes.client.ApiClient().sanitize_for_serialization
 
 
 class K8sObjectMeta:
@@ -56,7 +61,7 @@ class K8sObjectMeta:
 
     def __repr__(self) -> str:
         return (
-            f"K8sObject(name={self.name}, namespace={self.namespace}, cluster={self.cluster}, "
+            f"{self.__class__.__name__}(name={self.name}, namespace={self.namespace}, cluster={self.cluster}, "
             f"gvk={self.gvk}, user_id={self.user_id})"
         )
 
@@ -78,7 +83,10 @@ class K8sObject(K8sObjectMeta):
         self.manifest = manifest
 
     def __repr__(self) -> str:
-        return super().__repr__()
+        return (
+            f"{self.__class__.__name__}(name={self.name}, namespace={self.namespace}, cluster={self.cluster}, "
+            f"gvk={self.gvk}, manifest={self.manifest}, user_id={self.user_id})"
+        )
 
     def to_api_object(self, api: Api) -> APIObject:
         """Convert a regular k8s object to an api object for kr8s."""
@@ -96,6 +104,62 @@ class K8sObject(K8sObjectMeta):
             namespaced = self.namespaced
 
         return _APIObj(resource=self.manifest, namespace=self.namespace, api=api)
+
+
+class K8sSecret(K8sObject):
+    """Represents a secret in k8s."""
+
+    def __init__(
+        self,
+        name: str,
+        namespace: str,
+        cluster: ClusterId,
+        gvk: GVK,
+        manifest: Box,
+        user_id: str | None = None,
+        namespaced: bool = True,
+    ) -> None:
+        super().__init__(name, namespace, cluster, gvk, manifest, user_id, namespaced)
+
+    def __repr__(self) -> str:
+        # We hide the manifest to prevent leaking secrets
+        return (
+            f"{self.__class__.__name__}(name={self.name}, namespace={self.namespace}, cluster={self.cluster}, "
+            f"gvk={self.gvk}, user_id={self.user_id})"
+        )
+
+    @classmethod
+    def from_k8s_object(cls, k8s_object: K8sObject) -> K8sSecret:
+        """Convert a k8s object to a K8sSecret object."""
+        return K8sSecret(
+            name=k8s_object.name,
+            namespace=k8s_object.namespace,
+            cluster=k8s_object.cluster,
+            gvk=k8s_object.gvk,
+            manifest=k8s_object.manifest,
+        )
+
+    @classmethod
+    def from_v1_secret(cls, secret: V1Secret, cluster_id: ClusterId) -> K8sSecret:
+        """Convert a V1Secret to a K8sSecret object."""
+        assert secret.metadata is not None
+
+        return K8sSecret(
+            name=secret.metadata.name,
+            namespace=secret.metadata.namespace,
+            cluster=cluster_id,
+            gvk=GVK(kind=Secret.kind, version=Secret.version),
+            manifest=Box(sanitizer(secret)),
+        )
+
+    def to_v1_secret(self) -> V1Secret:
+        """Convert a K8sSecret to a V1Secret object."""
+        return V1Secret(
+            metadata=self.manifest.metadata,
+            data=self.manifest.get("data", {}),
+            string_data=self.manifest.get("stringData", {}),
+            type=self.manifest.get("type"),
+        )
 
 
 @dataclass

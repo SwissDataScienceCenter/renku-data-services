@@ -12,7 +12,6 @@ from sanic.worker.loader import AppLoader
 
 from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
-from renku_data_services.secrets.core import rotate_encryption_keys
 from renku_data_services.secrets_storage_api.app import register_all_handlers
 from renku_data_services.secrets_storage_api.dependencies import DependencyManager
 
@@ -56,11 +55,10 @@ def create_app() -> Sanic:
             return  # only run rotation on one worker
 
         try:
-            await rotate_encryption_keys(
+            await dm.user_secrets_repo.rotate_encryption_keys(
                 InternalServiceAdmin(id=ServiceAdminId.secrets_rotation),
                 dm.config.secrets.private_key,
                 dm.config.secrets.previous_private_key,
-                dm.user_secrets_repo,
             )
         finally:
             app.shared_ctx.rotation_lock.release()

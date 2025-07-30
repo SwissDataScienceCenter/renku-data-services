@@ -12,13 +12,15 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 import kr8s
+from box import Box
+from kr8s import ServerError
 from kubernetes import client, config
 from kubernetes.config.config_exception import ConfigException
 from kubernetes.config.incluster_config import SERVICE_CERT_FILENAME, SERVICE_TOKEN_FILENAME, InClusterConfigLoader
 
 from renku_data_services.errors import errors
 from renku_data_services.k8s.client_interfaces import K8sClient, PriorityClassClient, ResourceQuotaClient, SecretClient
-from renku_data_services.k8s.models import APIObjectInCluster, K8sObjectFilter
+from renku_data_services.k8s.models import APIObjectInCluster, K8sObject, K8sObjectFilter, K8sSecret
 
 if TYPE_CHECKING:
     from renku_data_services.k8s.constants import ClusterId
@@ -31,7 +33,7 @@ if TYPE_CHECKING:
     from renku_data_services.k8s_watcher import K8sDbCache
 
 
-class K8sCoreClient(ResourceQuotaClient, SecretClient):
+class K8sCoreClient(ResourceQuotaClient):
     """Real k8s core API client that exposes the required functions."""
 
     def __init__(self) -> None:
@@ -70,13 +72,58 @@ class K8sCoreClient(ResourceQuotaClient, SecretClient):
         """Update a resource quota."""
         self.client.patch_namespaced_resource_quota(name, namespace, body)
 
-    def create_secret(self, namespace: str, body: client.V1Secret) -> None:
-        """Create a secret."""
-        self.client.create_namespaced_secret(namespace, body)
 
-    def patch_secret(self, name: str, namespace: str, body: client.V1Secret) -> None:
+class K8sSecretClient(SecretClient):
+    """A wrapper around a kr8s k8s client, acts on Secrets."""
+
+    def __init__(self, client: K8sClient) -> None:
+        self.__client = client
+
+    async def create_secret(self, secret: K8sSecret) -> K8sSecret:
+        """Create a secret."""
+
+        try:
+            result = await self.__client.create(secret)
+        except ServerError as err:
+            if err.response and err.response.status_code == 409:
+                annotations: Box | None = secret.manifest.metadata.get("annotations")
+                labels: Box | None = secret.manifest.metadata.get("labels")
+                patches = [
+                    {
+                        "op": "replace",
+                        "path": "/data",
+                        "value": secret.manifest.get("data", {}),
+                    },
+                    {
+                        "op": "replace",
+                        "path": "/stringData",
+                        "value": secret.manifest.get("string_data", {}),
+                    },
+                    {
+                        "op": "replace",
+                        "path": "/metadata/annotations",
+                        "value": annotations.to_dict() if annotations is not None else {},
+                    },
+                    {
+                        "op": "replace",
+                        "path": "/metadata/labels",
+                        "value": labels.to_dict() if labels is not None else {},
+                    },
+                ]
+                result = await self.patch_secret(secret, patches)
+            else:
+                raise
+        return K8sSecret.from_k8s_object(result)
+
+    async def patch_secret(self, secret: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
         """Patch a secret."""
-        self.client.patch_namespaced_secret(name, namespace, body)
+
+        return await self.__client.patch(secret, patch)
+
+    async def delete_secret(self, secret: K8sObjectMeta) -> None:
+        """Delete a secret."""
+
+        await self.__client.delete(secret)
 
 
 class K8sSchedulingClient(PriorityClassClient):
@@ -122,7 +169,7 @@ class DummyCoreClient(ResourceQuotaClient, SecretClient):
     Not suitable for production - to be used only for testing and development.
     """
 
-    def __init__(self, quotas: dict[str, client.V1ResourceQuota], secrets: dict[str, client.V1Secret]) -> None:
+    def __init__(self, quotas: dict[str, client.V1ResourceQuota], secrets: dict[str, K8sSecret]) -> None:
         self.quotas = quotas
         self.secrets = secrets
         self.__lock: LockType | None = None
@@ -178,30 +225,23 @@ class DummyCoreClient(ResourceQuotaClient, SecretClient):
                 new_quota.spec = client.V1ResourceQuota(**body).spec
             self.quotas[name] = new_quota
 
-    def create_secret(self, namespace: str, body: client.V1Secret) -> None:
+    async def create_secret(self, secret: K8sSecret) -> K8sSecret:
         """Create a secret."""
         with self._lock:
-            if isinstance(body.metadata, dict):
-                body.metadata = client.V1ObjectMeta(**body.metadata)
-            body.metadata.uid = uuid4()
-            body.api_version = "v1"
-            body.kind = "Secret"
-            self.secrets[body.metadata.name] = body
+            secret.manifest.metadata.uid = uuid4()
+            self.secrets[secret.name] = secret
+            return secret
 
-    def patch_secret(self, name: str, namespace: str, body: client.V1Secret) -> None:
+    async def patch_secret(self, secret: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
         """Patch a secret."""
         # NOTE: This is only needed if the create_namespaced_secret can raise a conflict 409 status code
         # error when it tries to create a secret that already exists. But the dummy client never raises
         # this so we don't need to implement it (for now).
         raise NotImplementedError()
 
-    def delete_namespaced_secret(self, name: Any, namespace: Any, **kwargs: Any) -> Any:
+    async def delete_secret(self, secret: K8sObjectMeta) -> None:
         """Delete a secret."""
-        with self._lock:
-            removed_secret = self.secrets.pop(name, None)
-            if removed_secret is None:
-                raise client.ApiException(status=404)
-            return removed_secret
+        raise NotImplementedError()
 
 
 class DummySchedulingClient(PriorityClassClient):
