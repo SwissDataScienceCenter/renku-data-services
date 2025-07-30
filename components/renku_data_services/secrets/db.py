@@ -1,5 +1,8 @@
 """Database repo for secrets."""
 
+from __future__ import annotations
+
+import asyncio
 import random
 import string
 from collections.abc import AsyncGenerator, Callable, Sequence
@@ -7,6 +10,7 @@ from datetime import UTC, datetime
 from typing import cast
 
 from cryptography.hazmat.primitives.asymmetric import rsa
+from prometheus_client import Counter, Enum
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,7 +19,6 @@ from ulid import ULID
 from renku_data_services.base_api.auth import APIUser, only_authenticated
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId, Slug
 from renku_data_services.errors import errors
-from renku_data_services.secrets.core import encrypt_user_secret
 from renku_data_services.secrets.models import Secret, SecretKind, SecretPatch, UnsavedSecret
 from renku_data_services.secrets.orm import SecretORM
 from renku_data_services.users.db import UserRepo
@@ -91,6 +94,43 @@ class LowLevelUserSecretsRepo:
 
             await session.flush()
 
+    async def rotate_encryption_keys(
+        self,
+        requested_by: InternalServiceAdmin,
+        new_key: rsa.RSAPrivateKey,
+        old_key: rsa.RSAPrivateKey,
+        batch_size: int = 100,
+    ) -> None:
+        """Rotate all secrets to a new private key.
+
+        This method undoes the outer encryption and reencrypts with a new key, without touching the inner encryption.
+        """
+        processed_secrets_metrics = Counter(
+            "secrets_rotation_count",
+            "Number of secrets rotated",
+        )
+        running_metrics = Enum(
+            "secrets_rotation_state", "State of secrets rotation", states=["running", "finished", "errored"]
+        )
+        running_metrics.state("running")
+        try:
+            async for batch in self.get_all_secrets_batched(requested_by, batch_size):
+                updated_secrets = []
+                for secret, user_id in batch:
+                    new_secret = await secret.rotate_single_encryption_key(user_id, new_key, old_key)
+                    # we need to sleep, otherwise the async scheduler will never yield to other tasks like requests
+                    await asyncio.sleep(0.000001)
+                    if new_secret is not None:
+                        updated_secrets.append(new_secret)
+
+                await self.update_secret_values(requested_by, updated_secrets)
+                processed_secrets_metrics.inc(len(updated_secrets))
+        except:
+            running_metrics.state("errored")
+            raise
+        else:
+            running_metrics.state("finished")
+
 
 class UserSecretsRepo:
     """An adapter for accessing users secrets with encryption handling."""
@@ -138,8 +178,7 @@ class UserSecretsRepo:
             name_slug = Slug.from_name(secret.name).value
             default_filename = f"{name_slug[:200]}-{suffix}"
 
-        encrypted_value, encrypted_key = await encrypt_user_secret(
-            user_repo=self.user_repo,
+        encrypted_value, encrypted_key = await self.user_repo.encrypt_user_secret(
             requested_by=requested_by,
             secret_service_public_key=self.secret_service_public_key,
             secret_value=secret.secret_value,
@@ -194,8 +233,7 @@ class UserSecretsRepo:
                     )
                 secret.default_filename = patch.default_filename
             if patch.secret_value is not None:
-                encrypted_value, encrypted_key = await encrypt_user_secret(
-                    user_repo=self.user_repo,
+                encrypted_value, encrypted_key = await self.user_repo.encrypt_user_secret(
                     requested_by=requested_by,
                     secret_service_public_key=self.secret_service_public_key,
                     secret_value=patch.secret_value,

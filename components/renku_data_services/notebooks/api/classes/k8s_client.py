@@ -7,17 +7,16 @@ import json
 from typing import TYPE_CHECKING, Any, Generic, Optional, TypeVar, cast
 
 import httpx
-import kubernetes
 from box import Box
 from kr8s import NotFoundError, ServerError
 from kr8s.asyncio.objects import APIObject, Pod, Secret, StatefulSet
-from kubernetes.client import V1Secret
 
 from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.errors import errors
+from renku_data_services.k8s.client_interfaces import SecretClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
-from renku_data_services.k8s.models import GVK, ClusterConnection, K8sObject, K8sObjectFilter, K8sObjectMeta
+from renku_data_services.k8s.models import GVK, ClusterConnection, K8sObject, K8sObjectFilter, K8sObjectMeta, K8sSecret
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
 from renku_data_services.notebooks.constants import JUPYTER_SESSION_GVK
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
@@ -27,8 +26,6 @@ from renku_data_services.notebooks.util.retries import retry_with_exponential_ba
 
 if TYPE_CHECKING:
     from renku_data_services.k8s.clients import K8sClusterClientsPool
-
-sanitizer = kubernetes.client.ApiClient().sanitize_for_serialization
 
 
 # NOTE The type ignore below is because the kr8s library has no type stubs, they claim pyright better handles type hints
@@ -47,7 +44,7 @@ class JupyterServerV1Alpha1Kr8s(APIObject):
 _SessionType = TypeVar("_SessionType", JupyterServerV1Alpha1, AmaltheaSessionV1Alpha1)
 
 
-class NotebookK8sClient(Generic[_SessionType]):
+class NotebookK8sClient(SecretClient, Generic[_SessionType]):
     """A K8s Client for Notebooks."""
 
     def __init__(
@@ -404,36 +401,30 @@ class NotebookK8sClient(Generic[_SessionType]):
                 "value": base64.b64encode(json.dumps(new_docker_config).encode()).decode(),
             }
         ]
+
         await secret.patch(patch, type="json")
 
-    async def create_secret(self, secret: V1Secret, cluster: ClusterConnection) -> V1Secret:
+    async def create_secret(self, secret: K8sSecret) -> K8sSecret:
         """Create a secret."""
 
-        assert secret.metadata is not None
-
-        secret_obj = K8sObject(
-            name=secret.metadata.name,
-            namespace=cluster.namespace,
-            cluster=cluster.id,
-            gvk=GVK(kind=Secret.kind, version=Secret.version),
-            manifest=Box(sanitizer(secret)),
-        )
         try:
-            result = await self.__client.create(secret_obj)
+            result = await self.__client.create(secret)
         except ServerError as err:
             if err.response and err.response.status_code == 409:
-                annotations: Box | None = secret_obj.manifest.metadata.get("annotations")
-                labels: Box | None = secret_obj.manifest.metadata.get("labels")
+                annotations: Box | None = secret.manifest.metadata.get("annotations")
+                labels: Box | None = secret.manifest.metadata.get("labels")
                 patches = [
                     {
                         "op": "replace",
                         "path": "/data",
-                        "value": secret.data or {},
+                        # "value": secret.data or {},
+                        "value": {},
                     },
                     {
                         "op": "replace",
                         "path": "/stringData",
-                        "value": secret.string_data or {},
+                        # "value": secret.string_data or {},
+                        "value": {},
                     },
                     {
                         "op": "replace",
@@ -446,24 +437,17 @@ class NotebookK8sClient(Generic[_SessionType]):
                         "value": labels.to_dict() if labels is not None else {},
                     },
                 ]
-                result = await self.__client.patch(secret_obj, patches)
+                result = await self.__client.patch(secret, patches)
             else:
                 raise
-        return V1Secret(
-            metadata=result.manifest.metadata,
-            data=result.manifest.get("data", {}),
-            string_data=result.manifest.get("stringData", {}),
-            type=result.manifest.get("type"),
-        )
+        return K8sSecret.from_k8s_object(result)
 
-    async def delete_secret(self, name: str, cluster: ClusterConnection) -> None:
+    async def patch_secret(self, secret: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
+        """Patch a secret."""
+
+        return await self.__client.patch(secret, patch)
+
+    async def delete_secret(self, secret: K8sObjectMeta) -> None:
         """Delete a secret."""
 
-        await self.__client.delete(
-            K8sObjectMeta(
-                name=name,
-                namespace=cluster.namespace,
-                cluster=cluster.id,
-                gvk=GVK(kind=Secret.kind, version=Secret.version),
-            )
-        )
+        await self.__client.delete(secret)
