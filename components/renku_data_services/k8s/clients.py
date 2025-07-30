@@ -8,7 +8,7 @@ from collections.abc import AsyncIterable
 from copy import deepcopy
 from multiprocessing import Lock
 from multiprocessing.synchronize import Lock as LockType
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from uuid import uuid4
 
 import kr8s
@@ -20,17 +20,17 @@ from kubernetes.config.incluster_config import SERVICE_CERT_FILENAME, SERVICE_TO
 
 from renku_data_services.errors import errors
 from renku_data_services.k8s.client_interfaces import K8sClient, PriorityClassClient, ResourceQuotaClient, SecretClient
-from renku_data_services.k8s.models import APIObjectInCluster, K8sObject, K8sObjectFilter, K8sSecret
-
-if TYPE_CHECKING:
-    from renku_data_services.k8s.constants import ClusterId
-    from renku_data_services.k8s.models import (
-        GVK,
-        ClusterConnection,
-        K8sObject,
-        K8sObjectMeta,
-    )
-    from renku_data_services.k8s_watcher import K8sDbCache
+from renku_data_services.k8s.constants import ClusterId
+from renku_data_services.k8s.db import K8sDbCache
+from renku_data_services.k8s.models import (
+    GVK,
+    APIObjectInCluster,
+    ClusterConnection,
+    K8sObject,
+    K8sObjectFilter,
+    K8sObjectMeta,
+    K8sSecret,
+)
 
 
 class K8sCoreClient(ResourceQuotaClient):

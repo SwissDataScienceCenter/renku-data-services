@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
-from typing import TYPE_CHECKING, Any, Generic, Optional, TypeVar, cast
+from typing import Any, Generic, Optional, TypeVar, cast
 
 import httpx
 from box import Box
@@ -15,6 +15,7 @@ from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.errors import errors
 from renku_data_services.k8s.client_interfaces import SecretClient
+from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import GVK, ClusterConnection, K8sObject, K8sObjectFilter, K8sObjectMeta, K8sSecret
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
@@ -23,9 +24,6 @@ from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterSe
 from renku_data_services.notebooks.errors.programming import ProgrammingError
 from renku_data_services.notebooks.util.kubernetes_ import find_env_var
 from renku_data_services.notebooks.util.retries import retry_with_exponential_backoff_async
-
-if TYPE_CHECKING:
-    from renku_data_services.k8s.clients import K8sClusterClientsPool
 
 
 # NOTE The type ignore below is because the kr8s library has no type stubs, they claim pyright better handles type hints

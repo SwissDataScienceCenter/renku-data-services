@@ -14,8 +14,8 @@ from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.k8s.clients import K8sClusterClient
 from renku_data_services.k8s.constants import ClusterId
+from renku_data_services.k8s.db import K8sDbCache
 from renku_data_services.k8s.models import GVK, APIObjectInCluster, ClusterConnection, K8sObject, K8sObjectFilter
-from renku_data_services.k8s_watcher.db import K8sDbCache
 from renku_data_services.notebooks.crs import State
 
 logger = logging.getLogger(__name__)
