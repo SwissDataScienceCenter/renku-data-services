@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any
 
 from authlib.integrations.httpx_client import AsyncOAuth2Client
-from jwt import PyJWKClient
 from yaml import safe_load
 
 import renku_data_services.base_models as base_models
@@ -21,7 +20,6 @@ import renku_data_services.repositories
 import renku_data_services.search
 import renku_data_services.storage
 import renku_data_services.users
-from renku_data_services import errors
 from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.authn.gitlab import GitlabAuthenticator
 from renku_data_services.authn.keycloak import KcUserStore, KeycloakAuthenticator
@@ -76,7 +74,7 @@ from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
 from renku_data_services.users.models import UnsavedUserInfo
-from renku_data_services.utils.core import merge_api_specs, oidc_discovery
+from renku_data_services.utils.core import merge_api_specs
 
 default_resource_pool = crc_models.ResourcePool(
     name="default",
@@ -234,17 +232,7 @@ class DependencyManager:
         else:
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=config.k8s_namespace)
             assert config.keycloak is not None
-            oidc_disc_data = oidc_discovery(config.keycloak.url, config.keycloak.realm)
-            jwks_url = oidc_disc_data.get("jwks_uri")
-            if jwks_url is None:
-                raise errors.ConfigurationError(
-                    message="The JWKS url for Keycloak cannot be found from the OIDC discovery endpoint."
-                )
-            jwks = PyJWKClient(jwks_url)
-            if config.keycloak.algorithms is None:
-                raise errors.ConfigurationError(message="At least one token signature algorithm is required.")
-
-            authenticator = KeycloakAuthenticator(jwks=jwks, algorithms=config.keycloak.algorithms)
+            authenticator = KeycloakAuthenticator.new(config.keycloak)
             assert config.gitlab_url is not None
             gitlab_authenticator = GitlabAuthenticator(gitlab_url=config.gitlab_url)
             user_store = KcUserStore(keycloak_url=config.keycloak.url, realm=config.keycloak.realm)

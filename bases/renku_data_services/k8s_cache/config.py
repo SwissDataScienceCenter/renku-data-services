@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Self
-
-from kubernetes.client.api_client import os
 
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.notebooks.config.dynamic import _SessionIngress

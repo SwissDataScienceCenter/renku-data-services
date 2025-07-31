@@ -5,9 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
-from jwt import PyJWKClient
-
-from renku_data_services import base_models, errors
+from renku_data_services import base_models
 from renku_data_services.authn.dummy import DummyAuthenticator
 from renku_data_services.authn.keycloak import KeycloakAuthenticator
 from renku_data_services.crc.db import ClusterRepository
@@ -19,7 +17,6 @@ from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTE
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo
 from renku_data_services.secrets_storage_api.config import Config
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
-from renku_data_services.utils.core import oidc_discovery
 
 
 @dataclass
@@ -53,17 +50,7 @@ class DependencyManager:
             secret_client = DummyCoreClient({}, {})
         else:
             assert config.keycloak is not None
-            oidc_disc_data = oidc_discovery(config.keycloak.url, config.keycloak.realm)
-            jwks_url = oidc_disc_data.get("jwks_uri")
-            if jwks_url is None:
-                raise errors.ConfigurationError(
-                    message="The JWKS url for Keycloak cannot be found from the OIDC discovery endpoint."
-                )
-            jwks = PyJWKClient(jwks_url)
-            if config.keycloak.algorithms is None:
-                raise errors.ConfigurationError(message="At least one token signature algorithm is required.")
-
-            authenticator = KeycloakAuthenticator(jwks=jwks, algorithms=config.keycloak.algorithms)
+            authenticator = KeycloakAuthenticator.new(config.keycloak)
             api = KubeConfigEnv().api()
             secret_client = K8sSecretClient(
                 K8sClusterClientsPool(
