@@ -1,4 +1,5 @@
-AMALTHEA_SESSIONS_VERSION ?= 0.18.1
+AMALTHEA_JS_VERSION ?= 0.20.0
+AMALTHEA_SESSIONS_VERSION ?= 0.20.0
 CODEGEN_PARAMS := \
     --input-file-type openapi \
     --output-model-type pydantic_v2.BaseModel \

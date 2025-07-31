@@ -183,7 +183,10 @@ class ShipwrightClient:
             spec=crs.BuildRunSpec(
                 build=crs.Build(
                     spec=crs.BuildSpec(
-                        source=crs.GitSource(git=crs.Git(url=params.git_repository)),
+                        source=crs.GitSource(
+                            git=crs.Git(url=params.git_repository, revision=params.git_repository_revision),
+                            contextDir=params.context_dir,
+                        ),
                         strategy=crs.Strategy(kind="BuildStrategy", name=params.build_strategy_name),
                         paramValues=[
                             crs.ParamValue(name="frontend", value=params.frontend),

@@ -157,12 +157,16 @@ class ClusterORM(BaseORM):
     session_ingress_annotations: Mapped[dict[str, str]] = mapped_column(JSONVariant)
     session_tls_secret_name: Mapped[str] = mapped_column(String(256))
     session_storage_class: Mapped[str | None] = mapped_column(String(256))
+    # NOTE: The service account name is expected to point to a service account that already exists
+    # in the cluster in the namespace where the sessions will be launched.
+    service_account_name: Mapped[str | None] = mapped_column(String(256), default=None, nullable=True)
 
     def dump(self) -> SavedClusterSettings:
         """Create a cluster model from the ORM object."""
         return SavedClusterSettings(
             name=self.name,
             config_name=self.config_name,
+            service_account_name=self.service_account_name,
             session_protocol=SessionProtocol(self.session_protocol),
             session_host=self.session_host,
             session_port=self.session_port,
@@ -179,6 +183,7 @@ class ClusterORM(BaseORM):
         return ClusterORM(
             name=cluster.name,
             config_name=cluster.config_name,
+            service_account_name=cluster.service_account_name,
             session_protocol=str(cluster.session_protocol.value),
             session_host=cluster.session_host,
             session_port=cluster.session_port,
