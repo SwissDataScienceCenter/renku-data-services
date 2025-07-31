@@ -1,5 +1,7 @@
 """Keycloak user store."""
 
+from __future__ import annotations
+
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime
@@ -9,10 +11,12 @@ import httpx
 import jwt
 from jwt import PyJWKClient
 from sanic import Request
+from tenacity import retry, stop_after_attempt, stop_after_delay, wait_fixed
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from renku_data_services.app_config.config import KeycloakConfig
 from renku_data_services.base_models.core import Authenticator
 from renku_data_services.utils.core import get_ssl_context
 
@@ -52,6 +56,31 @@ class KeycloakAuthenticator(Authenticator):
     def __post_init__(self) -> None:
         if len(self.algorithms) == 0:
             raise errors.ConfigurationError(message="At least one algorithm for token validation has to be specified.")
+
+    @classmethod
+    def new(cls, kc_config: KeycloakConfig) -> KeycloakAuthenticator:
+        """Create a new KeycloakAuthenticator instance."""
+
+        @retry(stop=(stop_after_attempt(20) | stop_after_delay(300)), wait=wait_fixed(2), reraise=True)
+        def oidc_discovery(kc_config: KeycloakConfig) -> dict[str, Any]:
+            """Get OIDC configuration."""
+            url = f"{kc_config.url}/realms/{kc_config.realm}/.well-known/openid-configuration"
+            res = httpx.get(url, verify=get_ssl_context(), timeout=5)
+            if res.status_code == 200:
+                return cast(dict[str, Any], res.json())
+            raise errors.ConfigurationError(message=f"Cannot successfully do OIDC discovery with url {url}.")
+
+        oidc_disc_data = oidc_discovery(kc_config)
+        jwks_url = oidc_disc_data.get("jwks_uri")
+        if jwks_url is None:
+            raise errors.ConfigurationError(
+                message="The JWKS url for Keycloak cannot be found from the OIDC discovery endpoint."
+            )
+        jwks = PyJWKClient(jwks_url)
+        if kc_config.algorithms is None:
+            raise errors.ConfigurationError(message="At least one token signature algorithm is required.")
+
+        return cls(jwks=jwks, algorithms=kc_config.algorithms)
 
     def _validate(self, token: str) -> dict[str, Any]:
         try:
