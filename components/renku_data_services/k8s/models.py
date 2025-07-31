@@ -141,7 +141,7 @@ class K8sSecret(K8sObject):
 
     @classmethod
     def from_v1_secret(cls, secret: V1Secret, cluster_id: ClusterId) -> K8sSecret:
-        """Convert a V1Secret to a K8sSecret object."""
+        """Convert a V1Secret object to a K8sSecret object."""
         assert secret.metadata is not None
 
         return K8sSecret(

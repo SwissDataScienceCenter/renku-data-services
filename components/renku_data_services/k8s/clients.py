@@ -367,7 +367,7 @@ class K8sClusterClient(K8sClient):
             yield r.to_k8s_object()
 
 
-class K8SCachedClusterClient(K8sClusterClient):
+class K8sCachedClusterClient(K8sClusterClient):
     """A wrapper around a kr8s k8s client.
 
     Provides access to a cache for listing and reading resources but fallback to the cluster for other operations.
@@ -434,10 +434,10 @@ class K8SCachedClusterClient(K8sClusterClient):
 
 
 class K8sClusterClientsPool(K8sClient):
-    """A wrapper around a kr8s k8s client, acts on all resources over many clusters."""
+    """A wrapper around a pool of kr8s k8s clients."""
 
-    def __init__(self, cache: K8sDbCache, kinds_to_cache: list[GVK], clusters: list[ClusterConnection]) -> None:
-        self.__clients = {c.id: K8SCachedClusterClient(c, cache, kinds_to_cache) for c in clusters}
+    def __init__(self, clients: dict[ClusterId, K8sClusterClient]) -> None:
+        self.__clients = clients
 
     def __get_client_or_die(self, cluster_id: ClusterId) -> K8sClusterClient:
         cluster_client = self.__clients.get(cluster_id)
