@@ -10,13 +10,15 @@ from renku_data_services.authn.dummy import DummyAuthenticator
 from renku_data_services.authn.keycloak import KeycloakAuthenticator
 from renku_data_services.crc.db import ClusterRepository
 from renku_data_services.k8s.client_interfaces import SecretClient
-from renku_data_services.k8s.clients import DummyCoreClient, K8sClusterClientsPool, K8sSecretClient
+from renku_data_services.k8s.clients import (
+    DummyCoreClient,
+    K8sClusterClient,
+    K8sClusterClientsPool,
+    K8sSecretClient,
+)
 from renku_data_services.k8s.config import KubeConfigEnv, get_clusters
-from renku_data_services.k8s.db import K8sDbCache
-from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo
 from renku_data_services.secrets_storage_api.config import Config
-from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 
 
 @dataclass
@@ -54,14 +56,15 @@ class DependencyManager:
             api = KubeConfigEnv().api()
             secret_client = K8sSecretClient(
                 K8sClusterClientsPool(
-                    cache=K8sDbCache(config.db.async_session_maker),
-                    kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
-                    clusters=get_clusters(
-                        kube_conf_root_dir=os.environ.get("K8S_CONFIGS_ROOT", "/secrets/kube_configs"),
-                        namespace=api.namespace,
-                        api=api,
-                        cluster_rp=cluster_repo,
-                    ),
+                    clients={
+                        c.id: K8sClusterClient(c)
+                        for c in get_clusters(
+                            kube_conf_root_dir=os.environ.get("K8S_CONFIGS_ROOT", "/secrets/kube_configs"),
+                            namespace=api.namespace,
+                            api=api,
+                            cluster_rp=cluster_repo,
+                        )
+                    }
                 )
             )
 
