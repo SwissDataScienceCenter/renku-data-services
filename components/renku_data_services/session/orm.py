@@ -80,7 +80,7 @@ class EnvironmentORM(BaseORM):
         default=None,
     )
     build_parameters: Mapped["BuildParametersORM"] = relationship(lazy="joined", default=None)
-    strip_path_prefix: Mapped[bool] = mapped_column(default=False, server_default=false())
+    strip_path_prefix: Mapped[bool] = mapped_column(default=False, server_default=false(), nullable=False)
 
     def dump(self) -> models.Environment:
         """Create a session environment model from the EnvironmentORM."""
