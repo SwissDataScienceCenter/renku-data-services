@@ -252,13 +252,15 @@ class _AmaltheaV2Config:
 
 @dataclass
 class _SessionIngress:
+    classname: str | None = None
     host: str
-    tls_secret: Optional[str] = None
+    tls_secret: str | None = None
     annotations: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def from_env(cls) -> Self:
         return cls(
+            classname=os.environ["NB_SESSIONS__INGRESS__CLASSNAME"],
             host=os.environ["NB_SESSIONS__INGRESS__HOST"],
             tls_secret=os.environ.get("NB_SESSIONS__INGRESS__TLS_SECRET", None),
             annotations=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__INGRESS__ANNOTATIONS", "{}"))),

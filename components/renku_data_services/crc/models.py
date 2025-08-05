@@ -214,6 +214,7 @@ class Cluster:
     session_host: str
     session_port: int
     session_path: str
+    session_ingress_classname: str | None
     session_ingress_annotations: dict[str, Any]
     session_tls_secret_name: str
     session_storage_class: str | None
@@ -229,6 +230,7 @@ class Cluster:
             session_host=self.session_host,
             session_port=self.session_port,
             session_path=self.session_path,
+            session_ingress_classname=self.session_ingress_classname,
             session_ingress_annotations=self.session_ingress_annotations,
             session_tls_secret_name=self.session_tls_secret_name,
             session_storage_class=self.session_storage_class,
@@ -330,6 +332,7 @@ class ResourcePool:
                     session_host=tmp["session_host"],
                     session_port=tmp["session_port"],
                     session_path=tmp["session_path"],
+                    session_ingress_classname=tmp['session_ingress_classname'],
                     session_ingress_annotations=tmp["session_ingress_annotations"],
                     session_tls_secret_name=tmp["session_tls_secret_name"],
                     session_storage_class=tmp["session_storage_class"],

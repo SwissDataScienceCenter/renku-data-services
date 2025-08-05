@@ -986,6 +986,8 @@ components:
           $ref: "#/components/schemas/Port"
         session_path:
           type: string
+        session_ingress_classname:
+          $ref: "#/components/schemas/IngressClassName"
         session_ingress_annotations:
           $ref: "#/components/schemas/IngressAnnotations"
         session_tls_secret_name:
@@ -994,7 +996,7 @@ components:
           $ref: "#/components/schemas/StorageClassName"
         service_account_name:
           $ref: "#/components/schemas/K8sResourceName"
-      required: [ "name", "config_name", "session_protocol", "session_host", "session_port", "session_path", "session_ingress_annotations", "session_tls_secret_name" ]
+      required: [ "name", "config_name", "session_protocol", "session_host", "session_port", "session_path", "session_ingress_classname", "session_ingress_annotations", "session_tls_secret_name" ]
     ClusterPatch:
       type: object
       additionalProperties: false
