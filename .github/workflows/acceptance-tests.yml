@@ -22,7 +22,7 @@ jobs:
     name: Analyze deploy string
     runs-on: ubuntu-24.04
     outputs:
-      pr-contains-string: ${{ steps.deploy-comment.outputs.pr-contains-string }}
+      deploy: ${{ steps.deploy-comment.outputs.pr-contains-string }}
       renku: ${{ steps.deploy-comment.outputs.renku}}
       renku-core: ${{ steps.deploy-comment.outputs.renku-core}}
       renku-gateway: ${{ steps.deploy-comment.outputs.renku-gateway}}
@@ -47,7 +47,8 @@ jobs:
     needs: [check-deploy]
     permissions:
       pull-requests: write
-    if: github.event.action != 'closed' && needs.check-deploy.outputs.pr-contains-string == 'true'
+      id-token: write
+    if: github.event.action != 'closed' && needs.check-deploy.outputs.deploy == 'true'
     environment:
       name: renku-ci-ds-${{ github.event.number }}
       url: https://renku-ci-ds-${{ github.event.number }}.dev.renku.ch
@@ -126,7 +127,7 @@ jobs:
   legacy-selenium-acceptance-tests:
     name: Legacy Selenium tests
     needs: [check-deploy, deploy-pr]
-    if: github.event.action != 'closed' && needs.check-deploy.outputs.pr-contains-string == 'true' && needs.check-deploy.outputs.test-legacy-enabled == 'true'
+    if: github.event.action != 'closed' && needs.check-deploy.outputs.deploy == 'true' && needs.check-deploy.outputs.test-legacy-enabled == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: SwissDataScienceCenter/renku-actions/test-renku@v1.18.2
@@ -142,7 +143,7 @@ jobs:
     name: Legacy Cypress tests
     runs-on: ubuntu-24.04
     needs: [check-deploy, deploy-pr]
-    if: github.event.action != 'closed' && needs.check-deploy.outputs.pr-contains-string == 'true' && needs.check-deploy.outputs.test-legacy-enabled == 'true'
+    if: github.event.action != 'closed' && needs.check-deploy.outputs.deploy == 'true' && needs.check-deploy.outputs.test-legacy-enabled == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -168,7 +169,7 @@ jobs:
     name: Cypress tests
     runs-on: ubuntu-24.04
     needs: [check-deploy, deploy-pr]
-    if: github.event.action != 'closed' && needs.check-deploy.outputs.pr-contains-string == 'true' && needs.check-deploy.outputs.test-enabled == 'true'
+    if: github.event.action != 'closed' && needs.check-deploy.outputs.deploy == 'true' && needs.check-deploy.outputs.test-enabled == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -195,7 +196,7 @@ jobs:
     name: Cleanup
     runs-on: ubuntu-24.04
     needs: check-deploy
-    if: github.event.action == 'closed' && needs.check-deploy.outputs.pr-contains-string == 'true'
+    if: github.event.action == 'closed' && needs.check-deploy.outputs.deploy == 'true'
     permissions:
       pull-requests: write
     steps:
