@@ -94,7 +94,7 @@ jobs:
       - name: Get AKS credentials
         run: |
           az aks get-credentials --resource-group renku-dev --name aks-switzerlandnorth-renku-dev --file "${{ github.workspace }}/renkubot-kube.config"
-          chmod 600 "${{ github.workspace }}/renkubot-kube.config"
+          chmod 400 "${{ github.workspace }}/renkubot-kube.config"
 
       - name: Build and deploy
         uses: SwissDataScienceCenter/renku-actions/deploy-renku@v1.18.2
@@ -143,7 +143,7 @@ jobs:
     - name: Get AKS credentials
       run: |
         az aks get-credentials --resource-group renku-dev --name aks-switzerlandnorth-renku-dev --file "${{ github.workspace }}/renkubot-kube.config"
-        chmod 600 "${{ github.workspace }}/renkubot-kube.config"
+        chmod 400 "${{ github.workspace }}/renkubot-kube.config"
 
     - uses: SwissDataScienceCenter/renku-actions/test-renku@v1.18.2
       with:
@@ -257,7 +257,7 @@ jobs:
         if: needs.check-deploy.outputs.deploy == 'true'
         run: |
           az aks get-credentials --resource-group renku-dev --name aks-switzerlandnorth-renku-dev --file "${{ github.workspace }}/renkubot-kube.config"
-          chmod 600 "${{ github.workspace }}/renkubot-kube.config"
+          chmod 400 "${{ github.workspace }}/renkubot-kube.config"
 
       # Cleanup for both standard and Azure deployments
       - name: renku teardown
