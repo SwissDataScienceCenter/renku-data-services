@@ -100,7 +100,6 @@ jobs:
           echo "EOF" >> $GITHUB_ENV
 
       - name: Build and deploy
-        if: needs.check-deploy.outputs.deploy == 'true'
         uses: SwissDataScienceCenter/renku-actions/deploy-renku@v1.18.2
         env:
           DOCKER_PASSWORD: ${{ secrets.RENKU_DOCKER_PASSWORD }}
