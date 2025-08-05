@@ -133,7 +133,6 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
     - name: Azure login
-      if: needs.check-deploy.outputs.deploy == 'true'
       uses: azure/login@v2
       with:
         client-id: ${{ secrets.CI_RENKU_AZURE_CLIENT_ID }}
