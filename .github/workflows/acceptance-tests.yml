@@ -63,7 +63,6 @@ jobs:
           password: ${{ secrets.RENKU_DOCKER_PASSWORD }}
 
       - name: Find deployment url
-        if: needs.check-deploy.outputs.deploy == 'true'
         uses: peter-evans/find-comment@v3
         id: deploymentUrlMessage
         with:
