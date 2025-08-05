@@ -80,7 +80,6 @@ jobs:
            You can access the deployment of this PR at ${{ format('https://ci-renku-{0}.dev.renku.ch', github.event.number) }}
 
       - name: Azure login
-        if: needs.check-deploy.outputs.deploy == 'true'
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.CI_RENKU_AZURE_CLIENT_ID }}
