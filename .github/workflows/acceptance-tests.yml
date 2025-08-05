@@ -87,7 +87,6 @@ jobs:
           subscription-id: ${{ secrets.CI_RENKU_AZURE_SUBSCRIPTION_ID }}
 
       - uses: azure/aks-set-context@v4
-        if: needs.check-deploy.outputs.deploy == 'true'
         with:
           resource-group: "renku-dev"
           cluster-name: "aks-switzerlandnorth-renku-dev"
