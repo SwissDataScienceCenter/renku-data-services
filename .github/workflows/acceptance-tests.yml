@@ -169,15 +169,13 @@ jobs:
       fail-fast: false
       matrix:
         tests:
-          [
-            publicProject,
-            privateProject,
-            updateProjects,
-            testDatasets,
-            useSession,
-            checkWorkflows,
-            rstudioSession,
-          ]
+          - publicProject
+          - privateProject
+          - updateProjects
+          - testDatasets
+          - useSession
+          - checkWorkflows
+          - rstudioSession
     steps:
       - name: Extract Renku repository reference
         run: echo "RENKU_REFERENCE=`echo '${{ needs.check-deploy.outputs.renku }}' | cut -d'@' -f2`" >> $GITHUB_ENV
@@ -201,15 +199,13 @@ jobs:
       fail-fast: false
       matrix:
         tests:
-          [
-            anonymousNavigation,
-            dashboardV2,
-            groupBasics,
-            projectBasics,
-            projectResources,
-            searchEntities,
-            sessionBasics,
-          ]
+          - anonymousNavigation
+          - dashboardV2
+          - groupBasics
+          - projectBasics
+          - projectResources
+          - searchEntities
+          - sessionBasics
     steps:
       - name: Extract Renku repository reference
         run: echo "RENKU_REFERENCE=`echo '${{ needs.check-deploy.outputs.renku }}' | cut -d'@' -f2`" >> $GITHUB_ENV
