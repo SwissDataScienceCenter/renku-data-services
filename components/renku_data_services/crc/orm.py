@@ -168,6 +168,7 @@ class ClusterORM(BaseORM):
             session_host=self.session_host,
             session_port=self.session_port,
             session_path=self.session_path,
+            session_ingress_classname=self.session_ingress_classname,
             session_ingress_annotations=self.session_ingress_annotations,
             session_tls_secret_name=self.session_tls_secret_name,
             session_storage_class=self.session_storage_class,
