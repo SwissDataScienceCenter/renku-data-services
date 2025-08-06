@@ -268,4 +268,3 @@ jobs:
           MAX_AGE_SECONDS: 0
           DELETE_NAMESPACE: "true"
           KUBECONFIG: "${{ github.workspace }}/renkubot-kube.config"
-
