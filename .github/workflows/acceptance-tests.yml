@@ -49,6 +49,9 @@ jobs:
       pull-requests: write
       id-token: write
     if: github.event.action != 'closed' && needs.check-deploy.outputs.deploy == 'true'
+    environment:
+      name: renku-ci-ds-${{ github.event.number }}
+      url: https://renku-ci-ds-${{ github.event.number }}.dev.renku.ch
     steps:
       - uses: actions/checkout@v4.2.2
         with:
