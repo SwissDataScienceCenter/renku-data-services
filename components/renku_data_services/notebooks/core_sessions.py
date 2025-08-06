@@ -534,7 +534,7 @@ async def start_session(
     # Determine resource_class_id: the class can be overwritten at the user's request
     resource_class_id = body.resource_class_id or launcher.resource_class_id
 
-    cluster = await nb_config.k8s_v2_client.cluster_by_class_id(body.resource_class_id, user)
+    cluster = await nb_config.k8s_v2_client.cluster_by_class_id(resource_class_id, user)
 
     server_name = renku_2_make_server_name(
         user=user, project_id=str(launcher.project_id), launcher_id=body.launcher_id, cluster_id=cluster.id
