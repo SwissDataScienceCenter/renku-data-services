@@ -5,10 +5,10 @@ import json
 import os
 import random
 import string
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from datetime import timedelta
 from pathlib import PurePosixPath
-from typing import cast
+from typing import Protocol, TypeVar, cast
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -527,7 +527,11 @@ async def start_session(
     user_repo: UserRepo,
     metrics: MetricsService,
 ) -> tuple[AmaltheaSessionV1Alpha1, bool]:
-    """Start an Amalthea session."""
+    """Start an Amalthea session.
+
+    Returns a tuple where the first item is an instance of an Amalthea session
+    and the second item is a boolean set to true iff a new session was created.
+    """
     launcher = await session_repo.get_launcher(user, ULID.from_str(body.launcher_id))
     project = await project_repo.get_project(user=user, project_id=launcher.project_id)
 
@@ -654,7 +658,7 @@ async def start_session(
     session_extras = session_extras.concat(
         SessionExtraResources(
             secrets=[auth_secret],
-            volumes=[auth_secret.volume] if auth_secret.volume else None,
+            volumes=[auth_secret.volume] if auth_secret.volume else [],
         )
     )
 
@@ -918,68 +922,23 @@ async def patch_session(
             session_extras = session_extras.concat(SessionExtraResources(secrets=[image_secret]))
 
     # Construct session patch
-    containers = None
-    if session_extras.containers:
-        containers = list(session.spec.extraContainers or [])
-        containers_to_add = list(session_extras.containers)
-        for c_to_add in containers_to_add:
-            idx = None
-            for i, candidate_c in enumerate(containers):
-                if candidate_c.name == c_to_add.name:
-                    idx = i
-                    break
-            if idx is not None:
-                containers[idx] = c_to_add
-            else:
-                containers.append(c_to_add)
-        patch.spec.extraContainers = containers
-    init_containers = None
-    if session_extras.init_containers:
-        init_containers = list(session.spec.initContainers or [])
-        init_containers_to_add = list(session_extras.init_containers)
-        for ic_to_add in init_containers_to_add:
-            idx = None
-            for i, candidate_ic in enumerate(init_containers):
-                if candidate_ic.name == ic_to_add.name:
-                    idx = i
-                    break
-            if idx is not None:
-                init_containers[idx] = ic_to_add
-            else:
-                init_containers.append(ic_to_add)
-        patch.spec.initContainers = init_containers
-    volumes = None
-    if session_extras.volumes:
-        volumes = list(session.spec.extraVolumes or [])
-        volumes_to_add = list(session_extras.volumes)
-        for v_to_add in volumes_to_add:
-            idx = None
-            for i, candidate_v in enumerate(volumes):
-                if candidate_v.name == v_to_add.name:
-                    idx = i
-                    break
-            if idx is not None:
-                volumes[idx] = v_to_add
-            else:
-                volumes.append(v_to_add)
-        patch.spec.extraVolumes = volumes
-    volume_mounts = None
-    if session_extras.volume_mounts:
-        volume_mounts = list(session.spec.session.extraVolumeMounts or [])
-        volume_mounts_to_add = list(session_extras.volume_mounts)
-        for vm_to_add in volume_mounts_to_add:
-            idx = None
-            for i, candidate_vm in enumerate(volume_mounts):
-                if candidate_vm.name == vm_to_add.name:
-                    idx = i
-                    break
-            if idx is not None:
-                volume_mounts[idx] = vm_to_add
-            else:
-                volume_mounts.append(vm_to_add)
-        if not patch.spec.session:
-            patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()
-        patch.spec.session.extraVolumeMounts = volume_mounts
+    patch.spec.extraContainers = _make_patch_spec_list(
+        existing=session.spec.extraContainers or [], updated=session_extras.containers
+    )
+    patch.spec.initContainers = _make_patch_spec_list(
+        existing=session.spec.initContainers or [], updated=session_extras.init_containers
+    )
+    patch.spec.initContainers = _make_patch_spec_list(
+        existing=session.spec.initContainers or [], updated=session_extras.init_containers
+    )
+    patch.spec.extraVolumes = _make_patch_spec_list(
+        existing=session.spec.extraVolumes or [], updated=session_extras.volumes
+    )
+    if not patch.spec.session:
+        patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()
+    patch.spec.session.extraVolumeMounts = _make_patch_spec_list(
+        existing=session.spec.session.extraVolumeMounts or [], updated=session_extras.volume_mounts
+    )
 
     secrets_to_create = session_extras.secrets or []
     for s in secrets_to_create:
@@ -1039,3 +998,32 @@ def _deduplicate_target_paths(dcs: dict[str, RCloneStorage]) -> dict[str, RClone
         )
 
     return result_dcs
+
+
+class _NamedResource(Protocol):
+    """Represents a resource with a name."""
+
+    name: str
+
+
+_T = TypeVar("_T", bound=_NamedResource)
+
+
+def _make_patch_spec_list(existing: Sequence[_T], updated: Sequence[_T]) -> list[_T] | None:
+    """Merges updated into existing by upserting items identified by their name.
+
+    This method is used to construct session patches, merging session resources by name (containers, volumes, etc.).
+    """
+    patch_list = None
+    if updated:
+        patch_list = list(existing)
+        upsert_list = list(updated)
+        for upsert_item in upsert_list:
+            # Find out if the upsert_item needs to be added or updated
+            found = next(enumerate(filter(lambda item: item.name == upsert_item.name, patch_list)), None)
+            if found is not None:
+                idx, _ = found
+                patch_list[idx] = upsert_item
+            else:
+                patch_list.append(upsert_item)
+    return patch_list

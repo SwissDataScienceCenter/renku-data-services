@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TypeVar
 
 from kubernetes.client import V1Secret
 from pydantic import AliasGenerator, BaseModel, Field, Json
@@ -126,43 +125,27 @@ class ExtraSecret:
 class SessionExtraResources:
     """Represents extra resources to add to an amalthea session."""
 
-    containers: list[ExtraContainer] | None = None
-    data_connector_secrets: dict[str, list[DataConnectorSecret]] | None = None
-    data_sources: list[DataSource] | None = None
-    init_containers: list[InitContainer] | None = None
-    secrets: list[ExtraSecret] | None = None
-    volume_mounts: list[ExtraVolumeMount] | None = None
-    volumes: list[ExtraVolume] | None = None
+    containers: list[ExtraContainer] = field(default_factory=list)
+    data_connector_secrets: dict[str, list[DataConnectorSecret]] = field(default_factory=dict)
+    data_sources: list[DataSource] = field(default_factory=list)
+    init_containers: list[InitContainer] = field(default_factory=list)
+    secrets: list[ExtraSecret] = field(default_factory=list)
+    volume_mounts: list[ExtraVolumeMount] = field(default_factory=list)
+    volumes: list[ExtraVolume] = field(default_factory=list)
 
     def concat(self, added_extras: "SessionExtraResources | None") -> "SessionExtraResources":
         """Concatenates these session extras with more session extras."""
         if added_extras is None:
             return self
+        data_connector_secrets: dict[str, list[DataConnectorSecret]] = dict()
+        data_connector_secrets.update(self.data_connector_secrets)
+        data_connector_secrets.update(added_extras.data_connector_secrets)
         return SessionExtraResources(
-            containers=self._extend_list(self.containers, added_extras.containers),
-            data_connector_secrets=self._extend_dict(self.data_connector_secrets, added_extras.data_connector_secrets),
-            data_sources=self._extend_list(self.data_sources, added_extras.data_sources),
-            init_containers=self._extend_list(self.init_containers, added_extras.init_containers),
-            secrets=self._extend_list(self.secrets, added_extras.secrets),
-            volume_mounts=self._extend_list(self.volume_mounts, added_extras.volume_mounts),
-            volumes=self._extend_list(self.volumes, added_extras.volumes),
+            containers=self.containers + added_extras.containers,
+            data_connector_secrets=data_connector_secrets,
+            data_sources=self.data_sources + added_extras.data_sources,
+            init_containers=self.init_containers + added_extras.init_containers,
+            secrets=self.secrets + added_extras.secrets,
+            volume_mounts=self.volume_mounts + added_extras.volume_mounts,
+            volumes=self.volumes + added_extras.volumes,
         )
-
-    _T = TypeVar("_T")
-    _K = TypeVar("_K")
-
-    @staticmethod
-    def _extend_list(l1: list[_T] | None, l2: list[_T] | None) -> list[_T] | None:
-        res = l1
-        if l2 is not None:
-            res = res or []
-            res.extend(l2)
-        return res
-
-    @staticmethod
-    def _extend_dict(d1: dict[_K, _T] | None, d2: dict[_K, _T] | None) -> dict[_K, _T] | None:
-        res = d1
-        if d2 is not None:
-            res = res or dict()
-            res.update(d2)
-        return res
