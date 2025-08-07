@@ -945,6 +945,13 @@ async def patch_session(
     if image_pull_secret_name:
         patch.spec.imagePullSecrets = [ImagePullSecret(name=image_pull_secret_name, adopt=True)]
 
+    logger.warning(f"session_extras: {session_extras}")
+    logger.warning(
+        f"initContainers: {_make_patch_spec_list(
+        existing=session.spec.initContainers or [], updated=session_extras.init_containers
+    )}"
+    )
+    logger.warning(f"existing initContainers: {session.spec.initContainers}")
     logger.warning(f"patch: {patch.spec}")
 
     patch_serialized = patch.to_rfc7386()
