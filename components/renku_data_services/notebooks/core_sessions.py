@@ -928,9 +928,6 @@ async def patch_session(
     patch.spec.initContainers = _make_patch_spec_list(
         existing=session.spec.initContainers or [], updated=session_extras.init_containers
     )
-    patch.spec.initContainers = _make_patch_spec_list(
-        existing=session.spec.initContainers or [], updated=session_extras.init_containers
-    )
     patch.spec.extraVolumes = _make_patch_spec_list(
         existing=session.spec.extraVolumes or [], updated=session_extras.volumes
     )
@@ -946,6 +943,8 @@ async def patch_session(
 
     if image_pull_secret_name:
         patch.spec.imagePullSecrets = [ImagePullSecret(name=image_pull_secret_name, adopt=True)]
+
+    logger.warning(f"patch: {patch.spec}")
 
     patch_serialized = patch.to_rfc7386()
     if len(patch_serialized) == 0:
