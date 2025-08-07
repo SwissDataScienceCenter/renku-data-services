@@ -104,6 +104,17 @@ def get_clusters(
     """Get all clusters accessible to the application."""
     global _clusters
 
+    # Try to work around sync call of async function.
+    def _select_all_sync() -> list[models.SavedClusterSettings]:
+        materialised_list = []
+
+        async def f() -> None:
+            async for c in cluster_rp.select_all():
+                materialised_list.append(c)
+
+        kr8s._async_utils.run_sync(f)()
+        return materialised_list
+
     _clusters_lock.acquire()
 
     if _clusters is None:
@@ -117,9 +128,7 @@ def get_clusters(
 
         if os.path.exists(kube_conf_root_dir):
             # Run async code in sync context
-            db_clusters = kr8s._async_utils.run_sync(cluster_rp.select_all)()
-            for cluster in db_clusters:
-                assert isinstance(cluster, models.SavedClusterSettings)
+            db_clusters = _select_all_sync()
 
             for db_cluster in db_clusters:
                 filename = db_cluster.config_name
