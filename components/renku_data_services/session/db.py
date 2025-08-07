@@ -100,6 +100,7 @@ class SessionRepository:
             args=new_environment.args,
             creation_date=datetime.now(UTC).replace(microsecond=0),
             is_archived=new_environment.is_archived,
+            strip_path_prefix=new_environment.strip_path_prefix,
         )
 
         session.add(environment)
@@ -132,6 +133,7 @@ class SessionRepository:
             creation_date=datetime.now(UTC).replace(microsecond=0),
             is_archived=environment.is_archived,
             environment_image_source=environment.environment_image_source,
+            strip_path_prefix=environment.strip_path_prefix,
         )
 
         if environment.environment_image_source == models.EnvironmentImageSource.build:
@@ -190,6 +192,7 @@ class SessionRepository:
             environment_image_source=models.EnvironmentImageSource.build,
             build_parameters_id=build_parameters_orm.id,
             build_parameters=build_parameters_orm,
+            strip_path_prefix=False,
         )
         session.add(environment_orm)
         return environment_orm
@@ -250,6 +253,9 @@ class SessionRepository:
 
         if update.is_archived is not None:
             environment.is_archived = update.is_archived
+
+        if update.strip_path_prefix is not None:
+            environment.strip_path_prefix = update.strip_path_prefix
 
     async def __update_environment_build_parameters(
         self, environment: schemas.EnvironmentORM, update: models.EnvironmentPatch
@@ -411,6 +417,7 @@ class SessionRepository:
                     args=launcher.environment.args,
                     creation_date=datetime.now(UTC).replace(microsecond=0),
                     environment_image_source=models.EnvironmentImageSource.image,
+                    strip_path_prefix=launcher.environment.strip_path_prefix,
                 )
                 session.add(environment_orm)
             elif isinstance(launcher.environment, models.UnsavedBuildParameters):
@@ -441,6 +448,7 @@ class SessionRepository:
                     environment_image_source=models.EnvironmentImageSource.build,
                     build_parameters_id=build_parameters_orm.id,
                     build_parameters=build_parameters_orm,
+                    strip_path_prefix=False,  # TODO: Should this maybe be adjustable?
                 )
                 session.add(environment_orm)
 
@@ -695,6 +703,7 @@ class SessionRepository:
                 launcher.environment.args = update.args
                 launcher.environment.environment_image_source = models.EnvironmentImageSource.image
                 launcher.environment.build_parameters_id = None
+                launcher.environment.strip_path_prefix = update.strip_path_prefix
 
                 # NOTE: Delete the build parameters since they are not used by any other environment
                 await session.delete(build_parameters)
@@ -734,6 +743,7 @@ class SessionRepository:
                 launcher.environment.environment_image_source = models.EnvironmentImageSource.build
                 launcher.environment.build_parameters_id = build_parameters_orm.id
                 launcher.environment.build_parameters = build_parameters_orm
+                launcher.environment.strip_path_prefix = False
 
                 await session.flush()
             case _:

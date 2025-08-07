@@ -1,5 +1,6 @@
 
 name: Acceptance tests
+
 permissions:
   contents: read
   pull-requests: read
@@ -14,7 +15,7 @@ on:
       - closed
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -86,12 +87,13 @@ jobs:
           tenant-id: ${{ secrets.CI_RENKU_AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.CI_RENKU_AZURE_SUBSCRIPTION_ID }}
 
-      - uses: azure/aks-set-context@v4
+      - name: Set AKS context
+        uses: azure/aks-set-context@v4
         with:
           resource-group: "renku-dev"
           cluster-name: "aks-switzerlandnorth-renku-dev"
 
-      - name: Get AKS credentials
+      - name: Setup kubeconfig
         run: |
           mv "${KUBECONFIG}" "${{ github.workspace }}/renkubot-kube.config"
           echo "KUBECONFIG=${{ github.workspace }}/renkubot-kube.config" >> "$GITHUB_ENV"
@@ -119,39 +121,6 @@ jobs:
           amalthea: "${{ needs.check-deploy.outputs.amalthea }}"
           amalthea_sessions: "${{ needs.check-deploy.outputs.amalthea-sessions }}"
           extra_values: "${{ needs.check-deploy.outputs.extra-values }}"
-
-  legacy-selenium-acceptance-tests:
-    name: Legacy Selenium tests
-    needs: [ check-deploy, deploy-pr ]
-    if: github.event.action != 'closed' && needs.check-deploy.outputs.deploy == 'true' && needs.check-deploy.outputs.test-legacy-enabled == 'true'
-
-    runs-on: ubuntu-24.04
-    steps:
-    - name: Azure login
-      uses: azure/login@v2
-      with:
-        client-id: ${{ secrets.CI_RENKU_AZURE_CLIENT_ID }}
-        tenant-id: ${{ secrets.CI_RENKU_AZURE_TENANT_ID }}
-        subscription-id: ${{ secrets.CI_RENKU_AZURE_SUBSCRIPTION_ID }}
-
-    - uses: azure/aks-set-context@v4
-      with:
-        resource-group: "renku-dev"
-        cluster-name: "aks-switzerlandnorth-renku-dev"
-
-    - name: Get AKS credentials
-      run: |
-        mv "${KUBECONFIG}" "${{ github.workspace }}/renkubot-kube.config"
-        echo "KUBECONFIG=${{ github.workspace }}/renkubot-kube.config" >> "$GITHUB_ENV"
-
-    - uses: SwissDataScienceCenter/renku-actions/test-renku@v1.19.0
-      with:
-        kubeconfig: "${{ env.KUBECONFIG }}"
-        renku-release: renku-ci-ds-${{ github.event.number }}
-        gitlab-token: ${{ secrets.DEV_GITLAB_TOKEN }}
-        s3-results-access-key: ${{ secrets.ACCEPTANCE_TESTS_BUCKET_ACCESS_KEY }}
-        s3-results-secret-key: ${{ secrets.ACCEPTANCE_TESTS_BUCKET_SECRET_KEY }}
-        test-timeout-mins: "60"
 
   legacy-cypress-acceptance-tests:
     name: Legacy Cypress tests
@@ -186,7 +155,7 @@ jobs:
     name: Cypress tests
     runs-on: ubuntu-24.04
     needs: [check-deploy, deploy-pr]
-    if: github.event.action != 'closed' && needs.check-deploy.outputs.pr-contains-string == 'true' && needs.check-deploy.outputs.test-enabled == 'true'
+    if: github.event.action != 'closed' && needs.check-deploy.outputs.deploy == 'true' && needs.check-deploy.outputs.test-enabled == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -246,13 +215,14 @@ jobs:
           tenant-id: ${{ secrets.CI_RENKU_AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.CI_RENKU_AZURE_SUBSCRIPTION_ID }}
 
-      - uses: azure/aks-set-context@v4
+      - name: Set AKS context
+        uses: azure/aks-set-context@v4
         if: needs.check-deploy.outputs.deploy == 'true'
         with:
           resource-group: "renku-dev"
           cluster-name: "aks-switzerlandnorth-renku-dev"
 
-      - name: Get AKS credentials
+      - name: Setup kubeconfig
         if: needs.check-deploy.outputs.deploy == 'true'
         run: |
           mv "${KUBECONFIG}" "${{ github.workspace }}/renkubot-kube.config"

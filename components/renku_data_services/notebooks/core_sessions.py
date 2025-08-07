@@ -182,7 +182,7 @@ async def get_auth_secret_authenticated(
     return ExtraSecret(secret, vol, vol_mount)
 
 
-async def get_auth_secret_anonymous(nb_config: NotebooksConfig, server_name: str, request: Request) -> ExtraSecret:
+def get_auth_secret_anonymous(nb_config: NotebooksConfig, server_name: str, request: Request) -> ExtraSecret:
     """Get the extra secrets that need to be added to the session for an anonymous user."""
     # NOTE: We extract the session cookie value here in order to avoid creating a cookie.
     # The gateway encrypts and signs cookies so the user ID injected in the request headers does not
@@ -654,7 +654,7 @@ async def start_session(
             nb_config, user, server_name, base_server_url, base_server_https_url, base_server_path
         )
     else:
-        auth_secret = await get_auth_secret_anonymous(nb_config, server_name, request)
+        auth_secret = get_auth_secret_anonymous(nb_config, server_name, request)
     session_extras = session_extras.concat(
         SessionExtraResources(
             secrets=[auth_secret],
@@ -718,6 +718,7 @@ async def start_session(
                 command=environment.command,
                 args=environment.args,
                 shmSize=ShmSizeStr("1G"),
+                stripURLPath=environment.strip_path_prefix,
                 env=env,
             ),
             ingress=ingress,
