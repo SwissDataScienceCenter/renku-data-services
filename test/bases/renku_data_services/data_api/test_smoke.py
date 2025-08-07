@@ -53,7 +53,7 @@ def test_apispec_conflicts() -> None:
         fallback_strategies=["use_existing"],
         type_conflict_strategies=["use_existing"],
     )
-    apispec_files = list(Path(".").glob("**/api.spec.yaml"))
+    apispec_files = list(Path(".").glob("**/apispec.yaml"))
     if len(apispec_files) < 2:
         return
     with open(apispec_files[0]) as f:
