@@ -1,6 +1,7 @@
 """Base config for k8s."""
 
 import os
+from collections.abc import AsyncIterable
 
 import kr8s
 import yaml
@@ -94,22 +95,18 @@ async def get_clusters(
     namespace: str,
     api: kr8s.asyncio.Api,
     cluster_repo: ClusterRepository,
-) -> list[ClusterConnection]:
+) -> AsyncIterable[ClusterConnection]:
     """Get all clusters accessible to the application."""
-
-    clusters = [
-        k8s_models.ClusterConnection(
-            id=DEFAULT_K8S_CLUSTER,
-            namespace=namespace,
-            api=api,
-        )
-    ]
+    yield k8s_models.ClusterConnection(
+        id=DEFAULT_K8S_CLUSTER,
+        namespace=namespace,
+        api=api,
+    )
 
     if not os.path.exists(kube_conf_root_dir):
         logger.warning(f"Cannot open directory '{kube_conf_root_dir}', ignoring kube configs...")
-        return clusters
+        return
 
-    # Run async code in sync context
     async for cluster_db in cluster_repo.select_all():
         filename = cluster_db.config_name
         try:
@@ -119,9 +116,7 @@ async def get_clusters(
                 namespace=kube_config.api().namespace,
                 api=kube_config.api(),
             )
-            clusters.append(cluster)
             logger.info(f"Successfully loaded Kubernetes config: '{kube_conf_root_dir}/{filename}'")
+            yield cluster
         except Exception as e:
             logger.warning(f"Failed while loading '{kube_conf_root_dir}/{filename}', ignoring kube config. Error: {e}")
-
-    return clusters
