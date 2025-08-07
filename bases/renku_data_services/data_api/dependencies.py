@@ -41,19 +41,17 @@ from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.clients import (
     DummyCoreClient,
     DummySchedulingClient,
-    K8sCachedClusterClient,
     K8sClusterClientsPool,
     K8sCoreClient,
     K8sSchedulingClient,
 )
 from renku_data_services.k8s.config import KubeConfigEnv
-from renku_data_services.k8s.db import K8sDbCache, QuotaRepository
+from renku_data_services.k8s.db import QuotaRepository
 from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.metrics.core import StagingMetricsService
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.notebooks.config import get_clusters
-from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
 from renku_data_services.platform.db import PlatformRepository
 from renku_data_services.project.db import (
     ProjectMemberRepository,
@@ -66,7 +64,6 @@ from renku_data_services.search import query_manual
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsRepo
-from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
 from renku_data_services.storage.db import StorageRepository
@@ -245,23 +242,15 @@ class DependencyManager:
                 realm=config.keycloak.realm,
             )
             if config.builds.enabled:
-                k8s_db_cache = K8sDbCache(config.db.async_session_maker)
                 kr8s_api = KubeConfigEnv().api()
                 shipwright_client = ShipwrightClient(
                     client=K8sClusterClientsPool(
-                        clients={
-                            c.id: K8sCachedClusterClient(
-                                c,
-                                k8s_db_cache,
-                                [AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
-                            )
-                            for c in get_clusters(
-                                kube_conf_root_dir=config.k8s_config_root,
-                                namespace=config.k8s_namespace,
-                                api=kr8s_api,
-                                cluster_rp=cluster_repo,
-                            )
-                        }
+                        get_clusters(
+                            kube_conf_root_dir=config.k8s_config_root,
+                            namespace=config.k8s_namespace,
+                            api=kr8s_api,
+                            cluster_repo=cluster_repo,
+                        ),
                     ),
                     namespace=config.k8s_namespace,
                 )
