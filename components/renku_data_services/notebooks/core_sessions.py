@@ -945,15 +945,6 @@ async def patch_session(
     if image_pull_secret_name:
         patch.spec.imagePullSecrets = [ImagePullSecret(name=image_pull_secret_name, adopt=True)]
 
-    logger.warning(f"session_extras: {session_extras}")
-    logger.warning(
-        f"initContainers: {_make_patch_spec_list(
-        existing=session.spec.initContainers or [], updated=session_extras.init_containers
-    )}"
-    )
-    logger.warning(f"existing initContainers: {session.spec.initContainers}")
-    logger.warning(f"patch: {patch.spec}")
-
     patch_serialized = patch.to_rfc7386()
     if len(patch_serialized) == 0:
         return session
@@ -1026,8 +1017,10 @@ def _make_patch_spec_list(existing: Sequence[_T], updated: Sequence[_T]) -> list
         patch_list = list(existing)
         upsert_list = list(updated)
         for upsert_item in upsert_list:
+            print(f"patch_list before: {patch_list}")
             # Find out if the upsert_item needs to be added or updated
-            found = next(enumerate(filter(lambda item: item.name == upsert_item.name, patch_list)), None)
+            # found = next(enumerate(filter(lambda item: item.name == upsert_item.name, patch_list)), None)
+            found = next(filter(lambda t: t[1].name == upsert_item.name, enumerate(patch_list)), None)
             if found is not None:
                 idx, _ = found
                 patch_list[idx] = upsert_item
