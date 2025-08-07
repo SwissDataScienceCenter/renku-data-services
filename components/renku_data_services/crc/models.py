@@ -201,6 +201,7 @@ class ClusterPatch:
     session_ingress_annotations: dict[str, Any] | None
     session_tls_secret_name: str | None
     session_storage_class: str | None
+    service_account_name: str | None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -216,6 +217,7 @@ class Cluster:
     session_ingress_annotations: dict[str, Any]
     session_tls_secret_name: str
     session_storage_class: str | None
+    service_account_name: str | None = None
 
     def to_cluster_patch(self) -> ClusterPatch:
         """Convert to ClusterPatch."""
@@ -230,6 +232,7 @@ class Cluster:
             session_ingress_annotations=self.session_ingress_annotations,
             session_tls_secret_name=self.session_tls_secret_name,
             session_storage_class=self.session_storage_class,
+            service_account_name=self.service_account_name,
         )
 
 
@@ -331,6 +334,7 @@ class ResourcePool:
                     session_tls_secret_name=tmp["session_tls_secret_name"],
                     session_storage_class=tmp["session_storage_class"],
                     id=tmp["id"],
+                    service_account_name=tmp.get("service_account_name"),
                 )
             case None:
                 cluster = None

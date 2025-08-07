@@ -100,6 +100,7 @@ class SessionRepository:
             args=new_environment.args,
             creation_date=datetime.now(UTC).replace(microsecond=0),
             is_archived=new_environment.is_archived,
+            strip_path_prefix=new_environment.strip_path_prefix,
         )
 
         session.add(environment)
@@ -132,6 +133,7 @@ class SessionRepository:
             creation_date=datetime.now(UTC).replace(microsecond=0),
             is_archived=environment.is_archived,
             environment_image_source=environment.environment_image_source,
+            strip_path_prefix=environment.strip_path_prefix,
         )
 
         if environment.environment_image_source == models.EnvironmentImageSource.build:
@@ -141,6 +143,8 @@ class SessionRepository:
                 builder_variant=environment.build_parameters.builder_variant,
                 frontend_variant=environment.build_parameters.frontend_variant,
                 repository=environment.build_parameters.repository,
+                repository_revision=environment.build_parameters.repository_revision,
+                context_dir=environment.build_parameters.context_dir,
             )
             session.add(new_build_parameters)
 
@@ -165,6 +169,8 @@ class SessionRepository:
             builder_variant=new_build_parameters_environment.builder_variant,
             frontend_variant=new_build_parameters_environment.frontend_variant,
             repository=new_build_parameters_environment.repository,
+            repository_revision=new_build_parameters_environment.repository_revision,
+            context_dir=new_build_parameters_environment.context_dir,
         )
         session.add(build_parameters_orm)
 
@@ -186,6 +192,7 @@ class SessionRepository:
             environment_image_source=models.EnvironmentImageSource.build,
             build_parameters_id=build_parameters_orm.id,
             build_parameters=build_parameters_orm,
+            strip_path_prefix=False,
         )
         session.add(environment_orm)
         return environment_orm
@@ -247,6 +254,9 @@ class SessionRepository:
         if update.is_archived is not None:
             environment.is_archived = update.is_archived
 
+        if update.strip_path_prefix is not None:
+            environment.strip_path_prefix = update.strip_path_prefix
+
     async def __update_environment_build_parameters(
         self, environment: schemas.EnvironmentORM, update: models.EnvironmentPatch
     ) -> None:
@@ -262,6 +272,14 @@ class SessionRepository:
             environment.build_parameters.builder_variant = build_parameters.builder_variant
         if build_parameters.frontend_variant is not None:
             environment.build_parameters.frontend_variant = build_parameters.frontend_variant
+        if build_parameters.repository_revision == "":
+            environment.build_parameters.repository_revision = None
+        elif build_parameters.repository_revision:
+            environment.build_parameters.repository_revision = build_parameters.repository_revision
+        if build_parameters.context_dir == "":
+            environment.build_parameters.context_dir = None
+        elif build_parameters.context_dir:
+            environment.build_parameters.context_dir = build_parameters.context_dir
 
     async def update_environment(
         self, user: base_models.APIUser, environment_id: ULID, patch: models.EnvironmentPatch
@@ -399,6 +417,7 @@ class SessionRepository:
                     args=launcher.environment.args,
                     creation_date=datetime.now(UTC).replace(microsecond=0),
                     environment_image_source=models.EnvironmentImageSource.image,
+                    strip_path_prefix=launcher.environment.strip_path_prefix,
                 )
                 session.add(environment_orm)
             elif isinstance(launcher.environment, models.UnsavedBuildParameters):
@@ -406,6 +425,8 @@ class SessionRepository:
                     builder_variant=launcher.environment.builder_variant,
                     frontend_variant=launcher.environment.frontend_variant,
                     repository=launcher.environment.repository,
+                    repository_revision=launcher.environment.repository_revision,
+                    context_dir=launcher.environment.context_dir,
                 )
                 session.add(build_parameters_orm)
 
@@ -427,6 +448,7 @@ class SessionRepository:
                     environment_image_source=models.EnvironmentImageSource.build,
                     build_parameters_id=build_parameters_orm.id,
                     build_parameters=build_parameters_orm,
+                    strip_path_prefix=False,  # TODO: Should this maybe be adjustable?
                 )
                 session.add(environment_orm)
 
@@ -681,6 +703,7 @@ class SessionRepository:
                 launcher.environment.args = update.args
                 launcher.environment.environment_image_source = models.EnvironmentImageSource.image
                 launcher.environment.build_parameters_id = None
+                launcher.environment.strip_path_prefix = update.strip_path_prefix
 
                 # NOTE: Delete the build parameters since they are not used by any other environment
                 await session.delete(build_parameters)
@@ -700,6 +723,8 @@ class SessionRepository:
                     builder_variant=new_custom_built_environment.builder_variant,
                     frontend_variant=new_custom_built_environment.frontend_variant,
                     repository=new_custom_built_environment.repository,
+                    repository_revision=new_custom_built_environment.repository_revision,
+                    context_dir=new_custom_built_environment.context_dir,
                 )
                 session.add(build_parameters_orm)
 
@@ -718,6 +743,7 @@ class SessionRepository:
                 launcher.environment.environment_image_source = models.EnvironmentImageSource.build
                 launcher.environment.build_parameters_id = build_parameters_orm.id
                 launcher.environment.build_parameters = build_parameters_orm
+                launcher.environment.strip_path_prefix = False
 
                 await session.flush()
             case _:
@@ -1024,6 +1050,8 @@ class SessionRepository:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
         git_repository = build_parameters.repository
+        git_repository_revision = build_parameters.repository_revision
+        context_dir = build_parameters.context_dir
 
         output_image_prefix = (
             self.builds_config.build_output_image_prefix or constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
@@ -1072,6 +1100,8 @@ class SessionRepository:
             labels=labels,
             annotations=annotations,
             frontend=build_parameters.frontend_variant,
+            git_repository_revision=git_repository_revision,
+            context_dir=context_dir,
         )
 
     async def _get_environment_authorization(

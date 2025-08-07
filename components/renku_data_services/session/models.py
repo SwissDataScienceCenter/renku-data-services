@@ -60,6 +60,8 @@ class UnsavedBuildParameters:
     repository: str
     builder_variant: str
     frontend_variant: str
+    repository_revision: str | None = None
+    context_dir: str | None = None
 
 
 @dataclass(kw_only=True, frozen=True, eq=True)
@@ -87,6 +89,7 @@ class UnsavedEnvironment:
     args: list[str] | None = None
     command: list[str] | None = None
     is_archived: bool = False
+    strip_path_prefix: bool = False
 
     def __post_init__(self) -> None:
         if self.working_directory and not self.working_directory.is_absolute():
@@ -128,6 +131,8 @@ class BuildParametersPatch:
     repository: str | None = None
     builder_variant: str | None = None
     frontend_variant: str | None = None
+    repository_revision: str | None = None
+    context_dir: str | None = None
 
 
 @dataclass(eq=True, kw_only=True)
@@ -148,6 +153,7 @@ class EnvironmentPatch:
     is_archived: bool | None = None
     build_parameters: BuildParametersPatch | None = None
     environment_image_source: EnvironmentImageSource | None = None
+    strip_path_prefix: bool | None = None
 
 
 # TODO: Verify that these limits are compatible with k8s
@@ -307,6 +313,8 @@ class ShipwrightBuildRunParams:
     annotations: dict[str, str] | None = None
     frontend: str = FrontendVariant.vscodium.value
     build_image: str | None = None
+    git_repository_revision: str | None = None
+    context_dir: str | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

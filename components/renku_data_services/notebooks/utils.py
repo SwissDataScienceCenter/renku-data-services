@@ -25,9 +25,10 @@ def merge_node_affinities(
         )
     if node_affinity2.preferredDuringSchedulingIgnoredDuringExecution:
         if output.preferredDuringSchedulingIgnoredDuringExecution:
-            output.preferredDuringSchedulingIgnoredDuringExecution.extend(
-                node_affinity2.preferredDuringSchedulingIgnoredDuringExecution
-            )
+            output.preferredDuringSchedulingIgnoredDuringExecution = [
+                *output.preferredDuringSchedulingIgnoredDuringExecution,
+                *node_affinity2.preferredDuringSchedulingIgnoredDuringExecution,
+            ]
         else:
             output.preferredDuringSchedulingIgnoredDuringExecution = (
                 node_affinity2.preferredDuringSchedulingIgnoredDuringExecution
@@ -44,9 +45,10 @@ def merge_node_affinities(
         and node_affinity2.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms
     ):
         if output.requiredDuringSchedulingIgnoredDuringExecution:
-            output.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms.extend(
-                node_affinity2.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms
-            )
+            output.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms = [
+                *output.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms,
+                *node_affinity2.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms,
+            ]
         else:
             output.requiredDuringSchedulingIgnoredDuringExecution = RequiredDuringSchedulingIgnoredDuringExecution(
                 nodeSelectorTerms=(node_affinity2.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms)
