@@ -1,26 +1,23 @@
 AMALTHEA_JS_VERSION ?= 0.20.0
 AMALTHEA_SESSIONS_VERSION ?= 0.20.0
-CODEGEN_PARAMS := \
-    --input-file-type openapi \
-    --output-model-type pydantic_v2.BaseModel \
-    --use-double-quotes \
-    --target-python-version 3.13 \
-    --collapse-root-models \
-    --field-constraints \
-    --strict-nullable \
-    --set-default-enum-member \
-    --openapi-scopes schemas paths parameters \
-    --set-default-enum-member \
-    --use-one-literal-as-default \
-    --use-default
-CR_CODEGEN_PARAMS := \
-	--input-file-type jsonschema \
+COMMON_CODEGEN_PARAMS := \
 	--output-model-type pydantic_v2.BaseModel \
 	--use-double-quotes \
 	--target-python-version 3.13 \
-	--collapse-root-models \
 	--field-constraints \
-	--strict-nullable \
+	--strict-nullable
+API_CODEGEN_PARAMS := \
+	--input-file-type openapi \
+	${COMMON_CODEGEN_PARAMS} \
+	--collapse-root-models \
+	--set-default-enum-member \
+	--openapi-scopes schemas paths parameters \
+	--use-one-literal-as-default \
+	--use-default
+CR_CODEGEN_PARAMS := \
+	--input-file-type jsonschema \
+	${COMMON_CODEGEN_PARAMS} \
+	--collapse-root-models \
 	--allow-extra-fields \
 	--use-default-kwarg
 
@@ -28,17 +25,12 @@ CR_CODEGEN_PARAMS := \
 # this causes a bug in the code generator related to list of unions.
 # https://github.com/koxudaxi/datamodel-code-generator/issues/1937
 SEARCH_CODEGEN_PARAMS := \
-    --input-file-type openapi \
-    --output-model-type pydantic_v2.BaseModel \
-    --use-double-quotes \
-    --target-python-version 3.13 \
-    --field-constraints \
-    --strict-nullable \
-    --set-default-enum-member \
-    --openapi-scopes schemas paths parameters \
-    --set-default-enum-member \
-    --use-one-literal-as-default \
-    --use-default
+	--input-file-type openapi \
+	${COMMON_CODEGEN_PARAMS} \
+	--set-default-enum-member \
+	--openapi-scopes schemas paths parameters \
+	--use-one-literal-as-default \
+	--use-default
 
 .PHONY: all
 all: help
@@ -193,7 +185,7 @@ help:  ## Display this help.
 
 # Pattern rules
 
-API_SPEC_CODEGEN_PARAMS := ${CODEGEN_PARAMS}
+API_SPEC_CODEGEN_PARAMS := ${API_CODEGEN_PARAMS}
 %/apispec.py: %/api.spec.yaml
 	$(if $(findstring /search/, $(<)), $(eval API_SPEC_CODEGEN_PARAMS=${SEARCH_CODEGEN_PARAMS}))
 	poetry run datamodel-codegen --input $< --output $@ --base-class $(subst /,.,$(subst .py,_base.BaseAPISpec,$(subst components/,,$@))) ${API_SPEC_CODEGEN_PARAMS}
