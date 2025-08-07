@@ -375,7 +375,7 @@ class NotebooksNewBP(CustomBlueprint):
                     self.nb_config, user, server_name, base_server_url, base_server_https_url, base_server_path
                 )
             else:
-                auth_secret = await get_auth_secret_anonymous(self.nb_config, server_name, request)
+                auth_secret = get_auth_secret_anonymous(self.nb_config, server_name, request)
             if auth_secret.volume:
                 extra_volumes.append(auth_secret.volume)
 
@@ -442,6 +442,7 @@ class NotebooksNewBP(CustomBlueprint):
                         command=environment.command,
                         args=environment.args,
                         shmSize=ShmSizeStr("1G"),
+                        stripURLPath=environment.strip_path_prefix,
                         env=env,
                     ),
                     ingress=ingress,
