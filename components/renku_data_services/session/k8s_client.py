@@ -293,7 +293,7 @@ class ShipwrightClient:
         logs: dict[str, str] = {}
         if result is None:
             return logs
-        cluster = self.client.cluster_by_id(result.cluster)
+        cluster = await self.client.cluster_by_id(result.cluster)
 
         obj = result.to_api_object(cluster.api)
         result = Pod(resource=obj, namespace=obj.namespace, api=cluster.api)

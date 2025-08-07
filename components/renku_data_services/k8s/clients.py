@@ -293,6 +293,10 @@ class K8sClusterClient(K8sClient):
         self.__cluster = cluster
         assert self.__cluster.api is not None
 
+    def __lt__(self, other: K8sClusterClient) -> bool:
+        """Allows for sorting."""
+        return self.__cluster.id < other.__cluster.id and self.__cluster.namespace < other.__cluster.namespace
+
     def get_cluster(self) -> ClusterConnection:
         """Return a cluster object."""
         return self.__cluster
@@ -436,10 +440,18 @@ class K8sCachedClusterClient(K8sClusterClient):
 class K8sClusterClientsPool(K8sClient):
     """A wrapper around a pool of kr8s k8s clients."""
 
-    def __init__(self, clients: dict[ClusterId, K8sClusterClient]) -> None:
-        self.__clients = clients
+    def __init__(self, clusters: AsyncIterable[K8sClusterClient]) -> None:
+        self.__clusters = clusters
+        self.__clients: dict[ClusterId, K8sClusterClient] = {}
 
-    def __get_client_or_die(self, cluster_id: ClusterId) -> K8sClusterClient:
+    async def __init_clients_if_needed(self) -> None:
+        if len(self.__clients) > 0:
+            return
+        async for cluster in self.__clusters:
+            self.__clients[cluster.get_cluster().id] = cluster
+
+    async def __get_client_or_die(self, cluster_id: ClusterId) -> K8sClusterClient:
+        await self.__init_clients_if_needed()
         cluster_client = self.__clients.get(cluster_id)
 
         if cluster_client is None:
@@ -448,29 +460,35 @@ class K8sClusterClientsPool(K8sClient):
             )
         return cluster_client
 
-    def cluster_by_id(self, cluster_id: ClusterId) -> ClusterConnection:
+    async def cluster_by_id(self, cluster_id: ClusterId) -> ClusterConnection:
         """Return a cluster by its id."""
-        return self.__get_client_or_die(cluster_id).get_cluster()
+        client = await self.__get_client_or_die(cluster_id)
+        return client.get_cluster()
 
     async def create(self, obj: K8sObject) -> K8sObject:
         """Create the k8s object."""
-        return await self.__get_client_or_die(obj.cluster).create(obj)
+        client = await self.__get_client_or_die(obj.cluster)
+        return await client.create(obj)
 
     async def patch(self, meta: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
         """Patch a k8s object."""
-        return await self.__get_client_or_die(meta.cluster).patch(meta, patch)
+        client = await self.__get_client_or_die(meta.cluster)
+        return await client.patch(meta, patch)
 
     async def delete(self, meta: K8sObjectMeta) -> None:
         """Delete a k8s object."""
-        await self.__get_client_or_die(meta.cluster).delete(meta)
+        client = await self.__get_client_or_die(meta.cluster)
+        await client.delete(meta)
 
     async def get(self, meta: K8sObjectMeta) -> K8sObject | None:
         """Get a specific k8s object, None is returned if the object does not exist."""
-        return await self.__get_client_or_die(meta.cluster).get(meta)
+        client = await self.__get_client_or_die(meta.cluster)
+        return await client.get(meta)
 
     async def list(self, _filter: K8sObjectFilter) -> AsyncIterable[K8sObject]:
         """List all k8s objects."""
-        cluster_clients = [v for v in self.__clients.values()]
+        await self.__init_clients_if_needed()
+        cluster_clients = sorted(list(self.__clients.values()))
         for c in cluster_clients:
             async for r in c.list(_filter):
                 yield r

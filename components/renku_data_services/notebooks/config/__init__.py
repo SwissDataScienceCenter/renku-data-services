@@ -13,7 +13,6 @@ from renku_data_services.db_config.config import DBConfig
 from renku_data_services.k8s.clients import (
     DummyCoreClient,
     DummySchedulingClient,
-    K8sCachedClusterClient,
     K8sClusterClientsPool,
     K8sCoreClient,
     K8sSchedulingClient,
@@ -175,17 +174,14 @@ class NotebooksConfig:
         cluster_rp = ClusterRepository(db_config.async_session_maker)
 
         client = K8sClusterClientsPool(
-            clients={
-                c.id: K8sCachedClusterClient(
-                    c, k8s_db_cache, [AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK]
-                )
-                for c in get_clusters(
-                    kube_conf_root_dir=kube_config_root,
-                    namespace=k8s_config.renku_namespace,
-                    api=kr8s_api,
-                    cluster_rp=cluster_rp,
-                )
-            },
+            get_clusters(
+                kube_conf_root_dir=kube_config_root,
+                namespace=k8s_config.renku_namespace,
+                api=kr8s_api,
+                cluster_repo=cluster_rp,
+                cache=k8s_db_cache,
+                kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
+            )
         )
 
         k8s_client = NotebookK8sClient(

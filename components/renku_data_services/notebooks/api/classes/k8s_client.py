@@ -165,9 +165,10 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
 
         return None
 
-    def namespace(self) -> str:
+    async def namespace(self) -> str:
         """Current namespace of the main cluster."""
-        return self.__client.cluster_by_id(self.cluster_id()).namespace
+        client = await self.__client.cluster_by_id(self.cluster_id())
+        return client.namespace
 
     @staticmethod
     def cluster_id() -> ClusterId:
@@ -186,7 +187,7 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
             except errors.MissingResourceError:
                 pass
 
-        return self.__client.cluster_by_id(cluster_id)
+        return await self.__client.cluster_by_id(cluster_id)
 
     async def list_sessions(self, safe_username: str) -> list[_SessionType]:
         """Get a list of sessions that belong to a user."""
@@ -272,7 +273,7 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
         if statefulset is None:
             return None
 
-        cluster = self.__client.cluster_by_id(statefulset.cluster)
+        cluster = await self.__client.cluster_by_id(statefulset.cluster)
         if cluster is None:
             return None
 
@@ -337,7 +338,7 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
         if result is None:
             return logs
 
-        cluster = self.__client.cluster_by_id(result.cluster)
+        cluster = await self.__client.cluster_by_id(result.cluster)
         if cluster is None:
             return logs
 
@@ -371,7 +372,7 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
         if result is None:
             return
 
-        cluster = self.__client.cluster_by_id(result.cluster)
+        cluster = await self.__client.cluster_by_id(result.cluster)
         if cluster is None:
             return
 
