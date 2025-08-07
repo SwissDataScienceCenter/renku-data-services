@@ -94,6 +94,7 @@ jobs:
       - name: Get AKS credentials
         run: |
           mv "${KUBECONFIG}" "${{ github.workspace }}/renkubot-kube.config"
+          echo "KUBECONFIG=${{ github.workspace }}/renkubot-kube.config" >> "$GITHUB_ENV"
 
       - name: Build and deploy
         uses: SwissDataScienceCenter/renku-actions/deploy-renku@v1.19.0
@@ -106,7 +107,6 @@ jobs:
           RENKU_VALUES: minimal-deployment/minimal-deployment-values.yaml
           TEST_ARTIFACTS_PATH: "tests-artifacts-${{ github.sha }}"
           KUBERNETES_CLUSTER_FQDN: "dev.renku.ch"
-          KUBECONFIG: "${{ github.workspace }}/renkubot-kube.config"
           RENKU_ANONYMOUS_SESSIONS: "true"
 
           renku: "${{ needs.check-deploy.outputs.renku }}"
@@ -142,10 +142,11 @@ jobs:
     - name: Get AKS credentials
       run: |
         mv "${KUBECONFIG}" "${{ github.workspace }}/renkubot-kube.config"
+        echo "KUBECONFIG=${{ github.workspace }}/renkubot-kube.config" >> "$GITHUB_ENV"
 
     - uses: SwissDataScienceCenter/renku-actions/test-renku@v1.19.0
       with:
-        kubeconfig: "${{ github.workspace }}/renkubot-kube.config"
+        kubeconfig: "${{ env.KUBECONFIG }}"
         renku-release: renku-ci-ds-${{ github.event.number }}
         gitlab-token: ${{ secrets.DEV_GITLAB_TOKEN }}
         s3-results-access-key: ${{ secrets.ACCEPTANCE_TESTS_BUCKET_ACCESS_KEY }}
@@ -255,6 +256,7 @@ jobs:
         if: needs.check-deploy.outputs.deploy == 'true'
         run: |
           mv "${KUBECONFIG}" "${{ github.workspace }}/renkubot-kube.config"
+          echo "KUBECONFIG=${{ github.workspace }}/renkubot-kube.config" >> "$GITHUB_ENV"
 
       # Cleanup for both standard and Azure deployments
       - name: renku teardown
@@ -264,4 +266,3 @@ jobs:
           GITLAB_TOKEN: ${{ secrets.DEV_GITLAB_TOKEN }}
           MAX_AGE_SECONDS: 0
           DELETE_NAMESPACE: "true"
-          KUBECONFIG: "${{ github.workspace }}/renkubot-kube.config"
