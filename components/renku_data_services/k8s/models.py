@@ -140,15 +140,15 @@ class K8sSecret(K8sObject):
         )
 
     @classmethod
-    def from_v1_secret(cls, secret: V1Secret, cluster_id: ClusterId) -> K8sSecret:
+    def from_v1_secret(cls, secret: V1Secret, cluster: ClusterConnection) -> K8sSecret:
         """Convert a V1Secret object to a K8sSecret object."""
         assert secret.metadata is not None
 
         return K8sSecret(
             name=secret.metadata.name,
-            namespace=secret.metadata.namespace,
-            cluster=cluster_id,
-            gvk=GVK(kind=Secret.kind, version=Secret.version),
+            namespace=cluster.namespace,
+            cluster=cluster.id,
+            gvk=GVK(group="", version=Secret.version, kind="Secret"),
             manifest=Box(sanitizer(secret)),
         )
 
