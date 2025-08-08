@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from base64 import b64encode
 
+from box import Box
 from cryptography.hazmat.primitives.asymmetric import rsa
+from kr8s.objects import Secret
 from kubernetes import client as k8s_client
 from ulid import ULID
 
 from renku_data_services import base_models, errors
 from renku_data_services.k8s.constants import ClusterId
-from renku_data_services.k8s.models import K8sSecret
+from renku_data_services.k8s.models import GVK, K8sSecret, sanitizer
 from renku_data_services.secrets import apispec
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo
 from renku_data_services.secrets.models import OwnerReference
@@ -86,14 +88,19 @@ async def validate_secret(
     if owner_references:
         owner_refs = [o.to_k8s() for o in owner_references]
 
-    return K8sSecret.from_v1_secret(
-        k8s_client.V1Secret(
-            data=decrypted_secrets,
-            metadata=k8s_client.V1ObjectMeta(
-                name=body.name,
-                namespace=body.namespace,
-                owner_references=owner_refs,
-            ),
+    v1_secret = k8s_client.V1Secret(
+        data=decrypted_secrets,
+        metadata=k8s_client.V1ObjectMeta(
+            name=body.name,
+            namespace=body.namespace,
+            owner_references=owner_refs,
         ),
-        cluster_id,
+    )
+
+    return K8sSecret(
+        name=v1_secret.metadata.name,
+        namespace=v1_secret.metadata.namespace,
+        cluster=cluster_id,
+        gvk=GVK(kind=Secret.kind, version=Secret.version),
+        manifest=Box(sanitizer(v1_secret)),
     )

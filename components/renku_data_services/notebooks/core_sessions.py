@@ -314,15 +314,17 @@ async def request_dc_secret_creation(
     headers = {"Authorization": f"bearer {user.access_token}"}
 
     cluster_id = None
+    namespace = await nb_config.k8s_v2_client.namespace()
     if (cluster := await nb_config.k8s_v2_client.cluster_by_class_id(manifest.resource_class_id(), user)) is not None:
         cluster_id = cluster.id
+        namespace = cluster.namespace
 
     for s_id, secrets in dc_secrets.items():
         if len(secrets) == 0:
             continue
         request_data = {
             "name": f"{manifest.metadata.name}-ds-{s_id.lower()}-secrets",
-            "namespace": nb_config.k8s_v2_client.namespace(),
+            "namespace": namespace,
             "secret_ids": [str(secret.secret_id) for secret in secrets],
             "owner_references": [owner_reference],
             "key_mapping": {str(secret.secret_id): secret.name for secret in secrets},
@@ -387,12 +389,14 @@ async def request_session_secret_creation(
         key_mapping[secret_id].append(s.secret_slot.filename)
 
     cluster_id = None
+    namespace = await nb_config.k8s_v2_client.namespace()
     if (cluster := await nb_config.k8s_v2_client.cluster_by_class_id(manifest.resource_class_id(), user)) is not None:
         cluster_id = cluster.id
+        namespace = cluster.namespace
 
     request_data = {
         "name": f"{manifest.metadata.name}-secrets",
-        "namespace": nb_config.k8s_v2_client.namespace(),
+        "namespace": namespace,
         "secret_ids": [str(s.secret_id) for s in session_secrets],
         "owner_references": [owner_reference],
         "key_mapping": key_mapping,
@@ -609,7 +613,7 @@ async def patch_session(
                     "and/or check that you still have permissions for the image repository."
                 )
             # Ensure the secret is created in the cluster
-            await nb_config.k8s_v2_client.create_secret(K8sSecret.from_v1_secret(image_secret.secret, cluster.id))
+            await nb_config.k8s_v2_client.create_secret(K8sSecret.from_v1_secret(image_secret.secret, cluster))
 
             updated_secrets = [
                 secret for secret in (session.spec.imagePullSecrets or []) if not secret.name.endswith("-image-secret")

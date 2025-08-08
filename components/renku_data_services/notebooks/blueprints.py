@@ -484,12 +484,12 @@ class NotebooksNewBP(CustomBlueprint):
                 ),
             )
             for s in secrets_to_create:
-                await self.nb_config.k8s_v2_client.create_secret(K8sSecret.from_v1_secret(s.secret, cluster.id))
+                await self.nb_config.k8s_v2_client.create_secret(K8sSecret.from_v1_secret(s.secret, cluster))
             try:
                 manifest = await self.nb_config.k8s_v2_client.create_session(manifest, user)
             except Exception as err:
                 for s in secrets_to_create:
-                    await self.nb_config.k8s_v2_client.delete_secret(K8sSecret.from_v1_secret(s.secret, cluster.id))
+                    await self.nb_config.k8s_v2_client.delete_secret(K8sSecret.from_v1_secret(s.secret, cluster))
                 raise errors.ProgrammingError(message="Could not start the amalthea session") from err
             else:
                 try:
