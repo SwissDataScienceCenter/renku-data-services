@@ -338,6 +338,13 @@ class AmaltheaSessionV1Alpha1SpecSessionPatch(BaseCRD):
     shmSize: int | str | None = None
     storage: Storage | None = None
     imagePullPolicy: ImagePullPolicy | None = None
+    extraVolumeMounts: list[ExtraVolumeMount] | None = None
+
+
+class AmaltheaSessionV1Alpha1MetadataPatch(BaseCRD):
+    """Patch for the metadata of an amalthea session."""
+
+    annotations: dict[str, str] | None = None
 
 
 class AmaltheaSessionV1Alpha1SpecPatch(BaseCRD):
@@ -359,6 +366,7 @@ class AmaltheaSessionV1Alpha1SpecPatch(BaseCRD):
 class AmaltheaSessionV1Alpha1Patch(BaseCRD):
     """Patch for an amalthea session."""
 
+    metadata: AmaltheaSessionV1Alpha1MetadataPatch | None = None
     spec: AmaltheaSessionV1Alpha1SpecPatch
 
     def to_rfc7386(self) -> dict[str, Any]:
