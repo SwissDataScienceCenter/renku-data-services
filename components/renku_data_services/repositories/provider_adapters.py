@@ -8,7 +8,7 @@ from httpx import Response
 from renku_data_services import errors
 from renku_data_services.app_config import logging
 from renku_data_services.connected_services import orm as connected_services_schemas
-from renku_data_services.connected_services.apispec import ProviderKind
+from renku_data_services.connected_services.models import ProviderKind
 from renku_data_services.repositories import external_models, models
 
 logger = logging.getLogger(__name__)
