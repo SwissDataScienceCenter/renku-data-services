@@ -101,6 +101,7 @@ class UserServer:
 
     async def k8s_namespace(self) -> str:
         """Get the preferred namespace for a server."""
+        # FIXME: LSA: WE MIGHT NEED TO RETRIEVE THE CLUSTERID FROM ANNOTATIONS
         return await self._k8s_client.namespace()
 
     @property
