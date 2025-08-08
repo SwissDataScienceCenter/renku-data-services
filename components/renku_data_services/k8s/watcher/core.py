@@ -8,6 +8,9 @@ from asyncio import CancelledError, Task
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 
+from httpx import ReadError
+from kr8s import ServerError
+
 from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import APIUser, InternalServiceAdmin, ServiceAdminId
 from renku_data_services.base_models.metrics import MetricsService
@@ -53,15 +56,16 @@ class K8sWatcher:
         fltr = K8sObjectFilter(gvk=kind, cluster=cluster.id, namespace=cluster.namespace)
         # Upsert new / updated objects
         objects_in_k8s: dict[str, K8sObject] = {}
-        async for obj in clnt.list(fltr):
-            objects_in_k8s[obj.name] = obj
-            await self.__cache.upsert(obj)
-        # Remove objects that have been deleted from k8s but are still in cache
-        async for cache_obj in self.__cache.list(fltr):
-            cache_obj_is_in_k8s = objects_in_k8s.get(cache_obj.name) is not None
-            if cache_obj_is_in_k8s:
-                continue
-            await self.__cache.delete(cache_obj)
+        with contextlib.suppress(Exception):
+            async for obj in clnt.list(fltr):
+                objects_in_k8s[obj.name] = obj
+                await self.__cache.upsert(obj)
+            # Remove objects that have been deleted from k8s but are still in cache
+            async for cache_obj in self.__cache.list(fltr):
+                cache_obj_is_in_k8s = objects_in_k8s.get(cache_obj.name) is not None
+                if cache_obj_is_in_k8s:
+                    continue
+                await self.__cache.delete(cache_obj)
 
     async def __full_sync(self, cluster: ClusterConnection) -> None:
         """Run the full sync if it has never run or at the required interval."""
@@ -97,10 +101,21 @@ class K8sWatcher:
                     # can bypass async scheduling. This sleep here is as a last line of defence so this code does not
                     # execute indefinitely and prevent another resource kind from being watched.
                     await asyncio.sleep(0)
+            except ReadError:
+                await asyncio.sleep(10)
+                pass
+            except ValueError as e:
+                logger.error(f"watch loop failed for {kind} in cluster {cluster.id}: {e}")
+                await asyncio.sleep(10)
+                pass
+            except ServerError as e:
+                logger.error(f"watch loop failed for {kind} in cluster {cluster.id}: {e.response}")
+                await asyncio.sleep(10)
+                pass
             except Exception as e:
                 logger.error(f"watch loop failed for {kind} in cluster {cluster.id}", exc_info=e)
                 # without sleeping, this can just hang the code as exceptions seem to bypass the async scheduler
-                await asyncio.sleep(1)
+                await asyncio.sleep(10)
                 pass
 
     def __run_single(self, cluster: ClusterConnection) -> list[Task]:
