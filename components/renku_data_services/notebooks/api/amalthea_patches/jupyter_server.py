@@ -110,7 +110,7 @@ def args() -> list[dict[str, Any]]:
     return patches
 
 
-def image_pull_secret(server: UserServer, access_token: str | None) -> list[dict[str, Any]]:
+async def image_pull_secret(server: UserServer, access_token: str | None) -> list[dict[str, Any]]:
     """Adds an image pull secret to the session if the session image is not public."""
     patches = []
     if isinstance(server.user, AuthenticatedAPIUser) and server.is_image_private and access_token:
@@ -139,7 +139,7 @@ def image_pull_secret(server: UserServer, access_token: str | None) -> list[dict
                             "kind": "Secret",
                             "metadata": {
                                 "name": image_pull_secret_name,
-                                "namespace": server.k8s_namespace(),
+                                "namespace": await server.k8s_namespace(),
                             },
                             "type": "kubernetes.io/dockerconfigjson",
                         },

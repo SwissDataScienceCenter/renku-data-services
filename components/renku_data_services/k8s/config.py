@@ -1,17 +1,18 @@
 """Base config for k8s."""
 
 import os
-from threading import Lock
+from collections.abc import Sequence
 
 import kr8s
 import yaml
 
 from renku_data_services.app_config import logging
-from renku_data_services.crc import models
 from renku_data_services.crc.db import ClusterRepository
 from renku_data_services.k8s import models as k8s_models
-from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
-from renku_data_services.k8s.models import ClusterConnection
+from renku_data_services.k8s.clients import K8sCachedClusterClient, K8sClusterClient
+from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
+from renku_data_services.k8s.db import K8sDbCache
+from renku_data_services.k8s.models import GVK, ClusterConnection
 
 logger = logging.getLogger(__name__)
 
@@ -91,63 +92,74 @@ class KubeConfigYaml(KubeConfig):
                     break
 
 
-_clusters_lock: Lock = Lock()
-_clusters: list[ClusterConnection] | None = None
-
-
-def get_clusters(
+async def get_clusters(
     kube_conf_root_dir: str,
     namespace: str,
     api: kr8s.asyncio.Api,
-    cluster_rp: ClusterRepository,
-) -> list[ClusterConnection]:
+    cluster_repo: ClusterRepository,
+) -> Sequence[ClusterConnection]:
     """Get all clusters accessible to the application."""
-    global _clusters
+    output = [
+        k8s_models.ClusterConnection(
+            id=DEFAULT_K8S_CLUSTER,
+            namespace=namespace,
+            api=api,
+        )
+    ]
 
-    # Try to work around sync call of async function.
-    def _select_all_sync() -> list[models.SavedClusterSettings]:
-        materialised_list = []
+    if not os.path.exists(kube_conf_root_dir):
+        logger.warning(f"Cannot open directory '{kube_conf_root_dir}', ignoring kube configs...")
+        return output
 
-        async def f() -> None:
-            async for c in cluster_rp.select_all():
-                materialised_list.append(c)
-
-        kr8s._async_utils.run_sync(f)()
-        return materialised_list
-
-    _clusters_lock.acquire()
-
-    if _clusters is None:
-        _clusters = [
-            k8s_models.ClusterConnection(
-                id=DEFAULT_K8S_CLUSTER,
-                namespace=namespace,
-                api=api,
+    async for cluster_db in cluster_repo.select_all():
+        filename = cluster_db.config_name
+        try:
+            kube_config = KubeConfigYaml(f"{kube_conf_root_dir}/{filename}")
+            cluster = k8s_models.ClusterConnection(
+                id=cluster_db.id,
+                namespace=kube_config.api().namespace,
+                api=kube_config.api(),
             )
-        ]
+            logger.info(f"Successfully loaded Kubernetes config: '{kube_conf_root_dir}/{filename}'")
+            output.append(cluster)
+        except Exception as e:
+            logger.warning(f"Failed while loading '{kube_conf_root_dir}/{filename}', ignoring kube config. Error: {e}")
 
-        if os.path.exists(kube_conf_root_dir):
-            # Run async code in sync context
-            db_clusters = _select_all_sync()
+    return output
 
-            for db_cluster in db_clusters:
-                filename = db_cluster.config_name
-                try:
-                    kube_config = KubeConfigYaml(f"{kube_conf_root_dir}/{filename}")
-                    cluster = k8s_models.ClusterConnection(
-                        id=db_cluster.id,
-                        namespace=kube_config.api().namespace,
-                        api=kube_config.api(),
-                    )
-                    _clusters.append(cluster)
-                    logger.info(f"Successfully loaded Kubernetes config: '{kube_conf_root_dir}/{filename}'")
-                except Exception as e:
-                    logger.warning(
-                        f"Failed while loading '{kube_conf_root_dir}/{filename}', ignoring kube config. Error: {e}"
-                    )
-        else:
-            logger.warning(f"Cannot open directory '{kube_conf_root_dir}', ignoring kube configs...")
 
-    _clusters_lock.release()
+async def get_cached_clients(
+    kube_conf_root_dir: str,
+    namespace: str,
+    api: kr8s.asyncio.Api,
+    cluster_repo: ClusterRepository,
+    cache: K8sDbCache,
+    kinds_to_cache: list[GVK],
+) -> dict[ClusterId, K8sCachedClusterClient]:
+    """Get all clusters and generate cached clients from them."""
+    clusters = await get_clusters(
+        kube_conf_root_dir=kube_conf_root_dir,
+        namespace=namespace,
+        api=api,
+        cluster_repo=cluster_repo,
+    )
+    return {
+        cluster.id: K8sCachedClusterClient(cluster=cluster, cache=cache, kinds_to_cache=kinds_to_cache)
+        for cluster in clusters
+    }
 
-    return _clusters
+
+async def get_clients(
+    kube_conf_root_dir: str,
+    namespace: str,
+    api: kr8s.asyncio.Api,
+    cluster_repo: ClusterRepository,
+) -> dict[ClusterId, K8sClusterClient]:
+    """Get k8s clients for all clusters without caching."""
+    clusters = await get_clusters(
+        kube_conf_root_dir=kube_conf_root_dir,
+        namespace=namespace,
+        api=api,
+        cluster_repo=cluster_repo,
+    )
+    return {cluster.id: K8sClusterClient(cluster=cluster) for cluster in clusters}

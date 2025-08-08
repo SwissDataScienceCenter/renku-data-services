@@ -99,9 +99,9 @@ class UserServer:
         if not self._user.is_authenticated:
             self.server_url = f"{self.server_url}?token={self._user.id}"
 
-    def k8s_namespace(self) -> str:
+    async def k8s_namespace(self) -> str:
         """Get the preferred namespace for a server."""
-        return self._k8s_client.namespace()
+        return await self._k8s_client.namespace()
 
     @property
     def user(self) -> AnonymousAPIUser | AuthenticatedAPIUser:
@@ -312,7 +312,7 @@ class UserServer:
                 general_patches.dev_shm(self),
                 jupyter_server_patches.args(),
                 jupyter_server_patches.env(self),
-                jupyter_server_patches.image_pull_secret(self, self.internal_gitlab_user.access_token),
+                await jupyter_server_patches.image_pull_secret(self, self.internal_gitlab_user.access_token),
                 jupyter_server_patches.disable_service_links(),
                 jupyter_server_patches.rstudio_env_variables(self),
                 await git_proxy_patches.main(self),

@@ -13,12 +13,11 @@ from renku_data_services.db_config.config import DBConfig
 from renku_data_services.k8s.clients import (
     DummyCoreClient,
     DummySchedulingClient,
-    K8sCachedClusterClient,
     K8sClusterClientsPool,
     K8sCoreClient,
     K8sSchedulingClient,
 )
-from renku_data_services.k8s.config import KubeConfigEnv, get_clusters
+from renku_data_services.k8s.config import KubeConfigEnv, get_cached_clients
 from renku_data_services.k8s.db import K8sDbCache, QuotaRepository
 from renku_data_services.notebooks.api.classes.data_service import (
     CRCValidator,
@@ -173,19 +172,17 @@ class NotebooksConfig:
         k8s_config = _K8sConfig.from_env()
         k8s_db_cache = K8sDbCache(db_config.async_session_maker)
         cluster_rp = ClusterRepository(db_config.async_session_maker)
+        kinds_to_cache = [AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK]
 
         client = K8sClusterClientsPool(
-            clients={
-                c.id: K8sCachedClusterClient(
-                    c, k8s_db_cache, [AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK]
-                )
-                for c in get_clusters(
-                    kube_conf_root_dir=kube_config_root,
-                    namespace=k8s_config.renku_namespace,
-                    api=kr8s_api,
-                    cluster_rp=cluster_rp,
-                )
-            },
+            get_cached_clients(
+                kube_conf_root_dir=kube_config_root,
+                namespace=k8s_config.renku_namespace,
+                api=kr8s_api,
+                cluster_repo=cluster_rp,
+                cache=k8s_db_cache,
+                kinds_to_cache=kinds_to_cache,
+            )
         )
 
         k8s_client = NotebookK8sClient(
