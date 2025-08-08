@@ -24,7 +24,7 @@ async def main() -> None:
     kr8s_api = await kr8s.asyncio.api()
 
     clusters: dict[ClusterId, ClusterConnection] = {}
-    async for cluster in get_clusters(
+    for cluster in await get_clusters(
         kube_conf_root_dir=dm.config.k8s.kube_config_root,
         namespace=dm.config.k8s.renku_namespace,
         api=kr8s_api,

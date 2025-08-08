@@ -17,7 +17,7 @@ from renku_data_services.k8s.clients import (
     K8sCoreClient,
     K8sSchedulingClient,
 )
-from renku_data_services.k8s.config import KubeConfigEnv, get_clusters
+from renku_data_services.k8s.config import KubeConfigEnv, get_cached_clients
 from renku_data_services.k8s.db import K8sDbCache, QuotaRepository
 from renku_data_services.notebooks.api.classes.data_service import (
     CRCValidator,
@@ -41,6 +41,7 @@ from renku_data_services.notebooks.config.dynamic import (
 from renku_data_services.notebooks.config.static import _ServersGetEndpointAnnotations
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
+from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 
 
 class CRCValidatorProto(Protocol):
@@ -171,13 +172,16 @@ class NotebooksConfig:
         k8s_config = _K8sConfig.from_env()
         k8s_db_cache = K8sDbCache(db_config.async_session_maker)
         cluster_rp = ClusterRepository(db_config.async_session_maker)
+        kinds_to_cache = [AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK]
 
         client = K8sClusterClientsPool(
-            get_clusters(
+            get_cached_clients(
                 kube_conf_root_dir=kube_config_root,
                 namespace=k8s_config.renku_namespace,
                 api=kr8s_api,
                 cluster_repo=cluster_rp,
+                cache=k8s_db_cache,
+                kinds_to_cache=kinds_to_cache,
             )
         )
 

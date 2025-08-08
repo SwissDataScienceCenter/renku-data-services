@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import multiprocessing.synchronize
-from collections.abc import AsyncIterable
+from collections.abc import AsyncIterable, Awaitable, Mapping
 from copy import deepcopy
 from multiprocessing import Lock
 from multiprocessing.synchronize import Lock as LockType
@@ -440,15 +440,14 @@ class K8sCachedClusterClient(K8sClusterClient):
 class K8sClusterClientsPool(K8sClient):
     """A wrapper around a pool of kr8s k8s clients."""
 
-    def __init__(self, clusters: AsyncIterable[ClusterConnection]) -> None:
-        self.__clusters = clusters
-        self.__clients: dict[ClusterId, K8sClusterClient] = {}
+    def __init__(self, clients_coro: Awaitable[Mapping[ClusterId, K8sClusterClient]]) -> None:
+        self.__clients: Mapping[ClusterId, K8sClusterClient] = {}
+        self.__clients_coro = clients_coro
 
     async def __init_clients_if_needed(self) -> None:
         if len(self.__clients) > 0:
             return
-        async for cluster in self.__clusters:
-            self.__clients[cluster.id] = K8sClusterClient(cluster)
+        self.__clients = await self.__clients_coro
 
     async def __get_client_or_die(self, cluster_id: ClusterId) -> K8sClusterClient:
         await self.__init_clients_if_needed()

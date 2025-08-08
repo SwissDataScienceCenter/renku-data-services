@@ -45,13 +45,13 @@ from renku_data_services.k8s.clients import (
     K8sCoreClient,
     K8sSchedulingClient,
 )
-from renku_data_services.k8s.config import KubeConfigEnv
-from renku_data_services.k8s.db import QuotaRepository
+from renku_data_services.k8s.config import KubeConfigEnv, get_cached_clients
+from renku_data_services.k8s.db import K8sDbCache, QuotaRepository
 from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.metrics.core import StagingMetricsService
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
-from renku_data_services.notebooks.config import get_clusters
+from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
 from renku_data_services.platform.db import PlatformRepository
 from renku_data_services.project.db import (
     ProjectMemberRepository,
@@ -64,6 +64,7 @@ from renku_data_services.search import query_manual
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsRepo
+from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.k8s_client import ShipwrightClient
 from renku_data_services.storage.db import StorageRepository
@@ -241,16 +242,21 @@ class DependencyManager:
                 client_secret=config.keycloak.client_secret,
                 realm=config.keycloak.realm,
             )
+
             if config.builds.enabled:
                 kr8s_api = KubeConfigEnv().api()
+                k8s_db_cache = K8sDbCache(config.db.async_session_maker)
+                kinds_to_cache = [AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK]
                 shipwright_client = ShipwrightClient(
                     client=K8sClusterClientsPool(
-                        get_clusters(
+                        get_cached_clients(
                             kube_conf_root_dir=config.k8s_config_root,
                             namespace=config.k8s_namespace,
                             api=kr8s_api,
                             cluster_repo=cluster_repo,
-                        ),
+                            cache=k8s_db_cache,
+                            kinds_to_cache=kinds_to_cache,
+                        )
                     ),
                     namespace=config.k8s_namespace,
                 )

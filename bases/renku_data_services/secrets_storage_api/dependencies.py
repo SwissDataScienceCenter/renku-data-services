@@ -15,7 +15,7 @@ from renku_data_services.k8s.clients import (
     K8sClusterClientsPool,
     K8sSecretClient,
 )
-from renku_data_services.k8s.config import KubeConfigEnv, get_clusters
+from renku_data_services.k8s.config import KubeConfigEnv, get_clients
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo
 from renku_data_services.secrets_storage_api.config import Config
 
@@ -55,7 +55,7 @@ class DependencyManager:
             api = KubeConfigEnv().api()
             secret_client = K8sSecretClient(
                 K8sClusterClientsPool(
-                    get_clusters(
+                    get_clients(
                         kube_conf_root_dir=os.environ.get("K8S_CONFIGS_ROOT", "/secrets/kube_configs"),
                         namespace=api.namespace,
                         api=api,
