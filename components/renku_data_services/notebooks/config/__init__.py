@@ -16,6 +16,7 @@ from renku_data_services.k8s.clients import (
     K8sClusterClientsPool,
     K8sCoreClient,
     K8sSchedulingClient,
+    K8sSecretClient,
 )
 from renku_data_services.k8s.config import KubeConfigEnv, get_clusters
 from renku_data_services.k8s.db import K8sDbCache, QuotaRepository
@@ -186,6 +187,7 @@ class NotebooksConfig:
 
         k8s_client = NotebookK8sClient(
             client=client,
+            secrets_client=K8sSecretClient(client),
             rp_repo=rp_repo,
             session_type=JupyterServerV1Alpha1,
             gvk=JUPYTER_SESSION_GVK,
@@ -193,6 +195,7 @@ class NotebooksConfig:
         )
         k8s_v2_client = NotebookK8sClient(
             client=client,
+            secrets_client=K8sSecretClient(client),
             rp_repo=rp_repo,
             # NOTE: v2 sessions have no userId label, the safe-username label is the keycloak user ID
             session_type=AmaltheaSessionV1Alpha1,
