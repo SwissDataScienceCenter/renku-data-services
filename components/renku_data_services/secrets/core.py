@@ -101,6 +101,6 @@ async def validate_secret(
         name=v1_secret.metadata.name,
         namespace=v1_secret.metadata.namespace,
         cluster=cluster_id,
-        gvk=GVK(kind=Secret.kind, version=Secret.version),
+        gvk=GVK(group="", version=Secret.version, kind="Secret"),
         manifest=Box(sanitizer(v1_secret)),
     )
