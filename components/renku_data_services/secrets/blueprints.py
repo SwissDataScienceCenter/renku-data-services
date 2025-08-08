@@ -11,7 +11,6 @@ from ulid import ULID
 from renku_data_services import base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
-from renku_data_services.errors import errors
 from renku_data_services.k8s.client_interfaces import SecretClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.secrets import apispec
@@ -50,11 +49,12 @@ class K8sSecretsBP(CustomBlueprint):
 
             try:
                 result = await self.client.create_secret(secret)
-            except Exception as e:
+            except Exception:
+                raise  # FIXME: LSA : TO DEBUG
                 # don't wrap the error, we don't want secrets accidentally leaking.
-                raise errors.SecretCreationError(
-                    message=f"An error occurred creating secrets: {str(type(e))}"
-                ) from None
+                # raise errors.SecretCreationError(
+                #     message=f"An error occurred creating secrets: {str(type(e))}"
+                # ) from None
 
             return json(result.name, 201)
 
