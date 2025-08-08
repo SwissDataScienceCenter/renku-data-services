@@ -12,7 +12,6 @@ from typing import Any
 from uuid import uuid4
 
 import kr8s
-from box import Box
 from kr8s import ServerError
 from kubernetes import client, config
 from kubernetes.config.config_exception import ConfigException
@@ -86,8 +85,6 @@ class K8sSecretClient(SecretClient):
             result = await self.__client.create(secret)
         except ServerError as err:
             if err.response and err.response.status_code == 409:
-                annotations: Box | None = secret.manifest.metadata.get("annotations")
-                labels: Box | None = secret.manifest.metadata.get("labels")
                 patches = [
                     {
                         "op": "replace",
@@ -102,12 +99,12 @@ class K8sSecretClient(SecretClient):
                     {
                         "op": "replace",
                         "path": "/metadata/annotations",
-                        "value": annotations.to_dict() if annotations is not None else {},
+                        "value": secret.manifest.metadata.get("annotations", {}),
                     },
                     {
                         "op": "replace",
                         "path": "/metadata/labels",
-                        "value": labels.to_dict() if labels is not None else {},
+                        "value": secret.manifest.metadata.get("labels", {}),
                     },
                 ]
                 result = await self.patch_secret(secret, patches)

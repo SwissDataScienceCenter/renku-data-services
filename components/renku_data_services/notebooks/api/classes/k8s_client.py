@@ -48,12 +48,14 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
     def __init__(
         self,
         client: K8sClusterClientsPool,
+        secrets_client: SecretClient,
         rp_repo: ResourcePoolRepository,
         session_type: type[_SessionType],
         username_label: str,
         gvk: GVK,
     ) -> None:
         self.__client = client
+        self.__secrets_client = secrets_client
         self.__rp_repo = rp_repo
         self.__session_type: type[_SessionType] = session_type
         self.__session_gvk = gvk
@@ -408,48 +410,14 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
 
     async def create_secret(self, secret: K8sSecret) -> K8sSecret:
         """Create a secret."""
-
-        try:
-            result = await self.__client.create(secret)
-        except ServerError as err:
-            if err.response and err.response.status_code == 409:
-                annotations: Box | None = secret.manifest.metadata.get("annotations")
-                labels: Box | None = secret.manifest.metadata.get("labels")
-                patches = [
-                    {
-                        "op": "replace",
-                        "path": "/data",
-                        # "value": secret.data or {},
-                        "value": {},
-                    },
-                    {
-                        "op": "replace",
-                        "path": "/stringData",
-                        # "value": secret.string_data or {},
-                        "value": {},
-                    },
-                    {
-                        "op": "replace",
-                        "path": "/metadata/annotations",
-                        "value": annotations.to_dict() if annotations is not None else {},
-                    },
-                    {
-                        "op": "replace",
-                        "path": "/metadata/labels",
-                        "value": labels.to_dict() if labels is not None else {},
-                    },
-                ]
-                result = await self.__client.patch(secret, patches)
-            else:
-                raise
-        return K8sSecret.from_k8s_object(result)
+        return await self.__secrets_client.create_secret(secret)
 
     async def patch_secret(self, secret: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
         """Patch a secret."""
 
-        return await self.__client.patch(secret, patch)
+        return await self.__secrets_client.patch_secret(secret, patch)
 
     async def delete_secret(self, secret: K8sObjectMeta) -> None:
         """Delete a secret."""
 
-        await self.__client.delete(secret)
+        return await self.__secrets_client.delete_secret(secret)
