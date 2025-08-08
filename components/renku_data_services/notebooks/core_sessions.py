@@ -39,6 +39,7 @@ from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.notebooks.crs import (
     AmaltheaSessionSpec,
     AmaltheaSessionV1Alpha1,
+    AmaltheaSessionV1Alpha1MetadataPatch,
     AmaltheaSessionV1Alpha1Patch,
     AmaltheaSessionV1Alpha1SpecPatch,
     AmaltheaSessionV1Alpha1SpecSessionPatch,
@@ -835,6 +836,10 @@ async def patch_session(
                 message=f"The resource class you requested with ID {body.resource_class_id} does not exist"
             )
         # TODO: reject session classes which change the cluster
+        if not patch.metadata:
+            patch.metadata = AmaltheaSessionV1Alpha1MetadataPatch()
+        # Patch the resource class ID in the annotations
+        patch.metadata.annotations = {"renku.io/resource_class_id": str(body.resource_class_id)}
         if not patch.spec.session:
             patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()
         patch.spec.session.resources = resources_from_resource_class(rc)
