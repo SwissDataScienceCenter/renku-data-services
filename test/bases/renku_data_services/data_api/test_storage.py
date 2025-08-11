@@ -632,6 +632,10 @@ async def test_storage_schema_patches(storage_test_client, snapshot) -> None:
     oauth_providers = [s for s in schema if s["prefix"] in OAUTH_PROVIDERS]
     assert all(o["name"] != "client_id" and o["name"] != "client_secret" for p in oauth_providers for o in p["options"])
 
+    # check the OAUTH_PROVIDERS list
+    not_exists = set(p for p in OAUTH_PROVIDERS if p not in set(s["prefix"] for s in schema))
+    assert not_exists == set()
+
     # check custom webdav storage is added
     assert any(s["prefix"] == "polybox" for s in schema)
     assert any(s["prefix"] == "switchDrive" for s in schema)

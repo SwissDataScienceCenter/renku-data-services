@@ -19,7 +19,6 @@ BANNED_STORAGE: Final[set[str]] = {
 }
 
 OAUTH_PROVIDERS: Final[set[str]] = {
-    "acd",
     "box",
     "drive",
     "dropbox",
@@ -31,7 +30,7 @@ OAUTH_PROVIDERS: Final[set[str]] = {
     "onedrive",
     "pcloud",
     "pikpak",
-    "premiumzeme",
+    "premiumizeme",
     "putio",
     "sharefile",
     "yandex",

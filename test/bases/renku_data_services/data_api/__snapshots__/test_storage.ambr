@@ -9030,38 +9030,6 @@
       'name': 'premiumizeme',
       'options': list([
         dict({
-          'advanced': False,
-          'default': '',
-          'default_str': '',
-          'exclusive': False,
-          'help': '''
-            OAuth Client Id.
-            
-            Leave blank normally.
-          ''',
-          'ispassword': False,
-          'name': 'client_id',
-          'required': False,
-          'sensitive': True,
-          'type': 'string',
-        }),
-        dict({
-          'advanced': False,
-          'default': '',
-          'default_str': '',
-          'exclusive': False,
-          'help': '''
-            OAuth Client Secret.
-            
-            Leave blank normally.
-          ''',
-          'ispassword': False,
-          'name': 'client_secret',
-          'required': False,
-          'sensitive': True,
-          'type': 'string',
-        }),
-        dict({
           'advanced': True,
           'default': '',
           'default_str': '',
