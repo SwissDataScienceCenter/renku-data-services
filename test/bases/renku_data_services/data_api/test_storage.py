@@ -249,6 +249,21 @@ async def storage_test_client(
             422,
             "",
         ),
+        (
+            {
+                "project_id": "123456",
+                "name": "mystorage",
+                "configuration": {
+                    "type": "sftp",
+                    "host": "myhost",
+                    "ssh": "ssh",  # passing in banned option
+                },
+                "source_path": "bucket/myfolder",
+                "target_path": "my/target",
+            },
+            422,
+            "",
+        ),
     ],
 )
 @pytest.mark.asyncio
@@ -506,6 +521,39 @@ async def test_storage_patch_unauthorized(storage_test_client, valid_storage_pay
         ),
     )
     assert res.status_code == 403, res.text
+
+
+@pytest.mark.asyncio
+async def test_storage_patch_banned_option(storage_test_client, valid_storage_payload) -> None:
+    storage_test_client, _ = storage_test_client
+    # NOTE: The keycloak dummy client used to authorize the storage patch requests only has info
+    # on a user with name Admin Doe, using a different user will fail with a 401 error.
+    access_token = json.dumps({"is_admin": False, "id": "some-id", "full_name": "Admin Doe"})
+    payload = dict(valid_storage_payload)
+    payload["configuration"] = {
+        "type": "sftp",
+        "host": "myhost",
+    }
+    _, res = await storage_test_client.post(
+        "/api/data/storage",
+        headers={"Authorization": f"bearer {access_token}"},
+        data=json.dumps(payload),
+    )
+    assert res.status_code == 201
+    assert res.json["storage"]["storage_type"] == "sftp"
+    storage_id = res.json["storage"]["storage_id"]
+
+    _, res = await storage_test_client.patch(
+        f"/api/data/storage/{storage_id}",
+        headers={"Authorization": f"bearer {access_token}"},
+        data=json.dumps(
+            {
+                "configuration": {"key_file": "my_key"},
+            }
+        ),
+    )
+    assert res.status_code == 422
+    assert "key_file option is not allowed" in res.text
 
 
 @pytest.mark.asyncio
