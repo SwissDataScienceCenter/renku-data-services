@@ -38,6 +38,13 @@ OAUTH_PROVIDERS: Final[set[str]] = {
     "zoho",
 }
 
+BANNED_SFTP_OPTIONS: Final[set[str]] = {
+    "key_file",  # path to a local file
+    "pubkey_file",  # path to a local file
+    "known_hosts_file",  # path to a local file
+    "ssh",  # arbitrary command to be executed
+}
+
 
 def find_storage(spec: list[dict[str, Any]], prefix: str) -> dict[str, Any]:
     """Find and return the storage schema from the spec.
@@ -241,6 +248,16 @@ def __patch_switchdrive_storage(spec: list[dict[str, Any]]) -> None:
     )
 
 
+def __patch_schema_remove_banned_sftp_options(spec: list[dict[str, Any]]) -> None:
+    """Remove unsafe SFTP options."""
+    sftp = find_storage(spec, "sftp")
+    options = []
+    for option in sftp["Options"]:
+        if option["Name"] not in BANNED_SFTP_OPTIONS:
+            options.append(option)
+    sftp["Options"] = options
+
+
 def apply_patches(spec: list[dict[str, Any]]) -> None:
     """Apply patches to RClone schema."""
     patches = [
@@ -251,6 +268,7 @@ def apply_patches(spec: list[dict[str, Any]]) -> None:
         __patch_schema_remove_oauth_propeties,
         __patch_polybox_storage,
         __patch_switchdrive_storage,
+        __patch_schema_remove_banned_sftp_options,
     ]
 
     for patch in patches:
