@@ -280,7 +280,7 @@ async def get_data_sources(
         secret = ExtraSecret(
             cs.secret(
                 secret_name,
-                nb_config.k8s_client.namespace(),
+                await nb_config.k8s_client.namespace(),
                 user_secret_key=user_secret_key if secret_key_needed else None,
             )
         )

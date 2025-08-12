@@ -41,7 +41,6 @@ from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.clients import (
     DummyCoreClient,
     DummySchedulingClient,
-    K8sCachedClusterClient,
     K8sClusterClientsPool,
     K8sCoreClient,
     K8sSchedulingClient,
@@ -249,19 +248,14 @@ class DependencyManager:
                 kr8s_api = KubeConfigEnv().api()
                 shipwright_client = ShipwrightClient(
                     client=K8sClusterClientsPool(
-                        clients={
-                            c.id: K8sCachedClusterClient(
-                                c,
-                                k8s_db_cache,
-                                [AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
-                            )
-                            for c in get_clusters(
-                                kube_conf_root_dir=config.k8s_config_root,
-                                namespace=config.k8s_namespace,
-                                api=kr8s_api,
-                                cluster_rp=cluster_repo,
-                            )
-                        }
+                        get_clusters(
+                            kube_conf_root_dir=config.k8s_config_root,
+                            namespace=config.k8s_namespace,
+                            api=kr8s_api,
+                            cluster_repo=cluster_repo,
+                            cache=k8s_db_cache,
+                            kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
+                        ),
                     ),
                     namespace=config.k8s_namespace,
                 )
