@@ -28,7 +28,9 @@ async def main() -> None:
         cluster_rp=dm.cluster_repo(),
     )
 
-    kinds = [AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK]
+    kinds = [AMALTHEA_SESSION_GVK]
+    if dm.config.v1_services.enabled:
+        kinds.append(JUPYTER_SESSION_GVK)
     if dm.config.image_builders.enabled:
         kinds.extend([BUILD_RUN_GVK, TASK_RUN_GVK])
     watcher = K8sWatcher(
