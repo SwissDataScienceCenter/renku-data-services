@@ -27,7 +27,7 @@ async def main() -> None:
         api=kr8s_api,
         cluster_rp=dm.cluster_repo(),
     )
-    logger.info(f"Clusters: {clusters}")
+    logger.info(f"Clusters: {[str(c) for c in clusters]}")
 
     kinds = [AMALTHEA_SESSION_GVK]
     if dm.config.v1_services.enabled:
