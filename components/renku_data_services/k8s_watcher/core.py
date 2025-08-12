@@ -169,6 +169,9 @@ async def collect_metrics(
         # session stopping
         await metrics.session_stopped(user=user, metadata={"session_id": new_obj.meta.name})
         return
+    if not new_obj.obj.status.get("state"):
+        # The new state is not known yet so we cannot publish a metric
+        return
     previous_state = previous_obj.manifest.get("status", {}).get("state", None) if previous_obj else None
     match new_obj.obj.status.state:
         case State.Running.value if previous_state is None or previous_state == State.NotReady.value:
