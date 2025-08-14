@@ -609,3 +609,43 @@ async def test_migration_to_dcb9648c3c15(app_manager_instance: DependencyManager
     assert k8s_objs[1].tuple()[0] == "amalthea.dev"
     assert k8s_objs[1].tuple()[1] == "v1alpha1"
     assert k8s_objs[1].tuple()[2] == "jupyterserver"
+
+
+@pytest.mark.asyncio
+async def test_migration_to_c8061499b966(app_manager_instance: DependencyManager, admin_user: UserInfo) -> None:
+    run_migrations_for_app("common", "e117405fed51")
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        await session.execute(
+            sa.text(
+                "INSERT into "
+                "common.k8s_objects(name, namespace, manifest, deleted, kind, version, cluster, user_id) "
+                "VALUES ('name_pod', 'ns', '{}', FALSE, 'pod', 'v1', 'renkulab', 'user_id')"
+            )
+        )
+        await session.execute(
+            sa.text(
+                "INSERT into "
+                "common.k8s_objects(name, namespace, manifest, deleted, kind, version, cluster, user_id) "
+                "VALUES ('name_js', 'ns', '{}', FALSE, 'jupyterserver', 'amalthea.dev/v1alpha1', 'renkulab', 'user_id')"
+            )
+        )
+    run_migrations_for_app("common", "c8061499b966")
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        k8s_objs = (await session.execute(sa.text("SELECT name, cluster FROM common.k8s_objects"))).all()
+    assert len(k8s_objs) == 2
+    # Check that the cluster name was changed
+    assert k8s_objs[0].tuple()[1] == "0RENK1RENK2RENK3RENK4RENK5"
+    assert k8s_objs[1].tuple()[1] == "0RENK1RENK2RENK3RENK4RENK5"
+    id = ULID()
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        await session.execute(
+            sa.text(
+                "INSERT into "
+                "common.k8s_objects(name, namespace, manifest, deleted, kind, version, cluster, user_id) "
+                f"VALUES ('name_pod', 'ns', '{{}}', FALSE, 'pod', 'v1', '{id}', 'user_id')"
+            )
+        )
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        k8s_objs = (await session.execute(sa.text("SELECT name, cluster FROM common.k8s_objects"))).all()
+    # Check that we can insert another object with the same name, gvk, namespace, but a different cluster
+    assert len(k8s_objs) == 3
