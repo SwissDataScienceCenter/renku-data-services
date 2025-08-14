@@ -171,6 +171,10 @@ class Cluster:
 
         return base_server_path, base_server_url, base_server_https_url, host, tls_secret, ingress_annotations
 
+    def __str__(self) -> str:
+        api_url = repr(self.api.auth.server)
+        return f"{self.__class__.__name__}(id={self.id}, namespace={self.namespace}, api_url={api_url})"
+
 
 @dataclass(kw_only=True, frozen=True)
 class GVK:
