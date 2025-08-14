@@ -11,11 +11,11 @@ spec:
     - name: run-image
       description: The image to use as the base for all session images built with this strategy
       # default: "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/base-image:0.0.6"
-      default: "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/base-image:0.0.7a1"
+      default: "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/base-image:0.0.7"
     - name: builder-image
       description: The buildpack builder image to use
       # default: "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/selector:0.0.6"
-      default: "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/selector:0.0.7a1"
+      default: "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/selector:0.0.7"
     - name: frontend
       description: Which frontend should be used in the image. Either "jupyterlab" or "vscodium".
       default: vscodium
