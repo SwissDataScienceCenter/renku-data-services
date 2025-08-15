@@ -96,7 +96,7 @@ class GitHubAdapter(ProviderAdapter):
         url = urlparse(self.client_url)
         # See: https://docs.github.com/en/apps/sharing-github-apps/making-your-github-app-available-for-github-enterprise-server#the-app-code-must-use-the-correct-urls
         if url.netloc != "github.com":
-            return urljoin(self.client_url, "api/v3")
+            return urljoin(self.client_url, "api/v3/")
         url = url._replace(netloc=f"api.{url.netloc}")
         return urlunparse(url)
 
