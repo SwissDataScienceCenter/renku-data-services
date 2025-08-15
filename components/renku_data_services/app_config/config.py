@@ -55,6 +55,7 @@ class SentryConfig:
     enabled: bool
     dsn: str
     environment: str
+    release: str
     sample_rate: float = 0.2
 
     @classmethod
@@ -63,9 +64,10 @@ class SentryConfig:
         enabled = os.environ.get("SENTRY_ENABLED", "false").lower() == "true"
         dsn = os.environ.get("SENTRY_DSN", "")
         environment = os.environ.get("SENTRY_ENVIRONMENT", "")
+        release = os.environ.get("VERSION", "")
         sample_rate = float(os.environ.get("SENTRY_SAMPLE_RATE", "0.2"))
 
-        return cls(enabled, dsn=dsn, environment=environment, sample_rate=sample_rate)
+        return cls(enabled, dsn=dsn, environment=environment, release=release, sample_rate=sample_rate)
 
 
 @dataclass
