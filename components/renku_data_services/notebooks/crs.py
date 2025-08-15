@@ -51,10 +51,10 @@ from renku_data_services.notebooks.cr_amalthea_session import (
 from renku_data_services.notebooks.cr_amalthea_session import EnvItem2 as SessionEnvItem
 from renku_data_services.notebooks.cr_amalthea_session import Item4 as SecretAsVolumeItem
 from renku_data_services.notebooks.cr_amalthea_session import Limits6 as _Limits
-from renku_data_services.notebooks.cr_amalthea_session import Limits7 as _LimitsStr
+from renku_data_services.notebooks.cr_amalthea_session import Limits7 as LimitsStr
 from renku_data_services.notebooks.cr_amalthea_session import Model as _ASModel
 from renku_data_services.notebooks.cr_amalthea_session import Requests6 as _Requests
-from renku_data_services.notebooks.cr_amalthea_session import Requests7 as _RequestsStr
+from renku_data_services.notebooks.cr_amalthea_session import Requests7 as RequestsStr
 from renku_data_services.notebooks.cr_amalthea_session import Resources3 as _Resources
 from renku_data_services.notebooks.cr_amalthea_session import Secret1 as SecretAsVolume
 from renku_data_services.notebooks.cr_amalthea_session import Session as _ASSession
@@ -166,22 +166,10 @@ class Culling(_ASCulling):
         return handler(val)
 
 
-class RequestsStr(_RequestsStr):
-    """Resource requests of type str."""
-
-    root: str
-
-
 class Requests(_Requests):
     """Resource requests of type integer."""
 
     root: int
-
-
-class LimitsStr(_LimitsStr):
-    """Resource limits of type str."""
-
-    root: str
 
 
 class Limits(_Limits):
@@ -195,8 +183,10 @@ class Resources(_Resources):
 
     Overriding these is necessary because of
     https://docs.pydantic.dev/2.11/errors/validation_errors/#string_type.
-    Without the overrides a valid value for the pattern but which is actually an int
-    but is cast to a string, i.e. something like "4" will cause a validation error.
+    An integer model cannot have a regex pattern for validation in pydantic.
+    But the code generation applies the pattern constraint to both the int and string variations
+    of the fields. But the int variation runs and blows up at runtime only when an int is passed
+    for validation.
     """
 
     limits: Mapping[str, LimitsStr | Limits] | None = None
