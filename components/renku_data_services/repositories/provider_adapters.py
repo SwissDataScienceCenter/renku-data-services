@@ -73,12 +73,15 @@ class GitLabAdapter(GitProviderAdapter):
 
 
 class GitHubAdapter(GitProviderAdapter):
-    """Adapter for GitLab OAuth2 clients."""
+    """Adapter for GitHub OAuth2 clients."""
 
     @property
     def api_url(self) -> str:
         """The URL used for API calls on the Resource Server."""
         url = urlparse(self.client_url)
+        # See: https://docs.github.com/en/apps/sharing-github-apps/making-your-github-app-available-for-github-enterprise-server#the-app-code-must-use-the-correct-urls
+        if url.netloc != "github.com":
+            return urljoin(self.client_url, "api/v3")
         url = url._replace(netloc=f"api.{url.netloc}")
         return urlunparse(url)
 
