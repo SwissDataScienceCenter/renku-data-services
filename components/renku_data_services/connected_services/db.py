@@ -326,6 +326,8 @@ class ConnectedServicesRepository:
         """Get the account information from a OAuth2 connection."""
         async with self.get_async_oauth2_client(connection_id=connection_id, user=user) as (oauth2_client, _, adapter):
             request_url = urljoin(adapter.api_url, adapter.user_info_endpoint)
+            logger.info(f"REQUESTING {adapter.user_info_method} {request_url}")
+            logger.info(f"HEADERS {adapter.api_common_headers}")
             try:
                 if adapter.user_info_method == "POST":
                     response = await oauth2_client.post(request_url, headers=adapter.api_common_headers)
