@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from enum import StrEnum
 from hashlib import md5
 from typing import Any, TypeAlias, cast
@@ -108,7 +109,7 @@ class PatchKind(StrEnum):
     merge = "application/merge-patch+json"
 
 
-def find_container(patches: list[Patch], container_name: str) -> dict[str, Any] | None:
+def find_container(patches: Sequence[Patch], container_name: str) -> dict[str, Any] | None:
     """Find the json patch corresponding a given container."""
     # rfc 7386 patches are dictionaries, i.e. merge patch or json merge patch
     # rfc 6902 patches are lists, i.e. json patch
