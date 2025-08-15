@@ -19,7 +19,8 @@ CR_CODEGEN_PARAMS := \
 	${COMMON_CODEGEN_PARAMS} \
 	--collapse-root-models \
 	--allow-extra-fields \
-	--use-default-kwarg
+	--use-default-kwarg \
+	--use-generic-container-types
 
 # A separate set of params without the --collaps-root-models option as
 # this causes a bug in the code generator related to list of unions.
