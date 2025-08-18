@@ -100,24 +100,11 @@ async def get_clusters(
     kinds_to_cache: list[k8s_models.GVK] | None = None,
 ) -> AsyncIterable[K8sClusterClient]:
     """Get all clusters accessible to the application."""
+    cluster_connection = k8s_models.ClusterConnection(id=DEFAULT_K8S_CLUSTER, namespace=namespace, api=api)
     if cache is None or kinds_to_cache is None:
-        yield K8sClusterClient(
-            k8s_models.ClusterConnection(
-                id=DEFAULT_K8S_CLUSTER,
-                namespace=namespace,
-                api=api,
-            )
-        )
+        yield K8sClusterClient(cluster_connection)
     else:
-        yield K8sCachedClusterClient(
-            k8s_models.ClusterConnection(
-                id=DEFAULT_K8S_CLUSTER,
-                namespace=namespace,
-                api=api,
-            ),
-            cache,
-            kinds_to_cache,
-        )
+        yield K8sCachedClusterClient(cluster_connection, cache, kinds_to_cache)
 
     if not os.path.exists(kube_conf_root_dir):
         logger.warning(f"Cannot open directory '{kube_conf_root_dir}', ignoring kube configs...")
@@ -127,24 +114,15 @@ async def get_clusters(
         filename = cluster_db.config_name
         try:
             kube_config = KubeConfigYaml(f"{kube_conf_root_dir}/{filename}")
+            cluster_connection = k8s_models.ClusterConnection(
+                id=cluster_db.id,
+                namespace=kube_config.api().namespace,
+                api=kube_config.api(),
+            )
             if cache is None or kinds_to_cache is None:
-                cluster = K8sClusterClient(
-                    k8s_models.ClusterConnection(
-                        id=cluster_db.id,
-                        namespace=kube_config.api().namespace,
-                        api=kube_config.api(),
-                    )
-                )
+                cluster = K8sClusterClient(cluster_connection)
             else:
-                cluster = K8sCachedClusterClient(
-                    k8s_models.ClusterConnection(
-                        id=cluster_db.id,
-                        namespace=kube_config.api().namespace,
-                        api=kube_config.api(),
-                    ),
-                    cache,
-                    kinds_to_cache,
-                )
+                cluster = K8sCachedClusterClient(cluster_connection, cache, kinds_to_cache)
 
             logger.info(f"Successfully loaded Kubernetes config: '{kube_conf_root_dir}/{filename}'")
             yield cluster

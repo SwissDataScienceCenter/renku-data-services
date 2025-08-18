@@ -11,7 +11,7 @@ from kubernetes import client as k8s_client
 from ulid import ULID
 
 from renku_data_services import base_models, errors
-from renku_data_services.k8s.constants import ClusterId
+from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import GVK, K8sSecret, sanitizer
 from renku_data_services.secrets import apispec
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo
@@ -23,7 +23,6 @@ from renku_data_services.utils.cryptography import (
 
 
 async def validate_secret(
-    cluster_id: ClusterId,
     user: base_models.APIUser,
     body: apispec.K8sSecret,
     secrets_repo: LowLevelUserSecretsRepo,
@@ -31,6 +30,7 @@ async def validate_secret(
     previous_secret_service_private_key: rsa.RSAPrivateKey | None,
 ) -> K8sSecret:
     """Creates a single k8s secret from a list of user secrets stored in the DB."""
+    cluster_id = ClusterId(ULID.from_str(body.cluster_id)) if body.cluster_id is not None else DEFAULT_K8S_CLUSTER
 
     owner_references = []
     if body.owner_references:
@@ -101,6 +101,6 @@ async def validate_secret(
         name=v1_secret.metadata.name,
         namespace=v1_secret.metadata.namespace,
         cluster=cluster_id,
-        gvk=GVK(group="", version=Secret.version, kind="Secret"),
+        gvk=GVK(group="core", version=Secret.version, kind="Secret"),
         manifest=Box(sanitizer(v1_secret)),
     )
