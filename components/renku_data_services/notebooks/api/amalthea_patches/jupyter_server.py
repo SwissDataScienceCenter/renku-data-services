@@ -139,7 +139,7 @@ async def image_pull_secret(server: UserServer, access_token: str | None) -> lis
                             "kind": "Secret",
                             "metadata": {
                                 "name": image_pull_secret_name,
-                                "namespace": await server.k8s_namespace(),
+                                "namespace": server.k8s_namespace(),
                             },
                             "type": "kubernetes.io/dockerconfigjson",
                         },

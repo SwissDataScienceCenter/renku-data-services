@@ -19,7 +19,7 @@ async def main(server: UserServer) -> list[dict[str, Any]]:
     repositories = await server.repositories()
     for i, cloud_storage_request in enumerate(server.cloudstorage):
         cloud_storage_patches.extend(
-            cloud_storage_request.get_manifest_patch(f"{server.server_name}-ds-{i}", await server.k8s_namespace())
+            cloud_storage_request.get_manifest_patch(f"{server.server_name}-ds-{i}", server.k8s_namespace())
         )
         if repositories:
             cloud_storage_patches.append(

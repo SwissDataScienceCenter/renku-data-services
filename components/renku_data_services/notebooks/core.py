@@ -395,10 +395,12 @@ async def launch_notebook_helper(
 
     host = nb_config.sessions.ingress.host
     parsed_server_options: ServerOptions | None = None
+    session_namespace = nb_config.k8s.renku_namespace
     if resource_class_id is not None:
         # A resource class ID was passed in, validate with CRC service
         parsed_server_options = await nb_config.crc_validator.validate_class_storage(user, resource_class_id, storage)
         cluster = await nb_config.k8s_client.cluster_by_class_id(resource_class_id, user)
+        session_namespace = cluster.namespace
         with contextlib.suppress(errors.MissingResourceError):
             (_, _, _, host, _, _) = (await nb_config.cluster_rp.select(cluster.id)).get_ingress_parameters(server_name)
 
@@ -513,6 +515,7 @@ async def launch_notebook_helper(
         repositories=[Repository.from_dict(r.model_dump()) for r in repositories],
         config=nb_config,
         host=host,
+        namespace=session_namespace,
         **extra_kwargs,
     )
 
@@ -557,7 +560,7 @@ async def launch_notebook_helper(
     if k8s_user_secret is not None:
         request_data: dict[str, Any] = {
             "name": k8s_user_secret.name,
-            "namespace": await server.k8s_namespace(),
+            "namespace": server.k8s_namespace(),
             "secret_ids": [str(id_) for id_ in k8s_user_secret.user_secret_ids],
             "owner_references": [owner_reference],
         }
@@ -571,7 +574,7 @@ async def launch_notebook_helper(
                 base_name = f"{server_name}-ds-{icloud_storage}"
             request_data = {
                 "name": f"{base_name}-secrets",
-                "namespace": await server.k8s_namespace(),
+                "namespace": server.k8s_namespace(),
                 "secret_ids": list(cloud_storage.secrets.keys()),
                 "owner_references": [owner_reference],
                 "key_mapping": cloud_storage.secrets,

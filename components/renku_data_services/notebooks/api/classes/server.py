@@ -53,6 +53,7 @@ class UserServer:
         config: NotebooksConfig,
         internal_gitlab_user: APIUser,
         host: str,
+        namespace: str,
         using_default_image: bool = False,
         is_image_private: bool = False,
         repositories: list[Repository] | None = None,
@@ -71,6 +72,7 @@ class UserServer:
         self.cloudstorage = cloudstorage
         self.is_image_private = is_image_private
         self.host = host
+        self.__namespace = namespace
         self.config = config
         self.internal_gitlab_user = internal_gitlab_user
 
@@ -99,10 +101,9 @@ class UserServer:
         if not self._user.is_authenticated:
             self.server_url = f"{self.server_url}?token={self._user.id}"
 
-    async def k8s_namespace(self) -> str:
+    def k8s_namespace(self) -> str:
         """Get the preferred namespace for a server."""
-        # FIXME: LSA: WE MIGHT NEED TO RETRIEVE THE CLUSTERID FROM ANNOTATIONS
-        return await self._k8s_client.namespace()
+        return self.__namespace
 
     @property
     def user(self) -> AnonymousAPIUser | AuthenticatedAPIUser:
@@ -408,6 +409,7 @@ class Renku1UserServer(UserServer):
         work_dir: PurePosixPath,
         config: NotebooksConfig,
         host: str,
+        namespace: str,
         gitlab_project: Project | None,
         internal_gitlab_user: APIUser,
         using_default_image: bool = False,
@@ -440,6 +442,7 @@ class Renku1UserServer(UserServer):
             is_image_private=is_image_private,
             repositories=repositories,
             host=host,
+            namespace=namespace,
             config=config,
             internal_gitlab_user=internal_gitlab_user,
         )
