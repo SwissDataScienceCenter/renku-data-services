@@ -796,10 +796,10 @@ components:
     EnvironmentPort:
       type: integer
       minimum: 0
+      exclusiveMinimum: true
       exclusiveMaximum: true
       # NOTE: we reserve 65400 - 65535 for usage of Renku sidecars and services
       maximum: 65400
-      exclusiveMinimum: true
       description: The TCP port (on any container in the session) where user requests will be routed to from the ingress
     EnvironmentUid:
       type: integer
