@@ -339,6 +339,9 @@ async def launch_notebook_helper(
     if server:
         return UserServerManifest(server, nb_config.sessions.default_image, nb_config.sessions.storage.pvs_enabled), 200
 
+    if not nb_config.v1_sessions_enabled:
+        raise errors.ForbiddenError(message="Starting v1 sessions is not allowed.")
+
     gl_project_path = gl_project_path if gl_project_path is not None else ""
 
     # Add annotation for old and new notebooks
