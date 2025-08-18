@@ -94,6 +94,7 @@ def create_app() -> Sanic:
             sentry_sdk.init(
                 dsn=dependency_manager.config.sentry.dsn,
                 environment=dependency_manager.config.sentry.environment,
+                release=dependency_manager.config.sentry.release or None,
                 integrations=[
                     AsyncioIntegration(),
                     SanicIntegration(unsampled_statuses={404, 403, 401}),
