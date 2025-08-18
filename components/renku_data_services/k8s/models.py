@@ -148,7 +148,7 @@ class K8sSecret(K8sObject):
             name=secret.metadata.name,
             namespace=cluster.namespace,
             cluster=cluster.id,
-            gvk=GVK(group="", version=Secret.version, kind="Secret"),
+            gvk=GVK(group="core", version=Secret.version, kind="Secret"),
             manifest=Box(sanitizer(secret)),
         )
 
