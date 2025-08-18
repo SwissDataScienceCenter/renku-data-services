@@ -184,10 +184,11 @@ class NotebooksConfig:
                 kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
             )
         )
+        secrets_client = K8sSecretClient(client)
 
         k8s_client = NotebookK8sClient(
             client=client,
-            secrets_client=K8sSecretClient(client),
+            secrets_client=secrets_client,
             rp_repo=rp_repo,
             session_type=JupyterServerV1Alpha1,
             gvk=JUPYTER_SESSION_GVK,
@@ -195,7 +196,7 @@ class NotebooksConfig:
         )
         k8s_v2_client = NotebookK8sClient(
             client=client,
-            secrets_client=K8sSecretClient(client),
+            secrets_client=secrets_client,
             rp_repo=rp_repo,
             # NOTE: v2 sessions have no userId label, the safe-username label is the keycloak user ID
             session_type=AmaltheaSessionV1Alpha1,
