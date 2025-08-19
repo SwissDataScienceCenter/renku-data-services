@@ -69,7 +69,7 @@ class PriorityClassClient(Protocol):
 class K8sClient(Protocol):
     """Methods to manipulate resources on a Kubernetes cluster."""
 
-    async def create(self, obj: K8sObject) -> K8sObject:
+    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject:
         """Create the k8s object."""
         ...
 

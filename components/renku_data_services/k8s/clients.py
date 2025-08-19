@@ -12,7 +12,6 @@ from typing import Any
 from uuid import uuid4
 
 import kr8s
-from kr8s import ServerError
 from kubernetes import client, config
 from kubernetes.config.config_exception import ConfigException
 from kubernetes.config.incluster_config import SERVICE_CERT_FILENAME, SERVICE_TOKEN_FILENAME, InClusterConfigLoader
@@ -81,36 +80,7 @@ class K8sSecretClient(SecretClient):
     async def create_secret(self, secret: K8sSecret) -> K8sSecret:
         """Create a secret."""
 
-        try:
-            result = await self.__client.create(secret)
-        except ServerError as err:
-            if err.response and err.response.status_code == 409:
-                patches = [
-                    {
-                        "op": "replace",
-                        "path": "/data",
-                        "value": secret.manifest.get("data", {}),
-                    },
-                    {
-                        "op": "replace",
-                        "path": "/stringData",
-                        "value": secret.manifest.get("string_data", {}),
-                    },
-                    {
-                        "op": "replace",
-                        "path": "/metadata/annotations",
-                        "value": secret.manifest.metadata.get("annotations", {}),
-                    },
-                    {
-                        "op": "replace",
-                        "path": "/metadata/labels",
-                        "value": secret.manifest.metadata.get("labels", {}),
-                    },
-                ]
-                result = await self.patch_secret(secret, patches)
-            else:
-                raise
-        return K8sSecret.from_k8s_object(result)
+        return K8sSecret.from_k8s_object(await self.__client.create(secret, False))
 
     async def patch_secret(self, secret: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
         """Patch a secret."""
@@ -322,13 +292,17 @@ class K8sClusterClient(K8sClient):
     async def __get_api_object(self, meta: K8sObjectFilter) -> APIObjectInCluster | None:
         return await anext(aiter(self.__list(meta)), None)
 
-    async def create(self, obj: K8sObject) -> K8sObject:
+    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject:
         """Create the k8s object."""
 
         api_obj = obj.to_api_object(self.__cluster.api)
         await api_obj.create()
-        # if refresh isn't called, status and timestamp will be blank
-        await api_obj.refresh()
+
+        # In some cases the service account does not have read rights, in which case we cannot call get(), and refresh()
+        if refresh:
+            # if refresh isn't called, status and timestamp will be blank
+            await api_obj.refresh()
+
         return obj.with_manifest(api_obj.to_dict())
 
     async def patch(self, meta: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
@@ -379,12 +353,12 @@ class K8sCachedClusterClient(K8sClusterClient):
         self.__cache = cache
         self.__kinds_to_cache = set(kinds_to_cache)
 
-    async def create(self, obj: K8sObject) -> K8sObject:
+    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject:
         """Create the k8s object."""
         if obj.gvk in self.__kinds_to_cache:
             await self.__cache.upsert(obj)
         try:
-            obj = await super().create(obj)
+            obj = await super().create(obj, refresh)
         except:
             # if there was an error creating the k8s object, we delete it from the db again to not have ghost entries
             if obj.gvk in self.__kinds_to_cache:
@@ -462,10 +436,10 @@ class K8sClusterClientsPool(K8sClient):
         client = await self.__get_client_or_die(cluster_id)
         return client.get_cluster()
 
-    async def create(self, obj: K8sObject) -> K8sObject:
+    async def create(self, obj: K8sObject, refresh: bool = True) -> K8sObject:
         """Create the k8s object."""
         client = await self.__get_client_or_die(obj.cluster)
-        return await client.create(obj)
+        return await client.create(obj, refresh)
 
     async def patch(self, meta: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
         """Patch a k8s object."""
