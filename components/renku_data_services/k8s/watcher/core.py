@@ -9,7 +9,6 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 
 from httpx import ReadError
-from kr8s import ServerError
 
 from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import APIUser, InternalServiceAdmin, ServiceAdminId
@@ -18,7 +17,7 @@ from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.k8s.clients import K8sClusterClient
 from renku_data_services.k8s.constants import ClusterId
 from renku_data_services.k8s.db import K8sDbCache
-from renku_data_services.k8s.models import GVK, APIObjectInCluster, ClusterConnection, K8sObject, K8sObjectFilter
+from renku_data_services.k8s.models import GVK, APIObjectInCluster, K8sObject, K8sObjectFilter
 from renku_data_services.notebooks.crs import State
 
 logger = logging.getLogger(__name__)
@@ -36,7 +35,7 @@ class K8sWatcher:
     def __init__(
         self,
         handler: EventHandler,
-        clusters: dict[ClusterId, ClusterConnection],
+        clusters: dict[ClusterId, K8sClusterClient],
         kinds: list[GVK],
         db_cache: K8sDbCache,
     ) -> None:
@@ -50,89 +49,84 @@ class K8sWatcher:
         self.__sync_period_seconds = 600
         self.__cache = db_cache
 
-    async def __sync(self, cluster: ClusterConnection, kind: GVK) -> None:
+    async def __sync(self, client: K8sClusterClient, kind: GVK) -> None:
         """Upsert K8s objects in the cache and remove deleted objects from the cache."""
-        clnt = K8sClusterClient(cluster)
-        fltr = K8sObjectFilter(gvk=kind, cluster=cluster.id, namespace=cluster.namespace)
+
+        fltr = K8sObjectFilter(gvk=kind, cluster=client.get_cluster().id, namespace=client.get_cluster().namespace)
         # Upsert new / updated objects
         objects_in_k8s: dict[str, K8sObject] = {}
         with contextlib.suppress(Exception):
-            async for obj in clnt.list(fltr):
+            async for obj in client.list(fltr):
                 objects_in_k8s[obj.name] = obj
                 await self.__cache.upsert(obj)
+
+        with contextlib.suppress(Exception):
             # Remove objects that have been deleted from k8s but are still in cache
             async for cache_obj in self.__cache.list(fltr):
-                cache_obj_is_in_k8s = objects_in_k8s.get(cache_obj.name) is not None
-                if cache_obj_is_in_k8s:
-                    continue
-                await self.__cache.delete(cache_obj)
+                if objects_in_k8s.get(cache_obj.name) is None:
+                    await self.__cache.delete(cache_obj)
 
-    async def __full_sync(self, cluster: ClusterConnection) -> None:
+    async def __full_sync(self, client: K8sClusterClient) -> None:
         """Run the full sync if it has never run or at the required interval."""
-        last_sync = self.__full_sync_times.get(cluster.id)
+        cluster_id = client.get_cluster().id
+        last_sync = self.__full_sync_times.get(cluster_id)
         since_last_sync = datetime.now() - last_sync if last_sync is not None else None
         if since_last_sync is not None and since_last_sync.total_seconds() < self.__sync_period_seconds:
             return
-        self.__full_sync_running.add(cluster.id)
+        self.__full_sync_running.add(cluster_id)
         for kind in self.__kinds:
-            logger.info(f"Starting full k8s cache sync for cluster {cluster} and kind {kind}")
-            await self.__sync(cluster, kind)
-        self.__full_sync_times[cluster.id] = datetime.now()
-        self.__full_sync_running.remove(cluster.id)
+            logger.info(f"Starting full k8s cache sync for cluster {cluster_id} and kind {kind}")
+            await self.__sync(client, kind)
+        self.__full_sync_times[cluster_id] = datetime.now()
+        self.__full_sync_running.remove(cluster_id)
 
-    async def __periodic_full_sync(self, cluster: ClusterConnection) -> None:
+    async def __periodic_full_sync(self, client: K8sClusterClient) -> None:
         """Keeps trying to run the full sync."""
         while True:
-            await self.__full_sync(cluster)
+            await self.__full_sync(client)
             await asyncio.sleep(self.__sync_period_seconds / 10)
 
-    async def __watch_kind(self, kind: GVK, cluster: ClusterConnection) -> None:
+    async def __watch_kind(self, kind: GVK, client: K8sClusterClient) -> None:
+        cluster = client.get_cluster()
+        cluster_id = cluster.id
         while True:
             try:
                 watch = cluster.api.async_watch(kind=kind.kr8s_kind, namespace=cluster.namespace)
                 async for event_type, obj in watch:
-                    while cluster.id in self.__full_sync_running:
+                    if cluster_id in self.__full_sync_running:
                         logger.info(
                             f"Pausing k8s watch event processing for cluster {cluster} until full sync completes"
                         )
-                        await asyncio.sleep(5)
-                    await self.__handler(cluster.with_api_object(obj), event_type)
-                    # in some cases, the kr8s loop above just never yields, especially if there's exceptions which
-                    # can bypass async scheduling. This sleep here is as a last line of defence so this code does not
-                    # execute indefinitely and prevent another resource kind from being watched.
-                    await asyncio.sleep(0)
+                    else:
+                        await self.__handler(cluster.with_api_object(obj), event_type)
             except ReadError:
-                await asyncio.sleep(10)
                 pass
-            except ValueError as e:
-                logger.error(f"watch loop failed for {kind} in cluster {cluster.id}: {e}")
-                await asyncio.sleep(10)
-                pass
-            except ServerError as e:
-                logger.error(f"watch loop failed for {kind} in cluster {cluster.id}: {e.response}")
-                await asyncio.sleep(10)
+            except ValueError:
                 pass
             except Exception as e:
-                logger.error(f"watch loop failed for {kind} in cluster {cluster.id}", exc_info=e)
-                # without sleeping, this can just hang the code as exceptions seem to bypass the async scheduler
-                await asyncio.sleep(10)
+                logger.error(f"watch loop failed for {kind} in cluster {cluster_id}", exc_info=e)
                 pass
 
-    def __run_single(self, cluster: ClusterConnection) -> list[Task]:
+            # Add a sleep to prevent retrying in a loop the same action instantly. We do not exit as the resource kind
+            # might be added later on.
+            await asyncio.sleep(10)
+
+    def __run_single(self, client: K8sClusterClient) -> list[Task]:
         # The loops and error handling here will need some testing and love
         tasks = []
         for kind in self.__kinds:
-            logger.info(f"watching {kind} in cluster {cluster.id}")
-            tasks.append(asyncio.create_task(self.__watch_kind(kind, cluster)))
+            logger.info(f"watching {kind} in cluster {client.get_cluster().id}")
+            tasks.append(asyncio.create_task(self.__watch_kind(kind, client)))
 
         return tasks
 
     async def start(self) -> None:
         """Start the watcher."""
-        for cluster in sorted(self.__clusters.values(), key=lambda x: x.id):
-            await self.__full_sync(cluster)
-            self.__full_sync_tasks[cluster.id] = asyncio.create_task(self.__periodic_full_sync(cluster))
-            self.__watch_tasks[cluster.id] = self.__run_single(cluster)
+        for cluster_id in sorted(self.__clusters.keys()):
+            if (client := self.__clusters.get(cluster_id)) is not None:
+                await self.__full_sync(client)
+                self.__full_sync_tasks[cluster_id] = asyncio.create_task(self.__periodic_full_sync(client))
+                self.__watch_tasks[cluster_id] = self.__run_single(client)
 
     async def wait(self) -> None:
         """Wait for all tasks.

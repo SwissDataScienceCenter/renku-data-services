@@ -14,6 +14,7 @@ import pytest_asyncio
 from kr8s import NotFoundError
 from sanic_testing.testing import SanicASGITestClient
 
+from renku_data_services.k8s.clients import K8sClusterClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
 from renku_data_services.k8s.models import ClusterConnection
 from renku_data_services.k8s.watcher import K8sWatcher, k8s_object_handler
@@ -253,13 +254,15 @@ class TestNotebooks(ClusterRequired):
 
     @pytest_asyncio.fixture(scope="class", autouse=True)
     async def k8s_watcher(self, amalthea, app_manager) -> AsyncGenerator[None, None]:
-        clusters = [
-            ClusterConnection(
-                id=DEFAULT_K8S_CLUSTER,
-                namespace=app_manager.config.nb_config.k8s.renku_namespace,
-                api=app_manager.config.nb_config._kr8s_api.current,
+        clusters = {
+            DEFAULT_K8S_CLUSTER: K8sClusterClient(
+                ClusterConnection(
+                    id=DEFAULT_K8S_CLUSTER,
+                    namespace=app_manager.config.nb_config.k8s.renku_namespace,
+                    api=app_manager.config.nb_config._kr8s_api.current,
+                )
             )
-        ]
+        }
 
         # sleep to give amalthea a chance to create the CRDs, otherwise the watcher can error out
         await asyncio.sleep(1)
@@ -267,7 +270,7 @@ class TestNotebooks(ClusterRequired):
             handler=k8s_object_handler(
                 app_manager.config.nb_config.k8s_db_cache, app_manager.metrics, app_manager.rp_repo
             ),
-            clusters={c.id: c for c in clusters},
+            clusters=clusters,
             kinds=[JUPYTER_SESSION_GVK],
             db_cache=app_manager.config.nb_config.k8s_db_cache,
         )
