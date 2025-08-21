@@ -309,8 +309,12 @@ class TestNotebooks(ClusterRequired):
         server_name = "unknown_server"
         if server_exists:
             server_name = jupyter_server.name
+            for _ in list(range(0, 5)):
+                _, res = await sanic_client.get("/api/data/notebooks/servers", headers=authenticated_user_headers)
+                if res.json["servers"].get(server_name) is not None:
+                    break
+                await asyncio.sleep(1)  # wait a bit for k8s events to be processed in the background
 
-        await asyncio.sleep(2)  # wait a bit for k8s events to be processed in the background
         _, res = await sanic_client.get(f"/api/data/notebooks/logs/{server_name}", headers=authenticated_user_headers)
 
         assert res.status_code == expected_status_code, res.text

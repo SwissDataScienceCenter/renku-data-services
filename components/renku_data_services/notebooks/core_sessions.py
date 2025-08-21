@@ -570,7 +570,6 @@ async def start_session(
 
     # Fully determine the resource pool and resource class
     if resource_class_id is None:
-        await rp_repo.get_default_resource_class()  # FIXME: LSA WHY CALL AND NOT DO ANYTHING WITH RESULT?
         resource_pool = await rp_repo.get_default_resource_pool()
         resource_class = resource_pool.get_default_resource_class()
         if not resource_class and len(resource_pool.classes) > 0:
