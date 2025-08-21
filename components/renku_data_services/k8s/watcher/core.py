@@ -8,7 +8,7 @@ from asyncio import CancelledError, Task
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 
-from httpx import ReadError
+from httpx import ReadError, RemoteProtocolError
 
 from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import APIUser, InternalServiceAdmin, ServiceAdminId
@@ -100,6 +100,8 @@ class K8sWatcher:
                     else:
                         await self.__handler(cluster.with_api_object(obj), event_type)
             except ReadError:
+                pass
+            except RemoteProtocolError:
                 pass
             except ValueError:
                 pass
