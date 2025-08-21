@@ -11,6 +11,7 @@ from urllib.parse import urlunparse
 from kubernetes.utils import parse_duration, parse_quantity
 from kubernetes.utils.duration import format_duration
 from pydantic import BaseModel, Field, field_serializer, field_validator, model_serializer
+from pydantic.types import HashableItemType
 from ulid import ULID
 
 from renku_data_services.errors import errors
@@ -37,7 +38,6 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     ReconcileStrategy,
     RequiredDuringSchedulingIgnoredDuringExecution,
     SecretRef,
-    Session,
     Size,
     State,
     Status,
@@ -50,13 +50,14 @@ from renku_data_services.notebooks.cr_amalthea_session import (
 )
 from renku_data_services.notebooks.cr_amalthea_session import EnvItem2 as SessionEnvItem
 from renku_data_services.notebooks.cr_amalthea_session import Item4 as SecretAsVolumeItem
-from renku_data_services.notebooks.cr_amalthea_session import Limits6 as Limits
+from renku_data_services.notebooks.cr_amalthea_session import Limits6 as _Limits
 from renku_data_services.notebooks.cr_amalthea_session import Limits7 as LimitsStr
 from renku_data_services.notebooks.cr_amalthea_session import Model as _ASModel
-from renku_data_services.notebooks.cr_amalthea_session import Requests6 as Requests
+from renku_data_services.notebooks.cr_amalthea_session import Requests6 as _Requests
 from renku_data_services.notebooks.cr_amalthea_session import Requests7 as RequestsStr
-from renku_data_services.notebooks.cr_amalthea_session import Resources3 as Resources
+from renku_data_services.notebooks.cr_amalthea_session import Resources3 as _Resources
 from renku_data_services.notebooks.cr_amalthea_session import Secret1 as SecretAsVolume
+from renku_data_services.notebooks.cr_amalthea_session import Session as _ASSession
 from renku_data_services.notebooks.cr_amalthea_session import ShmSize1 as ShmSizeStr
 from renku_data_services.notebooks.cr_amalthea_session import Size1 as SizeStr
 from renku_data_services.notebooks.cr_amalthea_session import Spec as _ASSpec
@@ -165,9 +166,43 @@ class Culling(_ASCulling):
         return handler(val)
 
 
+class Requests(_Requests):
+    """Resource requests of type integer."""
+
+    root: int
+
+
+class Limits(_Limits):
+    """Resource limits of type integer."""
+
+    root: int
+
+
+class Resources(_Resources):
+    """Resource requests and limits spec.
+
+    Overriding these is necessary because of
+    https://docs.pydantic.dev/2.11/errors/validation_errors/#string_type.
+    An integer model cannot have a regex pattern for validation in pydantic.
+    But the code generation applies the pattern constraint to both the int and string variations
+    of the fields. But the int variation runs and blows up at runtime only when an int is passed
+    for validation.
+    """
+
+    limits: Mapping[str, LimitsStr | Limits] | None = None
+    requests: Mapping[str, RequestsStr | Requests] | None = None
+
+
+class Session(_ASSession):
+    """Amalthea spec.session schema."""
+
+    resources: Resources | None = None
+
+
 class AmaltheaSessionSpec(_ASSpec):
     """Amalthea session specification."""
 
+    session: Session
     culling: Culling | None = None
 
 
@@ -185,7 +220,7 @@ class AmaltheaSessionV1Alpha1(_ASModel):
         resource_requests: dict = {}
         if self.spec.session.resources is not None:
             reqs = self.spec.session.resources.requests or {}
-            reqs = {k: parse_quantity(v.root) for k, v in reqs.items()}
+            reqs = {k: parse_quantity(v.root if hasattr(v, "root") else v) for k, v in reqs.items()}
             resource_requests = {
                 **reqs,
                 "storage": parse_quantity(self.spec.session.storage.size.root),
@@ -338,6 +373,13 @@ class AmaltheaSessionV1Alpha1SpecSessionPatch(BaseCRD):
     shmSize: int | str | None = None
     storage: Storage | None = None
     imagePullPolicy: ImagePullPolicy | None = None
+    extraVolumeMounts: list[ExtraVolumeMount] | None = None
+
+
+class AmaltheaSessionV1Alpha1MetadataPatch(BaseCRD):
+    """Patch for the metadata of an amalthea session."""
+
+    annotations: dict[str, str] | None = None
 
 
 class AmaltheaSessionV1Alpha1SpecPatch(BaseCRD):
@@ -359,6 +401,7 @@ class AmaltheaSessionV1Alpha1SpecPatch(BaseCRD):
 class AmaltheaSessionV1Alpha1Patch(BaseCRD):
     """Patch for an amalthea session."""
 
+    metadata: AmaltheaSessionV1Alpha1MetadataPatch | None = None
     spec: AmaltheaSessionV1Alpha1SpecPatch
 
     def to_rfc7386(self) -> dict[str, Any]:

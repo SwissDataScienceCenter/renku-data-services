@@ -32,9 +32,12 @@ async def main() -> None:
     ):
         clusters[client.get_cluster().id] = client
 
-    kinds = [AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK]
+    kinds = [AMALTHEA_SESSION_GVK]
+    if dm.config.v1_services.enabled:
+        kinds.append(JUPYTER_SESSION_GVK)
     if dm.config.image_builders.enabled:
         kinds.extend([BUILD_RUN_GVK, TASK_RUN_GVK])
+    logger.info(f"Resources: {kinds}")
     watcher = K8sWatcher(
         handler=k8s_object_handler(dm.k8s_cache, dm.metrics, rp_repo=dm.rp_repo),
         clusters=clusters,

@@ -6,11 +6,15 @@ from pathlib import Path
 from kubernetes.client import V1Secret
 from pydantic import AliasGenerator, BaseModel, Field, Json
 
+from renku_data_services.data_connectors.models import DataConnectorSecret
 from renku_data_services.errors.errors import ProgrammingError
 from renku_data_services.notebooks.crs import (
     AmaltheaSessionV1Alpha1,
+    DataSource,
+    ExtraContainer,
     ExtraVolume,
     ExtraVolumeMount,
+    InitContainer,
     SecretRef,
 )
 
@@ -115,3 +119,33 @@ class ExtraSecret:
         if not secret_name:
             raise ProgrammingError(message="Cannot get reference to a secret that does not have a name.")
         return SecretRef(name=secret_name, adopt=self.adopt)
+
+
+@dataclass(frozen=True, kw_only=True)
+class SessionExtraResources:
+    """Represents extra resources to add to an amalthea session."""
+
+    containers: list[ExtraContainer] = field(default_factory=list)
+    data_connector_secrets: dict[str, list[DataConnectorSecret]] = field(default_factory=dict)
+    data_sources: list[DataSource] = field(default_factory=list)
+    init_containers: list[InitContainer] = field(default_factory=list)
+    secrets: list[ExtraSecret] = field(default_factory=list)
+    volume_mounts: list[ExtraVolumeMount] = field(default_factory=list)
+    volumes: list[ExtraVolume] = field(default_factory=list)
+
+    def concat(self, added_extras: "SessionExtraResources | None") -> "SessionExtraResources":
+        """Concatenates these session extras with more session extras."""
+        if added_extras is None:
+            return self
+        data_connector_secrets: dict[str, list[DataConnectorSecret]] = dict()
+        data_connector_secrets.update(self.data_connector_secrets)
+        data_connector_secrets.update(added_extras.data_connector_secrets)
+        return SessionExtraResources(
+            containers=self.containers + added_extras.containers,
+            data_connector_secrets=data_connector_secrets,
+            data_sources=self.data_sources + added_extras.data_sources,
+            init_containers=self.init_containers + added_extras.init_containers,
+            secrets=self.secrets + added_extras.secrets,
+            volume_mounts=self.volume_mounts + added_extras.volume_mounts,
+            volumes=self.volumes + added_extras.volumes,
+        )

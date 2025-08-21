@@ -134,6 +134,7 @@ class NotebooksConfig:
         default_factory=_ServersGetEndpointAnnotations
     )
     session_id_cookie_name: str = "_renku_session"  # NOTE: This cookie name is set and controlled by the gateway
+    v1_sessions_enabled: bool = False
 
     @classmethod
     def from_env(cls, db_config: DBConfig) -> Self:
@@ -148,6 +149,7 @@ class NotebooksConfig:
         git_provider_helper: GitProviderHelperProto
         k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
         kube_config_root = os.environ.get("K8S_CONFIGS_ROOT", "/secrets/kube_configs")
+        v1_sessions_enabled = _parse_str_as_bool(os.environ.get("V1_SESSIONS_ENABLED", False))
 
         if dummy_stores:
             quota_repo = QuotaRepository(DummyCoreClient({}, {}), DummySchedulingClient({}), namespace=k8s_namespace)
@@ -225,4 +227,5 @@ class NotebooksConfig:
             k8s_db_cache=k8s_db_cache,
             cluster_rp=cluster_rp,
             _kr8s_api=kr8s_api,
+            v1_sessions_enabled=v1_sessions_enabled,
         )

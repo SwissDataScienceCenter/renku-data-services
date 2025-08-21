@@ -52,6 +52,19 @@ class _ImageBuilderConfig:
 
 
 @dataclass
+class _V1ServicesConfig:
+    """Configuration for v1 services."""
+
+    enabled: bool
+
+    @classmethod
+    def from_env(cls) -> _V1ServicesConfig:
+        """Load values from environment variables."""
+        enabled = os.environ.get("V1_SERVICES_ENABLED", "false").lower() == "true"
+        return cls(enabled=enabled)
+
+
+@dataclass
 class Config:
     """K8s cache config."""
 
@@ -59,6 +72,7 @@ class Config:
     k8s: _K8sConfig
     metrics: _MetricsConfig
     image_builders: _ImageBuilderConfig
+    v1_services: _V1ServicesConfig
 
     @classmethod
     def from_env(cls) -> Config:
@@ -66,12 +80,12 @@ class Config:
         db = DBConfig.from_env()
         k8s = _K8sConfig.from_env()
         metrics = _MetricsConfig.from_env()
-
         image_builders = _ImageBuilderConfig.from_env()
-
+        v1_services = _V1ServicesConfig.from_env()
         return cls(
             db=db,
             k8s=k8s,
             metrics=metrics,
             image_builders=image_builders,
+            v1_services=v1_services,
         )

@@ -51,6 +51,7 @@ class FrontendVariant(StrEnum):
 
     vscodium = "vscodium"
     jupyterlab = "jupyterlab"
+    ttyd = "ttyd"
 
 
 @dataclass(kw_only=True, frozen=True, eq=True)
