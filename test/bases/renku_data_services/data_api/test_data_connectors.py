@@ -9,6 +9,7 @@ from sanic_testing.testing import SanicASGITestClient
 from renku_data_services.authz.models import Visibility
 from renku_data_services.base_models.core import NamespacePath, ProjectPath
 from renku_data_services.data_connectors import core
+from renku_data_services.data_connectors.doi.models import DOIMetadata
 from renku_data_services.namespace.models import NamespaceKind
 from renku_data_services.storage.rclone import RCloneDOIMetadata
 from renku_data_services.users.models import UserInfo
@@ -110,6 +111,12 @@ async def test_post_global_data_connector(
         provider="zenodo",
     )
     _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
+    zenodo_metadata = DOIMetadata(
+        name="SwissDataScienceCenter/renku-python: Version 0.7.2",
+        description="""<a href="https://github.com/SwissDataScienceCenter/renku-python/compare/v0.7.1...v0.7.2">0.7.2</a> (2019-11-15)\nBug Fixes\n<ul>\n<li>ensure all Person instances have valid ids (<a href="https://github.com/SwissDataScienceCenter/renku-python/commit/85585d0">85585d0</a>), addresses <a href="https://github.com/SwissDataScienceCenter/renku-python/issues/812">#812</a></li>\n</ul>""",  # noqa E501
+        keywords=[],
+    )
+    _mock_get_dataset_metadata(metadata=zenodo_metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
 
     payload = {
         "storage": {
@@ -164,6 +171,12 @@ async def test_post_global_data_connector_dataverse(
         provider="dataverse",
     )
     _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
+    dataverse_metadata = DOIMetadata(
+        name="Dataset metadata of known Dataverse installations, August 2024",
+        description="""<p>This dataset contains the metadata of the datasets published in 101 Dataverse installations, information about the metadata blocks of 106 installations, and the lists of pre-defined licenses or dataset terms that depositors can apply to datasets in the 88 installations that were running versions of the Dataverse software that include the "multiple-license" feature.\n\n<p>The data is useful for improving understandings about how certain Dataverse features and metadata fields are used and for learning about the quality of dataset and file-level metadata within and across Dataverse installations.\n\n<p><strong>How the metadata was downloaded</strong>\n<p>The dataset metadata and metadata block JSON files were downloaded from each installation between August 25 and August 30, 2024 using a "get_dataverse_installations_metadata" function in a collection of Python functions at <a href="https://github.com/jggautier/dataverse-scripts/blob/main/dataverse_repository_curation_assistant/dataverse_repository_curation_assistant_functions.py">https://github.com/jggautier/dataverse-scripts/blob/main/dataverse_repository_curation_assistant/dataverse_repository_curation_assistant_functions.py</a>.\n\n<p>In order to get the metadata from installations that require an installation account API token to use certain Dataverse software APIs, I created a CSV file with two columns: one column named "hostname" listing each installation URL for which I was able to create an account and another column named "apikey" listing my accounts\' API tokens. The Python script expects the CSV file and the listed API tokens to get metadata and other information from installations that require API tokens in order to use certain API endpoints.\n\n<p><strong>How the files are organized</strong>\n\n<pre>\n├── csv_files_with_metadata_from_most_known_dataverse_installations\n│\xa0\xa0 ├── author_2024.08.25-2024.08.30.csv\n│\xa0\xa0 ├── contributor_2024.08.25-2024.08.30.csv\n│\xa0\xa0 ├── data_source_2024.08.25-2024.08.30.csv\n│\xa0\xa0 ├── ...\n│\xa0\xa0 └── topic_classification_2024.08.25-2024.08.30.csv\n├── dataverse_json_metadata_from_each_known_dataverse_installation\n│\xa0\xa0 ├── Abacus_2024.08.26_15.52.42.zip\n│\xa0\xa0\xa0\xa0\xa0\xa0 ├── dataset_pids_Abacus_2024.08.26_15.52.42.csv\n│\xa0\xa0\xa0\xa0\xa0\xa0 ├── Dataverse_JSON_metadata_2024.08.26_15.52.42\n│\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0  ├── hdl_11272.1_AB2_0AQZNT_v1.0(latest_version).json\n│\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0  ├── ...\n│\xa0\xa0\xa0\xa0\xa0\xa0 ├── metadatablocks_v5.9\n│\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0  ├── astrophysics_v5.9.json\n│\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0  ├── biomedical_v5.9.json\n│\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0  ├── citation_v5.9.json\n│\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0  ├── ...\n│\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0  ├── socialscience_v5.6.json\n│\xa0\xa0 ├── ACSS_Dataverse_2024.08.26_00.02.51.zip\n│\xa0\xa0 ├── ...\n│\xa0\xa0 └── Yale_Dataverse_2024.08.25_03.52.57.zip\n└── dataverse_installations_summary_2024.08.30.csv\n└── dataset_pids_from_most_known_dataverse_installations_2024.08.csv\n└── license_options_for_each_dataverse_installation_2024.08.28_14.42.54.csv\n└── metadatablocks_from_most_known_dataverse_installations_2024.08.30.csv\n\n</pre>\n\n<p>This dataset contains two directories and four CSV files not in a directory.\n<p>One directory, "csv_files_with_metadata_from_most_known_dataverse_installations", contains 20 CSV files that list the values of many of the metadata fields in the "Citation" metadata block and "Geospatial" metadata block of datasets in the 101 Dataverse installations. For example, author_2024.08.25-2024.08.30.csv contains the "Author" metadata for the latest versions of all published, non-deaccessioned datasets in 101 installations, with a column for each of the four child fields: author name, affiliation, identifier type, and identifier.\n<p>The other directory, "dataverse_json_metadata_from_each_known_dataverse_installation", contains 106 zip files, one zip file for each of the 106 Dataverse installations whose sites were functioning when I attempted to collect their metadata. Each zip file contains a directory with JSON files that have information about the installation\'s metadata fields, such as the field names and how they\'re organized. For installations that had published datasets, and I was able to use Dataverse APIs to download the dataset metadata, the zip file also contains:\n<ul>\n<li>A CSV file listing information about the datasets published in the installation, including a column to indicate if the Python script was able to download the Dataverse JSON metadata for each dataset.\n<li>A directory of JSON files that contain the metadata of the installation\'s published, non-deaccessioned dataset versions in the Dataverse JSON metadata schema.\n</ul>\n<p>The dataverse_installations_summary_2024.08.30.csv file contains information about each installation, including its name, URL, Dataverse software version, and counts of dataset metadata included and not included in this dataset.\n<p>The dataset_pids_from_most_known_dataverse_installations_2024.08.csv file contains the dataset PIDs of published datasets in 101 Dataverse installations, with a column to indicate if the Python script was able to download the dataset\'s metadata. It\'s a union of all "dataset_pids_....csv" files in each of the 101 zip files in the dataverse_json_metadata_from_each_known_dataverse_installation directory.\n<p>The license_options_for_each_dataverse_installation_2024.08.28_14.42.54.csv file contains information about the licenses and data use agreements that some installations let depositors choose when creating datasets. When I collected this data, 88 of the available 106 installations were running versions of the Dataverse software that allow depositors to choose a "predefined license or data use agreement" from a dropdown menu in the dataset deposit form. For more information about this Dataverse feature, see <a href="https://guides.dataverse.org/en/5.14/user/dataset-management.html#choosing-a-license">https://guides.dataverse.org/en/5.14/user/dataset-management.html#choosing-a-license</a>.\n<p>The metadatablocks_from_most_known_dataverse_installations_2024.08.30.csv file contains the metadata block names, field names, child field names (if the field is a compound field), display names, descriptions/tooltip text, and watermarks of fields in the 106 Dataverse installations\' metadata blocks. This file is useful for learning about the metadata fields and field structures used in each installation.\n\n<p><strong>Known errors</strong>\n<p>The metadata of a few datasets from several known and functioning installations could not be downloaded.\n<p>In some cases, this is because of download timeouts caused by the datasets\' relatively large metadata exports, which contain information about the datasets\' large number of versions and files.\n<p>In other cases, datasets were publicly findable but in unpublished or deaccessioned states that prevented me from downloading their metadata export.\n\n<p><strong>About metadata blocks</strong>\n<p>Read about the Dataverse software\'s metadata blocks system at <a href="http://guides.dataverse.org/en/latest/admin/metadatacustomization.html">http://guides.dataverse.org/en/6.3/admin/metadatacustomization.html</a>""",  # noqa E501
+        keywords=["dataset metadata", "dataverse", "metadata blocks"],
+    )
+    _mock_get_dataset_metadata(metadata=dataverse_metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
 
     doi = "10.7910/DVN/2SA6SN"
     payload = {
@@ -239,6 +252,12 @@ async def test_post_global_data_connector_no_duplicates(
         provider="zenodo",
     )
     _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
+    zenodo_metadata = DOIMetadata(
+        name="SwissDataScienceCenter/renku-python: Version 0.7.2",
+        description="""<a href="https://github.com/SwissDataScienceCenter/renku-python/compare/v0.7.1...v0.7.2">0.7.2</a> (2019-11-15)\nBug Fixes\n<ul>\n<li>ensure all Person instances have valid ids (<a href="https://github.com/SwissDataScienceCenter/renku-python/commit/85585d0">85585d0</a>), addresses <a href="https://github.com/SwissDataScienceCenter/renku-python/issues/812">#812</a></li>\n</ul>""",  # noqa E501
+        keywords=[],
+    )
+    _mock_get_dataset_metadata(metadata=zenodo_metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
 
     doi = "10.5281/zenodo.2600782"
     payload = {
@@ -932,6 +951,12 @@ async def test_patch_global_data_connector(
         provider="zenodo",
     )
     _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
+    zenodo_metadata = DOIMetadata(
+        name="SwissDataScienceCenter/renku-python: Version 0.7.2",
+        description="""<a href="https://github.com/SwissDataScienceCenter/renku-python/compare/v0.7.1...v0.7.2">0.7.2</a> (2019-11-15)\nBug Fixes\n<ul>\n<li>ensure all Person instances have valid ids (<a href="https://github.com/SwissDataScienceCenter/renku-python/commit/85585d0">85585d0</a>), addresses <a href="https://github.com/SwissDataScienceCenter/renku-python/issues/812">#812</a></li>\n</ul>""",  # noqa E501
+        keywords=[],
+    )
+    _mock_get_dataset_metadata(metadata=zenodo_metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
 
     doi = "10.5281/zenodo.2600782"
     payload = {
@@ -1008,6 +1033,12 @@ async def test_delete_global_data_connector(
         provider="zenodo",
     )
     _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
+    zenodo_metadata = DOIMetadata(
+        name="SwissDataScienceCenter/renku-python: Version 0.7.2",
+        description="""<a href="https://github.com/SwissDataScienceCenter/renku-python/compare/v0.7.1...v0.7.2">0.7.2</a> (2019-11-15)\nBug Fixes\n<ul>\n<li>ensure all Person instances have valid ids (<a href="https://github.com/SwissDataScienceCenter/renku-python/commit/85585d0">85585d0</a>), addresses <a href="https://github.com/SwissDataScienceCenter/renku-python/issues/812">#812</a></li>\n</ul>""",  # noqa E501
+        keywords=[],
+    )
+    _mock_get_dataset_metadata(metadata=zenodo_metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
 
     doi = "10.5281/zenodo.2600782"
     payload = {
@@ -2369,3 +2400,34 @@ def _mock_get_doi_metadata(metadata: RCloneDOIMetadata, sanic_client: SanicASGIT
         return metadata
 
     monkeypatch.setattr(validator, "get_doi_metadata", _mock_get_doi_metadata)
+
+
+def _mock_get_dataset_metadata(metadata: DOIMetadata, sanic_client: SanicASGITestClient, monkeypatch: "MonkeyPatch"):
+    """Mock the _get_dataset_metadata_invenio method."""
+
+    # The Zenodo API may be unresponsive, so we mock its response
+    from renku_data_services.data_connectors.doi import metadata as metadata_mod
+
+    _orig_get_dataset_metadata_invenio = metadata_mod._get_dataset_metadata_invenio
+    _orig_get_dataset_metadata_dataverse = metadata_mod._get_dataset_metadata_dataverse
+
+    def _mock_get_dataset_metadata(original_fn):
+        async def _mock(*args, **kwargs) -> DOIMetadata | None:
+            fetched_metadata = await original_fn(*args, **kwargs)
+            if fetched_metadata is not None:
+                assert fetched_metadata == metadata
+                return fetched_metadata
+
+            warnings.warn("Could not retrieve DOI metadata, returning saved one", stacklevel=2)
+            return metadata
+
+        return _mock
+
+    monkeypatch.setattr(
+        metadata_mod, "_get_dataset_metadata_invenio", _mock_get_dataset_metadata(_orig_get_dataset_metadata_invenio)
+    )
+    monkeypatch.setattr(
+        metadata_mod,
+        "_get_dataset_metadata_dataverse",
+        _mock_get_dataset_metadata(_orig_get_dataset_metadata_dataverse),
+    )
