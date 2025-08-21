@@ -156,10 +156,6 @@ async def validate_unsaved_global_data_connector(
 
     # Fetch DOI metadata
     rclone_metadata = await validator.get_doi_metadata(configuration=data_connector.storage.configuration)
-    if rclone_metadata is None:
-        raise errors.ValidationError(
-            message=f"Could not resolve DOI {data_connector.storage.configuration.get("doi", "<unknown>")}"
-        )
     metadata = await get_dataset_metadata(rclone_metadata=rclone_metadata)
 
     name = data_connector.name
