@@ -7,6 +7,7 @@ from typing import Any
 from ulid import ULID
 
 from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind, RepositorySelection
+from renku_data_services.connected_services.core import validate_image_registry_url
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -25,6 +26,7 @@ class OAuth2Client:
     created_by_id: str
     creation_date: datetime
     updated_at: datetime
+    image_registry_url: str | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -39,6 +41,11 @@ class OAuth2ClientPatch:
     scope: str | None
     url: str | None
     use_pkce: bool | None
+    image_registry_url: str | None
+
+    def __post_init__(self) -> None:
+        if self.image_registry_url:
+            validate_image_registry_url(self.image_registry_url)
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -56,6 +63,7 @@ class ConnectedAccount:
 
     username: str
     web_url: str
+    email: str
 
 
 class OAuth2TokenSet(dict):
