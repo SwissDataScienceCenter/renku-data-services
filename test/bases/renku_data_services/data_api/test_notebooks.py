@@ -309,11 +309,19 @@ class TestNotebooks(ClusterRequired):
         server_name = "unknown_server"
         if server_exists:
             server_name = jupyter_server.name
-            for _ in list(range(0, 5)):
+            res = None
+            waited = 0
+            for t in list(range(0, 20)):
+                waited = t + 1
                 _, res = await sanic_client.get("/api/data/notebooks/servers", headers=authenticated_user_headers)
-                if res.json["servers"].get(server_name) is not None:
+                if res.status_code == 200 and res.json["servers"].get(server_name) is not None:
                     break
                 await asyncio.sleep(1)  # wait a bit for k8s events to be processed in the background
+            if res is None or res.json["servers"].get(server_name) is None:
+                raise Exception(
+                    f"Timeout reached while waiting for {server_name} to be ready."
+                    f" res {res.json if res is not None else None}, waited {waited} seconds"
+                )
 
         _, res = await sanic_client.get(f"/api/data/notebooks/logs/{server_name}", headers=authenticated_user_headers)
 
