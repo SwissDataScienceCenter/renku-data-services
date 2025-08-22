@@ -248,9 +248,10 @@ class APIObjectInCluster:
                 return cast(str, self.obj.metadata.labels["renku.io/userId"])
             case "amaltheasession":
                 return cast(str, self.obj.metadata.labels["renku.io/safe-username"])
+            case "hpcamaltheasession":
+                return cast(str, self.obj.metadata.labels["renku.io/safe-username"])
             case "buildrun":
                 return cast(str, self.obj.metadata.labels["renku.io/safe-username"])
-
             case "taskrun":
                 return DUMMY_TASK_RUN_USER_ID
             case _:
