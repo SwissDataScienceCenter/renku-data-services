@@ -174,6 +174,22 @@ def fake_gitlab(mocker, fake_gitlab_projects, fake_gitlab_project_info):
     return gitlab
 
 
+async def wait_for(sanic_client: SanicASGITestClient, user_headers, server_name: str, max_timeout: int = 20):
+    res = None
+    waited = 0
+    for t in list(range(0, max_timeout)):
+        waited = t + 1
+        _, res = await sanic_client.get("/api/data/notebooks/servers", headers=user_headers)
+        if res.status_code == 200 and res.json["servers"].get(server_name) is not None:
+            return
+        await asyncio.sleep(1)  # wait a bit for k8s events to be processed in the background
+
+    raise Exception(
+        f"Timeout reached while waiting for {server_name} to be ready."
+        f" res {res.json if res is not None else None}, waited {waited} seconds"
+    )
+
+
 @pytest.mark.asyncio
 async def test_version(sanic_client: SanicASGITestClient, user_headers):
     _, res = await sanic_client.get("/api/data/notebooks/version", headers=user_headers)
@@ -309,19 +325,7 @@ class TestNotebooks(ClusterRequired):
         server_name = "unknown_server"
         if server_exists:
             server_name = jupyter_server.name
-            res = None
-            waited = 0
-            for t in list(range(0, 20)):
-                waited = t + 1
-                _, res = await sanic_client.get("/api/data/notebooks/servers", headers=authenticated_user_headers)
-                if res.status_code == 200 and res.json["servers"].get(server_name) is not None:
-                    break
-                await asyncio.sleep(1)  # wait a bit for k8s events to be processed in the background
-            if res is None or res.json["servers"].get(server_name) is None:
-                raise Exception(
-                    f"Timeout reached while waiting for {server_name} to be ready."
-                    f" res {res.json if res is not None else None}, waited {waited} seconds"
-                )
+            await wait_for(sanic_client, authenticated_user_headers, server_name)
 
         _, res = await sanic_client.get(f"/api/data/notebooks/logs/{server_name}", headers=authenticated_user_headers)
 
@@ -366,8 +370,8 @@ class TestNotebooks(ClusterRequired):
         server_name = "unknown_server"
         if server_exists:
             server_name = jupyter_server.name
+            await wait_for(sanic_client, authenticated_user_headers, server_name)
 
-        await asyncio.sleep(2)  # wait a bit for k8s events to be processed in the background
         _, res = await sanic_client.patch(
             f"/api/data/notebooks/servers/{server_name}", json=patch, headers=authenticated_user_headers
         )
