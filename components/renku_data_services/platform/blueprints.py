@@ -7,13 +7,15 @@ from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
-from renku_data_services.base_api.auth import authenticate, only_admins
+from renku_data_services.base_api.auth import authenticate, only_admins, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.etag import extract_if_none_match, if_match_required
-from renku_data_services.base_models.validation import validated_json
+from renku_data_services.base_api.pagination import PaginationRequest, paginate
+from renku_data_services.base_models.validation import validate_and_dump, validated_json
+from renku_data_services.errors import errors
 from renku_data_services.platform import apispec
 from renku_data_services.platform.core import validate_platform_config_patch
-from renku_data_services.platform.db import PlatformRepository
+from renku_data_services.platform.db import PlatformRepository, RedirectRepository
 
 
 @dataclass(kw_only=True)
@@ -68,3 +70,43 @@ class PlatformConfigBP(CustomBlueprint):
             )
 
         return "/platform/config", ["PATCH"], _patch_singleton_configuration
+
+
+@dataclass(kw_only=True)
+class PlatformRedirectBP(CustomBlueprint):
+    """Handlers for the platform redirects."""
+
+    redirect_repo: RedirectRepository
+    authenticator: base_models.Authenticator
+
+    def get_redirect_configs(self) -> BlueprintFactoryResponse:
+        """List all redirects."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @paginate
+        async def _get_all_redirects(
+            _: Request,
+            _user: base_models.APIUser,
+            pagination: PaginationRequest,
+        ) -> JSONResponse:
+            redirects, total_num = await self.redirect_repo.get_redirect_configs(pagination=pagination)
+
+            redirects_list = [validate_and_dump(apispec.RedirectInfo, self._dump_redirect(r)) for r in redirects]
+            return validated_json(apispec.RedirectInfoList, redirects_list, total=total_num)
+
+        return "/platform/redirects", ["GET"], _get_all_redirects
+
+    def get_redirect_config(self) -> BlueprintFactoryResponse:
+        """Get a specific redirect config."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _get_redirect_config(_: Request, user: base_models.APIUser, redirect_id: str) -> JSONResponse:
+            redirect = await self.redirect_repo.get_redirect(user=user, redirect_id=redirect_id)
+            if not redirect:
+                raise errors.NotFoundError(message=f"Redirect with id '{redirect_id}' not found.")
+
+            return validated_json(apispec.RedirectInfo, redirect)
+
+        return "/platform/redirects/<url>", ["GET"], _get_redirect_config
