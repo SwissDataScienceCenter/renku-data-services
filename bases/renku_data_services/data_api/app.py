@@ -26,7 +26,7 @@ from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_connectors.blueprints import DataConnectorsBP
 from renku_data_services.namespace.blueprints import GroupsBP
 from renku_data_services.notebooks.blueprints import NotebooksBP, NotebooksNewBP
-from renku_data_services.platform.blueprints import PlatformConfigBP
+from renku_data_services.platform.blueprints import PlatformConfigBP, PlatformUrlRedirectBP
 from renku_data_services.project.blueprints import ProjectsBP, ProjectSessionSecretBP
 from renku_data_services.repositories.blueprints import RepositoriesBP
 from renku_data_services.search.blueprints import SearchBP
@@ -224,6 +224,12 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         platform_repo=dm.platform_repo,
         authenticator=dm.authenticator,
     )
+    platform_redirects = PlatformUrlRedirectBP(
+        name="platform_redirects",
+        url_prefix=url_prefix,
+        url_redirect_repo=dm.url_redirect_repo,
+        authenticator=dm.authenticator,
+    )
     search = SearchBP(
         name="search2",
         url_prefix=url_prefix,
@@ -277,6 +283,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
             platform_config.blueprint(),
             search.blueprint(),
             data_connectors.blueprint(),
+            platform_redirects.blueprint(),
         ]
     )
     if builds is not None:
