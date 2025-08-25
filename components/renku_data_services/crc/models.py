@@ -279,6 +279,7 @@ class ResourcePool:
     hibernation_threshold: int | None = None
     default: bool = False
     public: bool = False
+    remote: bool = False
     cluster: SavedClusterSettings | None = None
 
     def __post_init__(self) -> None:
@@ -372,6 +373,7 @@ class ResourcePool:
             quota=quota,
             default=data.get("default", False),
             public=data.get("public", False),
+            remote=data.get("remote", False),
             idle_threshold=data.get("idle_threshold"),
             hibernation_threshold=data.get("hibernation_threshold"),
             cluster=cluster,
