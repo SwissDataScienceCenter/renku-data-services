@@ -659,6 +659,8 @@ async def start_session(
 
     # Determine session location
     session_location = SessionLocation.remote if resource_pool.remote else SessionLocation.local
+    if session_location == SessionLocation.remote and not user.is_authenticated:
+        raise errors.ValidationError(message="Anonymous users cannot start remote sessions.")
 
     environment = launcher.environment
     image = environment.container_image
