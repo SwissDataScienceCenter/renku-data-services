@@ -290,6 +290,10 @@ class ResourcePool:
             raise ValidationError(message="The default resource pool has to be public.")
         if self.default and self.quota is not None:
             raise ValidationError(message="A default resource pool cannot have a quota.")
+        if self.remote and self.default:
+            raise ValidationError(message="The default resource pool cannot start remote sessions.")
+        if self.remote and self.public:
+            raise ValidationError(message="A resource pool which starts remote sessions cannot be public.")
         if (self.idle_threshold and self.idle_threshold < 0) or (
             self.hibernation_threshold and self.hibernation_threshold < 0
         ):
