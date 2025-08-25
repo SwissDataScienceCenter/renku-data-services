@@ -1,5 +1,7 @@
 """SQLAlchemy schemas for the CRC database."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -28,7 +30,7 @@ class UserORM(BaseORM):
 
     __tablename__ = "users"
     keycloak_id: Mapped[str] = mapped_column(String(36), unique=True, index=True)
-    namespace: Mapped["NamespaceORM"] = relationship(repr=False, back_populates="user", lazy="selectin")
+    namespace: Mapped[NamespaceORM] = relationship(repr=False, back_populates="user", lazy="selectin")
     first_name: Mapped[Optional[str]] = mapped_column(String(256), default=None)
     last_name: Mapped[Optional[str]] = mapped_column(String(256), default=None)
     email: Mapped[Optional[str]] = mapped_column(String(320), default=None, index=True)
@@ -46,7 +48,7 @@ class UserORM(BaseORM):
         )
 
     @classmethod
-    def load(cls, user: UserInfo) -> "UserORM":
+    def load(cls, user: UserInfo) -> UserORM:
         """Create an ORM object from the user object."""
         return cls(
             keycloak_id=user.id,
@@ -87,7 +89,7 @@ class UserPreferencesORM(BaseORM):
     """Show project migration banner."""
 
     @classmethod
-    def load(cls, user_preferences: UserPreferences) -> "UserPreferencesORM":
+    def load(cls, user_preferences: UserPreferences) -> UserPreferencesORM:
         """Create UserPreferencesORM from the user preferences model."""
         return cls(
             user_id=user_preferences.user_id,

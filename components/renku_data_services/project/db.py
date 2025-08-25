@@ -32,7 +32,6 @@ from renku_data_services.project import orm as schemas
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.decorators import update_search_document
 from renku_data_services.secrets import orm as secrets_schemas
-from renku_data_services.secrets.core import encrypt_user_secret
 from renku_data_services.secrets.models import SecretKind
 from renku_data_services.session import apispec as session_apispec
 from renku_data_services.session.core import (
@@ -835,8 +834,7 @@ class ProjectSessionSecretRepository:
                     del existing_secrets_as_dict[slot_id]
                     continue
 
-                encrypted_value, encrypted_key = await encrypt_user_secret(
-                    user_repo=self.user_repo,
+                encrypted_value, encrypted_key = await self.user_repo.encrypt_user_secret(
                     requested_by=user,
                     secret_service_public_key=self.secret_service_public_key,
                     secret_value=secret_update.value,

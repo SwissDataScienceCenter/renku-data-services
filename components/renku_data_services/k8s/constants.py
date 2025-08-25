@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from typing import Final, NewType
 
-# LSA Not enough time: Adapt this to be an alias to ULID
-ClusterId = NewType("ClusterId", str)
+from ulid import ULID
 
-DEFAULT_K8S_CLUSTER: Final[ClusterId] = ClusterId("0RENK1RENK2RENK3RENK4RENK5")  # This has to be a valid ULID
+ClusterId = NewType("ClusterId", ULID)
+
+DEFAULT_K8S_CLUSTER: Final[ClusterId] = ClusterId(
+    ULID.from_str("0RENK1RENK2RENK3RENK4RENK5")
+)  # This has to be a valid ULID
 
 DUMMY_TASK_RUN_USER_ID: Final[str] = "DummyTaskRunUser"
 """The user id to use for TaskRuns in the k8s cache.

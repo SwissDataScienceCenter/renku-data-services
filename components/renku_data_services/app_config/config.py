@@ -9,6 +9,8 @@ a single connection will be reused. This allows for the configuration classes to
 instantiated multiple times without creating multiple database connections.
 """
 
+from __future__ import annotations
+
 import os
 from dataclasses import dataclass
 
@@ -26,7 +28,7 @@ class KeycloakConfig:
     algorithms: list[str] | None
 
     @classmethod
-    def from_env(cls) -> "KeycloakConfig":
+    def from_env(cls) -> KeycloakConfig:
         """Load config from environment values."""
         url = os.environ.get("KEYCLOAK_URL")
         if url is None:
@@ -59,7 +61,7 @@ class SentryConfig:
     sample_rate: float = 0.2
 
     @classmethod
-    def from_env(cls) -> "SentryConfig":
+    def from_env(cls) -> SentryConfig:
         """Create a config from environment variables."""
         enabled = os.environ.get("SENTRY_ENABLED", "false").lower() == "true"
         dsn = os.environ.get("SENTRY_DSN", "")
@@ -77,7 +79,7 @@ class PosthogConfig:
     enabled: bool
 
     @classmethod
-    def from_env(cls) -> "PosthogConfig":
+    def from_env(cls) -> PosthogConfig:
         """Create posthog config from environment variables."""
         enabled = os.environ.get("POSTHOG_ENABLED", "false").lower() == "true"
 
@@ -92,7 +94,7 @@ class TrustedProxiesConfig:
     real_ip_header: str | None = None
 
     @classmethod
-    def from_env(cls) -> "TrustedProxiesConfig":
+    def from_env(cls) -> TrustedProxiesConfig:
         """Create a config from environment variables."""
         proxies_count = int(os.environ.get("PROXIES_COUNT") or "0")
         real_ip_header = os.environ.get("REAL_IP_HEADER")

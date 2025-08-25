@@ -89,7 +89,7 @@ class K8sObjectORM(BaseORM):
     group: Mapped[str | None] = mapped_column(index=True, nullable=True)
     version: Mapped[str] = mapped_column(index=True)
     kind: Mapped[str] = mapped_column(index=True)
-    cluster: Mapped[str] = mapped_column(index=True)
+    cluster: Mapped[ULID] = mapped_column(ULIDType, index=True)
     user_id: Mapped[str] = mapped_column(String(), index=True)
 
     @hybrid_property
