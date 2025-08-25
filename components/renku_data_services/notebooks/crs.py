@@ -52,6 +52,7 @@ from renku_data_services.notebooks.cr_amalthea_session import EnvItem2 as Sessio
 from renku_data_services.notebooks.cr_amalthea_session import Item4 as SecretAsVolumeItem
 from renku_data_services.notebooks.cr_amalthea_session import Limits6 as _Limits
 from renku_data_services.notebooks.cr_amalthea_session import Limits7 as LimitsStr
+from renku_data_services.notebooks.cr_amalthea_session import Location as SessionLocation
 from renku_data_services.notebooks.cr_amalthea_session import Model as _ASModel
 from renku_data_services.notebooks.cr_amalthea_session import Requests6 as _Requests
 from renku_data_services.notebooks.cr_amalthea_session import Requests7 as RequestsStr

@@ -65,6 +65,7 @@ from renku_data_services.notebooks.crs import (
     SecretAsVolumeItem,
     Session,
     SessionEnvItem,
+    SessionLocation,
     ShmSizeStr,
     SizeStr,
     State,
@@ -565,6 +566,11 @@ async def start_session(
             raise errors.MissingResourceError(message=f"The resource class with ID {resource_class_id} does not exist.")
     await nb_config.crc_validator.validate_class_storage(user, resource_class.id, body.disk_storage)
 
+    # Determine session location
+    session_location = SessionLocation.remote if resource_pool.remote else SessionLocation.local
+    if session_location == SessionLocation.remote and not user.is_authenticated:
+        raise errors.ValidationError(message="Anonymous users cannot start remote sessions.")
+
     environment = launcher.environment
     image = environment.container_image
     work_dir = environment.working_directory
@@ -694,6 +700,7 @@ async def start_session(
     session = AmaltheaSessionV1Alpha1(
         metadata=Metadata(name=server_name, annotations=annotations),
         spec=AmaltheaSessionSpec(
+            location=session_location,
             imagePullSecrets=[ImagePullSecret(name=image_pull_secret_name, adopt=True)]
             if image_pull_secret_name
             else [],

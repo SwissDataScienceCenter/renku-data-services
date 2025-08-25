@@ -2,7 +2,17 @@
 
 from typing import Optional
 
-from sqlalchemy import JSON, BigInteger, Column, Identity, Integer, MetaData, String, Table
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Column,
+    Identity,
+    Integer,
+    MetaData,
+    String,
+    Table,
+    false,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
@@ -217,6 +227,7 @@ class ResourcePoolORM(BaseORM):
     hibernation_threshold: Mapped[Optional[int]] = mapped_column(default=None)
     default: Mapped[bool] = mapped_column(default=False, index=True)
     public: Mapped[bool] = mapped_column(default=False, index=True)
+    remote: Mapped[bool] = mapped_column(default=False, server_default=false())
     id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
     cluster_id: Mapped[Optional[ULID]] = mapped_column(
         ForeignKey(ClusterORM.id, ondelete="SET NULL"), default=None, index=True
@@ -242,6 +253,7 @@ class ResourcePoolORM(BaseORM):
             hibernation_threshold=resource_pool.hibernation_threshold,
             public=resource_pool.public,
             default=resource_pool.default,
+            remote=resource_pool.remote,
             cluster_id=cluster_id,
         )
 
@@ -271,6 +283,7 @@ class ResourcePoolORM(BaseORM):
             hibernation_threshold=self.hibernation_threshold,
             public=self.public,
             default=self.default,
+            remote=self.remote,
             cluster=cluster,
         )
 
