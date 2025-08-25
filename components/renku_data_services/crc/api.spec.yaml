@@ -1280,13 +1280,15 @@ components:
           $ref: "#/components/schemas/PublicFlag"
         default:
           $ref: "#/components/schemas/DefaultFlag"
+        remote:
+          $ref: "#/components/schemas/RemoteFlag"
         idle_threshold:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
           $ref: "#/components/schemas/HibernationThreshold"
         cluster_id:
           $ref: "#/components/schemas/Ulid"
-      required: ["classes", "name", "public", "default"]
+      required: ["classes", "name", "public", "default", "remote"]
       example:
         quota:
           cpu: 50
@@ -1294,6 +1296,7 @@ components:
           gpu: 10
         public: true
         default: false
+        remote: false
         classes:
           - name: "resource class 1"
             cpu: 1.5
@@ -1325,6 +1328,8 @@ components:
           $ref: "#/components/schemas/PublicFlag"
         default:
           $ref: "#/components/schemas/DefaultFlag"
+        remote:
+          $ref: "#/components/schemas/RemoteFlag"
         idle_threshold:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
@@ -1355,13 +1360,15 @@ components:
           $ref: "#/components/schemas/PublicFlag"
         default:
           $ref: "#/components/schemas/DefaultFlag"
+        remote:
+          $ref: "#/components/schemas/RemoteFlag"
         idle_threshold:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
           $ref: "#/components/schemas/HibernationThreshold"
         cluster_id:
           $ref: "#/components/schemas/Ulid"
-      required: ["classes", "name", "public", "default"]
+      required: ["classes", "name", "public", "default", "remote"]
       example:
         quota:
           cpu: 50
@@ -1370,6 +1377,7 @@ components:
           id: 518c7d27-b5db-4aee-855f-f4638aded2d4
         public: true
         default: false
+        remote: false
         classes:
           - name: "resource class 1"
             cpu: 1.5
@@ -1403,6 +1411,8 @@ components:
           $ref: "#/components/schemas/PublicFlag"
         default:
           $ref: "#/components/schemas/DefaultFlag"
+        remote:
+          $ref: "#/components/schemas/RemoteFlag"
         idle_threshold:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
@@ -1413,7 +1423,7 @@ components:
             id:
               $ref: "#/components/schemas/Ulid"
           required: ["id"]
-      required: ["classes", "name", "id", "public", "default"]
+      required: ["classes", "name", "id", "public", "default", "remote"]
       example:
         quota:
           cpu: 50
@@ -1422,6 +1432,7 @@ components:
           id: 518c7d27-b5db-4aee-855f-f4638aded2d4
         public: false
         default: false
+        remote: false
         classes:
           - name: "resource class 1"
             cpu: 1.5
@@ -1456,13 +1467,15 @@ components:
           $ref: "#/components/schemas/PublicFlag"
         default:
           $ref: "#/components/schemas/DefaultFlag"
+        remote:
+          $ref: "#/components/schemas/RemoteFlag"
         idle_threshold:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
           $ref: "#/components/schemas/HibernationThreshold"
         cluster_id:
           $ref: "#/components/schemas/Ulid"
-      required: ["classes", "name", "id", "public", "default"]
+      required: ["classes", "name", "id", "public", "default", "remote"]
       example:
         quota:
           cpu: 50
@@ -1471,6 +1484,7 @@ components:
           id: 518c7d27-b5db-4aee-855f-f4638aded2d4
         public: false
         default: false
+        remote: false
         classes:
           - name: "resource class 1"
             cpu: 1.5
@@ -1679,6 +1693,11 @@ components:
     PublicFlag:
       type: boolean
       description: A resource pool whose classes can be accessed by anyone
+      default: false
+      example: false
+    RemoteFlag:
+      type: boolean
+      description: A resource pool which starts sessions remotely
       default: false
       example: false
     IdleThreshold:
