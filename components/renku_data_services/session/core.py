@@ -68,8 +68,8 @@ def validate_unsaved_build_parameters(
         repository=environment.repository,
         builder_variant=environment.builder_variant,
         frontend_variant=environment.frontend_variant,
-        repository_revision=environment.repository_revision,
-        context_dir=environment.context_dir,
+        repository_revision=environment.repository_revision if environment.repository_revision else None,
+        context_dir=environment.context_dir if environment.context_dir else None,
     )
 
 
