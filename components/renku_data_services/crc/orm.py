@@ -253,6 +253,7 @@ class ResourcePoolORM(BaseORM):
             hibernation_threshold=resource_pool.hibernation_threshold,
             public=resource_pool.public,
             default=resource_pool.default,
+            remote=resource_pool.remote,
             cluster_id=cluster_id,
         )
 
@@ -282,6 +283,7 @@ class ResourcePoolORM(BaseORM):
             hibernation_threshold=self.hibernation_threshold,
             public=self.public,
             default=self.default,
+            remote=self.remote,
             cluster=cluster,
         )
 
