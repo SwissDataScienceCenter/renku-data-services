@@ -184,7 +184,7 @@ class ClusterORM(BaseORM):
             name=cluster.name,
             config_name=cluster.config_name,
             service_account_name=cluster.service_account_name,
-            session_protocol=str(cluster.session_protocol.value),
+            session_protocol=cluster.session_protocol.value,
             session_host=cluster.session_host,
             session_port=cluster.session_port,
             session_path=cluster.session_path,
