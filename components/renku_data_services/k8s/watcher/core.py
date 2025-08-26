@@ -8,8 +8,6 @@ from asyncio import CancelledError, Task
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 
-from httpx import ReadError, RemoteProtocolError
-
 from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import APIUser, InternalServiceAdmin, ServiceAdminId
 from renku_data_services.base_models.metrics import MetricsService
@@ -115,12 +113,11 @@ class K8sWatcher:
                 # Add a sleep to prevent retrying in a loop the same action instantly. We do not exit as the resource
                 # kind might be added later on.
                 await asyncio.sleep(10)
-            except (ReadError, RemoteProtocolError) as e:
-                logger.warning(f"watch loop failed {kind}@{cluster_id}: {e}")
             except Exception as e:
                 logger.error(f"watch loop failed for {kind} in cluster {cluster_id}", exc_info=e)
-                # Add a sleep to prevent retrying in a loop the same action instantly.
-                await asyncio.sleep(1)
+
+            # Add a sleep to prevent retrying in a loop the same action instantly.
+            await asyncio.sleep(1)
 
     def __run_single(self, client: K8sClusterClient) -> list[Task]:
         # The loops and error handling here will need some testing and love
