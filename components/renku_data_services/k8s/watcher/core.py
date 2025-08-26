@@ -55,14 +55,26 @@ class K8sWatcher:
         fltr = K8sObjectFilter(gvk=kind, cluster=client.get_cluster().id, namespace=client.get_cluster().namespace)
         # Upsert new / updated objects
         objects_in_k8s: dict[str, K8sObject] = {}
-        with contextlib.suppress(Exception):
-            async for obj in client.list(fltr):
+        while True:
+            try:
+                obj = await anext(aiter(client.list(fltr)))
+            except StopAsyncIteration:
+                break  # No more items to list
+            except Exception as e:
+                logger.error(f"Failed to list objects: {e}")
+            else:
                 objects_in_k8s[obj.name] = obj
                 await self.__cache.upsert(obj)
 
-        with contextlib.suppress(Exception):
-            # Remove objects that have been deleted from k8s but are still in cache
-            async for cache_obj in self.__cache.list(fltr):
+        while True:
+            try:
+                cache_obj = await anext(aiter(self.__cache.list(fltr)))
+            except StopAsyncIteration:
+                break  # No more items to list
+            except Exception as e:
+                logger.error(f"Failed to list objects: {e}")
+            else:
+                # Remove objects that have been deleted from k8s but are still in cache
                 if objects_in_k8s.get(cache_obj.name) is None:
                     await self.__cache.delete(cache_obj)
 
