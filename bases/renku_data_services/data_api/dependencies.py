@@ -250,8 +250,8 @@ class DependencyManager:
                     client=K8sClusterClientsPool(
                         get_clusters(
                             kube_conf_root_dir=config.k8s_config_root,
-                            namespace=config.k8s_namespace,
-                            api=kr8s_api,
+                            default_cluster_namespace=config.k8s_namespace,
+                            default_cluster_api=kr8s_api,
                             cluster_repo=cluster_repo,
                             cache=k8s_db_cache,
                             kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],

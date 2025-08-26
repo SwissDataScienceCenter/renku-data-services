@@ -93,14 +93,16 @@ class KubeConfigYaml(KubeConfig):
 
 async def get_clusters(
     kube_conf_root_dir: str,
-    namespace: str,
-    api: kr8s.asyncio.Api,
+    default_cluster_namespace: str,
+    default_cluster_api: kr8s.asyncio.Api,
     cluster_repo: ClusterRepository,
     cache: K8sDbCache | None = None,
     kinds_to_cache: list[k8s_models.GVK] | None = None,
 ) -> AsyncIterable[K8sClusterClient]:
     """Get all clusters accessible to the application."""
-    cluster_connection = k8s_models.ClusterConnection(id=DEFAULT_K8S_CLUSTER, namespace=namespace, api=api)
+    cluster_connection = k8s_models.ClusterConnection(
+        id=DEFAULT_K8S_CLUSTER, namespace=default_cluster_namespace, api=default_cluster_api
+    )
     if cache is None or kinds_to_cache is None:
         yield K8sClusterClient(cluster_connection)
     else:

@@ -57,8 +57,8 @@ class DependencyManager:
                 K8sClusterClientsPool(
                     get_clusters(
                         kube_conf_root_dir=os.environ.get("K8S_CONFIGS_ROOT", "/secrets/kube_configs"),
-                        namespace=api.namespace,
-                        api=api,
+                        default_cluster_namespace=api.namespace,
+                        default_cluster_api=api,
                         cluster_repo=cluster_repo,
                     )
                 )

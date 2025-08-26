@@ -26,8 +26,8 @@ async def main() -> None:
     clusters: dict[ClusterId, K8sClusterClient] = {}
     async for client in get_clusters(
         kube_conf_root_dir=dm.config.k8s.kube_config_root,
-        namespace=dm.config.k8s.renku_namespace,
-        api=kr8s_api,
+        default_cluster_namespace=dm.config.k8s.renku_namespace,
+        default_cluster_api=kr8s_api,
         cluster_repo=dm.cluster_repo(),
     ):
         clusters[client.get_cluster().id] = client
