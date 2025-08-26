@@ -97,6 +97,7 @@ class K8sWatcher:
             await asyncio.sleep(self.__sync_period_seconds / 10)
 
     async def __watch_kind(self, kind: GVK, client: K8sClusterClient) -> None:
+        logger.info(f"Watching kind {kind} for {client}")
         cluster = client.get_cluster()
         cluster_id = cluster.id
         while True:
@@ -104,7 +105,7 @@ class K8sWatcher:
                 watch = cluster.api.async_watch(kind=kind.kr8s_kind, namespace=cluster.namespace)
                 async for event_type, obj in watch:
                     if cluster_id in self.__full_sync_running:
-                        logger.debug(
+                        logger.info(
                             f"Pausing k8s watch event processing for cluster {cluster} until full sync completes"
                         )
                     else:
@@ -117,7 +118,7 @@ class K8sWatcher:
                 logger.error(f"watch loop failed for {kind} in cluster {cluster_id}", exc_info=e)
 
             # Add a sleep to prevent retrying in a loop the same action instantly.
-            await asyncio.sleep(1)
+            await asyncio.sleep(10)
 
     def __run_single(self, client: K8sClusterClient) -> list[Task]:
         # The loops and error handling here will need some testing and love
