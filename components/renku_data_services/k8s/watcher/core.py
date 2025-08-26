@@ -111,11 +111,8 @@ class K8sWatcher:
                         )
                     else:
                         await self.__handler(cluster.with_api_object(obj), event_type)
-            except ReadError:
-                pass
-            except RemoteProtocolError:
-                pass
-            except ValueError:
+            except (ReadError, RemoteProtocolError, ValueError) as e:
+                logger.warning(f"watch loop failed for {kind} in cluster {cluster_id} {e}")
                 pass
             except Exception as e:
                 logger.error(f"watch loop failed for {kind} in cluster {cluster_id}", exc_info=e)
