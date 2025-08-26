@@ -56,14 +56,14 @@ paths:
           style: form
           explode: true
           schema:
-            $ref: "#/components/schemas/RedirectInfosGetQuery"
+            $ref: "#/components/schemas/RedirectPlansGetQuery"
       responses:
         "200":
-          description: The registered redirect infos
+          description: A list of redirect plans
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RedirectInfoList"
+                $ref: "#/components/schemas/RedirectPlanList"
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -80,11 +80,11 @@ paths:
               type: string
         responses:
           "200":
-            description: The redirect info
+            description: The redirect plan
             content:
               application/json:
                 schema:
-                  $ref: "#/components/schemas/RedirectInfo"
+                  $ref: "#/components/schemas/RedirectPlan"
           "404":
             description: No redirect for the source URL
             content:
@@ -96,7 +96,7 @@ paths:
         tags:
           - platform
       post:
-        summary: Create a new redirect info
+        summary: Create a new redirect plan
         parameters:
           - in: path
             name: url
@@ -109,14 +109,14 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RedirectInfoPost"
+                $ref: "#/components/schemas/RedirectPlanPost"
         responses:
           "201":
             description: The redirect info was created
             content:
               application/json:
                 schema:
-                  $ref: "#/components/schemas/RedirectInfo"
+                  $ref: "#/components/schemas/RedirectPlan"
           default:
             $ref: "#/components/responses/Error"
         tags:
@@ -142,77 +142,41 @@ components:
         incident_banner:
           $ref: "#/components/schemas/IncidentBanner"
       additionalProperties: false
-    RedirectInfoList:
+    RedirectPlanList:
       description: A list of redirect info objects
       type: array
       items:
-        $ref: "#/components/schemas/RedirectInfo"
-    RedirectInfo:
+        $ref: "#/components/schemas/RedirectPlan"
+    RedirectPlan:
       description: A mapping from src URLs to targets, either Renku entities or URLs
       type: object
       properties:
         source_url:
           description: The protocol-relative URL to redirect
           type: string
-        target:
-          description: The target of the redirect
-          $ref: "#/components/schemas/RedirectTarget"
-      required:
-        - source_url
-        - target
-    RedirectTarget:
-      description: The target of a redirect, either a URL or Renku Entity
-      oneOf:
-        - $ref: '#/components/schemas/RedirectTargetEntity'
-        - $ref: '#/components/schemas/RedirectTargetUrl'
-      discriminator:
-        propertyName: targetType
-        mapping:
-          Entity: '#/components/schemas/RedirectTargetEntity'
-          Url: '#/components/schemas/RedirectTargetUrl'
-    RedirectTargetEntity:
-      description: A mapping from src URLs to targets, either Renku entities or URLs
-      type: object
-      properties:
-        namespace:
-          description: The namespace of the Renku entity
-          $ref: "#/components/schemas/SlugResponse"
-        slug:
-          description: The slug of the Renku entity
-          $ref: "#/components/schemas/SlugResponse"
-        entity_type:
-          description: The Renku entity type
-          type: string
-      required:
-        - namespace
-        - slug
-        - entity_type
-    RedirectTargetUrl:
-      description: A mapping from src URLs to target URLs
-      type: object
-      properties:
-        url:
+        target_url:
           description: The protocol-relative URL to redirect to
           type: string
       required:
-        - url
-    RedirectInfosGetQuery:
+        - source_url
+        - target_url
+    RedirectPlansGetQuery:
       description: Query params for redirect list get request
       allOf:
       - $ref: "#/components/schemas/PaginationRequest"
-    RedirectInfoPost:
+    RedirectPlanPost:
       description: Schema for creating a new redirect info
       type: object
       properties:
         source_url:
           description: The protocol-relative URL to redirect
           type: string
-        target:
-          description: The target of the redirect
-          $ref: "#/components/schemas/RedirectTarget"
+        target_url:
+          description: The protocol-relative URL to redirect to
+          type: string
       required:
         - source_url
-        - target
+        - target_url
       additionalProperties: false
     ETag:
       type: string

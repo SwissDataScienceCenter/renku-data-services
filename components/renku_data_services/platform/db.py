@@ -6,11 +6,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
-from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services import base_models, errors
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
+from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.platform import models
 from renku_data_services.platform import orm as schemas
+from renku_data_services.project.db import ProjectRepository
 
 
 class PlatformRepository:
@@ -77,7 +78,7 @@ class RedirectRepository:
     async def get_redirect_configs(
         self,
         pagination: PaginationRequest,
-    ) -> tuple[list[models.RedirectConfig], int]:
+    ) -> tuple[list[models.UrlRedirectConfig], int]:
         """Get all redirect configs from the database."""
         project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
 

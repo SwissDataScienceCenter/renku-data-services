@@ -38,16 +38,15 @@ class PlatformConfigPatch:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class UnsavedRedirectConfig:
+class UnsavedUrlRedirectConfig:
     """Model representing a URL redirect that has not been persisted."""
 
     source_url: str
     target_url: str | None = None
-    target_project_id: ULID | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class RedirectConfig(UnsavedRedirectConfig):
+class UrlRedirectConfig(UnsavedUrlRedirectConfig):
     """Model representing a redirect from a source URL to a target."""
 
     id: ULID
