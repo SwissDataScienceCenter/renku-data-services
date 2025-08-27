@@ -92,8 +92,8 @@ class PlatformRedirectBP(CustomBlueprint):
         ) -> JSONResponse:
             redirects, total_num = await self.redirect_repo.get_redirect_configs(pagination=pagination)
 
-            redirects_list = [validate_and_dump(apispec.RedirectInfo, self._dump_redirect(r)) for r in redirects]
-            return validated_json(apispec.RedirectInfoList, redirects_list, total=total_num)
+            redirects_list = [validate_and_dump(apispec.UrlRedirectPlan, self._dump_redirect(r)) for r in redirects]
+            return validated_json(apispec.UrlRedirectPlanList, redirects_list, total=total_num)
 
         return "/platform/redirects", ["GET"], _get_all_redirects
 
