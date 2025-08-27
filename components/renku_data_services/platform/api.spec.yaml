@@ -56,14 +56,14 @@ paths:
           style: form
           explode: true
           schema:
-            $ref: "#/components/schemas/RedirectPlansGetQuery"
+            $ref: "#/components/schemas/UrlRedirectPlansGetQuery"
       responses:
         "200":
           description: A list of redirect plans
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RedirectPlanList"
+                $ref: "#/components/schemas/UrlRedirectPlanList"
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -84,7 +84,7 @@ paths:
             content:
               application/json:
                 schema:
-                  $ref: "#/components/schemas/RedirectPlan"
+                  $ref: "#/components/schemas/UrlRedirectPlan"
           "404":
             description: No redirect for the source URL
             content:
@@ -109,14 +109,14 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RedirectPlanPost"
+                $ref: "#/components/schemas/UrlRedirectPlanPost"
         responses:
           "201":
             description: The redirect info was created
             content:
               application/json:
                 schema:
-                  $ref: "#/components/schemas/RedirectPlan"
+                  $ref: "#/components/schemas/UrlRedirectPlan"
           default:
             $ref: "#/components/responses/Error"
         tags:
@@ -142,12 +142,12 @@ components:
         incident_banner:
           $ref: "#/components/schemas/IncidentBanner"
       additionalProperties: false
-    RedirectPlanList:
+    UrlRedirectPlanList:
       description: A list of redirect info objects
       type: array
       items:
-        $ref: "#/components/schemas/RedirectPlan"
-    RedirectPlan:
+        $ref: "#/components/schemas/UrlRedirectPlan"
+    UrlRedirectPlan:
       description: A mapping from src URLs to targets, either Renku entities or URLs
       type: object
       properties:
@@ -160,11 +160,11 @@ components:
       required:
         - source_url
         - target_url
-    RedirectPlansGetQuery:
+    UrlRedirectPlansGetQuery:
       description: Query params for redirect list get request
       allOf:
       - $ref: "#/components/schemas/PaginationRequest"
-    RedirectPlanPost:
+    UrlRedirectPlanPost:
       description: Schema for creating a new redirect info
       type: object
       properties:
