@@ -477,7 +477,7 @@ components:
     ImageRegistryUrl:
       type: string
       description: |
-        This should contain no paths, just the domain for the registry and the scheme 
+        This should contain no paths, just the domain for the registry and the scheme
         (http or https) to access the image registry API.
       example: https://registry.gitlab.com
     ErrorResponse:
