@@ -20,7 +20,6 @@ from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.connected_services import apispec, models
 from renku_data_services.connected_services import orm as schemas
 from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind
-from renku_data_services.connected_services.core import validate_image_registry_url
 from renku_data_services.connected_services.provider_adapters import (
     GitHubAdapter,
     ProviderAdapter,
@@ -85,7 +84,7 @@ class ConnectedServicesRepository:
             encrypt_string(self.encryption_key, user.id, new_client.client_secret) if new_client.client_secret else None
         )
         if new_client.image_registry_url:
-            validate_image_registry_url(new_client.image_registry_url)
+            models.validate_image_registry_url(new_client.image_registry_url)
         client = schemas.OAuth2ClientORM(
             id=provider_id,
             kind=new_client.kind,

@@ -69,6 +69,7 @@ class OAuth2ClientORM(BaseORM):
             created_by_id=self.created_by_id,
             creation_date=self.creation_date,
             updated_at=self.updated_at,
+            image_registry_url=self.image_registry_url,
         )
 
 

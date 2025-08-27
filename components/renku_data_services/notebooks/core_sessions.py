@@ -9,13 +9,10 @@ from collections.abc import AsyncIterator, Sequence
 from datetime import timedelta
 from pathlib import PurePosixPath
 from typing import Protocol, TypeVar, cast
-from urllib.parse import ParseResult, urljoin, urlparse
+from urllib.parse import urljoin, urlparse
 
-from google.protobuf import internal
 import httpx
 from kubernetes.client import V1ObjectMeta, V1Secret
-from renku_data_services.connected_services.db import ConnectedServicesRepository
-from renku_data_services.connected_services.models import ConnectedAccount
 from sanic import Request
 from toml import dumps
 from ulid import ULID
@@ -24,6 +21,7 @@ from yaml import safe_dump
 from renku_data_services.app_config import logging
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser
 from renku_data_services.base_models.metrics import MetricsService
+from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
 from renku_data_services.crc.models import GpuKind, ResourceClass, ResourcePool
 from renku_data_services.data_connectors.db import (
@@ -1043,6 +1041,7 @@ async def patch_session(
     )
     if image_pull_secret:
         session_extras.concat(SessionExtraResources(secrets=[image_pull_secret]))
+        patch.spec.imagePullSecrets = [ImagePullSecret(name=image_pull_secret.name, adopt=image_pull_secret.adopt)]
 
     # Construct session patch
     patch.spec.extraContainers = _make_patch_spec_list(
@@ -1063,9 +1062,6 @@ async def patch_session(
     secrets_to_create = session_extras.secrets or []
     for s in secrets_to_create:
         await nb_config.k8s_v2_client.create_secret(K8sSecret.from_v1_secret(s.secret, cluster))
-
-    if image_pull_secret_name:
-        patch.spec.imagePullSecrets = [ImagePullSecret(name=image_pull_secret_name, adopt=True)]
 
     patch_serialized = patch.to_rfc7386()
     if len(patch_serialized) == 0:

@@ -216,6 +216,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         cluster_repo=dm.cluster_repo,
         internal_gitlab_authenticator=dm.gitlab_authenticator,
         metrics=dm.metrics,
+        connected_svcs_repo=dm.connected_services_repo,
     )
     platform_config = PlatformConfigBP(
         name="platform_config",
