@@ -113,9 +113,7 @@ class K8sWatcher:
                     else:
                         await self.__handler(cluster.with_api_object(obj), event_type)
             except ValueError:
-                # Add a sleep to prevent retrying in a loop the same action instantly. We do not exit as the resource
-                # kind might be added later on.
-                await asyncio.sleep(10)
+                pass
             except Exception as e:
                 logger.error(f"watch loop failed for {kind} in cluster {cluster_id}", exc_info=e)
 
