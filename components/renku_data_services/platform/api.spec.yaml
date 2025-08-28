@@ -70,13 +70,6 @@ paths:
         - platform
       post:
         summary: Create a new redirect plan
-        parameters:
-          - in: path
-            name: url
-            required: true
-            description: The url-encoded source URL
-            schema:
-              type: string
         requestBody:
           required: true
           content:
@@ -117,6 +110,32 @@ paths:
               application/json:
                 schema:
                   $ref: "#/components/schemas/ErrorResponse"
+          default:
+            $ref: "#/components/responses/Error"
+        tags:
+          - platform
+      patch:
+        summary: Update a redirect plan
+        parameters:
+          - in: path
+            name: url
+            required: true
+            description: The url-encoded (original) source URL
+            schema:
+              type: string
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UrlRedirectPlanPost"
+        responses:
+          "200":
+            description: The redirect info was updated
+            content:
+              application/json:
+                schema:
+                  $ref: "#/components/schemas/UrlRedirectPlan"
           default:
             $ref: "#/components/responses/Error"
         tags:
