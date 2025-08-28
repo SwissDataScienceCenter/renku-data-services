@@ -53,9 +53,10 @@ class K8sWatcher:
         fltr = K8sObjectFilter(gvk=kind, cluster=client.get_cluster().id, namespace=client.get_cluster().namespace)
         # Upsert new / updated objects
         objects_in_k8s: dict[str, K8sObject] = {}
+        obj_iter = aiter(client.list(fltr))
         while True:
             try:
-                obj = await anext(aiter(client.list(fltr)))
+                obj = await anext(obj_iter)
             except StopAsyncIteration:
                 break  # No more items to list
             except Exception as e:
@@ -64,9 +65,10 @@ class K8sWatcher:
                 objects_in_k8s[obj.name] = obj
                 await self.__cache.upsert(obj)
 
+        cache_iter = aiter(self.__cache.list(fltr))
         while True:
             try:
-                cache_obj = await anext(aiter(self.__cache.list(fltr)))
+                cache_obj = await anext(cache_iter)
             except StopAsyncIteration:
                 break  # No more items to list
             except Exception as e:
