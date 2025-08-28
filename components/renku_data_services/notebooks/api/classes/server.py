@@ -314,7 +314,7 @@ class UserServer:
                 general_patches.dev_shm(self),
                 jupyter_server_patches.args(),
                 jupyter_server_patches.env(self),
-                await jupyter_server_patches.image_pull_secret(self, self.internal_gitlab_user.access_token),
+                jupyter_server_patches.image_pull_secret(self, self.internal_gitlab_user.access_token),
                 jupyter_server_patches.disable_service_links(),
                 jupyter_server_patches.rstudio_env_variables(self),
                 await git_proxy_patches.main(self),

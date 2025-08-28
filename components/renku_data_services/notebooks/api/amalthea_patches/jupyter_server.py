@@ -110,7 +110,7 @@ def args() -> list[dict[str, Any]]:
     return patches
 
 
-async def image_pull_secret(server: UserServer, access_token: str | None) -> list[dict[str, Any]]:
+def image_pull_secret(server: UserServer, access_token: str | None) -> list[dict[str, Any]]:
     """Adds an image pull secret to the session if the session image is not public."""
     patches = []
     if isinstance(server.user, AuthenticatedAPIUser) and server.is_image_private and access_token:
