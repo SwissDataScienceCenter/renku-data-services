@@ -113,7 +113,6 @@ class K8sSchedulingClient(PriorityClassClient):
     def delete_priority_class(self, name: str, body: client.V1DeleteOptions) -> None:
         """Delete a priority class."""
         try:
-            self.client.read_priority_class(name)
             self.client.delete_priority_class(name, body=body)
         except client.ApiException as e:
             if e.status != 404:
