@@ -42,7 +42,7 @@ class UnsavedUrlRedirectConfig:
     """Model representing a URL redirect that has not been persisted."""
 
     source_url: str
-    target_url: str | None = None
+    target_url: str
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

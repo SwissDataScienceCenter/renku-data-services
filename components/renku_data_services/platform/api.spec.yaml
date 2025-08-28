@@ -68,6 +68,32 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - platform
+      post:
+        summary: Create a new redirect plan
+        parameters:
+          - in: path
+            name: url
+            required: true
+            description: The url-encoded source URL
+            schema:
+              type: string
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UrlRedirectPlanPost"
+        responses:
+          "201":
+            description: The redirect info was created
+            content:
+              application/json:
+                schema:
+                  $ref: "#/components/schemas/UrlRedirectPlan"
+          default:
+            $ref: "#/components/responses/Error"
+        tags:
+          - platform
   /platform/redirects/{url}:
       get:
         summary: Return a redirect info for the specified source URL
@@ -91,32 +117,6 @@ paths:
               application/json:
                 schema:
                   $ref: "#/components/schemas/ErrorResponse"
-          default:
-            $ref: "#/components/responses/Error"
-        tags:
-          - platform
-      post:
-        summary: Create a new redirect plan
-        parameters:
-          - in: path
-            name: url
-            required: true
-            description: The url-encoded source URL
-            schema:
-              type: string
-        requestBody:
-          required: true
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/UrlRedirectPlanPost"
-        responses:
-          "201":
-            description: The redirect info was created
-            content:
-              application/json:
-                schema:
-                  $ref: "#/components/schemas/UrlRedirectPlan"
           default:
             $ref: "#/components/responses/Error"
         tags:
@@ -159,7 +159,6 @@ components:
           type: string
       required:
         - source_url
-        - target_url
     UrlRedirectPlansGetQuery:
       description: Query params for redirect list get request
       allOf:

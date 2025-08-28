@@ -4,10 +4,9 @@ from collections.abc import Callable
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from ulid import ULID
 
 from renku_data_services import base_models, errors
-from renku_data_services.authz.authz import Authz, ResourceType
+from renku_data_services.authz.authz import Authz
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.platform import models
 from renku_data_services.platform import orm as schemas
@@ -96,31 +95,21 @@ class UrlRedirectRepository:
             redirects = results[0].all()
             return [r.dump() for r in redirects], results[1] or 0
 
-    async def get_redirect_config_by_src_url(
-        self, user: base_models.APIUser, src_url: str
+    async def get_redirect_config_by_source_url(
+        self, user: base_models.APIUser, source_url: str
     ) -> models.UrlRedirectConfig | None:
         """Retrieve redirect config for a given source URL."""
 
         if user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
-        # We do not currently check if the user is allowed to access the project, but we could...
-
         async with self.session_maker() as session:
-            stmt_project = select(schemas.UrlRedirectsORM.source_url).where(
-                schemas.UrlRedirectsORM.source_url == src_url
-            )
-            res_project = await session.scalar(stmt_project)
-            if not res_project:
-                raise errors.MissingResourceError(
-                    message=f"Redirect config for source URL {src_url} does not exist or you do not have access to it."
-                )
-
-            stmt = select(schemas.UrlRedirectsORM).where(schemas.UrlRedirectsORM.source_url == src_url)
+            stmt = select(schemas.UrlRedirectsORM).where(schemas.UrlRedirectsORM.source_url == source_url)
             result = await session.execute(stmt)
-            url_redirect_orm = result.scalars().first()
+            url_redirect_orm: schemas.UrlRedirectsORM | None = result.scalars().first()
 
             if url_redirect_orm:
+                # We do not currently check if the user is allowed to access the project, but we could...
                 return url_redirect_orm.dump()
 
             return None

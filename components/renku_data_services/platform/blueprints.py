@@ -7,7 +7,7 @@ from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
-from renku_data_services.base_api.auth import authenticate, only_admins, only_authenticated
+from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.etag import extract_if_none_match, if_match_required
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
@@ -15,7 +15,8 @@ from renku_data_services.base_models.validation import validate_and_dump, valida
 from renku_data_services.errors import errors
 from renku_data_services.platform import apispec
 from renku_data_services.platform.core import validate_platform_config_patch
-from renku_data_services.platform.db import PlatformRepository, RedirectRepository
+from renku_data_services.platform.db import PlatformRepository, UrlRedirectRepository
+from renku_data_services.platform.models import UrlRedirectConfig
 
 
 @dataclass(kw_only=True)
@@ -76,10 +77,19 @@ class PlatformConfigBP(CustomBlueprint):
 class PlatformRedirectBP(CustomBlueprint):
     """Handlers for the platform redirects."""
 
-    redirect_repo: RedirectRepository
+    url_redirect_repo: UrlRedirectRepository
     authenticator: base_models.Authenticator
 
-    def get_redirect_configs(self) -> BlueprintFactoryResponse:
+    @staticmethod
+    def _dump_redirect(redirect: UrlRedirectConfig) -> dict[str, str]:
+        """Dumps a project for API responses."""
+        result = dict(
+            source_url=redirect.source_url,
+            target_url=redirect.target_url,
+        )
+        return result
+
+    def get_url_redirect_configs(self) -> BlueprintFactoryResponse:
         """List all redirects."""
 
         @authenticate(self.authenticator)
@@ -87,26 +97,42 @@ class PlatformRedirectBP(CustomBlueprint):
         @paginate
         async def _get_all_redirects(
             _: Request,
-            _user: base_models.APIUser,
+            user: base_models.APIUser,
             pagination: PaginationRequest,
         ) -> JSONResponse:
-            redirects, total_num = await self.redirect_repo.get_redirect_configs(pagination=pagination)
+            redirects, total_num = await self.url_redirect_repo.get_redirect_configs(user=user, pagination=pagination)
 
             redirects_list = [validate_and_dump(apispec.UrlRedirectPlan, self._dump_redirect(r)) for r in redirects]
             return validated_json(apispec.UrlRedirectPlanList, redirects_list, total=total_num)
 
         return "/platform/redirects", ["GET"], _get_all_redirects
 
-    def get_redirect_config(self) -> BlueprintFactoryResponse:
+    def post_url_redirect_config(self) -> BlueprintFactoryResponse:
+        """Create a new redirect config."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        async def _post_redirect_config(
+            _: Request, user: base_models.APIUser, body: apispec.UrlRedirectPlanPost
+        ) -> JSONResponse:
+            # redirect = await self.url_redirect_repo.create_redirect_config(user=user, body=body)
+            raise errors.ProgrammingError(message="Not yet implemented.")
+
+            # return validated_json(apispec.UrlRedirectPlan, redirect, status=201)
+
+        return "/platform/redirects", ["POST"], _post_redirect_config
+
+    def get_url_redirect_config(self) -> BlueprintFactoryResponse:
         """Get a specific redirect config."""
 
         @authenticate(self.authenticator)
-        @only_authenticated
-        async def _get_redirect_config(_: Request, user: base_models.APIUser, redirect_id: str) -> JSONResponse:
-            redirect = await self.redirect_repo.get_redirect(user=user, redirect_id=redirect_id)
+        async def _get_redirect_config(_: Request, user: base_models.APIUser, source_url: str) -> JSONResponse:
+            redirect = await self.url_redirect_repo.get_redirect_config_by_source_url(user=user, source_url=source_url)
             if not redirect:
-                raise errors.NotFoundError(message=f"Redirect with id '{redirect_id}' not found.")
+                return validated_json(
+                    apispec.UrlRedirectPlan, {"source_url": source_url, "target_url": None}, status=404
+                )
 
-            return validated_json(apispec.RedirectInfo, redirect)
+            return validated_json(apispec.UrlRedirectPlan, redirect)
 
         return "/platform/redirects/<url>", ["GET"], _get_redirect_config
