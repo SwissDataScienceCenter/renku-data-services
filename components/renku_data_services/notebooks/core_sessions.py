@@ -556,10 +556,6 @@ async def start_session(
     resource_class_id = body.resource_class_id or launcher.resource_class_id
 
     cluster = await nb_config.k8s_v2_client.cluster_by_class_id(resource_class_id, user)
-    try:
-        cluster_settings = await cluster_repo.select(cluster.id)
-    except errors.MissingResourceError:
-        cluster_settings = None
 
     server_name = renku_2_make_server_name(
         user=user, project_id=str(launcher.project_id), launcher_id=body.launcher_id, cluster_id=str(cluster.id)
@@ -644,6 +640,11 @@ async def start_session(
     session_extras = session_extras.concat(await get_extra_containers(nb_config, user, repositories, git_providers))
 
     # Ingress
+    try:
+        cluster_settings = await cluster_repo.select(cluster.id)
+    except errors.MissingResourceError:
+        cluster_settings = None
+
     if cluster_settings is not None:
         (
             base_server_path,
