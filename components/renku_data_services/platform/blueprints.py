@@ -1,6 +1,7 @@
 """Platform configuration blueprint."""
 
 from dataclasses import dataclass
+from typing import Any
 
 from sanic import Request, empty
 from sanic.response import HTTPResponse, JSONResponse
@@ -10,6 +11,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.etag import extract_if_none_match, if_match_required
+from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
 from renku_data_services.errors import errors
@@ -94,16 +96,19 @@ class PlatformRedirectBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
+        @validate_query(query=apispec.PaginationRequest)
         @paginate
         async def _get_all_redirects(
             _: Request,
             user: base_models.APIUser,
             pagination: PaginationRequest,
-        ) -> JSONResponse:
+        ) -> tuple[list[dict[str, Any]], int]:
             redirects, total_num = await self.url_redirect_repo.get_redirect_configs(user=user, pagination=pagination)
 
-            redirects_list = [validate_and_dump(apispec.UrlRedirectPlan, self._dump_redirect(r)) for r in redirects]
-            return validated_json(apispec.UrlRedirectPlanList, redirects_list, total=total_num)
+            redirects_list: list[dict[str, Any]] = [
+                validate_and_dump(apispec.UrlRedirectPlan, self._dump_redirect(r)) for r in redirects
+            ]
+            return redirects_list, total_num
 
         return "/platform/redirects", ["GET"], _get_all_redirects
 
