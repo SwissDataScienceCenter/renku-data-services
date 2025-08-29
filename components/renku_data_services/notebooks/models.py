@@ -101,7 +101,10 @@ class ExtraSecret:
     def __post_init__(self) -> None:
         if not self.secret.metadata:
             raise errors.ValidationError(message="The secret in Extra secret is missing its metadata.")
-        secret_name = cast(V1ObjectMeta, self.secret.metadata).name
+        if isinstance(self.secret.metadata, V1ObjectMeta):
+            secret_name = cast(str | None, self.secret.metadata.name)
+        else:
+            secret_name = cast(str | None, self.secret.metadata.get("name"))
         if not isinstance(secret_name, str):
             raise errors.ValidationError(message="The secret name in Extra secret is not a string.")
         if len(secret_name) == 0:

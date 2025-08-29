@@ -10,7 +10,7 @@ from authlib.integrations.base_client import InvalidTokenError
 from authlib.integrations.httpx_client import AsyncOAuth2Client, OAuthError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
@@ -380,6 +380,7 @@ class ConnectedServicesRepository:
                         schemas.OAuth2ClientORM.image_registry_url.in_(registry_urls)
                     )
                 )
+                .options(joinedload(schemas.OAuth2ConnectionORM.client))
             )
             conn = await session.scalar(stmt)
         if not conn:

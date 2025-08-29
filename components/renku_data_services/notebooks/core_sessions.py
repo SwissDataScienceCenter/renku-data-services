@@ -547,7 +547,7 @@ def __format_gitlab_image_pull_secret(
     return ExtraSecret(
         V1Secret(
             data={".dockerconfigjson": registry_secret},
-            metadata={"name": secret_name},
+            metadata=V1ObjectMeta(name=secret_name),
             type="kubernetes.io/dockerconfigjson",
         )
     )
