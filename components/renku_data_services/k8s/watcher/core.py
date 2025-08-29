@@ -13,7 +13,7 @@ from renku_data_services.base_models.core import APIUser, InternalServiceAdmin, 
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.k8s.clients import K8sClusterClient
-from renku_data_services.k8s.constants import ClusterId
+from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.db import K8sDbCache
 from renku_data_services.k8s.models import GVK, APIObjectInCluster, K8sObject, K8sObjectFilter
 from renku_data_services.notebooks.crs import State
@@ -47,7 +47,7 @@ class K8sWatcher:
         self.__sync_period_seconds = 600
         self.__cache = db_cache
 
-    async def __sync(self, client: K8sClusterClient, kind: GVK) -> None:
+    async def __sync(self, client: K8sClusterClient, kind: GVK, raise_exceptions: bool = False) -> None:
         """Upsert K8s objects in the cache and remove deleted objects from the cache."""
 
         fltr = K8sObjectFilter(gvk=kind, cluster=client.get_cluster().id, namespace=client.get_cluster().namespace)
@@ -61,6 +61,8 @@ class K8sWatcher:
                 break  # No more items to list
             except Exception as e:
                 logger.error(f"Failed to list objects: {e}")
+                if raise_exceptions:
+                    raise e
             else:
                 objects_in_k8s[obj.name] = obj
                 await self.__cache.upsert(obj)
@@ -73,6 +75,8 @@ class K8sWatcher:
                 break  # No more items to list
             except Exception as e:
                 logger.error(f"Failed to list objects: {e}")
+                if raise_exceptions:
+                    raise e
             else:
                 # Remove objects that have been deleted from k8s but are still in cache
                 if objects_in_k8s.get(cache_obj.name) is None:
@@ -88,7 +92,7 @@ class K8sWatcher:
         self.__full_sync_running.add(cluster_id)
         for kind in self.__kinds:
             logger.info(f"Starting full k8s cache sync for cluster {cluster_id} and kind {kind}")
-            await self.__sync(client, kind)
+            await self.__sync(client, kind, cluster_id == DEFAULT_K8S_CLUSTER)
         self.__full_sync_times[cluster_id] = datetime.now()
         self.__full_sync_running.remove(cluster_id)
 
