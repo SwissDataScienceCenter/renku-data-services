@@ -262,7 +262,7 @@ class TestNotebooks(ClusterRequired):
     @pytest.fixture(scope="class", autouse=True)
     def amalthea(self, cluster, app_manager) -> Generator[None, None]:
         if cluster is not None:
-            setup_amalthea("amalthea-js", "amalthea", "0.12.2", cluster)
+            setup_amalthea("amalthea-js", "amalthea", "0.20.1", cluster)
         app_manager.config.nb_config._kr8s_api.push(asyncio.run(kr8s.asyncio.api()))
 
         yield
