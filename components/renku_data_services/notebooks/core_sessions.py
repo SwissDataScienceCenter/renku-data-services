@@ -28,14 +28,15 @@ from renku_data_services.data_connectors.db import (
 )
 from renku_data_services.data_connectors.models import DataConnectorSecret, DataConnectorWithSecrets
 from renku_data_services.errors import errors
+from renku_data_services.k8s.models import K8sSecret, sanitizer
 from renku_data_services.notebooks import apispec, core
 from renku_data_services.notebooks.api.amalthea_patches import git_proxy, init_containers
 from renku_data_services.notebooks.api.amalthea_patches.init_containers import user_secrets_extras
 from renku_data_services.notebooks.api.classes.image import Image
-from renku_data_services.notebooks.api.classes.k8s_client import sanitizer
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_data_services.notebooks.config import NotebooksConfig
+from renku_data_services.notebooks.cr_amalthea_session import TlsSecret
 from renku_data_services.notebooks.crs import (
     AmaltheaSessionSpec,
     AmaltheaSessionV1Alpha1,
@@ -270,7 +271,6 @@ async def get_data_sources(
         )
         if len(dc.secrets) > 0:
             dcs_secrets[str(dc.data_connector.id)] = dc.secrets
-    user_secret_key = None
     if isinstance(user, AuthenticatedAPIUser) and len(dcs_secrets) > 0:
         secret_key = await user_repo.get_or_create_user_secret_key(user)
         user_secret_key = get_encryption_key(secret_key.encode(), user.id.encode()).decode("utf-8")
@@ -305,7 +305,7 @@ async def get_data_sources(
         secret = ExtraSecret(
             cs.secret(
                 secret_name,
-                nb_config.k8s_client.namespace(),
+                await nb_config.k8s_client.namespace(),
                 user_secret_key=user_secret_key if secret_key_needed else None,
             )
         )
@@ -341,15 +341,23 @@ async def request_dc_secret_creation(
     }
     secrets_url = nb_config.user_secrets.secrets_storage_service_url + "/api/secrets/kubernetes"
     headers = {"Authorization": f"bearer {user.access_token}"}
+
+    cluster_id = None
+    namespace = await nb_config.k8s_v2_client.namespace()
+    if (cluster := await nb_config.k8s_v2_client.cluster_by_class_id(manifest.resource_class_id(), user)) is not None:
+        cluster_id = cluster.id
+        namespace = cluster.namespace
+
     for s_id, secrets in dc_secrets.items():
         if len(secrets) == 0:
             continue
         request_data = {
             "name": f"{manifest.metadata.name}-ds-{s_id.lower()}-secrets",
-            "namespace": nb_config.k8s_v2_client.namespace(),
+            "namespace": namespace,
             "secret_ids": [str(secret.secret_id) for secret in secrets],
             "owner_references": [owner_reference],
             "key_mapping": {str(secret.secret_id): secret.name for secret in secrets},
+            "cluster_id": str(cluster_id),
         }
         async with httpx.AsyncClient(timeout=10) as client:
             res = await client.post(secrets_url, headers=headers, json=request_data)
@@ -408,12 +416,20 @@ async def request_session_secret_creation(
         if secret_id not in key_mapping:
             key_mapping[secret_id] = list()
         key_mapping[secret_id].append(s.secret_slot.filename)
+
+    cluster_id = None
+    namespace = await nb_config.k8s_v2_client.namespace()
+    if (cluster := await nb_config.k8s_v2_client.cluster_by_class_id(manifest.resource_class_id(), user)) is not None:
+        cluster_id = cluster.id
+        namespace = cluster.namespace
+
     request_data = {
         "name": f"{manifest.metadata.name}-secrets",
-        "namespace": nb_config.k8s_v2_client.namespace(),
+        "namespace": namespace,
         "secret_ids": [str(s.secret_id) for s in session_secrets],
         "owner_references": [owner_reference],
         "key_mapping": key_mapping,
+        "cluster_id": str(cluster_id),
     }
     secrets_url = nb_config.user_secrets.secrets_storage_service_url + "/api/secrets/kubernetes"
     headers = {"Authorization": f"bearer {user.access_token}"}
@@ -542,7 +558,7 @@ async def start_session(
     cluster = await nb_config.k8s_v2_client.cluster_by_class_id(resource_class_id, user)
 
     server_name = renku_2_make_server_name(
-        user=user, project_id=str(launcher.project_id), launcher_id=body.launcher_id, cluster_id=cluster.id
+        user=user, project_id=str(launcher.project_id), launcher_id=body.launcher_id, cluster_id=str(cluster.id)
     )
     existing_session = await nb_config.k8s_v2_client.get_session(server_name, user.id)
     if existing_session is not None and existing_session.spec is not None:
@@ -550,7 +566,6 @@ async def start_session(
 
     # Fully determine the resource pool and resource class
     if resource_class_id is None:
-        await rp_repo.get_default_resource_class()
         resource_pool = await rp_repo.get_default_resource_pool()
         resource_class = resource_pool.get_default_resource_class()
         if not resource_class and len(resource_pool.classes) > 0:
@@ -625,15 +640,37 @@ async def start_session(
     session_extras = session_extras.concat(await get_extra_containers(nb_config, user, repositories, git_providers))
 
     # Ingress
-    (
-        base_server_path,
-        base_server_url,
-        base_server_https_url,
-        host,
-        tls_secret,
-        ingress_annotations,
-    ) = await cluster.get_ingress_parameters(user, cluster_repo, nb_config.sessions.ingress, server_name)
+    try:
+        cluster_settings = await cluster_repo.select(cluster.id)
+    except errors.MissingResourceError:
+        cluster_settings = None
+
+    if cluster_settings is not None:
+        (
+            base_server_path,
+            base_server_url,
+            base_server_https_url,
+            host,
+            tls_secret,
+            ingress_annotations,
+        ) = cluster_settings.get_ingress_parameters(server_name)
+        storage_class = cluster_settings.get_storage_class()
+        service_account_name = cluster_settings.service_account_name
+    else:
+        # Fallback to global, main cluster parameters
+        host = nb_config.sessions.ingress.host
+        base_server_path = nb_config.sessions.ingress.base_path(server_name)
+        base_server_url = nb_config.sessions.ingress.base_url(server_name)
+        base_server_https_url = nb_config.sessions.ingress.base_url(server_name, force_https=True)
+        storage_class = nb_config.sessions.storage.pvs_storage_class
+        service_account_name = None
+        ingress_annotations = nb_config.sessions.ingress.annotations
+
+        tls_name = nb_config.sessions.ingress.tls_secret
+        tls_secret = None if tls_name is None else TlsSecret(adopt=False, name=tls_name)
+
     ui_path = f"{base_server_path}/{environment.default_url.lstrip('/')}"
+
     ingress = Ingress(
         host=host,
         ingressClassName=ingress_annotations.get("kubernetes.io/ingress.class"),
@@ -690,7 +727,6 @@ async def start_session(
     if launcher_env_variables:
         env.extend(launcher_env_variables)
 
-    storage_class = await cluster.get_storage_class(user, cluster_repo, nb_config.sessions.storage.pvs_storage_class)
     session = AmaltheaSessionV1Alpha1(
         metadata=Metadata(name=server_name, annotations=annotations),
         spec=AmaltheaSessionSpec(
@@ -738,16 +774,17 @@ async def start_session(
             dataSources=session_extras.data_sources,
             tolerations=tolerations_from_resource_class(resource_class, nb_config.sessions.tolerations_model),
             affinity=node_affinity_from_resource_class(resource_class, nb_config.sessions.affinity_model),
+            serviceAccountName=service_account_name,
         ),
     )
     secrets_to_create = session_extras.secrets or []
     for s in secrets_to_create:
-        await nb_config.k8s_v2_client.create_secret(s.secret, cluster)
+        await nb_config.k8s_v2_client.create_secret(K8sSecret.from_v1_secret(s.secret, cluster))
     try:
         session = await nb_config.k8s_v2_client.create_session(session, user)
     except Exception as err:
         for s in secrets_to_create:
-            await nb_config.k8s_v2_client.delete_secret(s.secret.metadata.name, cluster)
+            await nb_config.k8s_v2_client.delete_secret(K8sSecret.from_v1_secret(s.secret, cluster))
         raise errors.ProgrammingError(message="Could not start the amalthea session") from err
     else:
         try:
@@ -945,7 +982,7 @@ async def patch_session(
 
     secrets_to_create = session_extras.secrets or []
     for s in secrets_to_create:
-        await nb_config.k8s_v2_client.create_secret(s.secret, cluster)
+        await nb_config.k8s_v2_client.create_secret(K8sSecret.from_v1_secret(s.secret, cluster))
 
     if image_pull_secret_name:
         patch.spec.imagePullSecrets = [ImagePullSecret(name=image_pull_secret_name, adopt=True)]

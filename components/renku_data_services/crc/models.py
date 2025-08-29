@@ -6,16 +6,13 @@ from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Optional, Protocol
+from typing import Any, Optional, Protocol
 from uuid import uuid4
-
-from ulid import ULID
 
 from renku_data_services import errors
 from renku_data_services.errors import ValidationError
-
-if TYPE_CHECKING:
-    from renku_data_services.crc.apispec import Protocol as CrcApiProtocol
+from renku_data_services.k8s.constants import ClusterId
+from renku_data_services.notebooks.cr_amalthea_session import TlsSecret
 
 
 class ResourcesProtocol(Protocol):
@@ -188,13 +185,20 @@ class Quota(ResourcesCompareMixin):
         return rc <= self
 
 
+class SessionProtocol(StrEnum):
+    """Valid Session protocol values."""
+
+    HTTP = "http"
+    HTTPS = "https"
+
+
 @dataclass(frozen=True, eq=True, kw_only=True)
 class ClusterPatch:
     """K8s Cluster settings patch."""
 
     name: str | None
     config_name: str | None
-    session_protocol: CrcApiProtocol | None
+    session_protocol: SessionProtocol | None
     session_host: str | None
     session_port: int | None
     session_path: str | None
@@ -205,12 +209,12 @@ class ClusterPatch:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class Cluster:
+class ClusterSettings:
     """K8s Cluster settings."""
 
     name: str
     config_name: str
-    session_protocol: CrcApiProtocol
+    session_protocol: SessionProtocol
     session_host: str
     session_port: int
     session_path: str
@@ -237,10 +241,30 @@ class Cluster:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class SavedCluster(Cluster):
-    """K8s Cluster settings from the DB."""
+class SavedClusterSettings(ClusterSettings):
+    """Saved K8s Cluster settings."""
 
-    id: ULID
+    id: ClusterId
+
+    def get_storage_class(self) -> str | None:
+        """Get the default storage class for the cluster."""
+
+        return self.session_storage_class
+
+    def get_ingress_parameters(self, server_name: str) -> tuple[str, str, str, str, TlsSecret | None, dict[str, str]]:
+        """Returns the ingress parameters of the cluster."""
+
+        host = self.session_host
+        base_server_path = f"{self.session_path}/{server_name}"
+        base_server_url = f"{self.session_protocol.value}://{host}:{self.session_port}{base_server_path}"
+        base_server_https_url = base_server_url
+        ingress_annotations = self.session_ingress_annotations
+
+        tls_secret = (
+            None if self.session_tls_secret_name is None else TlsSecret(adopt=False, name=self.session_tls_secret_name)
+        )
+
+        return base_server_path, base_server_url, base_server_https_url, host, tls_secret, ingress_annotations
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -255,7 +279,7 @@ class ResourcePool:
     hibernation_threshold: int | None = None
     default: bool = False
     public: bool = False
-    cluster: SavedCluster | None = None
+    cluster: SavedClusterSettings | None = None
 
     def __post_init__(self) -> None:
         """Validate the resource pool after initialization."""
@@ -304,7 +328,7 @@ class ResourcePool:
     @classmethod
     def from_dict(cls, data: dict) -> ResourcePool:
         """Create the model from a plain dictionary."""
-        cluster: SavedCluster | None = None
+        cluster: SavedClusterSettings | None = None
         quota: Quota | None = None
         classes: list[ResourceClass] = []
 
@@ -319,11 +343,11 @@ class ResourcePool:
             classes = [ResourceClass.from_dict(c) if isinstance(c, dict) else c for c in data["classes"]]
 
         match tmp := data.get("cluster"):
-            case SavedCluster():
+            case SavedClusterSettings():
                 # This has to be before the dict() case, as this is also an instance of dict.
                 cluster = tmp
             case dict():
-                cluster = SavedCluster(
+                cluster = SavedClusterSettings(
                     name=tmp["name"],
                     config_name=tmp["config_name"],
                     session_protocol=tmp["session_protocol"],

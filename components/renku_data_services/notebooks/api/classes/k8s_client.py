@@ -1,32 +1,29 @@
 """An abstraction over the kr8s kubernetes client and the k8s-watcher."""
 
+from __future__ import annotations
+
 import base64
 import json
-from typing import TYPE_CHECKING, Any, Generic, Optional, TypeVar, cast
+from typing import Any, Generic, Optional, TypeVar, cast
 
 import httpx
-import kubernetes
 from box import Box
 from kr8s import NotFoundError, ServerError
 from kr8s.asyncio.objects import APIObject, Pod, Secret, StatefulSet
-from kubernetes.client import V1Secret
 
 from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.errors import errors
+from renku_data_services.k8s.client_interfaces import SecretClient
+from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
-from renku_data_services.k8s.models import GVK, Cluster, K8sObject, K8sObjectFilter, K8sObjectMeta
+from renku_data_services.k8s.models import GVK, ClusterConnection, K8sObject, K8sObjectFilter, K8sObjectMeta, K8sSecret
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
 from renku_data_services.notebooks.constants import JUPYTER_SESSION_GVK
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
 from renku_data_services.notebooks.errors.programming import ProgrammingError
 from renku_data_services.notebooks.util.kubernetes_ import find_env_var
 from renku_data_services.notebooks.util.retries import retry_with_exponential_backoff_async
-
-if TYPE_CHECKING:
-    from renku_data_services.k8s.clients import K8sClusterClientsPool
-
-sanitizer = kubernetes.client.ApiClient().sanitize_for_serialization
 
 
 # NOTE The type ignore below is because the kr8s library has no type stubs, they claim pyright better handles type hints
@@ -45,18 +42,20 @@ class JupyterServerV1Alpha1Kr8s(APIObject):
 _SessionType = TypeVar("_SessionType", JupyterServerV1Alpha1, AmaltheaSessionV1Alpha1)
 
 
-class NotebookK8sClient(Generic[_SessionType]):
+class NotebookK8sClient(SecretClient, Generic[_SessionType]):
     """A K8s Client for Notebooks."""
 
     def __init__(
         self,
-        client: "K8sClusterClientsPool",
+        client: K8sClusterClientsPool,
+        secrets_client: SecretClient,
         rp_repo: ResourcePoolRepository,
         session_type: type[_SessionType],
         username_label: str,
         gvk: GVK,
     ) -> None:
         self.__client = client
+        self.__secrets_client = secrets_client
         self.__rp_repo = rp_repo
         self.__session_type: type[_SessionType] = session_type
         self.__session_gvk = gvk
@@ -168,16 +167,17 @@ class NotebookK8sClient(Generic[_SessionType]):
 
         return None
 
-    def namespace(self) -> str:
+    async def namespace(self) -> str:
         """Current namespace of the main cluster."""
-        return self.__client.cluster_by_id(self.cluster_id()).namespace
+        client = await self.__client.cluster_by_id(self.cluster_id())
+        return client.namespace
 
     @staticmethod
     def cluster_id() -> ClusterId:
         """Cluster id of the main cluster."""
         return DEFAULT_K8S_CLUSTER
 
-    async def cluster_by_class_id(self, class_id: int | None, api_user: APIUser) -> Cluster:
+    async def cluster_by_class_id(self, class_id: int | None, api_user: APIUser) -> ClusterConnection:
         """Return the cluster associated with the given resource class id."""
         cluster_id = self.cluster_id()
 
@@ -185,11 +185,11 @@ class NotebookK8sClient(Generic[_SessionType]):
             try:
                 rp = await self.__rp_repo.get_resource_pool_from_class(api_user, class_id)
                 if rp.cluster is not None:
-                    cluster_id = ClusterId(str(rp.cluster.id))
+                    cluster_id = rp.cluster.id
             except errors.MissingResourceError:
                 pass
 
-        return self.__client.cluster_by_id(cluster_id)
+        return await self.__client.cluster_by_id(cluster_id)
 
     async def list_sessions(self, safe_username: str) -> list[_SessionType]:
         """Get a list of sessions that belong to a user."""
@@ -275,7 +275,7 @@ class NotebookK8sClient(Generic[_SessionType]):
         if statefulset is None:
             return None
 
-        cluster = self.__client.cluster_by_id(statefulset.cluster)
+        cluster = await self.__client.cluster_by_id(statefulset.cluster)
         if cluster is None:
             return None
 
@@ -340,7 +340,7 @@ class NotebookK8sClient(Generic[_SessionType]):
         if result is None:
             return logs
 
-        cluster = self.__client.cluster_by_id(result.cluster)
+        cluster = await self.__client.cluster_by_id(result.cluster)
         if cluster is None:
             return logs
 
@@ -374,7 +374,7 @@ class NotebookK8sClient(Generic[_SessionType]):
         if result is None:
             return
 
-        cluster = self.__client.cluster_by_id(result.cluster)
+        cluster = await self.__client.cluster_by_id(result.cluster)
         if cluster is None:
             return
 
@@ -405,66 +405,20 @@ class NotebookK8sClient(Generic[_SessionType]):
                 "value": base64.b64encode(json.dumps(new_docker_config).encode()).decode(),
             }
         ]
+
         await secret.patch(patch, type="json")
 
-    async def create_secret(self, secret: V1Secret, cluster: Cluster) -> V1Secret:
+    async def create_secret(self, secret: K8sSecret) -> K8sSecret:
         """Create a secret."""
 
-        assert secret.metadata is not None
+        return await self.__secrets_client.create_secret(secret)
 
-        secret_obj = K8sObject(
-            name=secret.metadata.name,
-            namespace=cluster.namespace,
-            cluster=cluster.id,
-            gvk=GVK(kind=Secret.kind, version=Secret.version),
-            manifest=Box(sanitizer(secret)),
-        )
-        try:
-            result = await self.__client.create(secret_obj)
-        except ServerError as err:
-            if err.response and err.response.status_code == 409:
-                annotations: Box | None = secret_obj.manifest.metadata.get("annotations")
-                labels: Box | None = secret_obj.manifest.metadata.get("labels")
-                patches = [
-                    {
-                        "op": "replace",
-                        "path": "/data",
-                        "value": secret.data or {},
-                    },
-                    {
-                        "op": "replace",
-                        "path": "/stringData",
-                        "value": secret.string_data or {},
-                    },
-                    {
-                        "op": "replace",
-                        "path": "/metadata/annotations",
-                        "value": annotations.to_dict() if annotations is not None else {},
-                    },
-                    {
-                        "op": "replace",
-                        "path": "/metadata/labels",
-                        "value": labels.to_dict() if labels is not None else {},
-                    },
-                ]
-                result = await self.__client.patch(secret_obj, patches)
-            else:
-                raise
-        return V1Secret(
-            metadata=result.manifest.metadata,
-            data=result.manifest.get("data", {}),
-            string_data=result.manifest.get("stringData", {}),
-            type=result.manifest.get("type"),
-        )
+    async def patch_secret(self, secret: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
+        """Patch a secret."""
 
-    async def delete_secret(self, name: str, cluster: Cluster) -> None:
+        return await self.__secrets_client.patch_secret(secret, patch)
+
+    async def delete_secret(self, secret: K8sObjectMeta) -> None:
         """Delete a secret."""
 
-        await self.__client.delete(
-            K8sObjectMeta(
-                name=name,
-                namespace=cluster.namespace,
-                cluster=cluster.id,
-                gvk=GVK(kind=Secret.kind, version=Secret.version),
-            )
-        )
+        return await self.__secrets_client.delete_secret(secret)

@@ -24,7 +24,6 @@ packages = [
   { include = "renku_data_services/errors", from = "../../components" },
   { include = "renku_data_services/git", from = "../../components" },
   { include = "renku_data_services/k8s", from = "../../components" },
-  { include = "renku_data_services/k8s_watcher", from = "../../components" },
   { include = "renku_data_services/message_queue", from = "../../components" },
   { include = "renku_data_services/namespace", from = "../../components" },
   { include = "renku_data_services/platform", from = "../../components" },

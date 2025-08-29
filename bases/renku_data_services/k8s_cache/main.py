@@ -5,9 +5,11 @@ import asyncio
 import kr8s
 
 from renku_data_services.app_config import logging
+from renku_data_services.k8s.clients import K8sClusterClient
 from renku_data_services.k8s.config import get_clusters
+from renku_data_services.k8s.constants import ClusterId
+from renku_data_services.k8s.watcher import K8sWatcher, k8s_object_handler
 from renku_data_services.k8s_cache.dependencies import DependencyManager
-from renku_data_services.k8s_watcher import K8sWatcher, k8s_object_handler
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 
@@ -21,13 +23,14 @@ async def main() -> None:
 
     kr8s_api = await kr8s.asyncio.api()
 
-    clusters = await get_clusters(
+    clusters: dict[ClusterId, K8sClusterClient] = {}
+    async for client in get_clusters(
         kube_conf_root_dir=dm.config.k8s.kube_config_root,
-        namespace=dm.config.k8s.renku_namespace,
-        api=kr8s_api,
-        cluster_rp=dm.cluster_repo(),
-    )
-    logger.info(f"Clusters: {[str(c) for c in clusters]}")
+        default_cluster_namespace=dm.config.k8s.renku_namespace,
+        default_cluster_api=kr8s_api,
+        cluster_repo=dm.cluster_repo(),
+    ):
+        clusters[client.get_cluster().id] = client
 
     kinds = [AMALTHEA_SESSION_GVK]
     if dm.config.v1_services.enabled:
@@ -37,7 +40,7 @@ async def main() -> None:
     logger.info(f"Resources: {kinds}")
     watcher = K8sWatcher(
         handler=k8s_object_handler(dm.k8s_cache, dm.metrics, rp_repo=dm.rp_repo),
-        clusters={c.id: c for c in clusters},
+        clusters=clusters,
         kinds=kinds,
         db_cache=dm.k8s_cache,
     )

@@ -16,7 +16,7 @@ from renku_data_services.base_models.validation import validated_json
 from renku_data_services.crc import apispec, models
 from renku_data_services.crc.core import validate_cluster, validate_cluster_patch
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository, UserRepository
-from renku_data_services.k8s.quota import QuotaRepository
+from renku_data_services.k8s.db import QuotaRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.models import UserInfo
 
@@ -52,7 +52,7 @@ class ResourcePoolsBP(CustomBlueprint):
         async def _post(_: Request, user: base_models.APIUser, body: apispec.ResourcePool) -> HTTPResponse:
             cluster = None
             if body.cluster_id is not None:
-                cluster = await self.cluster_repo.select(api_user=user, cluster_id=ULID.from_str(body.cluster_id))
+                cluster = await self.cluster_repo.select(ULID.from_str(body.cluster_id))
             rp = models.ResourcePool.from_dict({**body.model_dump(exclude_none=True), "cluster": cluster})
 
             res = await self.rp_repo.insert_resource_pool(api_user=user, resource_pool=rp)
@@ -614,7 +614,7 @@ class ClustersBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         async def _handler(_request: Request, user: base_models.APIUser, cluster_id: ULID) -> HTTPResponse:
-            cluster = await self.repo.select(user, cluster_id)
+            cluster = await self.repo.select(cluster_id)
 
             return validated_json(apispec.ClusterWithId, cluster, status=200)
 

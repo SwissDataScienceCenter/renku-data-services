@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol, cast
 
+from cryptography.hazmat.primitives.asymmetric import rsa
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,7 +39,12 @@ from renku_data_services.users.models import (
 )
 from renku_data_services.users.orm import LastKeycloakEventTimestamp, UserORM, UserPreferencesORM
 from renku_data_services.utils.core import with_db_transaction
-from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
+from renku_data_services.utils.cryptography import (
+    decrypt_string,
+    encrypt_rsa,
+    encrypt_string,
+    generate_random_encryption_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -219,6 +225,30 @@ class UserRepo(DbUsernameResolver):
             session.add(user)
 
         return secret_key
+
+    async def encrypt_user_secret(
+        self,
+        requested_by: base_models.APIUser,
+        secret_service_public_key: rsa.RSAPublicKey,
+        secret_value: str,
+    ) -> tuple[bytes, bytes]:
+        """Doubly encrypt a secret for a user.
+
+        Since RSA cannot encrypt arbitrary length strings, we use symmetric encryption with a random key and encrypt the
+        random key with RSA to get it to the secret service.
+        """
+        if requested_by.id is None:
+            raise errors.ValidationError(message="APIUser has no id")
+
+        user_secret_key = await self.get_or_create_user_secret_key(requested_by=requested_by)
+
+        # encrypt once with user secret
+        encrypted_value = encrypt_string(user_secret_key.encode(), requested_by.id, secret_value)
+        # encrypt again with the secret service public key
+        secret_svc_encryption_key = generate_random_encryption_key()
+        doubly_encrypted_value = encrypt_string(secret_svc_encryption_key, requested_by.id, encrypted_value.decode())
+        encrypted_key = encrypt_rsa(secret_service_public_key, secret_svc_encryption_key)
+        return doubly_encrypted_value, encrypted_key
 
 
 class UsersSync:
