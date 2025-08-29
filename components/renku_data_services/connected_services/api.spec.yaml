@@ -272,6 +272,8 @@ components:
           $ref: "#/components/schemas/ProviderUrl"
         use_pkce:
           $ref: "#/components/schemas/UsePKCE"
+        image_registry_url:
+          $ref: "#/components/schemas/ImageRegistryUrl"
       required:
         - id
         - kind
@@ -303,6 +305,8 @@ components:
           $ref: "#/components/schemas/ProviderUrl"
         use_pkce:
           $ref: "#/components/schemas/UsePKCE"
+        image_registry_url:
+          $ref: "#/components/schemas/ImageRegistryUrl"
       required:
         - id
         - kind
@@ -330,6 +334,8 @@ components:
           $ref: "#/components/schemas/ProviderUrl"
         use_pkce:
           $ref: "#/components/schemas/UsePKCE"
+        image_registry_url:
+          $ref: "#/components/schemas/ImageRegistryUrl"
     ConnectionList:
       type: array
       items:
@@ -468,6 +474,12 @@ components:
           minimum: 1
           maximum: 100
           default: 20
+    ImageRegistryUrl:
+      type: string
+      description: |
+        This should contain no paths, just the domain for the registry and the scheme
+        (http or https) to access the image registry API.
+      example: https://registry.gitlab.com
     ErrorResponse:
       type: object
       properties:

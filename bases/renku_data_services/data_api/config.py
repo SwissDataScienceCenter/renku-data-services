@@ -44,7 +44,7 @@ class Config:
     @classmethod
     def from_env(cls, db: DBConfig | None = None) -> Self:
         """Load config from environment."""
-        enable_internal_gitlab = os.getenv("ENABLE_V1_SERVICES", "true").lower() == "true"
+        enable_internal_gitlab = os.getenv("ENABLE_INTERNAL_GITLAB", "true").lower() == "true"
 
         dummy_stores = os.environ.get("DUMMY_STORES", "false").lower() == "true"
         if db is None:
@@ -70,7 +70,7 @@ class Config:
             k8s_config_root=os.environ.get("K8S_CONFIGS_ROOT", "/secrets/kube_configs"),
             db=db,
             builds=BuildsConfig.from_env(),
-            nb_config=NotebooksConfig.from_env(db, enable_internal_gitlab=enable_internal_gitlab),
+            nb_config=NotebooksConfig.from_env(db),
             secrets=PublicSecretsConfig.from_env(),
             sentry=SentryConfig.from_env(),
             posthog=PosthogConfig.from_env(),

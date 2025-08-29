@@ -14,4 +14,5 @@ def validate_oauth2_client_patch(patch: apispec.ProviderPatch) -> models.OAuth2C
         scope=patch.scope,
         url=patch.url,
         use_pkce=patch.use_pkce,
+        image_registry_url=patch.image_registry_url,
     )
