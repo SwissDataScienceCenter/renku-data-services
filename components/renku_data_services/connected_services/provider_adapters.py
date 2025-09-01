@@ -239,14 +239,14 @@ class CSCSAdapter(ProviderAdapter):
         """The authorization URL for the OAuth2 protocol."""
         url = urlparse(self.client_url)
         url = url._replace(netloc=f"auth.{url.netloc}")
-        return urljoin(urlunparse(url), "auth/realms/firecrest-clients/protocol/openid-connect/auth")
+        return urljoin(urlunparse(url), "auth/realms/cscs/protocol/openid-connect/auth")
 
     @property
     def token_endpoint_url(self) -> str:
         """The token endpoint URL for the OAuth2 protocol."""
         url = urlparse(self.client_url)
         url = url._replace(netloc=f"auth.{url.netloc}")
-        return urljoin(urlunparse(url), "auth/realms/firecrest-clients/protocol/openid-connect/token")
+        return urljoin(urlunparse(url), "auth/realms/cscs/protocol/openid-connect/token")
 
     @property
     def api_url(self) -> str:
