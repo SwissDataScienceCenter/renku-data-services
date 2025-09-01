@@ -174,7 +174,7 @@ class DependencyManager:
 
         # NOTE: Read spec files required for Swagger
         for file in files:
-            spec_file = Path(file).resolve().parent / "api.spec.yaml"
+            spec_file = Path(file).resolve().parent / "apispec.yaml"
             with open(spec_file) as f:
                 yaml_content = safe_load(f)
                 if file == renku_data_services.search.__file__:

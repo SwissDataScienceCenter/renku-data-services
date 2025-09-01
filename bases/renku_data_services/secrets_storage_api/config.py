@@ -28,7 +28,7 @@ class Config:
     log_cfg: logging.Config = field(default_factory=logging.Config.from_env)
 
     def __post_init__(self) -> None:
-        spec_file = Path(renku_data_services.secrets.__file__).resolve().parent / "api.spec.yaml"
+        spec_file = Path(renku_data_services.secrets.__file__).resolve().parent / "apispec.yaml"
         with open(spec_file) as f:
             self.spec = safe_load(f)
 
