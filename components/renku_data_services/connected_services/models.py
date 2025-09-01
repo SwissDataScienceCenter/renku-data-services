@@ -84,7 +84,6 @@ class ConnectedAccount:
 
     username: str
     web_url: str
-    email: str
 
 
 class OAuth2TokenSet(dict):

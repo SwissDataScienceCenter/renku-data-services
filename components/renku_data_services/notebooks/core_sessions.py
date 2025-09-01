@@ -530,15 +530,12 @@ async def __requires_image_pull_secret(nb_config: NotebooksConfig, image: str, i
     return False
 
 
-def __format_gitlab_image_pull_secret(
-    secret_name: str, access_token: str, registry_domain: str, email: str
-) -> ExtraSecret:
+def __format_image_pull_secret(secret_name: str, access_token: str, registry_domain: str) -> ExtraSecret:
     registry_secret = {
         "auths": {
             registry_domain: {
                 "Username": "oauth2",
                 "Password": access_token,
-                "Email": email,
             }
         }
     }
@@ -572,13 +569,11 @@ async def __get_gitlab_image_pull_secret_v2(
         return None
     if not conn_id:
         return None
-    conn_acct = await connected_svcs_repo.get_oauth2_connected_account(conn_id, user)
     if not docker_client.oauth2_token:
         return None
-    return __format_gitlab_image_pull_secret(
+    return __format_image_pull_secret(
         secret_name=secret_name,
         access_token=docker_client.oauth2_token,
-        email=conn_acct.email,
         registry_domain=image_parsed.hostname,
     )
 

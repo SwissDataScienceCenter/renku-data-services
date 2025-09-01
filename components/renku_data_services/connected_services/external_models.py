@@ -13,11 +13,10 @@ class GitLabConnectedAccount(BaseModel):
 
     username: str
     web_url: str
-    email: str
 
     def to_connected_account(self) -> models.ConnectedAccount:
         """Returns the corresponding ConnectedAccount object."""
-        return models.ConnectedAccount(username=self.username, web_url=self.web_url, email=self.email)
+        return models.ConnectedAccount(username=self.username, web_url=self.web_url)
 
 
 class GitHubConnectedAccount(BaseModel):
@@ -25,11 +24,10 @@ class GitHubConnectedAccount(BaseModel):
 
     login: str
     html_url: str
-    email: str
 
     def to_connected_account(self) -> models.ConnectedAccount:
         """Returns the corresponding ConnectedAccount object."""
-        return models.ConnectedAccount(username=self.login, web_url=self.html_url, email=self.email)
+        return models.ConnectedAccount(username=self.login, web_url=self.html_url)
 
 
 class GitHubAppInstallation(BaseModel):
@@ -74,7 +72,7 @@ class GoogleDriveConnectedAccount(BaseModel):
 
     def to_connected_account(self) -> models.ConnectedAccount:
         """Returns the corresponding ConnectedAccount object."""
-        return models.ConnectedAccount(username=self.name, web_url=f"mailto:{self.email}", email=self.email)
+        return models.ConnectedAccount(username=self.name, web_url=f"mailto:{self.email}")
 
 
 class OneDriveConnectedAccount(BaseModel):
@@ -87,9 +85,7 @@ class OneDriveConnectedAccount(BaseModel):
     def to_connected_account(self) -> models.ConnectedAccount:
         """Returns the corresponding ConnectedAccount object."""
         return models.ConnectedAccount(
-            username=" ".join(filter(None, [self.givenname, self.familyname])),
-            web_url=f"mailto:{self.email}",
-            email=self.email,
+            username=" ".join(filter(None, [self.givenname, self.familyname])), web_url=f"mailto:{self.email}"
         )
 
 
@@ -103,7 +99,5 @@ class DropboxConnectedAccount(BaseModel):
     def to_connected_account(self) -> models.ConnectedAccount:
         """Returns the corresponding ConnectedAccount object."""
         return models.ConnectedAccount(
-            username=" ".join(filter(None, [self.given_name, self.family_name])),
-            web_url=f"mailto:{self.email}",
-            email=self.email,
+            username=" ".join(filter(None, [self.given_name, self.family_name])), web_url=f"mailto:{self.email}"
         )
