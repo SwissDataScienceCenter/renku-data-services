@@ -3,32 +3,14 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
-from urllib.parse import urlparse
 
 from ulid import ULID
 
 from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind, RepositorySelection
-from renku_data_services.errors import errors
-
-
-def validate_image_registry_url(url: str) -> None:
-    """Validate an image registry url."""
-    parsed = urlparse(url)
-    if not parsed.netloc:
-        raise errors.ValidationError(
-            message=f"The host for the image registry url {url} is not valid, expected a non-empty value.",
-            quiet=True,
-        )
-    accepted_schemes = ["http", "https"]
-    if parsed.scheme not in accepted_schemes:
-        raise errors.ValidationError(
-            message=f"The scheme for the image registry url {url} is not valid, expected one of {accepted_schemes}",
-            quiet=True,
-        )
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class OAuth2Client:
+class UnsavedOAuth2Client:
     """OAuth2 Client model."""
 
     id: str
@@ -40,14 +22,16 @@ class OAuth2Client:
     scope: str
     url: str
     use_pkce: bool
+    image_registry_url: str | None = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class OAuth2Client(UnsavedOAuth2Client):
+    """OAuth2 Client model."""
+
     created_by_id: str
     creation_date: datetime
     updated_at: datetime
-    image_registry_url: str | None = None
-
-    def __post_init__(self) -> None:
-        if self.image_registry_url:
-            validate_image_registry_url(self.image_registry_url)
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -63,10 +47,6 @@ class OAuth2ClientPatch:
     url: str | None
     use_pkce: bool | None
     image_registry_url: str | None
-
-    def __post_init__(self) -> None:
-        if self.image_registry_url and len(self.image_registry_url) > 0:
-            validate_image_registry_url(self.image_registry_url)
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

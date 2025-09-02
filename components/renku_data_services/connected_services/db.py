@@ -17,7 +17,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.app_config import logging
 from renku_data_services.base_api.pagination import PaginationRequest
-from renku_data_services.connected_services import apispec, models
+from renku_data_services.connected_services import models
 from renku_data_services.connected_services import orm as schemas
 from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind
 from renku_data_services.connected_services.provider_adapters import (
@@ -69,9 +69,7 @@ class ConnectedServicesRepository:
             return client.dump(user_is_admin=user.is_admin)
 
     async def insert_oauth2_client(
-        self,
-        user: base_models.APIUser,
-        new_client: apispec.ProviderPost,
+        self, user: base_models.APIUser, new_client: models.UnsavedOAuth2Client
     ) -> models.OAuth2Client:
         """Insert a new OAuth2 Client environment."""
         if user.id is None:
@@ -83,8 +81,6 @@ class ConnectedServicesRepository:
         encrypted_client_secret = (
             encrypt_string(self.encryption_key, user.id, new_client.client_secret) if new_client.client_secret else None
         )
-        if new_client.image_registry_url:
-            models.validate_image_registry_url(new_client.image_registry_url)
         client = schemas.OAuth2ClientORM(
             id=provider_id,
             kind=new_client.kind,

@@ -41,6 +41,11 @@ class ImageRepoDockerAPI:
     client: httpx.AsyncClient = field(default_factory=lambda: httpx.AsyncClient(timeout=10, follow_redirects=True))
     scheme: str = "https"
 
+    def __post_init__(self) -> None:
+        self.hostname = self.hostname.rstrip("/")
+        if self.scheme == "":
+            self.scheme = "https"
+
     async def _get_docker_token(self, image: "Image") -> Optional[str]:
         """Get an authorization token from the docker v2 API.
 
