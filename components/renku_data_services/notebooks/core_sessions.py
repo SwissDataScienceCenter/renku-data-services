@@ -1059,7 +1059,6 @@ def _make_patch_spec_list(existing: Sequence[_T], updated: Sequence[_T]) -> list
         patch_list = list(existing)
         upsert_list = list(updated)
         for upsert_item in upsert_list:
-            print(f"patch_list before: {patch_list}")
             # Find out if the upsert_item needs to be added or updated
             # found = next(enumerate(filter(lambda item: item.name == upsert_item.name, patch_list)), None)
             found = next(filter(lambda t: t[1].name == upsert_item.name, enumerate(patch_list)), None)
