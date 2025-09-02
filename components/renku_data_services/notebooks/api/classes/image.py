@@ -39,13 +39,19 @@ class ImageRepoDockerAPI:
     # NOTE: If we do not use default_factory to create the client here requests will fail because it can happen
     # that the client gets created in the wrong asyncio loop.
     client: httpx.AsyncClient = field(default_factory=lambda: httpx.AsyncClient(timeout=10, follow_redirects=True))
+    scheme: str = "https"
+
+    def __post_init__(self) -> None:
+        self.hostname = self.hostname.rstrip("/")
+        if self.scheme == "":
+            self.scheme = "https"
 
     async def _get_docker_token(self, image: "Image") -> Optional[str]:
         """Get an authorization token from the docker v2 API.
 
         This will return the token provided by the API (or None if no token was found).
         """
-        image_digest_url = f"https://{self.hostname}/v2/{image.name}/manifests/{image.tag}"
+        image_digest_url = f"{self.scheme}://{self.hostname}/v2/{image.name}/manifests/{image.tag}"
         try:
             auth_req = await self.client.get(image_digest_url)
         except httpx.ConnectError:
@@ -79,7 +85,7 @@ class ImageRepoDockerAPI:
                 message=f"The image hostname {image.hostname} does not match the image repository {self.hostname}"
             )
         token = await self._get_docker_token(image)
-        image_digest_url = f"https://{image.hostname}/v2/{image.name}/manifests/{image.tag}"
+        image_digest_url = f"{self.scheme}://{image.hostname}/v2/{image.name}/manifests/{image.tag}"
         headers = {"Accept": ManifestTypes.docker_v2.value}
         if token:
             headers["Authorization"] = f"Bearer {token}"
@@ -105,7 +111,7 @@ class ImageRepoDockerAPI:
             image_digest: str | None = manifest.get("digest")
             if not manifest or not image_digest:
                 return None
-            image_digest_url = f"https://{image.hostname}/v2/{image.name}/manifests/{image_digest}"
+            image_digest_url = f"{self.scheme}://{image.hostname}/v2/{image.name}/manifests/{image_digest}"
             media_type = manifest.get("mediaType")
             headers["Accept"] = ManifestTypes.docker_v2.value
             if media_type in [
@@ -142,7 +148,7 @@ class ImageRepoDockerAPI:
             return None
         token = await self._get_docker_token(image)
         res = await self.client.get(
-            f"https://{image.hostname}/v2/{image.name}/blobs/{config_digest}",
+            f"{self.scheme}://{image.hostname}/v2/{image.name}/blobs/{config_digest}",
             headers={
                 "Accept": "application/json",
                 "Authorization": f"Bearer {token}",

@@ -44,7 +44,7 @@ class Config:
     @classmethod
     def from_env(cls, db: DBConfig | None = None) -> Self:
         """Load config from environment."""
-        enable_internal_gitlab = os.getenv("ENABLE_V1_SERVICES", "true").lower() == "true"
+        enable_internal_gitlab = os.getenv("ENABLE_INTERNAL_GITLAB", "true").lower() == "true"
 
         dummy_stores = os.environ.get("DUMMY_STORES", "false").lower() == "true"
         if db is None:

@@ -18,7 +18,7 @@ from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
 from renku_data_services.connected_services import apispec
 from renku_data_services.connected_services.apispec_base import AuthorizeParams, CallbackParams
-from renku_data_services.connected_services.core import validate_oauth2_client_patch
+from renku_data_services.connected_services.core import validate_oauth2_client_patch, validate_unsaved_oauth2_client
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 
 logger = logging.getLogger(__name__)
@@ -59,7 +59,8 @@ class OAuth2ClientsBP(CustomBlueprint):
         @only_admins
         @validate(json=apispec.ProviderPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.ProviderPost) -> JSONResponse:
-            client = await self.connected_services_repo.insert_oauth2_client(user=user, new_client=body)
+            new_client = validate_unsaved_oauth2_client(body)
+            client = await self.connected_services_repo.insert_oauth2_client(user=user, new_client=new_client)
             return validated_json(apispec.Provider, client, 201)
 
         return "/oauth2/providers", ["POST"], _post

@@ -4,20 +4,20 @@ from base64 import b64decode, b64encode
 from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 from authlib.integrations.base_client import InvalidTokenError
 from authlib.integrations.httpx_client import AsyncOAuth2Client, OAuthError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.app_config import logging
 from renku_data_services.base_api.pagination import PaginationRequest
-from renku_data_services.connected_services import apispec, models
+from renku_data_services.connected_services import models
 from renku_data_services.connected_services import orm as schemas
 from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind
 from renku_data_services.connected_services.provider_adapters import (
@@ -26,6 +26,7 @@ from renku_data_services.connected_services.provider_adapters import (
     get_provider_adapter,
 )
 from renku_data_services.connected_services.utils import generate_code_verifier
+from renku_data_services.notebooks.api.classes.image import Image, ImageRepoDockerAPI
 from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
 
 logger = logging.getLogger(__name__)
@@ -68,9 +69,7 @@ class ConnectedServicesRepository:
             return client.dump(user_is_admin=user.is_admin)
 
     async def insert_oauth2_client(
-        self,
-        user: base_models.APIUser,
-        new_client: apispec.ProviderPost,
+        self, user: base_models.APIUser, new_client: models.UnsavedOAuth2Client
     ) -> models.OAuth2Client:
         """Insert a new OAuth2 Client environment."""
         if user.id is None:
@@ -93,6 +92,7 @@ class ConnectedServicesRepository:
             url=new_client.url,
             use_pkce=new_client.use_pkce or False,
             created_by_id=user.id,
+            image_registry_url=new_client.image_registry_url,
         )
 
         async with self.session_maker() as session, session.begin():
@@ -144,6 +144,12 @@ class ConnectedServicesRepository:
                 client.url = patch.url
             if patch.use_pkce is not None:
                 client.use_pkce = patch.use_pkce
+            if patch.image_registry_url:
+                # Patching with a string of at least length 1 updates the value
+                client.image_registry_url = patch.image_registry_url
+            elif patch.image_registry_url == "":
+                # Patching with "", removes the value
+                client.image_registry_url = None
 
             await session.flush()
             await session.refresh(client)
@@ -272,7 +278,7 @@ class ConnectedServicesRepository:
                     adapter.token_endpoint_url, authorization_response=raw_url, code_verifier=code_verifier
                 )
 
-                logger.info(f"Token for client {client.id} has keys: {", ".join(token.keys())}")
+                logger.info(f"Token for client {client.id} has keys: {', '.join(token.keys())}")
 
                 next_url = connection.next_url
 
@@ -355,6 +361,40 @@ class ConnectedServicesRepository:
                 raise
             token_model = models.OAuth2TokenSet.from_dict(oauth2_client.token)
             return token_model
+
+    async def get_docker_client(
+        self, user: base_models.APIUser, image: Image
+    ) -> tuple[ImageRepoDockerAPI, ULID] | tuple[None, None]:
+        """Search for clients and connections that can work with the specific image and return a docker client."""
+        async with self.session_maker() as session:
+            registry_urls = [f"http://{image.hostname}", f"https://{image.hostname}"]
+            stmt = (
+                select(schemas.OAuth2ConnectionORM)
+                .where(schemas.OAuth2ConnectionORM.user_id == user.id)
+                .where(
+                    schemas.OAuth2ConnectionORM.client.has(
+                        schemas.OAuth2ClientORM.image_registry_url.in_(registry_urls)
+                    )
+                )
+                .options(joinedload(schemas.OAuth2ConnectionORM.client))
+            )
+            conn = await session.scalar(stmt)
+        if not conn:
+            return None, None
+        if conn.client.kind != ProviderKind.gitlab:
+            # NOTE: Only Gitlab is currently supported for this
+            return None, None
+        url = conn.client.image_registry_url
+        if not url:
+            return None, None
+        token_set = await self.get_oauth2_connection_token(conn.id, user)
+        url_parsed = urlparse(url)
+        access_token = token_set.access_token
+        if not access_token:
+            return None, None
+        return ImageRepoDockerAPI(
+            hostname=url_parsed.netloc, scheme=url_parsed.scheme, oauth2_token=access_token
+        ), conn.id
 
     async def get_oauth2_app_installations(
         self, connection_id: ULID, user: base_models.APIUser, pagination: PaginationRequest

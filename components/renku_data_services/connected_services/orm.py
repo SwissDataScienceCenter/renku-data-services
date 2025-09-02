@@ -49,6 +49,7 @@ class OAuth2ClientORM(BaseORM):
         onupdate=func.now(),
         nullable=False,
     )
+    image_registry_url: Mapped[str | None] = mapped_column(default=None, nullable=True, server_default=None)
 
     def dump(self, user_is_admin: bool = False) -> models.OAuth2Client:
         """Create an OAuth2 Client model from the OAuth2ClientORM.
@@ -68,6 +69,7 @@ class OAuth2ClientORM(BaseORM):
             created_by_id=self.created_by_id,
             creation_date=self.creation_date,
             updated_at=self.updated_at,
+            image_registry_url=self.image_registry_url,
         )
 
 

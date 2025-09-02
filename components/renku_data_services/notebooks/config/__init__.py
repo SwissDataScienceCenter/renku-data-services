@@ -122,6 +122,7 @@ class NotebooksConfig:
     k8s_client: NotebookK8sClient[JupyterServerV1Alpha1]
     k8s_v2_client: NotebookK8sClient[AmaltheaSessionV1Alpha1]
     cluster_rp: ClusterRepository
+    enable_internal_gitlab: bool
     current_resource_schema_version: int = 1
     anonymous_sessions_enabled: bool = False
     ssh_enabled: bool = False
@@ -139,6 +140,7 @@ class NotebooksConfig:
     @classmethod
     def from_env(cls, db_config: DBConfig, enable_internal_gitlab: bool) -> Self:
         """Create a configuration object from environment variables."""
+        enable_internal_gitlab = os.getenv("ENABLE_INTERNAL_GITLAB", "false").lower() == "true"
         dummy_stores = _parse_str_as_bool(os.environ.get("DUMMY_STORES", False))
         sessions_config: _SessionConfig
         git_config: _GitConfig
@@ -231,4 +233,5 @@ class NotebooksConfig:
             cluster_rp=cluster_rp,
             _kr8s_api=kr8s_api,
             v1_sessions_enabled=v1_sessions_enabled,
+            enable_internal_gitlab=enable_internal_gitlab,
         )
