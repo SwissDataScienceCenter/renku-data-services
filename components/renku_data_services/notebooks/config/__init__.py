@@ -138,7 +138,7 @@ class NotebooksConfig:
     v1_sessions_enabled: bool = False
 
     @classmethod
-    def from_env(cls, db_config: DBConfig) -> Self:
+    def from_env(cls, db_config: DBConfig, enable_internal_gitlab: bool) -> Self:
         """Create a configuration object from environment variables."""
         enable_internal_gitlab = os.getenv("ENABLE_INTERNAL_GITLAB", "false").lower() == "true"
         dummy_stores = _parse_str_as_bool(os.environ.get("DUMMY_STORES", False))

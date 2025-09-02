@@ -70,7 +70,7 @@ class Config:
             k8s_config_root=os.environ.get("K8S_CONFIGS_ROOT", "/secrets/kube_configs"),
             db=db,
             builds=BuildsConfig.from_env(),
-            nb_config=NotebooksConfig.from_env(db),
+            nb_config=NotebooksConfig.from_env(db, enable_internal_gitlab=enable_internal_gitlab),
             secrets=PublicSecretsConfig.from_env(),
             sentry=SentryConfig.from_env(),
             posthog=PosthogConfig.from_env(),
