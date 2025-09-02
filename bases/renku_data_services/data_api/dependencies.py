@@ -21,7 +21,7 @@ import renku_data_services.search
 import renku_data_services.storage
 import renku_data_services.users
 from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
-from renku_data_services.authn.gitlab import GitlabAuthenticator
+from renku_data_services.authn.gitlab import EmptyGitlabAuthenticator, GitlabAuthenticator
 from renku_data_services.authn.keycloak import KcUserStore, KeycloakAuthenticator
 from renku_data_services.authz.authz import Authz
 from renku_data_services.connected_services.db import ConnectedServicesRepository
@@ -37,7 +37,7 @@ from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
     DataConnectorSecretRepository,
 )
-from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
+from renku_data_services.git.gitlab import DummyGitlabAPI, EmptyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.clients import (
     DummyCoreClient,
     DummySchedulingClient,
@@ -232,11 +232,16 @@ class DependencyManager:
         else:
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=config.k8s_namespace)
             assert config.keycloak is not None
+
             authenticator = KeycloakAuthenticator.new(config.keycloak)
-            assert config.gitlab_url is not None
-            gitlab_authenticator = GitlabAuthenticator(gitlab_url=config.gitlab_url)
+            if config.enable_internal_gitlab:
+                assert config.gitlab_url
+                gitlab_authenticator = GitlabAuthenticator(gitlab_url=config.gitlab_url)
+                gitlab_client = GitlabAPI(gitlab_url=config.gitlab_url)
+            else:
+                gitlab_authenticator = EmptyGitlabAuthenticator()
+                gitlab_client = EmptyGitlabAPI()
             user_store = KcUserStore(keycloak_url=config.keycloak.url, realm=config.keycloak.realm)
-            gitlab_client = GitlabAPI(gitlab_url=config.gitlab_url)
             kc_api = KeycloakAPI(
                 keycloak_url=config.keycloak.url,
                 client_id=config.keycloak.client_id,
@@ -334,12 +339,12 @@ class DependencyManager:
             session_maker=config.db.async_session_maker,
             encryption_key=config.secrets.encryption_key,
             async_oauth2_client_class=cls.async_oauth2_client_class,
-            internal_gitlab_url=config.gitlab_url,
         )
         git_repositories_repo = GitRepositoriesRepository(
             session_maker=config.db.async_session_maker,
             connected_services_repo=connected_services_repo,
             internal_gitlab_url=config.gitlab_url,
+            enable_internal_gitlab=config.enable_internal_gitlab,
         )
         platform_repo = PlatformRepository(
             session_maker=config.db.async_session_maker,

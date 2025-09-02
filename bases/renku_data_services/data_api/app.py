@@ -182,7 +182,6 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         url_prefix=url_prefix,
         connected_services_repo=dm.connected_services_repo,
         authenticator=dm.authenticator,
-        internal_gitlab_authenticator=dm.gitlab_authenticator,
     )
     repositories = RepositoriesBP(
         name="repositories",
@@ -197,7 +196,6 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         authenticator=dm.authenticator,
         nb_config=dm.config.nb_config,
         internal_gitlab_authenticator=dm.gitlab_authenticator,
-        git_repo=dm.git_repositories_repo,
         rp_repo=dm.rp_repo,
         user_repo=dm.kc_user_repo,
         storage_repo=dm.storage_repo,
@@ -283,7 +281,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
     if builds is not None:
         app.blueprint(builds.blueprint())
 
-    # We need to patch sanic_extz as since version 24.12 they only send a string representation of errors
+    # We need to patch sanic_ext as since version 24.12 they only send a string representation of errors
     import sanic_ext.extras.validation.setup
 
     sanic_ext.extras.validation.setup.validate_body = _patched_validate_body

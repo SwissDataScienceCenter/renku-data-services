@@ -100,8 +100,10 @@ class _GitConfig:
     registry: str
 
     @classmethod
-    def from_env(cls) -> Self:
-        return cls(os.environ["NB_GIT__URL"], os.environ["NB_GIT__REGISTRY"])
+    def from_env(cls, enable_internal_gitlab: bool = True) -> Self:
+        if enable_internal_gitlab:
+            return cls(os.environ["NB_GIT__URL"], os.environ["NB_GIT__REGISTRY"])
+        return cls("", "")
 
 
 @dataclass
