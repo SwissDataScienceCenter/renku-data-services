@@ -830,16 +830,16 @@ async def start_session(
         session_extras = session_extras.concat(SessionExtraResources(secrets=[image_secret]))
 
     # Remote session configuration
-    remote_secret = (
-        get_remote_secret(
+    remote_secret = None
+    if session_location == SessionLocation.remote:
+        remote_secret = get_remote_secret(
             user=user,
             config=nb_config,
             server_name=server_name,
             git_providers=git_providers,
         )
-        if session_location == SessionLocation.remote
-        else None
-    )
+    if remote_secret is not None:
+        session_extras = session_extras.concat(SessionExtraResources(secrets=[remote_secret]))
 
     # Raise an error if there are invalid environment variables in the request body
     verify_launcher_env_variable_overrides(launcher, body)
