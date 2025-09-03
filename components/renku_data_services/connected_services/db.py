@@ -43,6 +43,7 @@ class ConnectedServicesRepository:
         self.session_maker = session_maker
         self.encryption_key = encryption_key
         self.async_oauth2_client_class = async_oauth2_client_class
+        self.supported_image_registry_providers = {ProviderKind.gitlab, ProviderKind.github}
 
     async def get_oauth2_clients(
         self,
@@ -383,13 +384,16 @@ class ConnectedServicesRepository:
                         schemas.OAuth2ClientORM.image_registry_url.in_(registry_urls)
                     )
                 )
-                .options(joinedload(schemas.OAuth2ConnectionORM.client))
+                .where(
+                    schemas.OAuth2ConnectionORM.client.has(
+                        schemas.OAuth2ClientORM.kind.in_(self.supported_image_registry_providers)
+                    )
+                )
+                .options(joinedload(schemas.OAuth2ConnectionORM.client, innerjoin=True))
             )
             conn = await session.scalar(stmt)
+
         if not conn:
-            return None, None
-        if conn.client.kind != models.ProviderKind.gitlab:
-            # NOTE: Only Gitlab is currently supported for this
             return None, None
         url = conn.client.image_registry_url
         if not url:
