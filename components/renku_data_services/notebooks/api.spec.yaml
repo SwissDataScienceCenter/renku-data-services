@@ -362,28 +362,29 @@ paths:
       tags:
         - sessions
   "/sessions/images":
-      get:
-        description: Check if a session image exists
-        parameters:
-        - description: The Docker image URL (tag included) that should be fetched.
-          in: query
-          name: image_url
-          required: true
-          schema:
-            type: string
-            minLength: 1
-        responses:
-          '200':
-            content:
-              application/json:
-                schema:
-                  "$ref": "#/components/schemas/ImageCheckResponse"
-          '422':
-            content:
-              application/json:
-                schema:
-                  "$ref": "#/components/schemas/ErrorResponse"
-            description: The image url is malformed.
+    get:
+      summary: Check if a session image exists
+      parameters:
+      - description: The Docker image URL (tag included) that should be fetched.
+        in: query
+        name: image_url
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      responses:
+        "200":
+          description: Information about the accessibility of the image
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ImageCheckResponse"
+        "422":
+          description: The image url is malformed.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
       tags:
         - sessions
 components:
