@@ -605,6 +605,42 @@ async def get_image_pull_secret(
     return image_secret, image_pull_secret_name
 
 
+def get_remote_secret(
+    user: AuthenticatedAPIUser | AnonymousAPIUser,
+    config: NotebooksConfig,
+    server_name: str,
+    git_providers: list[GitProvider],
+) -> ExtraSecret | None:
+    """Returns the secret containing the configuration for the remote session controller."""
+    if not user.is_authenticated or user.access_token is None or user.refresh_token is None:
+        return None
+    # TODO: where do we configure this?
+    cscs_provider = next(filter(lambda p: p.id == "cscs.ch", git_providers), None)
+    if not cscs_provider:
+        return None
+    renku_base_url = "https://" + config.sessions.ingress.host
+    renku_base_url = renku_base_url + "/" if renku_base_url.endswith("/") else renku_base_url
+    renku_auth_token_uri = f"{renku_base_url}auth/realms/{config.keycloak_realm}/protocol/openid-connect/token"
+    secret_data = {
+        # TODO: where do we configure this?
+        "FIRECREST_API_URL": "https://api.cscs.ch/hpc/firecrest/v2/",
+        "FIRECREST_AUTH_TOKEN_URI": cscs_provider.access_token_url,
+        "RENKU_ACCESS_TOKEN": user.access_token,
+        "RENKU_REFRESH_TOKEN": user.refresh_token,
+        "RENKU_AUTH_TOKEN_URI": renku_auth_token_uri,
+        "RENKU_CLIENT_ID": config.sessions.git_proxy.renku_client_id,
+        "RENKU_CLIENT_SECRET": config.sessions.git_proxy.renku_client_secret,
+    }
+    secret_name = f"{server_name}-remote-secret"
+    k8s_namespace = config.k8s_client.namespace()
+    secret = V1Secret(
+        metadata=V1ObjectMeta(name=secret_name, namespace=k8s_namespace),
+        string_data=secret_data,
+        type="kubernetes.io/dockerconfigjson",
+    )
+    return ExtraSecret(secret)
+
+
 async def start_session(
     request: Request,
     body: apispec.SessionPostRequest,
@@ -793,6 +829,18 @@ async def start_session(
     if image_secret:
         session_extras = session_extras.concat(SessionExtraResources(secrets=[image_secret]))
 
+    # Remote session configuration
+    remote_secret = (
+        get_remote_secret(
+            user=user,
+            config=nb_config,
+            server_name=server_name,
+            git_providers=git_providers,
+        )
+        if session_location == SessionLocation.remote
+        else None
+    )
+
     # Raise an error if there are invalid environment variables in the request body
     verify_launcher_env_variable_overrides(launcher, body)
     env = [
@@ -841,6 +889,7 @@ async def start_session(
                 shmSize=ShmSizeStr("1G"),
                 stripURLPath=environment.strip_path_prefix,
                 env=env,
+                remoteSecretRef=remote_secret.ref() if remote_secret else None,
             ),
             ingress=ingress,
             extraContainers=session_extras.containers,
