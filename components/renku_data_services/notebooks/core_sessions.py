@@ -636,7 +636,7 @@ def get_remote_secret(
     secret = V1Secret(
         metadata=V1ObjectMeta(name=secret_name, namespace=k8s_namespace),
         string_data=secret_data,
-        type="kubernetes.io/dockerconfigjson",
+        type="Opaque",
     )
     return ExtraSecret(secret)
 
