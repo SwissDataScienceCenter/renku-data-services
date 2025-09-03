@@ -6,7 +6,7 @@ Create Date: 2025-06-17 14:09:43.322460
 
 """
 
-from alembic import op
+# from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "f6705f482551"
@@ -16,7 +16,8 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("ALTER TYPE providerkind ADD VALUE 'cscs'")
+    # op.execute("ALTER TYPE providerkind ADD VALUE 'cscs'")
+    pass
 
 
 def downgrade() -> None:
