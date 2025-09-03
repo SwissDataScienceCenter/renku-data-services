@@ -1051,7 +1051,10 @@ components:
         accessible:
           type: boolean
           description: Whether the image is accessible or not.
-        connection:
+        connection_id:
+          type: string
+          description: The connection id if one was found
+        connection_status:
           allOf:
             - "$ref": "#/components/schemas/ImageConnectionStatus"
             - description: Whether an oauth2 connection is or can be used to access the image. If null indicates that there is no oauth2 connection we can use to access the requested image.
