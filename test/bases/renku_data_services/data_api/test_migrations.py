@@ -653,7 +653,7 @@ async def test_migration_to_c8061499b966(app_manager_instance: DependencyManager
 
 
 @pytest.mark.asyncio
-async def test_migration_to_04b2a0242f43(app_manager_instance: DependencyManager, admin_user: UserInfo) -> None:
+async def test_migration_to_66e2f1271cf6(app_manager_instance: DependencyManager, admin_user: UserInfo) -> None:
     """Test the migration to deduplicate slugs and add constraints that prevent further duplicates."""
 
     async def insert_project(session: AsyncSession, name: str) -> ULID:
@@ -712,7 +712,7 @@ async def test_migration_to_04b2a0242f43(app_manager_instance: DependencyManager
         )
         return id
 
-    run_migrations_for_app("common", "c8061499b966")
+    run_migrations_for_app("common", "35ea9d8f54e8")
 
     async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
         await insert_user_namespace(session, admin_user)
@@ -740,7 +740,7 @@ async def test_migration_to_04b2a0242f43(app_manager_instance: DependencyManager
         all_rows = res.all()
         assert len(all_rows) == 4  # 3 duplicates + 1 slug for the project which holds data connectors
 
-    run_migrations_for_app("common", "04b2a0242f43")
+    run_migrations_for_app("common", "66e2f1271cf6")
 
     # One project's slug should be renamed and the two slugs are now distinct
     async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
