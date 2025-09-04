@@ -20,7 +20,7 @@ from renku_data_services.data_connectors.db import (
     DataConnectorSecretRepository,
 )
 from renku_data_services.errors import errors
-from renku_data_services.notebooks import apispec, core
+from renku_data_services.notebooks import apispec, core, image_check
 from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.schemas.config_server_options import ServerOptionsEndpointResponse
 from renku_data_services.notebooks.api.schemas.logs import ServerLogs
@@ -330,33 +330,28 @@ class NotebooksNewBP(CustomBlueprint):
             query: apispec.SessionsImagesGetParametersQuery,
         ) -> JSONResponse:
             image = Image.from_path(query.image_url)
-            # the only gives a docker client if a secret can be found in the connected_services
-            docker_client, conn_id = await self.connected_svcs_repo.get_docker_client(user, image)
-            conn = await self.connected_svcs_repo.get_oauth2_connection(conn_id, user) if conn_id is not None else None
-            if conn is None:
-                ...
-            image_con = apispec.ImageConnection(
-                id = str(conn.id),
-                provider_id = conn.provider_id
-                status = ...
-            ) if conn is not None else None
-            resp = apispec.ImageCheckResponse(
-                accessible=False,
-                connection=apispec.ImageConnection(
-                    id = conn.id
-                ),
-                connection_id=str(conn.id) if conn is not None else None,
-            )
-            if conn is not None:
-                match conn.status:
-                    case ConnectionStatus.pending:
-                        resp.connection_status = apispec.ImageConnectionStatus.pending
+            result = await image_check.check_image(image, user, self.connected_svcs_repo)
+            logger.info(f"Checked image {query.image_url}: {result}")
+            conn = None
+            if result.connection:
+                match result.connection.status:
                     case ConnectionStatus.connected:
-                        resp.connection_status = apispec.ImageConnectionStatus.connected
+                        status = (
+                            apispec.ImageConnectionStatus.connected
+                            if result.response_code == 200 or result.response_code == 404
+                            else apispec.ImageConnectionStatus.invalid_credentials
+                        )
+                    case ConnectionStatus.pending:
+                        status = apispec.ImageConnectionStatus.pending
 
-            if docker_client is not None:
-                mf = await docker_client.get_image_manifest(image)
-                resp.accessible = mf is not None
+                conn = apispec.ImageConnection(
+                    id=str(result.connection.id), provider_id=result.connection.provider_id, status=status
+                )
+
+            resp = apispec.ImageCheckResponse(
+                accessible=result.accessible,
+                connection=conn,
+            )
 
             return json(resp.model_dump(exclude_none=True, mode="json"))
 

@@ -1073,7 +1073,6 @@ components:
       enum:
         - connected
         - pending
-        - disconnected
         - invalid_credentials
   responses:
     ImageCheckResponse:

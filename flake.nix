@@ -119,8 +119,9 @@
           SOLR_BIN_PATH = "${devshellToolsPkgs.solr}/bin/solr";
 
           shellHook = ''
+            PYENV_PATH=$(poetry env info --path)
             export FLAKE_ROOT="$(git rev-parse --show-toplevel)"
-            export PATH="$FLAKE_ROOT/.venv/bin:$PATH"
+            export PATH="$PYENV_PATH/bin:$PATH"
             export ALEMBIC_CONFIG="$FLAKE_ROOT/components/renku_data_services/migrations/alembic.ini"
             export NB_SERVER_OPTIONS__DEFAULTS_PATH="$FLAKE_ROOT/server_defaults.json"
             export NB_SERVER_OPTIONS__UI_CHOICES_PATH="$FLAKE_ROOT/server_options.json"
