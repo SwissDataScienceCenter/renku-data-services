@@ -1,7 +1,7 @@
 """add missing entitity slug constraints
 
 Revision ID: 04b2a0242f43
-Revises: c8061499b966
+Revises: 35ea9d8f54e8
 Create Date: 2025-08-22 16:34:20.530644
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "04b2a0242f43"
-down_revision = "c8061499b966"
+down_revision = "35ea9d8f54e8"
 branch_labels = None
 depends_on = None
 
