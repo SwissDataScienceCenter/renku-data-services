@@ -28,8 +28,6 @@ from renku_data_services.connected_services.utils import generate_code_verifier
 from renku_data_services.notebooks.api.classes.image import Image, ImageRepoDockerAPI
 from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
 
-# from renku_data_services.connected_services.apispec import ConnectionStatus
-
 logger = logging.getLogger(__name__)
 
 
