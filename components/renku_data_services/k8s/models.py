@@ -243,13 +243,14 @@ class APIObjectInCluster:
     @property
     def user_id(self) -> str | None:
         """Extract the user id from annotations."""
+        labels = cast(dict[str, str], self.obj.metadata.get("labels", {}))
         match self.obj.singular:
             case "jupyterserver":
-                return cast(str, self.obj.metadata.labels["renku.io/userId"])
+                return labels.get("renku.io/userId", None)
             case "amaltheasession":
-                return cast(str, self.obj.metadata.labels["renku.io/safe-username"])
+                return labels.get("renku.io/safe-username", None)
             case "buildrun":
-                return cast(str, self.obj.metadata.labels["renku.io/safe-username"])
+                return labels.get("renku.io/safe-username", None)
 
             case "taskrun":
                 return DUMMY_TASK_RUN_USER_ID
