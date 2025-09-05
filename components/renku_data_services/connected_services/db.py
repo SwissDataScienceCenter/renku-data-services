@@ -19,7 +19,7 @@ from renku_data_services.app_config import logging
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.connected_services import models
 from renku_data_services.connected_services import orm as schemas
-from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind
+from renku_data_services.connected_services.apispec import ConnectionStatus
 from renku_data_services.connected_services.provider_adapters import (
     GitHubAdapter,
     ProviderAdapter,
@@ -83,7 +83,7 @@ class ConnectedServicesRepository:
         )
         client = schemas.OAuth2ClientORM(
             id=provider_id,
-            kind=new_client.kind,
+            kind=models.ProviderKind(new_client.kind.value),
             app_slug=new_client.app_slug or "",
             client_id=new_client.client_id,
             client_secret=encrypted_client_secret,
@@ -406,7 +406,7 @@ class ConnectedServicesRepository:
             adapter,
         ):
             # NOTE: App installations are only available from GitHub
-            if connection.client.kind == ProviderKind.github and isinstance(adapter, GitHubAdapter):
+            if connection.client.kind == models.ProviderKind.github and isinstance(adapter, GitHubAdapter):
                 request_url = urljoin(adapter.api_url, "user/installations")
                 params = dict(page=pagination.page, per_page=pagination.per_page)
                 try:

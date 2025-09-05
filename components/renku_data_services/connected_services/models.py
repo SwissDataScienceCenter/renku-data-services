@@ -2,11 +2,24 @@
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 
 from ulid import ULID
 
-from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind, RepositorySelection
+# TODO: Do not import from apispec into models
+from renku_data_services.connected_services.apispec import ConnectionStatus, RepositorySelection
+
+
+class ProviderKind(StrEnum):
+    """The kind of platform we connnect to."""
+
+    gitlab = "gitlab"
+    github = "github"
+    drive = "drive"
+    onedrive = "onedrive"
+    dropbox = "dropbox"
+    cscs = "cscs"
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
