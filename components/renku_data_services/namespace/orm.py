@@ -246,14 +246,93 @@ class EntitySlugORM(BaseORM):
 
     __tablename__ = "entity_slugs"
     __table_args__ = (
+        # NOTE: prevents 2 different projects from having the same slug
+        # I.e. an invalid example like this:
+        # namespace_id | project_id | data_connector_id | slug
+        # 1            | 1          | NULL              | prj1
+        # 1            | 2          | NULL              | prj1
         Index(
-            "entity_slugs_unique_slugs",
+            "entity_slugs_unique_slugs_project_slugs",
+            "namespace_id",
+            "slug",
+            unique=True,
+            postgresql_where="data_connector_id IS NULL",
+        ),
+        # NOTE: prevents the same project from having different slugs
+        # I.e. an invalid example like this:
+        # namespace_id | project_id | data_connector_id | slug
+        # 1            | 1          | NULL              | prj1
+        # 1            | 1          | NULL              | prj2
+        Index(
+            "entity_slugs_unique_slugs_same_project_two_slugs",
             "namespace_id",
             "project_id",
+            unique=True,
+            postgresql_where="data_connector_id IS NULL",
+        ),
+        # NOTE: prevents 2 different data connectors owned by group or user from having the same slug
+        # I.e. an invalid example like this:
+        # namespace_id | project_id | data_connector_id | slug
+        # 1            | NULL       | 1                 | dc1
+        # 1            | NULL       | 2                 | dc1
+        Index(
+            "entity_slugs_unique_slugs_dc_in_group_user_slugs",
+            "namespace_id",
+            "slug",
+            unique=True,
+            postgresql_where="project_id IS NULL",
+        ),
+        # NOTE: prevents the same data connector owned by group or user from having 2 different slugs
+        # I.e. an invalid example like this:
+        # namespace_id | project_id | data_connector_id | slug
+        # 1            | NULL       | 1                 | dc1
+        # 1            | NULL       | 1                 | dc2
+        Index(
+            "entity_slugs_unique_slugs_same_dc_in_group_user_two_slugs",
+            "namespace_id",
+            "data_connector_id",
+            unique=True,
+            postgresql_where="project_id IS NULL",
+        ),
+        # NOTE: prevents 2 different data connectors owned by the same project from having the same slug
+        # I.e. an invalid example like this:
+        # namespace_id | project_id | data_connector_id | slug
+        # 1            | 1          | 1                 | dc1
+        # 1            | 1          | 2                 | dc1
+        Index(
+            "entity_slugs_unique_slugs_data_connector_in_project_slugs_1",
+            "namespace_id",
+            "project_id",
+            "slug",
+            unique=True,
+            postgresql_where="project_id IS NOT NULL AND data_connector_id IS NOT NULL",
+        ),
+        # NOTE: prevents the same data connector with the same slug being owned by different projects
+        # I.e. an invalid example like this:
+        # namespace_id | project_id | data_connector_id | slug
+        # 1            | 1          | 1                 | dc1
+        # 1            | 2          | 1                 | dc1
+        Index(
+            "entity_slugs_unique_slugs_data_connector_in_project_slugs_2",
+            "namespace_id",
             "data_connector_id",
             "slug",
             unique=True,
             postgresql_nulls_not_distinct=True,
+            postgresql_where="project_id IS NOT NULL AND data_connector_id IS NOT NULL",
+        ),
+        # NOTE: prevents the same data connector owned by the same project having 2 different slugs
+        # I.e. an invalid example like this:
+        # namespace_id | project_id | data_connector_id | slug
+        # 1            | 1          | 1                 | dc1
+        # 1            | 1          | 1                 | dc2
+        Index(
+            "entity_slugs_unique_slugs_data_connector_in_project_slugs_3",
+            "namespace_id",
+            "project_id",
+            "data_connector_id",
+            unique=True,
+            postgresql_where="project_id IS NOT NULL AND data_connector_id IS NOT NULL",
         ),
         CheckConstraint(
             "(project_id IS NOT NULL) OR (data_connector_id IS NOT NULL)",
