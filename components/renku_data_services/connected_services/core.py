@@ -11,7 +11,7 @@ def validate_oauth2_client_patch(patch: apispec.ProviderPatch) -> models.OAuth2C
     if patch.image_registry_url is not None and len(patch.image_registry_url) > 0:
         validate_image_registry_url(patch.image_registry_url)
     return models.OAuth2ClientPatch(
-        kind=patch.kind,
+        kind=models.ProviderKind(patch.kind.value) if patch.kind else None,
         app_slug=patch.app_slug,
         client_id=patch.client_id,
         client_secret=patch.client_secret,
@@ -29,7 +29,7 @@ def validate_unsaved_oauth2_client(clnt: apispec.ProviderPost) -> models.Unsaved
         validate_image_registry_url(clnt.image_registry_url)
     return models.UnsavedOAuth2Client(
         id=clnt.id,
-        kind=clnt.kind,
+        kind=models.ProviderKind(clnt.kind.value),
         app_slug=clnt.app_slug or "",
         client_id=clnt.client_id,
         client_secret=clnt.client_secret,

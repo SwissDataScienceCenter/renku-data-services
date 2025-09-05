@@ -410,6 +410,7 @@ components:
         - "drive"
         - "onedrive"
         - "dropbox"
+        - "generic_oidc"
       example: "gitlab"
     ApplicationSlug:
       description: |
