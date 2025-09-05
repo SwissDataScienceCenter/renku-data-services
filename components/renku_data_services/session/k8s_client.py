@@ -223,7 +223,24 @@ class ShipwrightClient:
             return models.ShipwrightBuildStatusUpdate(update=None)
 
         conditions = k8s_build_status.conditions
+        # NOTE: You can get a condition like this in some cases during autoscaling or for other reasons
+        #   message: Not all Steps in the Task have finished executing
+        #   reason: Running
+        #   status: Unknown
+        #   /type: Succeeded
+        # In this case we want to keep waiting - the buildrun is still running.
+        # A fully successful completion condition looks like this:
+        #   reason: Succeeded
+        #   status: True
+        #   /type: Succeeded
+        # See https://shipwright.io/docs/build/buildrun/#understanding-the-state-of-a-buildrun
+        # NOTE: In the examples above I put / before the type field because mypy parses that and fails.
+        # So I needed something to keep mypy happy. The real name of the field is "type"
         condition = next(filter(lambda c: c.type == "Succeeded", conditions or []), None)
+
+        if condition is not None and condition.reason in ["Running", "Pending"]:
+            # The buildrun is still running or pending
+            return models.ShipwrightBuildStatusUpdate(update=None)
 
         buildSpec = k8s_build_status.buildSpec
         output = buildSpec.output if buildSpec else None
@@ -238,7 +255,7 @@ class ShipwrightClient:
         result_repository_git_commit_sha = git_obj_2.commitSha if git_obj_2 else None
         result_repository_git_commit_sha = result_repository_git_commit_sha or "unknown"
 
-        if condition is not None and condition.status == "True":
+        if condition is not None and condition.reason == "Succeeded" and condition.status == "True":
             return models.ShipwrightBuildStatusUpdate(
                 update=models.ShipwrightBuildStatusUpdateContent(
                     status=models.BuildStatus.succeeded,
