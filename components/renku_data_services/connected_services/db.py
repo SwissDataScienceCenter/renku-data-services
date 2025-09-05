@@ -82,7 +82,7 @@ class ConnectedServicesRepository:
         )
         client = schemas.OAuth2ClientORM(
             id=provider_id,
-            kind=models.ProviderKind(new_client.kind.value),
+            kind=new_client.kind,
             app_slug=new_client.app_slug or "",
             client_id=new_client.client_id,
             client_secret=encrypted_client_secret,
