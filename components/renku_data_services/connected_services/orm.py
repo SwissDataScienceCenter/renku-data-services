@@ -12,8 +12,6 @@ from ulid import ULID
 from renku_data_services.connected_services import models
 from renku_data_services.utils.sqlalchemy import ULIDType
 
-# from renku_data_services.connected_services.apispec import ConnectionStatus
-
 JSONVariant = JSON().with_variant(JSONB(), "postgresql")
 
 metadata_obj = MetaData(schema="connected_services")
