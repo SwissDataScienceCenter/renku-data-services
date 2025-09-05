@@ -279,6 +279,7 @@ class ResourcePool:
     hibernation_threshold: int | None = None
     default: bool = False
     public: bool = False
+    remote: bool = False
     cluster: SavedClusterSettings | None = None
 
     def __post_init__(self) -> None:
@@ -289,6 +290,10 @@ class ResourcePool:
             raise ValidationError(message="The default resource pool has to be public.")
         if self.default and self.quota is not None:
             raise ValidationError(message="A default resource pool cannot have a quota.")
+        if self.remote and self.default:
+            raise ValidationError(message="The default resource pool cannot start remote sessions.")
+        if self.remote and self.public:
+            raise ValidationError(message="A resource pool which starts remote sessions cannot be public.")
         if (self.idle_threshold and self.idle_threshold < 0) or (
             self.hibernation_threshold and self.hibernation_threshold < 0
         ):
@@ -372,6 +377,7 @@ class ResourcePool:
             quota=quota,
             default=data.get("default", False),
             public=data.get("public", False),
+            remote=data.get("remote", False),
             idle_threshold=data.get("idle_threshold"),
             hibernation_threshold=data.get("hibernation_threshold"),
             cluster=cluster,

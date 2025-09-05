@@ -411,7 +411,7 @@ class ResourcePoolRepository(_Base):
             new_classes_coroutines = []
             for key, val in kwargs.items():
                 match key:
-                    case "name" | "public" | "default" | "idle_threshold" | "hibernation_threshold":
+                    case "name" | "public" | "default" | "remote" | "idle_threshold" | "hibernation_threshold":
                         setattr(rp, key, val)
                     case "cluster_id":
                         cluster_id = val
