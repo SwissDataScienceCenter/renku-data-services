@@ -2,11 +2,16 @@
 
 import argparse
 import asyncio
+import os
 from os import environ
 from typing import TYPE_CHECKING, Any
 
 import sentry_sdk
 from sanic import Request, Sanic
+
+if os.name == "posix":
+    Sanic.start_method = "fork"
+
 from sanic.response import BaseHTTPResponse
 from sanic.worker.loader import AppLoader
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
@@ -203,4 +208,7 @@ if __name__ == "__main__":
     loader = AppLoader(factory=create_app)
     app = loader.load()
     app.prepare(**args)
-    Sanic.serve(primary=app, app_loader=loader)
+    if os.name == "posix":
+        Sanic.serve(primary=app)
+    else:
+        Sanic.serve(primary=app, app_loader=loader)
