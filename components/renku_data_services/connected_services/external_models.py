@@ -5,7 +5,6 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from renku_data_services.connected_services import models
-from renku_data_services.connected_services.apispec import RepositorySelection
 
 
 class GitLabConnectedAccount(BaseModel):
@@ -35,7 +34,7 @@ class GitHubAppInstallation(BaseModel):
 
     id: int
     account: GitHubConnectedAccount
-    repository_selection: RepositorySelection
+    repository_selection: models.RepositorySelection
     suspended_at: datetime | None = None
 
     def to_app_installation(self) -> models.AppInstallation:

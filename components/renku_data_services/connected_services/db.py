@@ -19,7 +19,6 @@ from renku_data_services.app_config import logging
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.connected_services import models
 from renku_data_services.connected_services import orm as schemas
-from renku_data_services.connected_services.apispec import ConnectionStatus
 from renku_data_services.connected_services.provider_adapters import (
     GitHubAdapter,
     ProviderAdapter,
@@ -28,6 +27,8 @@ from renku_data_services.connected_services.provider_adapters import (
 from renku_data_services.connected_services.utils import generate_code_verifier
 from renku_data_services.notebooks.api.classes.image import Image, ImageRepoDockerAPI
 from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
+
+# from renku_data_services.connected_services.apispec import ConnectionStatus
 
 logger = logging.getLogger(__name__)
 
@@ -222,14 +223,14 @@ class ConnectedServicesRepository:
                         client_id=client.id,
                         token=None,
                         state=state,
-                        status=schemas.ConnectionStatus.pending,
+                        status=models.ConnectionStatus.pending,
                         code_verifier=code_verifier,
                         next_url=next_url,
                     )
                     session.add(connection)
                 else:
                     connection.state = state
-                    connection.status = schemas.ConnectionStatus.pending
+                    connection.status = models.ConnectionStatus.pending
                     connection.code_verifier = code_verifier
                     connection.next_url = next_url
 
@@ -284,7 +285,7 @@ class ConnectedServicesRepository:
 
                 connection.token = self._encrypt_token_set(token=token, user_id=connection.user_id)
                 connection.state = None
-                connection.status = schemas.ConnectionStatus.connected
+                connection.status = models.ConnectionStatus.connected
                 connection.next_url = None
 
                 return next_url
@@ -381,7 +382,7 @@ class ConnectedServicesRepository:
             conn = await session.scalar(stmt)
         if not conn:
             return None, None
-        if conn.client.kind != ProviderKind.gitlab:
+        if conn.client.kind != models.ProviderKind.gitlab:
             # NOTE: Only Gitlab is currently supported for this
             return None, None
         url = conn.client.image_registry_url
@@ -450,7 +451,7 @@ class ConnectedServicesRepository:
                     message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."  # noqa: E501
                 )
 
-            if connection.status != ConnectionStatus.connected or connection.token is None:
+            if connection.status != models.ConnectionStatus.connected or connection.token is None:
                 raise errors.UnauthorizedError(message=f"OAuth2 connection with id '{connection_id}' is not valid.")
 
             client = connection.client

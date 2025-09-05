@@ -10,8 +10,9 @@ from sqlalchemy.schema import UniqueConstraint
 from ulid import ULID
 
 from renku_data_services.connected_services import models
-from renku_data_services.connected_services.apispec import ConnectionStatus
 from renku_data_services.utils.sqlalchemy import ULIDType
+
+# from renku_data_services.connected_services.apispec import ConnectionStatus
 
 JSONVariant = JSON().with_variant(JSONB(), "postgresql")
 
@@ -83,7 +84,7 @@ class OAuth2ConnectionORM(BaseORM):
     client: Mapped[OAuth2ClientORM] = relationship(init=False, repr=False)
     token: Mapped[dict[str, Any] | None] = mapped_column("token", JSONVariant)
     state: Mapped[str | None] = mapped_column("state", String(), index=True, unique=True)
-    status: Mapped[ConnectionStatus]
+    status: Mapped[models.ConnectionStatus]
     code_verifier: Mapped[str | None] = mapped_column("code_verifier", String())
     next_url: Mapped[str | None] = mapped_column("next_url", String())
     creation_date: Mapped[datetime] = mapped_column(

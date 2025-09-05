@@ -411,6 +411,7 @@ components:
         - "onedrive"
         - "dropbox"
         - "cscs"
+        - "generic_oidc"
       example: "gitlab"
     ApplicationSlug:
       description: |

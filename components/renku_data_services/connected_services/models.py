@@ -7,9 +7,6 @@ from typing import Any
 
 from ulid import ULID
 
-# TODO: Do not import from apispec into models
-from renku_data_services.connected_services.apispec import ConnectionStatus, RepositorySelection
-
 
 class ProviderKind(StrEnum):
     """The kind of platform we connnect to."""
@@ -19,7 +16,21 @@ class ProviderKind(StrEnum):
     drive = "drive"
     onedrive = "onedrive"
     dropbox = "dropbox"
-    cscs = "cscs"
+    generic_oidc = "generic_oidc"
+
+
+class ConnectionStatus(StrEnum):
+    """The status of a connection."""
+
+    connected = "connected"
+    pending = "pending"
+
+
+class RepositorySelection(StrEnum):
+    """The repository selection for GitHub applications."""
+
+    all = "all"
+    selected = "selected"
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

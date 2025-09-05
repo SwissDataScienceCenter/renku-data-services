@@ -29,7 +29,7 @@ def validate_unsaved_oauth2_client(clnt: apispec.ProviderPost) -> models.Unsaved
         validate_image_registry_url(clnt.image_registry_url)
     return models.UnsavedOAuth2Client(
         id=clnt.id,
-        kind=clnt.kind,
+        kind=models.ProviderKind(clnt.kind.value),
         app_slug=clnt.app_slug or "",
         client_id=clnt.client_id,
         client_secret=clnt.client_secret,
