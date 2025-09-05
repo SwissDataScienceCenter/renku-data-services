@@ -47,6 +47,7 @@ class UnsavedOAuth2Client:
     url: str
     use_pkce: bool
     image_registry_url: str | None = None
+    oidc_issuer_url: str | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

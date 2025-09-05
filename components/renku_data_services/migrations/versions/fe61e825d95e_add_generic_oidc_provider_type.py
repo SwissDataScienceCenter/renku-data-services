@@ -6,6 +6,7 @@ Create Date: 2025-09-05 09:30:23.062585
 
 """
 
+import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -17,9 +18,13 @@ depends_on = None
 
 def upgrade() -> None:
     op.execute("ALTER TYPE providerkind ADD VALUE 'generic_oidc'")
+    op.add_column(
+        "oauth2_clients", sa.Column("oidc_issuer_url", sa.String(), nullable=True), schema="connected_services"
+    )
 
 
 def downgrade() -> None:
+    op.drop_column("oauth2_clients", "oidc_issuer_url", schema="connected_services")
     # NOTE: Postgres does not allow removing values from an enum
     op.execute("DELETE FROM connected_services.oauth2_clients WHERE kind = 'generic_oidc'")
     op.execute("ALTER TYPE providerkind RENAME TO providerkind_old;")
