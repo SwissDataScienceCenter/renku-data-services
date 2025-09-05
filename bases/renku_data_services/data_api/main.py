@@ -6,7 +6,6 @@ from os import environ
 from typing import TYPE_CHECKING, Any
 
 import sentry_sdk
-import uvloop
 from sanic import Request, Sanic
 from sanic.response import BaseHTTPResponse
 from sanic.worker.loader import AppLoader
@@ -20,7 +19,7 @@ from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.data_api.dependencies import DependencyManager
-from renku_data_services.data_api.prometheus import setup_app_metrics, setup_prometheus
+from renku_data_services.data_api.prometheus import setup_prometheus
 from renku_data_services.errors.errors import (
     ForbiddenError,
     MissingResourceError,
@@ -28,6 +27,7 @@ from renku_data_services.errors.errors import (
     ValidationError,
 )
 from renku_data_services.migrations.core import run_migrations_for_app
+from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.solr.solr_migrate import SchemaMigrator
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.utils.middleware import validate_null_byte
@@ -39,25 +39,28 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-async def _solr_reindex(app: Sanic) -> None:
+async def solr_reindex(reprovision: SearchReprovision) -> None:
     """Run a solr reindex of all data.
 
     This might be required after migrating the solr schema.
     """
-    config = DependencyManager.from_env()
-    reprovision = config.search_reprovisioning
-    admin = InternalServiceAdmin(id=ServiceAdminId.search_reprovision)
-    await reprovision.run_reprovision(admin)
-
-
-def solr_reindex(app_name: str) -> None:
-    """Runs a solr reindex."""
-    app = Sanic(app_name)
-    setup_app_metrics(app)
-
     logger.info("Running SOLR reindex triggered by a migration")
-    asyncio.set_event_loop(uvloop.new_event_loop())
-    asyncio.run(_solr_reindex(app))
+    admin = InternalServiceAdmin(id=ServiceAdminId.search_reprovision)
+    max_retries = 30
+    i = 0
+    while True:
+        try:
+            await reprovision.run_reprovision(admin)
+        except Exception as err:
+            logger.error("SOLR reindexing triggered by a migration has failed because of %s. Will wait and retry.", err)
+        else:
+            logger.info("SOLR reindexing triggered by a migration completed successfully")
+            break
+        i += 1
+        if i >= max_retries:
+            logger.error(f"SOLR reindexing triggered by a migration has failed {max_retries} times, giving up.")
+            break
+        await asyncio.sleep(10)
 
 
 def create_app() -> Sanic:
@@ -169,12 +172,12 @@ def create_app() -> Sanic:
         validator = RCloneValidator()
         app.ext.dependency(validator)
 
-    @app.main_process_ready
+    @app.after_server_start
     async def ready(app: Sanic) -> None:
         """Application ready event handler."""
         if getattr(app.ctx, "solr_reindex", False):
-            logger.info("Starting solr reindex, as required by migrations.")
-            app.manager.manage("SolrReindex", solr_reindex, {"app_name": app.name}, transient=True)
+            logger.info("Creating solr reindex task, as required by migrations.")
+            app.add_task(solr_reindex(dependency_manager.search_reprovisioning))
 
     @app.before_server_start
     async def logging_setup1(app: Sanic) -> None:
