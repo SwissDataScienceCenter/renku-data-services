@@ -7,9 +7,6 @@ from typing import Any
 
 from ulid import ULID
 
-# TODO: Do not import from apispec into models
-from renku_data_services.connected_services.apispec import ConnectionStatus, RepositorySelection
-
 
 class ProviderKind(StrEnum):
     """The kind of platform we connnect to."""
@@ -20,6 +17,21 @@ class ProviderKind(StrEnum):
     onedrive = "onedrive"
     dropbox = "dropbox"
     cscs = "cscs"
+    generic_oidc = "generic_oidc"
+
+
+class ConnectionStatus(StrEnum):
+    """The status of a connection."""
+
+    connected = "connected"
+    pending = "pending"
+
+
+class RepositorySelection(StrEnum):
+    """The repository selection for GitHub applications."""
+
+    all = "all"
+    selected = "selected"
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -36,6 +48,7 @@ class UnsavedOAuth2Client:
     url: str
     use_pkce: bool
     image_registry_url: str | None = None
+    oidc_issuer_url: str | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -60,6 +73,7 @@ class OAuth2ClientPatch:
     url: str | None
     use_pkce: bool | None
     image_registry_url: str | None
+    oidc_issuer_url: str | None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

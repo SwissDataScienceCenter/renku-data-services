@@ -1,8 +1,31 @@
+import contextlib
+
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
+from renku_data_services.authz.models import Visibility
+from renku_data_services.base_models.core import (
+    AuthenticatedAPIUser,
+    DataConnectorInProjectPath,
+    DataConnectorPath,
+    DataConnectorSlug,
+    NamespacePath,
+    ProjectPath,
+    ProjectSlug,
+)
 from renku_data_services.data_api.dependencies import DependencyManager
+from renku_data_services.data_connectors.models import (
+    CloudStorageCore,
+    DataConnector,
+    DataConnectorPatch,
+    GlobalDataConnector,
+    UnsavedDataConnector,
+)
+from renku_data_services.errors.errors import ConflictError, MissingResourceError, ValidationError
+from renku_data_services.namespace.models import UnsavedGroup
 from renku_data_services.namespace.orm import EntitySlugORM
+from renku_data_services.project.models import Project, ProjectPatch, UnsavedProject
 from renku_data_services.users.models import UserInfo
 
 
@@ -532,3 +555,197 @@ async def test_cleanup_with_group_deletion(
     # The data connector in the user namespace is still there
     _, response = await sanic_client.get(f"/api/data/data_connectors/{dc3_id}", headers=user_headers)
     assert response.status_code == 200
+
+
+def __project_patch_namespace(new_ns: str) -> ProjectPatch:
+    return ProjectPatch(
+        namespace=new_ns,
+        name=None,
+        slug=None,
+        visibility=None,
+        repositories=None,
+        description=None,
+        keywords=None,
+        documentation=None,
+        template_id=None,
+        is_template=None,
+        secrets_mount_directory=None,
+    )
+
+
+def __dc_patch_namespace(new_ns: ProjectPath | NamespacePath) -> DataConnectorPatch:
+    return DataConnectorPatch(
+        name=None,
+        namespace=new_ns,
+        slug=None,
+        visibility=None,
+        description=None,
+        keywords=None,
+        storage=None,
+    )
+
+
+def __dc_patch_slug(new_slug: str) -> DataConnectorPatch:
+    return DataConnectorPatch(
+        name=None,
+        namespace=None,
+        slug=new_slug,
+        visibility=None,
+        description=None,
+        keywords=None,
+        storage=None,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path1, path2, path2_patch, exc_type",
+    [
+        (
+            ProjectPath.from_strings("grp1", "prj1"),
+            ProjectPath.from_strings("grp2", "prj1"),
+            __project_patch_namespace("grp1"),
+            IntegrityError,
+        ),
+        (
+            DataConnectorPath.from_strings("grp1", "dc1"),
+            DataConnectorPath.from_strings("grp2", "dc1"),
+            __dc_patch_namespace(NamespacePath.from_strings("grp1")),
+            ValidationError,
+        ),
+        (
+            DataConnectorInProjectPath.from_strings("grp1", "prj1", "dc1"),
+            DataConnectorInProjectPath.from_strings("grp2", "prj1", "dc1"),
+            __dc_patch_namespace(ProjectPath.from_strings("grp1", "prj1")),
+            ValidationError,
+        ),
+        (
+            DataConnectorInProjectPath.from_strings("grp1", "prj1", "dc1"),
+            DataConnectorInProjectPath.from_strings("grp1", "prj2", "dc1"),
+            __dc_patch_namespace(ProjectPath.from_strings("grp1", "prj1")),
+            ValidationError,
+        ),
+        (
+            DataConnectorInProjectPath.from_strings("grp1", "prj1", "dc1"),
+            DataConnectorInProjectPath.from_strings("grp1", "prj1", "dc2"),
+            __dc_patch_slug("dc1"),
+            ValidationError,
+        ),
+        (
+            DataConnectorPath.from_strings("grp1", "dc1"),
+            DataConnectorPath.from_strings("grp1", "dc2"),
+            __dc_patch_slug("dc1"),
+            ValidationError,
+        ),
+    ],
+)
+async def test_avoiding_slug_conflicts_with_updates(
+    sanic_client,
+    app_manager_instance: DependencyManager,
+    admin_user: UserInfo,
+    admin_headers: dict[str, str],
+    path1: ProjectPath | DataConnectorPath | DataConnectorInProjectPath,
+    path2: ProjectPath | DataConnectorPath | DataConnectorInProjectPath,
+    path2_patch: ProjectPatch | DataConnectorPatch,
+    exc_type: type[Exception] | None,
+) -> None:
+    access_token = admin_headers.get("Authorization", "")[8:]
+    user = AuthenticatedAPIUser(
+        id=admin_user.id, access_token=access_token, email=admin_user.email or "user@google.com", is_admin=True
+    )
+    storage_config = CloudStorageCore(
+        storage_type="",
+        configuration={"type": "s3", "endpoint": "http://s3.aws.com"},
+        source_path="giab",
+        target_path="giab",
+        readonly=False,
+    )
+    # Create groups
+    await app_manager_instance.group_repo.insert_group(
+        user, UnsavedGroup(name=path1.first.value, slug=path1.first.value)
+    )
+    try:
+        await app_manager_instance.group_repo.get_group(user, path2.first)
+    except MissingResourceError:
+        await app_manager_instance.group_repo.insert_group(
+            user, UnsavedGroup(name=path2.first.value, slug=path2.first.value)
+        )
+    prj2: Project | None = None
+    dc2: DataConnector | GlobalDataConnector | None = None
+    # Create first set of project and dc
+    if isinstance(path1.second, ProjectSlug):
+        await app_manager_instance.project_repo.insert_project(
+            user,
+            UnsavedProject(
+                name=path1.second.value,
+                slug=path1.second.value,
+                created_by=user.id,
+                visibility=Visibility.PUBLIC,
+                namespace=path1.parent().serialize() if isinstance(path1, ProjectPath) else path1.first.value,
+            ),
+        )
+    dc_slug_1: DataConnectorSlug | None = None
+    if isinstance(path1, DataConnectorPath):
+        dc_slug_1 = path1.second
+    elif isinstance(path1, DataConnectorInProjectPath):
+        dc_slug_1 = path1.third
+    if dc_slug_1:
+        await app_manager_instance.data_connector_repo.insert_namespaced_data_connector(
+            user,
+            UnsavedDataConnector(
+                name=dc_slug_1.value,
+                slug=dc_slug_1.value,
+                visibility=Visibility.PUBLIC,
+                created_by=user.id,
+                storage=storage_config,
+                namespace=path1.parent(),
+            ),
+        )
+    # Create second set of project and dc
+    if isinstance(path2.second, ProjectSlug):
+        try:
+            prj2 = await app_manager_instance.project_repo.insert_project(
+                user,
+                UnsavedProject(
+                    name=path2.second.value,
+                    slug=path2.second.value,
+                    created_by=user.id,
+                    visibility=Visibility.PUBLIC,
+                    namespace=path2.first.value,
+                ),
+            )
+        except ConflictError:
+            prj2 = await app_manager_instance.project_repo.get_project_by_namespace_slug(
+                user, path2.first.value, path2.second
+            )
+    dc_slug_2: DataConnectorSlug | None = None
+    if isinstance(path2, DataConnectorPath):
+        dc_slug_2 = path2.second
+    elif isinstance(path2, DataConnectorInProjectPath):
+        dc_slug_2 = path2.third
+    if dc_slug_2:
+        try:
+            dc2 = await app_manager_instance.data_connector_repo.insert_namespaced_data_connector(
+                user,
+                UnsavedDataConnector(
+                    name=dc_slug_2.value,
+                    slug=dc_slug_2.value,
+                    visibility=Visibility.PUBLIC,
+                    created_by=user.id,
+                    storage=storage_config,
+                    namespace=path2.parent(),
+                ),
+            )
+        except ConflictError:
+            assert not isinstance(path2, ProjectPath)
+            dc2 = await app_manager_instance.data_connector_repo.get_data_connector_by_slug(user, path2)
+    # Test patches
+    with pytest.raises(exc_type) if exc_type is not None else contextlib.nullcontext():
+        if isinstance(path2_patch, ProjectPatch):
+            assert prj2 is not None
+            await app_manager_instance.project_repo.update_project(user, prj2.id, path2_patch)
+        elif isinstance(path2_patch, DataConnectorPatch):
+            assert dc2 is not None
+            await app_manager_instance.data_connector_repo.update_data_connector(user, dc2.id, path2_patch, dc2.etag)
+        else:
+            raise AssertionError("No update was performed")
