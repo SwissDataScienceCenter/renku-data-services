@@ -100,3 +100,23 @@ class DropboxConnectedAccount(BaseModel):
         return models.ConnectedAccount(
             username=" ".join(filter(None, [self.given_name, self.family_name])), web_url=f"mailto:{self.email}"
         )
+
+
+class GenericOIDCConnectedAccount(BaseModel):
+    """OAuth2 connected account model for generic OpenID Connect."""
+
+    # Reference: https://openid.net/specs/openid-connect-core-1_0.html#StandardClaims
+    sub: str
+    name: str | None
+    preferred_username: str | None
+
+    def to_connected_account(self) -> models.ConnectedAccount:
+        """Returns the corresponding ConnectedAccount object."""
+
+        return models.ConnectedAccount(
+            username=self._get_username(),
+            web_url="",
+        )
+
+    def _get_username(self) -> str:
+        return self.preferred_username or self.name or self.sub
