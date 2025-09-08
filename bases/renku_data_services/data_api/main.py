@@ -8,10 +8,6 @@ from typing import TYPE_CHECKING, Any
 
 import sentry_sdk
 from sanic import Request, Sanic
-
-if os.name == "posix":
-    Sanic.start_method = "fork"
-
 from sanic.response import BaseHTTPResponse
 from sanic.worker.loader import AppLoader
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
@@ -208,7 +204,8 @@ if __name__ == "__main__":
     loader = AppLoader(factory=create_app)
     app = loader.load()
     app.prepare(**args)
-    if os.name == "posix":
+    if os.name == "posix" and args.get("single_process", False):
+        Sanic.start_method = "fork"
         Sanic.serve(primary=app)
     else:
         Sanic.serve(primary=app, app_loader=loader)
