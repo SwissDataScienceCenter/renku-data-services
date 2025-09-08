@@ -1,7 +1,7 @@
 """add generic_oidc provider type
 
 Revision ID: fe61e825d95e
-Revises: 35ea9d8f54e8
+Revises: 66e2f1271cf6
 Create Date: 2025-09-05 09:30:23.062585
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "fe61e825d95e"
-down_revision = "35ea9d8f54e8"
+down_revision = "66e2f1271cf6"
 branch_labels = None
 depends_on = None
 
