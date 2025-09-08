@@ -1,6 +1,5 @@
 """Adapters for each kind of OAuth2 client."""
 
-import contextlib
 import logging
 from abc import ABC, abstractmethod
 from typing import Any
@@ -273,11 +272,12 @@ class GenericOidcAdapter(ProviderAdapter):
 
     def api_validate_account_response(self, response: Response) -> models.ConnectedAccount:
         """Validates and returns the connected account response from the Resource Server."""
-        logger.info(f"got response: {response.status_code}")
-        with contextlib.suppress(Exception):
-            logger.info(response.json())
+        return external_models.GenericOIDCConnectedAccount.model_validate(response.json()).to_connected_account()
+        # logger.info(f"got response: {response.status_code}")
+        # with contextlib.suppress(Exception):
+        #     logger.info(response.json())
 
-        raise errors.ProgrammingError(message="not implemented")
+        # raise errors.ProgrammingError(message="not implemented")
 
     def __get_configuration(self) -> dict[str, str]:
         config = self.__get_configurations().get(self.oidc_issuer_url, None)
