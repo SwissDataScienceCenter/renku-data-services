@@ -632,12 +632,7 @@ def get_remote_secret(
         "RENKU_CLIENT_SECRET": config.sessions.git_proxy.renku_client_secret,
     }
     secret_name = f"{server_name}-remote-secret"
-    k8s_namespace = config.k8s_client.namespace()
-    secret = V1Secret(
-        metadata=V1ObjectMeta(name=secret_name, namespace=k8s_namespace),
-        string_data=secret_data,
-        type="Opaque",
-    )
+    secret = V1Secret(metadata=V1ObjectMeta(name=secret_name), string_data=secret_data)
     return ExtraSecret(secret)
 
 
