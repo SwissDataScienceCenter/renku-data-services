@@ -20,6 +20,7 @@ def validate_oauth2_client_patch(patch: apispec.ProviderPatch) -> models.OAuth2C
         url=patch.url,
         use_pkce=patch.use_pkce,
         image_registry_url=patch.image_registry_url,
+        oidc_issuer_url=patch.oidc_issuer_url,
     )
 
 
@@ -27,6 +28,11 @@ def validate_unsaved_oauth2_client(clnt: apispec.ProviderPost) -> models.Unsaved
     """Validate the the creation of a new OAuth2 Client."""
     if clnt.image_registry_url is not None:
         validate_image_registry_url(clnt.image_registry_url)
+    if clnt.oidc_issuer_url and models.ProviderKind(clnt.kind.value) != models.ProviderKind.generic_oidc:
+        raise errors.ValidationError(
+            message=f"The field 'oidc_issuer_url' can only be set when kind is set to {models.ProviderKind.generic_oidc.value}.",  # noqa E501
+            quiet=True,
+        )
     return models.UnsavedOAuth2Client(
         id=clnt.id,
         kind=models.ProviderKind(clnt.kind.value),
@@ -38,6 +44,7 @@ def validate_unsaved_oauth2_client(clnt: apispec.ProviderPost) -> models.Unsaved
         url=clnt.url,
         use_pkce=clnt.use_pkce or False,
         image_registry_url=clnt.image_registry_url,
+        oidc_issuer_url=clnt.oidc_issuer_url,
     )
 
 
