@@ -47,4 +47,4 @@ USER $USER_UID:$USER_GID
 WORKDIR /app
 COPY --from=builder /app/env ./env
 ENV DB_POOL_SIZE=10
-ENTRYPOINT ["tini", "-g", "--", "env/bin/python", "-m", "renku_data_services.data_api.main"]
+ENTRYPOINT ["tini", "-g", "--", "env/bin/python", "-m", "renku_data_services.data_api.main", "--single-process"]
