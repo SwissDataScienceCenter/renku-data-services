@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import select
 
 from renku_data_services.base_models import APIUser
-from renku_data_services.connected_services import apispec
+from renku_data_services.connected_services import models
 from renku_data_services.connected_services import orm as schemas
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.migrations.core import run_migrations_for_app
@@ -39,9 +39,10 @@ async def test_token_encryption(
 async def test_client_secret_encryption(app_manager_instance: DependencyManager, admin_user: APIUser) -> None:
     run_migrations_for_app("common")
     connected_services_repo = app_manager_instance.connected_services_repo
-    new_client = apispec.ProviderPost(
+    new_client = models.UnsavedOAuth2Client(
         id="provider",
-        kind=apispec.ProviderKind.gitlab,
+        app_slug="",
+        kind=models.ProviderKind.gitlab,
         client_id="CLIENT_ID",
         client_secret="CLIENT_SECRET",  # nosec
         display_name="My Provider",
