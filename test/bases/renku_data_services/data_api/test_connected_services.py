@@ -214,9 +214,12 @@ async def test_patch_oauth2_provider(sanic_client: SanicASGITestClient, admin_he
 
     payload = {
         "app_slug": "my-new-example",
+        "kind": "generic_oidc",
         "display_name": "New display name",
         "scope": "read write",
         "url": "https://my-new-example.org",
+        "image_registry_url": "https://a-registry/",
+        "oidc_issuer_url": "https://my-issuer",
     }
 
     _, res = await sanic_client.patch(f"/api/data/oauth2/providers/{provider_id}", headers=admin_headers, json=payload)
@@ -224,9 +227,12 @@ async def test_patch_oauth2_provider(sanic_client: SanicASGITestClient, admin_he
     assert res.status_code == 200, res.text
     assert res.json is not None
     assert res.json.get("app_slug") == "my-new-example"
+    assert res.json.get("kind") == "generic_oidc"
     assert res.json.get("display_name") == "New display name"
     assert res.json.get("scope") == "read write"
     assert res.json.get("url") == "https://my-new-example.org"
+    assert res.json.get("image_registry_url") == "https://a-registry/"
+    assert res.json.get("oidc_issuer_url") == "https://my-issuer"
 
 
 @pytest.mark.asyncio
