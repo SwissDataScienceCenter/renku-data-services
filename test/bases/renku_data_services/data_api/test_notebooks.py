@@ -14,9 +14,10 @@ import pytest_asyncio
 from kr8s import NotFoundError
 from sanic_testing.testing import SanicASGITestClient
 
+from renku_data_services.k8s.clients import K8sClusterClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
-from renku_data_services.k8s.models import Cluster
-from renku_data_services.k8s_watcher import K8sWatcher, k8s_object_handler
+from renku_data_services.k8s.models import ClusterConnection
+from renku_data_services.k8s.watcher import K8sWatcher, k8s_object_handler
 from renku_data_services.notebooks.api.classes.k8s_client import JupyterServerV1Alpha1Kr8s
 from renku_data_services.notebooks.constants import JUPYTER_SESSION_GVK
 
@@ -173,6 +174,22 @@ def fake_gitlab(mocker, fake_gitlab_projects, fake_gitlab_project_info):
     return gitlab
 
 
+async def wait_for(sanic_client: SanicASGITestClient, user_headers, server_name: str, max_timeout: int = 20):
+    res = None
+    waited = 0
+    for t in list(range(0, max_timeout)):
+        waited = t + 1
+        _, res = await sanic_client.get("/api/data/notebooks/servers", headers=user_headers)
+        if res.status_code == 200 and res.json["servers"].get(server_name) is not None:
+            return
+        await asyncio.sleep(1)  # wait a bit for k8s events to be processed in the background
+
+    raise Exception(
+        f"Timeout reached while waiting for {server_name} to be ready."
+        f" res {res.json if res is not None else None}, waited {waited} seconds"
+    )
+
+
 @pytest.mark.asyncio
 async def test_version(sanic_client: SanicASGITestClient, user_headers):
     _, res = await sanic_client.get("/api/data/notebooks/version", headers=user_headers)
@@ -245,7 +262,7 @@ class TestNotebooks(ClusterRequired):
     @pytest.fixture(scope="class", autouse=True)
     def amalthea(self, cluster, app_manager) -> Generator[None, None]:
         if cluster is not None:
-            setup_amalthea("amalthea-js", "amalthea", "0.12.2", cluster)
+            setup_amalthea("amalthea-js", "amalthea", "0.21.0", cluster)
         app_manager.config.nb_config._kr8s_api.push(asyncio.run(kr8s.asyncio.api()))
 
         yield
@@ -253,13 +270,15 @@ class TestNotebooks(ClusterRequired):
 
     @pytest_asyncio.fixture(scope="class", autouse=True)
     async def k8s_watcher(self, amalthea, app_manager) -> AsyncGenerator[None, None]:
-        clusters = [
-            Cluster(
-                id=DEFAULT_K8S_CLUSTER,
-                namespace=app_manager.config.nb_config.k8s.renku_namespace,
-                api=app_manager.config.nb_config._kr8s_api.current,
+        clusters = {
+            DEFAULT_K8S_CLUSTER: K8sClusterClient(
+                ClusterConnection(
+                    id=DEFAULT_K8S_CLUSTER,
+                    namespace=app_manager.config.nb_config.k8s.renku_namespace,
+                    api=app_manager.config.nb_config._kr8s_api.current,
+                )
             )
-        ]
+        }
 
         # sleep to give amalthea a chance to create the CRDs, otherwise the watcher can error out
         await asyncio.sleep(1)
@@ -267,7 +286,7 @@ class TestNotebooks(ClusterRequired):
             handler=k8s_object_handler(
                 app_manager.config.nb_config.k8s_db_cache, app_manager.metrics, app_manager.rp_repo
             ),
-            clusters={c.id: c for c in clusters},
+            clusters=clusters,
             kinds=[JUPYTER_SESSION_GVK],
             db_cache=app_manager.config.nb_config.k8s_db_cache,
         )
@@ -306,8 +325,8 @@ class TestNotebooks(ClusterRequired):
         server_name = "unknown_server"
         if server_exists:
             server_name = jupyter_server.name
+            await wait_for(sanic_client, authenticated_user_headers, server_name)
 
-        await asyncio.sleep(2)  # wait a bit for k8s events to be processed in the background
         _, res = await sanic_client.get(f"/api/data/notebooks/logs/{server_name}", headers=authenticated_user_headers)
 
         assert res.status_code == expected_status_code, res.text
@@ -351,8 +370,8 @@ class TestNotebooks(ClusterRequired):
         server_name = "unknown_server"
         if server_exists:
             server_name = jupyter_server.name
+            await wait_for(sanic_client, authenticated_user_headers, server_name)
 
-        await asyncio.sleep(2)  # wait a bit for k8s events to be processed in the background
         _, res = await sanic_client.patch(
             f"/api/data/notebooks/servers/{server_name}", json=patch, headers=authenticated_user_headers
         )

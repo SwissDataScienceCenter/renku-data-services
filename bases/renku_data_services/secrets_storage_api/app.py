@@ -19,7 +19,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         authenticator=dm.authenticator,
         secret_service_private_key=dm.config.secrets.private_key,
         previous_secret_service_private_key=dm.config.secrets.previous_private_key,
-        core_client=dm.core_client,
+        client=dm.secret_client,
     )
     misc = MiscBP(name="misc", url_prefix=url_prefix, apispec=dm.config.spec, version=dm.config.version)
     app.blueprint([secrets_storage.blueprint(), misc.blueprint()])

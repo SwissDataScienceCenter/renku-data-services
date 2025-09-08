@@ -16,10 +16,10 @@ from renku_data_services.k8s.clients import (
     K8sClusterClientsPool,
     K8sCoreClient,
     K8sSchedulingClient,
+    K8sSecretClient,
 )
 from renku_data_services.k8s.config import KubeConfigEnv, get_clusters
-from renku_data_services.k8s.quota import QuotaRepository
-from renku_data_services.k8s_watcher import K8sDbCache
+from renku_data_services.k8s.db import K8sDbCache, QuotaRepository
 from renku_data_services.notebooks.api.classes.data_service import (
     CRCValidator,
     DummyCRCValidator,
@@ -106,7 +106,7 @@ class Kr8sApiStack:
 
 @dataclass
 class NotebooksConfig:
-    """The notebooks configuration."""
+    """The notebooks' configuration."""
 
     server_options: ServerOptionsConfig
     sessions: _SessionConfig
@@ -122,6 +122,7 @@ class NotebooksConfig:
     k8s_client: NotebookK8sClient[JupyterServerV1Alpha1]
     k8s_v2_client: NotebookK8sClient[AmaltheaSessionV1Alpha1]
     cluster_rp: ClusterRepository
+    enable_internal_gitlab: bool
     current_resource_schema_version: int = 1
     anonymous_sessions_enabled: bool = False
     ssh_enabled: bool = False
@@ -137,8 +138,9 @@ class NotebooksConfig:
     v1_sessions_enabled: bool = False
 
     @classmethod
-    def from_env(cls, db_config: DBConfig) -> Self:
+    def from_env(cls, db_config: DBConfig, enable_internal_gitlab: bool) -> Self:
         """Create a configuration object from environment variables."""
+        enable_internal_gitlab = os.getenv("ENABLE_INTERNAL_GITLAB", "false").lower() == "true"
         dummy_stores = _parse_str_as_bool(os.environ.get("DUMMY_STORES", False))
         sessions_config: _SessionConfig
         git_config: _GitConfig
@@ -164,9 +166,12 @@ class NotebooksConfig:
             rp_repo = ResourcePoolRepository(db_config.async_session_maker, quota_repo)
             crc_validator = CRCValidator(rp_repo)
             sessions_config = _SessionConfig.from_env()
-            git_config = _GitConfig.from_env()
+            git_config = _GitConfig.from_env(enable_internal_gitlab=enable_internal_gitlab)
             git_provider_helper = GitProviderHelper(
-                data_service_url, f"http://{sessions_config.ingress.host}", git_config.url
+                service_url=data_service_url,
+                renku_url=f"http://{sessions_config.ingress.host}",
+                internal_gitlab_url=git_config.url,
+                enable_internal_gitlab=enable_internal_gitlab,
             )
             # NOTE: we need to get an async client as a sync client can't be used in an async way
             # But all the config code is not async, so we need to drop into the running loop, if there is one
@@ -175,18 +180,22 @@ class NotebooksConfig:
         k8s_config = _K8sConfig.from_env()
         k8s_db_cache = K8sDbCache(db_config.async_session_maker)
         cluster_rp = ClusterRepository(db_config.async_session_maker)
+
         client = K8sClusterClientsPool(
-            get_clusters=get_clusters(
+            get_clusters(
                 kube_conf_root_dir=kube_config_root,
-                namespace=k8s_config.renku_namespace,
-                api=kr8s_api,
-                cluster_rp=cluster_rp,
-            ),
-            cache=k8s_db_cache,
-            kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
+                default_cluster_namespace=k8s_config.renku_namespace,
+                default_cluster_api=kr8s_api,
+                cluster_repo=cluster_rp,
+                cache=k8s_db_cache,
+                kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
+            )
         )
+        secrets_client = K8sSecretClient(client)
+
         k8s_client = NotebookK8sClient(
             client=client,
+            secrets_client=secrets_client,
             rp_repo=rp_repo,
             session_type=JupyterServerV1Alpha1,
             gvk=JUPYTER_SESSION_GVK,
@@ -194,6 +203,7 @@ class NotebooksConfig:
         )
         k8s_v2_client = NotebookK8sClient(
             client=client,
+            secrets_client=secrets_client,
             rp_repo=rp_repo,
             # NOTE: v2 sessions have no userId label, the safe-username label is the keycloak user ID
             session_type=AmaltheaSessionV1Alpha1,
@@ -223,4 +233,5 @@ class NotebooksConfig:
             cluster_rp=cluster_rp,
             _kr8s_api=kr8s_api,
             v1_sessions_enabled=v1_sessions_enabled,
+            enable_internal_gitlab=enable_internal_gitlab,
         )

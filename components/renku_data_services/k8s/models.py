@@ -3,21 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Self, cast
+from typing import Any, Self, cast
 
+import kubernetes
 from box import Box
 from kr8s._api import Api
 from kr8s.asyncio.objects import APIObject
-from ulid import ULID
+from kr8s.objects import Secret
+from kubernetes_asyncio.client import V1Secret
 
-from renku_data_services.base_models import APIUser
-from renku_data_services.errors import MissingResourceError, errors
+from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import DUMMY_TASK_RUN_USER_ID, ClusterId
-from renku_data_services.notebooks.cr_amalthea_session import TlsSecret
 
-if TYPE_CHECKING:
-    from renku_data_services.crc.db import ClusterRepository
-    from renku_data_services.notebooks.config.dynamic import _SessionIngress
+sanitizer = kubernetes.client.ApiClient().sanitize_for_serialization
 
 
 class K8sObjectMeta:
@@ -63,7 +61,7 @@ class K8sObjectMeta:
 
     def __repr__(self) -> str:
         return (
-            f"K8sObject(name={self.name}, namespace={self.namespace}, cluster={self.cluster}, "
+            f"{self.__class__.__name__}(name={self.name}, namespace={self.namespace}, cluster={self.cluster}, "
             f"gvk={self.gvk}, user_id={self.user_id})"
         )
 
@@ -85,7 +83,10 @@ class K8sObject(K8sObjectMeta):
         self.manifest = manifest
 
     def __repr__(self) -> str:
-        return super().__repr__()
+        return (
+            f"{self.__class__.__name__}(name={self.name}, namespace={self.namespace}, cluster={self.cluster}, "
+            f"gvk={self.gvk}, manifest={self.manifest}, user_id={self.user_id})"
+        )
 
     def to_api_object(self, api: Api) -> APIObject:
         """Convert a regular k8s object to an api object for kr8s."""
@@ -105,6 +106,62 @@ class K8sObject(K8sObjectMeta):
         return _APIObj(resource=self.manifest, namespace=self.namespace, api=api)
 
 
+class K8sSecret(K8sObject):
+    """Represents a secret in k8s."""
+
+    def __init__(
+        self,
+        name: str,
+        namespace: str,
+        cluster: ClusterId,
+        gvk: GVK,
+        manifest: Box,
+        user_id: str | None = None,
+        namespaced: bool = True,
+    ) -> None:
+        super().__init__(name, namespace, cluster, gvk, manifest, user_id, namespaced)
+
+    def __repr__(self) -> str:
+        # We hide the manifest to prevent leaking secrets
+        return (
+            f"{self.__class__.__name__}(name={self.name}, namespace={self.namespace}, cluster={self.cluster}, "
+            f"gvk={self.gvk}, user_id={self.user_id})"
+        )
+
+    @classmethod
+    def from_k8s_object(cls, k8s_object: K8sObject) -> K8sSecret:
+        """Convert a k8s object to a K8sSecret object."""
+        return K8sSecret(
+            name=k8s_object.name,
+            namespace=k8s_object.namespace,
+            cluster=k8s_object.cluster,
+            gvk=k8s_object.gvk,
+            manifest=k8s_object.manifest,
+        )
+
+    @classmethod
+    def from_v1_secret(cls, secret: V1Secret, cluster: ClusterConnection) -> K8sSecret:
+        """Convert a V1Secret object to a K8sSecret object."""
+        assert secret.metadata is not None
+
+        return K8sSecret(
+            name=secret.metadata.name,
+            namespace=cluster.namespace,
+            cluster=cluster.id,
+            gvk=GVK(group="core", version=Secret.version, kind="Secret"),
+            manifest=Box(sanitizer(secret)),
+        )
+
+    def to_v1_secret(self) -> V1Secret:
+        """Convert a K8sSecret to a V1Secret object."""
+        return V1Secret(
+            metadata=self.manifest.metadata,
+            data=self.manifest.get("data", {}),
+            string_data=self.manifest.get("stringData", {}),
+            type=self.manifest.get("type"),
+        )
+
+
 @dataclass
 class K8sObjectFilter:
     """Parameters used when filtering resources from the cache or k8s."""
@@ -117,9 +174,9 @@ class K8sObjectFilter:
     user_id: str | None = None
 
 
-@dataclass(eq=True, frozen=True)
-class Cluster:
-    """Representation of a k8s cluster."""
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ClusterConnection:
+    """K8s Cluster wrapper."""
 
     id: ClusterId
     namespace: str
@@ -128,52 +185,6 @@ class Cluster:
     def with_api_object(self, obj: APIObject) -> APIObjectInCluster:
         """Create an API object associated with the cluster."""
         return APIObjectInCluster(obj, self.id)
-
-    async def get_storage_class(
-        self, user: APIUser, cluster_repo: ClusterRepository, default_storage_class: str | None
-    ) -> str | None:
-        """Get the default storage class for the cluster."""
-        try:
-            cluster = await cluster_repo.select(user, ULID.from_str(self.id))
-            storage_class = cluster.session_storage_class
-        except (MissingResourceError, ValueError) as _e:
-            storage_class = default_storage_class
-
-        return storage_class
-
-    async def get_ingress_parameters(
-        self, user: APIUser, cluster_repo: ClusterRepository, main_ingress: _SessionIngress, server_name: str
-    ) -> tuple[str, str, str, str, TlsSecret | None, dict[str, str]]:
-        """Returns the ingress parameters of the cluster."""
-        tls_name = None
-
-        try:
-            cluster = await cluster_repo.select(user, ULID.from_str(self.id))
-
-            host = cluster.session_host
-            base_server_path = f"{cluster.session_path}/{server_name}"
-            base_server_url = f"{cluster.session_protocol.value}://{host}:{cluster.session_port}{base_server_path}"
-            base_server_https_url = base_server_url
-            tls_name = cluster.session_tls_secret_name
-            ingress_annotations = cluster.session_ingress_annotations
-        except (MissingResourceError, ValueError) as _e:
-            # Fallback to global, main cluster parameters
-            host = main_ingress.host
-            base_server_path = main_ingress.base_path(server_name)
-            base_server_url = main_ingress.base_url(server_name)
-            base_server_https_url = main_ingress.base_url(server_name, force_https=True)
-            ingress_annotations = main_ingress.annotations
-
-            if main_ingress.tls_secret is not None:
-                tls_name = main_ingress.tls_secret
-
-        tls_secret = None if tls_name is None else TlsSecret(adopt=False, name=tls_name)
-
-        return base_server_path, base_server_url, base_server_https_url, host, tls_secret, ingress_annotations
-
-    def __str__(self) -> str:
-        api_url = repr(self.api.auth.server)
-        return f"{self.__class__.__name__}(id={self.id}, namespace={self.namespace}, api_url={api_url})"
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -232,13 +243,14 @@ class APIObjectInCluster:
     @property
     def user_id(self) -> str | None:
         """Extract the user id from annotations."""
+        labels = cast(dict[str, str], self.obj.metadata.get("labels", {}))
         match self.obj.singular:
             case "jupyterserver":
-                return cast(str, self.obj.metadata.labels["renku.io/userId"])
+                return labels.get("renku.io/userId", None)
             case "amaltheasession":
-                return cast(str, self.obj.metadata.labels["renku.io/safe-username"])
+                return labels.get("renku.io/safe-username", None)
             case "buildrun":
-                return cast(str, self.obj.metadata.labels["renku.io/safe-username"])
+                return labels.get("renku.io/safe-username", None)
 
             case "taskrun":
                 return DUMMY_TASK_RUN_USER_ID

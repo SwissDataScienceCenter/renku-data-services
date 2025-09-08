@@ -218,8 +218,8 @@ class BuildParametersORM(BaseORM):
             repository=self.repository,
             builder_variant=self.builder_variant,
             frontend_variant=self.frontend_variant,
-            repository_revision=self.repository_revision,
-            context_dir=self.context_dir,
+            repository_revision=self.repository_revision or None,
+            context_dir=self.context_dir or None,
         )
 
 

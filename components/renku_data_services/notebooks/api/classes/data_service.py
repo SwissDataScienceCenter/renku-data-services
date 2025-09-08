@@ -152,6 +152,7 @@ class GitProviderHelper:
     service_url: str
     renku_url: str
     internal_gitlab_url: str
+    enable_internal_gitlab: bool
 
     def __post_init__(self) -> None:
         self.service_url = self.service_url.rstrip("/")
@@ -180,16 +181,17 @@ class GitProviderHelper:
 
         providers_list = list(providers.values())
         # Insert the internal GitLab as the first provider
-        internal_gitlab_access_token_url = urljoin(self.renku_url, "/api/auth/gitlab/exchange")
-        providers_list.insert(
-            0,
-            GitProvider(
-                id=INTERNAL_GITLAB_PROVIDER,
-                url=self.internal_gitlab_url,
-                connection_id="",
-                access_token_url=internal_gitlab_access_token_url,
-            ),
-        )
+        if self.enable_internal_gitlab and self.internal_gitlab_url:
+            internal_gitlab_access_token_url = urljoin(self.renku_url, "/api/auth/gitlab/exchange")
+            providers_list.insert(
+                0,
+                GitProvider(
+                    id=INTERNAL_GITLAB_PROVIDER,
+                    url=self.internal_gitlab_url,
+                    connection_id="",
+                    access_token_url=internal_gitlab_access_token_url,
+                ),
+            )
         return providers_list
 
     async def get_oauth2_connections(self, user: APIUser | None = None) -> list[OAuth2Connection]:

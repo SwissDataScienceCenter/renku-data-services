@@ -1,11 +1,25 @@
 """Base models for secrets."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 
+from cryptography.hazmat.primitives.asymmetric import rsa
 from kubernetes import client as k8s_client
 from ulid import ULID
+
+from renku_data_services.app_config import logging
+from renku_data_services.utils.cryptography import (
+    decrypt_rsa,
+    decrypt_string,
+    encrypt_rsa,
+    encrypt_string,
+    generate_random_encryption_key,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class SecretKind(StrEnum):
@@ -33,7 +47,7 @@ class Secret:
     data_connector_ids: list[ULID]
     """List of data connector IDs where this user secret is used."""
 
-    def update_encrypted_value(self, encrypted_value: bytes, encrypted_key: bytes) -> "Secret":
+    def update_encrypted_value(self, encrypted_value: bytes, encrypted_key: bytes) -> Secret:
         """Returns a new secret instance with updated encrypted_value and encrypted_key."""
         return Secret(
             id=self.id,
@@ -47,6 +61,29 @@ class Secret:
             data_connector_ids=self.data_connector_ids,
         )
 
+    async def rotate_single_encryption_key(
+        self, user_id: str, new_key: rsa.RSAPrivateKey, old_key: rsa.RSAPrivateKey
+    ) -> Secret | None:
+        """Rotate a single secret in place."""
+        # try using new key first as a sanity check, in case it was already rotated
+        try:
+            _ = decrypt_rsa(new_key, self.encrypted_key)
+        except ValueError:
+            pass
+        else:
+            return None  # could decrypt with new key, nothing to do
+
+        try:
+            decryption_key = decrypt_rsa(old_key, self.encrypted_key)
+            decrypted_value = decrypt_string(decryption_key, user_id, self.encrypted_value).encode()
+            new_encryption_key = generate_random_encryption_key()
+            encrypted_value = encrypt_string(new_encryption_key, user_id, decrypted_value.decode())
+            encrypted_key = encrypt_rsa(new_key.public_key(), new_encryption_key)
+            return self.update_encrypted_value(encrypted_value=encrypted_value, encrypted_key=encrypted_key)
+        except Exception as e:
+            logger.error(f"Couldn't decrypt secret {self.name}({self.id}): {e}")
+            return None
+
 
 @dataclass
 class OwnerReference:
@@ -58,7 +95,7 @@ class OwnerReference:
     uid: str
 
     @classmethod
-    def from_dict(cls, data: dict[str, str]) -> "OwnerReference":
+    def from_dict(cls, data: dict[str, str]) -> OwnerReference:
         """Create an owner reference from a dict."""
         return cls(apiVersion=data["apiVersion"], kind=data["kind"], name=data["name"], uid=data["uid"])
 

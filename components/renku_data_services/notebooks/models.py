@@ -2,11 +2,13 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import cast
 
-from kubernetes.client import V1Secret
+from kubernetes.client import V1ObjectMeta, V1Secret
 from pydantic import AliasGenerator, BaseModel, Field, Json
 
 from renku_data_services.data_connectors.models import DataConnectorSecret
+from renku_data_services.errors import errors
 from renku_data_services.errors.errors import ProgrammingError
 from renku_data_services.notebooks.crs import (
     AmaltheaSessionV1Alpha1,
@@ -96,6 +98,19 @@ class ExtraSecret:
     volume_mount: ExtraVolumeMount | None = None
     adopt: bool = True
 
+    def __post_init__(self) -> None:
+        if not self.secret.metadata:
+            raise errors.ValidationError(message="The secret in Extra secret is missing its metadata.")
+        if isinstance(self.secret.metadata, V1ObjectMeta):
+            secret_name = cast(str | None, self.secret.metadata.name)
+        else:
+            secret_name = cast(str | None, self.secret.metadata.get("name"))
+        if not isinstance(secret_name, str):
+            raise errors.ValidationError(message="The secret name in Extra secret is not a string.")
+        if len(secret_name) == 0:
+            raise errors.ValidationError(message="The secret name in Extra secret is empty.")
+        self.__secret_name = secret_name
+
     def key_ref(self, key: str | None = None) -> SecretRef:
         """Get an amalthea secret key reference."""
         meta = self.secret.metadata
@@ -119,6 +134,11 @@ class ExtraSecret:
         if not secret_name:
             raise ProgrammingError(message="Cannot get reference to a secret that does not have a name.")
         return SecretRef(name=secret_name, adopt=self.adopt)
+
+    @property
+    def name(self) -> str:
+        """Return the name of the secret."""
+        return self.__secret_name
 
 
 @dataclass(frozen=True, kw_only=True)

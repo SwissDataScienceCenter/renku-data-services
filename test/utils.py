@@ -18,13 +18,13 @@ from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.crc import models as rp_models
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository, UserRepository
-from renku_data_services.data_api.config import Config as AppConfig
+from renku_data_services.data_api.config import Config
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_connectors.db import DataConnectorRepository, DataConnectorSecretRepository
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.git.gitlab import DummyGitlabAPI
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient
-from renku_data_services.k8s.quota import QuotaRepository
+from renku_data_services.k8s.db import QuotaRepository
 from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
@@ -167,7 +167,7 @@ class TestDependencyManager(DependencyManager):
     ) -> "DependencyManager":
         """Create a config from environment variables."""
         db = DBConfigStack.from_env()
-        config = AppConfig.from_env(db)
+        config = Config.from_env(db)
         user_store: base_models.UserStore
         authenticator: base_models.Authenticator
         gitlab_authenticator: base_models.Authenticator
@@ -258,12 +258,12 @@ class TestDependencyManager(DependencyManager):
             session_maker=config.db.async_session_maker,
             encryption_key=config.secrets.encryption_key,
             async_oauth2_client_class=cls.async_oauth2_client_class,
-            internal_gitlab_url=config.gitlab_url,
         )
         git_repositories_repo = GitRepositoriesRepository(
             session_maker=config.db.async_session_maker,
             connected_services_repo=connected_services_repo,
             internal_gitlab_url=config.gitlab_url,
+            enable_internal_gitlab=config.enable_internal_gitlab,
         )
         platform_repo = PlatformRepository(
             session_maker=config.db.async_session_maker,

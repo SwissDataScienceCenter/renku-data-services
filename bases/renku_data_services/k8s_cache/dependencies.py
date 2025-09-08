@@ -4,9 +4,8 @@ from dataclasses import dataclass, field
 
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
 from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient
-from renku_data_services.k8s.quota import QuotaRepository
+from renku_data_services.k8s.db import K8sDbCache, QuotaRepository
 from renku_data_services.k8s_cache.config import Config
-from renku_data_services.k8s_watcher.db import K8sDbCache
 from renku_data_services.metrics.core import StagingMetricsService
 from renku_data_services.metrics.db import MetricsRepository
 

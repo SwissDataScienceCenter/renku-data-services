@@ -11,6 +11,7 @@ from renku_data_services.base_api.auth import authenticate, authenticate_2
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser, Authenticator
 from renku_data_services.base_models.metrics import MetricsService
+from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
@@ -27,7 +28,6 @@ from renku_data_services.notebooks.core_sessions import (
 )
 from renku_data_services.notebooks.errors.intermittent import AnonymousUserPatchError
 from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
-from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.db import UserRepo
@@ -39,7 +39,6 @@ class NotebooksBP(CustomBlueprint):
 
     authenticator: Authenticator
     nb_config: NotebooksConfig
-    git_repo: GitRepositoriesRepository
     internal_gitlab_authenticator: base_models.Authenticator
     rp_repo: ResourcePoolRepository
     user_repo: UserRepo
@@ -199,6 +198,7 @@ class NotebooksNewBP(CustomBlueprint):
     data_connector_secret_repo: DataConnectorSecretRepository
     metrics: MetricsService
     cluster_repo: ClusterRepository
+    connected_svcs_repo: ConnectedServicesRepository
 
     def start(self) -> BlueprintFactoryResponse:
         """Start a session with the new operator."""
@@ -225,6 +225,7 @@ class NotebooksNewBP(CustomBlueprint):
                 session_repo=self.session_repo,
                 user_repo=self.user_repo,
                 metrics=self.metrics,
+                connected_svcs_repo=self.connected_svcs_repo,
             )
             status = 201 if created else 200
             return json(session.as_apispec().model_dump(exclude_none=True, mode="json"), status)
@@ -290,6 +291,7 @@ class NotebooksNewBP(CustomBlueprint):
                 rp_repo=self.rp_repo,
                 session_repo=self.session_repo,
                 metrics=self.metrics,
+                connected_svcs_repo=self.connected_svcs_repo,
             )
             return json(new_session.as_apispec().model_dump(exclude_none=True, mode="json"))
 

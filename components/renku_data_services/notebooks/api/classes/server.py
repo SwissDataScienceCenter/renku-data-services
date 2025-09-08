@@ -11,6 +11,7 @@ from gitlab.v4.objects.projects import Project
 from renku_data_services.app_config import logging
 from renku_data_services.base_models import AnonymousAPIUser, AuthenticatedAPIUser
 from renku_data_services.base_models.core import APIUser
+from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
 from renku_data_services.notebooks.api.amalthea_patches import cloudstorage as cloudstorage_patches
 from renku_data_services.notebooks.api.amalthea_patches import general as general_patches
 from renku_data_services.notebooks.api.amalthea_patches import git_proxy as git_proxy_patches
@@ -26,6 +27,7 @@ from renku_data_services.notebooks.api.schemas.secrets import K8sUserSecrets
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
 from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.notebooks.constants import JUPYTER_SESSION_GVK
+from renku_data_services.notebooks.cr_amalthea_session import TlsSecret
 from renku_data_services.notebooks.crs import JupyterServerV1Alpha1
 from renku_data_services.notebooks.errors.programming import DuplicateEnvironmentVariableError
 from renku_data_services.notebooks.errors.user import MissingResourceError
@@ -51,6 +53,7 @@ class UserServer:
         config: NotebooksConfig,
         internal_gitlab_user: APIUser,
         host: str,
+        namespace: str,
         using_default_image: bool = False,
         is_image_private: bool = False,
         repositories: list[Repository] | None = None,
@@ -69,6 +72,7 @@ class UserServer:
         self.cloudstorage = cloudstorage
         self.is_image_private = is_image_private
         self.host = host
+        self.__namespace = namespace
         self.config = config
         self.internal_gitlab_user = internal_gitlab_user
 
@@ -99,7 +103,7 @@ class UserServer:
 
     def k8s_namespace(self) -> str:
         """Get the preferred namespace for a server."""
-        return self._k8s_client.namespace()
+        return self.__namespace
 
     @property
     def user(self) -> AnonymousAPIUser | AuthenticatedAPIUser:
@@ -231,16 +235,28 @@ class UserServer:
             }
 
         cluster = await self.config.k8s_client.cluster_by_class_id(self.server_options.resource_class_id, self._user)
-        (
-            base_server_path,
-            base_server_url,
-            base_server_https_url,
-            host,
-            tls_secret,
-            ingress_annotations,
-        ) = await cluster.get_ingress_parameters(
-            self._user, self.config.cluster_rp, self.config.sessions.ingress, self.server_name
-        )
+
+        if cluster.id != DEFAULT_K8S_CLUSTER:
+            cluster_settings = await self.config.cluster_rp.select(cluster.id)
+            (
+                base_server_path,
+                _,
+                _,
+                host,
+                tls_secret,
+                ingress_annotations,
+            ) = cluster_settings.get_ingress_parameters(self.server_name)
+        else:
+            # Fallback to global, main cluster parameters
+            host = self.config.sessions.ingress.host
+            base_server_path = self.config.sessions.ingress.base_path(self.server_name)
+            ingress_annotations = self.config.sessions.ingress.annotations
+
+            if self.config.sessions.ingress.tls_secret is not None:
+                tls_name = self.config.sessions.ingress.tls_secret
+            else:
+                tls_name = None
+            tls_secret = None if tls_name is None else TlsSecret(adopt=False, name=tls_name)
 
         # Combine everything into the manifest
         manifest = {
@@ -315,7 +331,7 @@ class UserServer:
                 # Cloud Storage needs to patch the git clone sidecar spec and so should come after
                 # the sidecars
                 # WARN: this patch depends on the index of the sidecar and so needs to be updated
-                # if sidercars are added or removed
+                # if sidecars are added or removed
                 await cloudstorage_patches.main(self),
                 # NOTE: User secrets adds an init container, volume and mounts, so it may affect
                 # indices in other patches.
@@ -394,6 +410,7 @@ class Renku1UserServer(UserServer):
         work_dir: PurePosixPath,
         config: NotebooksConfig,
         host: str,
+        namespace: str,
         gitlab_project: Project | None,
         internal_gitlab_user: APIUser,
         using_default_image: bool = False,
@@ -426,6 +443,7 @@ class Renku1UserServer(UserServer):
             is_image_private=is_image_private,
             repositories=repositories,
             host=host,
+            namespace=namespace,
             config=config,
             internal_gitlab_user=internal_gitlab_user,
         )

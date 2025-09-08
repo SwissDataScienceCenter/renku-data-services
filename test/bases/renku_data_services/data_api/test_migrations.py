@@ -9,6 +9,7 @@ import sqlalchemy as sa
 from alembic.script import ScriptDirectory
 from sanic_testing.testing import SanicASGITestClient
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import bindparam
 from ulid import ULID
@@ -649,3 +650,112 @@ async def test_migration_to_c8061499b966(app_manager_instance: DependencyManager
         k8s_objs = (await session.execute(sa.text("SELECT name, cluster FROM common.k8s_objects"))).all()
     # Check that we can insert another object with the same name, gvk, namespace, but a different cluster
     assert len(k8s_objs) == 3
+
+
+@pytest.mark.asyncio
+async def test_migration_to_66e2f1271cf6(app_manager_instance: DependencyManager, admin_user: UserInfo) -> None:
+    """Test the migration to deduplicate slugs and add constraints that prevent further duplicates."""
+
+    async def insert_project(session: AsyncSession, name: str) -> ULID:
+        proj_id = ULID()
+        now = datetime.now()
+        await session.execute(
+            sa.text(
+                "INSERT into "
+                "projects.projects(id, name, visibility, created_by_id, creation_date) "
+                f"VALUES ('{str(proj_id)}', '{name}', 'public', '{admin_user.id}', '{now.isoformat()}')"
+            )
+        )
+        return proj_id
+
+    async def insert_slug(
+        session: AsyncSession,
+        slug: str,
+        namespace_id: ULID,
+        project_id: ULID | None = None,
+        data_connector_id: ULID | None = None,
+    ) -> None:
+        project_id_query = "NULL" if project_id is None else f"'{str(project_id)}'"
+        dc_id_query = "NULL" if data_connector_id is None else f"'{str(data_connector_id)}'"
+        await session.execute(
+            sa.text(
+                "INSERT into "
+                "common.entity_slugs(slug, namespace_id, project_id, data_connector_id) "
+                f"VALUES ('{slug}', '{str(namespace_id)}', {project_id_query}, {dc_id_query} )"
+            )
+        )
+
+    async def insert_user_namespace(session: AsyncSession, user: UserInfo) -> None:
+        await session.execute(
+            sa.text(f"INSERT into users.users(keycloak_id) VALUES ('{user.namespace.underlying_resource_id}')")
+        )
+        await session.execute(
+            sa.text(
+                "INSERT into "
+                "common.namespaces(id, slug, user_id) "
+                f"VALUES ('{user.namespace.id}', '{user.namespace.path.serialize()}', "
+                f"'{user.namespace.underlying_resource_id}' )"
+            )
+        )
+
+    async def insert_data_connector(session: AsyncSession, name: str) -> ULID:
+        id = ULID()
+        now = datetime.now()
+        await session.execute(
+            sa.text(
+                "INSERT into "
+                "storage.data_connectors(id, name, visibility, storage_type, configuration, "
+                "source_path, target_path, created_by_id, readonly, creation_date) "
+                f"VALUES ('{str(id)}', '{name}', 'public', 's3', '{{}}', '/', '/', "
+                f"'{admin_user.namespace.underlying_resource_id}', FALSE, '{now.isoformat()}')"
+            )
+        )
+        return id
+
+    run_migrations_for_app("common", "35ea9d8f54e8")
+
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        await insert_user_namespace(session, admin_user)
+        # Two projects have duplicate slugs
+        p1_id = await insert_project(session, "p1")
+        p2_id = await insert_project(session, "p2")
+        await insert_slug(session, "p1", admin_user.namespace.id, p1_id)
+        await insert_slug(session, "p1", admin_user.namespace.id, p2_id)
+        # Two data connectors in the user namespace with duplicate slugs
+        dc1_id = await insert_data_connector(session, "dc1")
+        dc2_id = await insert_data_connector(session, "dc2")
+        await insert_slug(session, "d1", admin_user.namespace.id, None, dc1_id)
+        await insert_slug(session, "d1", admin_user.namespace.id, None, dc2_id)
+        # Two data connectors in a project namespace with duplicate slugs
+        p_for_dc_id = await insert_project(session, "p_for_dc")
+        await insert_slug(session, "p_for_dc", admin_user.namespace.id, p_for_dc_id, None)
+        p_dc1_id = await insert_data_connector(session, "p_dc1")
+        p_dc2_id = await insert_data_connector(session, "p_dc2")
+        await insert_slug(session, "dc_in_p", admin_user.namespace.id, p_for_dc_id, p_dc1_id)
+        await insert_slug(session, "dc_in_p", admin_user.namespace.id, p_for_dc_id, p_dc2_id)
+
+    # There are duplicated slugs
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        res = await session.execute(sa.text("select distinct slug FROM common.entity_slugs"))
+        all_rows = res.all()
+        assert len(all_rows) == 4  # 3 duplicates + 1 slug for the project which holds data connectors
+
+    run_migrations_for_app("common", "66e2f1271cf6")
+
+    # One project's slug should be renamed and the two slugs are now distinct
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        res = await session.execute(sa.text("select distinct slug FROM common.entity_slugs"))
+        all_rows = res.all()
+        assert len(all_rows) == 7  # 3 x 2 dedepulicated slugs + 1 for the project which holds data connectors
+
+    # Adding more duplicated slugs should error out
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        p3_id = await insert_project(session, "p3")
+        with pytest.raises(IntegrityError):
+            await insert_slug(session, "p1", admin_user.namespace.id, p3_id)
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        with pytest.raises(IntegrityError):
+            await insert_slug(session, "d1", admin_user.namespace.id, None, dc2_id)
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        with pytest.raises(IntegrityError):
+            await insert_slug(session, "dc_in_p", admin_user.namespace.id, p_for_dc_id, p_dc2_id)

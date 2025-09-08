@@ -10,7 +10,7 @@ from renku_data_services.connected_services.apispec import ConnectionStatus, Pro
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class OAuth2Client:
+class UnsavedOAuth2Client:
     """OAuth2 Client model."""
 
     id: str
@@ -22,6 +22,13 @@ class OAuth2Client:
     scope: str
     url: str
     use_pkce: bool
+    image_registry_url: str | None = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class OAuth2Client(UnsavedOAuth2Client):
+    """OAuth2 Client model."""
+
     created_by_id: str
     creation_date: datetime
     updated_at: datetime
@@ -39,6 +46,7 @@ class OAuth2ClientPatch:
     scope: str | None
     url: str | None
     use_pkce: bool | None
+    image_registry_url: str | None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

@@ -1,9 +1,10 @@
 """K8s cache config."""
 
+from __future__ import annotations
+
+import os
 from dataclasses import dataclass
 from typing import Self
-
-from kubernetes.client.api_client import os
 
 from renku_data_services.db_config.config import DBConfig
 
@@ -31,7 +32,7 @@ class _MetricsConfig:
     enabled: bool
 
     @classmethod
-    def from_env(cls) -> "_MetricsConfig":
+    def from_env(cls) -> _MetricsConfig:
         """Create metrics config from environment variables."""
         enabled = os.environ.get("POSTHOG_ENABLED", "false").lower() == "true"
         return cls(enabled)
@@ -44,7 +45,7 @@ class _ImageBuilderConfig:
     enabled: bool
 
     @classmethod
-    def from_env(cls) -> "_ImageBuilderConfig":
+    def from_env(cls) -> _ImageBuilderConfig:
         """Load values from environment variables."""
         enabled = os.environ.get("IMAGE_BUILDERS_ENABLED", "false").lower() == "true"
         return cls(enabled=enabled)
@@ -57,7 +58,7 @@ class _V1ServicesConfig:
     enabled: bool
 
     @classmethod
-    def from_env(cls) -> "_V1ServicesConfig":
+    def from_env(cls) -> _V1ServicesConfig:
         """Load values from environment variables."""
         enabled = os.environ.get("V1_SERVICES_ENABLED", "false").lower() == "true"
         return cls(enabled=enabled)
@@ -74,7 +75,7 @@ class Config:
     v1_services: _V1ServicesConfig
 
     @classmethod
-    def from_env(cls) -> "Config":
+    def from_env(cls) -> Config:
         """Create a config from environment variables."""
         db = DBConfig.from_env()
         k8s = _K8sConfig.from_env()

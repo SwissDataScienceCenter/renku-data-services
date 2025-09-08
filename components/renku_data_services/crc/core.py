@@ -3,12 +3,12 @@
 from renku_data_services.crc import apispec, models
 
 
-def validate_cluster(body: apispec.Cluster) -> models.Cluster:
+def validate_cluster(body: apispec.Cluster) -> models.ClusterSettings:
     """Convert a REST API Cluster object to a model Cluster object."""
-    return models.Cluster(
+    return models.ClusterSettings(
         name=body.name,
         config_name=body.config_name,
-        session_protocol=body.session_protocol,
+        session_protocol=models.SessionProtocol(body.session_protocol.value),
         session_host=body.session_host,
         session_port=body.session_port,
         session_path=body.session_path,
@@ -25,7 +25,9 @@ def validate_cluster_patch(patch: apispec.ClusterPatch) -> models.ClusterPatch:
     return models.ClusterPatch(
         name=patch.name,
         config_name=patch.config_name,
-        session_protocol=patch.session_protocol,
+        session_protocol=models.SessionProtocol(patch.session_protocol.value)
+        if patch.session_protocol is not None
+        else None,
         session_host=patch.session_host,
         session_port=patch.session_port,
         session_path=patch.session_path,
