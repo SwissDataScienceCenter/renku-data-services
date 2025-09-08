@@ -1,5 +1,6 @@
 """Adapters for each kind of OAuth2 client."""
 
+import contextlib
 import logging
 from abc import ABC, abstractmethod
 from typing import Any
@@ -260,8 +261,22 @@ class GenericOidcAdapter(ProviderAdapter):
         """The URL used for API calls on the Resource Server."""
         return self.client_url
 
+    @property
+    def user_info_endpoint(self) -> str:
+        """The URL of the user info endpoint."""
+        return self.__get_configuration()["userinfo_endpoint"]
+
+    @user_info_endpoint.setter
+    def user_info_endpoint(self, value: str) -> None:
+        """Setter for user_info_endpoint."""
+        raise errors.ProgrammingError(message="Cannot set user_info_endpoint.")
+
     def api_validate_account_response(self, response: Response) -> models.ConnectedAccount:
         """Validates and returns the connected account response from the Resource Server."""
+        logger.info(f"got response: {response.status_code}")
+        with contextlib.suppress(Exception):
+            logger.info(response.json())
+
         raise errors.ProgrammingError(message="not implemented")
 
     def __get_configuration(self) -> dict[str, str]:
@@ -275,6 +290,7 @@ class GenericOidcAdapter(ProviderAdapter):
         issuer_url = self.oidc_issuer_url
         if not issuer_url:
             raise errors.ValidationError(message="Issuer URL not configured for generic OIDC client.")
+        issuer_url = issuer_url if issuer_url.endswith("/") else issuer_url + "/"
         request_url = urljoin(issuer_url, ".well-known/openid-configuration")
         res = self.__get_httpx_client().get(request_url, headers=[("Accept", "application/json")])
         if res.status_code != 200:
