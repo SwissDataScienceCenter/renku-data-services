@@ -72,6 +72,7 @@ class OAuth2ClientPatch:
     url: str | None
     use_pkce: bool | None
     image_registry_url: str | None
+    oidc_issuer_url: str | None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
