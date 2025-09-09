@@ -336,12 +336,10 @@ class NotebooksNewBP(CustomBlueprint):
             if result.connection:
                 match result.connection.status:
                     case ConnectionStatus.connected:
-                        if result.response_code == 200:
-                            status = apispec.ImageConnectionStatus.connected
-                        elif result.error is not None:
+                        if result.error is not None:
                             status = apispec.ImageConnectionStatus.invalid_credentials
                         else:
-                            status = apispec.ImageConnectionStatus.disconnected
+                            status = apispec.ImageConnectionStatus.connected
 
                     case ConnectionStatus.pending:
                         status = apispec.ImageConnectionStatus.pending
