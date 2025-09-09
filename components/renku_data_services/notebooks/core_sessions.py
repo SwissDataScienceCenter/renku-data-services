@@ -619,8 +619,8 @@ def get_remote_secret(
     if not cscs_provider:
         return None
     renku_base_url = "https://" + config.sessions.ingress.host
-    renku_base_url = renku_base_url if renku_base_url.endswith("/") else renku_base_url + "/"
-    renku_auth_token_uri = f"{renku_base_url}auth/realms/{config.keycloak_realm}/protocol/openid-connect/token"
+    renku_base_url = renku_base_url.rstrip("/")
+    renku_auth_token_uri = f"{renku_base_url}/auth/realms/{config.keycloak_realm}/protocol/openid-connect/token"
     secret_data = {
         # TODO: where do we configure this?
         "FIRECREST_API_URL": "https://api.cscs.ch/hpc/firecrest/v2/",
