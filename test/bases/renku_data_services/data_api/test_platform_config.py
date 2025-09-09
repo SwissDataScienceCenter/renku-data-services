@@ -65,9 +65,6 @@ async def test_get_redirects(sanic_client: SanicASGITestClient, admin_headers: d
     assert res.headers["total"] == "0"
     assert res.headers["total-pages"] == "0"
 
-    # redirects = res.json
-    # assert redirects.get("etag") != ""
-
 
 @pytest.mark.asyncio
 async def test_get_redirect(sanic_client: SanicASGITestClient, admin_headers: dict[str, str]) -> None:
