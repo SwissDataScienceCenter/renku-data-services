@@ -247,11 +247,6 @@ components:
             - "message"
       required:
         - "error"
-    SlugResponse:
-      description: A command-line/url friendly name for a namespace
-      type: string
-      minLength: 1
-      example: "a-slug-example"
   responses:
     Error:
       description: The schema for all 4xx and 5xx responses
