@@ -53,6 +53,7 @@ async def gl_image_token(gl_token: str) -> None:
 
 
 async def dh_image_token() -> None:
+    """Bla."""
     dh_name = "docspell/restserver"
     dh_image = Image.from_path(dh_name)
     reg_api = dh_image.repo_api()  # .with_oauth2_token(gh_token)
@@ -61,6 +62,7 @@ async def dh_image_token() -> None:
 
 
 async def check_image(image_name: str, token: str | None, user: str | None) -> None:
+    """Bla."""
     image = Image.from_path(image_name)
 
     reg_api, conn_id = await deps.connected_services_repo.get_docker_client(admin, image)
