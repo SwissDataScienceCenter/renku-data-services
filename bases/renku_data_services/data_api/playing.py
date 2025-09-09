@@ -21,7 +21,7 @@ admin = APIUser(
     is_admin=True,
     first_name="Armin",
     last_name="A",
-    access_token="blabla",
+    access_token="blabla",  # nosec
 )
 
 
