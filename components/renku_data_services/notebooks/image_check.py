@@ -22,6 +22,7 @@ from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.connected_services.models import OAuth2Connection
+from renku_data_services.errors import errors
 from renku_data_services.notebooks.api.classes.image import Image
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ class CheckResult:
     accessible: bool
     response_code: int
     connection: OAuth2Connection | None = None
+    error: errors.UnauthorizedError | None = None
 
 
 async def check_image_path(
@@ -55,6 +57,12 @@ async def check_image(image: Image, user: APIUser, connected_services: Connected
         reg_api = image.repo_api()
 
     result = await reg_api.image_check(image)
+    unauth_error: errors.UnauthorizedError | None = None
+    if result != 200 and conn_id is not None:
+        try:
+            await connected_services.get_oauth2_connected_account(conn_id, user)
+        except errors.UnauthorizedError as e:
+            unauth_error = e
 
     conn = await connected_services.get_oauth2_connection(conn_id, user) if conn_id is not None else None
-    return CheckResult(accessible=result == 200, response_code=result, connection=conn)
+    return CheckResult(accessible=result == 200, response_code=result, connection=conn, error=unauth_error)
