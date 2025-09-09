@@ -624,12 +624,13 @@ def get_remote_secret(
     secret_data = {
         # TODO: where do we configure this?
         "FIRECREST_API_URL": "https://api.cscs.ch/hpc/firecrest/v2/",
-        "FIRECREST_AUTH_TOKEN_URI": cscs_provider.access_token_url,
-        "RENKU_ACCESS_TOKEN": user.access_token,
-        "RENKU_REFRESH_TOKEN": user.refresh_token,
-        "RENKU_AUTH_TOKEN_URI": renku_auth_token_uri,
-        "RENKU_CLIENT_ID": config.sessions.git_proxy.renku_client_id,
-        "RENKU_CLIENT_SECRET": config.sessions.git_proxy.renku_client_secret,
+        "AUTH_KIND": "renku",
+        "AUTH_TOKEN_URI": cscs_provider.access_token_url,
+        "AUTH_RENKU_ACCESS_TOKEN": user.access_token,
+        "AUTH_RENKU_REFRESH_TOKEN": user.refresh_token,
+        "AUTH_RENKU_TOKEN_URI": renku_auth_token_uri,
+        "AUTH_RENKU_CLIENT_ID": config.sessions.git_proxy.renku_client_id,
+        "AUTH_RENKU_CLIENT_SECRET": config.sessions.git_proxy.renku_client_secret,
     }
     secret_name = f"{server_name}-remote-secret"
     secret = V1Secret(metadata=V1ObjectMeta(name=secret_name), string_data=secret_data)
