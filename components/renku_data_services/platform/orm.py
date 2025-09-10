@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, MetaData, String, func
+from sqlalchemy import DateTime, MetaData, String, func, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 from ulid import ULID
 
@@ -59,12 +59,19 @@ class UrlRedirectsORM(BaseORM):
 
     __tablename__ = "url_redirects"
 
-    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
+    id: Mapped[ULID] = mapped_column(
+        "id",
+        ULIDType,
+        primary_key=True,
+        default_factory=lambda: str(ULID()),
+        init=False,
+        server_default=text("generate_ulid()"),
+    )
 
-    source_url: Mapped[str] = mapped_column("source_url", String(), default="", unique=True, index=True)
+    source_url: Mapped[str] = mapped_column("source_url", String(), unique=True, index=True)
     """The source URL for the redirect."""
 
-    target_url: Mapped[str] = mapped_column("target_url", String(), default="", index=True)
+    target_url: Mapped[str] = mapped_column("target_url", String(), index=True)
     """The target URL for the redirect."""
 
     creation_date: Mapped[datetime] = mapped_column(
