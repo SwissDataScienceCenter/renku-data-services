@@ -10,9 +10,6 @@ from renku_data_services.authz.authz import Authz
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.platform import models
 from renku_data_services.platform import orm as schemas
-from renku_data_services.project.db import ProjectRepository
-
-# from renku_data_services.utils.core import with_db_transaction
 
 
 class PlatformRepository:
@@ -70,11 +67,9 @@ class UrlRedirectRepository:
         self,
         session_maker: Callable[..., AsyncSession],
         authz: Authz,
-        project_repo: ProjectRepository,
     ) -> None:
         self.session_maker = session_maker
         self.authz = authz
-        self.project_repo = project_repo
 
     async def get_redirect_configs(
         self,

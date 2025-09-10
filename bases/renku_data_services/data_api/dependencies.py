@@ -350,11 +350,7 @@ class DependencyManager:
         platform_repo = PlatformRepository(
             session_maker=config.db.async_session_maker,
         )
-        url_redirect_repo = UrlRedirectRepository(
-            session_maker=config.db.async_session_maker,
-            authz=authz,
-            project_repo=project_repo,
-        )
+        url_redirect_repo = UrlRedirectRepository(session_maker=config.db.async_session_maker, authz=authz)
         data_connector_repo = DataConnectorRepository(
             session_maker=config.db.async_session_maker,
             authz=authz,
