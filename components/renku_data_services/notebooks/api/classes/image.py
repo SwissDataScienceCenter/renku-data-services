@@ -13,7 +13,9 @@ import httpx
 from werkzeug.datastructures import WWWAuthenticate
 
 from renku_data_services.errors import errors
+from renku_data_services.app_config import logging
 
+logger = logging.getLogger(__name__)
 
 class ManifestTypes(Enum):
     """The mime types for docker image manifests."""
@@ -148,7 +150,9 @@ class ImageRepoDockerAPI:
         headers = {}
         if token:
             headers["Authorization"] = f"Bearer {token}"
+        logger.info(f"Check image: {image_digest_url}")
         res = await self.client.head(image_digest_url, headers=headers)
+        logger.info(f"Checked image at: {image_digest_url}: ${res.status_code}")
         return res.status_code
 
     async def get_image_config(self, image: Image) -> Optional[dict[str, Any]]:
