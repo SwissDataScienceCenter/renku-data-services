@@ -619,25 +619,21 @@ def get_remote_secret(
     if not cscs_provider:
         return None
     renku_base_url = "https://" + config.sessions.ingress.host
-    renku_base_url = renku_base_url + "/" if renku_base_url.endswith("/") else renku_base_url
-    renku_auth_token_uri = f"{renku_base_url}auth/realms/{config.keycloak_realm}/protocol/openid-connect/token"
+    renku_base_url = renku_base_url.rstrip("/")
+    renku_auth_token_uri = f"{renku_base_url}/auth/realms/{config.keycloak_realm}/protocol/openid-connect/token"
     secret_data = {
         # TODO: where do we configure this?
         "FIRECREST_API_URL": "https://api.cscs.ch/hpc/firecrest/v2/",
-        "FIRECREST_AUTH_TOKEN_URI": cscs_provider.access_token_url,
-        "RENKU_ACCESS_TOKEN": user.access_token,
-        "RENKU_REFRESH_TOKEN": user.refresh_token,
-        "RENKU_AUTH_TOKEN_URI": renku_auth_token_uri,
-        "RENKU_CLIENT_ID": config.sessions.git_proxy.renku_client_id,
-        "RENKU_CLIENT_SECRET": config.sessions.git_proxy.renku_client_secret,
+        "AUTH_KIND": "renku",
+        "AUTH_TOKEN_URI": cscs_provider.access_token_url,
+        "AUTH_RENKU_ACCESS_TOKEN": user.access_token,
+        "AUTH_RENKU_REFRESH_TOKEN": user.refresh_token,
+        "AUTH_RENKU_TOKEN_URI": renku_auth_token_uri,
+        "AUTH_RENKU_CLIENT_ID": config.sessions.git_proxy.renku_client_id,
+        "AUTH_RENKU_CLIENT_SECRET": config.sessions.git_proxy.renku_client_secret,
     }
     secret_name = f"{server_name}-remote-secret"
-    k8s_namespace = config.k8s_client.namespace()
-    secret = V1Secret(
-        metadata=V1ObjectMeta(name=secret_name, namespace=k8s_namespace),
-        string_data=secret_data,
-        type="Opaque",
-    )
+    secret = V1Secret(metadata=V1ObjectMeta(name=secret_name), string_data=secret_data)
     return ExtraSecret(secret)
 
 
@@ -851,6 +847,11 @@ async def start_session(
         SessionEnvItem(name="RENKU_SESSION_IP", value="0.0.0.0"),  # nosec B104
         SessionEnvItem(name="RENKU_SESSION_PORT", value=f"{environment.port}"),
         SessionEnvItem(name="RENKU_WORKING_DIR", value=work_dir.as_posix()),
+        # New env vars
+        SessionEnvItem(name="RENKU_SECRETS_PATH", value=project.secrets_mount_directory.as_posix()),
+        SessionEnvItem(name="RENKU_PROJECT_ID", value=str(project.id)),
+        SessionEnvItem(name="RENKU_PROJECT_PATH", value=project.path.serialize()),
+        SessionEnvItem(name="RENKU_LAUNCHER_ID", value=str(launcher.id)),
     ]
     launcher_env_variables = get_launcher_env_variables(launcher, body)
     if launcher_env_variables:
