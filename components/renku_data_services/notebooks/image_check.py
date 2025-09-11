@@ -50,11 +50,14 @@ async def check_image_path(
 async def check_image(image: Image, user: APIUser, connected_services: ConnectedServicesRepository) -> CheckResult:
     """Check access to the given image."""
 
+    logger.info(f"Get docker client for user={user} and image={image}")
     reg_api, conn_id = await connected_services.get_docker_client(user, image)
 
     if reg_api is None:
         logger.info(f"Using public registry api for image {image.name}")
         reg_api = image.repo_api()
+    else:
+        logger.info(f"Found docker client for connection {conn_id}")
 
     result = await reg_api.image_check(image)
     unauth_error: errors.UnauthorizedError | None = None
