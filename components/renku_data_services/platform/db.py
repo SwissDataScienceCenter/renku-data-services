@@ -71,6 +71,14 @@ class UrlRedirectRepository:
         self.session_maker = session_maker
         self.authz = authz
 
+    async def _get_redirect_config_by_source_url(
+        self, session: AsyncSession, source_url: str
+    ) -> schemas.UrlRedirectsORM | None:
+        stmt = select(schemas.UrlRedirectsORM).where(schemas.UrlRedirectsORM.source_url == source_url)
+        result = await session.execute(stmt)
+        config: schemas.UrlRedirectsORM | None = result.scalars().first()
+        return config
+
     async def get_redirect_configs(
         self,
         user: base_models.APIUser,
@@ -99,16 +107,12 @@ class UrlRedirectRepository:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session:
-            stmt = select(schemas.UrlRedirectsORM).where(schemas.UrlRedirectsORM.source_url == source_url)
-            result = await session.execute(stmt)
-            url_redirect_orm: schemas.UrlRedirectsORM | None = result.scalars().first()
+            url_redirect_orm = await self._get_redirect_config_by_source_url(session, source_url)
 
             if not url_redirect_orm:
                 raise errors.MissingResourceError(
                     message=f"A redirect for '{source_url}' does not exist or you do not have access to it."
                 )
-
-            # We do not currently check if the user is allowed to access the project, but we could...
             return url_redirect_orm.dump()
 
     async def create_redirect_config(
@@ -121,9 +125,7 @@ class UrlRedirectRepository:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session, session.begin():
-            existing = await session.scalar(
-                select(schemas.UrlRedirectsORM).where(schemas.UrlRedirectsORM.source_url == post.source_url)
-            )
+            existing = await self._get_redirect_config_by_source_url(session, post.source_url)
             if existing is not None:
                 raise errors.ConflictError(message=f"A redirect for source URL '{post.source_url}' already exists.")
 
@@ -146,9 +148,7 @@ class UrlRedirectRepository:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session, session.begin():
-            existing = await session.scalar(
-                select(schemas.UrlRedirectsORM).where(schemas.UrlRedirectsORM.source_url == patch.source_url)
-            )
+            existing = await self._get_redirect_config_by_source_url(session, patch.source_url)
             if existing is None:
                 raise errors.MissingResourceError(
                     message=f"A redirect for source URL '{patch.source_url}' does not exist."
