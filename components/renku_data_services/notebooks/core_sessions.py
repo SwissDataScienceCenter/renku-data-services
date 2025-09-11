@@ -797,6 +797,10 @@ async def start_session(
         SessionEnvItem(name="RENKU_SESSION_IP", value="0.0.0.0"),  # nosec B104
         SessionEnvItem(name="RENKU_SESSION_PORT", value=f"{environment.port}"),
         SessionEnvItem(name="RENKU_WORKING_DIR", value=work_dir.as_posix()),
+        SessionEnvItem(name="RENKU_SECRETS_PATH", value=project.secrets_mount_directory.as_posix()),
+        SessionEnvItem(name="RENKU_PROJECT_ID", value=str(project.id)),
+        SessionEnvItem(name="RENKU_PROJECT_PATH", value=project.path.serialize()),
+        SessionEnvItem(name="RENKU_LAUNCHER_ID", value=str(launcher.id)),
     ]
     launcher_env_variables = get_launcher_env_variables(launcher, body)
     if launcher_env_variables:
