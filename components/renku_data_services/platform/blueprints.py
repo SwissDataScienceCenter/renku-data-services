@@ -16,7 +16,11 @@ from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
 from renku_data_services.platform import apispec
-from renku_data_services.platform.core import validate_platform_config_patch, validate_url_redirect_post
+from renku_data_services.platform.core import (
+    validate_platform_config_patch,
+    validate_url_redirect_patch,
+    validate_url_redirect_post,
+)
 from renku_data_services.platform.db import PlatformRepository, UrlRedirectRepository
 from renku_data_services.platform.models import UrlRedirectConfig
 
@@ -92,6 +96,21 @@ class PlatformUrlRedirectBP(CustomBlueprint):
         )
         return result
 
+    def delete_url_redirect_config(self) -> BlueprintFactoryResponse:
+        """Delete a specific redirect config."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @if_match_required
+        async def _delete_url_redirect_config(
+            _: Request, user: base_models.APIUser, url: str, etag: str
+        ) -> HTTPResponse:
+            source_url = urllib.parse.unquote(url)
+            await self.url_redirect_repo.delete_redirect_config(user=user, etag=etag, source_url=source_url)
+            return HTTPResponse(status=204)
+
+        return "/platform/redirects/<url>", ["DELETE"], _delete_url_redirect_config
+
     def get_url_redirect_configs(self) -> BlueprintFactoryResponse:
         """List all redirects."""
 
@@ -114,6 +133,17 @@ class PlatformUrlRedirectBP(CustomBlueprint):
 
         return "/platform/redirects", ["GET"], _get_all_redirects
 
+    def get_url_redirect_config(self) -> BlueprintFactoryResponse:
+        """Get a specific redirect config."""
+
+        @authenticate(self.authenticator)
+        async def _get_url_redirect_config(_: Request, user: base_models.APIUser, url: str) -> JSONResponse:
+            source_url = urllib.parse.unquote(url)
+            redirect = await self.url_redirect_repo.get_redirect_config_by_source_url(user=user, source_url=source_url)
+            return validated_json(apispec.UrlRedirectPlan, redirect)
+
+        return "/platform/redirects/<url>", ["GET"], _get_url_redirect_config
+
     def post_url_redirect_config(self) -> BlueprintFactoryResponse:
         """Create a new redirect config."""
 
@@ -131,31 +161,21 @@ class PlatformUrlRedirectBP(CustomBlueprint):
 
         return "/platform/redirects", ["POST"], _post_redirect_config
 
-    def get_url_redirect_config(self) -> BlueprintFactoryResponse:
-        """Get a specific redirect config."""
-
-        @authenticate(self.authenticator)
-        async def _get_url_redirect_config(_: Request, user: base_models.APIUser, url: str) -> JSONResponse:
-            source_url = urllib.parse.unquote(url)
-            redirect = await self.url_redirect_repo.get_redirect_config_by_source_url(user=user, source_url=source_url)
-            return validated_json(apispec.UrlRedirectPlan, redirect)
-
-        return "/platform/redirects/<url>", ["GET"], _get_url_redirect_config
-
     def patch_url_redirect_config(self) -> BlueprintFactoryResponse:
         """Update a specific redirect config."""
 
         @authenticate(self.authenticator)
         @only_admins
         @if_match_required
-        @validate(json=apispec.UrlRedirectPlanPost)
+        @validate(json=apispec.UrlRedirectPlanPatch)
         async def _patch_url_redirect_config(
-            _: Request, user: base_models.APIUser, url: str, body: apispec.UrlRedirectPlanPost, etag: str
+            _: Request, user: base_models.APIUser, url: str, body: apispec.UrlRedirectPlanPatch, etag: str
         ) -> JSONResponse:
-            url_redirect_post = validate_url_redirect_post(body)
+            source_url = urllib.parse.unquote(url)
+            url_redirect_patch = validate_url_redirect_patch(source_url, body)
 
             updated_redirect = await self.url_redirect_repo.update_redirect_config(
-                user=user, etag=etag, patch=url_redirect_post
+                user=user, etag=etag, patch=url_redirect_patch
             )
             return validated_json(apispec.UrlRedirectPlan, updated_redirect)
 

@@ -46,6 +46,14 @@ class UnsavedUrlRedirectConfig:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
+class UrlRedirectUpdateConfig:
+    """Model representing a URL redirect that has not been persisted."""
+
+    source_url: str
+    target_url: str | None = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
 class UrlRedirectConfig(UnsavedUrlRedirectConfig):
     """Model representing a redirect from a source URL to a target."""
 

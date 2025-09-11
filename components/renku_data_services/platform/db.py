@@ -76,7 +76,7 @@ class UrlRedirectRepository:
     ) -> schemas.UrlRedirectsORM | None:
         stmt = select(schemas.UrlRedirectsORM).where(schemas.UrlRedirectsORM.source_url == source_url)
         result = await session.execute(stmt)
-        config: schemas.UrlRedirectsORM | None = result.scalars().first()
+        config: schemas.UrlRedirectsORM | None = result.scalar_one_or_none()
         return config
 
     async def get_redirect_configs(
@@ -138,8 +138,35 @@ class UrlRedirectRepository:
             await session.refresh(redirect_orm)
             return redirect_orm.dump()
 
+    async def delete_redirect_config(
+        self, user: base_models.APIUser, etag: str, source_url: str
+    ) -> models.UrlRedirectUpdateConfig:
+        """Update a URL redirect configuration."""
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+        if not user.is_admin:
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session, session.begin():
+            existing = await self._get_redirect_config_by_source_url(session, source_url)
+            if existing is None:
+                return models.UrlRedirectUpdateConfig(
+                    source_url=source_url,
+                    target_url=None,
+                )
+
+            current_etag = existing.dump().etag
+            if current_etag != etag:
+                raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
+
+            await session.delete(existing)
+            return models.UrlRedirectUpdateConfig(
+                source_url=source_url,
+                target_url=None,
+            )
+
     async def update_redirect_config(
-        self, user: base_models.APIUser, etag: str, patch: models.UnsavedUrlRedirectConfig
+        self, user: base_models.APIUser, etag: str, patch: models.UrlRedirectUpdateConfig
     ) -> models.UrlRedirectConfig:
         """Update a URL redirect configuration."""
         if user.id is None:
@@ -157,11 +184,9 @@ class UrlRedirectRepository:
             current_etag = existing.dump().etag
             if current_etag != etag:
                 raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
-
-            existing.source_url = patch.source_url
-            existing.target_url = patch.target_url
-
-            session.add(existing)
-            await session.flush()
-            await session.refresh(existing)
+            if patch.target_url is not None:
+                existing.target_url = patch.target_url
+                session.add(existing)
+                await session.flush()
+                await session.refresh(existing)
             return existing.dump()

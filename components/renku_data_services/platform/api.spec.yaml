@@ -128,7 +128,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UrlRedirectPlanPost"
+                $ref: "#/components/schemas/UrlRedirectPlanPatch"
         responses:
           "200":
             description: The redirect info was updated
@@ -136,6 +136,22 @@ paths:
               application/json:
                 schema:
                   $ref: "#/components/schemas/UrlRedirectPlan"
+          default:
+            $ref: "#/components/responses/Error"
+        tags:
+          - platform
+      delete:
+        summary: Delete a redirect plan
+        parameters:
+          - in: path
+            name: source_url
+            required: true
+            description: The url-encoded (original) source URL
+            schema:
+              type: string
+        responses:
+          "204":
+            description: The redirect plan was removed or did not exist in the first place
           default:
             $ref: "#/components/responses/Error"
         tags:
@@ -161,6 +177,22 @@ components:
         incident_banner:
           $ref: "#/components/schemas/IncidentBanner"
       additionalProperties: false
+    SourceUrl:
+      description: |
+        The URL that should be redirected. Must begin with `/projects` or
+        `https://gitlab.renkulab.io/`
+      type: string
+      examples:
+        - "/projects/ns/slug"
+        - "https://gitlab.renkulab.io/user/project"
+    TargetUrl:
+      description: |
+        The URL that should be redirected to. Must begin with `https://` or
+        have the structure `/p/[ULID]`
+      type: string
+      examples:
+        - "/p/project-ulid"
+        - "https://github.com/user/project"
     UrlRedirectPlanList:
       description: A list of redirect info objects
       type: array
@@ -173,11 +205,9 @@ components:
         etag:
           $ref: "#/components/schemas/ETag"
         source_url:
-          description: URL reference to redirect
-          type: string
+          $ref: "#/components/schemas/SourceUrl"
         target_url:
-          description: URL reference to redirect to
-          type: string
+          $ref: "#/components/schemas/TargetUrl"
       required:
         - etag
         - source_url
@@ -186,27 +216,25 @@ components:
       description: Query params for redirect list get request
       allOf:
       - $ref: "#/components/schemas/PaginationRequest"
+    UrlRedirectPlanPatch:
+      description: Schema for updating a redirect info
+      type: object
+      properties:
+        target_url:
+          $ref: "#/components/schemas/TargetUrl"
+      additionalProperties: false
     UrlRedirectPlanPost:
       description: Schema for creating a new redirect info
       type: object
       properties:
         source_url:
-          description: URL reference to redirect
-          type: string
+          $ref: "#/components/schemas/SourceUrl"
         target_url:
-          description: URL reference to redirect to
-          type: string
+          $ref: "#/components/schemas/TargetUrl"
       required:
         - source_url
         - target_url
       additionalProperties: false
-      examples:
-        -
-          source_url: "https://gitlab.renkulab.io/user/project"
-          target_url: "https://github.com/user/project"
-        -
-          source_url: "/projects/ns/slug"
-          target_url: "/p/project-ulid"
     ETag:
       type: string
       description: Entity Tag
