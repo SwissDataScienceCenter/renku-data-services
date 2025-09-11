@@ -117,6 +117,39 @@ async def test_post_redirect(sanic_client: SanicASGITestClient, admin_headers: d
 
 
 @pytest.mark.asyncio
+async def test_post_redirect_duplicate(sanic_client: SanicASGITestClient, admin_headers: dict[str, str]) -> None:
+    headers = admin_headers
+    payload = {"source_url": "/projects/ns/project-slug", "target_url": "/p/ns/project-slug"}
+
+    _, res = await sanic_client.post("/api/data/platform/redirects", headers=headers, json=payload)
+    assert res.status_code == 201, res.text
+    assert res.json is not None
+    url_redirect_plan = res.json
+    assert url_redirect_plan.get("source_url") == "/projects/ns/project-slug"
+    assert url_redirect_plan.get("target_url") == "/p/ns/project-slug"
+    assert url_redirect_plan.get("etag") != ""
+
+    payload = {"source_url": "/projects/ns/project-slug", "target_url": "/p/ns2/project-slug2"}
+    _, res = await sanic_client.post("/api/data/platform/redirects", headers=headers, json=payload)
+    assert res.status_code == 409, (res.status_code, res.text)
+    assert res.json is not None
+    url_redirect_plan = res.json
+    assert url_redirect_plan.get("error").get("code") == 1409
+
+
+@pytest.mark.asyncio
+async def test_post_redirect_unauthorized(sanic_client: SanicASGITestClient, user_headers: dict[str, str]) -> None:
+    _, res = await sanic_client.get("/api/data/platform/redirects")
+
+    headers = user_headers
+    payload = {"source_url": "/projects/ns/project-slug", "target_url": "/p/ns/project-slug"}
+
+    _, res = await sanic_client.post("/api/data/platform/redirects", headers=headers, json=payload)
+
+    assert res.status_code == 403, res.status_code
+
+
+@pytest.mark.asyncio
 async def test_patch_redirect(sanic_client: SanicASGITestClient, admin_headers: dict[str, str]) -> None:
     headers = admin_headers
     payload = {"source_url": "/projects/ns/project-slug", "target_url": "/p/ns/project-slug"}
@@ -157,15 +190,22 @@ async def test_patch_redirect(sanic_client: SanicASGITestClient, admin_headers: 
 
 
 @pytest.mark.asyncio
-async def test_post_redirect_unauthorized(sanic_client: SanicASGITestClient, user_headers: dict[str, str]) -> None:
-    _, res = await sanic_client.get("/api/data/platform/redirects")
-
-    headers = user_headers
+async def test_patch_redirect_non_existant(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+) -> None:
     payload = {"source_url": "/projects/ns/project-slug", "target_url": "/p/ns/project-slug"}
-
-    _, res = await sanic_client.post("/api/data/platform/redirects", headers=headers, json=payload)
-
-    assert res.status_code == 403, res.status_code
+    encoded_url = urllib.parse.quote_plus("/projects/ns/project-slug")
+    patch_headers = merge_headers(admin_headers, {"If-Match": "some-etag"})
+    _, res = await sanic_client.patch(
+        f"/api/data/platform/redirects/{encoded_url}", headers=patch_headers, json=payload
+    )
+    # should not allow patching a redirect that does not exist
+    assert res.status_code == 404, res.status_code
+    assert res.json is not None
+    assert (
+        res.json.get("error").get("message") == "A redirect for source URL '/projects/ns/project-slug' does not exist."
+    )
 
 
 @pytest.mark.asyncio
@@ -201,6 +241,6 @@ async def test_patch_redirect_unauthorized(
     _, res = await sanic_client.patch(
         f"/api/data/platform/redirects/{encoded_url}", headers=patch_headers, json=payload
     )
-    assert res.status_code == 403, res.text
+    assert res.status_code == 403, res.status_code
     assert res.json is not None
     assert res.json.get("error").get("message") == "You do not have the required permissions for this operation."
