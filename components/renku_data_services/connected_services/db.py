@@ -370,6 +370,23 @@ class ConnectedServicesRepository:
             token_model = models.OAuth2TokenSet.from_dict(oauth2_client.token)
             return token_model
 
+    async def get_provider_for_image(self, image: Image) -> models.OAuth2Client | None:
+        """Find a provider supporting the given an image."""
+        registry_urls = [f"http://{image.hostname}", f"https://{image.hostname}"]
+        async with self.session_maker() as session:
+            stmt = (
+                select(schemas.OAuth2ClientORM)
+                .where(schemas.OAuth2ClientORM.image_registry_url.in_(registry_urls))
+                .where(
+                    schemas.OAuth2ClientORM.kind.in_(self.supported_image_registry_providers)
+                )
+            )
+            provider = await session.scalar(stmt)
+        if provider:
+            return provider.dump()
+        else:
+            return None
+
     async def get_docker_client(
         self, user: base_models.APIUser, image: Image
     ) -> tuple[ImageRepoDockerAPI, ULID] | tuple[None, None]:
