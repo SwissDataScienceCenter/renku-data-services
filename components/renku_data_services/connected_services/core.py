@@ -69,7 +69,7 @@ def validate_image_registry_url(url: str) -> None:
     parsed = urlparse(url)
     if not parsed.netloc:
         raise errors.ValidationError(
-            message=f"The host for the image registry url {url} is not valid, expected a non-empty value.",
+            message=f"The image registry url {url} is not valid, expected a valid url starting with the scheme.",
             quiet=True,
         )
     accepted_schemes = ["https"]
