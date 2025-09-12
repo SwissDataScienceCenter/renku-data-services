@@ -148,12 +148,13 @@ class ImageRepoDockerAPI:
         """Check the image at the registry."""
         token = await self._get_docker_token(image)
         image_digest_url = f"{self.scheme}://{image.hostname}/v2/{image.name}/manifests/{image.tag}"
-        headers = {}
+        headers = {"Accept": f"{ManifestTypes.docker_v2.value}, {ManifestTypes.oci_v1_manifest.value}"}
         if token:
             headers["Authorization"] = f"Bearer {token}"
+
         logger.info(f"Check image: {image_digest_url}")
         res = await self.client.head(image_digest_url, headers=headers)
-        logger.info(f"Checked image at: {image_digest_url}: ${res.status_code}")
+        logger.info(f"Checked image at: {image_digest_url}: {res.status_code}")
         return res.status_code
 
     async def get_image_config(self, image: Image) -> Optional[dict[str, Any]]:
