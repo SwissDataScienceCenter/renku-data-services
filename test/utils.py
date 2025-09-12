@@ -28,7 +28,7 @@ from renku_data_services.k8s.db import QuotaRepository
 from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
-from renku_data_services.platform.db import PlatformRepository
+from renku_data_services.platform.db import PlatformRepository, UrlRedirectRepository
 from renku_data_services.project.db import (
     ProjectMemberRepository,
     ProjectMigrationRepository,
@@ -268,6 +268,7 @@ class TestDependencyManager(DependencyManager):
         platform_repo = PlatformRepository(
             session_maker=config.db.async_session_maker,
         )
+        url_redirect_repo = UrlRedirectRepository(session_maker=config.db.async_session_maker, authz=authz)
         data_connector_repo = DataConnectorRepository(
             session_maker=config.db.async_session_maker,
             authz=authz,
@@ -328,6 +329,7 @@ class TestDependencyManager(DependencyManager):
             shipwright_client=None,
             authz=authz,
             low_level_user_secrets_repo=low_level_user_secrets_repo,
+            url_redirect_repo=url_redirect_repo,
         )
 
     def __post_init__(self) -> None:
