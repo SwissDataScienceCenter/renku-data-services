@@ -123,6 +123,7 @@ paths:
             description: The url-encoded (original) source URL
             schema:
               type: string
+          - $ref: "#/components/parameters/If-Match"
         requestBody:
           required: true
           content:
@@ -149,6 +150,7 @@ paths:
             description: The url-encoded (original) source URL
             schema:
               type: string
+          - $ref: "#/components/parameters/If-Match"
         responses:
           "204":
             description: The redirect plan was removed or did not exist in the first place
