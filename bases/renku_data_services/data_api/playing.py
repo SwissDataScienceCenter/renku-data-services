@@ -3,7 +3,12 @@
 import asyncio
 import os
 
+from sqlalchemy import select
+
 from renku_data_services.base_models.core import APIUser
+from renku_data_services.connected_services import orm as schemas
+from renku_data_services.connected_services.apispec import ProviderKind
+from renku_data_services.connected_services.orm import OAuth2ClientORM, OAuth2ConnectionORM
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.notebooks.api.classes.image import Image
 
@@ -89,11 +94,39 @@ async def check_docker_image(gh_token: str, gl_token: str) -> None:
     # await check_image("registry.gitlab.com/eikek/privim", gl_token, "eikek1")
 
 
-## method:
+async def db_query(image: Image) -> tuple[OAuth2ClientORM, OAuth2ConnectionORM | None] | None:
+    """Bla."""
+    supported_image_registry_providers = {ProviderKind.gitlab, ProviderKind.github}
+    registry_urls = [f"http://{image.hostname}", f"https://{image.hostname}"]
+    async with deps.config.db.async_session_maker() as session:
+        stmt = (
+            select(schemas.OAuth2ClientORM, schemas.OAuth2ConnectionORM)
+            .join(
+                schemas.OAuth2ConnectionORM,
+                schemas.OAuth2ConnectionORM.client_id == schemas.OAuth2ClientORM.id,
+                isouter=True,
+            )  # isouter is a left-join, not an outer join
+            .where(schemas.OAuth2ClientORM.image_registry_url.in_(registry_urls))
+            .where(schemas.OAuth2ClientORM.kind.in_(supported_image_registry_providers))
+            .limit(1)  # there could be multiple matching - just take the first arbitrary 🤷
+        )
+        print(stmt)
+        result = await session.execute(stmt)
+        row = result.one_or_none()
+        if row is None or row.OAuth2ClientORM is None:
+            return None
+        else:
+            return (row.OAuth2ClientORM, row.OAuth2ConnectionORM)
 
+
+## method:
 
 if __name__ == "__main__":
     gh_token = os.getenv("GHCR_TOKEN") or ""
     gl_token = os.getenv("GLAB_TOKEN") or ""
-    asyncio.run(check_docker_image(gh_token, gl_token))
+    img1 = "ghcr.io/eikek/privim"
+    img2 = "gitlab-registry.datascience.ch/eike/privim"
+    image = Image.from_path(img2)
+    result = asyncio.run(db_query(image))
+    print(result)
 #    asyncio.run(check_docker_image(gh_token, gl_token))

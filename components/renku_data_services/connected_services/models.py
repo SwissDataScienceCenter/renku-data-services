@@ -83,6 +83,10 @@ class OAuth2Connection:
     provider_id: str
     status: ConnectionStatus
 
+    def is_connected(self) -> bool:
+        """Returns whether this connection is in status 'connected'."""
+        return self.status == ConnectionStatus.connected
+
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class ConnectedAccount:
@@ -149,3 +153,12 @@ class AppInstallationList:
 
     total_count: int
     installations: list[AppInstallation]
+
+
+@dataclass(frozen=True, eq=True)
+class ImageProvider:
+    """Result when retrieving provider information for an image."""
+
+    provider: OAuth2Client
+    connection: OAuth2Connection | None
+    registry_url: str
