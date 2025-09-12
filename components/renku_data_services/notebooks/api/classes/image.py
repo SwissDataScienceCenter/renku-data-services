@@ -196,7 +196,7 @@ class ImageRepoDockerAPI:
 
     def with_oauth2_token(self, oauth2_token: str) -> ImageRepoDockerAPI:
         """Return a docker API instance with the token as authentication."""
-        return ImageRepoDockerAPI(self.hostname, oauth2_token)
+        return ImageRepoDockerAPI(hostname=self.hostname, scheme=self.scheme, oauth2_token=oauth2_token)
 
     def maybe_with_oauth2_token(self, token_hostname: str | None, oauth2_token: str | None) -> ImageRepoDockerAPI:
         """Return a docker API instance with the token as authentication.
@@ -301,3 +301,6 @@ class Image:
     def repo_api(self) -> ImageRepoDockerAPI:
         """Get the docker API from the image."""
         return ImageRepoDockerAPI(self.hostname)
+
+    def __str__(self) -> str:
+        return f"{self.hostname}/{self.name}:{self.tag}"
