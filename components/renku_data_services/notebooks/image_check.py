@@ -18,6 +18,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import final
 
+import httpx
+
 from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.connected_services.db import ConnectedServicesRepository
@@ -62,7 +64,11 @@ async def check_image(image: Image, user: APIUser, connected_services: Connected
             logger.info(f"Error getting image repo client for image {image}: {e}")
             unauth_error = e
 
-    result = await reg_api.image_check(image)
+    try:
+        result = await reg_api.image_check(image)
+    except httpx.HTTPError as e:
+        logger.info(f"Error connecting {reg_api.scheme}://{reg_api.hostname}: {e}")
+        result = 0
 
     if result != 200 and connection is not None:
         try:

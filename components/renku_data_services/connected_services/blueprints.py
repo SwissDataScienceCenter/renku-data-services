@@ -174,7 +174,7 @@ class OAuth2ConnectionsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         async def _delete_one(_: Request, user: base_models.APIUser, connection_id: ULID) -> HTTPResponse:
-            result = await self.connected_services_repo.delete_oauth2_connection(conn_id=connection_id, user=user)
+            result = await self.connected_services_repo.delete_oauth2_connection(conn_id=str(connection_id), user=user)
 
             return empty(status=204 if result else 404)
 
