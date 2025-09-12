@@ -348,10 +348,13 @@ class NotebooksNewBP(CustomBlueprint):
                     id=str(result.connection.id), provider_id=result.connection.provider_id, status=status
                 )
 
-            resp = apispec.ImageCheckResponse(
-                accessible=result.accessible,
-                connection=conn,
-            )
+            provider: apispec.ImageProvider | None = None
+            if result.provider:
+                provider = apispec.ImageProvider(
+                    id=result.provider.id, name=result.provider.display_name, url=result.provider.url
+                )
+
+            resp = apispec.ImageCheckResponse(accessible=result.accessible, connection=conn, provider=provider)
 
             return json(resp.model_dump(exclude_none=True, mode="json"))
 
