@@ -274,11 +274,35 @@ async def test_post_redirect_input_validation(sanic_client: SanicASGITestClient,
     assert res.json is not None
     assert res.json.get("error").get("message") == "The source URL host must be gitlab.renkulab.io."
 
-    payload = {"source_url": "https://gitlab.renkulab.io/foo", "target_url": "http://github.com"}
+    payload = {"source_url": "https://gitlab.renkulab.io/foo//", "target_url": "http://github.com"}
+    _, res = await sanic_client.post("/api/data/platform/redirects", headers=admin_headers, json=payload)
+    assert res.status_code == 422, f"status code {res.status_code} != 422"
+    assert res.json is not None
+    assert res.json.get("error").get("message") == "The source URL path is not canonical."
+
+    payload = {"source_url": "https://gitlab.renkulab.io/foo/../../", "target_url": "http://github.com"}
+    _, res = await sanic_client.post("/api/data/platform/redirects", headers=admin_headers, json=payload)
+    assert res.status_code == 422, f"status code {res.status_code} != 422"
+    assert res.json is not None
+    assert res.json.get("error").get("message") == "The source URL path is not canonical."
+
+    payload = {"source_url": "https://gitlab.renkulab.io/foo", "target_url": "http://github.com/bar"}
     _, res = await sanic_client.post("/api/data/platform/redirects", headers=admin_headers, json=payload)
     assert res.status_code == 422, f"status code {res.status_code} != 422"
     assert res.json is not None
     assert res.json.get("error").get("message") == "The target URL must use HTTPS."
+
+    payload = {"source_url": "https://gitlab.renkulab.io/foo", "target_url": "https://github.com/bar?query=1"}
+    _, res = await sanic_client.post("/api/data/platform/redirects", headers=admin_headers, json=payload)
+    assert res.status_code == 422, f"status code {res.status_code} != 422"
+    assert res.json is not None
+    assert res.json.get("error").get("message") == "The target URL must not include parameters, a query, or a fragment."
+
+    payload = {"source_url": "https://gitlab.renkulab.io/foo", "target_url": "https://github.com/bar#fragment"}
+    _, res = await sanic_client.post("/api/data/platform/redirects", headers=admin_headers, json=payload)
+    assert res.status_code == 422, f"status code {res.status_code} != 422"
+    assert res.json is not None
+    assert res.json.get("error").get("message") == "The target URL must not include parameters, a query, or a fragment."
 
 
 @pytest.mark.asyncio

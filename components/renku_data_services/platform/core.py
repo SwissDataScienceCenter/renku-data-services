@@ -1,5 +1,6 @@
 """Business logic for the platform configuration."""
 
+import os
 import re
 from urllib.parse import ParseResult, urlparse
 
@@ -12,6 +13,15 @@ v2_project_pattern = re.compile(r"^/p/[0-7][0-9A-HJKMNP-TV-Z]{25}$")
 def validate_platform_config_patch(patch: apispec.PlatformConfigPatch) -> models.PlatformConfigPatch:
     """Validate the update to the platform configuration."""
     return models.PlatformConfigPatch(incident_banner=patch.incident_banner)
+
+
+def _ensure_no_extras(parsed: ParseResult, position: str) -> None:
+    """Ensure that the parsed URL has no extra components."""
+    if parsed.params or parsed.query or parsed.fragment:
+        raise errors.ValidationError(message=f"The {position} URL must not include parameters, a query, or a fragment.")
+    canonical_path = os.path.normpath(parsed.path)
+    if parsed.path != canonical_path:
+        raise errors.ValidationError(message=f"The {position} URL path is not canonical.")
 
 
 def _validate_source_gitlab_url(parsed: ParseResult) -> str:
@@ -55,6 +65,7 @@ def _validate_target_v2_project_url(parsed: ParseResult) -> str:
 def validate_source_url(url: str) -> str:
     """Validate the source URL."""
     parsed = urlparse(url)
+    _ensure_no_extras(parsed, "source")
     if parsed.scheme:
         return _validate_source_gitlab_url(parsed)
     return _validate_source_v1_url(parsed)
@@ -63,6 +74,7 @@ def validate_source_url(url: str) -> str:
 def validate_target_url(url: str) -> str:
     """Validate the target URL."""
     parsed = urlparse(url)
+    _ensure_no_extras(parsed, "target")
     if parsed.scheme or parsed.netloc:
         return _validate_target_external_url(parsed)
     return _validate_target_v2_project_url(parsed)
