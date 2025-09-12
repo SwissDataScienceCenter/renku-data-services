@@ -21,7 +21,7 @@ from typing import final
 from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.connected_services.db import ConnectedServicesRepository
-from renku_data_services.connected_services.models import OAuth2Connection
+from renku_data_services.connected_services.models import OAuth2Client, OAuth2Connection
 from renku_data_services.errors import errors
 from renku_data_services.notebooks.api.classes.image import Image
 
@@ -36,6 +36,7 @@ class CheckResult:
     accessible: bool
     response_code: int
     connection: OAuth2Connection | None = None
+    provider: OAuth2Client | None = None
     error: errors.UnauthorizedError | None = None
 
 
@@ -51,6 +52,7 @@ async def check_image(image: Image, user: APIUser, connected_services: Connected
     """Check access to the given image."""
 
     logger.info(f"Get docker client for user={user} and image={image}")
+    provider = await connected_services.get_provider_for_image(image)
     reg_api, conn_id = await connected_services.get_docker_client(user, image)
 
     if reg_api is None:
@@ -61,6 +63,7 @@ async def check_image(image: Image, user: APIUser, connected_services: Connected
 
     result = await reg_api.image_check(image)
     unauth_error: errors.UnauthorizedError | None = None
+
     if result != 200 and conn_id is not None:
         try:
             await connected_services.get_oauth2_connected_account(conn_id, user)
@@ -68,4 +71,6 @@ async def check_image(image: Image, user: APIUser, connected_services: Connected
             unauth_error = e
 
     conn = await connected_services.get_oauth2_connection(conn_id, user) if conn_id is not None else None
-    return CheckResult(accessible=result == 200, response_code=result, connection=conn, error=unauth_error)
+    return CheckResult(
+        accessible=result == 200, response_code=result, connection=conn, provider=provider, error=unauth_error
+    )

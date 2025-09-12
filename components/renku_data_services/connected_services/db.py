@@ -377,9 +377,7 @@ class ConnectedServicesRepository:
             stmt = (
                 select(schemas.OAuth2ClientORM)
                 .where(schemas.OAuth2ClientORM.image_registry_url.in_(registry_urls))
-                .where(
-                    schemas.OAuth2ClientORM.kind.in_(self.supported_image_registry_providers)
-                )
+                .where(schemas.OAuth2ClientORM.kind.in_(self.supported_image_registry_providers))
             )
             provider = await session.scalar(stmt)
         if provider:
