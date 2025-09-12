@@ -12,10 +12,11 @@ from typing import Any, Optional, Self, cast
 import httpx
 from werkzeug.datastructures import WWWAuthenticate
 
-from renku_data_services.errors import errors
 from renku_data_services.app_config import logging
+from renku_data_services.errors import errors
 
 logger = logging.getLogger(__name__)
+
 
 class ManifestTypes(Enum):
     """The mime types for docker image manifests."""
