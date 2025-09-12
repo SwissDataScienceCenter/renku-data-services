@@ -297,6 +297,25 @@ class ConnectedServicesRepository:
 
                 return next_url
 
+    async def delete_oauth2_connection(self, user: base_models.APIUser, conn_id: str) -> bool:
+        """Delete one connection of the given user."""
+        if not user.is_authenticated or user.id is None:
+            return False
+
+        async with self.session_maker() as session, session.begin():
+            result = await session.scalars(
+                select(schemas.OAuth2ConnectionORM)
+                .where(schemas.OAuth2ConnectionORM.id == conn_id)
+                .where(schemas.OAuth2ConnectionORM.user_id == user.id)
+            )
+            conn = result.one_or_none()
+
+            if conn is None:
+                return False
+
+            await session.delete(conn)
+            return True
+
     async def get_oauth2_connections(
         self,
         user: base_models.APIUser,
