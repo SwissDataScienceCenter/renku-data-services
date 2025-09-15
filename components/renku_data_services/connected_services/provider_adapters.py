@@ -282,6 +282,11 @@ class GenericOidcAdapter(ProviderAdapter):
         return config
 
     def __discover(self) -> dict[str, str]:
+        """Performs OpenID Connect discovery from the issuer URL.
+
+        Reference: https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderConfig
+        See section 4: "Obtaining OpenID Provider Configuration Information"
+        """
         issuer_url = self.oidc_issuer_url
         if not issuer_url:
             raise errors.ValidationError(message="Issuer URL not configured for generic OIDC client.")
@@ -294,7 +299,7 @@ class GenericOidcAdapter(ProviderAdapter):
         return {
             "authorization_endpoint": res_json["authorization_endpoint"],
             "token_endpoint": res_json["token_endpoint"],
-            "userinfo_endpoint": res_json["userinfo_endpoint"],
+            "userinfo_endpoint": res_json.get("userinfo_endpoint", ""),
         }
 
     @classmethod
