@@ -1,5 +1,5 @@
 AMALTHEA_JS_VERSION ?= 0.20.0
-AMALTHEA_SESSIONS_VERSION ?= 0.20.0
+AMALTHEA_SESSIONS_VERSION ?= leafty/exp-dev-naming
 COMMON_CODEGEN_PARAMS := \
 	--output-model-type pydantic_v2.BaseModel \
 	--use-double-quotes \
@@ -126,7 +126,7 @@ install_amaltheas:  ## Installs both version of amalthea in the. NOTE: It uses t
 # TODO: Add the version variables from the top of the file here when the charts are fully published
 .PHONY: amalthea_schema
 amalthea_schema:  ## Updates generates pydantic classes from CRDs
-	curl https://raw.githubusercontent.com/SwissDataScienceCenter/amalthea/${AMALTHEA_SESSIONS_VERSION}/config/crd/bases/amalthea.dev_amaltheasessions.yaml | yq '.spec.versions[0].schema.openAPIV3Schema' | poetry run datamodel-codegen --output components/renku_data_services/notebooks/cr_amalthea_session.py --base-class renku_data_services.notebooks.cr_base.BaseCRD ${CR_CODEGEN_PARAMS}
+	curl https://raw.githubusercontent.com/SwissDataScienceCenter/amalthea/${AMALTHEA_SESSIONS_VERSION}/config/crd/bases/amalthea.dev_hpcamaltheasessions.yaml | yq '.spec.versions[0].schema.openAPIV3Schema' | poetry run datamodel-codegen --output components/renku_data_services/notebooks/cr_amalthea_session.py --base-class renku_data_services.notebooks.cr_base.BaseCRD ${CR_CODEGEN_PARAMS}
 	curl https://raw.githubusercontent.com/SwissDataScienceCenter/amalthea/${AMALTHEA_JS_VERSION}/controller/crds/jupyter_server.yaml | yq '.spec.versions[0].schema.openAPIV3Schema' | poetry run datamodel-codegen --output components/renku_data_services/notebooks/cr_jupyter_server.py --base-class renku_data_services.notebooks.cr_base.BaseCRD ${CR_CODEGEN_PARAMS}
 
 .PHONY: shipwright_schema
