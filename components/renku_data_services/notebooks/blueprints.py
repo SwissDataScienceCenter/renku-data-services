@@ -349,9 +349,9 @@ class NotebooksNewBP(CustomBlueprint):
                 )
 
             provider: apispec.ImageProvider | None = None
-            if result.provider:
+            if result.client:
                 provider = apispec.ImageProvider(
-                    id=result.provider.id, name=result.provider.display_name, url=result.provider.url
+                    id=result.client.id, name=result.client.display_name, url=result.client.url
                 )
 
             resp = apispec.ImageCheckResponse(accessible=result.accessible, connection=conn, provider=provider)
