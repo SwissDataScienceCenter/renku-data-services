@@ -10,7 +10,6 @@ from sqlalchemy.schema import UniqueConstraint
 from ulid import ULID
 
 from renku_data_services.connected_services import models
-from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind
 from renku_data_services.utils.sqlalchemy import ULIDType
 
 JSONVariant = JSON().with_variant(JSONB(), "postgresql")
@@ -32,7 +31,7 @@ class OAuth2ClientORM(BaseORM):
     client_id: Mapped[str] = mapped_column("client_id", String(500), repr=False)
     display_name: Mapped[str] = mapped_column("display_name", String(99))
     created_by_id: Mapped[str] = mapped_column("created_by_id", String())
-    kind: Mapped[ProviderKind]
+    kind: Mapped[models.ProviderKind]
     scope: Mapped[str] = mapped_column("scope", String())
     url: Mapped[str] = mapped_column("url", String())
     use_pkce: Mapped[bool] = mapped_column("use_pkce", Boolean(), server_default=false())
@@ -50,6 +49,7 @@ class OAuth2ClientORM(BaseORM):
         nullable=False,
     )
     image_registry_url: Mapped[str | None] = mapped_column(default=None, nullable=True, server_default=None)
+    oidc_issuer_url: Mapped[str | None] = mapped_column(default=None, nullable=True, server_default=None)
 
     def dump(self, user_is_admin: bool = False) -> models.OAuth2Client:
         """Create an OAuth2 Client model from the OAuth2ClientORM.
@@ -70,6 +70,7 @@ class OAuth2ClientORM(BaseORM):
             creation_date=self.creation_date,
             updated_at=self.updated_at,
             image_registry_url=self.image_registry_url,
+            oidc_issuer_url=self.oidc_issuer_url,
         )
 
 
@@ -83,7 +84,7 @@ class OAuth2ConnectionORM(BaseORM):
     client: Mapped[OAuth2ClientORM] = relationship(init=False, repr=False)
     token: Mapped[dict[str, Any] | None] = mapped_column("token", JSONVariant)
     state: Mapped[str | None] = mapped_column("state", String(), index=True, unique=True)
-    status: Mapped[ConnectionStatus]
+    status: Mapped[models.ConnectionStatus]
     code_verifier: Mapped[str | None] = mapped_column("code_verifier", String())
     next_url: Mapped[str | None] = mapped_column("next_url", String())
     creation_date: Mapped[datetime] = mapped_column(

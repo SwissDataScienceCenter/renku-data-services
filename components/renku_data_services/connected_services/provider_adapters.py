@@ -1,14 +1,17 @@
 """Adapters for each kind of OAuth2 client."""
 
+import logging
 from abc import ABC, abstractmethod
+from typing import Any
 from urllib.parse import urljoin, urlparse, urlunparse
 
-from httpx import Response
+from httpx import Client, Response
 
 from renku_data_services import errors
 from renku_data_services.connected_services import external_models, models
 from renku_data_services.connected_services import orm as schemas
-from renku_data_services.connected_services.apispec import ProviderKind
+
+logger = logging.getLogger(__name__)
 
 
 class ProviderAdapter(ABC):
@@ -17,7 +20,7 @@ class ProviderAdapter(ABC):
     user_info_endpoint = "user"
     user_info_method = "GET"
 
-    def __init__(self, client_url: str) -> None:
+    def __init__(self, client_url: str, **kwargs: Any) -> None:
         self.client_url = client_url
 
     @property
@@ -232,12 +235,91 @@ class DropboxAdapter(ProviderAdapter):
         return external_models.DropboxConnectedAccount.model_validate(response.json()).to_connected_account()
 
 
-_adapter_map: dict[ProviderKind, type[ProviderAdapter]] = {
-    ProviderKind.gitlab: GitLabAdapter,
-    ProviderKind.github: GitHubAdapter,
-    ProviderKind.drive: GoogleDriveAdapter,
-    ProviderKind.onedrive: OneDriveAdapter,
-    ProviderKind.dropbox: DropboxAdapter,
+class GenericOidcAdapter(ProviderAdapter):
+    """Adapter for generic OpenID Connect clients."""
+
+    _httpx_client: Client | None = None
+    _configurations: dict[str, dict[str, str]] = dict()
+
+    def __init__(self, client_url: str, oidc_issuer_url: str, **kwargs: Any) -> None:
+        super().__init__(client_url, **kwargs)
+        self.oidc_issuer_url = oidc_issuer_url
+
+    @property
+    def authorization_url(self) -> str:
+        """The authorization URL for the OAuth2 protocol."""
+        return self.__get_configuration()["authorization_endpoint"]
+
+    @property
+    def token_endpoint_url(self) -> str:
+        """The token endpoint URL for the OAuth2 protocol."""
+        return self.__get_configuration()["token_endpoint"]
+
+    @property
+    def api_url(self) -> str:
+        """The URL used for API calls on the Resource Server."""
+        return self.client_url
+
+    @property
+    def user_info_endpoint(self) -> str:
+        """The URL of the user info endpoint."""
+        return self.__get_configuration()["userinfo_endpoint"]
+
+    @user_info_endpoint.setter
+    def user_info_endpoint(self, value: str) -> None:
+        """Setter for user_info_endpoint."""
+        raise errors.ProgrammingError(message="Cannot set user_info_endpoint.")
+
+    def api_validate_account_response(self, response: Response) -> models.ConnectedAccount:
+        """Validates and returns the connected account response from the Resource Server."""
+        return external_models.GenericOIDCConnectedAccount.model_validate(response.json()).to_connected_account()
+
+    def __get_configuration(self) -> dict[str, str]:
+        config = self.__get_configurations().get(self.oidc_issuer_url, None)
+        if config is None:
+            config = self.__discover()
+            self.__get_configurations()[self.oidc_issuer_url] = config
+        return config
+
+    def __discover(self) -> dict[str, str]:
+        """Performs OpenID Connect discovery from the issuer URL.
+
+        Reference: https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderConfig
+        See section 4: "Obtaining OpenID Provider Configuration Information"
+        """
+        issuer_url = self.oidc_issuer_url
+        if not issuer_url:
+            raise errors.ValidationError(message="Issuer URL not configured for generic OIDC client.")
+        issuer_url = issuer_url if issuer_url.endswith("/") else issuer_url + "/"
+        request_url = urljoin(issuer_url, ".well-known/openid-configuration")
+        res = self.__get_httpx_client().get(request_url, headers=[("Accept", "application/json")])
+        if res.status_code != 200:
+            raise errors.ProgrammingError(message=f"Could not read OIDC issuer configuration from {request_url}")
+        res_json = res.json()
+        return {
+            "authorization_endpoint": res_json["authorization_endpoint"],
+            "token_endpoint": res_json["token_endpoint"],
+            "userinfo_endpoint": res_json.get("userinfo_endpoint", ""),
+        }
+
+    @classmethod
+    def __get_configurations(cls) -> dict[str, dict[str, str]]:
+        return cls._configurations
+
+    @classmethod
+    def __get_httpx_client(cls) -> Client:
+        if cls._httpx_client is None:
+            cls._httpx_client = Client()
+        return cls._httpx_client
+
+
+_adapter_map: dict[models.ProviderKind, type[ProviderAdapter]] = {
+    models.ProviderKind.gitlab: GitLabAdapter,
+    models.ProviderKind.github: GitHubAdapter,
+    models.ProviderKind.drive: GoogleDriveAdapter,
+    models.ProviderKind.onedrive: OneDriveAdapter,
+    models.ProviderKind.dropbox: DropboxAdapter,
+    models.ProviderKind.generic_oidc: GenericOidcAdapter,
 }
 
 
@@ -249,4 +331,4 @@ def get_provider_adapter(client: schemas.OAuth2ClientORM) -> ProviderAdapter:
         raise errors.ValidationError(message=f"URL not defined for provider {client.id}.")
 
     adapter_class = _adapter_map[client.kind]
-    return adapter_class(client_url=client.url)
+    return adapter_class(client_url=client.url, oidc_issuer_url=client.oidc_issuer_url)
