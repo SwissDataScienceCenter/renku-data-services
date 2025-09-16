@@ -8,7 +8,7 @@ from urllib.parse import urljoin, urlparse
 
 from authlib.integrations.base_client import InvalidTokenError
 from authlib.integrations.httpx_client import AsyncOAuth2Client, OAuthError
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 from ulid import ULID
@@ -26,6 +26,7 @@ from renku_data_services.connected_services.provider_adapters import (
 )
 from renku_data_services.connected_services.utils import generate_code_verifier
 from renku_data_services.notebooks.api.classes.image import Image, ImageRepoDockerAPI
+from renku_data_services.users.db import APIUser
 from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
 
 logger = logging.getLogger(__name__)
@@ -403,7 +404,7 @@ class ConnectedServicesRepository:
             token_model = models.OAuth2TokenSet.from_dict(oauth2_client.token)
             return token_model
 
-    async def get_provider_for_image(self, image: Image) -> models.ImageProvider | None:
+    async def get_provider_for_image(self, user: APIUser, image: Image) -> models.ImageProvider | None:
         """Find a provider supporting the given an image."""
         registry_urls = [f"http://{image.hostname}", f"https://{image.hostname}"]
         async with self.session_maker() as session:
@@ -411,12 +412,17 @@ class ConnectedServicesRepository:
                 select(schemas.OAuth2ClientORM, schemas.OAuth2ConnectionORM)
                 .join(
                     schemas.OAuth2ConnectionORM,
-                    schemas.OAuth2ConnectionORM.client_id == schemas.OAuth2ClientORM.id,
-                    isouter=True,  # isouter is a left-join, not an outer join
+                    and_(
+                        schemas.OAuth2ConnectionORM.client_id == schemas.OAuth2ClientORM.id,
+                        schemas.OAuth2ConnectionORM.user_id == user.id,
+                    ),
+                    isouter=True,  # isouter makes it a left-join, not an outer join
                 )
                 .where(schemas.OAuth2ClientORM.image_registry_url.in_(registry_urls))
                 .where(schemas.OAuth2ClientORM.kind.in_(self.supported_image_registry_providers))
-                .limit(1)  # there could be multiple matching - just take the first arbitrary 🤷
+                # there could be multiple matching - just take the first arbitrary 🤷
+                .order_by(schemas.OAuth2ConnectionORM.updated_at.desc())
+                .limit(1)
             )
             result = await session.execute(stmt)
             row = result.one_or_none()
@@ -425,18 +431,21 @@ class ConnectedServicesRepository:
             else:
                 return models.ImageProvider(
                     row.OAuth2ClientORM.dump(),
-                    row.OAuth2ConnectionORM.dump() if row.OAuth2ConnectionORM is not None else None,
+                    models.ConnectedUser(row.OAuth2ConnectionORM.dump(), user)
+                    if row.OAuth2ConnectionORM is not None
+                    else None,
                     str(row.OAuth2ClientORM.image_registry_url),  # above query makes it non-nil
                 )
 
-    async def get_image_repo_client(
-        self, user: base_models.APIUser, image_provider: models.ImageProvider
-    ) -> ImageRepoDockerAPI:
+    async def get_image_repo_client(self, image_provider: models.ImageProvider) -> ImageRepoDockerAPI:
         """Create a image repository client for the given user and image provider."""
         url = urlparse(image_provider.registry_url)
         repo_api = ImageRepoDockerAPI(hostname=url.netloc, scheme=url.scheme)
-        if image_provider.connection and image_provider.connection.is_connected():
-            token_set = await self.get_oauth2_connection_token(image_provider.connection.id, user)
+        if image_provider.is_connected():
+            assert image_provider.connected_user is not None
+            user = image_provider.connected_user.user
+            conn = image_provider.connected_user.connection
+            token_set = await self.get_oauth2_connection_token(conn.id, user)
             access_token = token_set.access_token
             if access_token:
                 logger.info(f"Use personal connection to {image_provider.provider.id} for user {user.id}")
