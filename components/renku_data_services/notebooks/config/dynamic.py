@@ -248,7 +248,8 @@ class _AmaltheaV2Config:
             cache_url=os.environ["NB_AMALTHEA_V2__CACHE_URL"],
             group=os.environ.get("NB_AMALTHEA_V2__GROUP", "amalthea.dev"),
             version=os.environ.get("NB_AMALTHEA_V2__VERSION", "v1alpha1"),
-            plural=os.environ.get("NB_AMALTHEA_V2__PLURAL", "amaltheasessions"),
+            # plural=os.environ.get("NB_AMALTHEA_V2__PLURAL", "amaltheasessions"),
+            plural=os.environ.get("NB_AMALTHEA_V2__PLURAL", "hpcamaltheasessions"),
         )
 
 
