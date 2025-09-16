@@ -180,6 +180,11 @@
             ${spicedb-zed}/bin/zed --no-verify-ca --insecure --endpoint ''$ZED_ENDPOINT --token ''$ZED_TOKEN $@
           ''
         )
+        (
+          writeShellScriptBin "ptest" ''
+            pytest --disable-warnings --no-cov -s -p no:warnings $@
+          ''
+        )
       ];
     in {
       formatter = pkgs.alejandra;
@@ -232,8 +237,9 @@
               ];
 
             shellHook = ''
+              PYENV_PATH=$(poetry env info --path)
               export FLAKE_ROOT="$(git rev-parse --show-toplevel)"
-              export PATH="$FLAKE_ROOT/.venv/bin:$PATH"
+              export PATH="$PYENV_PATH/bin:$PATH"
             '';
           });
         vm = pkgs.mkShell (devSettings

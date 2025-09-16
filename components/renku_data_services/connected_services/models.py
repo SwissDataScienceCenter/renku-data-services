@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
+from renku_data_services.users.db import APIUser
 
 from ulid import ULID
 
@@ -156,9 +157,25 @@ class AppInstallationList:
 
 
 @dataclass(frozen=True, eq=True)
+class ConnectedUser:
+    """A user and the corresponding oauth2 connection."""
+
+    connection: OAuth2Connection
+    user: APIUser
+
+    def is_connected(self) -> bool:
+        """Returns whether the connection is in status 'connected'."""
+        return self.connection.is_connected()
+
+
+@dataclass(frozen=True, eq=True)
 class ImageProvider:
     """Result when retrieving provider information for an image."""
 
     provider: OAuth2Client
-    connection: OAuth2Connection | None
+    connected_user: ConnectedUser | None
     registry_url: str
+
+    def is_connected(self) -> bool:
+        """Returns whether the connection exists and is in status 'connected'."""
+        return self.connected_user is not None and self.connected_user.is_connected()

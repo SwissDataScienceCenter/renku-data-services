@@ -55,11 +55,12 @@ async def check_image(image: Image, user: APIUser, connected_services: Connected
 
     reg_api: ImageRepoDockerAPI = image.repo_api()  # public images
     unauth_error: errors.UnauthorizedError | None = None
-    image_provider = await connected_services.get_provider_for_image(image)
-    connection = image_provider.connection if image_provider is not None else None
+    image_provider = await connected_services.get_provider_for_image(user, image)
+    connected_user = image_provider.connected_user if image_provider is not None else None
+    connection = connected_user.connection if connected_user is not None else None
     if image_provider is not None:
         try:
-            reg_api = await connected_services.get_image_repo_client(user, image_provider)
+            reg_api = await connected_services.get_image_repo_client(image_provider)
         except errors.UnauthorizedError as e:
             logger.info(f"Error getting image repo client for image {image}: {e}")
             unauth_error = e
