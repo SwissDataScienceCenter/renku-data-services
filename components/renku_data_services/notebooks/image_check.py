@@ -23,7 +23,7 @@ import httpx
 from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.connected_services.db import ConnectedServicesRepository
-from renku_data_services.connected_services.models import OAuth2Client, OAuth2Connection
+from renku_data_services.connected_services.models import ImageProvider, OAuth2Client, OAuth2Connection
 from renku_data_services.errors import errors
 from renku_data_services.notebooks.api.classes.image import Image, ImageRepoDockerAPI
 
@@ -37,9 +37,34 @@ class CheckResult:
 
     accessible: bool
     response_code: int
-    connection: OAuth2Connection | None = None
-    provider: OAuth2Client | None = None
+    image_provider: ImageProvider | None = None
+    token: str | None = None
     error: errors.UnauthorizedError | None = None
+
+    @property
+    def connection(self) -> OAuth2Connection | None:
+        """Return the connection if present."""
+        if self.image_provider is None:
+            return None
+        if self.image_provider.connected_user is None:
+            return None
+        return self.image_provider.connected_user.connection
+
+    @property
+    def client(self) -> OAuth2Client | None:
+        """Return the OAuth2 client if present."""
+        if self.image_provider is None:
+            return None
+        return self.image_provider.provider
+
+    @property
+    def user(self) -> APIUser | None:
+        """Return the connected user if applicable."""
+        if self.image_provider is None:
+            return None
+        if self.image_provider.connected_user is None:
+            return None
+        return self.image_provider.connected_user.user
 
 
 async def check_image_path(
@@ -81,7 +106,7 @@ async def check_image(image: Image, user: APIUser, connected_services: Connected
     return CheckResult(
         accessible=result == 200,
         response_code=result,
-        connection=connection,
-        provider=image_provider.provider if image_provider is not None else None,
+        image_provider=image_provider,
+        token=reg_api.oauth2_token,
         error=unauth_error,
     )
