@@ -19,7 +19,6 @@ from renku_data_services.app_config import logging
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.connected_services import models
 from renku_data_services.connected_services import orm as schemas
-from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind
 from renku_data_services.connected_services.provider_adapters import (
     GitHubAdapter,
     ProviderAdapter,
@@ -93,6 +92,7 @@ class ConnectedServicesRepository:
             use_pkce=new_client.use_pkce or False,
             created_by_id=user.id,
             image_registry_url=new_client.image_registry_url,
+            oidc_issuer_url=new_client.oidc_issuer_url or None,
         )
 
         async with self.session_maker() as session, session.begin():
@@ -150,6 +150,13 @@ class ConnectedServicesRepository:
             elif patch.image_registry_url == "":
                 # Patching with "", removes the value
                 client.image_registry_url = None
+            if patch.oidc_issuer_url:
+                client.oidc_issuer_url = patch.oidc_issuer_url
+            elif patch.oidc_issuer_url == "":
+                client.oidc_issuer_url = None
+            # Unset oidc_issuer_url when the kind has been changed to a value other than 'generic_oidc'
+            if client.kind != models.ProviderKind.generic_oidc:
+                client.oidc_issuer_url = None
 
             await session.flush()
             await session.refresh(client)
@@ -222,14 +229,14 @@ class ConnectedServicesRepository:
                         client_id=client.id,
                         token=None,
                         state=state,
-                        status=schemas.ConnectionStatus.pending,
+                        status=models.ConnectionStatus.pending,
                         code_verifier=code_verifier,
                         next_url=next_url,
                     )
                     session.add(connection)
                 else:
                     connection.state = state
-                    connection.status = schemas.ConnectionStatus.pending
+                    connection.status = models.ConnectionStatus.pending
                     connection.code_verifier = code_verifier
                     connection.next_url = next_url
 
@@ -284,7 +291,7 @@ class ConnectedServicesRepository:
 
                 connection.token = self._encrypt_token_set(token=token, user_id=connection.user_id)
                 connection.state = None
-                connection.status = schemas.ConnectionStatus.connected
+                connection.status = models.ConnectionStatus.connected
                 connection.next_url = None
 
                 return next_url
@@ -381,7 +388,7 @@ class ConnectedServicesRepository:
             conn = await session.scalar(stmt)
         if not conn:
             return None, None
-        if conn.client.kind != ProviderKind.gitlab:
+        if conn.client.kind != models.ProviderKind.gitlab:
             # NOTE: Only Gitlab is currently supported for this
             return None, None
         url = conn.client.image_registry_url
@@ -406,7 +413,7 @@ class ConnectedServicesRepository:
             adapter,
         ):
             # NOTE: App installations are only available from GitHub
-            if connection.client.kind == ProviderKind.github and isinstance(adapter, GitHubAdapter):
+            if connection.client.kind == models.ProviderKind.github and isinstance(adapter, GitHubAdapter):
                 request_url = urljoin(adapter.api_url, "user/installations")
                 params = dict(page=pagination.page, per_page=pagination.per_page)
                 try:
@@ -450,7 +457,7 @@ class ConnectedServicesRepository:
                     message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."  # noqa: E501
                 )
 
-            if connection.status != ConnectionStatus.connected or connection.token is None:
+            if connection.status != models.ConnectionStatus.connected or connection.token is None:
                 raise errors.UnauthorizedError(message=f"OAuth2 connection with id '{connection_id}' is not valid.")
 
             client = connection.client
