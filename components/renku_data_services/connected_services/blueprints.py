@@ -136,8 +136,7 @@ class OAuth2ClientsBP(CustomBlueprint):
         https_callback_url = urlunparse(urlparse(callback_url)._replace(scheme="https"))
         if https_callback_url != callback_url:
             logger.warning("Forcing the callback URL to use https. Trusted proxies configuration may be incorrect.")
-        ## TODO TODO revert before merge!
-        return callback_url
+        return https_callback_url
 
 
 @dataclass(kw_only=True)
