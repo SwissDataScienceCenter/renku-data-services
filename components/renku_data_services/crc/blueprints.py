@@ -64,7 +64,7 @@ class ResourcePoolsBP(CustomBlueprint):
             remote_configuration = None
             if body.remote_configuration:
                 validate_remote_configuration(body=body.remote_configuration)
-                remote_configuration = body.remote_configuration.model_dump(exclude_none=True)
+                remote_configuration = body.remote_configuration.model_dump(exclude_none=True, mode="json")
                 body.remote_configuration = None
             rp = models.ResourcePool.from_dict(
                 {**body.model_dump(exclude_none=True), "cluster": cluster, "remote_configuration": remote_configuration}
@@ -119,7 +119,7 @@ class ResourcePoolsBP(CustomBlueprint):
             remote_configuration = None
             if body.remote_configuration:
                 validate_remote_configuration(body=body.remote_configuration)
-                remote_configuration = body.remote_configuration.model_dump(exclude_none=True)
+                remote_configuration = body.remote_configuration.model_dump(exclude_none=True, mode="json")
                 body.remote_configuration = None
 
             res = await self.rp_repo.update_resource_pool(
@@ -149,8 +149,8 @@ class ResourcePoolsBP(CustomBlueprint):
             remote_configuration = None
             if body.remote_configuration:
                 validate_remote_configuration_patch(body=body.remote_configuration)
-                logger.warning(f"patch() { body.remote_configuration.model_dump(exclude_none=True)}")
-                remote_configuration = body.remote_configuration.model_dump(exclude_none=True)
+                logger.warning(f"patch() { body.remote_configuration.model_dump(exclude_none=True, mode='json')}")
+                remote_configuration = body.remote_configuration.model_dump(exclude_none=True, mode="json")
                 body.remote_configuration = None
             res = await self.rp_repo.update_resource_pool(
                 api_user=user,
