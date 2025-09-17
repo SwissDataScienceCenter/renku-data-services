@@ -148,7 +148,10 @@ class ImageRepoDockerAPI:
         """Check the image at the registry."""
         token = await self._get_docker_token(image)
         image_digest_url = f"{self.scheme}://{image.hostname}/v2/{image.name}/manifests/{image.tag}"
-        headers = {"Accept": f"{ManifestTypes.docker_v2.value}, {ManifestTypes.oci_v1_manifest.value}"}
+        accept_media = ",".join(
+            [e.value for e in [ManifestTypes.docker_v2, ManifestTypes.oci_v1_manifest, ManifestTypes.oci_v1_index]]
+        )
+        headers = {"Accept": accept_media}
         if token:
             headers["Authorization"] = f"Bearer {token}"
 
