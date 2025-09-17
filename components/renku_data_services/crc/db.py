@@ -306,6 +306,8 @@ class ResourcePoolRepository(_Base):
                     raise errors.ValidationError(
                         message="There can only be one default resource pool and one already exists."
                     )
+            if not orm.remote_provider_id:
+                orm.remote_provider_id = None
             session.add(orm)
 
             await session.flush()
@@ -468,6 +470,24 @@ class ResourcePoolRepository(_Base):
                                     api_user, resource_pool_id=id, resource_class_id=class_id, **cls
                                 )
                             )
+                    case "remote_provider_id":
+                        if val is None:
+                            continue
+                        if val == "":
+                            rp.remote_provider_id = None
+                            new_rp_model = new_rp_model.update(remote_provider_id=None)
+                            continue
+                        rp.remote_provider_id = val
+                        new_rp_model = new_rp_model.update(remote_provider_id=val)
+                    # TODO: with this update method, it is impossible to unset remote_configuration
+                    case "remote_configuration":
+                        if val is None:
+                            continue
+                        remote_configuration = new_rp_model.remote_configuration
+                        if remote_configuration is None:
+                            continue
+                        rp.remote_configuration = remote_configuration.to_dict()
+                        new_rp_model = new_rp_model.update(remote_configuration=remote_configuration.to_dict())
                     case _:
                         pass
             new_classes = await gather(*new_classes_coroutines)

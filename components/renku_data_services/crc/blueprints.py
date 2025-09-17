@@ -14,7 +14,12 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_api.misc import validate_body_root_model, validate_db_ids, validate_query
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.crc import apispec, models
-from renku_data_services.crc.core import validate_cluster, validate_cluster_patch
+from renku_data_services.crc.core import (
+    validate_cluster,
+    validate_cluster_patch,
+    validate_remote_configuration,
+    validate_remote_configuration_patch,
+)
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository, UserRepository
 from renku_data_services.k8s.db import QuotaRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
@@ -53,8 +58,9 @@ class ResourcePoolsBP(CustomBlueprint):
             cluster = None
             if body.cluster_id is not None:
                 cluster = await self.cluster_repo.select(ULID.from_str(body.cluster_id))
+            if body.remote_configuration:
+                validate_remote_configuration(body=body.remote_configuration)
             rp = models.ResourcePool.from_dict({**body.model_dump(exclude_none=True), "cluster": cluster})
-
             res = await self.rp_repo.insert_resource_pool(api_user=user, resource_pool=rp)
             return validated_json(apispec.ResourcePoolWithId, res, status=201)
 
@@ -102,6 +108,8 @@ class ResourcePoolsBP(CustomBlueprint):
         async def _put(
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.ResourcePoolPut
         ) -> HTTPResponse:
+            if body.remote_configuration:
+                validate_remote_configuration(body=body.remote_configuration)
             res = await self.rp_repo.update_resource_pool(
                 api_user=user,
                 id=resource_pool_id,
@@ -125,6 +133,8 @@ class ResourcePoolsBP(CustomBlueprint):
         async def _patch(
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.ResourcePoolPatch
         ) -> HTTPResponse:
+            if body.remote_configuration:
+                validate_remote_configuration_patch(body=body.remote_configuration)
             res = await self.rp_repo.update_resource_pool(
                 api_user=user,
                 id=resource_pool_id,

@@ -1337,7 +1337,7 @@ components:
         remote_provider_id:
           $ref: "#/components/schemas/RemoteProviderId"
         remote_configuration:
-          $ref: "#/components/schemas/RemoteConfiguration"
+          $ref: "#/components/schemas/RemoteConfigurationPatch"
         idle_threshold:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
@@ -1746,12 +1746,16 @@ components:
           enum: [ "firecrest" ]
           description: Kind of remote resource pool
           example: "firecrest"
-        apiUrl:
+        api_url:
           $ref: "#/components/schemas/RemoteConfigurationFirecrestApiUrl"
         system_name:
           $ref: "#/components/schemas/RemoteConfigurationFirecrestSystemName"
         partition:
           $ref: "#/components/schemas/RemoteConfigurationFirecrestPartition"
+      required:
+        - kind
+        - api_url
+        - system_name
     RemoteConfigurationFirecrestApiUrl:
       type: string
       description: The base URL of the FirecREST API
@@ -1764,6 +1768,34 @@ components:
       type: string
       description: The partition to use when submitting jobs
       example: "normal"
+    RemoteConfigurationPatch:
+      type: object
+      description: |
+        Patch for the configuration used by to start sessions remotely
+      oneOf:
+        - $ref: "#/components/schemas/RemoteConfigurationFirecrestPatch"
+      discriminator:
+        propertyName: kind
+        mapping:
+          firecrest: '#/components/schemas/RemoteConfigurationFirecrestPatch'
+    RemoteConfigurationFirecrestPatch:
+      type: object
+      description: |
+        The configuration for starting sessions remotely using
+        the FirecREST API
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum: [ "firecrest" ]
+          description: Kind of remote resource pool
+          example: "firecrest"
+        api_url:
+          $ref: "#/components/schemas/RemoteConfigurationFirecrestApiUrl"
+        system_name:
+          $ref: "#/components/schemas/RemoteConfigurationFirecrestSystemName"
+        partition:
+          $ref: "#/components/schemas/RemoteConfigurationFirecrestPartition"
     IdleThreshold:
       type: integer
       description: A threshold in seconds after which a session gets hibernated (0 means no threshold)

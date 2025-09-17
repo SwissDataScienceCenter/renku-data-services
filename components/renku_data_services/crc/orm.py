@@ -232,7 +232,7 @@ class ResourcePoolORM(BaseORM):
     default: Mapped[bool] = mapped_column(default=False, index=True)
     public: Mapped[bool] = mapped_column(default=False, index=True)
     remote: Mapped[bool] = mapped_column(default=False, server_default=false())
-    remote_provider_id: Mapped[ULID | None] = mapped_column(
+    remote_provider_id: Mapped[str | None] = mapped_column(
         ForeignKey(cs_schemas.OAuth2ClientORM.id, ondelete="RESTRICT", name="resource_pools_remote_provider_id_fk"),
         default=None,
         server_default=None,
@@ -259,6 +259,10 @@ class ResourcePoolORM(BaseORM):
         if resource_pool.cluster is not None:
             cluster_id = resource_pool.cluster.id
 
+        remote_configuration = None
+        if resource_pool.remote_configuration:
+            remote_configuration = resource_pool.remote_configuration.to_dict()
+
         return cls(
             name=resource_pool.name,
             quota=quota,
@@ -268,6 +272,8 @@ class ResourcePoolORM(BaseORM):
             public=resource_pool.public,
             default=resource_pool.default,
             remote=resource_pool.remote,
+            remote_provider_id=resource_pool.remote_provider_id,
+            remote_configuration=remote_configuration,
             cluster_id=cluster_id,
         )
 
@@ -288,6 +294,9 @@ class ResourcePoolORM(BaseORM):
                 f"Using the quota {quota} in the response."
             )
         cluster = None if self.cluster is None else self.cluster.dump()
+        remote_configuration = (
+            models.RemoteConfiguration.from_dict(self.remote_configuration) if self.remote_configuration else None
+        )
         return models.ResourcePool(
             id=self.id,
             name=self.name,
@@ -298,6 +307,8 @@ class ResourcePoolORM(BaseORM):
             public=self.public,
             default=self.default,
             remote=self.remote,
+            remote_provider_id=self.remote_provider_id,
+            remote_configuration=remote_configuration,
             cluster=cluster,
         )
 
