@@ -9,6 +9,7 @@ from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from renku_data_services.app_config import logging
 from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_body_root_model, validate_db_ids, validate_query
@@ -24,6 +25,8 @@ from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
 from renku_data_services.k8s.db import QuotaRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.models import UserInfo
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(kw_only=True)
@@ -146,6 +149,7 @@ class ResourcePoolsBP(CustomBlueprint):
             remote_configuration = None
             if body.remote_configuration:
                 validate_remote_configuration_patch(body=body.remote_configuration)
+                logger.warning(f"patch() { body.remote_configuration.model_dump(exclude_none=True)}")
                 remote_configuration = body.remote_configuration.model_dump(exclude_none=True)
                 body.remote_configuration = None
             res = await self.rp_repo.update_resource_pool(
