@@ -448,7 +448,7 @@ class ConnectedServicesRepository:
             token_set = await self.get_oauth2_connection_token(conn.id, user)
             access_token = token_set.access_token
             if access_token:
-                logger.info(f"Use personal connection to {image_provider.provider.id} for user {user.id}")
+                logger.debug(f"Use connection {conn.id} to {image_provider.provider.id} for user {user.id}")
                 repo_api = repo_api.with_oauth2_token(access_token)
         return repo_api
 

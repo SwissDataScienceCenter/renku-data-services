@@ -40,7 +40,7 @@ class ImageRepoDockerAPI:
 
     hostname: str
     oauth2_token: Optional[str] = field(default=None, repr=False)
-    oauth2_user: str = field(default="oauth2", repr=False)
+
     # NOTE: We need to follow redirects so that we can authenticate with the image repositories properly.
     # NOTE: If we do not use default_factory to create the client here requests will fail because it can happen
     # that the client gets created in the wrong asyncio loop.
@@ -74,7 +74,7 @@ class ImageRepoDockerAPI:
             return None
         headers = {"Accept": "application/json"}
         if self.oauth2_token:
-            creds = base64.b64encode(f"${self.oauth2_user}:{self.oauth2_token}".encode()).decode()
+            creds = base64.b64encode(f"oauth2:{self.oauth2_token}".encode()).decode()
             headers["Authorization"] = f"Basic {creds}"
         token_req = await self.client.get(realm, params=params, headers=headers)
         return str(token_req.json().get("token"))
@@ -142,7 +142,7 @@ class ImageRepoDockerAPI:
 
     async def image_exists(self, image: Image) -> bool:
         """Check the docker repo API if the image exists."""
-        return await self.get_image_manifest(image) is not None
+        return await self.image_check(image) == 200
 
     async def image_check(self, image: Image) -> int:
         """Check the image at the registry."""
@@ -188,10 +188,6 @@ class ImageRepoDockerAPI:
         if workdir == "":
             workdir = "/"
         return PurePosixPath(workdir)
-
-    def with_oauth2_user(self, user: str) -> ImageRepoDockerAPI:
-        """Sets the username for retrieving access tokens."""
-        return ImageRepoDockerAPI(self.hostname, self.oauth2_token, user)
 
     def with_oauth2_token(self, oauth2_token: str) -> ImageRepoDockerAPI:
         """Return a docker API instance with the token as authentication."""

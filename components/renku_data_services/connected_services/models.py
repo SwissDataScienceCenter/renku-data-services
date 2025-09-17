@@ -180,3 +180,15 @@ class ImageProvider:
     def is_connected(self) -> bool:
         """Returns whether the connection exists and is in status 'connected'."""
         return self.connected_user is not None and self.connected_user.is_connected()
+
+    @property
+    def connection(self) -> OAuth2Connection | None:
+        """Return the connection if present."""
+        if self.connected_user:
+            return self.connected_user.connection
+        else:
+            return None
+
+    def __str__(self) -> str:
+        conn = f"connection={self.connection.id}" if self.connection else "connection=None"
+        return f"ImageProvider({self.provider.id}/{self.provider.kind}, {conn})"
