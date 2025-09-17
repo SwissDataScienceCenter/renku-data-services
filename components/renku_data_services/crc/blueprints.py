@@ -58,9 +58,14 @@ class ResourcePoolsBP(CustomBlueprint):
             cluster = None
             if body.cluster_id is not None:
                 cluster = await self.cluster_repo.select(ULID.from_str(body.cluster_id))
+            remote_configuration = None
             if body.remote_configuration:
                 validate_remote_configuration(body=body.remote_configuration)
-            rp = models.ResourcePool.from_dict({**body.model_dump(exclude_none=True), "cluster": cluster})
+                remote_configuration = body.remote_configuration.model_dump(exclude_none=True)
+                body.remote_configuration = None
+            rp = models.ResourcePool.from_dict(
+                {**body.model_dump(exclude_none=True), "cluster": cluster, "remote_configuration": remote_configuration}
+            )
             res = await self.rp_repo.insert_resource_pool(api_user=user, resource_pool=rp)
             return validated_json(apispec.ResourcePoolWithId, res, status=201)
 
@@ -108,11 +113,16 @@ class ResourcePoolsBP(CustomBlueprint):
         async def _put(
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.ResourcePoolPut
         ) -> HTTPResponse:
+            remote_configuration = None
             if body.remote_configuration:
                 validate_remote_configuration(body=body.remote_configuration)
+                remote_configuration = body.remote_configuration.model_dump(exclude_none=True)
+                body.remote_configuration = None
+
             res = await self.rp_repo.update_resource_pool(
                 api_user=user,
                 id=resource_pool_id,
+                remote_configuration=remote_configuration,
                 **body.model_dump(exclude_none=True),
             )
             if res is None:
@@ -133,11 +143,15 @@ class ResourcePoolsBP(CustomBlueprint):
         async def _patch(
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.ResourcePoolPatch
         ) -> HTTPResponse:
+            remote_configuration = None
             if body.remote_configuration:
                 validate_remote_configuration_patch(body=body.remote_configuration)
+                remote_configuration = body.remote_configuration.model_dump(exclude_none=True)
+                body.remote_configuration = None
             res = await self.rp_repo.update_resource_pool(
                 api_user=user,
                 id=resource_pool_id,
+                remote_configuration=remote_configuration,
                 **body.model_dump(exclude_none=True),
             )
             if res is None:
