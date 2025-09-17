@@ -6,6 +6,7 @@ grows it is worth looking into separating this functionality into separate class
 it all in one place.
 """
 
+import json
 from asyncio import gather
 from collections.abc import AsyncGenerator, Callable, Collection, Coroutine, Sequence
 from dataclasses import asdict, dataclass, field
@@ -390,7 +391,7 @@ class ResourcePoolRepository(_Base):
     @_only_admins
     async def update_resource_pool(self, api_user: base_models.APIUser, id: int, **kwargs: Any) -> models.ResourcePool:
         """Update an existing resource pool in the database."""
-        logger.warning("update()", kwargs.get("remote_configuration"))
+        logger.warning(f"update() {json.dumps(kwargs.get("remote_configuration"))}")
         async with self.session_maker() as session, session.begin():
             stmt = (
                 select(schemas.ResourcePoolORM)
