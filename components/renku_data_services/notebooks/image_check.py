@@ -40,6 +40,19 @@ class CheckResult:
     token: str | None = field(default=None, repr=False)
     error: errors.UnauthorizedError | None = None
 
+    def __str__(self) -> str:
+        provider = "None"
+        if self.client:
+            conn = f"connection={self.connection.id}" if self.connection else "connection=None"
+            provider = f"{self.client.id}/{self.client.kind} ({conn})"
+        token = "***" if self.token else "None"
+        error = "unauthorized" if self.error else "None"
+        return (
+            "CheckResult("
+            f"accessible={self.accessible}/{self.response_code}, "
+            f"provider={provider}, token={token}, error={error})"
+        )
+
     @property
     def connection(self) -> OAuth2Connection | None:
         """Return the connection if present."""

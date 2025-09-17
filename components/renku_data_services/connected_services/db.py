@@ -10,7 +10,7 @@ from authlib.integrations.base_client import InvalidTokenError
 from authlib.integrations.httpx_client import AsyncOAuth2Client, OAuthError
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import selectinload
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
@@ -451,43 +451,6 @@ class ConnectedServicesRepository:
                 logger.info(f"Use personal connection to {image_provider.provider.id} for user {user.id}")
                 repo_api = repo_api.with_oauth2_token(access_token)
         return repo_api
-
-    async def get_docker_client(
-        self, user: base_models.APIUser, image: Image
-    ) -> tuple[ImageRepoDockerAPI, ULID] | tuple[None, None]:
-        """Search for clients and connections that can work with the specific image and return a docker client."""
-        async with self.session_maker() as session:
-            registry_urls = [f"http://{image.hostname}", f"https://{image.hostname}"]
-            stmt = (
-                select(schemas.OAuth2ConnectionORM)
-                .where(schemas.OAuth2ConnectionORM.user_id == user.id)
-                .where(
-                    schemas.OAuth2ConnectionORM.client.has(
-                        schemas.OAuth2ClientORM.image_registry_url.in_(registry_urls)
-                    )
-                )
-                .where(
-                    schemas.OAuth2ConnectionORM.client.has(
-                        schemas.OAuth2ClientORM.kind.in_(self.supported_image_registry_providers)
-                    )
-                )
-                .options(joinedload(schemas.OAuth2ConnectionORM.client, innerjoin=True))
-            )
-            conn = await session.scalar(stmt)
-
-        if not conn:
-            return None, None
-        url = conn.client.image_registry_url
-        if not url:
-            return None, None
-        token_set = await self.get_oauth2_connection_token(conn.id, user)
-        url_parsed = urlparse(url)
-        access_token = token_set.access_token
-        if not access_token:
-            return None, None
-        return ImageRepoDockerAPI(
-            hostname=url_parsed.netloc, scheme=url_parsed.scheme, oauth2_token=access_token
-        ), conn.id
 
     async def get_oauth2_app_installations(
         self, connection_id: ULID, user: base_models.APIUser, pagination: PaginationRequest
