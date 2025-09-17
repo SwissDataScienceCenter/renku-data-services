@@ -8,9 +8,8 @@ Access to docker images can fall into these cases:
 For the latter case, try to find out as much as possible:
 - Look for credentials in the connected services
 - If there are no connections defined for that user and registry, image is not accessible
-- Try access it with the credentials:
-  - a 404 means the image doesn't exist
-  - a 402 means the credentials are not valid or don't provide enoug permissions to access it (access denied)
+- Try access it with the credentials, if it still fails the token could be invalid.
+- Try to obtain the connected account that checks the token validity
 """
 
 from __future__ import annotations
