@@ -1282,6 +1282,10 @@ components:
           $ref: "#/components/schemas/DefaultFlag"
         remote:
           $ref: "#/components/schemas/RemoteFlag"
+        remote_provider_id:
+          $ref: "#/components/schemas/RemoteProviderId"
+        remote_configuration:
+          $ref: "#/components/schemas/RemoteConfiguration"
         idle_threshold:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
@@ -1330,6 +1334,10 @@ components:
           $ref: "#/components/schemas/DefaultFlag"
         remote:
           $ref: "#/components/schemas/RemoteFlag"
+        remote_provider_id:
+          $ref: "#/components/schemas/RemoteProviderId"
+        remote_configuration:
+          $ref: "#/components/schemas/RemoteConfiguration"
         idle_threshold:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
@@ -1362,6 +1370,10 @@ components:
           $ref: "#/components/schemas/DefaultFlag"
         remote:
           $ref: "#/components/schemas/RemoteFlag"
+        remote_provider_id:
+          $ref: "#/components/schemas/RemoteProviderId"
+        remote_configuration:
+          $ref: "#/components/schemas/RemoteConfiguration"
         idle_threshold:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
@@ -1413,6 +1425,10 @@ components:
           $ref: "#/components/schemas/DefaultFlag"
         remote:
           $ref: "#/components/schemas/RemoteFlag"
+        remote_provider_id:
+          $ref: "#/components/schemas/RemoteProviderId"
+        remote_configuration:
+          $ref: "#/components/schemas/RemoteConfiguration"
         idle_threshold:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
@@ -1469,6 +1485,10 @@ components:
           $ref: "#/components/schemas/DefaultFlag"
         remote:
           $ref: "#/components/schemas/RemoteFlag"
+        remote_provider_id:
+          $ref: "#/components/schemas/RemoteProviderId"
+        remote_configuration:
+          $ref: "#/components/schemas/RemoteConfiguration"
         idle_threshold:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
@@ -1700,6 +1720,50 @@ components:
       description: A resource pool which starts sessions remotely
       default: false
       example: false
+    RemoteProviderId:
+      type: string
+      description: The ID of a provider (see oauth2 section)
+      example: "my-provider"
+    RemoteConfiguration:
+      type: object
+      description: The configuration used by to start sessions remotely
+      # NOTE: Using oneOf here allows to describe more types of remote sessions
+      oneOf:
+        - $ref: "#/components/schemas/RemoteConfigurationFirecrest"
+      discriminator:
+        propertyName: kind
+        mapping:
+          firecrest: '#/components/schemas/RemoteConfigurationFirecrest'
+    RemoteConfigurationFirecrest:
+      type: object
+      description: |
+        The configuration for starting sessions remotely using
+        the FirecREST API
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum: [ "firecrest" ]
+          description: Kind of remote resource pool
+          example: "firecrest"
+        apiUrl:
+          $ref: "#/components/schemas/RemoteConfigurationFirecrestApiUrl"
+        system_name:
+          $ref: "#/components/schemas/RemoteConfigurationFirecrestSystemName"
+        partition:
+          $ref: "#/components/schemas/RemoteConfigurationFirecrestPartition"
+    RemoteConfigurationFirecrestApiUrl:
+      type: string
+      description: The base URL of the FirecREST API
+      example: "https://api.cscs.ch/hpc/firecrest/v2"
+    RemoteConfigurationFirecrestSystemName:
+      type: string
+      description: The name of the system to use with the FirecREST API
+      example: "eiger"
+    RemoteConfigurationFirecrestPartition:
+      type: string
+      description: The partition to use when submitting jobs
+      example: "normal"
     IdleThreshold:
       type: integer
       description: A threshold in seconds after which a session gets hibernated (0 means no threshold)
