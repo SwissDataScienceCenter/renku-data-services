@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import (
     JSON,
@@ -22,6 +22,7 @@ from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services.app_config import logging
+from renku_data_services.connected_services import orm as cs_schemas
 from renku_data_services.crc import models
 from renku_data_services.crc.models import ClusterSettings, SavedClusterSettings, SessionProtocol
 from renku_data_services.errors import errors
@@ -231,6 +232,16 @@ class ResourcePoolORM(BaseORM):
     default: Mapped[bool] = mapped_column(default=False, index=True)
     public: Mapped[bool] = mapped_column(default=False, index=True)
     remote: Mapped[bool] = mapped_column(default=False, server_default=false())
+    remote_provider_id: Mapped[ULID | None] = mapped_column(
+        ForeignKey(cs_schemas.OAuth2ClientORM.id, ondelete="RESTRICT", name="resource_pools_remote_provider_id_fk"),
+        default=None,
+        server_default=None,
+        nullable=True,
+        index=True,
+    )
+    remote_configuration: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONVariant, default=None, server_default=None, nullable=True
+    )
     id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
     cluster_id: Mapped[Optional[ULID]] = mapped_column(
         ForeignKey(ClusterORM.id, ondelete="SET NULL"), default=None, index=True
