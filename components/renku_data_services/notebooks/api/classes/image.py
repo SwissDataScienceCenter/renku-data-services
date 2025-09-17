@@ -152,9 +152,8 @@ class ImageRepoDockerAPI:
         if token:
             headers["Authorization"] = f"Bearer {token}"
 
-        logger.info(f"Check image: {image_digest_url}")
         res = await self.client.head(image_digest_url, headers=headers)
-        logger.info(f"Checked image at: {image_digest_url}: {res.status_code}")
+        logger.debug(f"Checked image access: {image_digest_url}: {res.status_code}")
         return res.status_code
 
     async def get_image_config(self, image: Image) -> Optional[dict[str, Any]]:
