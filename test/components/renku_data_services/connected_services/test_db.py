@@ -6,9 +6,13 @@ from typing import cast
 import pytest
 
 from renku_data_services.base_models.core import APIUser
-from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind
 from renku_data_services.connected_services.db import ConnectedServicesRepository, Image
-from renku_data_services.connected_services.models import OAuth2Client, UnsavedOAuth2Client
+from renku_data_services.connected_services.models import (
+    ConnectionStatus,
+    OAuth2Client,
+    ProviderKind,
+    UnsavedOAuth2Client,
+)
 from renku_data_services.connected_services.orm import OAuth2ConnectionORM
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.migrations.core import run_migrations_for_app

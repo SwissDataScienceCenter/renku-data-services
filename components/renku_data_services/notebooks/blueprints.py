@@ -12,8 +12,8 @@ from renku_data_services.base_api.auth import authenticate, authenticate_2
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser, Authenticator
 from renku_data_services.base_models.metrics import MetricsService
-from renku_data_services.connected_services.apispec import ConnectionStatus
 from renku_data_services.connected_services.db import ConnectedServicesRepository
+from renku_data_services.connected_services.models import ConnectionStatus
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,

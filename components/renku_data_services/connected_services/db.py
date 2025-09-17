@@ -44,7 +44,7 @@ class ConnectedServicesRepository:
         self.session_maker = session_maker
         self.encryption_key = encryption_key
         self.async_oauth2_client_class = async_oauth2_client_class
-        self.supported_image_registry_providers = {ProviderKind.gitlab, ProviderKind.github}
+        self.supported_image_registry_providers = {models.ProviderKind.gitlab, models.ProviderKind.github}
 
     async def get_oauth2_clients(
         self,

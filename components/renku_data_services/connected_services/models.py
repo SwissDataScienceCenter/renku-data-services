@@ -4,9 +4,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
-from renku_data_services.users.db import APIUser
 
 from ulid import ULID
+
+from renku_data_services.users.db import APIUser
 
 
 class ProviderKind(StrEnum):
