@@ -535,8 +535,9 @@ def __format_image_pull_secret(secret_name: str, access_token: str, registry_dom
     registry_secret = {
         "auths": {
             registry_domain: {
-                "Username": "oauth2",
-                "Password": access_token,
+                "auth": base64.b64encode(f"oauth2:{access_token}".encode()).decode()
+                # "Username": "oauth2",
+                # "Password": access_token,
             }
         }
     }
