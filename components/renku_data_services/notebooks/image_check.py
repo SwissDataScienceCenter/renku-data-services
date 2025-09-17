@@ -14,7 +14,7 @@ For the latter case, try to find out as much as possible:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import final
 
 import httpx
@@ -37,7 +37,7 @@ class CheckResult:
     accessible: bool
     response_code: int
     image_provider: ImageProvider | None = None
-    token: str | None = None
+    token: str | None = field(default=None, repr=False)
     error: errors.UnauthorizedError | None = None
 
     @property

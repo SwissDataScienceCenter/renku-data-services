@@ -557,6 +557,7 @@ async def __get_gitlab_image_pull_secret_v2(
     """Return a secret for accessing the image if one is available for the given user."""
     image_parsed = Image.from_path(image)
     image_check_result = await ic.check_image(image_parsed, user, connected_svcs_repo)
+    logger.info(f"Set pull secret for {image} to connection {image_check_result.image_provider}")
     if not image_check_result.token:
         return None
 
