@@ -295,7 +295,9 @@ class ResourcePoolORM(BaseORM):
             )
         cluster = None if self.cluster is None else self.cluster.dump()
         remote_configuration = (
-            models.RemoteConfiguration.from_dict(self.remote_configuration) if self.remote_configuration else None
+            models.RemoteConfigurationFirecrest.from_dict(self.remote_configuration)
+            if self.remote_configuration
+            else None
         )
         return models.ResourcePool(
             id=self.id,

@@ -1730,10 +1730,6 @@ components:
       # NOTE: Using oneOf here allows to describe more types of remote sessions
       oneOf:
         - $ref: "#/components/schemas/RemoteConfigurationFirecrest"
-      discriminator:
-        propertyName: kind
-        mapping:
-          firecrest: '#/components/schemas/RemoteConfigurationFirecrest'
     RemoteConfigurationFirecrest:
       type: object
       description: |
@@ -1774,10 +1770,6 @@ components:
         Patch for the configuration used by to start sessions remotely
       oneOf:
         - $ref: "#/components/schemas/RemoteConfigurationFirecrestPatch"
-      discriminator:
-        propertyName: kind
-        mapping:
-          firecrest: '#/components/schemas/RemoteConfigurationFirecrestPatch'
     RemoteConfigurationFirecrestPatch:
       type: object
       description: |

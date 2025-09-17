@@ -281,7 +281,7 @@ class ResourcePool:
     public: bool = False
     remote: bool = False
     remote_provider_id: str | None = None
-    remote_configuration: RemoteConfiguration | None = None
+    remote_configuration: RemoteConfigurationFirecrest | None = None
     cluster: SavedClusterSettings | None = None
 
     def __post_init__(self) -> None:
@@ -346,7 +346,7 @@ class ResourcePool:
         cluster: SavedClusterSettings | None = None
         quota: Quota | None = None
         classes: list[ResourceClass] = []
-        remote_configuration: RemoteConfiguration | None = None
+        remote_configuration: RemoteConfigurationFirecrest | None = None
 
         if "quota" in data and isinstance(data["quota"], dict):
             quota = Quota.from_dict(data["quota"])
@@ -382,10 +382,10 @@ class ResourcePool:
                 raise errors.ValidationError(message=f"Got unexpected cluster data {unknown} when creating model")
 
         match tmp := data.get("remote_configuration"):
-            case RemoteConfiguration():
+            case RemoteConfigurationFirecrest():
                 remote_configuration = tmp
             case dict():
-                remote_configuration = RemoteConfiguration.from_dict(tmp)
+                remote_configuration = RemoteConfigurationFirecrest.from_dict(tmp)
             case None:
                 remote_configuration = None
             case unknown:
@@ -436,38 +436,27 @@ class RemoteConfigurationFirecrest:
     system_name: str
     partition: str | None = None
 
-
-@dataclass(frozen=True, eq=True, kw_only=True)
-class RemoteConfiguration:
-    """Model for remote configurations."""
-
-    root: RemoteConfigurationFirecrest
-
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Self:
         """Convert a dict object into a RemoteConfiguration instance."""
         kind = data.get("kind")
         if kind == RemoteConfigurationKind.firecrest.value:
             return cls(
-                root=RemoteConfigurationFirecrest(
-                    kind=RemoteConfigurationKind.firecrest,
-                    api_url=data["api_url"],
-                    system_name=data["system_name"],
-                    partition=data.get("partition") or None,
-                )
+                kind=RemoteConfigurationKind.firecrest,
+                api_url=data["api_url"],
+                system_name=data["system_name"],
+                partition=data.get("partition") or None,
             )
         raise errors.ValidationError(message=f"Invalid kind for remote configuration: '{kind}'")
 
     def to_dict(self) -> dict[str, Any]:
         """Convert this instance of RemoteConfiguration into a dictionary."""
-        if self.root.kind == RemoteConfigurationKind.firecrest:
-            return dict(
-                kind=self.root.kind,
-                api_url=self.root.api_url,
-                system_name=self.root.system_name,
-                partition=self.root.partition or None,
-            )
-        raise errors.ValidationError(message=f"Invalid kind for remote configuration: '{self.root.kind}'")
+        return dict(
+            kind=self.kind,
+            api_url=self.api_url,
+            system_name=self.system_name,
+            partition=self.partition or None,
+        )
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -478,6 +467,3 @@ class RemoteConfigurationFirecrestPatch:
     api_url: str | None = None
     system_name: str | None = None
     partition: str | None = None
-
-
-RemoteConfigurationPatch = RemoteConfigurationFirecrestPatch
