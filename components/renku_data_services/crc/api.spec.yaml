@@ -1292,7 +1292,7 @@ components:
           $ref: "#/components/schemas/HibernationThreshold"
         cluster_id:
           $ref: "#/components/schemas/Ulid"
-      required: ["classes", "name", "public", "default", "remote"]
+      required: ["classes", "name", "public", "default"]
       example:
         quota:
           cpu: 50
@@ -1380,7 +1380,7 @@ components:
           $ref: "#/components/schemas/HibernationThreshold"
         cluster_id:
           $ref: "#/components/schemas/Ulid"
-      required: ["classes", "name", "public", "default", "remote"]
+      required: ["classes", "name", "public", "default"]
       example:
         quota:
           cpu: 50
