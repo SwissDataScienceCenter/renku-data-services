@@ -191,4 +191,4 @@ class ImageProvider:
 
     def __str__(self) -> str:
         conn = f"connection={self.connection.id}" if self.connection else "connection=None"
-        return f"ImageProvider({self.provider.id}/{self.provider.kind}, {conn})"
+        return f"ImageProvider(provider={self.provider.id}/{self.provider.kind}, {conn})"

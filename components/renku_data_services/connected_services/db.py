@@ -298,7 +298,7 @@ class ConnectedServicesRepository:
 
                 return next_url
 
-    async def delete_oauth2_connection(self, user: base_models.APIUser, conn_id: str) -> bool:
+    async def delete_oauth2_connection(self, user: base_models.APIUser, connection_id: ULID) -> bool:
         """Delete one connection of the given user."""
         if not user.is_authenticated or user.id is None:
             return False
@@ -306,7 +306,7 @@ class ConnectedServicesRepository:
         async with self.session_maker() as session, session.begin():
             result = await session.scalars(
                 select(schemas.OAuth2ConnectionORM)
-                .where(schemas.OAuth2ConnectionORM.id == conn_id)
+                .where(schemas.OAuth2ConnectionORM.id == connection_id)
                 .where(schemas.OAuth2ConnectionORM.user_id == user.id)
             )
             conn = result.one_or_none()
@@ -332,7 +332,7 @@ class ConnectedServicesRepository:
             connections = result.all()
             return [c.dump() for c in connections]
 
-    async def get_oauth2_connection_maybe(
+    async def get_oauth2_connection_or_none(
         self, connection_id: ULID, user: base_models.APIUser
     ) -> models.OAuth2Connection | None:
         """Get one OAuth2 connection from the database. Throw if the user is not authenticated."""
@@ -358,7 +358,7 @@ class ConnectedServicesRepository:
 
         Throw if the connection doesn't exist or the user is not authenticated.
         """
-        connection = await self.get_oauth2_connection_maybe(connection_id, user)
+        connection = await self.get_oauth2_connection_or_none(connection_id, user)
         if connection is None:
             raise errors.MissingResourceError(
                 message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."
