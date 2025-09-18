@@ -23,7 +23,7 @@ from renku_data_services.base_models import AnonymousAPIUser, APIUser, Authentic
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
-from renku_data_services.crc.models import GpuKind, ResourceClass, ResourcePool
+from renku_data_services.crc.models import GpuKind, RemoteConfigurationFirecrest, ResourceClass, ResourcePool
 from renku_data_services.data_connectors.db import (
     DataConnectorSecretRepository,
 )
@@ -609,23 +609,23 @@ def get_remote_secret(
     user: AuthenticatedAPIUser | AnonymousAPIUser,
     config: NotebooksConfig,
     server_name: str,
+    remote_provider_id: str,
+    remote_configuration: RemoteConfigurationFirecrest,
     git_providers: list[GitProvider],
 ) -> ExtraSecret | None:
     """Returns the secret containing the configuration for the remote session controller."""
     if not user.is_authenticated or user.access_token is None or user.refresh_token is None:
         return None
-    # TODO: where do we configure this?
-    cscs_provider = next(filter(lambda p: p.id == "cscs.ch", git_providers), None)
-    if not cscs_provider:
+    remote_provider = next(filter(lambda p: p.id == remote_provider_id, git_providers), None)
+    if not remote_provider:
         return None
     renku_base_url = "https://" + config.sessions.ingress.host
     renku_base_url = renku_base_url.rstrip("/")
     renku_auth_token_uri = f"{renku_base_url}/auth/realms/{config.keycloak_realm}/protocol/openid-connect/token"
     secret_data = {
-        # TODO: where do we configure this?
-        "FIRECREST_API_URL": "https://api.cscs.ch/hpc/firecrest/v2/",
+        "FIRECREST_API_URL": remote_configuration.api_url,
         "AUTH_KIND": "renku",
-        "AUTH_TOKEN_URI": cscs_provider.access_token_url,
+        "AUTH_TOKEN_URI": remote_provider.access_token_url,
         "AUTH_RENKU_ACCESS_TOKEN": user.access_token,
         "AUTH_RENKU_REFRESH_TOKEN": user.refresh_token,
         "AUTH_RENKU_TOKEN_URI": renku_auth_token_uri,
@@ -828,10 +828,20 @@ async def start_session(
     # Remote session configuration
     remote_secret = None
     if session_location == SessionLocation.remote:
+        if resource_pool.remote_provider_id is None:
+            raise errors.ProgrammingError(
+                message=f"The resource pool {resource_pool.id} configuration is not valid (missing field 'remote_provider_id')."  # noqa E501
+            )
+        if resource_pool.remote_configuration is None:
+            raise errors.ProgrammingError(
+                message=f"The resource pool {resource_pool.id} configuration is not valid (missing field 'remote_configuration')."  # noqa E501
+            )
         remote_secret = get_remote_secret(
             user=user,
             config=nb_config,
             server_name=server_name,
+            remote_provider_id=resource_pool.remote_provider_id,
+            remote_configuration=resource_pool.remote_configuration,
             git_providers=git_providers,
         )
     if remote_secret is not None:
