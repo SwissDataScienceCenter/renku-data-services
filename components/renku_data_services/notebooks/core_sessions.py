@@ -622,8 +622,11 @@ def get_remote_secret(
     renku_base_url = "https://" + config.sessions.ingress.host
     renku_base_url = renku_base_url.rstrip("/")
     renku_auth_token_uri = f"{renku_base_url}/auth/realms/{config.keycloak_realm}/protocol/openid-connect/token"
+    # TODO: Use a common prefix for the remote session controller environment variables
     secret_data = {
+        "REMOTE_KIND": remote_configuration.kind.value,
         "FIRECREST_API_URL": remote_configuration.api_url,
+        "SYSTEM_NAME": remote_configuration.system_name,
         "AUTH_KIND": "renku",
         "AUTH_TOKEN_URI": remote_provider.access_token_url,
         "AUTH_RENKU_ACCESS_TOKEN": user.access_token,
@@ -632,6 +635,8 @@ def get_remote_secret(
         "AUTH_RENKU_CLIENT_ID": config.sessions.git_proxy.renku_client_id,
         "AUTH_RENKU_CLIENT_SECRET": config.sessions.git_proxy.renku_client_secret,
     }
+    if remote_configuration.partition:
+        secret_data["PARTITION"] = remote_configuration.partition
     secret_name = f"{server_name}-remote-secret"
     secret = V1Secret(metadata=V1ObjectMeta(name=secret_name), string_data=secret_data)
     return ExtraSecret(secret)
