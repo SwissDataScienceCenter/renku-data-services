@@ -294,11 +294,7 @@ class ResourcePoolORM(BaseORM):
                 f"Using the quota {quota} in the response."
             )
         cluster = None if self.cluster is None else self.cluster.dump()
-        remote_configuration = (
-            models.RemoteConfigurationFirecrest.from_dict(self.remote_configuration)
-            if self.remote_configuration
-            else None
-        )
+        remote_configuration = self._dump_remote_configuration()
         return models.ResourcePool(
             id=self.id,
             name=self.name,
@@ -313,6 +309,12 @@ class ResourcePoolORM(BaseORM):
             remote_configuration=remote_configuration,
             cluster=cluster,
         )
+
+    def _dump_remote_configuration(self) -> models.RemoteConfigurationFirecrest | None:
+        """Create a remote_configuration model from the corresponding column of the ORM object."""
+        if self.remote_configuration is None:
+            return None
+        return models.RemoteConfigurationFirecrest.from_dict(self.remote_configuration)
 
 
 class TolerationORM(BaseORM):

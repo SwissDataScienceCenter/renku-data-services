@@ -451,12 +451,9 @@ class RemoteConfigurationFirecrest:
 
     def to_dict(self) -> dict[str, Any]:
         """Convert this instance of RemoteConfiguration into a dictionary."""
-        return dict(
-            kind=self.kind,
-            api_url=self.api_url,
-            system_name=self.system_name,
-            partition=self.partition or None,
-        )
+        res = asdict(self)
+        res["kind"] = self.kind.value
+        return res
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
