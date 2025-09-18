@@ -20,15 +20,12 @@ from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
-from renku_data_services.app_config import logging
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
 from renku_data_services.crc.models import ClusterPatch, ClusterSettings, SavedClusterSettings, SessionProtocol
 from renku_data_services.crc.orm import ClusterORM
 from renku_data_services.k8s.db import QuotaRepository
 from renku_data_services.users.db import UserRepo
-
-logger = logging.getLogger(__name__)
 
 
 class _Base:
@@ -390,7 +387,6 @@ class ResourcePoolRepository(_Base):
     @_only_admins
     async def update_resource_pool(self, api_user: base_models.APIUser, id: int, **kwargs: Any) -> models.ResourcePool:
         """Update an existing resource pool in the database."""
-        logger.warning(f"update() {kwargs.get("remote_configuration")}")
         async with self.session_maker() as session, session.begin():
             stmt = (
                 select(schemas.ResourcePoolORM)
@@ -414,7 +410,6 @@ class ResourcePoolRepository(_Base):
             # NOTE: The .update method on the model validates the update to the resource pool
             old_rp_model = rp.dump(quota)
             new_rp_model = old_rp_model.update(**kwargs)
-            logger.warning(f"update() {new_rp_model.remote_configuration}")
             new_classes_coroutines = []
             for key, val in kwargs.items():
                 match key:
@@ -484,6 +479,7 @@ class ResourcePoolRepository(_Base):
                         rp.remote = False
                         rp.remote_provider_id = None
                         rp.remote_configuration = None
+                        new_rp_model = new_rp_model.update(remote_provider_id=None, remote_configuration=None)
                     case "remote_provider_id":
                         if val is None:
                             continue

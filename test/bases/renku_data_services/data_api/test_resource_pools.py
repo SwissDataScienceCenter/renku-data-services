@@ -27,6 +27,7 @@ resource_pool_payload = [
             "quota": {"cpu": 100, "memory": 100, "gpu": 0},
             "default": False,
             "public": True,
+            "remote": False,
             "idle_threshold": 86400,
             "hibernation_threshold": 99999,
             "cluster_id": "change_me",
@@ -50,6 +51,7 @@ resource_pool_payload = [
             "quota": "something",
             "default": False,
             "public": True,
+            "remote": False,
         },
         422,
     ),
@@ -107,6 +109,57 @@ async def test_resource_pool_creation_with_cluster_ids(
         assert "cluster" in res.json
         assert "id" in res.json["cluster"]
         assert res.json["cluster"]["id"] == payload["cluster_id"]
+
+
+@pytest.mark.parametrize(
+    "payload,expected_status_code",
+    resource_pool_payload,
+)
+@pytest.mark.asyncio
+async def test_resource_pool_creation_with_remote(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    payload: dict[str, Any],
+    expected_status_code: int,
+) -> None:
+    # Create a provider
+    provider_payload = {
+        "id": "some-provider",
+        "kind": "gitlab",
+        "client_id": "some-client-id",
+        "display_name": "my oauth2 application",
+        "scope": "api",
+        "url": "https://example.org",
+    }
+    _, res = await sanic_client.post("/api/data/oauth2/providers", headers=admin_headers, json=provider_payload)
+    assert res.status_code == 201, res.text
+
+    if "cluster_id" in payload:
+        payload["cluster_id"] = None
+    payload["default"] = False
+    payload["public"] = False
+    payload["remote"] = True
+    payload["remote_provider_id"] = provider_payload["id"]
+    payload["remote_configuration"] = {
+        "kind": "firecrest",
+        "api_url": "https://example.org",
+        "system_name": "my-system",
+    }
+
+    _, res = await create_rp(payload, sanic_client)
+    assert res.status_code == expected_status_code, res.text
+
+    if res.status_code >= 200 and res.status_code < 400:
+        assert res.json is not None
+        rp = res.json
+        assert "remote" in rp
+        assert rp["remote"]
+        assert rp.get("remote_provider_id") == provider_payload["id"]
+        assert rp.get("remote_configuration") == {
+            "kind": "firecrest",
+            "api_url": "https://example.org",
+            "system_name": "my-system",
+        }
 
 
 @pytest.mark.asyncio
@@ -1040,6 +1093,7 @@ resource_pool_payload = {
     "quota": {"cpu": 100.0, "memory": 100, "gpu": 0},
     "default": False,
     "public": True,
+    "remote": False,
     "idle_threshold": 86400,
     "hibernation_threshold": 99999,
 }
@@ -1182,3 +1236,68 @@ async def test_resource_pools_delete(
     else:
         _, res = await sanic_client.delete(url)
     assert res.status_code == expected_status_code, res.text
+
+
+@pytest.mark.asyncio
+async def test_resource_pool_patch_remote(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    # Create a provider
+    provider_payload = {
+        "id": "some-provider",
+        "kind": "gitlab",
+        "client_id": "some-client-id",
+        "display_name": "my oauth2 application",
+        "scope": "api",
+        "url": "https://example.org",
+    }
+    _, res = await sanic_client.post("/api/data/oauth2/providers", headers=admin_headers, json=provider_payload)
+    assert res.status_code == 201, res.text
+
+    # First, create a non-remote resource pool
+    payload = deepcopy(resource_pool_payload)
+    if "cluster_id" in payload:
+        payload["cluster_id"] = None
+
+    _, res = await create_rp(payload, sanic_client)
+    assert res.status_code == 201, res.text
+    rp_id = res.json["id"]
+
+    # Patch with the remote configuration
+    patch = {
+        "default": False,
+        "public": False,
+        "remote": True,
+        "remote_provider_id": provider_payload["id"],
+        "remote_configuration": {
+            "kind": "firecrest",
+            "api_url": "https://example.org",
+            "system_name": "my-system",
+        },
+    }
+
+    _, res = await sanic_client.patch(f"/api/data/resource_pools/{rp_id}", headers=admin_headers, json=patch)
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    rp = res.json
+    assert "remote" in rp
+    assert rp["remote"]
+    assert rp.get("remote_provider_id") == provider_payload["id"]
+    assert rp.get("remote_configuration") == {
+        "kind": "firecrest",
+        "api_url": "https://example.org",
+        "system_name": "my-system",
+    }
+
+    # Patch to reset the resource pool
+    patch = {"default": False, "public": False, "remote": False}
+
+    _, res = await sanic_client.patch(f"/api/data/resource_pools/{rp_id}", headers=admin_headers, json=patch)
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    rp = res.json
+    assert "remote" in rp
+    assert not rp["remote"]
+    assert rp.get("remote_provider_id") is None
+    assert rp.get("remote_configuration") is None
