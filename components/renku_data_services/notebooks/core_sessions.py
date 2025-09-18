@@ -23,7 +23,7 @@ from renku_data_services.base_models import AnonymousAPIUser, APIUser, Authentic
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
-from renku_data_services.crc.models import GpuKind, RemoteConfigurationFirecrest, ResourceClass, ResourcePool
+from renku_data_services.crc.models import GpuKind, ResourceClass, ResourcePool
 from renku_data_services.data_connectors.db import (
     DataConnectorSecretRepository,
 )
@@ -67,7 +67,6 @@ from renku_data_services.notebooks.crs import (
     SecretAsVolumeItem,
     Session,
     SessionEnvItem,
-    SessionLocation,
     ShmSizeStr,
     SizeStr,
     State,
@@ -605,43 +604,6 @@ async def get_image_pull_secret(
     return image_secret, image_pull_secret_name
 
 
-def get_remote_secret(
-    user: AuthenticatedAPIUser | AnonymousAPIUser,
-    config: NotebooksConfig,
-    server_name: str,
-    remote_provider_id: str,
-    remote_configuration: RemoteConfigurationFirecrest,
-    git_providers: list[GitProvider],
-) -> ExtraSecret | None:
-    """Returns the secret containing the configuration for the remote session controller."""
-    if not user.is_authenticated or user.access_token is None or user.refresh_token is None:
-        return None
-    remote_provider = next(filter(lambda p: p.id == remote_provider_id, git_providers), None)
-    if not remote_provider:
-        return None
-    renku_base_url = "https://" + config.sessions.ingress.host
-    renku_base_url = renku_base_url.rstrip("/")
-    renku_auth_token_uri = f"{renku_base_url}/auth/realms/{config.keycloak_realm}/protocol/openid-connect/token"
-    # TODO: Use a common prefix for the remote session controller environment variables
-    secret_data = {
-        "REMOTE_KIND": remote_configuration.kind.value,
-        "FIRECREST_API_URL": remote_configuration.api_url,
-        "SYSTEM_NAME": remote_configuration.system_name,
-        "AUTH_KIND": "renku",
-        "AUTH_TOKEN_URI": remote_provider.access_token_url,
-        "AUTH_RENKU_ACCESS_TOKEN": user.access_token,
-        "AUTH_RENKU_REFRESH_TOKEN": user.refresh_token,
-        "AUTH_RENKU_TOKEN_URI": renku_auth_token_uri,
-        "AUTH_RENKU_CLIENT_ID": config.sessions.git_proxy.renku_client_id,
-        "AUTH_RENKU_CLIENT_SECRET": config.sessions.git_proxy.renku_client_secret,
-    }
-    if remote_configuration.partition:
-        secret_data["PARTITION"] = remote_configuration.partition
-    secret_name = f"{server_name}-remote-secret"
-    secret = V1Secret(metadata=V1ObjectMeta(name=secret_name), string_data=secret_data)
-    return ExtraSecret(secret)
-
-
 async def start_session(
     request: Request,
     body: apispec.SessionPostRequest,
@@ -693,11 +655,6 @@ async def start_session(
         if not resource_class or not resource_class.id:
             raise errors.MissingResourceError(message=f"The resource class with ID {resource_class_id} does not exist.")
     await nb_config.crc_validator.validate_class_storage(user, resource_class.id, body.disk_storage)
-
-    # Determine session location
-    session_location = SessionLocation.remote if resource_pool.remote else SessionLocation.local
-    if session_location == SessionLocation.remote and not user.is_authenticated:
-        raise errors.ValidationError(message="Anonymous users cannot start remote sessions.")
 
     environment = launcher.environment
     image = environment.container_image
@@ -830,28 +787,6 @@ async def start_session(
     if image_secret:
         session_extras = session_extras.concat(SessionExtraResources(secrets=[image_secret]))
 
-    # Remote session configuration
-    remote_secret = None
-    if session_location == SessionLocation.remote:
-        if resource_pool.remote_provider_id is None:
-            raise errors.ProgrammingError(
-                message=f"The resource pool {resource_pool.id} configuration is not valid (missing field 'remote_provider_id')."  # noqa E501
-            )
-        if resource_pool.remote_configuration is None:
-            raise errors.ProgrammingError(
-                message=f"The resource pool {resource_pool.id} configuration is not valid (missing field 'remote_configuration')."  # noqa E501
-            )
-        remote_secret = get_remote_secret(
-            user=user,
-            config=nb_config,
-            server_name=server_name,
-            remote_provider_id=resource_pool.remote_provider_id,
-            remote_configuration=resource_pool.remote_configuration,
-            git_providers=git_providers,
-        )
-    if remote_secret is not None:
-        session_extras = session_extras.concat(SessionExtraResources(secrets=[remote_secret]))
-
     # Raise an error if there are invalid environment variables in the request body
     verify_launcher_env_variable_overrides(launcher, body)
     env = [
@@ -874,7 +809,6 @@ async def start_session(
     session = AmaltheaSessionV1Alpha1(
         metadata=Metadata(name=server_name, annotations=annotations),
         spec=AmaltheaSessionSpec(
-            location=session_location,
             imagePullSecrets=[ImagePullSecret(name=image_pull_secret_name, adopt=True)] if image_secret else [],
             codeRepositories=[],
             hibernated=False,
@@ -900,7 +834,6 @@ async def start_session(
                 shmSize=ShmSizeStr("1G"),
                 stripURLPath=environment.strip_path_prefix,
                 env=env,
-                remoteSecretRef=remote_secret.ref() if remote_secret else None,
             ),
             ingress=ingress,
             extraContainers=session_extras.containers,

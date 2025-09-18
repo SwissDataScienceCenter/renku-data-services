@@ -3421,11 +3421,6 @@ class InitContainer(BaseCRD):
     )
 
 
-class Location(Enum):
-    local = "local"
-    remote = "remote"
-
-
 class ReconcileStrategy(Enum):
     never = "never"
     always = "always"
@@ -3517,21 +3512,6 @@ class ReadinessProbe2(BaseCRD):
         extra="allow",
     )
     type: Type3 = Field(default="tcp", description="The type of readiness probe")
-
-
-class RemoteSecretRef(BaseCRD):
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    adopt: Optional[bool] = Field(
-        default=None,
-        description="If the secret is adopted then the operator will delete the secret when the custom resource that uses it is deleted.",
-    )
-    key: Optional[str] = Field(
-        default=None,
-        description="The key is optional because it may not be relevant depending on where or how the secret is used.\nFor example, for authentication see the `secretRef` field in `spec.authentication`\nfor more details.",
-    )
-    name: str
 
 
 class Limits6(RootModel[int]):
@@ -3652,10 +3632,6 @@ class Session(BaseCRD):
     readinessProbe: ReadinessProbe2 = Field(
         default={}, description="The readiness probe to use on the session container"
     )
-    remoteSecretRef: Optional[RemoteSecretRef] = Field(
-        default=None,
-        description='The secret containing the configuration needed to start a remote session.\nThis field should be populated only when the session location is set to "remote".\nThis secret will be loaded into environment variables passed to the remote\nsession controller.\nSee: [internal/remote/config.Config] for a list of configuration options.',
-    )
     resources: Optional[Resources3] = Field(
         default=None,
         description="Resource requirements and limits in the same format as a Pod in Kubernetes",
@@ -3756,10 +3732,6 @@ class Spec(BaseCRD):
         default=None,
         description="Additional init containers to add to the session statefulset\nNOTE: The container names provided will be partially overwritten and randomized to avoid collisions",
     )
-    location: Location = Field(
-        default="local",
-        description='Specifies whether the process running the user\'s session is local or remote.\n- A local session runs as a container in the same pod as where the AmaltheaSession is defined and running.\n- A remote session runs as a remote process on an external compute resource.\n  The remote process is controlled by the "session_controller (TBC)" container in the session pod.',
-    )
     nodeSelector: Optional[Mapping[str, str]] = Field(
         default=None,
         description="Selector which must match a node's labels for the pod to be scheduled on that node.\nPassed right through to the Statefulset used for the session.",
@@ -3837,7 +3809,6 @@ class Status(BaseCRD):
         default=None,
         description="If the state is failed then the message will contain information about what went wrong, otherwise it is empty",
     )
-    failedSchedulingSince: Optional[datetime] = None
     failingSince: Optional[datetime] = None
     hibernatedSince: Optional[datetime] = None
     idle: bool = False
