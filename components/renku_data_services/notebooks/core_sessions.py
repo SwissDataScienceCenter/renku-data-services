@@ -18,6 +18,7 @@ from toml import dumps
 from ulid import ULID
 from yaml import safe_dump
 
+import renku_data_services.notebooks.image_check as ic
 from renku_data_services.app_config import logging
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser
 from renku_data_services.base_models.metrics import MetricsService
@@ -532,12 +533,7 @@ async def __requires_image_pull_secret(nb_config: NotebooksConfig, image: str, i
 
 def __format_image_pull_secret(secret_name: str, access_token: str, registry_domain: str) -> ExtraSecret:
     registry_secret = {
-        "auths": {
-            registry_domain: {
-                "Username": "oauth2",
-                "Password": access_token,
-            }
-        }
+        "auths": {registry_domain: {"auth": base64.b64encode(f"oauth2:{access_token}".encode()).decode()}}
     }
     registry_secret = json.dumps(registry_secret)
     registry_secret = base64.b64encode(registry_secret.encode()).decode()
@@ -553,28 +549,20 @@ def __format_image_pull_secret(secret_name: str, access_token: str, registry_dom
 async def __get_gitlab_image_pull_secret_v2(
     secret_name: str, connected_svcs_repo: ConnectedServicesRepository, image: str, user: APIUser
 ) -> ExtraSecret | None:
-    """Determines if an image requires a pull secret based on its visibility and their GitLab access token."""
-    # Check if image is public
+    """Return a secret for accessing the image if one is available for the given user."""
     image_parsed = Image.from_path(image)
-    public_repo = image_parsed.repo_api()
-    image_exists_publicly = await public_repo.image_exists(image_parsed)
-    if image_exists_publicly:
+    image_check_result = await ic.check_image(image_parsed, user, connected_svcs_repo)
+    logger.debug(f"Set pull secret for {image} to connection {image_check_result.image_provider}")
+    if not image_check_result.token:
         return None
-    # Check if image is private
-    docker_client, conn_id = await connected_svcs_repo.get_docker_client(user, image_parsed)
-    if not docker_client:
+
+    if not image_check_result.image_provider:
         return None
-    image_exists_privately = await docker_client.image_exists(image_parsed)
-    if not image_exists_privately:
-        return None
-    if not conn_id:
-        return None
-    if not docker_client.oauth2_token:
-        return None
+
     return __format_image_pull_secret(
         secret_name=secret_name,
-        access_token=docker_client.oauth2_token,
-        registry_domain=image_parsed.hostname,
+        access_token=image_check_result.token,
+        registry_domain=image_check_result.image_provider.registry_url,
     )
 
 
