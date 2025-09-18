@@ -14,7 +14,12 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_api.misc import validate_body_root_model, validate_db_ids, validate_query
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.crc import apispec, models
-from renku_data_services.crc.core import validate_cluster, validate_cluster_patch
+from renku_data_services.crc.core import (
+    validate_cluster,
+    validate_cluster_patch,
+    validate_remote_configuration,
+    validate_remote_configuration_patch,
+)
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository, UserRepository
 from renku_data_services.k8s.db import QuotaRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
@@ -53,8 +58,14 @@ class ResourcePoolsBP(CustomBlueprint):
             cluster = None
             if body.cluster_id is not None:
                 cluster = await self.cluster_repo.select(ULID.from_str(body.cluster_id))
-            rp = models.ResourcePool.from_dict({**body.model_dump(exclude_none=True), "cluster": cluster})
-
+            remote_configuration = None
+            if body.remote_configuration:
+                validate_remote_configuration(body=body.remote_configuration)
+                remote_configuration = body.remote_configuration.model_dump(exclude_none=True, mode="json")
+                body.remote_configuration = None
+            rp = models.ResourcePool.from_dict(
+                {**body.model_dump(exclude_none=True), "cluster": cluster, "remote_configuration": remote_configuration}
+            )
             res = await self.rp_repo.insert_resource_pool(api_user=user, resource_pool=rp)
             return validated_json(apispec.ResourcePoolWithId, res, status=201)
 
@@ -102,9 +113,16 @@ class ResourcePoolsBP(CustomBlueprint):
         async def _put(
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.ResourcePoolPut
         ) -> HTTPResponse:
+            remote_configuration = None
+            if body.remote_configuration:
+                validate_remote_configuration(body=body.remote_configuration)
+                remote_configuration = body.remote_configuration.model_dump(exclude_none=True, mode="json")
+                body.remote_configuration = None
+
             res = await self.rp_repo.update_resource_pool(
                 api_user=user,
                 id=resource_pool_id,
+                remote_configuration=remote_configuration,
                 **body.model_dump(exclude_none=True),
             )
             if res is None:
@@ -125,9 +143,17 @@ class ResourcePoolsBP(CustomBlueprint):
         async def _patch(
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.ResourcePoolPatch
         ) -> HTTPResponse:
+            remote_configuration = None
+            if body.remote_configuration:
+                validate_remote_configuration_patch(body=body.remote_configuration)
+                remote_configuration = body.remote_configuration.model_dump(exclude_none=True, mode="json")
+                body.remote_configuration = None
+            if body.remote is not None and not body.remote:
+                body.remote_provider_id = ""
             res = await self.rp_repo.update_resource_pool(
                 api_user=user,
                 id=resource_pool_id,
+                remote_configuration=remote_configuration,
                 **body.model_dump(exclude_none=True),
             )
             if res is None:

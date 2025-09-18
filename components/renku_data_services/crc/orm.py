@@ -2,9 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
-from sqlalchemy import JSON, BigInteger, Column, Identity, Integer, MetaData, String, Table
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Column,
+    Identity,
+    Integer,
+    MetaData,
+    String,
+    Table,
+    false,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
@@ -12,6 +22,7 @@ from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services.app_config import logging
+from renku_data_services.connected_services import orm as cs_schemas
 from renku_data_services.crc import models
 from renku_data_services.crc.models import ClusterSettings, SavedClusterSettings, SessionProtocol
 from renku_data_services.errors import errors
@@ -220,6 +231,17 @@ class ResourcePoolORM(BaseORM):
     hibernation_threshold: Mapped[Optional[int]] = mapped_column(default=None)
     default: Mapped[bool] = mapped_column(default=False, index=True)
     public: Mapped[bool] = mapped_column(default=False, index=True)
+    remote: Mapped[bool] = mapped_column(default=False, server_default=false())
+    remote_provider_id: Mapped[str | None] = mapped_column(
+        ForeignKey(cs_schemas.OAuth2ClientORM.id, ondelete="RESTRICT", name="resource_pools_remote_provider_id_fk"),
+        default=None,
+        server_default=None,
+        nullable=True,
+        index=True,
+    )
+    remote_configuration: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONVariant, default=None, server_default=None, nullable=True
+    )
     id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
     cluster_id: Mapped[Optional[ULID]] = mapped_column(
         ForeignKey(ClusterORM.id, ondelete="SET NULL"), default=None, index=True
@@ -237,6 +259,10 @@ class ResourcePoolORM(BaseORM):
         if resource_pool.cluster is not None:
             cluster_id = resource_pool.cluster.id
 
+        remote_configuration = None
+        if resource_pool.remote_configuration:
+            remote_configuration = resource_pool.remote_configuration.to_dict()
+
         return cls(
             name=resource_pool.name,
             quota=quota,
@@ -245,6 +271,9 @@ class ResourcePoolORM(BaseORM):
             hibernation_threshold=resource_pool.hibernation_threshold,
             public=resource_pool.public,
             default=resource_pool.default,
+            remote=resource_pool.remote,
+            remote_provider_id=resource_pool.remote_provider_id,
+            remote_configuration=remote_configuration,
             cluster_id=cluster_id,
         )
 
@@ -265,6 +294,7 @@ class ResourcePoolORM(BaseORM):
                 f"Using the quota {quota} in the response."
             )
         cluster = None if self.cluster is None else self.cluster.dump()
+        remote_configuration = self._dump_remote_configuration()
         return models.ResourcePool(
             id=self.id,
             name=self.name,
@@ -274,8 +304,17 @@ class ResourcePoolORM(BaseORM):
             hibernation_threshold=self.hibernation_threshold,
             public=self.public,
             default=self.default,
+            remote=self.remote,
+            remote_provider_id=self.remote_provider_id,
+            remote_configuration=remote_configuration,
             cluster=cluster,
         )
+
+    def _dump_remote_configuration(self) -> models.RemoteConfigurationFirecrest | None:
+        """Create a remote_configuration model from the corresponding column of the ORM object."""
+        if self.remote_configuration is None:
+            return None
+        return models.RemoteConfigurationFirecrest.from_dict(self.remote_configuration)
 
 
 class TolerationORM(BaseORM):
