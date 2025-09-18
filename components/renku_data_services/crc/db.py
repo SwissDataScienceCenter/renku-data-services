@@ -418,7 +418,7 @@ class ResourcePoolRepository(_Base):
             new_classes_coroutines = []
             for key, val in kwargs.items():
                 match key:
-                    case "name" | "public" | "default" | "remote" | "idle_threshold" | "hibernation_threshold":
+                    case "name" | "public" | "default" | "idle_threshold" | "hibernation_threshold":
                         setattr(rp, key, val)
                     case "cluster_id":
                         cluster_id = val
@@ -475,6 +475,15 @@ class ResourcePoolRepository(_Base):
                                     api_user, resource_pool_id=id, resource_class_id=class_id, **cls
                                 )
                             )
+                    case "remote":
+                        if val is None:
+                            continue
+                        if val:
+                            rp.remote = True
+                            continue
+                        rp.remote = False
+                        rp.remote_provider_id = None
+                        rp.remote_configuration = None
                     case "remote_provider_id":
                         if val is None:
                             continue
