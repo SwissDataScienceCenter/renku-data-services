@@ -2,12 +2,15 @@
 
 import os
 from collections.abc import AsyncIterable
+from typing import Self
 
+import aiofiles
 import kr8s
 import yaml
 
 from renku_data_services.app_config import logging
 from renku_data_services.crc.db import ClusterRepository
+from renku_data_services.errors import errors
 from renku_data_services.k8s import models as k8s_models
 from renku_data_services.k8s.clients import K8sCachedClusterClient, K8sClusterClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
@@ -75,20 +78,30 @@ class KubeConfigEnv(KubeConfig):
 class KubeConfigYaml(KubeConfig):
     """Get a kube config from a yaml file."""
 
-    def __init__(self, kubeconfig: str) -> None:
-        super().__init__(kubeconfig=kubeconfig)
+    def __init__(self, kubeconfig_path: str, kubeconfig_contents: str) -> None:
+        super().__init__(kubeconfig=kubeconfig_path)
 
-        with open(kubeconfig) as stream:
-            _conf = yaml.safe_load(stream)
+        _conf = yaml.safe_load(kubeconfig_contents)
+        if not isinstance(_conf, dict):
+            raise errors.ConfigurationError(message=f"The kubeconfig {kubeconfig_path} is empty or has a bad format.")
 
         self._current_context_name = _conf.get("current-context", None)
         if self._current_context_name is not None:
             for context in _conf.get("contexts", []):
+                if not isinstance(context, dict):
+                    continue
                 name = context.get("name", None)
                 inner = context.get("context", None)
                 if inner is not None and name is not None and name == self._current_context_name:
                     self._ns = inner.get("namespace", None)
                     break
+
+    @classmethod
+    async def from_kubeconfig_file(cls, kubeconfig_path: str) -> Self:
+        """Generte a config from a kubeconfig file."""
+        async with aiofiles.open(kubeconfig_path) as stream:
+            _str = await stream.read()
+        return cls(kubeconfig_path, _str)
 
 
 async def get_clusters(
@@ -115,7 +128,7 @@ async def get_clusters(
     async for cluster_db in cluster_repo.select_all():
         filename = cluster_db.config_name
         try:
-            kube_config = KubeConfigYaml(f"{kube_conf_root_dir}/{filename}")
+            kube_config = await KubeConfigYaml.from_kubeconfig_file(f"{kube_conf_root_dir}/{filename}")
             cluster_connection = k8s_models.ClusterConnection(
                 id=cluster_db.id,
                 namespace=kube_config.api().namespace,
