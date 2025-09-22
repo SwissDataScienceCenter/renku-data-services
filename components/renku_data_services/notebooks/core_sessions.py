@@ -621,20 +621,7 @@ def get_remote_secret(
     renku_base_url = "https://" + config.sessions.ingress.host
     renku_base_url = renku_base_url.rstrip("/")
     renku_auth_token_uri = f"{renku_base_url}/auth/realms/{config.keycloak_realm}/protocol/openid-connect/token"
-    # TODO: Use a common prefix for the remote session controller environment variables
     secret_data = {
-        # "REMOTE_KIND": remote_configuration.kind.value,
-        # "FIRECREST_API_URL": remote_configuration.api_url,
-        # "SYSTEM_NAME": remote_configuration.system_name,
-        # "AUTH_KIND": "renku",
-        # "AUTH_TOKEN_URI": remote_provider.access_token_url,
-        # "AUTH_RENKU_ACCESS_TOKEN": user.access_token,
-        # "AUTH_RENKU_REFRESH_TOKEN": user.refresh_token,
-        # "AUTH_RENKU_TOKEN_URI": renku_auth_token_uri,
-        # "AUTH_RENKU_CLIENT_ID": config.sessions.git_proxy.renku_client_id,
-        # "AUTH_RENKU_CLIENT_SECRET": config.sessions.git_proxy.renku_client_secret,
-        # # TODO: Remove this (debugging this for now)
-        # "FAKE_START": "true",
         "RSC_AUTH_KIND": "renku",
         "RSC_AUTH_TOKEN_URI": remote_provider.access_token_url,
         "RSC_AUTH_RENKU_ACCESS_TOKEN": user.access_token,
@@ -643,8 +630,6 @@ def get_remote_secret(
         "RSC_AUTH_RENKU_CLIENT_ID": config.sessions.git_proxy.renku_client_id,
         "RSC_AUTH_RENKU_CLIENT_SECRET": config.sessions.git_proxy.renku_client_secret,
     }
-    # if remote_configuration.partition:
-    #     secret_data["PARTITION"] = remote_configuration.partition
     secret_name = f"{server_name}-remote-secret"
     secret = V1Secret(metadata=V1ObjectMeta(name=secret_name), string_data=secret_data)
     return ExtraSecret(secret)
@@ -657,10 +642,7 @@ def get_remote_env(
     env = [
         SessionEnvItem(name="RSC_REMOTE_KIND", value=remote_configuration.kind.value),
         SessionEnvItem(name="RSC_FIRECREST_API_URL", value=remote_configuration.api_url),
-        SessionEnvItem(name="RSC_SYSTEM_NAME", value=remote_configuration.system_name),
-        # TODO: Remove this (debugging this for now)
-        SessionEnvItem(name="RSC_FAKE_START", value="true"),
-        SessionEnvItem(name="FAKE_START", value="true"),
+        SessionEnvItem(name="RSC_FIRECREST_SYSTEM_NAME", value=remote_configuration.system_name),
     ]
     if remote_configuration.partition:
         env.append(SessionEnvItem(name="RSC_FIRECREST_PARTITION", value=remote_configuration.partition))
