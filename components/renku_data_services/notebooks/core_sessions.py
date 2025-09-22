@@ -610,7 +610,6 @@ def get_remote_secret(
     config: NotebooksConfig,
     server_name: str,
     remote_provider_id: str,
-    remote_configuration: RemoteConfigurationFirecrest,
     git_providers: list[GitProvider],
 ) -> ExtraSecret | None:
     """Returns the secret containing the configuration for the remote session controller."""
@@ -624,24 +623,48 @@ def get_remote_secret(
     renku_auth_token_uri = f"{renku_base_url}/auth/realms/{config.keycloak_realm}/protocol/openid-connect/token"
     # TODO: Use a common prefix for the remote session controller environment variables
     secret_data = {
-        "REMOTE_KIND": remote_configuration.kind.value,
-        "FIRECREST_API_URL": remote_configuration.api_url,
-        "SYSTEM_NAME": remote_configuration.system_name,
-        "AUTH_KIND": "renku",
-        "AUTH_TOKEN_URI": remote_provider.access_token_url,
-        "AUTH_RENKU_ACCESS_TOKEN": user.access_token,
-        "AUTH_RENKU_REFRESH_TOKEN": user.refresh_token,
-        "AUTH_RENKU_TOKEN_URI": renku_auth_token_uri,
-        "AUTH_RENKU_CLIENT_ID": config.sessions.git_proxy.renku_client_id,
-        "AUTH_RENKU_CLIENT_SECRET": config.sessions.git_proxy.renku_client_secret,
-        # TODO: Remove this (debugging this for now)
-        "FAKE_START": "true",
+        # "REMOTE_KIND": remote_configuration.kind.value,
+        # "FIRECREST_API_URL": remote_configuration.api_url,
+        # "SYSTEM_NAME": remote_configuration.system_name,
+        # "AUTH_KIND": "renku",
+        # "AUTH_TOKEN_URI": remote_provider.access_token_url,
+        # "AUTH_RENKU_ACCESS_TOKEN": user.access_token,
+        # "AUTH_RENKU_REFRESH_TOKEN": user.refresh_token,
+        # "AUTH_RENKU_TOKEN_URI": renku_auth_token_uri,
+        # "AUTH_RENKU_CLIENT_ID": config.sessions.git_proxy.renku_client_id,
+        # "AUTH_RENKU_CLIENT_SECRET": config.sessions.git_proxy.renku_client_secret,
+        # # TODO: Remove this (debugging this for now)
+        # "FAKE_START": "true",
+        "RSC_AUTH_KIND": "renku",
+        "RSC_AUTH_TOKEN_URI": remote_provider.access_token_url,
+        "RSC_AUTH_RENKU_ACCESS_TOKEN": user.access_token,
+        "RSC_AUTH_RENKU_REFRESH_TOKEN": user.refresh_token,
+        "RSC_AUTH_RENKU_TOKEN_URI": renku_auth_token_uri,
+        "RSC_AUTH_RENKU_CLIENT_ID": config.sessions.git_proxy.renku_client_id,
+        "RSC_AUTH_RENKU_CLIENT_SECRET": config.sessions.git_proxy.renku_client_secret,
     }
-    if remote_configuration.partition:
-        secret_data["PARTITION"] = remote_configuration.partition
+    # if remote_configuration.partition:
+    #     secret_data["PARTITION"] = remote_configuration.partition
     secret_name = f"{server_name}-remote-secret"
     secret = V1Secret(metadata=V1ObjectMeta(name=secret_name), string_data=secret_data)
     return ExtraSecret(secret)
+
+
+def get_remote_env(
+    remote_configuration: RemoteConfigurationFirecrest,
+) -> list[SessionEnvItem]:
+    """Returns env variables used for remote sessions."""
+    env = [
+        SessionEnvItem(name="RSC_REMOTE_KIND", value=remote_configuration.kind.value),
+        SessionEnvItem(name="RSC_FIRECREST_API_URL", value=remote_configuration.api_url),
+        SessionEnvItem(name="RSC_SYSTEM_NAME", value=remote_configuration.system_name),
+        # TODO: Remove this (debugging this for now)
+        SessionEnvItem(name="RSC_FAKE_START", value="true"),
+        SessionEnvItem(name="FAKE_START", value="true"),
+    ]
+    if remote_configuration.partition:
+        env.append(SessionEnvItem(name="RSC_FIRECREST_PARTITION", value=remote_configuration.partition))
+    return env
 
 
 async def start_session(
@@ -848,7 +871,6 @@ async def start_session(
             config=nb_config,
             server_name=server_name,
             remote_provider_id=resource_pool.remote_provider_id,
-            remote_configuration=resource_pool.remote_configuration,
             git_providers=git_providers,
         )
     if remote_secret is not None:
@@ -871,6 +893,10 @@ async def start_session(
     ]
     launcher_env_variables = get_launcher_env_variables(launcher, body)
     if launcher_env_variables:
+        if session_location == SessionLocation.remote:
+            launcher_env_variables = [
+                item.model_copy(update=dict(name=f"RENKU_ENV_{item.name}")) for item in launcher_env_variables
+            ]
         env.extend(launcher_env_variables)
 
     session = AmaltheaSessionV1Alpha1(
