@@ -184,17 +184,15 @@ components:
         The URL that should be redirected. Must begin with `/projects` or
         `https://gitlab.renkulab.io/`
       type: string
-      examples:
-        - "/projects/ns/slug"
-        - "https://gitlab.renkulab.io/user/project"
+      example:
+        "/projects/ns/slug"
     TargetUrl:
       description: |
         The URL that should be redirected to. Must begin with `https://` or
         have the structure `/p/[ULID]`
       type: string
-      examples:
-        - "/p/project-ulid"
-        - "https://github.com/user/project"
+      example:
+        "/p/project-ulid"
     UrlRedirectPlanList:
       description: A list of redirect info objects
       type: array
