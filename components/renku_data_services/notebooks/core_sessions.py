@@ -891,13 +891,19 @@ async def start_session(
         SessionEnvItem(name="RENKU_PROJECT_PATH", value=project.path.serialize()),
         SessionEnvItem(name="RENKU_LAUNCHER_ID", value=str(launcher.id)),
     ]
+    if session_location == SessionLocation.remote:
+        assert resource_pool.remote_configuration is not None  # This should have been checked above
+        env.extend(
+            get_remote_env(
+                remote_configuration=resource_pool.remote_configuration,
+            )
+        )
     launcher_env_variables = get_launcher_env_variables(launcher, body)
-    if launcher_env_variables:
-        if session_location == SessionLocation.remote:
-            launcher_env_variables = [
-                item.model_copy(update=dict(name=f"RENKU_ENV_{item.name}")) for item in launcher_env_variables
-            ]
-        env.extend(launcher_env_variables)
+    if session_location == SessionLocation.remote:
+        launcher_env_variables = [
+            item.model_copy(update=dict(name=f"RENKU_ENV_{item.name}")) for item in launcher_env_variables
+        ]
+    env.extend(launcher_env_variables)
 
     session = AmaltheaSessionV1Alpha1(
         metadata=Metadata(name=server_name, annotations=annotations),
