@@ -634,6 +634,8 @@ def get_remote_secret(
         "AUTH_RENKU_TOKEN_URI": renku_auth_token_uri,
         "AUTH_RENKU_CLIENT_ID": config.sessions.git_proxy.renku_client_id,
         "AUTH_RENKU_CLIENT_SECRET": config.sessions.git_proxy.renku_client_secret,
+        # TODO: Remove this (debugging this for now)
+        "FAKE_START": "true",
     }
     if remote_configuration.partition:
         secret_data["PARTITION"] = remote_configuration.partition
