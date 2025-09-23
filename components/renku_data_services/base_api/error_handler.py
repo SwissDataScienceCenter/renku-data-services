@@ -8,6 +8,7 @@ from collections.abc import Mapping, Set
 from sqlite3 import Error as SqliteError
 from typing import Any, Optional, Protocol, TypeVar, Union
 
+import httpx
 import jwt
 from asyncpg import exceptions as postgres_exceptions
 from pydantic import ValidationError as PydanticValidationError
@@ -136,6 +137,10 @@ class CustomErrorHandler(ErrorHandler):
             case CancelledError():
                 quiet = request.transport.is_closing()
                 formatted_exception = errors.RequestCancelledError(quiet=quiet)
+
+            case httpx.RequestError():
+                formatted_exception = errors.BaseError(message=f"Error on remote connection: {exception}")
+
         self.log(request, formatted_exception)
         if formatted_exception.status_code == 500 and "PYTEST_CURRENT_TEST" in os.environ:
             # TODO: Figure out how to do logging properly in here, I could not get the sanic logs to show up from here
