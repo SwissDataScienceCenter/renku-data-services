@@ -52,13 +52,13 @@ class DependencyManager:
         else:
             assert config.keycloak is not None
             authenticator = KeycloakAuthenticator.new(config.keycloak)
-            api = KubeConfigEnv().api()
+            default_kubeconfig = KubeConfigEnv()
+
             secret_client = K8sSecretClient(
                 K8sClusterClientsPool(
                     get_clusters(
                         kube_conf_root_dir=os.environ.get("K8S_CONFIGS_ROOT", "/secrets/kube_configs"),
-                        default_cluster_namespace=api.namespace,
-                        default_cluster_api=api,
+                        default_kubeconfig=default_kubeconfig,
                         cluster_repo=cluster_repo,
                     )
                 )
