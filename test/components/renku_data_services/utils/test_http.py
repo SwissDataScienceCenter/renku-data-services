@@ -23,7 +23,7 @@ async def expect_error(rr: RunRequest, url: str) -> RequestError:
 
 @pytest.mark.asyncio
 async def test_add_url() -> None:
-    urls = ["http://bad-label--.com", ""]
+    urls = ["http://bad-label--.com", "", "ftp://x.com"]
     methods: list[RunRequest] = [client.post, client.get, client.delete, client.patch, client.head, client.put]
     for m in methods:
         for url in urls:
