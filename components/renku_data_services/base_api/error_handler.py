@@ -68,9 +68,9 @@ class CustomErrorHandler(ErrorHandler):
         self.api_spec = api_spec
         super().__init__(base)
 
-    def default(self, request: Request, exception: Exception) -> HTTPResponse:
-        """Overrides the default error handler."""
-        formatted_exception = errors.BaseError()
+    @classmethod
+    def _get_formatted_exception(cls, exception: Exception) -> errors.BaseError | None:
+        formatted_exception: errors.BaseError | None = None
         match exception:
             case errors.BaseError():
                 formatted_exception = exception
@@ -140,6 +140,12 @@ class CustomErrorHandler(ErrorHandler):
 
             case httpx.RequestError():
                 formatted_exception = errors.BaseError(message=f"Error on remote connection: {exception}")
+
+        return formatted_exception
+
+    def default(self, request: Request, exception: Exception) -> HTTPResponse:
+        """Overrides the default error handler."""
+        formatted_exception = self._get_formatted_exception(exception) or errors.BaseError()
 
         self.log(request, formatted_exception)
         if formatted_exception.status_code == 500 and "PYTEST_CURRENT_TEST" in os.environ:
