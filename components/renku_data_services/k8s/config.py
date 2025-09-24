@@ -68,37 +68,29 @@ class KubeConfig:
 class KubeConfigEnv(KubeConfig):
     """Get a kube config from the environment."""
 
-    def __init__(self) -> None:
-        super().__init__(ns=os.environ.get("K8S_NAMESPACE", "default"))
+async def from_kubeconfig_file(kubeconfig_path: str) -> KubeConfig:
+    """Generate a config from a kubeconfig file."""
+    
+    async with aiofiles.open(kubeconfig_path) as stream:
+        kubeconfig_contents = await stream.read()
+    
+    conf = yaml.safe_load(kubeconfig_contents)
+    if not isinstance(conf, dict):
+        raise errors.ConfigurationError(message=f"The kubeconfig {kubeconfig_path} is empty or has a bad format.")
 
+    current_context_name = conf.get("current-context", None)
+    ns = None
+    if current_context_name is not None:
+        for context in conf.get("contexts", []):
+            if not isinstance(context, dict):
+                continue
+            name = context.get("name", None)
+            inner = context.get("context", None)
+            if inner is not None and name == current_context_name:
+                ns = inner.get("namespace", None)
+                break
 
-class KubeConfigYaml(KubeConfig):
-    """Get a kube config from a yaml file."""
-
-    def __init__(self, kubeconfig_path: str, kubeconfig_contents: str) -> None:
-        super().__init__(kubeconfig=kubeconfig_path)
-
-        _conf = yaml.safe_load(kubeconfig_contents)
-        if not isinstance(_conf, dict):
-            raise errors.ConfigurationError(message=f"The kubeconfig {kubeconfig_path} is empty or has a bad format.")
-
-        self._current_context_name = _conf.get("current-context", None)
-        if self._current_context_name is not None:
-            for context in _conf.get("contexts", []):
-                if not isinstance(context, dict):
-                    continue
-                name = context.get("name", None)
-                inner = context.get("context", None)
-                if inner is not None and name is not None and name == self._current_context_name:
-                    self._ns = inner.get("namespace", None)
-                    break
-
-    @classmethod
-    async def from_kubeconfig_file(cls, kubeconfig_path: str) -> Self:
-        """Generate a config from a kubeconfig file."""
-        async with aiofiles.open(kubeconfig_path) as stream:
-            _str = await stream.read()
-        return cls(kubeconfig_path, _str)
+    return KubeConfig(kubeconfig_path, current_context_name=current_context_name, ns=ns)
 
 
 async def get_clusters(
