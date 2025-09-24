@@ -79,7 +79,7 @@ def validate_firecrest_api_url(url: str) -> None:
     parsed = urlparse(url)
     if not parsed.netloc:
         raise errors.ValidationError(
-            message=f"The host for the image registry url {url} is not valid, expected a non-empty value.",
+            message=f"The host for the firecrest api url {url} is not valid, expected a non-empty value.",
             quiet=True,
         )
     accepted_schemes = ["https"]
