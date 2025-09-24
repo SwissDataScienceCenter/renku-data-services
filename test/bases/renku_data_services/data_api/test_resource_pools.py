@@ -27,7 +27,6 @@ resource_pool_payload = [
             "quota": {"cpu": 100, "memory": 100, "gpu": 0},
             "default": False,
             "public": True,
-            "remote": False,
             "idle_threshold": 86400,
             "hibernation_threshold": 99999,
             "cluster_id": "change_me",
@@ -51,7 +50,6 @@ resource_pool_payload = [
             "quota": "something",
             "default": False,
             "public": True,
-            "remote": False,
         },
         422,
     ),
@@ -72,7 +70,7 @@ async def test_resource_pool_creation(
         payload["cluster_id"] = None
 
     _, res = await create_rp(payload, sanic_client)
-    assert res.status_code == expected_status_code
+    assert res.status_code == expected_status_code, res.text
 
 
 @pytest.mark.parametrize(
@@ -138,10 +136,9 @@ async def test_resource_pool_creation_with_remote(
         payload["cluster_id"] = None
     payload["default"] = False
     payload["public"] = False
-    payload["remote"] = True
-    payload["remote_provider_id"] = provider_payload["id"]
-    payload["remote_configuration"] = {
+    payload["remote"] = {
         "kind": "firecrest",
+        "provider_id": provider_payload["id"],
         "api_url": "https://example.org",
         "system_name": "my-system",
     }
@@ -152,11 +149,9 @@ async def test_resource_pool_creation_with_remote(
     if res.status_code >= 200 and res.status_code < 400:
         assert res.json is not None
         rp = res.json
-        assert "remote" in rp
-        assert rp["remote"]
-        assert rp.get("remote_provider_id") == provider_payload["id"]
-        assert rp.get("remote_configuration") == {
+        assert rp.get("remote") == {
             "kind": "firecrest",
+            "provider_id": provider_payload["id"],
             "api_url": "https://example.org",
             "system_name": "my-system",
         }
@@ -1093,7 +1088,6 @@ resource_pool_payload = {
     "quota": {"cpu": 100.0, "memory": 100, "gpu": 0},
     "default": False,
     "public": True,
-    "remote": False,
     "idle_threshold": 86400,
     "hibernation_threshold": 99999,
 }
@@ -1268,10 +1262,9 @@ async def test_resource_pool_patch_remote(
     patch = {
         "default": False,
         "public": False,
-        "remote": True,
-        "remote_provider_id": provider_payload["id"],
-        "remote_configuration": {
+        "remote": {
             "kind": "firecrest",
+            "provider_id": provider_payload["id"],
             "api_url": "https://example.org",
             "system_name": "my-system",
         },
@@ -1281,23 +1274,18 @@ async def test_resource_pool_patch_remote(
     assert res.status_code == 200, res.text
     assert res.json is not None
     rp = res.json
-    assert "remote" in rp
-    assert rp["remote"]
-    assert rp.get("remote_provider_id") == provider_payload["id"]
-    assert rp.get("remote_configuration") == {
+    assert rp.get("remote") == {
         "kind": "firecrest",
+        "provider_id": provider_payload["id"],
         "api_url": "https://example.org",
         "system_name": "my-system",
     }
 
     # Patch to reset the resource pool
-    patch = {"default": False, "public": False, "remote": False}
+    patch = {"default": False, "public": False, "remote": {}}
 
     _, res = await sanic_client.patch(f"/api/data/resource_pools/{rp_id}", headers=admin_headers, json=patch)
     assert res.status_code == 200, res.text
     assert res.json is not None
     rp = res.json
-    assert "remote" in rp
-    assert not rp["remote"]
-    assert rp.get("remote_provider_id") is None
-    assert rp.get("remote_configuration") is None
+    assert "remote" not in rp

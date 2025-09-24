@@ -1281,10 +1281,6 @@ components:
         default:
           $ref: "#/components/schemas/DefaultFlag"
         remote:
-          $ref: "#/components/schemas/RemoteFlag"
-        remote_provider_id:
-          $ref: "#/components/schemas/RemoteProviderId"
-        remote_configuration:
           $ref: "#/components/schemas/RemoteConfiguration"
         idle_threshold:
           $ref: "#/components/schemas/IdleThreshold"
@@ -1333,10 +1329,6 @@ components:
         default:
           $ref: "#/components/schemas/DefaultFlag"
         remote:
-          $ref: "#/components/schemas/RemoteFlag"
-        remote_provider_id:
-          $ref: "#/components/schemas/RemoteProviderId"
-        remote_configuration:
           $ref: "#/components/schemas/RemoteConfigurationPatch"
         idle_threshold:
           $ref: "#/components/schemas/IdleThreshold"
@@ -1369,10 +1361,6 @@ components:
         default:
           $ref: "#/components/schemas/DefaultFlag"
         remote:
-          $ref: "#/components/schemas/RemoteFlag"
-        remote_provider_id:
-          $ref: "#/components/schemas/RemoteProviderId"
-        remote_configuration:
           $ref: "#/components/schemas/RemoteConfiguration"
         idle_threshold:
           $ref: "#/components/schemas/IdleThreshold"
@@ -1424,10 +1412,6 @@ components:
         default:
           $ref: "#/components/schemas/DefaultFlag"
         remote:
-          $ref: "#/components/schemas/RemoteFlag"
-        remote_provider_id:
-          $ref: "#/components/schemas/RemoteProviderId"
-        remote_configuration:
           $ref: "#/components/schemas/RemoteConfiguration"
         idle_threshold:
           $ref: "#/components/schemas/IdleThreshold"
@@ -1439,7 +1423,7 @@ components:
             id:
               $ref: "#/components/schemas/Ulid"
           required: ["id"]
-      required: ["classes", "name", "id", "public", "default", "remote"]
+      required: ["classes", "name", "id", "public", "default"]
       example:
         quota:
           cpu: 50
@@ -1484,10 +1468,6 @@ components:
         default:
           $ref: "#/components/schemas/DefaultFlag"
         remote:
-          $ref: "#/components/schemas/RemoteFlag"
-        remote_provider_id:
-          $ref: "#/components/schemas/RemoteProviderId"
-        remote_configuration:
           $ref: "#/components/schemas/RemoteConfiguration"
         idle_threshold:
           $ref: "#/components/schemas/IdleThreshold"
@@ -1495,7 +1475,7 @@ components:
           $ref: "#/components/schemas/HibernationThreshold"
         cluster_id:
           $ref: "#/components/schemas/Ulid"
-      required: ["classes", "name", "id", "public", "default", "remote"]
+      required: ["classes", "name", "id", "public", "default"]
       example:
         quota:
           cpu: 50
@@ -1715,18 +1695,11 @@ components:
       description: A resource pool whose classes can be accessed by anyone
       default: false
       example: false
-    RemoteFlag:
-      type: boolean
-      description: A resource pool which starts sessions remotely
-      default: false
-      example: false
-    RemoteProviderId:
-      type: string
-      description: The ID of a provider (see oauth2 section)
-      example: "my-provider"
     RemoteConfiguration:
       type: object
-      description: The configuration used by to start sessions remotely
+      description: |
+        The configuration used by Renku to start sessions remotely.
+        If this field is present, the corresponding resource pool starts remote sessions.
       # NOTE: Using oneOf here allows to describe more types of remote sessions
       oneOf:
         - $ref: "#/components/schemas/RemoteConfigurationFirecrest"
@@ -1742,6 +1715,8 @@ components:
           enum: [ "firecrest" ]
           description: Kind of remote resource pool
           example: "firecrest"
+        provider_id:
+          $ref: "#/components/schemas/RemoteConfigurationFirecrestProviderId"
         api_url:
           $ref: "#/components/schemas/RemoteConfigurationFirecrestApiUrl"
         system_name:
@@ -1752,6 +1727,12 @@ components:
         - kind
         - api_url
         - system_name
+    RemoteConfigurationFirecrestProviderId:
+      type: string
+      description: |
+        The ID of a provider (see oauth2 section).
+        This is used to allow seamless authentication using Renku integrations.
+      example: "my-provider"
     RemoteConfigurationFirecrestApiUrl:
       type: string
       description: The base URL of the FirecREST API
@@ -1769,7 +1750,12 @@ components:
       description: |
         Patch for the configuration used by to start sessions remotely
       oneOf:
+        - $ref: "#/components/schemas/RemoteConfigurationPatchReset"
         - $ref: "#/components/schemas/RemoteConfigurationFirecrestPatch"
+    RemoteConfigurationPatchReset:
+      type: object
+      description: Value used to unset the remote field (empty object).
+      additionalProperties: false
     RemoteConfigurationFirecrestPatch:
       type: object
       description: |
@@ -1782,6 +1768,8 @@ components:
           enum: [ "firecrest" ]
           description: Kind of remote resource pool
           example: "firecrest"
+        provider_id:
+          $ref: "#/components/schemas/RemoteConfigurationFirecrestProviderId"
         api_url:
           $ref: "#/components/schemas/RemoteConfigurationFirecrestApiUrl"
         system_name:

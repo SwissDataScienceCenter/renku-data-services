@@ -19,19 +19,12 @@ depends_on = None
 
 def upgrade() -> None:
     op.add_column(
-        "resource_pools",
-        sa.Column("remote", sa.Boolean(), server_default=sa.text("false"), nullable=False),
-        schema="resource_pools",
-    )
-    op.add_column(
         "resource_pools", sa.Column("remote_provider_id", sa.String(length=99), nullable=True), schema="resource_pools"
     )
     op.add_column(
         "resource_pools",
         sa.Column(
-            "remote_configuration",
-            sa.JSON().with_variant(postgresql.JSONB(astext_type=sa.Text()), "postgresql"),
-            nullable=True,
+            "remote_json", sa.JSON().with_variant(postgresql.JSONB(astext_type=sa.Text()), "postgresql"), nullable=True
         ),
         schema="resource_pools",
     )
@@ -63,6 +56,5 @@ def downgrade() -> None:
         table_name="resource_pools",
         schema="resource_pools",
     )
-    op.drop_column("resource_pools", "remote_configuration", schema="resource_pools")
+    op.drop_column("resource_pools", "remote_json", schema="resource_pools")
     op.drop_column("resource_pools", "remote_provider_id", schema="resource_pools")
-    op.drop_column("resource_pools", "remote", schema="resource_pools")

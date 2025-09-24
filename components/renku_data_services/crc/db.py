@@ -473,31 +473,19 @@ class ResourcePoolRepository(_Base):
                     case "remote":
                         if val is None:
                             continue
-                        if val:
-                            rp.remote = True
-                            continue
-                        rp.remote = False
-                        rp.remote_provider_id = None
-                        rp.remote_configuration = None
-                        new_rp_model = new_rp_model.update(remote_provider_id=None, remote_configuration=None)
-                    case "remote_provider_id":
-                        if val is None:
-                            continue
-                        if val == "":
+                        if isinstance(val, models.RemoteConfigurationPatchReset):
                             rp.remote_provider_id = None
-                            new_rp_model = new_rp_model.update(remote_provider_id=None)
+                            rp.remote_json = None
+                            new_rp_model = new_rp_model.update(remote=None)
                             continue
-                        rp.remote_provider_id = val
-                        new_rp_model = new_rp_model.update(remote_provider_id=val)
-                    # TODO: with this update method, it is impossible to unset remote_configuration
-                    case "remote_configuration":
-                        if val is None:
+                        if isinstance(val, models.RemoteConfigurationFirecrestPatch):
+                            assert new_rp_model.remote is not None
+                            rp.remote_provider_id = val.provider_id
+                            remote_json = new_rp_model.remote.to_dict()
+                            del remote_json["provider_id"]
+                            rp.remote_json = remote_json
                             continue
-                        remote_configuration = new_rp_model.remote_configuration
-                        if remote_configuration is None:
-                            continue
-                        rp.remote_configuration = remote_configuration.to_dict()
-                        new_rp_model = new_rp_model.update(remote_configuration=remote_configuration.to_dict())
+                        raise errors.ProgrammingError(message=f"Unexpected update value for field remote: {val}")
                     case _:
                         pass
             new_classes = await gather(*new_classes_coroutines)
