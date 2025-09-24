@@ -2,7 +2,6 @@
 
 import os
 from collections.abc import AsyncIterable, Awaitable
-from typing import Self
 
 import aiofiles
 import kr8s
@@ -50,7 +49,7 @@ class KubeConfig:
         Kr8s cannot return an AsyncAPI instance from sync code, and we can't easily make all our config code async,
         so this method is a direct copy of the kr8s sync client code, just that it returns an async client.
         """
-        ret = kr8s.asyncio.api(
+        return kr8s.asyncio.api(
             url=self._url,
             kubeconfig=self._kubeconfig,
             serviceaccount=self._sa,
@@ -58,7 +57,6 @@ class KubeConfig:
             context=self._current_context_name,
             _asyncio=True,  # This is the only line that is different from kr8s code
         )
-        return ret
 
     def api(self) -> Awaitable[kr8s.asyncio.Api]:
         """Instantiate the async Kr8s Api object based on the configuration."""
@@ -68,12 +66,16 @@ class KubeConfig:
 class KubeConfigEnv(KubeConfig):
     """Get a kube config from the environment."""
 
+    def __init__(self) -> None:
+        super().__init__(ns=os.environ.get("K8S_NAMESPACE", "default"))
+
+
 async def from_kubeconfig_file(kubeconfig_path: str) -> KubeConfig:
     """Generate a config from a kubeconfig file."""
-    
+
     async with aiofiles.open(kubeconfig_path) as stream:
         kubeconfig_contents = await stream.read()
-    
+
     conf = yaml.safe_load(kubeconfig_contents)
     if not isinstance(conf, dict):
         raise errors.ConfigurationError(message=f"The kubeconfig {kubeconfig_path} is empty or has a bad format.")
