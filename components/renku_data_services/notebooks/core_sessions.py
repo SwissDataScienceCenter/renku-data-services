@@ -763,6 +763,13 @@ async def start_session(
             volumes=[auth_secret.volume] if auth_secret.volume else [],
         )
     )
+    authn_extra_volume_mounts: list[ExtraVolumeMount] = []
+    if auth_secret.volume_mount:
+        authn_extra_volume_mounts.append(auth_secret.volume_mount)
+
+    cert_vol_mounts = init_containers.certificates_volume_mounts(nb_config)
+    if cert_vol_mounts:
+        authn_extra_volume_mounts.extend(cert_vol_mounts)
 
     image_secret, image_pull_secret_name = await get_image_pull_secret(
         image=image,
@@ -834,7 +841,7 @@ async def start_session(
                 if isinstance(user, AuthenticatedAPIUser)
                 else AuthenticationType.token,
                 secretRef=auth_secret.key_ref("auth"),
-                extraVolumeMounts=[auth_secret.volume_mount] if auth_secret.volume_mount else None,
+                extraVolumeMounts=authn_extra_volume_mounts,
             ),
             dataSources=session_extras.data_sources,
             tolerations=tolerations_from_resource_class(resource_class, nb_config.sessions.tolerations_model),
