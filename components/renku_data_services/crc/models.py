@@ -239,13 +239,6 @@ class ClusterSettings:
             service_account_name=self.service_account_name,
         )
 
-
-@dataclass(frozen=True, eq=True, kw_only=True)
-class SavedClusterSettings(ClusterSettings):
-    """Saved K8s Cluster settings."""
-
-    id: ClusterId
-
     def get_storage_class(self) -> str | None:
         """Get the default storage class for the cluster."""
 
@@ -256,7 +249,14 @@ class SavedClusterSettings(ClusterSettings):
 
         host = self.session_host
         base_server_path = f"{self.session_path}/{server_name}"
-        base_server_url = f"{self.session_protocol.value}://{host}:{self.session_port}{base_server_path}"
+        if self.session_port in [80, 443]:
+            # No need to specify the port in these cases. If we specify the port on https or http
+            # when it is the usual port then the URL callbacks for authentication do not work.
+            # I.e. if the callback is registered as https://some.host/link it will not work when a redirect
+            # like https://some.host:443/link is used.
+            base_server_url = f"{self.session_protocol.value}://{host}{base_server_path}"
+        else:
+            base_server_url = f"{self.session_protocol.value}://{host}:{self.session_port}{base_server_path}"
         base_server_https_url = base_server_url
         ingress_annotations = self.session_ingress_annotations
 
@@ -265,6 +265,13 @@ class SavedClusterSettings(ClusterSettings):
         )
 
         return base_server_path, base_server_url, base_server_https_url, host, tls_secret, ingress_annotations
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SavedClusterSettings(ClusterSettings):
+    """Saved K8s Cluster settings."""
+
+    id: ClusterId
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
