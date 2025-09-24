@@ -95,7 +95,7 @@ class KubeConfigYaml(KubeConfig):
 
     @classmethod
     async def from_kubeconfig_file(cls, kubeconfig_path: str) -> Self:
-        """Generte a config from a kubeconfig file."""
+        """Generate a config from a kubeconfig file."""
         async with aiofiles.open(kubeconfig_path) as stream:
             _str = await stream.read()
         return cls(kubeconfig_path, _str)
@@ -127,7 +127,7 @@ async def get_clusters(
         logger.info(f"Trying to load Kubernetes config: '{kube_conf_root_dir}/{filename}'")
         try:
             logger.info(f"Reading: '{kube_conf_root_dir}/{filename}'")
-            kube_config = await KubeConfigYaml.from_kubeconfig_file(f"{kube_conf_root_dir}/{filename}")
+            kube_config = await from_kubeconfig_file(f"{kube_conf_root_dir}/{filename}")
             logger.info(f"Creating API for '{kube_conf_root_dir}/{filename}'")
             k8s_api = await kube_config.api()
             logger.info(f"Creating cluster connection for '{kube_conf_root_dir}/{filename}'")
