@@ -9,7 +9,7 @@ import kr8s
 
 from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
-from renku_data_services.crc.models import ResourceClass
+from renku_data_services.crc.models import ClusterSettings, ResourceClass, SessionProtocol
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.k8s.clients import (
     DummyCoreClient,
@@ -163,6 +163,7 @@ class NotebooksConfig:
     )
     session_id_cookie_name: str = "_renku_session"  # NOTE: This cookie name is set and controlled by the gateway
     v1_sessions_enabled: bool = False
+    local_cluster_session_service_account: str | None = None
 
     @classmethod
     def from_env(cls, db_config: DBConfig, enable_internal_gitlab: bool) -> Self:
@@ -235,6 +236,7 @@ class NotebooksConfig:
             gvk=AMALTHEA_SESSION_GVK,
             username_label="renku.io/safe-username",
         )
+
         return cls(
             server_options=server_options,
             sessions=sessions_config,
@@ -258,4 +260,20 @@ class NotebooksConfig:
             cluster_rp=cluster_rp,
             v1_sessions_enabled=v1_sessions_enabled,
             enable_internal_gitlab=enable_internal_gitlab,
+            local_cluster_session_service_account=os.environ.get("LOCAL_CLUSTER_SESSION_SERVICE_ACCOUNT"),
+        )
+
+    def local_cluster_settings(self) -> ClusterSettings:
+        """The cluster settings for the local cluster where the Renku services are installed."""
+        return ClusterSettings(
+            name="local-cluster-settings",
+            config_name="",
+            session_protocol=SessionProtocol.HTTPS,
+            session_host=self.sessions.ingress.host,
+            session_port=443,
+            session_path="/sessions",
+            session_ingress_annotations=self.sessions.ingress.annotations,
+            session_tls_secret_name=self.sessions.ingress.tls_secret,
+            session_storage_class=self.sessions.storage.pvs_storage_class,
+            service_account_name=self.local_cluster_session_service_account,
         )

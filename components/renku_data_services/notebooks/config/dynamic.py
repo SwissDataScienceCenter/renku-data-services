@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass, field
 from enum import Enum
 from io import StringIO
-from typing import Any, ClassVar, Optional, Self, Union
+from typing import Any, ClassVar, Self, Union
 from urllib.parse import urlunparse
 
 import yaml
@@ -255,14 +255,14 @@ class _AmaltheaV2Config:
 @dataclass
 class _SessionIngress:
     host: str
-    tls_secret: Optional[str] = None
+    tls_secret: str
     annotations: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def from_env(cls) -> Self:
         return cls(
             host=os.environ["NB_SESSIONS__INGRESS__HOST"],
-            tls_secret=os.environ.get("NB_SESSIONS__INGRESS__TLS_SECRET", None),
+            tls_secret=os.environ["NB_SESSIONS__INGRESS__TLS_SECRET"],
             annotations=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__INGRESS__ANNOTATIONS", "{}"))),
         )
 
@@ -432,7 +432,7 @@ class _SessionConfig:
             git_proxy=_GitProxyConfig(renku_client_secret="not-defined"),  # nosec B106
             git_rpc_server=_GitRpcServerConfig.from_env(),
             git_clone=_GitCloneConfig.from_env(),
-            ingress=_SessionIngress(host="localhost"),
+            ingress=_SessionIngress(host="localhost", tls_secret="some-secret"),  # nosec: B106
             ca_certs=_CustomCaCertsConfig.from_env(),
             oidc=_SessionOidcConfig(
                 client_id="not-defined",
