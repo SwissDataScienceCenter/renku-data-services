@@ -85,6 +85,6 @@ def validate_firecrest_api_url(url: str) -> None:
     accepted_schemes = ["https"]
     if parsed.scheme not in accepted_schemes:
         raise errors.ValidationError(
-            message=f"The scheme for the image registry url {url} is not valid, expected one of {accepted_schemes}",
+            message=f"The scheme for the firecrest api url {url} is not valid, expected one of {accepted_schemes}",
             quiet=True,
         )
