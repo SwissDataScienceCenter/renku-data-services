@@ -109,6 +109,35 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - oauth2
+  /oauth2/providers/{provider_id}/simple_connect:
+    post:
+      summary: Authorize using a given token set
+      description: |
+        Provide a pre-defined token set to store and use for
+        connecting to an external service.
+      parameters:
+        - in: path
+          name: provider_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SimpleConnect"
+      responses:
+        "201":
+          description: The connection was created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Connection"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - oauth2
   /oauth2/providers/{provider_id}/authorize:
     get:
       summary: Authorize an OAuth2 Client
@@ -373,6 +402,15 @@ components:
         - id
         - provider_id
         - status
+    SimpleConnect:
+      type: object
+      properties:
+        access_token:
+          type: string
+        username:
+          type: string
+      required:
+        - access_token
     ConnectedAccount:
       type: object
       additionalProperties: false

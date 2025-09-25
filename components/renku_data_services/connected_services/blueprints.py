@@ -129,6 +129,24 @@ class OAuth2ClientsBP(CustomBlueprint):
 
         return "/oauth2/callback", ["GET"], _callback
 
+    def custom_connect(self) -> BlueprintFactoryResponse:
+        """Custom connection."""
+
+        @authenticate(self.authenticator)
+        @validate(json=apispec.SimpleConnect)
+        async def _custom_connect(
+            _: Request, user: base_models.APIUser, provider_id: str, body: apispec.SimpleConnect
+        ) -> JSONResponse:
+            provider_id = unquote(provider_id)
+            token_set = body.model_dump()
+            conn_id = await self.connected_services_repo.custom_connect(user, provider_id, token_set)
+            conn = apispec.Connection(
+                id=str(conn_id), provider_id=provider_id, status=apispec.ConnectionStatus.connected
+            )
+            return validated_json(apispec.Connection, conn)
+
+        return "/oauth2/providers/<provider_id>/simple_connect", ["POST"], _custom_connect
+
     def _get_callback_url(self, request: Request) -> str:
         callback_url = request.url_for(f"{self.name}.{self.authorize_callback.__name__}")
         # TODO: configure the server to trust the reverse proxy so that the request scheme is always "https".

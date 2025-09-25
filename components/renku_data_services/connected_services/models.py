@@ -116,6 +116,11 @@ class OAuth2TokenSet(dict):
         return data
 
     @property
+    def username(self) -> str | None:
+        """Return the username property."""
+        return self.get("username")
+
+    @property
     def access_token(self) -> str | None:
         """Returns the access token."""
         return self.get("access_token")
