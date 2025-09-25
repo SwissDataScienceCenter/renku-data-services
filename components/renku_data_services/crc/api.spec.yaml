@@ -1280,6 +1280,8 @@ components:
           $ref: "#/components/schemas/PublicFlag"
         default:
           $ref: "#/components/schemas/DefaultFlag"
+        remote:
+          $ref: "#/components/schemas/RemoteConfiguration"
         idle_threshold:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
@@ -1294,6 +1296,7 @@ components:
           gpu: 10
         public: true
         default: false
+        remote: false
         classes:
           - name: "resource class 1"
             cpu: 1.5
@@ -1325,6 +1328,8 @@ components:
           $ref: "#/components/schemas/PublicFlag"
         default:
           $ref: "#/components/schemas/DefaultFlag"
+        remote:
+          $ref: "#/components/schemas/RemoteConfigurationPatch"
         idle_threshold:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
@@ -1355,6 +1360,8 @@ components:
           $ref: "#/components/schemas/PublicFlag"
         default:
           $ref: "#/components/schemas/DefaultFlag"
+        remote:
+          $ref: "#/components/schemas/RemoteConfiguration"
         idle_threshold:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
@@ -1370,6 +1377,7 @@ components:
           id: 518c7d27-b5db-4aee-855f-f4638aded2d4
         public: true
         default: false
+        remote: false
         classes:
           - name: "resource class 1"
             cpu: 1.5
@@ -1403,6 +1411,8 @@ components:
           $ref: "#/components/schemas/PublicFlag"
         default:
           $ref: "#/components/schemas/DefaultFlag"
+        remote:
+          $ref: "#/components/schemas/RemoteConfiguration"
         idle_threshold:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
@@ -1422,6 +1432,7 @@ components:
           id: 518c7d27-b5db-4aee-855f-f4638aded2d4
         public: false
         default: false
+        remote: false
         classes:
           - name: "resource class 1"
             cpu: 1.5
@@ -1456,6 +1467,8 @@ components:
           $ref: "#/components/schemas/PublicFlag"
         default:
           $ref: "#/components/schemas/DefaultFlag"
+        remote:
+          $ref: "#/components/schemas/RemoteConfiguration"
         idle_threshold:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
@@ -1471,6 +1484,7 @@ components:
           id: 518c7d27-b5db-4aee-855f-f4638aded2d4
         public: false
         default: false
+        remote: false
         classes:
           - name: "resource class 1"
             cpu: 1.5
@@ -1681,6 +1695,87 @@ components:
       description: A resource pool whose classes can be accessed by anyone
       default: false
       example: false
+    RemoteConfiguration:
+      type: object
+      description: |
+        The configuration used by Renku to start sessions remotely.
+        If this field is present, the corresponding resource pool starts remote sessions.
+      # NOTE: Using oneOf here allows to describe more types of remote sessions
+      oneOf:
+        - $ref: "#/components/schemas/RemoteConfigurationFirecrest"
+    RemoteConfigurationFirecrest:
+      type: object
+      description: |
+        The configuration for starting sessions remotely using
+        the FirecREST API
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum: [ "firecrest" ]
+          description: Kind of remote resource pool
+          example: "firecrest"
+        provider_id:
+          $ref: "#/components/schemas/RemoteConfigurationFirecrestProviderId"
+        api_url:
+          $ref: "#/components/schemas/RemoteConfigurationFirecrestApiUrl"
+        system_name:
+          $ref: "#/components/schemas/RemoteConfigurationFirecrestSystemName"
+        partition:
+          $ref: "#/components/schemas/RemoteConfigurationFirecrestPartition"
+      required:
+        - kind
+        - api_url
+        - system_name
+    RemoteConfigurationFirecrestProviderId:
+      type: string
+      description: |
+        The ID of a provider (see oauth2 section).
+        This is used to allow seamless authentication using Renku integrations.
+      example: "my-provider"
+    RemoteConfigurationFirecrestApiUrl:
+      type: string
+      description: The base URL of the FirecREST API
+      example: "https://api.cscs.ch/hpc/firecrest/v2"
+    RemoteConfigurationFirecrestSystemName:
+      type: string
+      description: The name of the system to use with the FirecREST API
+      example: "eiger"
+    RemoteConfigurationFirecrestPartition:
+      type: string
+      description: The partition to use when submitting jobs
+      example: "normal"
+    RemoteConfigurationPatch:
+      type: object
+      description: |
+        Patch for the configuration used by to start sessions remotely
+      oneOf:
+        - $ref: "#/components/schemas/RemoteConfigurationPatchReset"
+        - $ref: "#/components/schemas/RemoteConfigurationFirecrestPatch"
+    RemoteConfigurationPatchReset:
+      type: object
+      description: Value used to unset the remote field (empty object).
+      additionalProperties: false
+    RemoteConfigurationFirecrestPatch:
+      type: object
+      description: |
+        The configuration for starting sessions remotely using
+        the FirecREST API
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum: [ "firecrest" ]
+          description: Kind of remote resource pool
+          example: "firecrest"
+        provider_id:
+          $ref: "#/components/schemas/RemoteConfigurationFirecrestProviderId"
+        api_url:
+          $ref: "#/components/schemas/RemoteConfigurationFirecrestApiUrl"
+        system_name:
+          $ref: "#/components/schemas/RemoteConfigurationFirecrestSystemName"
+        partition:
+          $ref: "#/components/schemas/RemoteConfigurationFirecrestPartition"
     IdleThreshold:
       type: integer
       description: A threshold in seconds after which a session gets hibernated (0 means no threshold)
