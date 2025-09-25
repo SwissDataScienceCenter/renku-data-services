@@ -10,6 +10,7 @@ from typing import Any, Optional, Protocol, Self
 from uuid import uuid4
 
 from renku_data_services import errors
+from renku_data_services.base_models import RESET, ResetType
 from renku_data_services.errors import ValidationError
 from renku_data_services.k8s.constants import ClusterId
 from renku_data_services.notebooks.cr_amalthea_session import TlsSecret
@@ -328,7 +329,7 @@ class ResourcePool:
         """Determine if an update to a resource pool is valid and if valid create new updated resource pool."""
         if self.default and "default" in kwargs and not kwargs["default"]:
             raise ValidationError(message="A default resource pool cannot be made non-default.")
-        if "remote" in kwargs and isinstance(kwargs["remote"], RemoteConfigurationPatchReset):
+        if "remote" in kwargs and kwargs["remote"] is RESET:
             kwargs["remote"] = None
         if "remote" in kwargs and isinstance(kwargs["remote"], RemoteConfigurationFirecrestPatch):
             remote_dict: dict[str, Any] = self.remote.to_dict() if self.remote else dict()
@@ -453,13 +454,6 @@ class RemoteConfigurationFirecrest:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class RemoteConfigurationPatchReset:
-    """Model used to unset a remote configuration."""
-
-    pass
-
-
-@dataclass(frozen=True, eq=True, kw_only=True)
 class RemoteConfigurationFirecrestPatch:
     """Model for remote configurations using the FirecREST API."""
 
@@ -477,4 +471,4 @@ class RemoteConfigurationFirecrestPatch:
         return res
 
 
-RemoteConfigurationPatch = RemoteConfigurationPatchReset | RemoteConfigurationFirecrestPatch
+RemoteConfigurationPatch = ResetType | RemoteConfigurationFirecrestPatch

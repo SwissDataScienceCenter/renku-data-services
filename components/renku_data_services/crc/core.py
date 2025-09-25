@@ -2,6 +2,7 @@
 
 from urllib.parse import urlparse
 
+from renku_data_services.base_models import RESET
 from renku_data_services.crc import apispec, models
 from renku_data_services.errors import errors
 
@@ -63,7 +64,7 @@ def validate_remote_put(
 ) -> models.RemoteConfigurationPatch:
     """Validate the PUT update to a remote configuration object."""
     if body is None:
-        return models.RemoteConfigurationPatchReset()
+        return RESET
     remote = validate_remote(body=body)
     return models.RemoteConfigurationFirecrestPatch(
         kind=remote.kind,
@@ -79,7 +80,7 @@ def validate_remote_patch(
 ) -> models.RemoteConfigurationPatch:
     """Validate the patch to a remote configuration object."""
     if isinstance(body, apispec.RemoteConfigurationPatchReset):
-        return models.RemoteConfigurationPatchReset()
+        return RESET
     kind = models.RemoteConfigurationKind(body.kind.value) if body.kind else None
     if kind and kind != models.RemoteConfigurationKind.firecrest:
         raise errors.ValidationError(message=f"The kind '{kind}' of remote configuration is not supported.", quiet=True)

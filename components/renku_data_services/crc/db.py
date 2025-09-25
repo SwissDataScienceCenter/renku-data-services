@@ -20,6 +20,7 @@ from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from renku_data_services.base_models import RESET
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
 from renku_data_services.crc.models import ClusterPatch, ClusterSettings, SavedClusterSettings, SessionProtocol
@@ -473,7 +474,7 @@ class ResourcePoolRepository(_Base):
                     case "remote":
                         if val is None:
                             continue
-                        if isinstance(val, models.RemoteConfigurationPatchReset):
+                        if val is RESET:
                             rp.remote_provider_id = None
                             rp.remote_json = None
                             new_rp_model = new_rp_model.update(remote=None)
