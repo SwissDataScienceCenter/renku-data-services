@@ -19,6 +19,7 @@ class ProviderKind(StrEnum):
     onedrive = "onedrive"
     dropbox = "dropbox"
     generic_oidc = "generic_oidc"
+    dockerhub = "dockerhub"
 
 
 class ConnectionStatus(StrEnum):

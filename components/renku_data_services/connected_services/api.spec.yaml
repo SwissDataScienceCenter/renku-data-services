@@ -468,6 +468,7 @@ components:
         - "onedrive"
         - "dropbox"
         - "generic_oidc"
+        - "dockerhub"
       example: "gitlab"
     ApplicationSlug:
       description: |
