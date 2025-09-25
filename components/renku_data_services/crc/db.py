@@ -20,6 +20,7 @@ from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from renku_data_services.base_models import RESET
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
 from renku_data_services.crc.models import ClusterPatch, ClusterSettings, SavedClusterSettings, SessionProtocol
@@ -306,6 +307,8 @@ class ResourcePoolRepository(_Base):
                     raise errors.ValidationError(
                         message="There can only be one default resource pool and one already exists."
                     )
+            if not orm.remote_provider_id:
+                orm.remote_provider_id = None
             session.add(orm)
 
             await session.flush()
@@ -468,6 +471,22 @@ class ResourcePoolRepository(_Base):
                                     api_user, resource_pool_id=id, resource_class_id=class_id, **cls
                                 )
                             )
+                    case "remote":
+                        if val is None:
+                            continue
+                        if val is RESET:
+                            rp.remote_provider_id = None
+                            rp.remote_json = None
+                            new_rp_model = new_rp_model.update(remote=None)
+                            continue
+                        if isinstance(val, models.RemoteConfigurationFirecrestPatch):
+                            assert new_rp_model.remote is not None
+                            rp.remote_provider_id = val.provider_id
+                            remote_json = new_rp_model.remote.to_dict()
+                            del remote_json["provider_id"]
+                            rp.remote_json = remote_json
+                            continue
+                        raise errors.ProgrammingError(message=f"Unexpected update value for field remote: {val}")
                     case _:
                         pass
             new_classes = await gather(*new_classes_coroutines)
