@@ -636,16 +636,16 @@ def get_remote_secret(
 
 
 def get_remote_env(
-    remote_configuration: RemoteConfigurationFirecrest,
+    remote: RemoteConfigurationFirecrest,
 ) -> list[SessionEnvItem]:
     """Returns env variables used for remote sessions."""
     env = [
-        SessionEnvItem(name="RSC_REMOTE_KIND", value=remote_configuration.kind.value),
-        SessionEnvItem(name="RSC_FIRECREST_API_URL", value=remote_configuration.api_url),
-        SessionEnvItem(name="RSC_FIRECREST_SYSTEM_NAME", value=remote_configuration.system_name),
+        SessionEnvItem(name="RSC_REMOTE_KIND", value=remote.kind.value),
+        SessionEnvItem(name="RSC_FIRECREST_API_URL", value=remote.api_url),
+        SessionEnvItem(name="RSC_FIRECREST_SYSTEM_NAME", value=remote.system_name),
     ]
-    if remote_configuration.partition:
-        env.append(SessionEnvItem(name="RSC_FIRECREST_PARTITION", value=remote_configuration.partition))
+    if remote.partition:
+        env.append(SessionEnvItem(name="RSC_FIRECREST_PARTITION", value=remote.partition))
     return env
 
 
@@ -840,19 +840,16 @@ async def start_session(
     # Remote session configuration
     remote_secret = None
     if session_location == SessionLocation.remote:
-        if resource_pool.remote_provider_id is None:
+        assert resource_pool.remote is not None
+        if resource_pool.remote.provider_id is None:
             raise errors.ProgrammingError(
                 message=f"The resource pool {resource_pool.id} configuration is not valid (missing field 'remote_provider_id')."  # noqa E501
-            )
-        if resource_pool.remote_configuration is None:
-            raise errors.ProgrammingError(
-                message=f"The resource pool {resource_pool.id} configuration is not valid (missing field 'remote_configuration')."  # noqa E501
             )
         remote_secret = get_remote_secret(
             user=user,
             config=nb_config,
             server_name=server_name,
-            remote_provider_id=resource_pool.remote_provider_id,
+            remote_provider_id=resource_pool.remote.provider_id,
             git_providers=git_providers,
         )
     if remote_secret is not None:
@@ -874,10 +871,10 @@ async def start_session(
         SessionEnvItem(name="RENKU_LAUNCHER_ID", value=str(launcher.id)),
     ]
     if session_location == SessionLocation.remote:
-        assert resource_pool.remote_configuration is not None  # This should have been checked above
+        assert resource_pool.remote is not None
         env.extend(
             get_remote_env(
-                remote_configuration=resource_pool.remote_configuration,
+                remote=resource_pool.remote,
             )
         )
     launcher_env_variables = get_launcher_env_variables(launcher, body)
