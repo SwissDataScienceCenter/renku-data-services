@@ -13,6 +13,7 @@ from sqlalchemy import (
     MetaData,
     String,
     Table,
+    false,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
@@ -230,6 +231,7 @@ class ResourcePoolORM(BaseORM):
     hibernation_threshold: Mapped[Optional[int]] = mapped_column(default=None)
     default: Mapped[bool] = mapped_column(default=False, index=True)
     public: Mapped[bool] = mapped_column(default=False, index=True)
+    remote: Mapped[bool] = mapped_column(default=False, server_default=false())
     remote_provider_id: Mapped[str | None] = mapped_column(
         ForeignKey(cs_schemas.OAuth2ClientORM.id, ondelete="RESTRICT", name="resource_pools_remote_provider_id_fk"),
         default=None,
@@ -237,7 +239,7 @@ class ResourcePoolORM(BaseORM):
         nullable=True,
         index=True,
     )
-    remote_json: Mapped[dict[str, Any] | None] = mapped_column(
+    remote_configuration: Mapped[dict[str, Any] | None] = mapped_column(
         JSONVariant, default=None, server_default=None, nullable=True
     )
     id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
@@ -257,12 +259,9 @@ class ResourcePoolORM(BaseORM):
         if resource_pool.cluster is not None:
             cluster_id = resource_pool.cluster.id
 
-        remote_provider_id = None
-        remote_json = None
-        if resource_pool.remote:
-            remote_provider_id = resource_pool.remote.provider_id
-            remote_json = resource_pool.remote.to_dict()
-            del remote_json["provider_id"]
+        remote_configuration = None
+        if resource_pool.remote_configuration:
+            remote_configuration = resource_pool.remote_configuration.to_dict()
 
         return cls(
             name=resource_pool.name,
@@ -272,8 +271,9 @@ class ResourcePoolORM(BaseORM):
             hibernation_threshold=resource_pool.hibernation_threshold,
             public=resource_pool.public,
             default=resource_pool.default,
-            remote_provider_id=remote_provider_id,
-            remote_json=remote_json,
+            remote=resource_pool.remote,
+            remote_provider_id=resource_pool.remote_provider_id,
+            remote_configuration=remote_configuration,
             cluster_id=cluster_id,
         )
 
@@ -294,7 +294,11 @@ class ResourcePoolORM(BaseORM):
                 f"Using the quota {quota} in the response."
             )
         cluster = None if self.cluster is None else self.cluster.dump()
-        remote = self._dump_remote()
+        remote_configuration = (
+            models.RemoteConfigurationFirecrest.from_dict(self.remote_configuration)
+            if self.remote_configuration
+            else None
+        )
         return models.ResourcePool(
             id=self.id,
             name=self.name,
@@ -304,16 +308,10 @@ class ResourcePoolORM(BaseORM):
             hibernation_threshold=self.hibernation_threshold,
             public=self.public,
             default=self.default,
-            remote=remote,
+            remote=self.remote,
+            remote_provider_id=self.remote_provider_id,
+            remote_configuration=remote_configuration,
             cluster=cluster,
-        )
-
-    def _dump_remote(self) -> models.RemoteConfigurationFirecrest | None:
-        """Create a remote_configuration model from the corresponding column of the ORM object."""
-        if self.remote_json is None:
-            return None
-        return models.RemoteConfigurationFirecrest.from_dict(
-            {**self.remote_json, "provider_id": self.remote_provider_id}
         )
 
 

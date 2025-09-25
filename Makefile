@@ -1,5 +1,5 @@
 AMALTHEA_JS_VERSION ?= 0.20.0
-AMALTHEA_SESSIONS_VERSION ?= leafty/exp-dev-naming
+AMALTHEA_SESSIONS_VERSION ?= leafty/remote-session-controller
 COMMON_CODEGEN_PARAMS := \
 	--output-model-type pydantic_v2.BaseModel \
 	--use-double-quotes \
