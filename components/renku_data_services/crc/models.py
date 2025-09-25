@@ -280,9 +280,6 @@ class ResourcePool:
     default: bool = False
     public: bool = False
     remote: RemoteConfigurationFirecrest | None = None
-    # remote: bool = False
-    # remote_provider_id: str | None = None
-    # remote_configuration: RemoteConfigurationFirecrest | None = None
     cluster: SavedClusterSettings | None = None
 
     def __post_init__(self) -> None:
@@ -297,14 +294,6 @@ class ResourcePool:
             raise ValidationError(message="The default resource pool cannot start remote sessions.")
         if self.remote and self.public:
             raise ValidationError(message="A resource pool which starts remote sessions cannot be public.")
-        # if self.remote_provider_id and not self.remote:
-        #     raise ValidationError(
-        #         message="The field 'remote_provider_id' can only be set when 'remote' is also set to true."
-        #     )
-        # if self.remote_configuration and not self.remote:
-        #     raise ValidationError(
-        #         message="The field 'remote_configuration' can only be set when 'remote' is also set to true."
-        #     )
         if (self.idle_threshold and self.idle_threshold < 0) or (
             self.hibernation_threshold and self.hibernation_threshold < 0
         ):
