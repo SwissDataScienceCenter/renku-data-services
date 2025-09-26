@@ -23,6 +23,7 @@ from renku_data_services.app_config import logging
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.connected_services.db import ConnectedServicesRepository
+from renku_data_services.connected_services.models import ProviderKind
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
 from renku_data_services.crc.models import GpuKind, ResourceClass, ResourcePool
 from renku_data_services.data_connectors.db import (
@@ -557,10 +558,14 @@ async def __get_gitlab_image_pull_secret_v2(
     if not image_check_result.image_provider:
         return None
 
+    registry_url = image_check_result.image_provider.registry_url
+    if image_check_result.image_provider.provider.kind == ProviderKind.dockerhub:
+        registry_url = "https://index.docker.io/v1/"
+
     return __format_image_pull_secret(
         secret_name=secret_name,
         token=image_check_result.token,
-        registry_domain=image_check_result.image_provider.registry_url,
+        registry_domain=registry_url,
     )
 
 
