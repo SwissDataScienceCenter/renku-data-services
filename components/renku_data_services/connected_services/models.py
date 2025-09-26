@@ -19,6 +19,7 @@ class ProviderKind(StrEnum):
     onedrive = "onedrive"
     dropbox = "dropbox"
     generic_oidc = "generic_oidc"
+    dockerhub = "dockerhub"
 
 
 class ConnectionStatus(StrEnum):
@@ -114,6 +115,11 @@ class OAuth2TokenSet(dict):
         if self.expires_at_iso is not None:
             data["expires_at_iso"] = self.expires_at_iso
         return data
+
+    @property
+    def username(self) -> str | None:
+        """Return the username property."""
+        return self.get("username")
 
     @property
     def access_token(self) -> str | None:
