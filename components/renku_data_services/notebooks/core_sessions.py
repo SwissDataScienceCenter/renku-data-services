@@ -546,7 +546,7 @@ def __format_image_pull_secret(secret_name: str, access_token: str, registry_dom
     )
 
 
-async def __get_gitlab_image_pull_secret_v2(
+async def __get_connected_services_image_pull_secret(
     secret_name: str, connected_svcs_repo: ConnectedServicesRepository, image: str, user: APIUser
 ) -> ExtraSecret | None:
     """Return a secret for accessing the image if one is available for the given user."""
@@ -573,23 +573,28 @@ async def get_image_pull_secret(
     user: APIUser,
     internal_gitlab_user: APIUser,
     connected_svcs_repo: ConnectedServicesRepository,
-) -> tuple[ExtraSecret | None, str]:
-    """Get na image pull secret if needed, currently only supports Gitlab."""
-    image_secret: ExtraSecret | None = None
-    image_pull_secret_name = f"{server_name}-image-secret"
-    if nb_config.enable_internal_gitlab:
-        # NOTE: This is the old flow where Gitlab is enabled and part of Renku
-        if isinstance(user, AuthenticatedAPIUser) and internal_gitlab_user.access_token is not None:
-            needs_pull_secret = await __requires_image_pull_secret(nb_config, image, internal_gitlab_user)
+) -> ExtraSecret | None:
+    """Get an image pull secret."""
 
-            if needs_pull_secret:
-                image_secret = __get_gitlab_image_pull_secret(
-                    nb_config, user, image_pull_secret_name, internal_gitlab_user.access_token
-                )
-    else:
-        # NOTE: No internal Gitlab, we get the image pull secret from the connected services
-        image_secret = await __get_gitlab_image_pull_secret_v2(image_pull_secret_name, connected_svcs_repo, image, user)
-    return image_secret, image_pull_secret_name
+    v2_secret = await __get_connected_services_image_pull_secret(
+        f"{server_name}-image-secret", connected_svcs_repo, image, user
+    )
+    if v2_secret:
+        return v2_secret
+
+    if (
+        nb_config.enable_internal_gitlab
+        and isinstance(user, AuthenticatedAPIUser)
+        and internal_gitlab_user.access_token is not None
+    ):
+        needs_pull_secret = await __requires_image_pull_secret(nb_config, image, internal_gitlab_user)
+        if needs_pull_secret:
+            v1_secret = __get_gitlab_image_pull_secret(
+                nb_config, user, f"{server_name}-image-secret-v1", internal_gitlab_user.access_token
+            )
+            return v1_secret
+
+    return None
 
 
 async def start_session(
@@ -764,7 +769,7 @@ async def start_session(
         )
     )
 
-    image_secret, image_pull_secret_name = await get_image_pull_secret(
+    image_secret = await get_image_pull_secret(
         image=image,
         server_name=server_name,
         nb_config=nb_config,
@@ -797,7 +802,7 @@ async def start_session(
     session = AmaltheaSessionV1Alpha1(
         metadata=Metadata(name=server_name, annotations=annotations),
         spec=AmaltheaSessionSpec(
-            imagePullSecrets=[ImagePullSecret(name=image_pull_secret_name, adopt=True)] if image_secret else [],
+            imagePullSecrets=[ImagePullSecret(name=image_secret.name, adopt=True)] if image_secret else [],
             codeRepositories=[],
             hibernated=False,
             reconcileStrategy=ReconcileStrategy.whenFailedOrHibernated,
@@ -1018,7 +1023,7 @@ async def patch_session(
 
     # Patching the image pull secret
     image = session.spec.session.image
-    image_pull_secret, _ = await get_image_pull_secret(
+    image_pull_secret = await get_image_pull_secret(
         image=image,
         server_name=server_name,
         nb_config=nb_config,

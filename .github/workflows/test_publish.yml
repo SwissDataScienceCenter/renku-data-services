@@ -140,6 +140,7 @@ jobs:
           cacheFrom: ${{ needs.build-devcontainer.outputs.image_repository }}:${{ needs.build-devcontainer.outputs.image_tag }}
       - name: Coveralls Parallel
         uses: coverallsapp/github-action@v2
+        continue-on-error: true
         with:
           flag-name: run-main-tests
           parallel: true
@@ -191,6 +192,7 @@ jobs:
           cacheFrom: ${{ needs.build-devcontainer.outputs.image_repository }}:${{ needs.build-devcontainer.outputs.image_tag }}
       - name: Coveralls Parallel
         uses: coverallsapp/github-action@v2
+        continue-on-error: true
         with:
           flag-name: run-schemathesis-tests
           parallel: true
