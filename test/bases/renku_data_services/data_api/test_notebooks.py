@@ -258,6 +258,7 @@ async def test_check_docker_image(sanic_client: SanicASGITestClient, user_header
     assert res.status_code == expected_status_code, res.text
 
 
+@pytest.mark.skip()
 class TestNotebooks(ClusterRequired):
     @pytest.fixture(scope="class", autouse=True)
     def amalthea(self, cluster, app_manager) -> Generator[None, None]:

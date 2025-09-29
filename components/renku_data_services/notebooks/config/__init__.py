@@ -172,7 +172,7 @@ class NotebooksConfig:
         dummy_stores = _parse_str_as_bool(os.environ.get("DUMMY_STORES", False))
         sessions_config: _SessionConfig
         git_config: _GitConfig
-        default_kubeconfig: KubeConfig
+        default_kubeconfig = KubeConfigEnv()
         data_service_url = os.environ.get("NB_DATA_SERVICE_URL", "http://127.0.0.1:8000")
         server_options = ServerOptionsConfig.from_env()
         crc_validator: CRCValidatorProto
@@ -188,7 +188,6 @@ class NotebooksConfig:
             sessions_config = _SessionConfig._for_testing()
             git_provider_helper = DummyGitProviderHelper()
             git_config = _GitConfig("http://not.specified", "registry.not.specified")
-            default_kubeconfig = TestKubeConfig()
 
         else:
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
@@ -202,7 +201,6 @@ class NotebooksConfig:
                 internal_gitlab_url=git_config.url,
                 enable_internal_gitlab=enable_internal_gitlab,
             )
-            default_kubeconfig = KubeConfigEnv()
 
         k8s_config = _K8sConfig.from_env()
         k8s_db_cache = K8sDbCache(db_config.async_session_maker)
