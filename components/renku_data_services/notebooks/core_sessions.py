@@ -881,10 +881,10 @@ async def start_session(
             )
         )
     launcher_env_variables = get_launcher_env_variables(launcher, body)
-    if session_location == SessionLocation.remote:
-        launcher_env_variables = [
-            item.model_copy(update=dict(name=f"RENKU_ENV_{item.name}")) for item in launcher_env_variables
-        ]
+    # if session_location == SessionLocation.remote:
+    #     launcher_env_variables = [
+    #         item.model_copy(update=dict(name=f"RENKU_ENV_{item.name}")) for item in launcher_env_variables
+    #     ]
     env.extend(launcher_env_variables)
 
     session = AmaltheaSessionV1Alpha1(
