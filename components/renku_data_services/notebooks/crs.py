@@ -36,8 +36,8 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     Preference,
     PreferredDuringSchedulingIgnoredDuringExecutionItem,
     ReconcileStrategy,
+    RemoteSecretRef,
     RequiredDuringSchedulingIgnoredDuringExecution,
-    SecretRef,
     Size,
     State,
     Status,
@@ -52,11 +52,13 @@ from renku_data_services.notebooks.cr_amalthea_session import EnvItem2 as Sessio
 from renku_data_services.notebooks.cr_amalthea_session import Item4 as SecretAsVolumeItem
 from renku_data_services.notebooks.cr_amalthea_session import Limits6 as _Limits
 from renku_data_services.notebooks.cr_amalthea_session import Limits7 as LimitsStr
+from renku_data_services.notebooks.cr_amalthea_session import Location as SessionLocation
 from renku_data_services.notebooks.cr_amalthea_session import Model as _ASModel
 from renku_data_services.notebooks.cr_amalthea_session import Requests6 as _Requests
 from renku_data_services.notebooks.cr_amalthea_session import Requests7 as RequestsStr
 from renku_data_services.notebooks.cr_amalthea_session import Resources3 as _Resources
 from renku_data_services.notebooks.cr_amalthea_session import Secret1 as SecretAsVolume
+from renku_data_services.notebooks.cr_amalthea_session import SecretRef as _SecretRef
 from renku_data_services.notebooks.cr_amalthea_session import Session as _ASSession
 from renku_data_services.notebooks.cr_amalthea_session import ShmSize1 as ShmSizeStr
 from renku_data_services.notebooks.cr_amalthea_session import Size1 as SizeStr
@@ -193,10 +195,17 @@ class Resources(_Resources):
     requests: Mapping[str, RequestsStr | Requests] | None = None
 
 
+class SecretRef(_SecretRef, RemoteSecretRef):
+    """Reference to a secret."""
+
+    pass
+
+
 class Session(_ASSession):
     """Amalthea spec.session schema."""
 
     resources: Resources | None = None
+    remoteSecretRef: SecretRef | None = None
 
 
 class AmaltheaSessionSpec(_ASSpec):
