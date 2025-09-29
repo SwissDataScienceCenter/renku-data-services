@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from typing import final
 
 import httpx
+from authlib.integrations.httpx_client import OAuthError
 
 from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import APIUser
@@ -97,6 +98,10 @@ async def check_image(image: Image, user: APIUser, connected_services: Connected
         except errors.UnauthorizedError as e:
             logger.info(f"Error getting image repo client for image {image}: {e}")
             unauth_error = e
+        except OAuthError as e:
+            logger.info(f"Error getting image repo client for image {image}: {e}")
+            unauth_error = errors.UnauthorizedError(message=f"OAuth error when getting repo client for image: {image}")
+            unauth_error.__cause__ = e
 
     try:
         result = await reg_api.image_check(image)
