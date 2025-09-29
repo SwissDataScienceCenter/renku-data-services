@@ -7,21 +7,18 @@ from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
 
 from renku_data_services import base_models
-from renku_data_services.app_config import logging
 from renku_data_services.base_api.auth import authenticate, authenticate_2
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser, Authenticator
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.connected_services.db import ConnectedServicesRepository
-from renku_data_services.connected_services.models import ConnectionStatus
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
     DataConnectorSecretRepository,
 )
 from renku_data_services.errors import errors
-from renku_data_services.notebooks import apispec, core, image_check
-from renku_data_services.notebooks.api.classes.image import Image
+from renku_data_services.notebooks import apispec, core
 from renku_data_services.notebooks.api.schemas.config_server_options import ServerOptionsEndpointResponse
 from renku_data_services.notebooks.api.schemas.logs import ServerLogs
 from renku_data_services.notebooks.config import NotebooksConfig
@@ -34,8 +31,6 @@ from renku_data_services.project.db import ProjectRepository, ProjectSessionSecr
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users.db import UserRepo
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass(kw_only=True)
@@ -328,34 +323,12 @@ class NotebooksNewBP(CustomBlueprint):
             user: AnonymousAPIUser | AuthenticatedAPIUser,
             internal_gitlab_user: APIUser,
             query: apispec.SessionsImagesGetParametersQuery,
-        ) -> JSONResponse:
-            image = Image.from_path(query.image_url)
-            result = await image_check.check_image(image, user, self.connected_svcs_repo)
-            logger.info(f"Checked image {query.image_url}: {result}")
-            conn = None
-            if result.connection:
-                match result.connection.status:
-                    case ConnectionStatus.connected:
-                        if result.error is not None:
-                            status = apispec.ImageConnectionStatus.invalid_credentials
-                        else:
-                            status = apispec.ImageConnectionStatus.connected
+        ) -> HTTPResponse:
+            image_url = request.get_args().get("image_url")
+            if not isinstance(image_url, str):
+                raise ValueError("required string of image url")
 
-                    case ConnectionStatus.pending:
-                        status = apispec.ImageConnectionStatus.pending
-
-                conn = apispec.ImageConnection(
-                    id=str(result.connection.id), provider_id=result.connection.provider_id, status=status
-                )
-
-            provider: apispec.ImageProvider | None = None
-            if result.client:
-                provider = apispec.ImageProvider(
-                    id=result.client.id, name=result.client.display_name, url=result.client.url
-                )
-
-            resp = apispec.ImageCheckResponse(accessible=result.accessible, connection=conn, provider=provider)
-
-            return json(resp.model_dump(exclude_none=True, mode="json"))
+            status = 200 if await core.docker_image_exists(self.nb_config, image_url, internal_gitlab_user) else 404
+            return HTTPResponse(status=status)
 
         return "/sessions/images", ["GET"], _check_docker_image

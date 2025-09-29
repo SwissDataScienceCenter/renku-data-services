@@ -51,7 +51,7 @@ async def apispec(sanic_client: SanicASGITestClient) -> BaseOpenAPISchema:
 @schemathesis.hook
 def filter_headers(context: HookContext, headers: dict[str, str] | None) -> bool:
     op = context.operation
-    if headers is not None and (op.method.upper() == "PATCH" or op.method.upper() == "DELETE"):
+    if headers is not None and op.method.upper() == "PATCH":
         try:
             [h.encode("ascii") for h in headers.values()]
         except UnicodeEncodeError:

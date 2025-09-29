@@ -8,9 +8,9 @@ from urllib.parse import urljoin, urlparse
 
 from authlib.integrations.base_client import InvalidTokenError
 from authlib.integrations.httpx_client import AsyncOAuth2Client, OAuthError
-from sqlalchemy import and_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
@@ -26,7 +26,6 @@ from renku_data_services.connected_services.provider_adapters import (
 )
 from renku_data_services.connected_services.utils import generate_code_verifier
 from renku_data_services.notebooks.api.classes.image import Image, ImageRepoDockerAPI
-from renku_data_services.users.db import APIUser
 from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
 
 logger = logging.getLogger(__name__)
@@ -44,7 +43,6 @@ class ConnectedServicesRepository:
         self.session_maker = session_maker
         self.encryption_key = encryption_key
         self.async_oauth2_client_class = async_oauth2_client_class
-        self.supported_image_registry_providers = {models.ProviderKind.gitlab, models.ProviderKind.github}
 
     async def get_oauth2_clients(
         self,
@@ -298,25 +296,6 @@ class ConnectedServicesRepository:
 
                 return next_url
 
-    async def delete_oauth2_connection(self, user: base_models.APIUser, connection_id: ULID) -> bool:
-        """Delete one connection of the given user."""
-        if not user.is_authenticated or user.id is None:
-            return False
-
-        async with self.session_maker() as session, session.begin():
-            result = await session.scalars(
-                select(schemas.OAuth2ConnectionORM)
-                .where(schemas.OAuth2ConnectionORM.id == connection_id)
-                .where(schemas.OAuth2ConnectionORM.user_id == user.id)
-            )
-            conn = result.one_or_none()
-
-            if conn is None:
-                return False
-
-            await session.delete(conn)
-            return True
-
     async def get_oauth2_connections(
         self,
         user: base_models.APIUser,
@@ -332,10 +311,8 @@ class ConnectedServicesRepository:
             connections = result.all()
             return [c.dump() for c in connections]
 
-    async def get_oauth2_connection_or_none(
-        self, connection_id: ULID, user: base_models.APIUser
-    ) -> models.OAuth2Connection | None:
-        """Get one OAuth2 connection from the database. Throw if the user is not authenticated."""
+    async def get_oauth2_connection(self, connection_id: ULID, user: base_models.APIUser) -> models.OAuth2Connection:
+        """Get one OAuth2 connection from the database."""
         if not user.is_authenticated or user.id is None:
             raise errors.MissingResourceError(
                 message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."
@@ -348,23 +325,11 @@ class ConnectedServicesRepository:
                 .where(schemas.OAuth2ConnectionORM.user_id == user.id)
             )
             connection = result.one_or_none()
-            if connection:
-                return connection.dump()
-            else:
-                return None
-
-    async def get_oauth2_connection(self, connection_id: ULID, user: base_models.APIUser) -> models.OAuth2Connection:
-        """Get one OAuth2 connection from the database.
-
-        Throw if the connection doesn't exist or the user is not authenticated.
-        """
-        connection = await self.get_oauth2_connection_or_none(connection_id, user)
-        if connection is None:
-            raise errors.MissingResourceError(
-                message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."
-            )
-
-        return connection
+            if connection is None:
+                raise errors.MissingResourceError(
+                    message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."  # noqa: E501
+                )
+            return connection.dump()
 
     async def get_oauth2_connected_account(
         self, connection_id: ULID, user: base_models.APIUser
@@ -404,53 +369,39 @@ class ConnectedServicesRepository:
             token_model = models.OAuth2TokenSet.from_dict(oauth2_client.token)
             return token_model
 
-    async def get_provider_for_image(self, user: APIUser, image: Image) -> models.ImageProvider | None:
-        """Find a provider supporting the given an image."""
-        registry_urls = [f"http://{image.hostname}", f"https://{image.hostname}"]
+    async def get_docker_client(
+        self, user: base_models.APIUser, image: Image
+    ) -> tuple[ImageRepoDockerAPI, ULID] | tuple[None, None]:
+        """Search for clients and connections that can work with the specific image and return a docker client."""
         async with self.session_maker() as session:
+            registry_urls = [f"http://{image.hostname}", f"https://{image.hostname}"]
             stmt = (
-                select(schemas.OAuth2ClientORM, schemas.OAuth2ConnectionORM)
-                .join(
-                    schemas.OAuth2ConnectionORM,
-                    and_(
-                        schemas.OAuth2ConnectionORM.client_id == schemas.OAuth2ClientORM.id,
-                        schemas.OAuth2ConnectionORM.user_id == user.id,
-                    ),
-                    isouter=True,  # isouter makes it a left-join, not an outer join
+                select(schemas.OAuth2ConnectionORM)
+                .where(schemas.OAuth2ConnectionORM.user_id == user.id)
+                .where(
+                    schemas.OAuth2ConnectionORM.client.has(
+                        schemas.OAuth2ClientORM.image_registry_url.in_(registry_urls)
+                    )
                 )
-                .where(schemas.OAuth2ClientORM.image_registry_url.in_(registry_urls))
-                .where(schemas.OAuth2ClientORM.kind.in_(self.supported_image_registry_providers))
-                # there could be multiple matching - just take the first arbitrary 🤷
-                .order_by(schemas.OAuth2ConnectionORM.updated_at.desc())
-                .limit(1)
+                .options(joinedload(schemas.OAuth2ConnectionORM.client))
             )
-            result = await session.execute(stmt)
-            row = result.one_or_none()
-            if row is None or row.OAuth2ClientORM is None:
-                return None
-            else:
-                return models.ImageProvider(
-                    row.OAuth2ClientORM.dump(),
-                    models.ConnectedUser(row.OAuth2ConnectionORM.dump(), user)
-                    if row.OAuth2ConnectionORM is not None
-                    else None,
-                    str(row.OAuth2ClientORM.image_registry_url),  # above query makes it non-nil
-                )
-
-    async def get_image_repo_client(self, image_provider: models.ImageProvider) -> ImageRepoDockerAPI:
-        """Create a image repository client for the given user and image provider."""
-        url = urlparse(image_provider.registry_url)
-        repo_api = ImageRepoDockerAPI(hostname=url.netloc, scheme=url.scheme)
-        if image_provider.is_connected():
-            assert image_provider.connected_user is not None
-            user = image_provider.connected_user.user
-            conn = image_provider.connected_user.connection
-            token_set = await self.get_oauth2_connection_token(conn.id, user)
-            access_token = token_set.access_token
-            if access_token:
-                logger.debug(f"Use connection {conn.id} to {image_provider.provider.id} for user {user.id}")
-                repo_api = repo_api.with_oauth2_token(access_token)
-        return repo_api
+            conn = await session.scalar(stmt)
+        if not conn:
+            return None, None
+        if conn.client.kind != models.ProviderKind.gitlab:
+            # NOTE: Only Gitlab is currently supported for this
+            return None, None
+        url = conn.client.image_registry_url
+        if not url:
+            return None, None
+        token_set = await self.get_oauth2_connection_token(conn.id, user)
+        url_parsed = urlparse(url)
+        access_token = token_set.access_token
+        if not access_token:
+            return None, None
+        return ImageRepoDockerAPI(
+            hostname=url_parsed.netloc, scheme=url_parsed.scheme, oauth2_token=access_token
+        ), conn.id
 
     async def get_oauth2_app_installations(
         self, connection_id: ULID, user: base_models.APIUser, pagination: PaginationRequest

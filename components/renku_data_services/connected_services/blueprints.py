@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import unquote, urlparse, urlunparse
 
-from sanic import HTTPResponse, Request, empty, json, redirect
+from sanic import HTTPResponse, Request, json, redirect
 from sanic.response import JSONResponse
 from sanic_ext import validate
 from ulid import ULID
@@ -167,17 +167,6 @@ class OAuth2ConnectionsBP(CustomBlueprint):
             return validated_json(apispec.Connection, connection)
 
         return "/oauth2/connections/<connection_id:ulid>", ["GET"], _get_one
-
-    def delete(self) -> BlueprintFactoryResponse:
-        """Delete a specific OAuth2 connection."""
-
-        @authenticate(self.authenticator)
-        async def _delete_one(_: Request, user: base_models.APIUser, connection_id: ULID) -> HTTPResponse:
-            result = await self.connected_services_repo.delete_oauth2_connection(user, connection_id)
-
-            return empty(status=204 if result else 404)
-
-        return "/oauth2/connections/<connection_id:ulid>", ["DELETE"], _delete_one
 
     def get_account(self) -> BlueprintFactoryResponse:
         """Get the account information for a specific OAuth2 connection."""

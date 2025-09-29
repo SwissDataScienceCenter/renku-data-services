@@ -18,7 +18,6 @@ from toml import dumps
 from ulid import ULID
 from yaml import safe_dump
 
-import renku_data_services.notebooks.image_check as ic
 from renku_data_services.app_config import logging
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser
 from renku_data_services.base_models.metrics import MetricsService
@@ -534,7 +533,12 @@ async def __requires_image_pull_secret(nb_config: NotebooksConfig, image: str, i
 
 def __format_image_pull_secret(secret_name: str, access_token: str, registry_domain: str) -> ExtraSecret:
     registry_secret = {
-        "auths": {registry_domain: {"auth": base64.b64encode(f"oauth2:{access_token}".encode()).decode()}}
+        "auths": {
+            registry_domain: {
+                "Username": "oauth2",
+                "Password": access_token,
+            }
+        }
     }
     registry_secret = json.dumps(registry_secret)
     registry_secret = base64.b64encode(registry_secret.encode()).decode()
@@ -547,23 +551,31 @@ def __format_image_pull_secret(secret_name: str, access_token: str, registry_dom
     )
 
 
-async def __get_connected_services_image_pull_secret(
+async def __get_gitlab_image_pull_secret_v2(
     secret_name: str, connected_svcs_repo: ConnectedServicesRepository, image: str, user: APIUser
 ) -> ExtraSecret | None:
-    """Return a secret for accessing the image if one is available for the given user."""
+    """Determines if an image requires a pull secret based on its visibility and their GitLab access token."""
+    # Check if image is public
     image_parsed = Image.from_path(image)
-    image_check_result = await ic.check_image(image_parsed, user, connected_svcs_repo)
-    logger.debug(f"Set pull secret for {image} to connection {image_check_result.image_provider}")
-    if not image_check_result.token:
+    public_repo = image_parsed.repo_api()
+    image_exists_publicly = await public_repo.image_exists(image_parsed)
+    if image_exists_publicly:
         return None
-
-    if not image_check_result.image_provider:
+    # Check if image is private
+    docker_client, conn_id = await connected_svcs_repo.get_docker_client(user, image_parsed)
+    if not docker_client:
         return None
-
+    image_exists_privately = await docker_client.image_exists(image_parsed)
+    if not image_exists_privately:
+        return None
+    if not conn_id:
+        return None
+    if not docker_client.oauth2_token:
+        return None
     return __format_image_pull_secret(
         secret_name=secret_name,
-        access_token=image_check_result.token,
-        registry_domain=image_check_result.image_provider.registry_url,
+        access_token=docker_client.oauth2_token,
+        registry_domain=image_parsed.hostname,
     )
 
 
@@ -574,28 +586,23 @@ async def get_image_pull_secret(
     user: APIUser,
     internal_gitlab_user: APIUser,
     connected_svcs_repo: ConnectedServicesRepository,
-) -> ExtraSecret | None:
-    """Get an image pull secret."""
+) -> tuple[ExtraSecret | None, str]:
+    """Get na image pull secret if needed, currently only supports Gitlab."""
+    image_secret: ExtraSecret | None = None
+    image_pull_secret_name = f"{server_name}-image-secret"
+    if nb_config.enable_internal_gitlab:
+        # NOTE: This is the old flow where Gitlab is enabled and part of Renku
+        if isinstance(user, AuthenticatedAPIUser) and internal_gitlab_user.access_token is not None:
+            needs_pull_secret = await __requires_image_pull_secret(nb_config, image, internal_gitlab_user)
 
-    v2_secret = await __get_connected_services_image_pull_secret(
-        f"{server_name}-image-secret", connected_svcs_repo, image, user
-    )
-    if v2_secret:
-        return v2_secret
-
-    if (
-        nb_config.enable_internal_gitlab
-        and isinstance(user, AuthenticatedAPIUser)
-        and internal_gitlab_user.access_token is not None
-    ):
-        needs_pull_secret = await __requires_image_pull_secret(nb_config, image, internal_gitlab_user)
-        if needs_pull_secret:
-            v1_secret = __get_gitlab_image_pull_secret(
-                nb_config, user, f"{server_name}-image-secret-v1", internal_gitlab_user.access_token
-            )
-            return v1_secret
-
-    return None
+            if needs_pull_secret:
+                image_secret = __get_gitlab_image_pull_secret(
+                    nb_config, user, image_pull_secret_name, internal_gitlab_user.access_token
+                )
+    else:
+        # NOTE: No internal Gitlab, we get the image pull secret from the connected services
+        image_secret = await __get_gitlab_image_pull_secret_v2(image_pull_secret_name, connected_svcs_repo, image, user)
+    return image_secret, image_pull_secret_name
 
 
 def get_remote_secret(
@@ -629,16 +636,16 @@ def get_remote_secret(
 
 
 def get_remote_env(
-    remote: RemoteConfigurationFirecrest,
+    remote_configuration: RemoteConfigurationFirecrest,
 ) -> list[SessionEnvItem]:
     """Returns env variables used for remote sessions."""
     env = [
-        SessionEnvItem(name="RSC_REMOTE_KIND", value=remote.kind.value),
-        SessionEnvItem(name="RSC_FIRECREST_API_URL", value=remote.api_url),
-        SessionEnvItem(name="RSC_FIRECREST_SYSTEM_NAME", value=remote.system_name),
+        SessionEnvItem(name="RSC_REMOTE_KIND", value=remote_configuration.kind.value),
+        SessionEnvItem(name="RSC_FIRECREST_API_URL", value=remote_configuration.api_url),
+        SessionEnvItem(name="RSC_FIRECREST_SYSTEM_NAME", value=remote_configuration.system_name),
     ]
-    if remote.partition:
-        env.append(SessionEnvItem(name="RSC_FIRECREST_PARTITION", value=remote.partition))
+    if remote_configuration.partition:
+        env.append(SessionEnvItem(name="RSC_FIRECREST_PARTITION", value=remote_configuration.partition))
     return env
 
 
@@ -819,7 +826,7 @@ async def start_session(
         )
     )
 
-    image_secret = await get_image_pull_secret(
+    image_secret, image_pull_secret_name = await get_image_pull_secret(
         image=image,
         server_name=server_name,
         nb_config=nb_config,
@@ -833,16 +840,19 @@ async def start_session(
     # Remote session configuration
     remote_secret = None
     if session_location == SessionLocation.remote:
-        assert resource_pool.remote is not None
-        if resource_pool.remote.provider_id is None:
+        if resource_pool.remote_provider_id is None:
             raise errors.ProgrammingError(
                 message=f"The resource pool {resource_pool.id} configuration is not valid (missing field 'remote_provider_id')."  # noqa E501
+            )
+        if resource_pool.remote_configuration is None:
+            raise errors.ProgrammingError(
+                message=f"The resource pool {resource_pool.id} configuration is not valid (missing field 'remote_configuration')."  # noqa E501
             )
         remote_secret = get_remote_secret(
             user=user,
             config=nb_config,
             server_name=server_name,
-            remote_provider_id=resource_pool.remote.provider_id,
+            remote_provider_id=resource_pool.remote_provider_id,
             git_providers=git_providers,
         )
     if remote_secret is not None:
@@ -864,20 +874,24 @@ async def start_session(
         SessionEnvItem(name="RENKU_LAUNCHER_ID", value=str(launcher.id)),
     ]
     if session_location == SessionLocation.remote:
-        assert resource_pool.remote is not None
+        assert resource_pool.remote_configuration is not None  # This should have been checked above
         env.extend(
             get_remote_env(
-                remote=resource_pool.remote,
+                remote_configuration=resource_pool.remote_configuration,
             )
         )
     launcher_env_variables = get_launcher_env_variables(launcher, body)
+    # if session_location == SessionLocation.remote:
+    #     launcher_env_variables = [
+    #         item.model_copy(update=dict(name=f"RENKU_ENV_{item.name}")) for item in launcher_env_variables
+    #     ]
     env.extend(launcher_env_variables)
 
     session = AmaltheaSessionV1Alpha1(
         metadata=Metadata(name=server_name, annotations=annotations),
         spec=AmaltheaSessionSpec(
             location=session_location,
-            imagePullSecrets=[ImagePullSecret(name=image_secret.name, adopt=True)] if image_secret else [],
+            imagePullSecrets=[ImagePullSecret(name=image_pull_secret_name, adopt=True)] if image_secret else [],
             codeRepositories=[],
             hibernated=False,
             reconcileStrategy=ReconcileStrategy.whenFailedOrHibernated,
@@ -1099,7 +1113,7 @@ async def patch_session(
 
     # Patching the image pull secret
     image = session.spec.session.image
-    image_pull_secret = await get_image_pull_secret(
+    image_pull_secret, _ = await get_image_pull_secret(
         image=image,
         server_name=server_name,
         nb_config=nb_config,

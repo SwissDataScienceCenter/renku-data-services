@@ -53,7 +53,7 @@ from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.notebooks.config import get_clusters
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
-from renku_data_services.platform.db import PlatformRepository, UrlRedirectRepository
+from renku_data_services.platform.db import PlatformRepository
 from renku_data_services.project.db import (
     ProjectMemberRepository,
     ProjectMigrationRepository,
@@ -140,7 +140,6 @@ class DependencyManager:
     metrics_repo: MetricsRepository
     metrics: StagingMetricsService
     shipwright_client: ShipwrightClient | None
-    url_redirect_repo: UrlRedirectRepository
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
@@ -350,7 +349,6 @@ class DependencyManager:
         platform_repo = PlatformRepository(
             session_maker=config.db.async_session_maker,
         )
-        url_redirect_repo = UrlRedirectRepository(session_maker=config.db.async_session_maker, authz=authz)
         data_connector_repo = DataConnectorRepository(
             session_maker=config.db.async_session_maker,
             authz=authz,
@@ -410,5 +408,4 @@ class DependencyManager:
             shipwright_client=shipwright_client,
             authz=authz,
             low_level_user_secrets_repo=low_level_user_secrets_repo,
-            url_redirect_repo=url_redirect_repo,
         )

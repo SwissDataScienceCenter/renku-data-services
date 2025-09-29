@@ -25,17 +25,13 @@ class PublicSecretsConfig:
         """Load config from environment variables."""
         if os.environ.get("DUMMY_STORES", "false").lower() == "true":
             public_key_path = os.getenv("SECRETS_SERVICE_PUBLIC_KEY_PATH")
+            encryption_key = secrets.token_bytes(32)
             if public_key_path is not None:
                 public_key = serialization.load_pem_public_key(Path(public_key_path).read_bytes())
             else:
                 # generate new random key
                 private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
                 public_key = private_key.public_key()
-            encryption_key_path = os.getenv("ENCRYPTION_KEY_PATH")
-            if encryption_key_path is not None:
-                encryption_key = Path(encryption_key_path).read_bytes()
-            else:
-                encryption_key = secrets.token_bytes(32)
         else:
             public_key_path = os.getenv("SECRETS_SERVICE_PUBLIC_KEY_PATH", "/secret_service_public_key")
             encryption_key_path = os.getenv("ENCRYPTION_KEY_PATH", "encryption_key")
