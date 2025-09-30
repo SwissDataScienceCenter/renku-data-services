@@ -1,7 +1,7 @@
 """feat: add support for remote sessions to resource pools
 
 Revision ID: 3aa50593f4e4
-Revises: fe61e825d95e
+Revises: 8365db35dc76
 Create Date: 2025-09-18 13:31:32.392300
 
 """
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "3aa50593f4e4"
-down_revision = "fe61e825d95e"
+down_revision = "8365db35dc76"
 branch_labels = None
 depends_on = None
 
