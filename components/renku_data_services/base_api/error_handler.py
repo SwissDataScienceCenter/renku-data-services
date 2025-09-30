@@ -139,7 +139,8 @@ class CustomErrorHandler(ErrorHandler):
                 formatted_exception = errors.RequestCancelledError(quiet=quiet)
 
             case httpx.RequestError():
-                formatted_exception = errors.BaseError(message=f"Error on remote connection: {exception}")
+                req_uri = exception.request.url
+                formatted_exception = errors.BaseError(message=f"Error on remote connection to {req_uri}: {exception}")
 
         return formatted_exception
 
