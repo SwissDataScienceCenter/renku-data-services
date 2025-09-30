@@ -461,13 +461,20 @@ class ConnectedServicesRepository:
             connection,
             adapter,
         ):
-            # NOTE: App installations are only available from GitHub
-            if connection.client.kind == models.ProviderKind.github and isinstance(adapter, GitHubAdapter):
+            # NOTE: App installations are only available from GitHub when using a "GitHub App"
+            #       it doesn't work for "OAuth App". Currently we guess handling a "Github App"
+            #       if no image_registry_url is specified
+            if (
+                connection.client.kind == models.ProviderKind.github
+                and not connection.client.image_registry_url
+                and isinstance(adapter, GitHubAdapter)
+            ):
                 request_url = urljoin(adapter.api_url, "user/installations")
                 params = dict(page=pagination.page, per_page=pagination.per_page)
                 try:
                     response = await oauth2_client.get(request_url, params=params, headers=adapter.api_common_headers)
                 except OAuthError as err:
+                    logger.warning(f"Error getting installations: {err}")
                     if err.error == "bad_refresh_token":
                         raise errors.InvalidTokenError(
                             message="The refresh token for the connected service has expired or is invalid.",
@@ -477,6 +484,7 @@ class ConnectedServicesRepository:
                     raise
 
                 if response.status_code > 200:
+                    logger.warning(f"Could not get installations: {response.status_code} - {response.text}")
                     raise errors.UnauthorizedError(message="Could not get installation information.")
 
                 return adapter.api_validate_app_installations_response(response)
