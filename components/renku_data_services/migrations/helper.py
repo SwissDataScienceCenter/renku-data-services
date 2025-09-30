@@ -1,7 +1,5 @@
 """Helper functions for writing migrations."""
 
-from typing import cast
-
 from alembic import op
 from psycopg import sql
 
@@ -15,8 +13,7 @@ def get_enum_values(enum_type: str) -> list[str]:
     )
     result = connection.exec_driver_sql(statement)
     rows = result.all()
-    values = [v[0] for v in rows]
-    return cast(list[str], values)
+    return [v[0] for v in rows]
 
 
 def create_enum_type(enum_type: str, values: list[str]) -> None:
