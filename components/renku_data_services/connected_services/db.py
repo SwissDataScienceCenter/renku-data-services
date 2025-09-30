@@ -468,6 +468,7 @@ class ConnectedServicesRepository:
                 try:
                     response = await oauth2_client.get(request_url, params=params, headers=adapter.api_common_headers)
                 except OAuthError as err:
+                    logger.warning(f"Error getting installations: {err}")
                     if err.error == "bad_refresh_token":
                         raise errors.InvalidTokenError(
                             message="The refresh token for the connected service has expired or is invalid.",
@@ -477,6 +478,7 @@ class ConnectedServicesRepository:
                     raise
 
                 if response.status_code > 200:
+                    logger.warning(f"Could not get installations: {response.status_code} - {response.text}")
                     raise errors.UnauthorizedError(message="Could not get installation information.")
 
                 return adapter.api_validate_app_installations_response(response)
