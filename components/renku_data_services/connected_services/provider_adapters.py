@@ -83,6 +83,11 @@ class GitLabAdapter(ProviderAdapter):
 class GitHubAdapter(ProviderAdapter):
     """Adapter for GitHub OAuth2 clients."""
 
+    def __init__(self, client_url: str, **kwargs: Any) -> None:
+        if client_url == "https://ghcr.io":
+            client_url = "https://github.com"
+        super().__init__(client_url, **kwargs)
+
     @property
     def authorization_url(self) -> str:
         """The authorization URL for the OAuth2 protocol."""
