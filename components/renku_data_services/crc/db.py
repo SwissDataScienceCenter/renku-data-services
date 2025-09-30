@@ -20,15 +20,13 @@ from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
-from renku_data_services.app_config import logging
+from renku_data_services.base_models import RESET
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
 from renku_data_services.crc.models import ClusterPatch, ClusterSettings, SavedClusterSettings, SessionProtocol
 from renku_data_services.crc.orm import ClusterORM
 from renku_data_services.k8s.db import QuotaRepository
 from renku_data_services.users.db import UserRepo
-
-logger = logging.getLogger(__name__)
 
 
 class _Base:
@@ -390,7 +388,6 @@ class ResourcePoolRepository(_Base):
     @_only_admins
     async def update_resource_pool(self, api_user: base_models.APIUser, id: int, **kwargs: Any) -> models.ResourcePool:
         """Update an existing resource pool in the database."""
-        logger.warning(f"update() {kwargs.get("remote_configuration")}")
         async with self.session_maker() as session, session.begin():
             stmt = (
                 select(schemas.ResourcePoolORM)
@@ -414,7 +411,6 @@ class ResourcePoolRepository(_Base):
             # NOTE: The .update method on the model validates the update to the resource pool
             old_rp_model = rp.dump(quota)
             new_rp_model = old_rp_model.update(**kwargs)
-            logger.warning(f"update() {new_rp_model.remote_configuration}")
             new_classes_coroutines = []
             for key, val in kwargs.items():
                 match key:
@@ -478,30 +474,19 @@ class ResourcePoolRepository(_Base):
                     case "remote":
                         if val is None:
                             continue
-                        if val:
-                            rp.remote = True
-                            continue
-                        rp.remote = False
-                        rp.remote_provider_id = None
-                        rp.remote_configuration = None
-                    case "remote_provider_id":
-                        if val is None:
-                            continue
-                        if val == "":
+                        if val is RESET:
                             rp.remote_provider_id = None
-                            new_rp_model = new_rp_model.update(remote_provider_id=None)
+                            rp.remote_json = None
+                            new_rp_model = new_rp_model.update(remote=None)
                             continue
-                        rp.remote_provider_id = val
-                        new_rp_model = new_rp_model.update(remote_provider_id=val)
-                    # TODO: with this update method, it is impossible to unset remote_configuration
-                    case "remote_configuration":
-                        if val is None:
+                        if isinstance(val, models.RemoteConfigurationFirecrestPatch):
+                            assert new_rp_model.remote is not None
+                            rp.remote_provider_id = val.provider_id
+                            remote_json = new_rp_model.remote.to_dict()
+                            del remote_json["provider_id"]
+                            rp.remote_json = remote_json
                             continue
-                        remote_configuration = new_rp_model.remote_configuration
-                        if remote_configuration is None:
-                            continue
-                        rp.remote_configuration = remote_configuration.to_dict()
-                        new_rp_model = new_rp_model.update(remote_configuration=remote_configuration.to_dict())
+                        raise errors.ProgrammingError(message=f"Unexpected update value for field remote: {val}")
                     case _:
                         pass
             new_classes = await gather(*new_classes_coroutines)
