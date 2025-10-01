@@ -311,7 +311,7 @@ def certificates_volume_mounts(config: NotebooksConfig) -> list[ExtraVolumeMount
         config,
         etc_certs=True,
         custom_certs=True,
-        read_only_etc_certs=False,
+        read_only_etc_certs=True,
     )
 
 
