@@ -124,6 +124,7 @@ async def check_image(
         and image.hostname == intern_gl_cfg.nb_config.git.registry
         and intern_gl_cfg.gitlab_user.access_token
     ):
+        logger.debug(f"Using internal gitlab at {intern_gl_cfg.nb_config.git.registry}")
         reg_api = reg_api.with_oauth2_token(intern_gl_cfg.gitlab_user.access_token)
 
     try:
