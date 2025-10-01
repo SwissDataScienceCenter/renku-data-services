@@ -252,10 +252,7 @@ class UserServer:
             base_server_path = self.config.sessions.ingress.base_path(self.server_name)
             ingress_annotations = self.config.sessions.ingress.annotations
 
-            if self.config.sessions.ingress.tls_secret is not None:
-                tls_name = self.config.sessions.ingress.tls_secret
-            else:
-                tls_name = None
+            tls_name = self.config.sessions.ingress.tls_secret
             tls_secret = None if tls_name is None else TlsSecret(adopt=False, name=tls_name)
 
         # Combine everything into the manifest
