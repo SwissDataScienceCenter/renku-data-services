@@ -249,8 +249,6 @@ class APIObjectInCluster:
                 return labels.get("renku.io/userId", None)
             case "amaltheasession":
                 return labels.get("renku.io/safe-username", None)
-            case "hpcamaltheasession":
-                return labels.get("renku.io/safe-username", None)
             case "buildrun":
                 return labels.get("renku.io/safe-username", None)
             case "taskrun":
