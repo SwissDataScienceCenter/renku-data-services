@@ -4,13 +4,14 @@ import base64
 import random
 from enum import StrEnum
 
+from renku_data_services.app_config import logging
 from renku_data_services.connected_services.apispec import Provider
 from renku_data_services.connected_services.apispec import ProviderKind as ApiProviderKind
 from renku_data_services.connected_services.models import OAuth2Client, ProviderKind
 from renku_data_services.connected_services.orm import OAuth2ClientORM
-from renku_data_services.app_config import logging
 
 logger = logging.getLogger(__name__)
+
 
 def generate_code_verifier(size: int = 48) -> str:
     """Returns a randomly generated code for use in PKCE."""
