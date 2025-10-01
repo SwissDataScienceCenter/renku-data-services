@@ -433,7 +433,7 @@ async def test_get_installations_github(
 async def test_get_no_installations_ghcrio(
     oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_connection
 ):
-    connection = await create_oauth2_connection("provider_1", kind="github", url="https://ghcr.io")
+    connection = await create_oauth2_connection("provider_1", kind="github", image_registry_url="https://ghcr.io")
     connection_id = connection["id"]
 
     _, res = await oauth2_test_client.get(

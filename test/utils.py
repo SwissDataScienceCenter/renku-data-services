@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import typing
 from collections.abc import Callable
@@ -28,6 +30,7 @@ from renku_data_services.k8s.db import QuotaRepository
 from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
+from renku_data_services.notebooks.api.classes.data_service import GitProviderHelper2
 from renku_data_services.platform.db import PlatformRepository, UrlRedirectRepository
 from renku_data_services.project.db import (
     ProjectMemberRepository,
@@ -50,7 +53,7 @@ from renku_data_services.users.kc_api import IKeycloakAPI
 
 
 class StackSessionMaker:
-    def __init__(self, parent: "DBConfigStack") -> None:
+    def __init__(self, parent: DBConfigStack) -> None:
         self.parent = parent
 
     def __call__(self, *args: Any, **kwds: Any) -> AsyncSession:
@@ -164,7 +167,7 @@ class TestDependencyManager(DependencyManager):
     @classmethod
     def from_env(
         cls, dummy_users: list[user_preferences_models.UnsavedUserInfo], prefix: str = ""
-    ) -> "DependencyManager":
+    ) -> DependencyManager:
         """Create a config from environment variables."""
         db = DBConfigStack.from_env()
         config = Config.from_env(db)
@@ -295,6 +298,7 @@ class TestDependencyManager(DependencyManager):
         cluster_repo = ClusterRepository(session_maker=config.db.async_session_maker)
         metrics_repo = MetricsRepository(session_maker=config.db.async_session_maker)
         metrics_mock = MagicMock(spec=MetricsService)
+        git_provider_helper = GitProviderHelper2(connected_services_repo, "", "", "", config.enable_internal_gitlab)
         return cls(
             config=config,
             authenticator=authenticator,
@@ -330,6 +334,7 @@ class TestDependencyManager(DependencyManager):
             authz=authz,
             low_level_user_secrets_repo=low_level_user_secrets_repo,
             url_redirect_repo=url_redirect_repo,
+            git_provider_helper=git_provider_helper,
         )
 
     def __post_init__(self) -> None:
