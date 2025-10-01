@@ -255,7 +255,7 @@ class _AmaltheaV2Config:
 @dataclass
 class _SessionIngress:
     host: str
-    tls_secret: str
+    tls_secret: str | None = None
     annotations: dict[str, str] = field(default_factory=dict)
 
     @classmethod

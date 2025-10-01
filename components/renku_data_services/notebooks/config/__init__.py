@@ -11,6 +11,7 @@ from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
 from renku_data_services.crc.models import ClusterSettings, ResourceClass, SessionProtocol
 from renku_data_services.db_config.config import DBConfig
+from renku_data_services.errors import errors
 from renku_data_services.k8s.clients import (
     DummyCoreClient,
     DummySchedulingClient,
@@ -263,6 +264,8 @@ class NotebooksConfig:
 
     def local_cluster_settings(self) -> ClusterSettings:
         """The cluster settings for the local cluster where the Renku services are installed."""
+        if not self.sessions.ingress.tls_secret:
+            raise errors.ProgrammingError(message="The tls secret must be defined for a local cluster.")
         return ClusterSettings(
             name="local-cluster-settings",
             config_name="",
