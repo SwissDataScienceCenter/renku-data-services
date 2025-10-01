@@ -330,7 +330,12 @@ class NotebooksNewBP(CustomBlueprint):
             query: apispec.SessionsImagesGetParametersQuery,
         ) -> JSONResponse:
             image = Image.from_path(query.image_url)
-            result = await image_check.check_image(image, user, self.connected_svcs_repo)
+            result = await image_check.check_image(
+                image,
+                user,
+                self.connected_svcs_repo,
+                image_check.InternalGitLabConfig(internal_gitlab_user, self.nb_config),
+            )
             logger.info(f"Checked image {query.image_url}: {result}")
             conn = None
             if result.connection:
