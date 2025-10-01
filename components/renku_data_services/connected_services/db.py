@@ -466,7 +466,7 @@ class ConnectedServicesRepository:
             #       if no image_registry_url is specified
             if (
                 connection.client.kind == models.ProviderKind.github
-                and not connection.client.image_registry_url
+                and connection.client.url == "https://github.com"
                 and isinstance(adapter, GitHubAdapter)
             ):
                 request_url = urljoin(adapter.api_url, "user/installations")
