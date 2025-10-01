@@ -24,7 +24,7 @@ from renku_data_services.notebooks import apispec, core, image_check
 from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.schemas.config_server_options import ServerOptionsEndpointResponse
 from renku_data_services.notebooks.api.schemas.logs import ServerLogs
-from renku_data_services.notebooks.config import NotebooksConfig
+from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
 from renku_data_services.notebooks.core_sessions import (
     patch_session,
     start_session,
@@ -204,6 +204,7 @@ class NotebooksNewBP(CustomBlueprint):
     metrics: MetricsService
     cluster_repo: ClusterRepository
     connected_svcs_repo: ConnectedServicesRepository
+    git_provider_helper: GitProviderHelperProto
 
     def start(self) -> BlueprintFactoryResponse:
         """Start a session with the new operator."""
@@ -222,6 +223,7 @@ class NotebooksNewBP(CustomBlueprint):
                 user=user,
                 internal_gitlab_user=internal_gitlab_user,
                 nb_config=self.nb_config,
+                git_provider_helper=self.git_provider_helper,
                 cluster_repo=self.cluster_repo,
                 data_connector_secret_repo=self.data_connector_secret_repo,
                 project_repo=self.project_repo,
@@ -291,6 +293,7 @@ class NotebooksNewBP(CustomBlueprint):
                 user=user,
                 internal_gitlab_user=internal_gitlab_user,
                 nb_config=self.nb_config,
+                git_provider_helper=self.git_provider_helper,
                 project_repo=self.project_repo,
                 project_session_secret_repo=self.project_session_secret_repo,
                 rp_repo=self.rp_repo,

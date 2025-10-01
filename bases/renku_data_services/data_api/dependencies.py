@@ -51,7 +51,8 @@ from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.metrics.core import StagingMetricsService
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
-from renku_data_services.notebooks.config import get_clusters
+from renku_data_services.notebooks.api.classes.data_service import GitProviderHelper2
+from renku_data_services.notebooks.config import GitProviderHelperProto, get_clusters
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
 from renku_data_services.platform.db import PlatformRepository, UrlRedirectRepository
 from renku_data_services.project.db import (
@@ -141,6 +142,7 @@ class DependencyManager:
     metrics: StagingMetricsService
     shipwright_client: ShipwrightClient | None
     url_redirect_repo: UrlRedirectRepository
+    git_provider_helper: GitProviderHelperProto
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
@@ -374,6 +376,7 @@ class DependencyManager:
             project_repo=project_repo,
             data_connector_repo=data_connector_repo,
         )
+        git_provider_helper = GitProviderHelper2.create(connected_services_repo, config.enable_internal_gitlab)
         metrics_repo = MetricsRepository(session_maker=config.db.async_session_maker)
         metrics = StagingMetricsService(enabled=config.posthog.enabled, metrics_repo=metrics_repo)
         return cls(
@@ -411,4 +414,5 @@ class DependencyManager:
             authz=authz,
             low_level_user_secrets_repo=low_level_user_secrets_repo,
             url_redirect_repo=url_redirect_repo,
+            git_provider_helper=git_provider_helper,
         )

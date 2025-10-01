@@ -23,8 +23,6 @@ from renku_data_services.k8s.db import K8sDbCache, QuotaRepository
 from renku_data_services.notebooks.api.classes.data_service import (
     CRCValidator,
     DummyCRCValidator,
-    DummyGitProviderHelper,
-    GitProviderHelper,
 )
 from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClient
 from renku_data_services.notebooks.api.classes.repository import GitProvider
@@ -118,7 +116,7 @@ class NotebooksConfig:
     cloud_storage: _CloudStorage
     user_secrets: _UserSecrets
     crc_validator: CRCValidatorProto
-    git_provider_helper: GitProviderHelperProto
+    #   git_provider_helper: GitProviderHelperProto
     k8s_client: NotebookK8sClient[JupyterServerV1Alpha1]
     k8s_v2_client: NotebookK8sClient[AmaltheaSessionV1Alpha1]
     cluster_rp: ClusterRepository
@@ -148,7 +146,6 @@ class NotebooksConfig:
         data_service_url = os.environ.get("NB_DATA_SERVICE_URL", "http://127.0.0.1:8000")
         server_options = ServerOptionsConfig.from_env()
         crc_validator: CRCValidatorProto
-        git_provider_helper: GitProviderHelperProto
         k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
         kube_config_root = os.environ.get("K8S_CONFIGS_ROOT", "/secrets/kube_configs")
         v1_sessions_enabled = _parse_str_as_bool(os.environ.get("V1_SESSIONS_ENABLED", False))
@@ -158,7 +155,6 @@ class NotebooksConfig:
             rp_repo = ResourcePoolRepository(db_config.async_session_maker, quota_repo)
             crc_validator = DummyCRCValidator()
             sessions_config = _SessionConfig._for_testing()
-            git_provider_helper = DummyGitProviderHelper()
             git_config = _GitConfig("http://not.specified", "registry.not.specified")
             kr8s_api = Kr8sApiStack()  # type: ignore[assignment]
         else:
@@ -167,12 +163,6 @@ class NotebooksConfig:
             crc_validator = CRCValidator(rp_repo)
             sessions_config = _SessionConfig.from_env()
             git_config = _GitConfig.from_env(enable_internal_gitlab=enable_internal_gitlab)
-            git_provider_helper = GitProviderHelper(
-                service_url=data_service_url,
-                renku_url=f"http://{sessions_config.ingress.host}",
-                internal_gitlab_url=git_config.url,
-                enable_internal_gitlab=enable_internal_gitlab,
-            )
             # NOTE: we need to get an async client as a sync client can't be used in an async way
             # But all the config code is not async, so we need to drop into the running loop, if there is one
             kr8s_api = KubeConfigEnv().api()
@@ -226,7 +216,7 @@ class NotebooksConfig:
             data_service_url=data_service_url,
             dummy_stores=dummy_stores,
             crc_validator=crc_validator,
-            git_provider_helper=git_provider_helper,
+            #            git_provider_helper=git_provider_helper,
             k8s_client=k8s_client,
             k8s_v2_client=k8s_v2_client,
             k8s_db_cache=k8s_db_cache,

@@ -24,7 +24,11 @@ from renku_data_services.connected_services.provider_adapters import (
     ProviderAdapter,
     get_provider_adapter,
 )
-from renku_data_services.connected_services.utils import generate_code_verifier
+from renku_data_services.connected_services.utils import (
+    GitHubProviderType,
+    generate_code_verifier,
+    get_github_provider_type,
+)
 from renku_data_services.notebooks.api.classes.image import Image, ImageRepoDockerAPI
 from renku_data_services.users.db import APIUser
 from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
@@ -462,11 +466,9 @@ class ConnectedServicesRepository:
             adapter,
         ):
             # NOTE: App installations are only available from GitHub when using a "GitHub App"
-            #       it doesn't work for "OAuth App". Currently we guess handling a "Github App"
-            #       if no image_registry_url is specified
             if (
                 connection.client.kind == models.ProviderKind.github
-                and not connection.client.image_registry_url
+                and get_github_provider_type(connection.client) == GitHubProviderType.standard_app
                 and isinstance(adapter, GitHubAdapter)
             ):
                 request_url = urljoin(adapter.api_url, "user/installations")
