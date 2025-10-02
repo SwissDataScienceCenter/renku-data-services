@@ -912,7 +912,10 @@ class ProjectMigrationRepository:
         project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, Scope.READ)
 
         async with self.session_maker() as session:
-            stmt = select(schemas.ProjectMigrationsORM).where(schemas.ProjectMigrationsORM.project_id.in_(project_ids))
+            # TODO: Should we add pagination here? That would require changing the API.
+            stmt = select(schemas.ProjectMigrationsORM)
+            if not user.is_admin:
+                stmt = stmt.where(schemas.ProjectMigrationsORM.project_id.in_(project_ids))
             result = await session.stream_scalars(stmt)
             async for migration in result:
                 yield migration.dump()
