@@ -238,7 +238,7 @@ class DependencyManager:
                 UnsavedUserInfo(id="user2", first_name="user2", last_name="doe", email="user2@doe.com"),
             ]
             kc_api = DummyKeycloakAPI(users=[i.to_keycloak_dict() for i in dummy_users])
-            git_provider_helper = DummyGitProviderHelper()
+            git_provider_helper: GitProviderHelperProto = DummyGitProviderHelper()
         else:
             git_provider_helper = GitProviderHelper2.create(connected_services_repo, config.enable_internal_gitlab)
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=config.k8s_namespace)
