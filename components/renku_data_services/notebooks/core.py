@@ -30,7 +30,7 @@ from renku_data_services.notebooks.api.schemas.secrets import K8sUserSecrets
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
 from renku_data_services.notebooks.api.schemas.servers_get import NotebookResponse
 from renku_data_services.notebooks.api.schemas.servers_patch import PatchServerStatusEnum
-from renku_data_services.notebooks.config import NotebooksConfig
+from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
 from renku_data_services.notebooks.constants import JUPYTER_SESSION_GVK
 from renku_data_services.notebooks.errors import intermittent
 from renku_data_services.notebooks.errors import user as user_errors
@@ -332,6 +332,7 @@ async def launch_notebook_helper(
     internal_gitlab_user: APIUser,
     user_repo: UserRepo,
     storage_repo: StorageRepository,
+    git_provider_helper: GitProviderHelperProto,
 ) -> tuple[UserServerManifest, int]:
     """Helper function to launch a Jupyter server."""
 
@@ -519,6 +520,7 @@ async def launch_notebook_helper(
         config=nb_config,
         host=host,
         namespace=session_namespace,
+        git_provider_helper=git_provider_helper,
         **extra_kwargs,
     )
 
@@ -594,6 +596,7 @@ async def launch_notebook(
     launch_request: apispec.LaunchNotebookRequestOld,
     user_repo: UserRepo,
     storage_repo: StorageRepository,
+    git_provider_helper: GitProviderHelperProto,
 ) -> tuple[UserServerManifest, int]:
     """Starts a server using the old operator."""
 
@@ -652,6 +655,7 @@ async def launch_notebook(
         internal_gitlab_user=internal_gitlab_user,
         user_repo=user_repo,
         storage_repo=storage_repo,
+        git_provider_helper=git_provider_helper,
     )
 
 
