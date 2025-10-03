@@ -7,6 +7,7 @@ from collections.abc import Mapping, Set
 from sqlite3 import Error as SqliteError
 from typing import Any, Optional, Protocol, TypeVar, Union
 
+import httpx
 import jwt
 from asyncpg import exceptions as postgres_exceptions
 from pydantic import ValidationError as PydanticValidationError
@@ -66,9 +67,9 @@ class CustomErrorHandler(ErrorHandler):
         self.api_spec = api_spec
         super().__init__(base)
 
-    def default(self, request: Request, exception: Exception) -> HTTPResponse:
-        """Overrides the default error handler."""
-        formatted_exception = errors.BaseError()
+    @classmethod
+    def _get_formatted_exception(cls, exception: Exception) -> errors.BaseError | None:
+        formatted_exception: errors.BaseError | None = None
         match exception:
             case errors.BaseError():
                 formatted_exception = exception
@@ -132,6 +133,17 @@ class CustomErrorHandler(ErrorHandler):
                 )
             case jwt.exceptions.InvalidTokenError():
                 formatted_exception = errors.InvalidTokenError()
+
+            case httpx.RequestError():
+                req_uri = exception.request.url
+                formatted_exception = errors.BaseError(message=f"Error on remote connection to {req_uri}: {exception}")
+
+        return formatted_exception
+
+    def default(self, request: Request, exception: Exception) -> HTTPResponse:
+        """Overrides the default error handler."""
+        formatted_exception = self._get_formatted_exception(exception) or errors.BaseError()
+
         self.log(request, formatted_exception)
         if formatted_exception.status_code == 500 and "PYTEST_CURRENT_TEST" in os.environ:
             # TODO: Figure out how to do logging properly in here, I could not get the sanic logs to show up from here
