@@ -116,7 +116,6 @@ class NotebooksConfig:
     cloud_storage: _CloudStorage
     user_secrets: _UserSecrets
     crc_validator: CRCValidatorProto
-    #   git_provider_helper: GitProviderHelperProto
     k8s_client: NotebookK8sClient[JupyterServerV1Alpha1]
     k8s_v2_client: NotebookK8sClient[AmaltheaSessionV1Alpha1]
     cluster_rp: ClusterRepository
@@ -216,7 +215,6 @@ class NotebooksConfig:
             data_service_url=data_service_url,
             dummy_stores=dummy_stores,
             crc_validator=crc_validator,
-            #            git_provider_helper=git_provider_helper,
             k8s_client=k8s_client,
             k8s_v2_client=k8s_v2_client,
             k8s_db_cache=k8s_db_cache,

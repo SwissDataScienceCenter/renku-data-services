@@ -149,7 +149,7 @@ class DummyCRCValidator:
         return self.options
 
 
-class GitProviderHelper2:
+class GitProviderHelper:
     """Gets the list of providers."""
 
     def __init__(
@@ -205,12 +205,12 @@ class GitProviderHelper2:
         return providers_list
 
     @classmethod
-    def create(cls, csr: ConnectedServicesRepository, enable_internal_gitlab: bool) -> GitProviderHelper2:
+    def create(cls, csr: ConnectedServicesRepository, enable_internal_gitlab: bool) -> GitProviderHelper:
         """Create an instance."""
         sessions_config = _SessionConfig.from_env()
         git_config = _GitConfig.from_env(enable_internal_gitlab=enable_internal_gitlab)
         data_service_url = os.environ.get("NB_DATA_SERVICE_URL", "http://127.0.0.1:8000")
-        return GitProviderHelper2(
+        return GitProviderHelper(
             connected_services_repo=csr,
             service_url=data_service_url,
             renku_url=f"http://{sessions_config.ingress.host}",

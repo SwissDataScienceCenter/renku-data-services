@@ -26,6 +26,7 @@ class GitHubProviderType(StrEnum):
     standard_app = "standard_app"
 
 
+# TODO: add a new type of integration 'github_oauth' instead of running this logic
 def get_github_provider_type(c: OAuth2Client | OAuth2ClientORM | Provider) -> GitHubProviderType | None:
     """GitHub may use two different auth features: "oauth app" and "github app".
 

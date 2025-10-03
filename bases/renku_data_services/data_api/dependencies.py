@@ -51,7 +51,7 @@ from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.metrics.core import StagingMetricsService
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
-from renku_data_services.notebooks.api.classes.data_service import DummyGitProviderHelper, GitProviderHelper2
+from renku_data_services.notebooks.api.classes.data_service import DummyGitProviderHelper, GitProviderHelper
 from renku_data_services.notebooks.config import GitProviderHelperProto, get_clusters
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
 from renku_data_services.platform.db import PlatformRepository, UrlRedirectRepository
@@ -240,7 +240,7 @@ class DependencyManager:
             kc_api = DummyKeycloakAPI(users=[i.to_keycloak_dict() for i in dummy_users])
             git_provider_helper: GitProviderHelperProto = DummyGitProviderHelper()
         else:
-            git_provider_helper = GitProviderHelper2.create(connected_services_repo, config.enable_internal_gitlab)
+            git_provider_helper = GitProviderHelper.create(connected_services_repo, config.enable_internal_gitlab)
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=config.k8s_namespace)
             assert config.keycloak is not None
 
