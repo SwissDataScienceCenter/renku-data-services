@@ -150,6 +150,7 @@
         basedpyright
         rclone-sdsc
         azure-cli
+        k3d
         (
           writeShellScriptBin "pg" ''
             psql -h $DB_HOST -p $DB_PORT -U dev $DB_NAME

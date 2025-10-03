@@ -37,7 +37,7 @@ from renku_data_services.notebooks.api.amalthea_patches.init_containers import u
 from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
-from renku_data_services.notebooks.config import NotebooksConfig
+from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
 from renku_data_services.notebooks.cr_amalthea_session import TlsSecret
 from renku_data_services.notebooks.crs import (
     AmaltheaSessionSpec,
@@ -551,7 +551,7 @@ async def __get_connected_services_image_pull_secret(
 ) -> ExtraSecret | None:
     """Return a secret for accessing the image if one is available for the given user."""
     image_parsed = Image.from_path(image)
-    image_check_result = await ic.check_image(image_parsed, user, connected_svcs_repo)
+    image_check_result = await ic.check_image(image_parsed, user, connected_svcs_repo, None)
     logger.debug(f"Set pull secret for {image} to connection {image_check_result.image_provider}")
     if not image_check_result.token:
         return None
@@ -603,6 +603,7 @@ async def start_session(
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     internal_gitlab_user: APIUser,
     nb_config: NotebooksConfig,
+    git_provider_helper: GitProviderHelperProto,
     cluster_repo: ClusterRepository,
     data_connector_secret_repo: DataConnectorSecretRepository,
     project_repo: ProjectRepository,
@@ -663,7 +664,7 @@ async def start_session(
         user=user, project_id=project.id
     )
     data_connectors_stream = data_connector_secret_repo.get_data_connectors_with_secrets(user, project.id)
-    git_providers = await nb_config.git_provider_helper.get_providers(user=user)
+    git_providers = await git_provider_helper.get_providers(user=user)
     repositories = repositories_from_project(project, git_providers)
 
     # User secrets
@@ -887,6 +888,7 @@ async def patch_session(
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     internal_gitlab_user: APIUser,
     nb_config: NotebooksConfig,
+    git_provider_helper: GitProviderHelperProto,
     project_repo: ProjectRepository,
     project_session_secret_repo: ProjectSessionSecretRepository,
     rp_repo: ResourcePoolRepository,
@@ -982,7 +984,7 @@ async def patch_session(
     session_secrets = await project_session_secret_repo.get_all_session_secrets_from_project(
         user=user, project_id=project.id
     )
-    git_providers = await nb_config.git_provider_helper.get_providers(user=user)
+    git_providers = await git_provider_helper.get_providers(user=user)
     repositories = repositories_from_project(project, git_providers)
 
     # User secrets
