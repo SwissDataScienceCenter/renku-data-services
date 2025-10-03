@@ -48,6 +48,7 @@ class NotebooksBP(CustomBlueprint):
     rp_repo: ResourcePoolRepository
     user_repo: UserRepo
     storage_repo: StorageRepository
+    git_provider_helper: GitProviderHelperProto
 
     def version(self) -> BlueprintFactoryResponse:
         """Return notebook services version."""
@@ -100,6 +101,7 @@ class NotebooksBP(CustomBlueprint):
                 body,
                 user_repo=self.user_repo,
                 storage_repo=self.storage_repo,
+                git_provider_helper=self.git_provider_helper,
             )
             return core.serialize_v1_server(server, self.nb_config, status_code)
 

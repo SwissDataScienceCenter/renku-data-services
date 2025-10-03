@@ -21,12 +21,11 @@ from renku_data_services.notebooks.api.amalthea_patches import inject_certificat
 from renku_data_services.notebooks.api.amalthea_patches import jupyter_server as jupyter_server_patches
 from renku_data_services.notebooks.api.amalthea_patches import ssh as ssh_patches
 from renku_data_services.notebooks.api.classes.cloud_storage import ICloudStorageRequest
-from renku_data_services.notebooks.api.classes.data_service import GitProviderHelper2
 from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClient
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.api.schemas.secrets import K8sUserSecrets
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
-from renku_data_services.notebooks.config import NotebooksConfig
+from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
 from renku_data_services.notebooks.constants import JUPYTER_SESSION_GVK
 from renku_data_services.notebooks.cr_amalthea_session import TlsSecret
 from renku_data_services.notebooks.crs import JupyterServerV1Alpha1
@@ -55,7 +54,7 @@ class UserServer:
         internal_gitlab_user: APIUser,
         host: str,
         namespace: str,
-        git_provider_helper: GitProviderHelper2,
+        git_provider_helper: GitProviderHelperProto,
         using_default_image: bool = False,
         is_image_private: bool = False,
         repositories: list[Repository] | None = None,
@@ -414,7 +413,7 @@ class Renku1UserServer(UserServer):
         config: NotebooksConfig,
         host: str,
         namespace: str,
-        git_provider_helper: GitProviderHelper2,
+        git_provider_helper: GitProviderHelperProto,
         gitlab_project: Project | None,
         internal_gitlab_user: APIUser,
         using_default_image: bool = False,

@@ -199,6 +199,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         rp_repo=dm.rp_repo,
         user_repo=dm.kc_user_repo,
         storage_repo=dm.storage_repo,
+        git_provider_helper=dm.git_provider_helper,
     )
     notebooks_new = NotebooksNewBP(
         name="notebooks",
