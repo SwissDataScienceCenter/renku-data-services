@@ -1,10 +1,10 @@
 from renku_data_services.notebooks.crs import (
     NodeAffinity,
 )
-from renku_data_services.notebooks.utils import merge_node_affinities
+from renku_data_services.notebooks.utils import intersect_node_affinities
 
 
-def test_merge_node_affinities() -> None:
+def test_intersect_node_affinities() -> None:
     na_1 = NodeAffinity.model_validate(
         {
             "requiredDuringSchedulingIgnoredDuringExecution": {
@@ -22,7 +22,7 @@ def test_merge_node_affinities() -> None:
         }
     )
 
-    result = merge_node_affinities(na_1, na_2)
+    result = intersect_node_affinities(na_1, na_2)
 
     expected = NodeAffinity.model_validate(
         {
@@ -39,4 +39,5 @@ def test_merge_node_affinities() -> None:
         }
     )
 
+    assert result.model_dump(mode="json") == expected.model_dump(mode="json")
     assert result == expected

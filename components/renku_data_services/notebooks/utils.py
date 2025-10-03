@@ -13,46 +13,50 @@ from renku_data_services.notebooks.crs import (
 )
 
 
-def merge_node_affinities(
+def intersect_node_affinities(
     node_affinity1: NodeAffinity,
     node_affinity2: NodeAffinity,
 ) -> NodeAffinity:
     """Merge two node affinities into a brand new object."""
     output = NodeAffinity()
-    if node_affinity1.preferredDuringSchedulingIgnoredDuringExecution:
-        output.preferredDuringSchedulingIgnoredDuringExecution = (
-            node_affinity1.preferredDuringSchedulingIgnoredDuringExecution
-        )
-    if node_affinity2.preferredDuringSchedulingIgnoredDuringExecution:
-        if output.preferredDuringSchedulingIgnoredDuringExecution:
-            output.preferredDuringSchedulingIgnoredDuringExecution = [
-                *output.preferredDuringSchedulingIgnoredDuringExecution,
-                *node_affinity2.preferredDuringSchedulingIgnoredDuringExecution,
-            ]
-        else:
-            output.preferredDuringSchedulingIgnoredDuringExecution = (
-                node_affinity2.preferredDuringSchedulingIgnoredDuringExecution
-            )
+
+    if (
+        node_affinity1.preferredDuringSchedulingIgnoredDuringExecution
+        or node_affinity2.preferredDuringSchedulingIgnoredDuringExecution
+    ):
+        items = [
+            *(node_affinity1.preferredDuringSchedulingIgnoredDuringExecution or []),
+            *(node_affinity2.preferredDuringSchedulingIgnoredDuringExecution or []),
+        ]
+        if items:
+            output.preferredDuringSchedulingIgnoredDuringExecution = items
+
     if (
         node_affinity1.requiredDuringSchedulingIgnoredDuringExecution
         and node_affinity1.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms
     ):
-        output.requiredDuringSchedulingIgnoredDuringExecution = RequiredDuringSchedulingIgnoredDuringExecution(
-            nodeSelectorTerms=node_affinity1.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms
+        output.requiredDuringSchedulingIgnoredDuringExecution = (
+            node_affinity1.requiredDuringSchedulingIgnoredDuringExecution.model_copy()
         )
-    if (
-        node_affinity2.requiredDuringSchedulingIgnoredDuringExecution
-        and node_affinity2.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms
-    ):
-        if output.requiredDuringSchedulingIgnoredDuringExecution:
-            output.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms = [
-                *output.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms,
-                *node_affinity2.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms,
-            ]
-        else:
-            output.requiredDuringSchedulingIgnoredDuringExecution = RequiredDuringSchedulingIgnoredDuringExecution(
-                nodeSelectorTerms=(node_affinity2.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms)
-            )
+        if (
+            node_affinity2.requiredDuringSchedulingIgnoredDuringExecution
+            and node_affinity2.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms
+        ):
+            for term_out in output.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms:
+                for term_2 in node_affinity2.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms:
+                    matchExpressions = [
+                        *(term_out.matchExpressions or []),
+                        *(term_2.matchExpressions or []),
+                    ]
+                    if matchExpressions:
+                        term_out.matchExpressions = matchExpressions
+                    matchFields = [
+                        *(term_out.matchFields or []),
+                        *(term_2.matchFields or []),
+                    ]
+                    if matchFields:
+                        term_out.matchFields = matchFields
+
     return output
 
 
@@ -97,7 +101,7 @@ def node_affinity_from_resource_class(
 
     affinity = default_affinity.model_copy(deep=True)
     if affinity.nodeAffinity:
-        affinity.nodeAffinity = merge_node_affinities(affinity.nodeAffinity, rc_node_affinity)
+        affinity.nodeAffinity = intersect_node_affinities(affinity.nodeAffinity, rc_node_affinity)
     else:
         affinity.nodeAffinity = rc_node_affinity
     return affinity
