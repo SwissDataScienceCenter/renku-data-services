@@ -24,7 +24,7 @@ from renku_data_services.notebooks import apispec, core, image_check
 from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.schemas.config_server_options import ServerOptionsEndpointResponse
 from renku_data_services.notebooks.api.schemas.logs import ServerLogs
-from renku_data_services.notebooks.config import NotebooksConfig
+from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
 from renku_data_services.notebooks.core_sessions import (
     patch_session,
     start_session,
@@ -48,6 +48,7 @@ class NotebooksBP(CustomBlueprint):
     rp_repo: ResourcePoolRepository
     user_repo: UserRepo
     storage_repo: StorageRepository
+    git_provider_helper: GitProviderHelperProto
 
     def version(self) -> BlueprintFactoryResponse:
         """Return notebook services version."""
@@ -100,6 +101,7 @@ class NotebooksBP(CustomBlueprint):
                 body,
                 user_repo=self.user_repo,
                 storage_repo=self.storage_repo,
+                git_provider_helper=self.git_provider_helper,
             )
             return core.serialize_v1_server(server, self.nb_config, status_code)
 
@@ -204,6 +206,7 @@ class NotebooksNewBP(CustomBlueprint):
     metrics: MetricsService
     cluster_repo: ClusterRepository
     connected_svcs_repo: ConnectedServicesRepository
+    git_provider_helper: GitProviderHelperProto
 
     def start(self) -> BlueprintFactoryResponse:
         """Start a session with the new operator."""
@@ -222,6 +225,7 @@ class NotebooksNewBP(CustomBlueprint):
                 user=user,
                 internal_gitlab_user=internal_gitlab_user,
                 nb_config=self.nb_config,
+                git_provider_helper=self.git_provider_helper,
                 cluster_repo=self.cluster_repo,
                 data_connector_secret_repo=self.data_connector_secret_repo,
                 project_repo=self.project_repo,
@@ -291,6 +295,7 @@ class NotebooksNewBP(CustomBlueprint):
                 user=user,
                 internal_gitlab_user=internal_gitlab_user,
                 nb_config=self.nb_config,
+                git_provider_helper=self.git_provider_helper,
                 project_repo=self.project_repo,
                 project_session_secret_repo=self.project_session_secret_repo,
                 rp_repo=self.rp_repo,
@@ -330,7 +335,12 @@ class NotebooksNewBP(CustomBlueprint):
             query: apispec.SessionsImagesGetParametersQuery,
         ) -> JSONResponse:
             image = Image.from_path(query.image_url)
-            result = await image_check.check_image(image, user, self.connected_svcs_repo)
+            result = await image_check.check_image(
+                image,
+                user,
+                self.connected_svcs_repo,
+                image_check.InternalGitLabConfig(internal_gitlab_user, self.nb_config),
+            )
             logger.info(f"Checked image {query.image_url}: {result}")
             conn = None
             if result.connection:

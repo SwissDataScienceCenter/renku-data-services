@@ -25,7 +25,7 @@ from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClie
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.api.schemas.secrets import K8sUserSecrets
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
-from renku_data_services.notebooks.config import NotebooksConfig
+from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
 from renku_data_services.notebooks.constants import JUPYTER_SESSION_GVK
 from renku_data_services.notebooks.cr_amalthea_session import TlsSecret
 from renku_data_services.notebooks.crs import JupyterServerV1Alpha1
@@ -54,6 +54,7 @@ class UserServer:
         internal_gitlab_user: APIUser,
         host: str,
         namespace: str,
+        git_provider_helper: GitProviderHelperProto,
         using_default_image: bool = False,
         is_image_private: bool = False,
         repositories: list[Repository] | None = None,
@@ -74,6 +75,7 @@ class UserServer:
         self.host = host
         self.__namespace = namespace
         self.config = config
+        self.git_provider_helper = git_provider_helper
         self.internal_gitlab_user = internal_gitlab_user
 
         if self.server_options.idle_threshold_seconds is not None:
@@ -130,7 +132,7 @@ class UserServer:
     async def git_providers(self) -> list[GitProvider]:
         """The list of git providers."""
         if self._git_providers is None:
-            self._git_providers = await self.config.git_provider_helper.get_providers(user=self.user)
+            self._git_providers = await self.git_provider_helper.get_providers(user=self.user)
         return self._git_providers
 
     async def required_git_providers(self) -> list[GitProvider]:
@@ -408,6 +410,7 @@ class Renku1UserServer(UserServer):
         config: NotebooksConfig,
         host: str,
         namespace: str,
+        git_provider_helper: GitProviderHelperProto,
         gitlab_project: Project | None,
         internal_gitlab_user: APIUser,
         using_default_image: bool = False,
@@ -436,6 +439,7 @@ class Renku1UserServer(UserServer):
             k8s_client=k8s_client,
             workspace_mount_path=workspace_mount_path,
             work_dir=work_dir,
+            git_provider_helper=git_provider_helper,
             using_default_image=using_default_image,
             is_image_private=is_image_private,
             repositories=repositories,

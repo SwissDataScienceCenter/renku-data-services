@@ -188,6 +188,8 @@ paths:
           description: If deleted successfully
         default:
           $ref: "#/components/responses/Error"
+      tags:
+        - oauth2
   /oauth2/connections/{connection_id}/account:
     get:
       summary: Get the account information for this OAuth2 connection for the currently authenticated user if their account is connected
