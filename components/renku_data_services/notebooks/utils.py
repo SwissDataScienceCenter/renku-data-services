@@ -31,31 +31,52 @@ def intersect_node_affinities(
         if items:
             output.preferredDuringSchedulingIgnoredDuringExecution = items
 
+    # node_affinity1 and node_affinity2 have nodeSelectorTerms, we preform a cross product
     if (
         node_affinity1.requiredDuringSchedulingIgnoredDuringExecution
         and node_affinity1.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms
+    ) and (
+        node_affinity2.requiredDuringSchedulingIgnoredDuringExecution
+        and node_affinity2.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms
     ):
-        output.requiredDuringSchedulingIgnoredDuringExecution = (
-            node_affinity1.requiredDuringSchedulingIgnoredDuringExecution.model_copy()
-        )
-        if (
-            node_affinity2.requiredDuringSchedulingIgnoredDuringExecution
-            and node_affinity2.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms
-        ):
-            for term_out in output.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms:
-                for term_2 in node_affinity2.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms:
-                    matchExpressions = [
-                        *(term_out.matchExpressions or []),
-                        *(term_2.matchExpressions or []),
-                    ]
-                    if matchExpressions:
-                        term_out.matchExpressions = matchExpressions
-                    matchFields = [
-                        *(term_out.matchFields or []),
-                        *(term_2.matchFields or []),
-                    ]
-                    if matchFields:
-                        term_out.matchFields = matchFields
+        terms_1 = [*node_affinity1.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms]
+        terms_2 = [*node_affinity2.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms]
+        terms_out: list[NodeSelectorTerm] = []
+        for term_1 in terms_1:
+            for term_2 in terms_2:
+                term_out = NodeSelectorTerm()
+                matchExpressions = [*(term_1.matchExpressions or []), *(term_2.matchExpressions or [])]
+                if matchExpressions:
+                    term_out.matchExpressions = matchExpressions
+                matchFields = [*(term_1.matchFields or []), *(term_2.matchFields or [])]
+                if matchFields:
+                    term_out.matchFields = matchFields
+                if term_out.matchExpressions or term_out.matchFields:
+                    terms_out.append(term_out)
+        if terms_out:
+            output.requiredDuringSchedulingIgnoredDuringExecution = RequiredDuringSchedulingIgnoredDuringExecution(
+                nodeSelectorTerms=terms_out
+            )
+    # only node_affinity1 has nodeSelectorTerms, we pick them unchanged
+    elif (
+        node_affinity1.requiredDuringSchedulingIgnoredDuringExecution
+        and node_affinity1.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms
+    ):
+        terms_1 = [*node_affinity1.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms]
+        if terms_1:
+            output.requiredDuringSchedulingIgnoredDuringExecution = RequiredDuringSchedulingIgnoredDuringExecution(
+                nodeSelectorTerms=terms_1
+            )
+    # only node_affinity2 has nodeSelectorTerms, we pick them unchanged
+    elif (
+        node_affinity2.requiredDuringSchedulingIgnoredDuringExecution
+        and node_affinity2.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms
+    ):
+        terms_2 = [*node_affinity2.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms]
+        if terms_2:
+            output.requiredDuringSchedulingIgnoredDuringExecution = RequiredDuringSchedulingIgnoredDuringExecution(
+                nodeSelectorTerms=terms_2
+            )
 
     return output
 
