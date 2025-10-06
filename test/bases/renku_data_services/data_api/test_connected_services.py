@@ -406,7 +406,7 @@ async def test_get_installations_gitlab(
 async def test_get_installations_github(
     oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_connection
 ):
-    connection = await create_oauth2_connection("provider_1", kind="github")
+    connection = await create_oauth2_connection("provider_1", kind="github", url="https://github.com")
     connection_id = connection["id"]
 
     _, res = await oauth2_test_client.get(
@@ -427,3 +427,20 @@ async def test_get_installations_github(
     assert res.headers.get("per-page") == "20"
     assert res.headers.get("total") == "1"
     assert res.headers.get("total-pages") == "1"
+
+
+@pytest.mark.asyncio
+async def test_get_no_installations_ghcrio(
+    oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_connection
+):
+    connection = await create_oauth2_connection("provider_1", kind="github", image_registry_url="https://ghcr.io")
+    connection_id = connection["id"]
+
+    _, res = await oauth2_test_client.get(
+        f"/api/data/oauth2/connections/{connection_id}/installations", headers=user_headers
+    )
+
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    installations_list = res.json
+    assert len(installations_list) == 0

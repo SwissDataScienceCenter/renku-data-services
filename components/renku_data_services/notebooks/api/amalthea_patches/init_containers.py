@@ -11,10 +11,19 @@ from typing import TYPE_CHECKING, Any
 from kubernetes import client
 
 from renku_data_services.base_models.core import AnonymousAPIUser, AuthenticatedAPIUser
-from renku_data_services.notebooks.api.amalthea_patches.utils import get_certificates_volume_mounts
+from renku_data_services.notebooks.api.amalthea_patches.utils import (
+    get_certificates_volume_mounts,
+    get_certificates_volume_mounts_unserialized,
+)
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.config import NotebooksConfig
-from renku_data_services.notebooks.crs import EmptyDir, ExtraVolume, ExtraVolumeMount, InitContainer, SecretAsVolume
+from renku_data_services.notebooks.crs import (
+    EmptyDir,
+    ExtraVolume,
+    ExtraVolumeMount,
+    InitContainer,
+    SecretAsVolume,
+)
 from renku_data_services.notebooks.models import SessionExtraResources
 from renku_data_services.project import constants as project_constants
 from renku_data_services.project.models import SessionSecret
@@ -294,6 +303,16 @@ async def git_clone(server: UserServer) -> list[dict[str, Any]]:
             ],
         }
     ]
+
+
+def certificates_volume_mounts(config: NotebooksConfig) -> list[ExtraVolumeMount]:
+    """Get the volume mounts for the CA certificates."""
+    return get_certificates_volume_mounts_unserialized(
+        config,
+        etc_certs=True,
+        custom_certs=True,
+        read_only_etc_certs=True,
+    )
 
 
 def certificates_container(config: NotebooksConfig) -> tuple[client.V1Container, list[client.V1Volume]]:
