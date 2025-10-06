@@ -51,7 +51,8 @@ from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.metrics.core import StagingMetricsService
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
-from renku_data_services.notebooks.config import get_clusters
+from renku_data_services.notebooks.api.classes.data_service import DummyGitProviderHelper, GitProviderHelper
+from renku_data_services.notebooks.config import GitProviderHelperProto, get_clusters
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
 from renku_data_services.platform.db import PlatformRepository, UrlRedirectRepository
 from renku_data_services.project.db import (
@@ -141,6 +142,7 @@ class DependencyManager:
     metrics: StagingMetricsService
     shipwright_client: ShipwrightClient | None
     url_redirect_repo: UrlRedirectRepository
+    git_provider_helper: GitProviderHelperProto
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
@@ -216,6 +218,12 @@ class DependencyManager:
         kc_api: IKeycloakAPI
         cluster_repo = ClusterRepository(session_maker=config.db.async_session_maker)
 
+        connected_services_repo = ConnectedServicesRepository(
+            session_maker=config.db.async_session_maker,
+            encryption_key=config.secrets.encryption_key,
+            async_oauth2_client_class=cls.async_oauth2_client_class,
+        )
+
         if config.dummy_stores:
             authenticator = DummyAuthenticator()
             gitlab_authenticator = DummyAuthenticator()
@@ -230,7 +238,9 @@ class DependencyManager:
                 UnsavedUserInfo(id="user2", first_name="user2", last_name="doe", email="user2@doe.com"),
             ]
             kc_api = DummyKeycloakAPI(users=[i.to_keycloak_dict() for i in dummy_users])
+            git_provider_helper: GitProviderHelperProto = DummyGitProviderHelper()
         else:
+            git_provider_helper = GitProviderHelper.create(connected_services_repo, config.enable_internal_gitlab)
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=config.k8s_namespace)
             assert config.keycloak is not None
 
@@ -336,11 +346,6 @@ class DependencyManager:
             user_repo=kc_user_repo,
             secret_service_public_key=config.secrets.public_key,
         )
-        connected_services_repo = ConnectedServicesRepository(
-            session_maker=config.db.async_session_maker,
-            encryption_key=config.secrets.encryption_key,
-            async_oauth2_client_class=cls.async_oauth2_client_class,
-        )
         git_repositories_repo = GitRepositoriesRepository(
             session_maker=config.db.async_session_maker,
             connected_services_repo=connected_services_repo,
@@ -411,4 +416,5 @@ class DependencyManager:
             authz=authz,
             low_level_user_secrets_repo=low_level_user_secrets_repo,
             url_redirect_repo=url_redirect_repo,
+            git_provider_helper=git_provider_helper,
         )
