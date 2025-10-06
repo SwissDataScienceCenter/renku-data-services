@@ -191,12 +191,6 @@ class NotebooksConfig:
             crc_validator = CRCValidator(rp_repo)
             sessions_config = _SessionConfig.from_env()
             git_config = _GitConfig.from_env(enable_internal_gitlab=enable_internal_gitlab)
-            git_provider_helper = GitProviderHelper(
-                service_url=data_service_url,
-                renku_url=f"http://{sessions_config.ingress.host}",
-                internal_gitlab_url=git_config.url,
-                enable_internal_gitlab=enable_internal_gitlab,
-            )
 
         k8s_config = _K8sConfig.from_env()
         k8s_db_cache = K8sDbCache(db_config.async_session_maker)
