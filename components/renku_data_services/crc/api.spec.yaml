@@ -986,6 +986,8 @@ components:
           $ref: "#/components/schemas/Port"
         session_path:
           type: string
+        session_ingress_class_name:
+          $ref: "#/components/schemas/IngressClassName"
         session_ingress_annotations:
           $ref: "#/components/schemas/IngressAnnotations"
         session_tls_secret_name:
@@ -1011,6 +1013,8 @@ components:
           $ref: "#/components/schemas/Port"
         session_path:
           type: string
+        session_ingress_class_name:
+          $ref: "#/components/schemas/IngressClassName"
         session_ingress_annotations:
           $ref: "#/components/schemas/IngressAnnotations"
         session_tls_secret_name:
@@ -1037,6 +1041,8 @@ components:
           $ref: "#/components/schemas/Port"
         session_path:
           type: string
+        session_ingress_class_name:
+          $ref: "#/components/schemas/IngressClassName"
         session_ingress_annotations:
           $ref: "#/components/schemas/IngressAnnotations"
         session_tls_secret_name:
@@ -1804,6 +1810,9 @@ components:
       type: string
       maxLength: 256
     StorageClassName:
+      type: string
+      maxLength: 256
+    IngressClassName:
       type: string
       maxLength: 256
     IngressAnnotations:
