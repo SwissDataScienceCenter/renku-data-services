@@ -1,6 +1,7 @@
 """Base notebooks svc configuration."""
 
 import os
+from collections.abc import Awaitable
 from dataclasses import dataclass, field
 from typing import Any, Optional, Protocol, Self
 
@@ -8,8 +9,9 @@ import kr8s
 
 from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
-from renku_data_services.crc.models import ResourceClass
+from renku_data_services.crc.models import ClusterSettings, ResourceClass, SessionProtocol
 from renku_data_services.db_config.config import DBConfig
+from renku_data_services.errors import errors
 from renku_data_services.k8s.clients import (
     DummyCoreClient,
     DummySchedulingClient,
@@ -18,7 +20,7 @@ from renku_data_services.k8s.clients import (
     K8sSchedulingClient,
     K8sSecretClient,
 )
-from renku_data_services.k8s.config import KubeConfigEnv, get_clusters
+from renku_data_services.k8s.config import KubeConfig, KubeConfigEnv, get_clusters
 from renku_data_services.k8s.db import K8sDbCache, QuotaRepository
 from renku_data_services.notebooks.api.classes.data_service import (
     CRCValidator,
@@ -102,6 +104,33 @@ class Kr8sApiStack:
         return object.__getattribute__(self.current, name)
 
 
+class TestKubeConfig(KubeConfig):
+    """Kubeconfig used for testing."""
+
+    def __init__(
+        self,
+        kubeconfig: str | None = None,
+        current_context_name: str | None = None,
+        ns: str | None = None,
+        sa: str | None = None,
+        url: str | None = None,
+    ) -> None:
+        super().__init__(kubeconfig, current_context_name, ns, sa, url)
+        self.__stack = Kr8sApiStack()
+
+    def sync_api(self) -> kr8s.Api:
+        """Instantiate the sync Kr8s Api object based on the configuration."""
+        return self.__stack  # type: ignore[return-value]
+
+    def api(self) -> Awaitable[kr8s.asyncio.Api]:
+        """Instantiate the async Kr8s Api object based on the configuration."""
+
+        async def _api() -> kr8s.asyncio.Api:
+            return self.__stack  # type: ignore[return-value]
+
+        return _api()
+
+
 @dataclass
 class NotebooksConfig:
     """The notebooks' configuration."""
@@ -112,7 +141,6 @@ class NotebooksConfig:
     git: _GitConfig
     k8s: _K8sConfig
     k8s_db_cache: K8sDbCache
-    _kr8s_api: kr8s.asyncio.Api
     cloud_storage: _CloudStorage
     user_secrets: _UserSecrets
     crc_validator: CRCValidatorProto
@@ -133,6 +161,7 @@ class NotebooksConfig:
     )
     session_id_cookie_name: str = "_renku_session"  # NOTE: This cookie name is set and controlled by the gateway
     v1_sessions_enabled: bool = False
+    local_cluster_session_service_account: str | None = None
 
     @classmethod
     def from_env(cls, db_config: DBConfig, enable_internal_gitlab: bool) -> Self:
@@ -141,7 +170,7 @@ class NotebooksConfig:
         dummy_stores = _parse_str_as_bool(os.environ.get("DUMMY_STORES", False))
         sessions_config: _SessionConfig
         git_config: _GitConfig
-        kr8s_api: kr8s.asyncio.Api
+        default_kubeconfig = KubeConfigEnv()
         data_service_url = os.environ.get("NB_DATA_SERVICE_URL", "http://127.0.0.1:8000")
         server_options = ServerOptionsConfig.from_env()
         crc_validator: CRCValidatorProto
@@ -155,16 +184,13 @@ class NotebooksConfig:
             crc_validator = DummyCRCValidator()
             sessions_config = _SessionConfig._for_testing()
             git_config = _GitConfig("http://not.specified", "registry.not.specified")
-            kr8s_api = Kr8sApiStack()  # type: ignore[assignment]
+
         else:
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
             rp_repo = ResourcePoolRepository(db_config.async_session_maker, quota_repo)
             crc_validator = CRCValidator(rp_repo)
             sessions_config = _SessionConfig.from_env()
             git_config = _GitConfig.from_env(enable_internal_gitlab=enable_internal_gitlab)
-            # NOTE: we need to get an async client as a sync client can't be used in an async way
-            # But all the config code is not async, so we need to drop into the running loop, if there is one
-            kr8s_api = KubeConfigEnv().api()
 
         k8s_config = _K8sConfig.from_env()
         k8s_db_cache = K8sDbCache(db_config.async_session_maker)
@@ -173,8 +199,7 @@ class NotebooksConfig:
         client = K8sClusterClientsPool(
             get_clusters(
                 kube_conf_root_dir=kube_config_root,
-                default_cluster_namespace=k8s_config.renku_namespace,
-                default_cluster_api=kr8s_api,
+                default_kubeconfig=default_kubeconfig,
                 cluster_repo=cluster_rp,
                 cache=k8s_db_cache,
                 kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
@@ -199,6 +224,7 @@ class NotebooksConfig:
             gvk=AMALTHEA_SESSION_GVK,
             username_label="renku.io/safe-username",
         )
+
         return cls(
             server_options=server_options,
             sessions=sessions_config,
@@ -219,7 +245,24 @@ class NotebooksConfig:
             k8s_v2_client=k8s_v2_client,
             k8s_db_cache=k8s_db_cache,
             cluster_rp=cluster_rp,
-            _kr8s_api=kr8s_api,
             v1_sessions_enabled=v1_sessions_enabled,
             enable_internal_gitlab=enable_internal_gitlab,
+            local_cluster_session_service_account=os.environ.get("LOCAL_CLUSTER_SESSION_SERVICE_ACCOUNT"),
+        )
+
+    def local_cluster_settings(self) -> ClusterSettings:
+        """The cluster settings for the local cluster where the Renku services are installed."""
+        if not self.sessions.ingress.tls_secret:
+            raise errors.ProgrammingError(message="The tls secret must be defined for a local cluster.")
+        return ClusterSettings(
+            name="local-cluster-settings",
+            config_name="",
+            session_protocol=SessionProtocol.HTTPS,
+            session_host=self.sessions.ingress.host,
+            session_port=443,
+            session_path="/sessions",
+            session_ingress_annotations=self.sessions.ingress.annotations,
+            session_tls_secret_name=self.sessions.ingress.tls_secret,
+            session_storage_class=self.sessions.storage.pvs_storage_class,
+            service_account_name=self.local_cluster_session_service_account,
         )

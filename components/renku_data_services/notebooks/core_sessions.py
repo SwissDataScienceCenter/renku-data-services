@@ -24,7 +24,7 @@ from renku_data_services.base_models import AnonymousAPIUser, APIUser, Authentic
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
-from renku_data_services.crc.models import GpuKind, ResourceClass, ResourcePool
+from renku_data_services.crc.models import ClusterSettings, GpuKind, ResourceClass, ResourcePool
 from renku_data_services.data_connectors.db import (
     DataConnectorSecretRepository,
 )
@@ -38,7 +38,6 @@ from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
-from renku_data_services.notebooks.cr_amalthea_session import TlsSecret
 from renku_data_services.notebooks.crs import (
     AmaltheaSessionSpec,
     AmaltheaSessionV1Alpha1,
@@ -709,35 +708,24 @@ async def start_session(
     # Extra containers
     session_extras = session_extras.concat(await get_extra_containers(nb_config, user, repositories, git_providers))
 
-    # Ingress
+    # Cluster settings (ingress, storage class, etc)
+    cluster_settings: ClusterSettings
     try:
         cluster_settings = await cluster_repo.select(cluster.id)
     except errors.MissingResourceError:
-        cluster_settings = None
-
-    if cluster_settings is not None:
-        (
-            base_server_path,
-            base_server_url,
-            base_server_https_url,
-            host,
-            tls_secret,
-            ingress_annotations,
-        ) = cluster_settings.get_ingress_parameters(server_name)
-        storage_class = cluster_settings.get_storage_class()
-        service_account_name = cluster_settings.service_account_name
-    else:
         # Fallback to global, main cluster parameters
-        host = nb_config.sessions.ingress.host
-        base_server_path = nb_config.sessions.ingress.base_path(server_name)
-        base_server_url = nb_config.sessions.ingress.base_url(server_name)
-        base_server_https_url = nb_config.sessions.ingress.base_url(server_name, force_https=True)
-        storage_class = nb_config.sessions.storage.pvs_storage_class
-        service_account_name = None
-        ingress_annotations = nb_config.sessions.ingress.annotations
+        cluster_settings = nb_config.local_cluster_settings()
 
-        tls_name = nb_config.sessions.ingress.tls_secret
-        tls_secret = None if tls_name is None else TlsSecret(adopt=False, name=tls_name)
+    (
+        base_server_path,
+        base_server_url,
+        base_server_https_url,
+        host,
+        tls_secret,
+        ingress_annotations,
+    ) = cluster_settings.get_ingress_parameters(server_name)
+    storage_class = cluster_settings.get_storage_class()
+    service_account_name = cluster_settings.service_account_name
 
     ui_path = f"{base_server_path}/{environment.default_url.lstrip('/')}"
 
