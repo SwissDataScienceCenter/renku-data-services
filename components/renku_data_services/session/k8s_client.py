@@ -228,6 +228,11 @@ class ShipwrightClient:
         #   reason: Running
         #   status: Unknown
         #   /type: Succeeded
+        # or
+        #   message: TaskRun Pod exceeded available resources
+        #   reason: ExceededNodeResources
+        #   status: Unknown
+        #   /type: Succeeded
         # In this case we want to keep waiting - the buildrun is still running.
         # A fully successful completion condition looks like this:
         #   reason: Succeeded
@@ -238,7 +243,7 @@ class ShipwrightClient:
         # So I needed something to keep mypy happy. The real name of the field is "type"
         condition = next(filter(lambda c: c.type == "Succeeded", conditions or []), None)
 
-        if condition is not None and condition.reason in ["Running", "Pending"]:
+        if condition is not None and condition.status not in ["True", "False"]:
             # The buildrun is still running or pending
             return models.ShipwrightBuildStatusUpdate(update=None)
 

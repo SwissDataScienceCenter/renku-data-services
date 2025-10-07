@@ -26,6 +26,7 @@ from renku_data_services.connected_services.db import ConnectedServicesRepositor
 from renku_data_services.connected_services.models import ImageProvider, OAuth2Client, OAuth2Connection
 from renku_data_services.errors import errors
 from renku_data_services.notebooks.api.classes.image import Image, ImageRepoDockerAPI
+from renku_data_services.notebooks.config import NotebooksConfig
 
 logger = logging.getLogger(__name__)
 
@@ -76,15 +77,31 @@ class CheckResult:
         return self.image_provider.connected_user.user
 
 
+@dataclass
+class InternalGitLabConfig:
+    """Required for internal gitlab, which will be shut down soon."""
+
+    gitlab_user: APIUser
+    nb_config: NotebooksConfig
+
+
 async def check_image_path(
-    image_path: str, user: APIUser, connected_services: ConnectedServicesRepository
+    image_path: str,
+    user: APIUser,
+    connected_services: ConnectedServicesRepository,
+    internal_gitlab_config: InternalGitLabConfig | None,
 ) -> CheckResult:
     """Check access to the given image."""
     image = Image.from_path(image_path)
-    return await check_image(image, user, connected_services)
+    return await check_image(image, user, connected_services, internal_gitlab_config)
 
 
-async def check_image(image: Image, user: APIUser, connected_services: ConnectedServicesRepository) -> CheckResult:
+async def check_image(
+    image: Image,
+    user: APIUser,
+    connected_services: ConnectedServicesRepository,
+    intern_gl_cfg: InternalGitLabConfig | None,
+) -> CheckResult:
     """Check access to the given image."""
 
     reg_api: ImageRepoDockerAPI = image.repo_api()  # public images
@@ -102,6 +119,13 @@ async def check_image(image: Image, user: APIUser, connected_services: Connected
             logger.info(f"Error getting image repo client for image {image}: {e}")
             unauth_error = errors.UnauthorizedError(message=f"OAuth error when getting repo client for image: {image}")
             unauth_error.__cause__ = e
+    elif (
+        intern_gl_cfg
+        and image.hostname == intern_gl_cfg.nb_config.git.registry
+        and intern_gl_cfg.gitlab_user.access_token
+    ):
+        logger.debug(f"Using internal gitlab at {intern_gl_cfg.nb_config.git.registry}")
+        reg_api = reg_api.with_oauth2_token(intern_gl_cfg.gitlab_user.access_token)
 
     try:
         result = await reg_api.image_check(image)

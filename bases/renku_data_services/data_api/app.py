@@ -199,6 +199,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         rp_repo=dm.rp_repo,
         user_repo=dm.kc_user_repo,
         storage_repo=dm.storage_repo,
+        git_provider_helper=dm.git_provider_helper,
     )
     notebooks_new = NotebooksNewBP(
         name="notebooks",
@@ -217,6 +218,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         internal_gitlab_authenticator=dm.gitlab_authenticator,
         metrics=dm.metrics,
         connected_svcs_repo=dm.connected_services_repo,
+        git_provider_helper=dm.git_provider_helper,
     )
     platform_config = PlatformConfigBP(
         name="platform_config",

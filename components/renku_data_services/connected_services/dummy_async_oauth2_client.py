@@ -26,10 +26,10 @@ class DummyAsyncOAuth2Client(AsyncOAuth2Client):  # type: ignore[misc]
         if parsed.path == "/api/v4/projects/username%2Fmy_repo":
             return self._get_repository_response()
 
-        if parsed.path == "/api/v3/user/installations":
+        if parsed.path == "/api/v3/user/installations" or parsed.path == "/user/installations":
             return self._get_installations_response()
 
-        return Response(500, json=dict())
+        return Response(500, json={"error": f"path is not expected: {parsed.path}"})
 
     @staticmethod
     def _get_account_response() -> Response:

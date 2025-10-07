@@ -14,6 +14,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.connected_services import orm as connected_services_schemas
 from renku_data_services.connected_services.db import ConnectedServicesRepository
+from renku_data_services.connected_services.utils import GitHubProviderType, get_github_provider_type
 from renku_data_services.repositories import models
 from renku_data_services.repositories.provider_adapters import (
     get_internal_gitlab_adapter,
@@ -36,6 +37,12 @@ class GitRepositoriesRepository:
         self.internal_gitlab_url = internal_gitlab_url
         self.enable_internal_gitlab = enable_internal_gitlab
 
+    def __include_repository_provider(self, c: connected_services_schemas.OAuth2ClientORM, repo_netloc: str) -> bool:
+        github_type = get_github_provider_type(c)
+        return urlparse(c.url).netloc == repo_netloc and (
+            not github_type or github_type == GitHubProviderType.standard_app
+        )
+
     async def get_repository(
         self,
         repository_url: str,
@@ -50,7 +57,7 @@ class GitRepositoriesRepository:
             result_clients = await session.scalars(select(connected_services_schemas.OAuth2ClientORM))
             clients = result_clients.all()
 
-        matched_client = next(filter(lambda x: urlparse(x.url).netloc == repository_netloc, clients), None)
+        matched_client = next(filter(lambda x: self.__include_repository_provider(x, repository_netloc), clients), None)
 
         if matched_client is None:
             if self.enable_internal_gitlab and self.internal_gitlab_url:

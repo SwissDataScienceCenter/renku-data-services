@@ -24,7 +24,7 @@ from renku_data_services.base_models import AnonymousAPIUser, APIUser, Authentic
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
-from renku_data_services.crc.models import GpuKind, ResourceClass, ResourcePool
+from renku_data_services.crc.models import ClusterSettings, GpuKind, ResourceClass, ResourcePool
 from renku_data_services.data_connectors.db import (
     DataConnectorSecretRepository,
 )
@@ -37,8 +37,7 @@ from renku_data_services.notebooks.api.amalthea_patches.init_containers import u
 from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
-from renku_data_services.notebooks.config import NotebooksConfig
-from renku_data_services.notebooks.cr_amalthea_session import TlsSecret
+from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
 from renku_data_services.notebooks.crs import (
     AmaltheaSessionSpec,
     AmaltheaSessionV1Alpha1,
@@ -551,7 +550,7 @@ async def __get_connected_services_image_pull_secret(
 ) -> ExtraSecret | None:
     """Return a secret for accessing the image if one is available for the given user."""
     image_parsed = Image.from_path(image)
-    image_check_result = await ic.check_image(image_parsed, user, connected_svcs_repo)
+    image_check_result = await ic.check_image(image_parsed, user, connected_svcs_repo, None)
     logger.debug(f"Set pull secret for {image} to connection {image_check_result.image_provider}")
     if not image_check_result.token:
         return None
@@ -603,6 +602,7 @@ async def start_session(
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     internal_gitlab_user: APIUser,
     nb_config: NotebooksConfig,
+    git_provider_helper: GitProviderHelperProto,
     cluster_repo: ClusterRepository,
     data_connector_secret_repo: DataConnectorSecretRepository,
     project_repo: ProjectRepository,
@@ -663,7 +663,7 @@ async def start_session(
         user=user, project_id=project.id
     )
     data_connectors_stream = data_connector_secret_repo.get_data_connectors_with_secrets(user, project.id)
-    git_providers = await nb_config.git_provider_helper.get_providers(user=user)
+    git_providers = await git_provider_helper.get_providers(user=user)
     repositories = repositories_from_project(project, git_providers)
 
     # User secrets
@@ -708,35 +708,24 @@ async def start_session(
     # Extra containers
     session_extras = session_extras.concat(await get_extra_containers(nb_config, user, repositories, git_providers))
 
-    # Ingress
+    # Cluster settings (ingress, storage class, etc)
+    cluster_settings: ClusterSettings
     try:
         cluster_settings = await cluster_repo.select(cluster.id)
     except errors.MissingResourceError:
-        cluster_settings = None
-
-    if cluster_settings is not None:
-        (
-            base_server_path,
-            base_server_url,
-            base_server_https_url,
-            host,
-            tls_secret,
-            ingress_annotations,
-        ) = cluster_settings.get_ingress_parameters(server_name)
-        storage_class = cluster_settings.get_storage_class()
-        service_account_name = cluster_settings.service_account_name
-    else:
         # Fallback to global, main cluster parameters
-        host = nb_config.sessions.ingress.host
-        base_server_path = nb_config.sessions.ingress.base_path(server_name)
-        base_server_url = nb_config.sessions.ingress.base_url(server_name)
-        base_server_https_url = nb_config.sessions.ingress.base_url(server_name, force_https=True)
-        storage_class = nb_config.sessions.storage.pvs_storage_class
-        service_account_name = None
-        ingress_annotations = nb_config.sessions.ingress.annotations
+        cluster_settings = nb_config.local_cluster_settings()
 
-        tls_name = nb_config.sessions.ingress.tls_secret
-        tls_secret = None if tls_name is None else TlsSecret(adopt=False, name=tls_name)
+    (
+        base_server_path,
+        base_server_url,
+        base_server_https_url,
+        host,
+        tls_secret,
+        ingress_annotations,
+    ) = cluster_settings.get_ingress_parameters(server_name)
+    storage_class = cluster_settings.get_storage_class()
+    service_account_name = cluster_settings.service_account_name
 
     ui_path = f"{base_server_path}/{environment.default_url.lstrip('/')}"
 
@@ -768,6 +757,13 @@ async def start_session(
             volumes=[auth_secret.volume] if auth_secret.volume else [],
         )
     )
+    authn_extra_volume_mounts: list[ExtraVolumeMount] = []
+    if auth_secret.volume_mount:
+        authn_extra_volume_mounts.append(auth_secret.volume_mount)
+
+    cert_vol_mounts = init_containers.certificates_volume_mounts(nb_config)
+    if cert_vol_mounts:
+        authn_extra_volume_mounts.extend(cert_vol_mounts)
 
     image_secret = await get_image_pull_secret(
         image=image,
@@ -839,7 +835,7 @@ async def start_session(
                 if isinstance(user, AuthenticatedAPIUser)
                 else AuthenticationType.token,
                 secretRef=auth_secret.key_ref("auth"),
-                extraVolumeMounts=[auth_secret.volume_mount] if auth_secret.volume_mount else None,
+                extraVolumeMounts=authn_extra_volume_mounts,
             ),
             dataSources=session_extras.data_sources,
             tolerations=tolerations_from_resource_class(resource_class, nb_config.sessions.tolerations_model),
@@ -887,6 +883,7 @@ async def patch_session(
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     internal_gitlab_user: APIUser,
     nb_config: NotebooksConfig,
+    git_provider_helper: GitProviderHelperProto,
     project_repo: ProjectRepository,
     project_session_secret_repo: ProjectSessionSecretRepository,
     rp_repo: ResourcePoolRepository,
@@ -982,7 +979,7 @@ async def patch_session(
     session_secrets = await project_session_secret_repo.get_all_session_secrets_from_project(
         user=user, project_id=project.id
     )
-    git_providers = await nb_config.git_provider_helper.get_providers(user=user)
+    git_providers = await git_provider_helper.get_providers(user=user)
     repositories = repositories_from_project(project, git_providers)
 
     # User secrets

@@ -24,7 +24,11 @@ from renku_data_services.connected_services.provider_adapters import (
     ProviderAdapter,
     get_provider_adapter,
 )
-from renku_data_services.connected_services.utils import generate_code_verifier
+from renku_data_services.connected_services.utils import (
+    GitHubProviderType,
+    generate_code_verifier,
+    get_github_provider_type,
+)
 from renku_data_services.notebooks.api.classes.image import Image, ImageRepoDockerAPI
 from renku_data_services.users.db import APIUser
 from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
@@ -461,13 +465,18 @@ class ConnectedServicesRepository:
             connection,
             adapter,
         ):
-            # NOTE: App installations are only available from GitHub
-            if connection.client.kind == models.ProviderKind.github and isinstance(adapter, GitHubAdapter):
+            # NOTE: App installations are only available from GitHub when using a "GitHub App"
+            if (
+                connection.client.kind == models.ProviderKind.github
+                and get_github_provider_type(connection.client) == GitHubProviderType.standard_app
+                and isinstance(adapter, GitHubAdapter)
+            ):
                 request_url = urljoin(adapter.api_url, "user/installations")
                 params = dict(page=pagination.page, per_page=pagination.per_page)
                 try:
                     response = await oauth2_client.get(request_url, params=params, headers=adapter.api_common_headers)
                 except OAuthError as err:
+                    logger.warning(f"Error getting installations at {request_url}: {err}")
                     if err.error == "bad_refresh_token":
                         raise errors.InvalidTokenError(
                             message="The refresh token for the connected service has expired or is invalid.",
@@ -477,6 +486,9 @@ class ConnectedServicesRepository:
                     raise
 
                 if response.status_code > 200:
+                    logger.warning(
+                        f"Could not get installations at {request_url}: {response.status_code} - {response.text}"
+                    )
                     raise errors.UnauthorizedError(message="Could not get installation information.")
 
                 return adapter.api_validate_app_installations_response(response)
