@@ -38,8 +38,7 @@ all: help
 
 ##@ Apispec
 
-# If you add a new api spec, add the `apispec.py` file here and as a
-# target/dependency below
+# If you add a new api spec, add the `apispec.py` file here.
 API_SPECS := \
     components/renku_data_services/crc/apispec.py \
     components/renku_data_services/storage/apispec.py \
@@ -54,20 +53,6 @@ API_SPECS := \
     components/renku_data_services/platform/apispec.py \
     components/renku_data_services/data_connectors/apispec.py \
     components/renku_data_services/search/apispec.py
-
-components/renku_data_services/crc/apispec.py: components/renku_data_services/crc/api.spec.yaml
-components/renku_data_services/storage/apispec.py: components/renku_data_services/storage/api.spec.yaml
-components/renku_data_services/users/apispec.py: components/renku_data_services/users/api.spec.yaml
-components/renku_data_services/project/apispec.py: components/renku_data_services/project/api.spec.yaml
-components/renku_data_services/session/apispec.py: components/renku_data_services/session/api.spec.yaml
-components/renku_data_services/namespace/apispec.py: components/renku_data_services/namespace/api.spec.yaml
-components/renku_data_services/secrets/apispec.py: components/renku_data_services/secrets/api.spec.yaml
-components/renku_data_services/connected_services/apispec.py: components/renku_data_services/connected_services/api.spec.yaml
-components/renku_data_services/repositories/apispec.py: components/renku_data_services/repositories/api.spec.yaml
-components/renku_data_services/notebooks/apispec.py: components/renku_data_services/notebooks/api.spec.yaml
-components/renku_data_services/platform/apispec.py: components/renku_data_services/platform/api.spec.yaml
-components/renku_data_services/data_connectors/apispec.py: components/renku_data_services/data_connectors/api.spec.yaml
-components/renku_data_services/search/apispec.py: components/renku_data_services/search/api.spec.yaml
 
 schemas: ${API_SPECS}  ## Generate pydantic classes from apispec yaml files
 	@echo "generated classes based on ApiSpec"
