@@ -202,6 +202,7 @@ class ClusterPatch:
     session_host: str | None
     session_port: int | None
     session_path: str | None
+    session_ingress_class_name: str | None
     session_ingress_annotations: dict[str, Any] | None
     session_tls_secret_name: str | None
     session_storage_class: str | None
@@ -246,7 +247,9 @@ class ClusterSettings:
 
         return self.session_storage_class
 
-    def get_ingress_parameters(self, server_name: str) -> tuple[str, str, str, str, TlsSecret | None, dict[str, str]]:
+    def get_ingress_parameters(
+        self, server_name: str
+    ) -> tuple[str, str, str, str, TlsSecret | None, str | None, dict[str, str]]:
         """Returns the ingress parameters of the cluster."""
 
         host = self.session_host
@@ -260,13 +263,22 @@ class ClusterSettings:
         else:
             base_server_url = f"{self.session_protocol.value}://{host}:{self.session_port}{base_server_path}"
         base_server_https_url = base_server_url
+        ingress_class_name = self.session_ingress_class_name
         ingress_annotations = self.session_ingress_annotations
 
         tls_secret = (
             None if self.session_tls_secret_name is None else TlsSecret(adopt=False, name=self.session_tls_secret_name)
         )
 
-        return base_server_path, base_server_url, base_server_https_url, host, tls_secret, ingress_annotations
+        return (
+            base_server_path,
+            base_server_url,
+            base_server_https_url,
+            host,
+            tls_secret,
+            ingress_class_name,
+            ingress_annotations,
+        )
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

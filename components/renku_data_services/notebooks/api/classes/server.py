@@ -246,6 +246,7 @@ class UserServer:
                 _,
                 host,
                 tls_secret,
+                _,
                 ingress_annotations,
             ) = cluster_settings.get_ingress_parameters(self.server_name)
         else:

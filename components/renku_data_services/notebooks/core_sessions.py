@@ -722,6 +722,7 @@ async def start_session(
         base_server_https_url,
         host,
         tls_secret,
+        ingress_class_name,
         ingress_annotations,
     ) = cluster_settings.get_ingress_parameters(server_name)
     storage_class = cluster_settings.get_storage_class()
@@ -731,7 +732,7 @@ async def start_session(
 
     ingress = Ingress(
         host=host,
-        ingressClassName=ingress_annotations.get("kubernetes.io/ingress.class"),
+        ingressClassName=ingress_class_name,
         annotations=ingress_annotations,
         tlsSecret=tls_secret,
         pathPrefix=base_server_path,
