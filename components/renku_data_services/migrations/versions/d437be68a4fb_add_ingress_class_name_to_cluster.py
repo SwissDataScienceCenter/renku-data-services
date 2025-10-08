@@ -1,7 +1,7 @@
 """Add ingress class name to Cluster
 
 Revision ID: d437be68a4fb
-Revises: 8365db35dc76
+Revises: 3aa50593f4e4
 Create Date: 2025-10-07 14:00:31.086825
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "d437be68a4fb"
-down_revision = "8365db35dc76"
+down_revision = "3aa50593f4e4"
 branch_labels = None
 depends_on = None
 
