@@ -266,6 +266,9 @@ class ClusterSettings:
         ingress_class_name = self.session_ingress_class_name
         ingress_annotations = self.session_ingress_annotations
 
+        if ingress_class_name is None:
+            ingress_class_name = ingress_annotations.get("kubernetes.io/ingress.class")
+
         tls_secret = (
             None if self.session_tls_secret_name is None else TlsSecret(adopt=False, name=self.session_tls_secret_name)
         )
