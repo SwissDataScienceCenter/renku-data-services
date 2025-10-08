@@ -730,6 +730,9 @@ async def start_session(
 
     ui_path = f"{base_server_path}/{environment.default_url.lstrip('/')}"
 
+    if ingress_class_name is None:
+        ingress_class_name = ingress_annotations.get("kubernetes.io/ingress.class")
+
     ingress = Ingress(
         host=host,
         ingressClassName=ingress_class_name,
