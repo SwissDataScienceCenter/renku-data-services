@@ -14,9 +14,9 @@ BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX: Final[str] = "harbor.dev.renku.ch/renku-build
 BUILD_OUTPUT_IMAGE_NAME: Final[str] = "renku-build"
 """The container image name created from Renku builds."""
 
-BUILD_BUILDER_IMAGE: Final[str] = "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/selector:0.0.8"
+BUILD_BUILDER_IMAGE: Final[str] = "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/selector:0.1.0"
 
-BUILD_RUN_IMAGE: Final[str] = "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/base-image:0.0.8"
+BUILD_RUN_IMAGE: Final[str] = "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/base-image:0.1.0"
 BUILD_MOUNT_DIRECTORY: Final[PurePosixPath] = PurePosixPath("/home/renku/work")
 BUILD_WORKING_DIRECTORY: Final[PurePosixPath] = BUILD_MOUNT_DIRECTORY
 BUILD_UID: Final[int] = 1000
