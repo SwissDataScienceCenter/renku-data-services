@@ -1,5 +1,5 @@
-AMALTHEA_JS_VERSION ?= 0.20.0
-AMALTHEA_SESSIONS_VERSION ?= 0.20.0
+AMALTHEA_JS_VERSION ?= 0.22.0
+AMALTHEA_SESSIONS_VERSION ?= 0.22.0
 COMMON_CODEGEN_PARAMS := \
 	--output-model-type pydantic_v2.BaseModel \
 	--use-double-quotes \
