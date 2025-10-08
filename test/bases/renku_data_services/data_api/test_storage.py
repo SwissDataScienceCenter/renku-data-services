@@ -12,7 +12,7 @@ from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.storage.rclone import RCloneValidator
-from renku_data_services.storage.rclone_patches import BANNED_STORAGE, OAUTH_PROVIDERS
+from renku_data_services.storage.rclone_patches import BANNED_SFTP_OPTIONS, BANNED_STORAGE, OAUTH_PROVIDERS
 from renku_data_services.utils.core import get_openbis_session_token
 from test.utils import SanicReusableASGITestClient
 
@@ -246,6 +246,21 @@ async def storage_test_client(
                 },
                 "source_path": "bucket/my-folder",
                 "target_path": "my/my-target",
+            },
+            422,
+            "",
+        ),
+        (
+            {
+                "project_id": "123456",
+                "name": "mystorage",
+                "configuration": {
+                    "type": "sftp",
+                    "host": "myhost",
+                    "ssh": "ssh",  # passing in banned option
+                },
+                "source_path": "bucket/myfolder",
+                "target_path": "my/target",
             },
             422,
             "",
@@ -510,6 +525,39 @@ async def test_storage_patch_unauthorized(storage_test_client, valid_storage_pay
 
 
 @pytest.mark.asyncio
+async def test_storage_patch_banned_option(storage_test_client, valid_storage_payload) -> None:
+    storage_test_client, _ = storage_test_client
+    # NOTE: The keycloak dummy client used to authorize the storage patch requests only has info
+    # on a user with name Admin Doe, using a different user will fail with a 401 error.
+    access_token = json.dumps({"is_admin": False, "id": "some-id", "full_name": "Admin Doe"})
+    payload = dict(valid_storage_payload)
+    payload["configuration"] = {
+        "type": "sftp",
+        "host": "myhost",
+    }
+    _, res = await storage_test_client.post(
+        "/api/data/storage",
+        headers={"Authorization": f"bearer {access_token}"},
+        data=json.dumps(payload),
+    )
+    assert res.status_code == 201
+    assert res.json["storage"]["storage_type"] == "sftp"
+    storage_id = res.json["storage"]["storage_id"]
+
+    _, res = await storage_test_client.patch(
+        f"/api/data/storage/{storage_id}",
+        headers={"Authorization": f"bearer {access_token}"},
+        data=json.dumps(
+            {
+                "configuration": {"key_file": "my_key"},
+            }
+        ),
+    )
+    assert res.status_code == 422
+    assert "key_file option is not allowed" in res.text
+
+
+@pytest.mark.asyncio
 async def test_storage_obscure(storage_test_client) -> None:
     storage_test_client, _ = storage_test_client
     body = {
@@ -666,9 +714,20 @@ async def test_storage_schema_patches(storage_test_client, snapshot) -> None:
     oauth_providers = [s for s in schema if s["prefix"] in OAUTH_PROVIDERS]
     assert all(o["name"] != "client_id" and o["name"] != "client_secret" for p in oauth_providers for o in p["options"])
 
+    # check the OAUTH_PROVIDERS list
+    not_exists = set(p for p in OAUTH_PROVIDERS if p not in set(s["prefix"] for s in schema))
+    assert not_exists == set()
+
     # check custom webdav storage is added
     assert any(s["prefix"] == "polybox" for s in schema)
     assert any(s["prefix"] == "switchDrive" for s in schema)
+
+    # check that unsafe SFTP options are removed
+    sftp = next((e for e in schema if e["prefix"] == "sftp"), None)
+    assert sftp
+    assert all(o["name"] not in BANNED_SFTP_OPTIONS for o in sftp["options"])
+
+    # snapshot the schema
     assert schema == snapshot
 
 

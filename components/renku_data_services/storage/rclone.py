@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from renku_data_services import errors
 from renku_data_services.app_config import logging
-from renku_data_services.storage.rclone_patches import BANNED_STORAGE, apply_patches
+from renku_data_services.storage.rclone_patches import BANNED_SFTP_OPTIONS, BANNED_STORAGE, apply_patches
 
 logger = logging.getLogger(__name__)
 
@@ -375,6 +375,14 @@ class RCloneProviderSchema(BaseModel):
 
         return None
 
+    def check_unsafe_option(self, name: str) -> None:
+        """Check that the option is safe."""
+        if self.prefix != "sftp":
+            return None
+        if name in BANNED_SFTP_OPTIONS:
+            raise errors.ValidationError(message=f"The {name} option is not allowed.")
+        return None
+
     def validate_config(
         self, configuration: Union["RCloneConfig", dict[str, Any]], keep_sensitive: bool = False
     ) -> None:
@@ -399,6 +407,8 @@ class RCloneProviderSchema(BaseModel):
             raise errors.ValidationError(message=f"The following fields are required but missing:\n{missing_str}")
 
         for key in keys:
+            self.check_unsafe_option(key)
+
             value = configuration[key]
 
             option: RCloneOption | None = self.get_option_for_provider(key, provider)

@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass, field
 from enum import Enum
 from io import StringIO
-from typing import Any, ClassVar, Optional, Self, Union
+from typing import Any, ClassVar, Self, Union
 from urllib.parse import urlunparse
 
 import yaml
@@ -100,16 +100,18 @@ class _GitConfig:
     registry: str
 
     @classmethod
-    def from_env(cls) -> Self:
-        return cls(os.environ["NB_GIT__URL"], os.environ["NB_GIT__REGISTRY"])
+    def from_env(cls, enable_internal_gitlab: bool = True) -> Self:
+        if enable_internal_gitlab:
+            return cls(os.environ["NB_GIT__URL"], os.environ["NB_GIT__REGISTRY"])
+        return cls("", "")
 
 
 @dataclass
 class _GitProxyConfig:
     renku_client_secret: str = field(repr=False)
     sentry: _SentryConfig = field(default_factory=_SentryConfig.from_env)
-    port: int = 8080
-    health_port: int = 8081
+    port: int = 65480
+    health_port: int = 65481
     image: str = f"renku/git-https-proxy:{latest_version}"
     renku_client_id: str = "renku"
 
@@ -119,8 +121,8 @@ class _GitProxyConfig:
             renku_client_secret=os.environ["NB_SESSIONS__GIT_PROXY__RENKU_CLIENT_SECRET"],
             renku_client_id=os.environ.get("NB_SESSIONS__GIT_PROXY__RENKU_CLIENT_ID", "renku"),
             sentry=_SentryConfig.from_env(prefix="NB_SESSIONS__GIT_PROXY__"),
-            port=_parse_value_as_int(os.environ.get("NB_SESSIONS__GIT_PROXY__PORT", 8080)),
-            health_port=_parse_value_as_int(os.environ.get("NB_SESSIONS__GIT_PROXY__HEALTH_PORT", 8081)),
+            port=_parse_value_as_int(os.environ.get("NB_SESSIONS__GIT_PROXY__PORT", 65480)),
+            health_port=_parse_value_as_int(os.environ.get("NB_SESSIONS__GIT_PROXY__HEALTH_PORT", 65481)),
             image=os.environ.get("NB_SESSIONS__GIT_PROXY__IMAGE", f"renku/git-https-proxy:{latest_version}"),
         )
 
@@ -253,14 +255,14 @@ class _AmaltheaV2Config:
 @dataclass
 class _SessionIngress:
     host: str
-    tls_secret: Optional[str] = None
+    tls_secret: str | None = None
     annotations: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def from_env(cls) -> Self:
         return cls(
             host=os.environ["NB_SESSIONS__INGRESS__HOST"],
-            tls_secret=os.environ.get("NB_SESSIONS__INGRESS__TLS_SECRET", None),
+            tls_secret=os.environ["NB_SESSIONS__INGRESS__TLS_SECRET"],
             annotations=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__INGRESS__ANNOTATIONS", "{}"))),
         )
 
@@ -430,7 +432,7 @@ class _SessionConfig:
             git_proxy=_GitProxyConfig(renku_client_secret="not-defined"),  # nosec B106
             git_rpc_server=_GitRpcServerConfig.from_env(),
             git_clone=_GitCloneConfig.from_env(),
-            ingress=_SessionIngress(host="localhost"),
+            ingress=_SessionIngress(host="localhost", tls_secret="some-secret"),  # nosec: B106
             ca_certs=_CustomCaCertsConfig.from_env(),
             oidc=_SessionOidcConfig(
                 client_id="not-defined",

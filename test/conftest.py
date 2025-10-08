@@ -219,6 +219,7 @@ async def app_manager(
     monkeysession.setenv("MAX_PINNED_PROJECTS", "5")
     monkeysession.setenv("NB_SERVER_OPTIONS__DEFAULTS_PATH", "server_defaults.json")
     monkeysession.setenv("NB_SERVER_OPTIONS__UI_CHOICES_PATH", "server_options.json")
+    monkeysession.setenv("V1_SESSIONS_ENABLED", "true")
 
     dm = TestDependencyManager.from_env(dummy_users)
 

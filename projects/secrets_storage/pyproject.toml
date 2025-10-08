@@ -25,7 +25,6 @@ packages = [
   { include = "renku_data_services/errors", from = "../../components" },
   { include = "renku_data_services/git", from = "../../components" },
   { include = "renku_data_services/k8s", from = "../../components" },
-  { include = "renku_data_services/k8s_watcher", from = "../../components" },
   { include = "renku_data_services/message_queue", from = "../../components" },
   { include = "renku_data_services/migrations", from = "../../components" },
   { include = "renku_data_services/namespace", from = "../../components" },
@@ -56,6 +55,7 @@ pyjwt = { extras = ["crypto"], version = "^2.10.1" }
 tenacity = "^9.0.0"
 httpx = "<0.29"
 kubernetes = "^31.0.0"
+kubernetes-asyncio = "^32.0.0"
 python-ulid = "^3.0.0"
 python-gitlab = "^5.6.0"
 psycopg = { version = "^3.2.3", extras = ["binary"] }
@@ -69,7 +69,7 @@ cryptography = "^44.0.1"
 authzed = "^1.20.0"
 # see https://github.com/sanic-org/sanic/issues/2828 for setuptools dependency, remove when not needed anymore
 setuptools = { version = "^75.8.2" }
-aiofile = "^3.9.0"
+aiofiles = "^24.1.0"
 # Not a direct dependency, it is needed by authzed. Was causing things to crash at startup beacuse of
 # google.protobuf.runtime_version.VersionError:
 # Detected incompatible Protobuf Gencode/Runtime versions when loading authzed/api/v1/core.proto: gencode 5.28.2 runtime 5.27.3.

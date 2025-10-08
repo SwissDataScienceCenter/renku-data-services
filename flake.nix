@@ -119,11 +119,17 @@
           SOLR_BIN_PATH = "${devshellToolsPkgs.solr}/bin/solr";
 
           shellHook = ''
+            PYENV_PATH=$(poetry env info --path)
             export FLAKE_ROOT="$(git rev-parse --show-toplevel)"
-            export PATH="$FLAKE_ROOT/.venv/bin:$PATH"
+            export PATH="$PYENV_PATH/bin:$PATH"
             export ALEMBIC_CONFIG="$FLAKE_ROOT/components/renku_data_services/migrations/alembic.ini"
             export NB_SERVER_OPTIONS__DEFAULTS_PATH="$FLAKE_ROOT/server_defaults.json"
             export NB_SERVER_OPTIONS__UI_CHOICES_PATH="$FLAKE_ROOT/server_options.json"
+            export ENCRYPTION_KEY_PATH="$FLAKE_ROOT/.encryption_key"
+
+            if [ ! -e "$FLAKE_ROOT/.encryption_key" ]; then
+              head -c30 /dev/random > "$FLAKE_ROOT/.encryption_key"
+            fi
           '';
         };
 
@@ -143,6 +149,8 @@
         python313
         basedpyright
         rclone-sdsc
+        azure-cli
+        k3d
         (
           writeShellScriptBin "pg" ''
             psql -h $DB_HOST -p $DB_PORT -U dev $DB_NAME
@@ -171,6 +179,11 @@
         (
           writeShellScriptBin "zedl" ''
             ${spicedb-zed}/bin/zed --no-verify-ca --insecure --endpoint ''$ZED_ENDPOINT --token ''$ZED_TOKEN $@
+          ''
+        )
+        (
+          writeShellScriptBin "ptest" ''
+            pytest --disable-warnings --no-cov -s -p no:warnings $@
           ''
         )
       ];
@@ -225,8 +238,9 @@
               ];
 
             shellHook = ''
+              PYENV_PATH=$(poetry env info --path)
               export FLAKE_ROOT="$(git rev-parse --show-toplevel)"
-              export PATH="$FLAKE_ROOT/.venv/bin:$PATH"
+              export PATH="$PYENV_PATH/bin:$PATH"
             '';
           });
         vm = pkgs.mkShell (devSettings

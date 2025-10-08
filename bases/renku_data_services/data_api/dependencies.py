@@ -1,5 +1,7 @@
 """Dependency management for data api."""
 
+from __future__ import annotations
+
 import functools
 import os
 from dataclasses import dataclass, field
@@ -7,7 +9,6 @@ from pathlib import Path
 from typing import Any
 
 from authlib.integrations.httpx_client import AsyncOAuth2Client
-from jwt import PyJWKClient
 from yaml import safe_load
 
 import renku_data_services.base_models as base_models
@@ -19,9 +20,8 @@ import renku_data_services.repositories
 import renku_data_services.search
 import renku_data_services.storage
 import renku_data_services.users
-from renku_data_services import errors
 from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
-from renku_data_services.authn.gitlab import GitlabAuthenticator
+from renku_data_services.authn.gitlab import EmptyGitlabAuthenticator, GitlabAuthenticator
 from renku_data_services.authn.keycloak import KcUserStore, KeycloakAuthenticator
 from renku_data_services.authz.authz import Authz
 from renku_data_services.connected_services.db import ConnectedServicesRepository
@@ -37,7 +37,7 @@ from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
     DataConnectorSecretRepository,
 )
-from renku_data_services.git.gitlab import DummyGitlabAPI, GitlabAPI
+from renku_data_services.git.gitlab import DummyGitlabAPI, EmptyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.clients import (
     DummyCoreClient,
     DummySchedulingClient,
@@ -46,15 +46,15 @@ from renku_data_services.k8s.clients import (
     K8sSchedulingClient,
 )
 from renku_data_services.k8s.config import KubeConfigEnv
-from renku_data_services.k8s.quota import QuotaRepository
-from renku_data_services.k8s_watcher import K8sDbCache
+from renku_data_services.k8s.db import K8sDbCache, QuotaRepository
 from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.metrics.core import StagingMetricsService
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
-from renku_data_services.notebooks.config import get_clusters
+from renku_data_services.notebooks.api.classes.data_service import DummyGitProviderHelper, GitProviderHelper
+from renku_data_services.notebooks.config import GitProviderHelperProto, get_clusters
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
-from renku_data_services.platform.db import PlatformRepository
+from renku_data_services.platform.db import PlatformRepository, UrlRedirectRepository
 from renku_data_services.project.db import (
     ProjectMemberRepository,
     ProjectMigrationRepository,
@@ -75,7 +75,7 @@ from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
 from renku_data_services.users.models import UnsavedUserInfo
-from renku_data_services.utils.core import merge_api_specs, oidc_discovery
+from renku_data_services.utils.core import merge_api_specs
 
 default_resource_pool = crc_models.ResourcePool(
     name="default",
@@ -141,6 +141,8 @@ class DependencyManager:
     metrics_repo: MetricsRepository
     metrics: StagingMetricsService
     shipwright_client: ShipwrightClient | None
+    url_redirect_repo: UrlRedirectRepository
+    git_provider_helper: GitProviderHelperProto
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
@@ -203,7 +205,7 @@ class DependencyManager:
             self.default_resource_pool = generate_default_resource_pool(options, defaults)
 
     @classmethod
-    def from_env(cls) -> "DependencyManager":
+    def from_env(cls) -> DependencyManager:
         """Create a config from environment variables."""
 
         user_store: base_models.UserStore
@@ -215,6 +217,12 @@ class DependencyManager:
         config = Config.from_env()
         kc_api: IKeycloakAPI
         cluster_repo = ClusterRepository(session_maker=config.db.async_session_maker)
+
+        connected_services_repo = ConnectedServicesRepository(
+            session_maker=config.db.async_session_maker,
+            encryption_key=config.secrets.encryption_key,
+            async_oauth2_client_class=cls.async_oauth2_client_class,
+        )
 
         if config.dummy_stores:
             authenticator = DummyAuthenticator()
@@ -230,24 +238,21 @@ class DependencyManager:
                 UnsavedUserInfo(id="user2", first_name="user2", last_name="doe", email="user2@doe.com"),
             ]
             kc_api = DummyKeycloakAPI(users=[i.to_keycloak_dict() for i in dummy_users])
+            git_provider_helper: GitProviderHelperProto = DummyGitProviderHelper()
         else:
+            git_provider_helper = GitProviderHelper.create(connected_services_repo, config.enable_internal_gitlab)
             quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=config.k8s_namespace)
             assert config.keycloak is not None
-            oidc_disc_data = oidc_discovery(config.keycloak.url, config.keycloak.realm)
-            jwks_url = oidc_disc_data.get("jwks_uri")
-            if jwks_url is None:
-                raise errors.ConfigurationError(
-                    message="The JWKS url for Keycloak cannot be found from the OIDC discovery endpoint."
-                )
-            jwks = PyJWKClient(jwks_url)
-            if config.keycloak.algorithms is None:
-                raise errors.ConfigurationError(message="At least one token signature algorithm is required.")
 
-            authenticator = KeycloakAuthenticator(jwks=jwks, algorithms=config.keycloak.algorithms)
-            assert config.gitlab_url is not None
-            gitlab_authenticator = GitlabAuthenticator(gitlab_url=config.gitlab_url)
+            authenticator = KeycloakAuthenticator.new(config.keycloak)
+            if config.enable_internal_gitlab:
+                assert config.gitlab_url
+                gitlab_authenticator = GitlabAuthenticator(gitlab_url=config.gitlab_url)
+                gitlab_client = GitlabAPI(gitlab_url=config.gitlab_url)
+            else:
+                gitlab_authenticator = EmptyGitlabAuthenticator()
+                gitlab_client = EmptyGitlabAPI()
             user_store = KcUserStore(keycloak_url=config.keycloak.url, realm=config.keycloak.realm)
-            gitlab_client = GitlabAPI(gitlab_url=config.gitlab_url)
             kc_api = KeycloakAPI(
                 keycloak_url=config.keycloak.url,
                 client_id=config.keycloak.client_id,
@@ -255,22 +260,18 @@ class DependencyManager:
                 realm=config.keycloak.realm,
             )
             if config.builds.enabled:
-                # NOTE: we need to get an async client as a sync client can't be used in an async way
-                # But all the config code is not async, so we need to drop into the running loop, if there is one
-                kr8s_api = KubeConfigEnv().api()
                 k8s_db_cache = K8sDbCache(config.db.async_session_maker)
-                client = K8sClusterClientsPool(
-                    get_clusters=get_clusters(
-                        kube_conf_root_dir=config.k8s_config_root,
-                        namespace=config.k8s_namespace,
-                        api=kr8s_api,
-                        cluster_rp=cluster_repo,
-                    ),
-                    cache=k8s_db_cache,
-                    kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
-                )
+                default_kubeconfig = KubeConfigEnv()
                 shipwright_client = ShipwrightClient(
-                    client=client,
+                    client=K8sClusterClientsPool(
+                        get_clusters(
+                            kube_conf_root_dir=config.k8s_config_root,
+                            default_kubeconfig=default_kubeconfig,
+                            cluster_repo=cluster_repo,
+                            cache=k8s_db_cache,
+                            kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
+                        ),
+                    ),
                     namespace=config.k8s_namespace,
                 )
 
@@ -344,20 +345,16 @@ class DependencyManager:
             user_repo=kc_user_repo,
             secret_service_public_key=config.secrets.public_key,
         )
-        connected_services_repo = ConnectedServicesRepository(
-            session_maker=config.db.async_session_maker,
-            encryption_key=config.secrets.encryption_key,
-            async_oauth2_client_class=cls.async_oauth2_client_class,
-            internal_gitlab_url=config.gitlab_url,
-        )
         git_repositories_repo = GitRepositoriesRepository(
             session_maker=config.db.async_session_maker,
             connected_services_repo=connected_services_repo,
             internal_gitlab_url=config.gitlab_url,
+            enable_internal_gitlab=config.enable_internal_gitlab,
         )
         platform_repo = PlatformRepository(
             session_maker=config.db.async_session_maker,
         )
+        url_redirect_repo = UrlRedirectRepository(session_maker=config.db.async_session_maker, authz=authz)
         data_connector_repo = DataConnectorRepository(
             session_maker=config.db.async_session_maker,
             authz=authz,
@@ -417,4 +414,6 @@ class DependencyManager:
             shipwright_client=shipwright_client,
             authz=authz,
             low_level_user_secrets_repo=low_level_user_secrets_repo,
+            url_redirect_repo=url_redirect_repo,
+            git_provider_helper=git_provider_helper,
         )

@@ -1,67 +1,95 @@
 """Required interfaces for k8s clients."""
 
-from abc import ABC, abstractmethod
-from typing import Any
+from __future__ import annotations
+
+from collections.abc import AsyncIterable
+from typing import Any, Protocol
+
+from kubernetes_asyncio.client import V1DeleteOptions, V1PriorityClass, V1ResourceQuota
+
+from renku_data_services.k8s.models import K8sObject, K8sObjectFilter, K8sObjectMeta, K8sSecret
 
 
-class K8sCoreClientInterface(ABC):
-    """Defines what functionality is required for the core k8s client."""
+class ResourceQuotaClient(Protocol):
+    """Methods to manipulate ResourceQuota kubernetes resources."""
 
-    @abstractmethod
-    def read_namespaced_resource_quota(self, name: Any, namespace: Any, **kwargs: Any) -> Any:
-        """Get a resource quota."""
-        ...
-
-    @abstractmethod
-    def list_namespaced_resource_quota(self, namespace: Any, **kwargs: Any) -> Any:
+    def list_resource_quota(self, namespace: str, label_selector: str) -> list[V1ResourceQuota]:
         """List resource quotas."""
         ...
 
-    @abstractmethod
-    def create_namespaced_resource_quota(self, namespace: Any, body: Any, **kwargs: Any) -> Any:
+    def read_resource_quota(self, name: str, namespace: str) -> V1ResourceQuota:
+        """Get a resource quota."""
+        ...
+
+    def create_resource_quota(self, namespace: str, body: V1ResourceQuota) -> None:
         """Create a resource quota."""
         ...
 
-    @abstractmethod
-    def delete_namespaced_resource_quota(self, name: Any, namespace: Any, **kwargs: Any) -> Any:
+    def delete_resource_quota(self, name: str, namespace: str) -> None:
         """Delete a resource quota."""
         ...
 
-    @abstractmethod
-    def patch_namespaced_resource_quota(self, name: Any, namespace: Any, body: Any, **kwargs: Any) -> Any:
+    def patch_resource_quota(self, name: str, namespace: str, body: V1ResourceQuota) -> None:
         """Update a resource quota."""
         ...
 
-    @abstractmethod
-    def delete_namespaced_secret(self, name: Any, namespace: Any, **kwargs: Any) -> Any:
-        """Delete a secret."""
-        ...
 
-    @abstractmethod
-    def create_namespaced_secret(self, namespace: Any, body: Any, **kwargs: Any) -> Any:
+class SecretClient(Protocol):
+    """Methods to manipulate Secret kubernetes resources."""
+
+    async def create_secret(self, secret: K8sSecret) -> K8sSecret:
         """Create a secret."""
         ...
 
-    @abstractmethod
-    def patch_namespaced_secret(self, name: Any, namespace: Any, body: Any, **kwargs: Any) -> Any:
+    async def patch_secret(self, secret: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
         """Patch an existing secret."""
         ...
 
+    async def delete_secret(self, secret: K8sObjectMeta) -> None:
+        """Delete a secret."""
+        ...
 
-class K8sSchedudlingClientInterface(ABC):
-    """Defines what functionality is required for the scheduling k8s client."""
 
-    @abstractmethod
-    def create_priority_class(self, body: Any, **kwargs: Any) -> Any:
+class PriorityClassClient(Protocol):
+    """Methods to manipulate kubernetes Priority Class resources."""
+
+    def create_priority_class(self, body: V1PriorityClass) -> V1PriorityClass:
         """Create a priority class."""
         ...
 
-    @abstractmethod
-    def delete_priority_class(self, name: Any, **kwargs: Any) -> Any:
+    def read_priority_class(self, name: str) -> V1PriorityClass | None:
+        """Retrieve a priority class."""
+        ...
+
+    def delete_priority_class(self, name: str, body: V1DeleteOptions) -> None:
         """Delete a priority class."""
         ...
 
-    @abstractmethod
-    def get_priority_class(self, name: Any, **kwargs: Any) -> Any:
-        """Retrieve a priority class."""
+
+class K8sClient(Protocol):
+    """Methods to manipulate resources on a Kubernetes cluster."""
+
+    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject:
+        """Create the k8s object."""
+        ...
+
+    async def patch(self, meta: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
+        """Patch a k8s object.
+
+        If the patch is a list we assume that we have a rfc6902 json patch like
+        `[{ "op": "add", "path": "/a/b/c", "value": [ "foo", "bar" ] }]`.
+        If the patch is a dictionary then it is considered to be a rfc7386 json merge patch.
+        """
+        ...
+
+    async def delete(self, meta: K8sObjectMeta) -> None:
+        """Delete a k8s object."""
+        ...
+
+    async def get(self, meta: K8sObjectMeta) -> K8sObject | None:
+        """Get a specific k8s object, None is returned if the object does not exist."""
+        ...
+
+    def list(self, _filter: K8sObjectFilter) -> AsyncIterable[K8sObject]:
+        """List all k8s objects."""
         ...

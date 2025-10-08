@@ -1,5 +1,6 @@
 """Notebooks service core implementation, specifically for JupyterServer sessions."""
 
+import contextlib
 import json as json_lib
 from datetime import UTC, datetime
 from math import floor
@@ -29,7 +30,7 @@ from renku_data_services.notebooks.api.schemas.secrets import K8sUserSecrets
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
 from renku_data_services.notebooks.api.schemas.servers_get import NotebookResponse
 from renku_data_services.notebooks.api.schemas.servers_patch import PatchServerStatusEnum
-from renku_data_services.notebooks.config import NotebooksConfig
+from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
 from renku_data_services.notebooks.constants import JUPYTER_SESSION_GVK
 from renku_data_services.notebooks.errors import intermittent
 from renku_data_services.notebooks.errors import user as user_errors
@@ -331,6 +332,7 @@ async def launch_notebook_helper(
     internal_gitlab_user: APIUser,
     user_repo: UserRepo,
     storage_repo: StorageRepository,
+    git_provider_helper: GitProviderHelperProto,
 ) -> tuple[UserServerManifest, int]:
     """Helper function to launch a Jupyter server."""
 
@@ -338,6 +340,9 @@ async def launch_notebook_helper(
 
     if server:
         return UserServerManifest(server, nb_config.sessions.default_image, nb_config.sessions.storage.pvs_enabled), 200
+
+    if not nb_config.v1_sessions_enabled:
+        raise errors.ForbiddenError(message="Starting v1 sessions is not allowed.")
 
     gl_project_path = gl_project_path if gl_project_path is not None else ""
 
@@ -394,17 +399,15 @@ async def launch_notebook_helper(
 
     host = nb_config.sessions.ingress.host
     parsed_server_options: ServerOptions | None = None
+    session_namespace = nb_config.k8s.renku_namespace
     if resource_class_id is not None:
         # A resource class ID was passed in, validate with CRC service
         parsed_server_options = await nb_config.crc_validator.validate_class_storage(user, resource_class_id, storage)
-        k8s_cluster = await nb_config.k8s_client.cluster_by_class_id(resource_class_id, user)
-        if (
-            p := await k8s_cluster.get_ingress_parameters(
-                user, nb_config.cluster_rp, nb_config.sessions.ingress, server_name
-            )
-        ) is not None:
-            (_, _, _, ingress_host, _, _) = p
-            host = ingress_host
+        cluster = await nb_config.k8s_client.cluster_by_class_id(resource_class_id, user)
+        session_namespace = cluster.namespace
+        with contextlib.suppress(errors.MissingResourceError):
+            (_, _, _, host, _, _) = (await nb_config.cluster_rp.select(cluster.id)).get_ingress_parameters(server_name)
+
     elif server_options is not None:
         if isinstance(server_options, dict):
             requested_server_options = ServerOptions(
@@ -516,6 +519,8 @@ async def launch_notebook_helper(
         repositories=[Repository.from_dict(r.model_dump()) for r in repositories],
         config=nb_config,
         host=host,
+        namespace=session_namespace,
+        git_provider_helper=git_provider_helper,
         **extra_kwargs,
     )
 
@@ -591,6 +596,7 @@ async def launch_notebook(
     launch_request: apispec.LaunchNotebookRequestOld,
     user_repo: UserRepo,
     storage_repo: StorageRepository,
+    git_provider_helper: GitProviderHelperProto,
 ) -> tuple[UserServerManifest, int]:
     """Starts a server using the old operator."""
 
@@ -606,7 +612,7 @@ async def launch_notebook(
         launch_request.project,
         launch_request.branch,
         launch_request.commit_sha,
-        cluster.id,
+        str(cluster.id),
     )
     project_slug = f"{launch_request.namespace}/{launch_request.project}"
     gitlab_client = NotebooksGitlabClient(config.git.url, internal_gitlab_user.access_token)
@@ -649,6 +655,7 @@ async def launch_notebook(
         internal_gitlab_user=internal_gitlab_user,
         user_repo=user_repo,
         storage_repo=storage_repo,
+        git_provider_helper=git_provider_helper,
     )
 
 

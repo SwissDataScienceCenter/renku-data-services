@@ -391,6 +391,10 @@ components:
           $ref: "#/components/schemas/EnvironmentArgs"
         is_archived:
           $ref: "#/components/schemas/IsArchived"
+        strip_path_prefix:
+          allOf:
+            - $ref: "#/components/schemas/StripPathPrefix"
+          default: false
       required:
         - id
         - name
@@ -498,6 +502,10 @@ components:
           default: false
         environment_image_source:
           $ref: "#/components/schemas/EnvironmentImageSourceImage"
+        strip_path_prefix:
+          allOf:
+            - $ref: "#/components/schemas/StripPathPrefix"
+          default: false
       required:
         - name
         - container_image
@@ -542,6 +550,8 @@ components:
           $ref: "#/components/schemas/EnvironmentArgs"
         is_archived:
           $ref: "#/components/schemas/IsArchived"
+        strip_path_prefix:
+          $ref: "#/components/schemas/StripPathPrefix"
     SessionLaunchersList:
       description: A list of Renku session launchers
       type: array
@@ -895,6 +905,22 @@ components:
       type: array
       items:
         $ref: "#/components/schemas/Build"
+    StripPathPrefix:
+      type: boolean
+      default: false
+      description: |-
+        If set to true the default url and the base path where sessions are
+        served will be removed from all URL paths before the requests reach
+        the server running in the session. So the server in the session will
+        receive HTTP requests whose base path will be "/". However this will
+        not work unless the server running inside the session can be made
+        aware that paths are rewritten. For example, if the application/server
+        running in the session serves a HTML page that then loads javascript
+        and CSS, the path where these assets should be loaded from in the browser
+        will not be "/" but it has to include the prefix that was stripped. And
+        the server from the session that generated the HTML page needs to know
+        what is the full base path (including the part that was stripped) so that
+        it can make the URLs to such assets be reachable from the browser.
     BuildPatch:
       description: The requested update of a container image build
       type: object

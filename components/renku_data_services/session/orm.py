@@ -80,6 +80,7 @@ class EnvironmentORM(BaseORM):
         default=None,
     )
     build_parameters: Mapped["BuildParametersORM"] = relationship(lazy="joined", default=None)
+    strip_path_prefix: Mapped[bool] = mapped_column(default=False, server_default=false(), nullable=False)
 
     def dump(self) -> models.Environment:
         """Create a session environment model from the EnvironmentORM."""
@@ -103,6 +104,7 @@ class EnvironmentORM(BaseORM):
             environment_image_source=self.environment_image_source,
             build_parameters=self.build_parameters.dump() if self.build_parameters else None,
             build_parameters_id=self.build_parameters_id,
+            strip_path_prefix=self.strip_path_prefix,
         )
 
 
@@ -216,8 +218,8 @@ class BuildParametersORM(BaseORM):
             repository=self.repository,
             builder_variant=self.builder_variant,
             frontend_variant=self.frontend_variant,
-            repository_revision=self.repository_revision,
-            context_dir=self.context_dir,
+            repository_revision=self.repository_revision or None,
+            context_dir=self.context_dir or None,
         )
 
 

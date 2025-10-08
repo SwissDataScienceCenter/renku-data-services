@@ -6,16 +6,14 @@ from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Optional, Protocol
+from typing import Any, Optional, Protocol, Self
 from uuid import uuid4
 
-from ulid import ULID
-
 from renku_data_services import errors
+from renku_data_services.base_models import RESET, ResetType
 from renku_data_services.errors import ValidationError
-
-if TYPE_CHECKING:
-    from renku_data_services.crc.apispec import Protocol as CrcApiProtocol
+from renku_data_services.k8s.constants import ClusterId
+from renku_data_services.notebooks.cr_amalthea_session import TlsSecret
 
 
 class ResourcesProtocol(Protocol):
@@ -188,13 +186,20 @@ class Quota(ResourcesCompareMixin):
         return rc <= self
 
 
+class SessionProtocol(StrEnum):
+    """Valid Session protocol values."""
+
+    HTTP = "http"
+    HTTPS = "https"
+
+
 @dataclass(frozen=True, eq=True, kw_only=True)
 class ClusterPatch:
     """K8s Cluster settings patch."""
 
     name: str | None
     config_name: str | None
-    session_protocol: CrcApiProtocol | None
+    session_protocol: SessionProtocol | None
     session_host: str | None
     session_port: int | None
     session_path: str | None
@@ -205,12 +210,12 @@ class ClusterPatch:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class Cluster:
+class ClusterSettings:
     """K8s Cluster settings."""
 
     name: str
     config_name: str
-    session_protocol: CrcApiProtocol
+    session_protocol: SessionProtocol
     session_host: str
     session_port: int
     session_path: str
@@ -235,12 +240,39 @@ class Cluster:
             service_account_name=self.service_account_name,
         )
 
+    def get_storage_class(self) -> str | None:
+        """Get the default storage class for the cluster."""
+
+        return self.session_storage_class
+
+    def get_ingress_parameters(self, server_name: str) -> tuple[str, str, str, str, TlsSecret | None, dict[str, str]]:
+        """Returns the ingress parameters of the cluster."""
+
+        host = self.session_host
+        base_server_path = f"{self.session_path}/{server_name}"
+        if self.session_port in [80, 443]:
+            # No need to specify the port in these cases. If we specify the port on https or http
+            # when it is the usual port then the URL callbacks for authentication do not work.
+            # I.e. if the callback is registered as https://some.host/link it will not work when a redirect
+            # like https://some.host:443/link is used.
+            base_server_url = f"{self.session_protocol.value}://{host}{base_server_path}"
+        else:
+            base_server_url = f"{self.session_protocol.value}://{host}:{self.session_port}{base_server_path}"
+        base_server_https_url = base_server_url
+        ingress_annotations = self.session_ingress_annotations
+
+        tls_secret = (
+            None if self.session_tls_secret_name is None else TlsSecret(adopt=False, name=self.session_tls_secret_name)
+        )
+
+        return base_server_path, base_server_url, base_server_https_url, host, tls_secret, ingress_annotations
+
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class SavedCluster(Cluster):
-    """K8s Cluster settings from the DB."""
+class SavedClusterSettings(ClusterSettings):
+    """Saved K8s Cluster settings."""
 
-    id: ULID
+    id: ClusterId
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -255,7 +287,8 @@ class ResourcePool:
     hibernation_threshold: int | None = None
     default: bool = False
     public: bool = False
-    cluster: SavedCluster | None = None
+    remote: RemoteConfigurationFirecrest | None = None
+    cluster: SavedClusterSettings | None = None
 
     def __post_init__(self) -> None:
         """Validate the resource pool after initialization."""
@@ -265,6 +298,10 @@ class ResourcePool:
             raise ValidationError(message="The default resource pool has to be public.")
         if self.default and self.quota is not None:
             raise ValidationError(message="A default resource pool cannot have a quota.")
+        if self.remote and self.default:
+            raise ValidationError(message="The default resource pool cannot start remote sessions.")
+        if self.remote and self.public:
+            raise ValidationError(message="A resource pool which starts remote sessions cannot be public.")
         if (self.idle_threshold and self.idle_threshold < 0) or (
             self.hibernation_threshold and self.hibernation_threshold < 0
         ):
@@ -299,14 +336,21 @@ class ResourcePool:
         """Determine if an update to a resource pool is valid and if valid create new updated resource pool."""
         if self.default and "default" in kwargs and not kwargs["default"]:
             raise ValidationError(message="A default resource pool cannot be made non-default.")
+        if "remote" in kwargs and kwargs["remote"] is RESET:
+            kwargs["remote"] = None
+        if "remote" in kwargs and isinstance(kwargs["remote"], RemoteConfigurationFirecrestPatch):
+            remote_dict: dict[str, Any] = self.remote.to_dict() if self.remote else dict()
+            remote_dict.update(kwargs["remote"].to_dict())
+            kwargs["remote"] = remote_dict
         return ResourcePool.from_dict({**asdict(self), **kwargs})
 
     @classmethod
     def from_dict(cls, data: dict) -> ResourcePool:
         """Create the model from a plain dictionary."""
-        cluster: SavedCluster | None = None
+        cluster: SavedClusterSettings | None = None
         quota: Quota | None = None
         classes: list[ResourceClass] = []
+        remote: RemoteConfigurationFirecrest | None = None
 
         if "quota" in data and isinstance(data["quota"], dict):
             quota = Quota.from_dict(data["quota"])
@@ -319,11 +363,11 @@ class ResourcePool:
             classes = [ResourceClass.from_dict(c) if isinstance(c, dict) else c for c in data["classes"]]
 
         match tmp := data.get("cluster"):
-            case SavedCluster():
+            case SavedClusterSettings():
                 # This has to be before the dict() case, as this is also an instance of dict.
                 cluster = tmp
             case dict():
-                cluster = SavedCluster(
+                cluster = SavedClusterSettings(
                     name=tmp["name"],
                     config_name=tmp["config_name"],
                     session_protocol=tmp["session_protocol"],
@@ -341,6 +385,16 @@ class ResourcePool:
             case unknown:
                 raise errors.ValidationError(message=f"Got unexpected cluster data {unknown} when creating model")
 
+        match tmp := data.get("remote"):
+            case RemoteConfigurationFirecrest():
+                remote = tmp
+            case dict():
+                remote = RemoteConfigurationFirecrest.from_dict(tmp)
+            case None:
+                remote = None
+            case unknown:
+                raise errors.ValidationError(message=f"Got unexpected remote data {unknown} when creating model")
+
         return cls(
             name=data["name"],
             id=data.get("id"),
@@ -348,6 +402,7 @@ class ResourcePool:
             quota=quota,
             default=data.get("default", False),
             public=data.get("public", False),
+            remote=remote,
             idle_threshold=data.get("idle_threshold"),
             hibernation_threshold=data.get("hibernation_threshold"),
             cluster=cluster,
@@ -366,3 +421,61 @@ class ResourcePool:
             if rc.default:
                 return rc
         return None
+
+
+class RemoteConfigurationKind(StrEnum):
+    """Remote resource pool kinds."""
+
+    firecrest = "firecrest"
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class RemoteConfigurationFirecrest:
+    """Model for remote configurations using the FirecREST API."""
+
+    kind: RemoteConfigurationKind = RemoteConfigurationKind.firecrest
+    provider_id: str | None = None
+    api_url: str
+    system_name: str
+    partition: str | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Self:
+        """Convert a dict object into a RemoteConfiguration instance."""
+        kind = data.get("kind")
+        if kind == RemoteConfigurationKind.firecrest.value:
+            return cls(
+                kind=RemoteConfigurationKind.firecrest,
+                provider_id=data.get("provider_id") or None,
+                api_url=data["api_url"],
+                system_name=data["system_name"],
+                partition=data.get("partition") or None,
+            )
+        raise errors.ValidationError(message=f"Invalid kind for remote configuration: '{kind}'")
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert this instance of RemoteConfiguration into a dictionary."""
+        res = asdict(self)
+        res["kind"] = self.kind.value
+        return res
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class RemoteConfigurationFirecrestPatch:
+    """Model for remote configurations using the FirecREST API."""
+
+    kind: RemoteConfigurationKind | None = None
+    provider_id: str | None = None
+    api_url: str | None = None
+    system_name: str | None = None
+    partition: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert this instance of RemoteConfigurationPatch into a dictionary."""
+        res = asdict(self)
+        if self.kind:
+            res["kind"] = self.kind.value
+        return res
+
+
+RemoteConfigurationPatch = ResetType | RemoteConfigurationFirecrestPatch

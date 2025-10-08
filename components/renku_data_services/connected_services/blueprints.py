@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import unquote, urlparse, urlunparse
 
-from sanic import HTTPResponse, Request, json, redirect
+from sanic import HTTPResponse, Request, empty, json, redirect
 from sanic.response import JSONResponse
 from sanic_ext import validate
 from ulid import ULID
@@ -18,7 +18,7 @@ from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
 from renku_data_services.connected_services import apispec
 from renku_data_services.connected_services.apispec_base import AuthorizeParams, CallbackParams
-from renku_data_services.connected_services.core import validate_oauth2_client_patch
+from renku_data_services.connected_services.core import validate_oauth2_client_patch, validate_unsaved_oauth2_client
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 
 logger = logging.getLogger(__name__)
@@ -59,7 +59,8 @@ class OAuth2ClientsBP(CustomBlueprint):
         @only_admins
         @validate(json=apispec.ProviderPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.ProviderPost) -> JSONResponse:
-            client = await self.connected_services_repo.insert_oauth2_client(user=user, new_client=body)
+            new_client = validate_unsaved_oauth2_client(body)
+            client = await self.connected_services_repo.insert_oauth2_client(user=user, new_client=new_client)
             return validated_json(apispec.Provider, client, 201)
 
         return "/oauth2/providers", ["POST"], _post
@@ -144,7 +145,6 @@ class OAuth2ConnectionsBP(CustomBlueprint):
 
     connected_services_repo: ConnectedServicesRepository
     authenticator: base_models.Authenticator
-    internal_gitlab_authenticator: base_models.Authenticator
 
     def get_all(self) -> BlueprintFactoryResponse:
         """List all OAuth2 connections."""
@@ -167,6 +167,17 @@ class OAuth2ConnectionsBP(CustomBlueprint):
             return validated_json(apispec.Connection, connection)
 
         return "/oauth2/connections/<connection_id:ulid>", ["GET"], _get_one
+
+    def delete(self) -> BlueprintFactoryResponse:
+        """Delete a specific OAuth2 connection."""
+
+        @authenticate(self.authenticator)
+        async def _delete_one(_: Request, user: base_models.APIUser, connection_id: ULID) -> HTTPResponse:
+            result = await self.connected_services_repo.delete_oauth2_connection(user, connection_id)
+
+            return empty(status=204 if result else 404)
+
+        return "/oauth2/connections/<connection_id:ulid>", ["DELETE"], _delete_one
 
     def get_account(self) -> BlueprintFactoryResponse:
         """Get the account information for a specific OAuth2 connection."""

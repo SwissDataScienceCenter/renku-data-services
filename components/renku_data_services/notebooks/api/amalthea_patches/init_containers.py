@@ -11,10 +11,20 @@ from typing import TYPE_CHECKING, Any
 from kubernetes import client
 
 from renku_data_services.base_models.core import AnonymousAPIUser, AuthenticatedAPIUser
-from renku_data_services.notebooks.api.amalthea_patches.utils import get_certificates_volume_mounts
+from renku_data_services.notebooks.api.amalthea_patches.utils import (
+    get_certificates_volume_mounts,
+    get_certificates_volume_mounts_unserialized,
+)
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.config import NotebooksConfig
-from renku_data_services.notebooks.crs import EmptyDir, ExtraVolume, ExtraVolumeMount, InitContainer, SecretAsVolume
+from renku_data_services.notebooks.crs import (
+    EmptyDir,
+    ExtraVolume,
+    ExtraVolumeMount,
+    InitContainer,
+    SecretAsVolume,
+)
+from renku_data_services.notebooks.models import SessionExtraResources
 from renku_data_services.project import constants as project_constants
 from renku_data_services.project.models import SessionSecret
 
@@ -92,6 +102,7 @@ async def git_clone_container_v2(
         },
     ]
     if user.is_authenticated:
+        env.append({"name": f"{prefix}GIT_PROXY_PORT", "value": str(config.sessions.git_proxy.port)})
         if user.email:
             env.append(
                 {"name": f"{prefix}USER__EMAIL", "value": user.email},
@@ -294,6 +305,16 @@ async def git_clone(server: UserServer) -> list[dict[str, Any]]:
     ]
 
 
+def certificates_volume_mounts(config: NotebooksConfig) -> list[ExtraVolumeMount]:
+    """Get the volume mounts for the CA certificates."""
+    return get_certificates_volume_mounts_unserialized(
+        config,
+        etc_certs=True,
+        custom_certs=True,
+        read_only_etc_certs=True,
+    )
+
+
 def certificates_container(config: NotebooksConfig) -> tuple[client.V1Container, list[client.V1Volume]]:
     """The specification for the container that setups self signed CAs."""
     init_container = client.V1Container(
@@ -401,14 +422,14 @@ def download_image(server: UserServer) -> list[dict[str, Any]]:
     ]
 
 
-def user_secrets_container(
+def user_secrets_extras(
     user: AuthenticatedAPIUser | AnonymousAPIUser,
     config: NotebooksConfig,
     secrets_mount_directory: str,
     k8s_secret_name: str,
     session_secrets: list[SessionSecret],
-) -> tuple[InitContainer, list[ExtraVolume], list[ExtraVolumeMount]] | None:
-    """The init container which decrypts user secrets to be mounted in the session."""
+) -> SessionExtraResources | None:
+    """The session extras which decrypts user secrets to be mounted in the session."""
     if not session_secrets or user.is_anonymous:
         return None
 
@@ -457,8 +478,8 @@ def user_secrets_container(
         )
     )
 
-    return (
-        init_container,
-        [volume_k8s_secrets, volume_decrypted_secrets],
-        [decrypted_volume_mount],
+    return SessionExtraResources(
+        init_containers=[init_container],
+        volumes=[volume_k8s_secrets, volume_decrypted_secrets],
+        volume_mounts=[decrypted_volume_mount],
     )

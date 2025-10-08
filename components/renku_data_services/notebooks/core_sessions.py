@@ -5,62 +5,91 @@ import json
 import os
 import random
 import string
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from datetime import timedelta
 from pathlib import PurePosixPath
-from typing import cast
+from typing import Protocol, TypeVar, cast
 from urllib.parse import urljoin, urlparse
 
 import httpx
 from kubernetes.client import V1ObjectMeta, V1Secret
 from sanic import Request
 from toml import dumps
+from ulid import ULID
 from yaml import safe_dump
 
+import renku_data_services.notebooks.image_check as ic
 from renku_data_services.app_config import logging
-from renku_data_services.base_models import APIUser
-from renku_data_services.base_models.core import AnonymousAPIUser, AuthenticatedAPIUser
+from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser
 from renku_data_services.base_models.metrics import MetricsService
-from renku_data_services.crc.db import ResourcePoolRepository
-from renku_data_services.crc.models import GpuKind, ResourceClass, ResourcePool
+from renku_data_services.connected_services.db import ConnectedServicesRepository
+from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
+from renku_data_services.crc.models import (
+    ClusterSettings,
+    GpuKind,
+    RemoteConfigurationFirecrest,
+    ResourceClass,
+    ResourcePool,
+)
+from renku_data_services.data_connectors.db import (
+    DataConnectorSecretRepository,
+)
 from renku_data_services.data_connectors.models import DataConnectorSecret, DataConnectorWithSecrets
 from renku_data_services.errors import errors
-from renku_data_services.notebooks import apispec
+from renku_data_services.k8s.models import K8sSecret, sanitizer
+from renku_data_services.notebooks import apispec, core
 from renku_data_services.notebooks.api.amalthea_patches import git_proxy, init_containers
+from renku_data_services.notebooks.api.amalthea_patches.init_containers import user_secrets_extras
 from renku_data_services.notebooks.api.classes.image import Image
-from renku_data_services.notebooks.api.classes.k8s_client import sanitizer
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
-from renku_data_services.notebooks.config import NotebooksConfig
+from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
 from renku_data_services.notebooks.crs import (
+    AmaltheaSessionSpec,
     AmaltheaSessionV1Alpha1,
+    AmaltheaSessionV1Alpha1MetadataPatch,
     AmaltheaSessionV1Alpha1Patch,
     AmaltheaSessionV1Alpha1SpecPatch,
     AmaltheaSessionV1Alpha1SpecSessionPatch,
+    Authentication,
+    AuthenticationType,
     Culling,
     DataSource,
     ExtraContainer,
     ExtraVolume,
     ExtraVolumeMount,
+    ImagePullPolicy,
     ImagePullSecret,
+    Ingress,
     InitContainer,
     Limits,
     LimitsStr,
+    Metadata,
+    ReconcileStrategy,
     Requests,
     RequestsStr,
     Resources,
     SecretAsVolume,
     SecretAsVolumeItem,
+    Session,
     SessionEnvItem,
+    SessionLocation,
+    ShmSizeStr,
+    SizeStr,
     State,
+    Storage,
 )
-from renku_data_services.notebooks.models import ExtraSecret
+from renku_data_services.notebooks.models import ExtraSecret, SessionExtraResources
+from renku_data_services.notebooks.util.kubernetes_ import (
+    renku_2_make_server_name,
+)
 from renku_data_services.notebooks.utils import (
     node_affinity_from_resource_class,
     tolerations_from_resource_class,
 )
-from renku_data_services.project.db import ProjectRepository
+from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
 from renku_data_services.project.models import Project, SessionSecret
+from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.models import SessionLauncher
 from renku_data_services.users.db import UserRepo
 from renku_data_services.utils.cryptography import get_encryption_key
@@ -77,8 +106,9 @@ async def get_extra_init_containers(
     work_dir: PurePosixPath,
     uid: int = 1000,
     gid: int = 1000,
-) -> tuple[list[InitContainer], list[ExtraVolume]]:
+) -> SessionExtraResources:
     """Get all extra init containers that should be added to an amalthea session."""
+    # TODO: The above statement is not correct: the init container for user secrets is not included here
     cert_init, cert_vols = init_containers.certificates_container(nb_config)
     session_init_containers = [InitContainer.model_validate(sanitizer(cert_init))]
     extra_volumes = [ExtraVolume.model_validate(sanitizer(volume)) for volume in cert_vols]
@@ -94,7 +124,10 @@ async def get_extra_init_containers(
     )
     if git_clone is not None:
         session_init_containers.append(InitContainer.model_validate(git_clone))
-    return session_init_containers, extra_volumes
+    return SessionExtraResources(
+        init_containers=session_init_containers,
+        volumes=extra_volumes,
+    )
 
 
 async def get_extra_containers(
@@ -102,7 +135,7 @@ async def get_extra_containers(
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     repositories: list[Repository],
     git_providers: list[GitProvider],
-) -> list[ExtraContainer]:
+) -> SessionExtraResources:
     """Get the extra containers added to amalthea sessions."""
     conts: list[ExtraContainer] = []
     git_proxy_container = await git_proxy.main_container(
@@ -110,7 +143,7 @@ async def get_extra_containers(
     )
     if git_proxy_container:
         conts.append(ExtraContainer.model_validate(sanitizer(git_proxy_container)))
-    return conts
+    return SessionExtraResources(containers=conts)
 
 
 async def get_auth_secret_authenticated(
@@ -159,7 +192,7 @@ async def get_auth_secret_authenticated(
     return ExtraSecret(secret, vol, vol_mount)
 
 
-async def get_auth_secret_anonymous(nb_config: NotebooksConfig, server_name: str, request: Request) -> ExtraSecret:
+def get_auth_secret_anonymous(nb_config: NotebooksConfig, server_name: str, request: Request) -> ExtraSecret:
     """Get the extra secrets that need to be added to the session for an anonymous user."""
     # NOTE: We extract the session cookie value here in order to avoid creating a cookie.
     # The gateway encrypts and signs cookies so the user ID injected in the request headers does not
@@ -186,7 +219,7 @@ async def get_auth_secret_anonymous(nb_config: NotebooksConfig, server_name: str
     return ExtraSecret(secret)
 
 
-def get_gitlab_image_pull_secret(
+def __get_gitlab_image_pull_secret(
     nb_config: NotebooksConfig, user: AuthenticatedAPIUser, image_pull_secret_name: str, access_token: str
 ) -> ExtraSecret:
     """Create a Kubernetes secret for private GitLab registry authentication."""
@@ -222,7 +255,7 @@ async def get_data_sources(
     work_dir: PurePosixPath,
     cloud_storage_overrides: list[apispec.SessionCloudStoragePost],
     user_repo: UserRepo,
-) -> tuple[list[DataSource], list[ExtraSecret], dict[str, list[DataConnectorSecret]]]:
+) -> SessionExtraResources:
     """Generate cloud storage related resources."""
     data_sources: list[DataSource] = []
     secrets: list[ExtraSecret] = []
@@ -258,7 +291,7 @@ async def get_data_sources(
         if csr_id not in dcs:
             raise errors.MissingResourceError(
                 message=f"You have requested a cloud storage with ID {csr_id} which does not exist "
-                "or you dont have access to."
+                "or you don't have access to."
             )
         if csr.target_path is not None and not PurePosixPath(csr.target_path).is_absolute():
             csr.target_path = (work_dir / csr.target_path).as_posix()
@@ -280,7 +313,7 @@ async def get_data_sources(
         secret = ExtraSecret(
             cs.secret(
                 secret_name,
-                nb_config.k8s_client.namespace(),
+                await nb_config.k8s_client.namespace(),
                 user_secret_key=user_secret_key if secret_key_needed else None,
             )
         )
@@ -292,7 +325,11 @@ async def get_data_sources(
                 accessMode="ReadOnlyMany" if cs.readonly else "ReadWriteOnce",
             )
         )
-    return data_sources, secrets, dcs_secrets
+    return SessionExtraResources(
+        data_sources=data_sources,
+        secrets=secrets,
+        data_connector_secrets=dcs_secrets,
+    )
 
 
 async def request_dc_secret_creation(
@@ -312,15 +349,23 @@ async def request_dc_secret_creation(
     }
     secrets_url = nb_config.user_secrets.secrets_storage_service_url + "/api/secrets/kubernetes"
     headers = {"Authorization": f"bearer {user.access_token}"}
+
+    cluster_id = None
+    namespace = await nb_config.k8s_v2_client.namespace()
+    if (cluster := await nb_config.k8s_v2_client.cluster_by_class_id(manifest.resource_class_id(), user)) is not None:
+        cluster_id = cluster.id
+        namespace = cluster.namespace
+
     for s_id, secrets in dc_secrets.items():
         if len(secrets) == 0:
             continue
         request_data = {
             "name": f"{manifest.metadata.name}-ds-{s_id.lower()}-secrets",
-            "namespace": nb_config.k8s_v2_client.namespace(),
+            "namespace": namespace,
             "secret_ids": [str(secret.secret_id) for secret in secrets],
             "owner_references": [owner_reference],
             "key_mapping": {str(secret.secret_id): secret.name for secret in secrets},
+            "cluster_id": str(cluster_id),
         }
         async with httpx.AsyncClient(timeout=10) as client:
             res = await client.post(secrets_url, headers=headers, json=request_data)
@@ -379,12 +424,20 @@ async def request_session_secret_creation(
         if secret_id not in key_mapping:
             key_mapping[secret_id] = list()
         key_mapping[secret_id].append(s.secret_slot.filename)
+
+    cluster_id = None
+    namespace = await nb_config.k8s_v2_client.namespace()
+    if (cluster := await nb_config.k8s_v2_client.cluster_by_class_id(manifest.resource_class_id(), user)) is not None:
+        cluster_id = cluster.id
+        namespace = cluster.namespace
+
     request_data = {
         "name": f"{manifest.metadata.name}-secrets",
-        "namespace": nb_config.k8s_v2_client.namespace(),
+        "namespace": namespace,
         "secret_ids": [str(s.secret_id) for s in session_secrets],
         "owner_references": [owner_reference],
         "key_mapping": key_mapping,
+        "cluster_id": str(cluster_id),
     }
     secrets_url = nb_config.user_secrets.secrets_storage_service_url + "/api/secrets/kubernetes"
     headers = {"Authorization": f"bearer {user.access_token}"}
@@ -465,7 +518,7 @@ def get_culling(
     )
 
 
-async def requires_image_pull_secret(nb_config: NotebooksConfig, image: str, internal_gitlab_user: APIUser) -> bool:
+async def __requires_image_pull_secret(nb_config: NotebooksConfig, image: str, internal_gitlab_user: APIUser) -> bool:
     """Determines if an image requires a pull secret based on its visibility and their GitLab access token."""
 
     parsed_image = Image.from_path(image)
@@ -484,14 +537,440 @@ async def requires_image_pull_secret(nb_config: NotebooksConfig, image: str, int
     return False
 
 
+def __format_image_pull_secret(secret_name: str, access_token: str, registry_domain: str) -> ExtraSecret:
+    registry_secret = {
+        "auths": {registry_domain: {"auth": base64.b64encode(f"oauth2:{access_token}".encode()).decode()}}
+    }
+    registry_secret = json.dumps(registry_secret)
+    registry_secret = base64.b64encode(registry_secret.encode()).decode()
+    return ExtraSecret(
+        V1Secret(
+            data={".dockerconfigjson": registry_secret},
+            metadata=V1ObjectMeta(name=secret_name),
+            type="kubernetes.io/dockerconfigjson",
+        )
+    )
+
+
+async def __get_connected_services_image_pull_secret(
+    secret_name: str, connected_svcs_repo: ConnectedServicesRepository, image: str, user: APIUser
+) -> ExtraSecret | None:
+    """Return a secret for accessing the image if one is available for the given user."""
+    image_parsed = Image.from_path(image)
+    image_check_result = await ic.check_image(image_parsed, user, connected_svcs_repo, None)
+    logger.debug(f"Set pull secret for {image} to connection {image_check_result.image_provider}")
+    if not image_check_result.token:
+        return None
+
+    if not image_check_result.image_provider:
+        return None
+
+    return __format_image_pull_secret(
+        secret_name=secret_name,
+        access_token=image_check_result.token,
+        registry_domain=image_check_result.image_provider.registry_url,
+    )
+
+
+async def get_image_pull_secret(
+    image: str,
+    server_name: str,
+    nb_config: NotebooksConfig,
+    user: APIUser,
+    internal_gitlab_user: APIUser,
+    connected_svcs_repo: ConnectedServicesRepository,
+) -> ExtraSecret | None:
+    """Get an image pull secret."""
+
+    v2_secret = await __get_connected_services_image_pull_secret(
+        f"{server_name}-image-secret", connected_svcs_repo, image, user
+    )
+    if v2_secret:
+        return v2_secret
+
+    if (
+        nb_config.enable_internal_gitlab
+        and isinstance(user, AuthenticatedAPIUser)
+        and internal_gitlab_user.access_token is not None
+    ):
+        needs_pull_secret = await __requires_image_pull_secret(nb_config, image, internal_gitlab_user)
+        if needs_pull_secret:
+            v1_secret = __get_gitlab_image_pull_secret(
+                nb_config, user, f"{server_name}-image-secret-v1", internal_gitlab_user.access_token
+            )
+            return v1_secret
+
+    return None
+
+
+def get_remote_secret(
+    user: AuthenticatedAPIUser | AnonymousAPIUser,
+    config: NotebooksConfig,
+    server_name: str,
+    remote_provider_id: str,
+    git_providers: list[GitProvider],
+) -> ExtraSecret | None:
+    """Returns the secret containing the configuration for the remote session controller."""
+    if not user.is_authenticated or user.access_token is None or user.refresh_token is None:
+        return None
+    remote_provider = next(filter(lambda p: p.id == remote_provider_id, git_providers), None)
+    if not remote_provider:
+        return None
+    renku_base_url = "https://" + config.sessions.ingress.host
+    renku_base_url = renku_base_url.rstrip("/")
+    renku_auth_token_uri = f"{renku_base_url}/auth/realms/{config.keycloak_realm}/protocol/openid-connect/token"
+    secret_data = {
+        "RSC_AUTH_KIND": "renku",
+        "RSC_AUTH_TOKEN_URI": remote_provider.access_token_url,
+        "RSC_AUTH_RENKU_ACCESS_TOKEN": user.access_token,
+        "RSC_AUTH_RENKU_REFRESH_TOKEN": user.refresh_token,
+        "RSC_AUTH_RENKU_TOKEN_URI": renku_auth_token_uri,
+        "RSC_AUTH_RENKU_CLIENT_ID": config.sessions.git_proxy.renku_client_id,
+        "RSC_AUTH_RENKU_CLIENT_SECRET": config.sessions.git_proxy.renku_client_secret,
+    }
+    secret_name = f"{server_name}-remote-secret"
+    secret = V1Secret(metadata=V1ObjectMeta(name=secret_name), string_data=secret_data)
+    return ExtraSecret(secret)
+
+
+def get_remote_env(
+    remote: RemoteConfigurationFirecrest,
+) -> list[SessionEnvItem]:
+    """Returns env variables used for remote sessions."""
+    env = [
+        SessionEnvItem(name="RSC_REMOTE_KIND", value=remote.kind.value),
+        SessionEnvItem(name="RSC_FIRECREST_API_URL", value=remote.api_url),
+        SessionEnvItem(name="RSC_FIRECREST_SYSTEM_NAME", value=remote.system_name),
+    ]
+    if remote.partition:
+        env.append(SessionEnvItem(name="RSC_FIRECREST_PARTITION", value=remote.partition))
+    return env
+
+
+async def start_session(
+    request: Request,
+    body: apispec.SessionPostRequest,
+    user: AnonymousAPIUser | AuthenticatedAPIUser,
+    internal_gitlab_user: APIUser,
+    nb_config: NotebooksConfig,
+    git_provider_helper: GitProviderHelperProto,
+    cluster_repo: ClusterRepository,
+    data_connector_secret_repo: DataConnectorSecretRepository,
+    project_repo: ProjectRepository,
+    project_session_secret_repo: ProjectSessionSecretRepository,
+    rp_repo: ResourcePoolRepository,
+    session_repo: SessionRepository,
+    user_repo: UserRepo,
+    metrics: MetricsService,
+    connected_svcs_repo: ConnectedServicesRepository,
+) -> tuple[AmaltheaSessionV1Alpha1, bool]:
+    """Start an Amalthea session.
+
+    Returns a tuple where the first item is an instance of an Amalthea session
+    and the second item is a boolean set to true iff a new session was created.
+    """
+    launcher = await session_repo.get_launcher(user, ULID.from_str(body.launcher_id))
+    project = await project_repo.get_project(user=user, project_id=launcher.project_id)
+
+    # Determine resource_class_id: the class can be overwritten at the user's request
+    resource_class_id = body.resource_class_id or launcher.resource_class_id
+
+    cluster = await nb_config.k8s_v2_client.cluster_by_class_id(resource_class_id, user)
+
+    server_name = renku_2_make_server_name(
+        user=user, project_id=str(launcher.project_id), launcher_id=body.launcher_id, cluster_id=str(cluster.id)
+    )
+    existing_session = await nb_config.k8s_v2_client.get_session(server_name, user.id)
+    if existing_session is not None and existing_session.spec is not None:
+        return existing_session, False
+
+    # Fully determine the resource pool and resource class
+    if resource_class_id is None:
+        resource_pool = await rp_repo.get_default_resource_pool()
+        resource_class = resource_pool.get_default_resource_class()
+        if not resource_class and len(resource_pool.classes) > 0:
+            resource_class = resource_pool.classes[0]
+        if not resource_class or not resource_class.id:
+            raise errors.ProgrammingError(message="Cannot find any resource classes in the default pool.")
+        resource_class_id = resource_class.id
+    else:
+        resource_pool = await rp_repo.get_resource_pool_from_class(user, resource_class_id)
+        resource_class = resource_pool.get_resource_class(resource_class_id)
+        if not resource_class or not resource_class.id:
+            raise errors.MissingResourceError(message=f"The resource class with ID {resource_class_id} does not exist.")
+    await nb_config.crc_validator.validate_class_storage(user, resource_class.id, body.disk_storage)
+
+    # Determine session location
+    session_location = SessionLocation.remote if resource_pool.remote else SessionLocation.local
+    if session_location == SessionLocation.remote and not user.is_authenticated:
+        raise errors.ValidationError(message="Anonymous users cannot start remote sessions.")
+
+    environment = launcher.environment
+    image = environment.container_image
+    work_dir = environment.working_directory
+    if not work_dir:
+        image_workdir = await core.docker_image_workdir(nb_config, environment.container_image, internal_gitlab_user)
+        work_dir_fallback = PurePosixPath("/home/jovyan")
+        work_dir = image_workdir or work_dir_fallback
+    storage_mount_fallback = work_dir / "work"
+    storage_mount = launcher.environment.mount_directory or storage_mount_fallback
+    secrets_mount_directory = storage_mount / project.secrets_mount_directory
+    session_secrets = await project_session_secret_repo.get_all_session_secrets_from_project(
+        user=user, project_id=project.id
+    )
+    data_connectors_stream = data_connector_secret_repo.get_data_connectors_with_secrets(user, project.id)
+    git_providers = await git_provider_helper.get_providers(user=user)
+    repositories = repositories_from_project(project, git_providers)
+
+    # User secrets
+    session_extras = SessionExtraResources()
+    session_extras = session_extras.concat(
+        user_secrets_extras(
+            user=user,
+            config=nb_config,
+            secrets_mount_directory=secrets_mount_directory.as_posix(),
+            k8s_secret_name=f"{server_name}-secrets",
+            session_secrets=session_secrets,
+        )
+    )
+
+    # Data connectors
+    session_extras = session_extras.concat(
+        await get_data_sources(
+            nb_config=nb_config,
+            server_name=server_name,
+            user=user,
+            data_connectors_stream=data_connectors_stream,
+            work_dir=work_dir,
+            cloud_storage_overrides=body.cloudstorage or [],
+            user_repo=user_repo,
+        )
+    )
+
+    # More init containers
+    session_extras = session_extras.concat(
+        await get_extra_init_containers(
+            nb_config,
+            user,
+            repositories,
+            git_providers,
+            storage_mount,
+            work_dir,
+            uid=environment.uid,
+            gid=environment.gid,
+        )
+    )
+
+    # Extra containers
+    session_extras = session_extras.concat(await get_extra_containers(nb_config, user, repositories, git_providers))
+
+    # Cluster settings (ingress, storage class, etc)
+    cluster_settings: ClusterSettings
+    try:
+        cluster_settings = await cluster_repo.select(cluster.id)
+    except errors.MissingResourceError:
+        # Fallback to global, main cluster parameters
+        cluster_settings = nb_config.local_cluster_settings()
+
+    (
+        base_server_path,
+        base_server_url,
+        base_server_https_url,
+        host,
+        tls_secret,
+        ingress_annotations,
+    ) = cluster_settings.get_ingress_parameters(server_name)
+    storage_class = cluster_settings.get_storage_class()
+    service_account_name = cluster_settings.service_account_name
+
+    ui_path = f"{base_server_path}/{environment.default_url.lstrip('/')}"
+
+    ingress = Ingress(
+        host=host,
+        ingressClassName=ingress_annotations.get("kubernetes.io/ingress.class"),
+        annotations=ingress_annotations,
+        tlsSecret=tls_secret,
+        pathPrefix=base_server_path,
+    )
+
+    # Annotations
+    annotations: dict[str, str] = {
+        "renku.io/project_id": str(launcher.project_id),
+        "renku.io/launcher_id": body.launcher_id,
+        "renku.io/resource_class_id": str(resource_class_id),
+    }
+
+    # Authentication
+    if isinstance(user, AuthenticatedAPIUser):
+        auth_secret = await get_auth_secret_authenticated(
+            nb_config, user, server_name, base_server_url, base_server_https_url, base_server_path
+        )
+    else:
+        auth_secret = get_auth_secret_anonymous(nb_config, server_name, request)
+    session_extras = session_extras.concat(
+        SessionExtraResources(
+            secrets=[auth_secret],
+            volumes=[auth_secret.volume] if auth_secret.volume else [],
+        )
+    )
+    authn_extra_volume_mounts: list[ExtraVolumeMount] = []
+    if auth_secret.volume_mount:
+        authn_extra_volume_mounts.append(auth_secret.volume_mount)
+
+    cert_vol_mounts = init_containers.certificates_volume_mounts(nb_config)
+    if cert_vol_mounts:
+        authn_extra_volume_mounts.extend(cert_vol_mounts)
+
+    image_secret = await get_image_pull_secret(
+        image=image,
+        server_name=server_name,
+        nb_config=nb_config,
+        user=user,
+        internal_gitlab_user=internal_gitlab_user,
+        connected_svcs_repo=connected_svcs_repo,
+    )
+    if image_secret:
+        session_extras = session_extras.concat(SessionExtraResources(secrets=[image_secret]))
+
+    # Remote session configuration
+    remote_secret = None
+    if session_location == SessionLocation.remote:
+        assert resource_pool.remote is not None
+        if resource_pool.remote.provider_id is None:
+            raise errors.ProgrammingError(
+                message=f"The resource pool {resource_pool.id} configuration is not valid (missing field 'remote_provider_id')."  # noqa E501
+            )
+        remote_secret = get_remote_secret(
+            user=user,
+            config=nb_config,
+            server_name=server_name,
+            remote_provider_id=resource_pool.remote.provider_id,
+            git_providers=git_providers,
+        )
+    if remote_secret is not None:
+        session_extras = session_extras.concat(SessionExtraResources(secrets=[remote_secret]))
+
+    # Raise an error if there are invalid environment variables in the request body
+    verify_launcher_env_variable_overrides(launcher, body)
+    env = [
+        SessionEnvItem(name="RENKU_BASE_URL_PATH", value=base_server_path),
+        SessionEnvItem(name="RENKU_BASE_URL", value=base_server_url),
+        SessionEnvItem(name="RENKU_MOUNT_DIR", value=storage_mount.as_posix()),
+        SessionEnvItem(name="RENKU_SESSION", value="1"),
+        SessionEnvItem(name="RENKU_SESSION_IP", value="0.0.0.0"),  # nosec B104
+        SessionEnvItem(name="RENKU_SESSION_PORT", value=f"{environment.port}"),
+        SessionEnvItem(name="RENKU_WORKING_DIR", value=work_dir.as_posix()),
+        SessionEnvItem(name="RENKU_SECRETS_PATH", value=project.secrets_mount_directory.as_posix()),
+        SessionEnvItem(name="RENKU_PROJECT_ID", value=str(project.id)),
+        SessionEnvItem(name="RENKU_PROJECT_PATH", value=project.path.serialize()),
+        SessionEnvItem(name="RENKU_LAUNCHER_ID", value=str(launcher.id)),
+    ]
+    if session_location == SessionLocation.remote:
+        assert resource_pool.remote is not None
+        env.extend(
+            get_remote_env(
+                remote=resource_pool.remote,
+            )
+        )
+    launcher_env_variables = get_launcher_env_variables(launcher, body)
+    env.extend(launcher_env_variables)
+
+    session = AmaltheaSessionV1Alpha1(
+        metadata=Metadata(name=server_name, annotations=annotations),
+        spec=AmaltheaSessionSpec(
+            location=session_location,
+            imagePullSecrets=[ImagePullSecret(name=image_secret.name, adopt=True)] if image_secret else [],
+            codeRepositories=[],
+            hibernated=False,
+            reconcileStrategy=ReconcileStrategy.whenFailedOrHibernated,
+            priorityClassName=resource_class.quota,
+            session=Session(
+                image=image,
+                imagePullPolicy=ImagePullPolicy.Always,
+                urlPath=ui_path,
+                port=environment.port,
+                storage=Storage(
+                    className=storage_class,
+                    size=SizeStr(str(body.disk_storage) + "G"),
+                    mountPath=storage_mount.as_posix(),
+                ),
+                workingDir=work_dir.as_posix(),
+                runAsUser=environment.uid,
+                runAsGroup=environment.gid,
+                resources=resources_from_resource_class(resource_class),
+                extraVolumeMounts=session_extras.volume_mounts,
+                command=environment.command,
+                args=environment.args,
+                shmSize=ShmSizeStr("1G"),
+                stripURLPath=environment.strip_path_prefix,
+                env=env,
+                remoteSecretRef=remote_secret.ref() if remote_secret else None,
+            ),
+            ingress=ingress,
+            extraContainers=session_extras.containers,
+            initContainers=session_extras.init_containers,
+            extraVolumes=session_extras.volumes,
+            culling=get_culling(user, resource_pool, nb_config),
+            authentication=Authentication(
+                enabled=True,
+                type=AuthenticationType.oauth2proxy
+                if isinstance(user, AuthenticatedAPIUser)
+                else AuthenticationType.token,
+                secretRef=auth_secret.key_ref("auth"),
+                extraVolumeMounts=authn_extra_volume_mounts,
+            ),
+            dataSources=session_extras.data_sources,
+            tolerations=tolerations_from_resource_class(resource_class, nb_config.sessions.tolerations_model),
+            affinity=node_affinity_from_resource_class(resource_class, nb_config.sessions.affinity_model),
+            serviceAccountName=service_account_name,
+        ),
+    )
+    secrets_to_create = session_extras.secrets or []
+    for s in secrets_to_create:
+        await nb_config.k8s_v2_client.create_secret(K8sSecret.from_v1_secret(s.secret, cluster))
+    try:
+        session = await nb_config.k8s_v2_client.create_session(session, user)
+    except Exception as err:
+        for s in secrets_to_create:
+            await nb_config.k8s_v2_client.delete_secret(K8sSecret.from_v1_secret(s.secret, cluster))
+        raise errors.ProgrammingError(message="Could not start the amalthea session") from err
+    else:
+        try:
+            await request_session_secret_creation(user, nb_config, session, session_secrets)
+            data_connector_secrets = session_extras.data_connector_secrets or dict()
+            await request_dc_secret_creation(user, nb_config, session, data_connector_secrets)
+        except Exception:
+            await nb_config.k8s_v2_client.delete_session(server_name, user.id)
+            raise
+
+    await metrics.user_requested_session_launch(
+        user=user,
+        metadata={
+            "cpu": int(resource_class.cpu * 1000),
+            "memory": resource_class.memory,
+            "gpu": resource_class.gpu,
+            "storage": body.disk_storage,
+            "resource_class_id": resource_class.id,
+            "resource_pool_id": resource_pool.id or "",
+            "resource_class_name": f"{resource_pool.name}.{resource_class.name}",
+            "session_id": server_name,
+        },
+    )
+    return session, True
+
+
 async def patch_session(
     body: apispec.SessionPatchRequest,
     session_id: str,
-    nb_config: NotebooksConfig,
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     internal_gitlab_user: APIUser,
-    rp_repo: ResourcePoolRepository,
+    nb_config: NotebooksConfig,
+    git_provider_helper: GitProviderHelperProto,
     project_repo: ProjectRepository,
+    project_session_secret_repo: ProjectSessionSecretRepository,
+    rp_repo: ResourcePoolRepository,
+    session_repo: SessionRepository,
+    connected_svcs_repo: ConnectedServicesRepository,
     metrics: MetricsService,
 ) -> AmaltheaSessionV1Alpha1:
     """Patch an Amalthea session."""
@@ -543,6 +1022,11 @@ async def patch_session(
             raise errors.MissingResourceError(
                 message=f"The resource class you requested with ID {body.resource_class_id} does not exist"
             )
+        # TODO: reject session classes which change the cluster
+        if not patch.metadata:
+            patch.metadata = AmaltheaSessionV1Alpha1MetadataPatch()
+        # Patch the resource class ID in the annotations
+        patch.metadata.annotations = {"renku.io/resource_class_id": str(body.resource_class_id)}
         if not patch.spec.session:
             patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()
         patch.spec.session.resources = resources_from_resource_class(rc)
@@ -562,48 +1046,93 @@ async def patch_session(
     if is_getting_hibernated:
         return await nb_config.k8s_v2_client.patch_session(session_id, user.id, patch.to_rfc7386())
 
-    # Patching the extra containers (includes the git proxy)
-    git_providers = await nb_config.git_provider_helper.get_providers(user)
-    repositories = await repositories_from_session(user, session, project_repo, git_providers)
-    extra_containers = await get_extra_containers(
-        nb_config,
-        user,
-        repositories,
-        git_providers,
+    server_name = session.metadata.name
+    launcher = await session_repo.get_launcher(user, session.launcher_id)
+    project = await project_repo.get_project(user=user, project_id=session.project_id)
+    environment = launcher.environment
+    work_dir = environment.working_directory
+    if not work_dir:
+        image_workdir = await core.docker_image_workdir(nb_config, environment.container_image, internal_gitlab_user)
+        work_dir_fallback = PurePosixPath("/home/jovyan")
+        work_dir = image_workdir or work_dir_fallback
+    storage_mount_fallback = work_dir / "work"
+    storage_mount = launcher.environment.mount_directory or storage_mount_fallback
+    secrets_mount_directory = storage_mount / project.secrets_mount_directory
+    session_secrets = await project_session_secret_repo.get_all_session_secrets_from_project(
+        user=user, project_id=project.id
     )
-    if extra_containers:
-        patch.spec.extraContainers = extra_containers
+    git_providers = await git_provider_helper.get_providers(user=user)
+    repositories = repositories_from_project(project, git_providers)
+
+    # User secrets
+    session_extras = SessionExtraResources()
+    session_extras = session_extras.concat(
+        user_secrets_extras(
+            user=user,
+            config=nb_config,
+            secrets_mount_directory=secrets_mount_directory.as_posix(),
+            k8s_secret_name=f"{server_name}-secrets",
+            session_secrets=session_secrets,
+        )
+    )
+
+    # Data connectors: skip
+    # TODO: How can we patch data connectors? Should we even patch them?
+    # TODO: The fact that `start_session()` accepts overrides for data connectors
+    # TODO: but that we do not save these overrides (e.g. as annotations) means that
+    # TODO: we cannot patch data connectors upon resume.
+    # TODO: If we did, we would lose the user's provided overrides (e.g. unsaved credentials).
+
+    # More init containers
+    session_extras = session_extras.concat(
+        await get_extra_init_containers(
+            nb_config,
+            user,
+            repositories,
+            git_providers,
+            storage_mount,
+            work_dir,
+            uid=environment.uid,
+            gid=environment.gid,
+        )
+    )
+
+    # Extra containers
+    session_extras = session_extras.concat(await get_extra_containers(nb_config, user, repositories, git_providers))
 
     # Patching the image pull secret
-    if isinstance(user, AuthenticatedAPIUser) and internal_gitlab_user.access_token is not None:
-        image = session.spec.session.image
-        server_name = session.metadata.name
-        needs_pull_secret = await requires_image_pull_secret(nb_config, image, internal_gitlab_user)
-        logger.info(f"Session with ID {session_id} needs pull secret for image {image}: {needs_pull_secret}")
+    image = session.spec.session.image
+    image_pull_secret = await get_image_pull_secret(
+        image=image,
+        server_name=server_name,
+        nb_config=nb_config,
+        connected_svcs_repo=connected_svcs_repo,
+        user=user,
+        internal_gitlab_user=internal_gitlab_user,
+    )
+    if image_pull_secret:
+        session_extras.concat(SessionExtraResources(secrets=[image_pull_secret]))
+        patch.spec.imagePullSecrets = [ImagePullSecret(name=image_pull_secret.name, adopt=image_pull_secret.adopt)]
 
-        if needs_pull_secret:
-            image_pull_secret_name = f"{server_name}-image-secret"
+    # Construct session patch
+    patch.spec.extraContainers = _make_patch_spec_list(
+        existing=session.spec.extraContainers or [], updated=session_extras.containers
+    )
+    patch.spec.initContainers = _make_patch_spec_list(
+        existing=session.spec.initContainers or [], updated=session_extras.init_containers
+    )
+    patch.spec.extraVolumes = _make_patch_spec_list(
+        existing=session.spec.extraVolumes or [], updated=session_extras.volumes
+    )
+    if not patch.spec.session:
+        patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()
+    patch.spec.session.extraVolumeMounts = _make_patch_spec_list(
+        existing=session.spec.session.extraVolumeMounts or [], updated=session_extras.volume_mounts
+    )
 
-            # Always create a fresh secret to ensure we have the latest token
-            image_secret = get_gitlab_image_pull_secret(
-                nb_config, user, image_pull_secret_name, internal_gitlab_user.access_token
-            )
-
-            if not image_secret:
-                logger.error(f"Failed to create image pull secret for session ID {session_id} with image {image}")
-                raise errors.ProgrammingError(
-                    message=f"We cannot retrive credentials for your private image {image}. "
-                    "In order to resolve this problem, you can try to log out and back in "
-                    "and/or check that you still have permissions for the image repository."
-                )
-            # Ensure the secret is created in the cluster
-            await nb_config.k8s_v2_client.create_secret(image_secret.secret, cluster)
-
-            updated_secrets = [
-                secret for secret in (session.spec.imagePullSecrets or []) if not secret.name.endswith("-image-secret")
-            ]
-            updated_secrets.append(ImagePullSecret(name=image_pull_secret_name, adopt=True))
-            patch.spec.imagePullSecrets = updated_secrets
+    secrets_to_create = session_extras.secrets or []
+    for s in secrets_to_create:
+        await nb_config.k8s_v2_client.create_secret(K8sSecret.from_v1_secret(s.secret, cluster))
 
     patch_serialized = patch.to_rfc7386()
     if len(patch_serialized) == 0:
@@ -656,3 +1185,33 @@ def _deduplicate_target_paths(dcs: dict[str, RCloneStorage]) -> dict[str, RClone
         )
 
     return result_dcs
+
+
+class _NamedResource(Protocol):
+    """Represents a resource with a name."""
+
+    name: str
+
+
+_T = TypeVar("_T", bound=_NamedResource)
+
+
+def _make_patch_spec_list(existing: Sequence[_T], updated: Sequence[_T]) -> list[_T] | None:
+    """Merges updated into existing by upserting items identified by their name.
+
+    This method is used to construct session patches, merging session resources by name (containers, volumes, etc.).
+    """
+    patch_list = None
+    if updated:
+        patch_list = list(existing)
+        upsert_list = list(updated)
+        for upsert_item in upsert_list:
+            # Find out if the upsert_item needs to be added or updated
+            # found = next(enumerate(filter(lambda item: item.name == upsert_item.name, patch_list)), None)
+            found = next(filter(lambda t: t[1].name == upsert_item.name, enumerate(patch_list)), None)
+            if found is not None:
+                idx, _ = found
+                patch_list[idx] = upsert_item
+            else:
+                patch_list.append(upsert_item)
+    return patch_list

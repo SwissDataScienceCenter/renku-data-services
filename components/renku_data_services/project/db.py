@@ -11,7 +11,7 @@ from pathlib import PurePosixPath
 from typing import Concatenate, ParamSpec, TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
-from sqlalchemy import Select, delete, func, select, update
+from sqlalchemy import ColumnElement, Select, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer
 from sqlalchemy.sql.functions import coalesce
@@ -20,7 +20,7 @@ from ulid import ULID
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
-from renku_data_services.authz.models import CheckPermissionItem, Member, MembershipChange, Scope
+from renku_data_services.authz.models import CheckPermissionItem, Member, MembershipChange, Scope, Visibility
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models import RESET
 from renku_data_services.base_models.core import Slug
@@ -32,7 +32,6 @@ from renku_data_services.project import orm as schemas
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.decorators import update_search_document
 from renku_data_services.secrets import orm as secrets_schemas
-from renku_data_services.secrets.core import encrypt_user_secret
 from renku_data_services.secrets.models import SecretKind
 from renku_data_services.session import apispec as session_apispec
 from renku_data_services.session.core import (
@@ -136,14 +135,17 @@ class ProjectRepository:
             )
 
         async with self.session_maker() as session:
-            stmt = select(schemas.ProjectORM).where(schemas.ProjectORM.template_id == project_id)
+            # NOTE: Show only those projects that user has access to
+            scope = Scope.WRITE if only_writable else Scope.NON_PUBLIC_READ
+            project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, scope=scope)
+
+            cond: ColumnElement[bool] = schemas.ProjectORM.id.in_(project_ids)
+            if scope == Scope.NON_PUBLIC_READ:
+                cond = or_(cond, schemas.ProjectORM.visibility == Visibility.PUBLIC.value)
+
+            stmt = select(schemas.ProjectORM).where(schemas.ProjectORM.template_id == project_id).where(cond)
             result = await session.execute(stmt)
             project_orms = result.scalars().all()
-
-            # NOTE: Show only those projects that user has access to
-            scope = Scope.WRITE if only_writable else Scope.READ
-            project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, scope=scope)
-            project_orms = [p for p in project_orms if p.id in project_ids]
 
             return [p.dump() for p in project_orms]
 
@@ -832,8 +834,7 @@ class ProjectSessionSecretRepository:
                     del existing_secrets_as_dict[slot_id]
                     continue
 
-                encrypted_value, encrypted_key = await encrypt_user_secret(
-                    user_repo=self.user_repo,
+                encrypted_value, encrypted_key = await self.user_repo.encrypt_user_secret(
                     requested_by=user,
                     secret_service_public_key=self.secret_service_public_key,
                     secret_value=secret_update.value,
@@ -967,6 +968,7 @@ class ProjectMigrationRepository:
                     args=constants.MIGRATION_ARGS,
                     is_archived=False,
                     environment_image_source=session_apispec.EnvironmentImageSourceImage.image,
+                    strip_path_prefix=False,
                 ),
                 env_variables=None,
             )

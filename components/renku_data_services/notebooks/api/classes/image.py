@@ -1,5 +1,7 @@
 """Used to get information about docker images used in jupyter servers."""
 
+from __future__ import annotations
+
 import base64
 import re
 from dataclasses import dataclass, field
@@ -10,7 +12,10 @@ from typing import Any, Optional, Self, cast
 import httpx
 from werkzeug.datastructures import WWWAuthenticate
 
+from renku_data_services.app_config import logging
 from renku_data_services.errors import errors
+
+logger = logging.getLogger(__name__)
 
 
 class ManifestTypes(Enum):
@@ -35,17 +40,24 @@ class ImageRepoDockerAPI:
 
     hostname: str
     oauth2_token: Optional[str] = field(default=None, repr=False)
+
     # NOTE: We need to follow redirects so that we can authenticate with the image repositories properly.
     # NOTE: If we do not use default_factory to create the client here requests will fail because it can happen
     # that the client gets created in the wrong asyncio loop.
     client: httpx.AsyncClient = field(default_factory=lambda: httpx.AsyncClient(timeout=10, follow_redirects=True))
+    scheme: str = "https"
 
-    async def _get_docker_token(self, image: "Image") -> Optional[str]:
+    def __post_init__(self) -> None:
+        self.hostname = self.hostname.rstrip("/")
+        if self.scheme == "":
+            self.scheme = "https"
+
+    async def _get_docker_token(self, image: Image) -> Optional[str]:
         """Get an authorization token from the docker v2 API.
 
         This will return the token provided by the API (or None if no token was found).
         """
-        image_digest_url = f"https://{self.hostname}/v2/{image.name}/manifests/{image.tag}"
+        image_digest_url = f"{self.scheme}://{self.hostname}/v2/{image.name}/manifests/{image.tag}"
         try:
             auth_req = await self.client.get(image_digest_url)
         except httpx.ConnectError:
@@ -62,14 +74,14 @@ class ImageRepoDockerAPI:
             return None
         headers = {"Accept": "application/json"}
         if self.oauth2_token:
-            creds = base64.urlsafe_b64encode(f"oauth2:{self.oauth2_token}".encode()).decode()
+            creds = base64.b64encode(f"oauth2:{self.oauth2_token}".encode()).decode()
             headers["Authorization"] = f"Basic {creds}"
         token_req = await self.client.get(realm, params=params, headers=headers)
         return str(token_req.json().get("token"))
 
     async def get_image_manifest(
         self,
-        image: "Image",
+        image: Image,
         platform_architecture: str = DEFAULT_PLATFORM_ARCHITECTURE,
         platform_os: str = DEFAULT_PLATFORM_OS,
     ) -> Optional[dict[str, Any]]:
@@ -79,7 +91,7 @@ class ImageRepoDockerAPI:
                 message=f"The image hostname {image.hostname} does not match the image repository {self.hostname}"
             )
         token = await self._get_docker_token(image)
-        image_digest_url = f"https://{image.hostname}/v2/{image.name}/manifests/{image.tag}"
+        image_digest_url = f"{self.scheme}://{image.hostname}/v2/{image.name}/manifests/{image.tag}"
         headers = {"Accept": ManifestTypes.docker_v2.value}
         if token:
             headers["Authorization"] = f"Bearer {token}"
@@ -105,7 +117,7 @@ class ImageRepoDockerAPI:
             image_digest: str | None = manifest.get("digest")
             if not manifest or not image_digest:
                 return None
-            image_digest_url = f"https://{image.hostname}/v2/{image.name}/manifests/{image_digest}"
+            image_digest_url = f"{self.scheme}://{image.hostname}/v2/{image.name}/manifests/{image_digest}"
             media_type = manifest.get("mediaType")
             headers["Accept"] = ManifestTypes.docker_v2.value
             if media_type in [
@@ -128,11 +140,26 @@ class ImageRepoDockerAPI:
 
         return cast(dict[str, Any], res.json())
 
-    async def image_exists(self, image: "Image") -> bool:
+    async def image_exists(self, image: Image) -> bool:
         """Check the docker repo API if the image exists."""
-        return await self.get_image_manifest(image) is not None
+        return await self.image_check(image) == 200
 
-    async def get_image_config(self, image: "Image") -> Optional[dict[str, Any]]:
+    async def image_check(self, image: Image) -> int:
+        """Check the image at the registry."""
+        token = await self._get_docker_token(image)
+        image_digest_url = f"{self.scheme}://{image.hostname}/v2/{image.name}/manifests/{image.tag}"
+        accept_media = ",".join(
+            [e.value for e in [ManifestTypes.docker_v2, ManifestTypes.oci_v1_manifest, ManifestTypes.oci_v1_index]]
+        )
+        headers = {"Accept": accept_media}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+
+        res = await self.client.head(image_digest_url, headers=headers)
+        logger.debug(f"Checked image access: {image_digest_url}: {res.status_code}")
+        return res.status_code
+
+    async def get_image_config(self, image: Image) -> Optional[dict[str, Any]]:
         """Query the docker API to get the configuration of an image."""
         manifest = await self.get_image_manifest(image)
         if manifest is None:
@@ -142,7 +169,7 @@ class ImageRepoDockerAPI:
             return None
         token = await self._get_docker_token(image)
         res = await self.client.get(
-            f"https://{image.hostname}/v2/{image.name}/blobs/{config_digest}",
+            f"{self.scheme}://{image.hostname}/v2/{image.name}/blobs/{config_digest}",
             headers={
                 "Accept": "application/json",
                 "Authorization": f"Bearer {token}",
@@ -152,7 +179,7 @@ class ImageRepoDockerAPI:
             return None
         return cast(dict[str, Any], res.json())
 
-    async def image_workdir(self, image: "Image") -> Optional[PurePosixPath]:
+    async def image_workdir(self, image: Image) -> Optional[PurePosixPath]:
         """Query the docker API to get the workdir of an image."""
         config = await self.get_image_config(image)
         if config is None:
@@ -165,11 +192,11 @@ class ImageRepoDockerAPI:
             workdir = "/"
         return PurePosixPath(workdir)
 
-    def with_oauth2_token(self, oauth2_token: str) -> "ImageRepoDockerAPI":
+    def with_oauth2_token(self, oauth2_token: str) -> ImageRepoDockerAPI:
         """Return a docker API instance with the token as authentication."""
-        return ImageRepoDockerAPI(self.hostname, oauth2_token)
+        return ImageRepoDockerAPI(hostname=self.hostname, scheme=self.scheme, oauth2_token=oauth2_token)
 
-    def maybe_with_oauth2_token(self, token_hostname: str | None, oauth2_token: str | None) -> "ImageRepoDockerAPI":
+    def maybe_with_oauth2_token(self, token_hostname: str | None, oauth2_token: str | None) -> ImageRepoDockerAPI:
         """Return a docker API instance with the token as authentication.
 
         The token is used only if the image hostname matches the token hostname.
@@ -272,3 +299,6 @@ class Image:
     def repo_api(self) -> ImageRepoDockerAPI:
         """Get the docker API from the image."""
         return ImageRepoDockerAPI(self.hostname)
+
+    def __str__(self) -> str:
+        return f"{self.hostname}/{self.name}:{self.tag}"

@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from box import Box
-from sqlalchemy import ColumnElement, DateTime, MetaData, String, func, text
+from sqlalchemy import ColumnElement, DateTime, MetaData, String, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.hybrid import Comparator, hybrid_property
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
@@ -47,6 +47,17 @@ class K8sObjectORM(BaseORM):
     """Representation of a k8s resource."""
 
     __tablename__ = "k8s_objects"
+    __table_args__ = (
+        UniqueConstraint(
+            "group",
+            "version",
+            "kind",
+            "cluster",
+            "namespace",
+            "name",
+            name="_unique_common_k8s_objects_gvk_cluster_namespace_name",
+        ),
+    )
 
     id: Mapped[ULID] = mapped_column(
         "id",
@@ -56,7 +67,7 @@ class K8sObjectORM(BaseORM):
         default_factory=lambda: str(ULID()),
         server_default=text("generate_ulid()"),
     )
-    name: Mapped[str] = mapped_column("name", String(), index=True, unique=True)
+    name: Mapped[str] = mapped_column("name", String(), index=True)
     namespace: Mapped[str] = mapped_column("namespace", String(), index=True)
     creation_date: Mapped[datetime] = mapped_column(
         "creation_date",
@@ -78,7 +89,7 @@ class K8sObjectORM(BaseORM):
     group: Mapped[str | None] = mapped_column(index=True, nullable=True)
     version: Mapped[str] = mapped_column(index=True)
     kind: Mapped[str] = mapped_column(index=True)
-    cluster: Mapped[str] = mapped_column(index=True)
+    cluster: Mapped[ULID] = mapped_column(ULIDType, index=True)
     user_id: Mapped[str] = mapped_column(String(), index=True)
 
     @hybrid_property

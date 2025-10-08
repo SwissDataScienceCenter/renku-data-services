@@ -1,8 +1,19 @@
 """SQLAlchemy schemas for the CRC database."""
 
-from typing import Optional
+from __future__ import annotations
 
-from sqlalchemy import JSON, BigInteger, Column, Identity, Integer, MetaData, String, Table
+from typing import Any, Optional
+
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Column,
+    Identity,
+    Integer,
+    MetaData,
+    String,
+    Table,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
@@ -10,9 +21,11 @@ from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services.app_config import logging
+from renku_data_services.connected_services import orm as cs_schemas
 from renku_data_services.crc import models
-from renku_data_services.crc.apispec import Protocol as CrcApiProtocol
+from renku_data_services.crc.models import ClusterSettings, SavedClusterSettings, SessionProtocol
 from renku_data_services.errors import errors
+from renku_data_services.k8s.constants import ClusterId
 from renku_data_services.utils.sqlalchemy import ULIDType
 
 logger = logging.getLogger(__name__)
@@ -37,7 +50,7 @@ resource_pools_users = Table(
 )
 
 
-class RPUserORM(BaseORM):
+class UserORM(BaseORM):
     """Stores the Keycloak user ID for controlling user access to resource pools.
 
     Used in combination with the `resource_pool_users` table this table provides information
@@ -50,7 +63,7 @@ class RPUserORM(BaseORM):
     __tablename__ = "users"
     keycloak_id: Mapped[str] = mapped_column(String(50), unique=True, index=True)
     no_default_access: Mapped[bool] = mapped_column(default=False, insert_default=False)
-    resource_pools: Mapped[list["ResourcePoolORM"]] = relationship(
+    resource_pools: Mapped[list[ResourcePoolORM]] = relationship(
         secondary=resource_pools_users,
         back_populates="users",
         default_factory=list,
@@ -59,7 +72,7 @@ class RPUserORM(BaseORM):
     id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, init=False)
 
     @classmethod
-    def load(cls, user: base_models.User) -> "RPUserORM":
+    def load(cls, user: base_models.User) -> UserORM:
         """Create an ORM object from a user model."""
         return cls(keycloak_id=user.keycloak_id, no_default_access=user.no_default_access)
 
@@ -82,17 +95,17 @@ class ResourceClassORM(BaseORM):
     resource_pool_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("resource_pools.id", ondelete="CASCADE"), default=None, index=True
     )
-    resource_pool: Mapped[Optional["ResourcePoolORM"]] = relationship(
+    resource_pool: Mapped[Optional[ResourcePoolORM]] = relationship(
         back_populates="classes", default=None, lazy="joined"
     )
     id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, default=None, init=False)
-    tolerations: Mapped[list["TolerationORM"]] = relationship(
+    tolerations: Mapped[list[TolerationORM]] = relationship(
         back_populates="resource_class",
         default_factory=list,
         cascade="save-update, merge, delete",
         lazy="selectin",
     )
-    node_affinities: Mapped[list["NodeAffintyORM"]] = relationship(
+    node_affinities: Mapped[list[NodeAffintyORM]] = relationship(
         back_populates="resource_class",
         default_factory=list,
         cascade="save-update, merge, delete",
@@ -100,7 +113,7 @@ class ResourceClassORM(BaseORM):
     )
 
     @classmethod
-    def load(cls, resource_class: models.ResourceClass) -> "ResourceClassORM":
+    def load(cls, resource_class: models.ResourceClass) -> ResourceClassORM:
         """Create a ORM object from the resource class model."""
         return cls(
             name=resource_class.name,
@@ -158,13 +171,12 @@ class ClusterORM(BaseORM):
     # in the cluster in the namespace where the sessions will be launched.
     service_account_name: Mapped[str | None] = mapped_column(String(256), default=None, nullable=True)
 
-    def dump(self) -> models.SavedCluster:
+    def dump(self) -> SavedClusterSettings:
         """Create a cluster model from the ORM object."""
-        return models.SavedCluster(
-            id=self.id,
+        return SavedClusterSettings(
             name=self.name,
             config_name=self.config_name,
-            session_protocol=CrcApiProtocol[self.session_protocol],
+            session_protocol=SessionProtocol(self.session_protocol),
             session_host=self.session_host,
             session_port=self.session_port,
             session_path=self.session_path,
@@ -172,10 +184,11 @@ class ClusterORM(BaseORM):
             session_tls_secret_name=self.session_tls_secret_name,
             session_storage_class=self.session_storage_class,
             service_account_name=self.service_account_name,
+            id=ClusterId(self.id),
         )
 
     @classmethod
-    def load(cls, cluster: models.Cluster) -> "ClusterORM":
+    def load(cls, cluster: ClusterSettings) -> ClusterORM:
         """Create an ORM object from the cluster model."""
         return ClusterORM(
             name=cluster.name,
@@ -197,13 +210,13 @@ class ResourcePoolORM(BaseORM):
     __tablename__ = "resource_pools"
     name: Mapped[str] = mapped_column(String(40), index=True)
     quota: Mapped[Optional[str]] = mapped_column(String(63), index=True, default=None)
-    users: Mapped[list["RPUserORM"]] = relationship(
+    users: Mapped[list[UserORM]] = relationship(
         secondary=resource_pools_users,
         back_populates="resource_pools",
         default_factory=list,
         repr=False,
     )
-    classes: Mapped[list["ResourceClassORM"]] = relationship(
+    classes: Mapped[list[ResourceClassORM]] = relationship(
         back_populates="resource_pool",
         default_factory=list,
         cascade="save-update, merge, delete",
@@ -217,6 +230,16 @@ class ResourcePoolORM(BaseORM):
     hibernation_threshold: Mapped[Optional[int]] = mapped_column(default=None)
     default: Mapped[bool] = mapped_column(default=False, index=True)
     public: Mapped[bool] = mapped_column(default=False, index=True)
+    remote_provider_id: Mapped[str | None] = mapped_column(
+        ForeignKey(cs_schemas.OAuth2ClientORM.id, ondelete="RESTRICT", name="resource_pools_remote_provider_id_fk"),
+        default=None,
+        server_default=None,
+        nullable=True,
+        index=True,
+    )
+    remote_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONVariant, default=None, server_default=None, nullable=True
+    )
     id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
     cluster_id: Mapped[Optional[ULID]] = mapped_column(
         ForeignKey(ClusterORM.id, ondelete="SET NULL"), default=None, index=True
@@ -224,7 +247,7 @@ class ResourcePoolORM(BaseORM):
     cluster: Mapped[Optional[ClusterORM]] = relationship(viewonly=True, default=None, lazy="selectin", init=False)
 
     @classmethod
-    def load(cls, resource_pool: models.ResourcePool) -> "ResourcePoolORM":
+    def load(cls, resource_pool: models.ResourcePool) -> ResourcePoolORM:
         """Create an ORM object from the resource pool model."""
         quota = None
         if resource_pool.quota is not None:
@@ -234,6 +257,13 @@ class ResourcePoolORM(BaseORM):
         if resource_pool.cluster is not None:
             cluster_id = resource_pool.cluster.id
 
+        remote_provider_id = None
+        remote_json = None
+        if resource_pool.remote:
+            remote_provider_id = resource_pool.remote.provider_id
+            remote_json = resource_pool.remote.to_dict()
+            del remote_json["provider_id"]
+
         return cls(
             name=resource_pool.name,
             quota=quota,
@@ -242,6 +272,8 @@ class ResourcePoolORM(BaseORM):
             hibernation_threshold=resource_pool.hibernation_threshold,
             public=resource_pool.public,
             default=resource_pool.default,
+            remote_provider_id=remote_provider_id,
+            remote_json=remote_json,
             cluster_id=cluster_id,
         )
 
@@ -262,6 +294,7 @@ class ResourcePoolORM(BaseORM):
                 f"Using the quota {quota} in the response."
             )
         cluster = None if self.cluster is None else self.cluster.dump()
+        remote = self._dump_remote()
         return models.ResourcePool(
             id=self.id,
             name=self.name,
@@ -271,7 +304,16 @@ class ResourcePoolORM(BaseORM):
             hibernation_threshold=self.hibernation_threshold,
             public=self.public,
             default=self.default,
+            remote=remote,
             cluster=cluster,
+        )
+
+    def _dump_remote(self) -> models.RemoteConfigurationFirecrest | None:
+        """Create a remote_configuration model from the corresponding column of the ORM object."""
+        if self.remote_json is None:
+            return None
+        return models.RemoteConfigurationFirecrest.from_dict(
+            {**self.remote_json, "provider_id": self.remote_provider_id}
         )
 
 
@@ -280,7 +322,7 @@ class TolerationORM(BaseORM):
 
     __tablename__ = "tolerations"
     key: Mapped[str] = mapped_column(String(63), index=True)
-    resource_class: Mapped[Optional["ResourceClassORM"]] = relationship(
+    resource_class: Mapped[Optional[ResourceClassORM]] = relationship(
         back_populates="tolerations", default=None, lazy="selectin"
     )
     resource_class_id: Mapped[Optional[int]] = mapped_column(
@@ -294,7 +336,7 @@ class NodeAffintyORM(BaseORM):
 
     __tablename__ = "node_affinities"
     key: Mapped[str] = mapped_column(String(63), index=True)
-    resource_class: Mapped[Optional["ResourceClassORM"]] = relationship(
+    resource_class: Mapped[Optional[ResourceClassORM]] = relationship(
         back_populates="node_affinities", default=None, lazy="selectin"
     )
     resource_class_id: Mapped[Optional[int]] = mapped_column(
@@ -304,7 +346,7 @@ class NodeAffintyORM(BaseORM):
     id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
 
     @classmethod
-    def load(cls, affinity: models.NodeAffinity) -> "NodeAffintyORM":
+    def load(cls, affinity: models.NodeAffinity) -> NodeAffintyORM:
         """Create an ORM object from the node affinity model."""
         return cls(
             key=affinity.key,

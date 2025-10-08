@@ -146,6 +146,30 @@ From the root folder of the repository, run:
 Then you can run the test as usual directly from PyCharm by clicking on the green arrow next to a specific test, or a
 whole test suite or part of the test hierarchy.
 
+We use [Syrupy](https://github.com/syrupy-project/syrupy) for snapshotting data in tests.
+
+To update the snapshot data, run the following command in the devcontainer:
+```bash
+$ poetry run pytest -m "not schemathesis" -n auto --snapshot-update
+```
+
+### Directly from PyCharm
+
+From the root folder of the repository, run:
+
+1. `devcontainer build --workspace-folder .`
+2. `devcontainer up --workspace-folder .`
+3. `make schemas`
+4. `make amalthea_schema`
+
+> **WARNING:**
+>
+> Be careful with the kubernetes environment in your shell, as in case of badly setup tests and environment you might try
+> to run some tests against your default cluster.
+
+Then you can run the test as usual directly from PyCharm by clicking on the green arrow next to a specific test, or a
+whole test suite or part of the test hierarchy.
+
 ## Migrations
 
 We use Alembic for migrations, and we have a single version table for all schemas. This version table

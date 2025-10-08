@@ -4,11 +4,11 @@ from base64 import b64decode, b64encode
 from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 from authlib.integrations.base_client import InvalidTokenError
 from authlib.integrations.httpx_client import AsyncOAuth2Client, OAuthError
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from ulid import ULID
@@ -17,15 +17,20 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.app_config import logging
 from renku_data_services.base_api.pagination import PaginationRequest
-from renku_data_services.connected_services import apispec, models
+from renku_data_services.connected_services import models
 from renku_data_services.connected_services import orm as schemas
-from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind
 from renku_data_services.connected_services.provider_adapters import (
     GitHubAdapter,
     ProviderAdapter,
     get_provider_adapter,
 )
-from renku_data_services.connected_services.utils import generate_code_verifier
+from renku_data_services.connected_services.utils import (
+    GitHubProviderType,
+    generate_code_verifier,
+    get_github_provider_type,
+)
+from renku_data_services.notebooks.api.classes.image import Image, ImageRepoDockerAPI
+from renku_data_services.users.db import APIUser
 from renku_data_services.utils.cryptography import decrypt_string, encrypt_string
 
 logger = logging.getLogger(__name__)
@@ -39,12 +44,11 @@ class ConnectedServicesRepository:
         session_maker: Callable[..., AsyncSession],
         encryption_key: bytes,
         async_oauth2_client_class: type[AsyncOAuth2Client],
-        internal_gitlab_url: str | None,
     ):
         self.session_maker = session_maker
         self.encryption_key = encryption_key
         self.async_oauth2_client_class = async_oauth2_client_class
-        self.internal_gitlab_url = internal_gitlab_url.rstrip("/") if internal_gitlab_url else None
+        self.supported_image_registry_providers = {models.ProviderKind.gitlab, models.ProviderKind.github}
 
     async def get_oauth2_clients(
         self,
@@ -70,9 +74,7 @@ class ConnectedServicesRepository:
             return client.dump(user_is_admin=user.is_admin)
 
     async def insert_oauth2_client(
-        self,
-        user: base_models.APIUser,
-        new_client: apispec.ProviderPost,
+        self, user: base_models.APIUser, new_client: models.UnsavedOAuth2Client
     ) -> models.OAuth2Client:
         """Insert a new OAuth2 Client environment."""
         if user.id is None:
@@ -95,6 +97,8 @@ class ConnectedServicesRepository:
             url=new_client.url,
             use_pkce=new_client.use_pkce or False,
             created_by_id=user.id,
+            image_registry_url=new_client.image_registry_url,
+            oidc_issuer_url=new_client.oidc_issuer_url or None,
         )
 
         async with self.session_maker() as session, session.begin():
@@ -146,6 +150,19 @@ class ConnectedServicesRepository:
                 client.url = patch.url
             if patch.use_pkce is not None:
                 client.use_pkce = patch.use_pkce
+            if patch.image_registry_url:
+                # Patching with a string of at least length 1 updates the value
+                client.image_registry_url = patch.image_registry_url
+            elif patch.image_registry_url == "":
+                # Patching with "", removes the value
+                client.image_registry_url = None
+            if patch.oidc_issuer_url:
+                client.oidc_issuer_url = patch.oidc_issuer_url
+            elif patch.oidc_issuer_url == "":
+                client.oidc_issuer_url = None
+            # Unset oidc_issuer_url when the kind has been changed to a value other than 'generic_oidc'
+            if client.kind != models.ProviderKind.generic_oidc:
+                client.oidc_issuer_url = None
 
             await session.flush()
             await session.refresh(client)
@@ -218,14 +235,14 @@ class ConnectedServicesRepository:
                         client_id=client.id,
                         token=None,
                         state=state,
-                        status=schemas.ConnectionStatus.pending,
+                        status=models.ConnectionStatus.pending,
                         code_verifier=code_verifier,
                         next_url=next_url,
                     )
                     session.add(connection)
                 else:
                     connection.state = state
-                    connection.status = schemas.ConnectionStatus.pending
+                    connection.status = models.ConnectionStatus.pending
                     connection.code_verifier = code_verifier
                     connection.next_url = next_url
 
@@ -274,16 +291,35 @@ class ConnectedServicesRepository:
                     adapter.token_endpoint_url, authorization_response=raw_url, code_verifier=code_verifier
                 )
 
-                logger.info(f"Token for client {client.id} has keys: {", ".join(token.keys())}")
+                logger.info(f"Token for client {client.id} has keys: {', '.join(token.keys())}")
 
                 next_url = connection.next_url
 
                 connection.token = self._encrypt_token_set(token=token, user_id=connection.user_id)
                 connection.state = None
-                connection.status = schemas.ConnectionStatus.connected
+                connection.status = models.ConnectionStatus.connected
                 connection.next_url = None
 
                 return next_url
+
+    async def delete_oauth2_connection(self, user: base_models.APIUser, connection_id: ULID) -> bool:
+        """Delete one connection of the given user."""
+        if not user.is_authenticated or user.id is None:
+            return False
+
+        async with self.session_maker() as session, session.begin():
+            result = await session.scalars(
+                select(schemas.OAuth2ConnectionORM)
+                .where(schemas.OAuth2ConnectionORM.id == connection_id)
+                .where(schemas.OAuth2ConnectionORM.user_id == user.id)
+            )
+            conn = result.one_or_none()
+
+            if conn is None:
+                return False
+
+            await session.delete(conn)
+            return True
 
     async def get_oauth2_connections(
         self,
@@ -300,8 +336,10 @@ class ConnectedServicesRepository:
             connections = result.all()
             return [c.dump() for c in connections]
 
-    async def get_oauth2_connection(self, connection_id: ULID, user: base_models.APIUser) -> models.OAuth2Connection:
-        """Get one OAuth2 connection from the database."""
+    async def get_oauth2_connection_or_none(
+        self, connection_id: ULID, user: base_models.APIUser
+    ) -> models.OAuth2Connection | None:
+        """Get one OAuth2 connection from the database. Throw if the user is not authenticated."""
         if not user.is_authenticated or user.id is None:
             raise errors.MissingResourceError(
                 message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."
@@ -314,11 +352,23 @@ class ConnectedServicesRepository:
                 .where(schemas.OAuth2ConnectionORM.user_id == user.id)
             )
             connection = result.one_or_none()
-            if connection is None:
-                raise errors.MissingResourceError(
-                    message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."  # noqa: E501
-                )
-            return connection.dump()
+            if connection:
+                return connection.dump()
+            else:
+                return None
+
+    async def get_oauth2_connection(self, connection_id: ULID, user: base_models.APIUser) -> models.OAuth2Connection:
+        """Get one OAuth2 connection from the database.
+
+        Throw if the connection doesn't exist or the user is not authenticated.
+        """
+        connection = await self.get_oauth2_connection_or_none(connection_id, user)
+        if connection is None:
+            raise errors.MissingResourceError(
+                message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."
+            )
+
+        return connection
 
     async def get_oauth2_connected_account(
         self, connection_id: ULID, user: base_models.APIUser
@@ -358,6 +408,54 @@ class ConnectedServicesRepository:
             token_model = models.OAuth2TokenSet.from_dict(oauth2_client.token)
             return token_model
 
+    async def get_provider_for_image(self, user: APIUser, image: Image) -> models.ImageProvider | None:
+        """Find a provider supporting the given an image."""
+        registry_urls = [f"http://{image.hostname}", f"https://{image.hostname}"]
+        async with self.session_maker() as session:
+            stmt = (
+                select(schemas.OAuth2ClientORM, schemas.OAuth2ConnectionORM)
+                .join(
+                    schemas.OAuth2ConnectionORM,
+                    and_(
+                        schemas.OAuth2ConnectionORM.client_id == schemas.OAuth2ClientORM.id,
+                        schemas.OAuth2ConnectionORM.user_id == user.id,
+                    ),
+                    isouter=True,  # isouter makes it a left-join, not an outer join
+                )
+                .where(schemas.OAuth2ClientORM.image_registry_url.in_(registry_urls))
+                .where(schemas.OAuth2ClientORM.kind.in_(self.supported_image_registry_providers))
+                # there could be multiple matching - just take the first arbitrary 🤷
+                .order_by(schemas.OAuth2ConnectionORM.updated_at.desc())
+                .limit(1)
+            )
+            result = await session.execute(stmt)
+            row = result.one_or_none()
+            if row is None or row.OAuth2ClientORM is None:
+                return None
+            else:
+                return models.ImageProvider(
+                    row.OAuth2ClientORM.dump(),
+                    models.ConnectedUser(row.OAuth2ConnectionORM.dump(), user)
+                    if row.OAuth2ConnectionORM is not None
+                    else None,
+                    str(row.OAuth2ClientORM.image_registry_url),  # above query makes it non-nil
+                )
+
+    async def get_image_repo_client(self, image_provider: models.ImageProvider) -> ImageRepoDockerAPI:
+        """Create a image repository client for the given user and image provider."""
+        url = urlparse(image_provider.registry_url)
+        repo_api = ImageRepoDockerAPI(hostname=url.netloc, scheme=url.scheme)
+        if image_provider.is_connected():
+            assert image_provider.connected_user is not None
+            user = image_provider.connected_user.user
+            conn = image_provider.connected_user.connection
+            token_set = await self.get_oauth2_connection_token(conn.id, user)
+            access_token = token_set.access_token
+            if access_token:
+                logger.debug(f"Use connection {conn.id} to {image_provider.provider.id} for user {user.id}")
+                repo_api = repo_api.with_oauth2_token(access_token)
+        return repo_api
+
     async def get_oauth2_app_installations(
         self, connection_id: ULID, user: base_models.APIUser, pagination: PaginationRequest
     ) -> models.AppInstallationList:
@@ -367,13 +465,18 @@ class ConnectedServicesRepository:
             connection,
             adapter,
         ):
-            # NOTE: App installations are only available from GitHub
-            if connection.client.kind == ProviderKind.github and isinstance(adapter, GitHubAdapter):
+            # NOTE: App installations are only available from GitHub when using a "GitHub App"
+            if (
+                connection.client.kind == models.ProviderKind.github
+                and get_github_provider_type(connection.client) == GitHubProviderType.standard_app
+                and isinstance(adapter, GitHubAdapter)
+            ):
                 request_url = urljoin(adapter.api_url, "user/installations")
                 params = dict(page=pagination.page, per_page=pagination.per_page)
                 try:
                     response = await oauth2_client.get(request_url, params=params, headers=adapter.api_common_headers)
                 except OAuthError as err:
+                    logger.warning(f"Error getting installations at {request_url}: {err}")
                     if err.error == "bad_refresh_token":
                         raise errors.InvalidTokenError(
                             message="The refresh token for the connected service has expired or is invalid.",
@@ -383,6 +486,9 @@ class ConnectedServicesRepository:
                     raise
 
                 if response.status_code > 200:
+                    logger.warning(
+                        f"Could not get installations at {request_url}: {response.status_code} - {response.text}"
+                    )
                     raise errors.UnauthorizedError(message="Could not get installation information.")
 
                 return adapter.api_validate_app_installations_response(response)
@@ -412,7 +518,7 @@ class ConnectedServicesRepository:
                     message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."  # noqa: E501
                 )
 
-            if connection.status != ConnectionStatus.connected or connection.token is None:
+            if connection.status != models.ConnectionStatus.connected or connection.token is None:
                 raise errors.UnauthorizedError(message=f"OAuth2 connection with id '{connection_id}' is not valid.")
 
             client = connection.client

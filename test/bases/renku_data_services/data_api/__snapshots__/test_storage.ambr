@@ -9030,38 +9030,6 @@
       'name': 'premiumizeme',
       'options': list([
         dict({
-          'advanced': False,
-          'default': '',
-          'default_str': '',
-          'exclusive': False,
-          'help': '''
-            OAuth Client Id.
-            
-            Leave blank normally.
-          ''',
-          'ispassword': False,
-          'name': 'client_id',
-          'required': False,
-          'sensitive': True,
-          'type': 'string',
-        }),
-        dict({
-          'advanced': False,
-          'default': '',
-          'default_str': '',
-          'exclusive': False,
-          'help': '''
-            OAuth Client Secret.
-            
-            Leave blank normally.
-          ''',
-          'ispassword': False,
-          'name': 'client_secret',
-          'required': False,
-          'sensitive': True,
-          'type': 'string',
-        }),
-        dict({
           'advanced': True,
           'default': '',
           'default_str': '',
@@ -14705,24 +14673,6 @@
           'default_str': '',
           'exclusive': False,
           'help': '''
-            Path to PEM-encoded private key file.
-            
-            Leave blank or set key-use-agent to use ssh-agent.
-            
-            Leading `~` will be expanded in the file name as will environment variables such as `${RCLONE_CONFIG_DIR}`.
-          ''',
-          'ispassword': False,
-          'name': 'key_file',
-          'required': False,
-          'sensitive': False,
-          'type': 'string',
-        }),
-        dict({
-          'advanced': False,
-          'default': '',
-          'default_str': '',
-          'exclusive': False,
-          'help': '''
             The passphrase to decrypt the PEM-encoded private key file.
             
             Only PEM encrypted key files (old OpenSSH format) are supported. Encrypted keys
@@ -14746,48 +14696,6 @@
           ''',
           'ispassword': False,
           'name': 'pubkey',
-          'required': False,
-          'sensitive': False,
-          'type': 'string',
-        }),
-        dict({
-          'advanced': False,
-          'default': '',
-          'default_str': '',
-          'exclusive': False,
-          'help': '''
-            Optional path to public key file.
-            
-            Set this if you have a signed certificate you want to use for authentication.
-            
-            Leading `~` will be expanded in the file name as will environment variables such as `${RCLONE_CONFIG_DIR}`.
-          ''',
-          'ispassword': False,
-          'name': 'pubkey_file',
-          'required': False,
-          'sensitive': False,
-          'type': 'string',
-        }),
-        dict({
-          'advanced': True,
-          'default': '',
-          'default_str': '',
-          'examples': list([
-            dict({
-              'help': "Use OpenSSH's known_hosts file.",
-              'value': '~/.ssh/known_hosts',
-            }),
-          ]),
-          'exclusive': False,
-          'help': '''
-            Optional path to known_hosts file.
-            
-            Set this value to enable server host key validation.
-            
-            Leading `~` will be expanded in the file name as will environment variables such as `${RCLONE_CONFIG_DIR}`.
-          ''',
-          'ispassword': False,
-          'name': 'known_hosts_file',
           'required': False,
           'sensitive': False,
           'type': 'string',
@@ -15340,46 +15248,6 @@
           ''',
           'ispassword': False,
           'name': 'host_key_algorithms',
-          'required': False,
-          'sensitive': False,
-          'type': 'SpaceSepList',
-        }),
-        dict({
-          'advanced': False,
-          'default': list([
-          ]),
-          'default_str': '',
-          'exclusive': False,
-          'help': '''
-            Path and arguments to external ssh binary.
-            
-            Normally rclone will use its internal ssh library to connect to the
-            SFTP server. However it does not implement all possible ssh options so
-            it may be desirable to use an external ssh binary.
-            
-            Rclone ignores all the internal config if you use this option and
-            expects you to configure the ssh binary with the user/host/port and
-            any other options you need.
-            
-            **Important** The ssh command must log in without asking for a
-            password so needs to be configured with keys or certificates.
-            
-            Rclone will run the command supplied either with the additional
-            arguments "-s sftp" to access the SFTP subsystem or with commands such
-            as "md5sum /path/to/file" appended to read checksums.
-            
-            Any arguments with spaces in should be surrounded by "double quotes".
-            
-            An example setting might be:
-            
-                ssh -o ServerAliveInterval=20 user@example.com
-            
-            Note that when using an external ssh binary rclone makes a new ssh
-            connection for every hash it calculates.
-  
-          ''',
-          'ispassword': False,
-          'name': 'ssh',
           'required': False,
           'sensitive': False,
           'type': 'SpaceSepList',

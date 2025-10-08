@@ -1,52 +1,44 @@
-AMALTHEA_JS_VERSION ?= 0.20.0
-AMALTHEA_SESSIONS_VERSION ?= 0.20.0
-CODEGEN_PARAMS := \
-    --input-file-type openapi \
-    --output-model-type pydantic_v2.BaseModel \
-    --use-double-quotes \
-    --target-python-version 3.13 \
-    --collapse-root-models \
-    --field-constraints \
-    --strict-nullable \
-    --set-default-enum-member \
-    --openapi-scopes schemas paths parameters \
-    --set-default-enum-member \
-    --use-one-literal-as-default \
-    --use-default
-CR_CODEGEN_PARAMS := \
-	--input-file-type jsonschema \
+AMALTHEA_JS_VERSION ?= 0.22.0
+AMALTHEA_SESSIONS_VERSION ?= 0.22.0
+COMMON_CODEGEN_PARAMS := \
 	--output-model-type pydantic_v2.BaseModel \
 	--use-double-quotes \
 	--target-python-version 3.13 \
-	--collapse-root-models \
 	--field-constraints \
-	--strict-nullable \
+	--strict-nullable
+API_CODEGEN_PARAMS := \
+	--input-file-type openapi \
+	${COMMON_CODEGEN_PARAMS} \
+	--collapse-root-models \
+	--set-default-enum-member \
+	--openapi-scopes schemas paths parameters \
+	--use-one-literal-as-default \
+	--use-default
+CR_CODEGEN_PARAMS := \
+	--input-file-type jsonschema \
+	${COMMON_CODEGEN_PARAMS} \
+	--collapse-root-models \
 	--allow-extra-fields \
-	--use-default-kwarg
+	--use-default-kwarg \
+	--use-generic-container-types
 
 # A separate set of params without the --collaps-root-models option as
 # this causes a bug in the code generator related to list of unions.
 # https://github.com/koxudaxi/datamodel-code-generator/issues/1937
 SEARCH_CODEGEN_PARAMS := \
-    --input-file-type openapi \
-    --output-model-type pydantic_v2.BaseModel \
-    --use-double-quotes \
-    --target-python-version 3.13 \
-    --field-constraints \
-    --strict-nullable \
-    --set-default-enum-member \
-    --openapi-scopes schemas paths parameters \
-    --set-default-enum-member \
-    --use-one-literal-as-default \
-    --use-default
+	--input-file-type openapi \
+	${COMMON_CODEGEN_PARAMS} \
+	--set-default-enum-member \
+	--openapi-scopes schemas paths parameters \
+	--use-one-literal-as-default \
+	--use-default
 
 .PHONY: all
 all: help
 
 ##@ Apispec
 
-# If you add a new api spec, add the `apispec.py` file here and as a
-# target/dependency below
+# If you add a new api spec, add the `apispec.py` file here.
 API_SPECS := \
     components/renku_data_services/crc/apispec.py \
     components/renku_data_services/storage/apispec.py \
@@ -61,20 +53,6 @@ API_SPECS := \
     components/renku_data_services/platform/apispec.py \
     components/renku_data_services/data_connectors/apispec.py \
     components/renku_data_services/search/apispec.py
-
-components/renku_data_services/crc/apispec.py: components/renku_data_services/crc/api.spec.yaml
-components/renku_data_services/storage/apispec.py: components/renku_data_services/storage/api.spec.yaml
-components/renku_data_services/users/apispec.py: components/renku_data_services/users/api.spec.yaml
-components/renku_data_services/project/apispec.py: components/renku_data_services/project/api.spec.yaml
-components/renku_data_services/session/apispec.py: components/renku_data_services/session/api.spec.yaml
-components/renku_data_services/namespace/apispec.py: components/renku_data_services/namespace/api.spec.yaml
-components/renku_data_services/secrets/apispec.py: components/renku_data_services/secrets/api.spec.yaml
-components/renku_data_services/connected_services/apispec.py: components/renku_data_services/connected_services/api.spec.yaml
-components/renku_data_services/repositories/apispec.py: components/renku_data_services/repositories/api.spec.yaml
-components/renku_data_services/notebooks/apispec.py: components/renku_data_services/notebooks/api.spec.yaml
-components/renku_data_services/platform/apispec.py: components/renku_data_services/platform/api.spec.yaml
-components/renku_data_services/data_connectors/apispec.py: components/renku_data_services/data_connectors/api.spec.yaml
-components/renku_data_services/search/apispec.py: components/renku_data_services/search/api.spec.yaml
 
 schemas: ${API_SPECS}  ## Generate pydantic classes from apispec yaml files
 	@echo "generated classes based on ApiSpec"
@@ -193,7 +171,7 @@ help:  ## Display this help.
 
 # Pattern rules
 
-API_SPEC_CODEGEN_PARAMS := ${CODEGEN_PARAMS}
+API_SPEC_CODEGEN_PARAMS := ${API_CODEGEN_PARAMS}
 %/apispec.py: %/api.spec.yaml
 	$(if $(findstring /search/, $(<)), $(eval API_SPEC_CODEGEN_PARAMS=${SEARCH_CODEGEN_PARAMS}))
 	poetry run datamodel-codegen --input $< --output $@ --base-class $(subst /,.,$(subst .py,_base.BaseAPISpec,$(subst components/,,$@))) ${API_SPEC_CODEGEN_PARAMS}

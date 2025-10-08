@@ -26,7 +26,7 @@ from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_connectors.blueprints import DataConnectorsBP
 from renku_data_services.namespace.blueprints import GroupsBP
 from renku_data_services.notebooks.blueprints import NotebooksBP, NotebooksNewBP
-from renku_data_services.platform.blueprints import PlatformConfigBP
+from renku_data_services.platform.blueprints import PlatformConfigBP, PlatformUrlRedirectBP
 from renku_data_services.project.blueprints import ProjectsBP, ProjectSessionSecretBP
 from renku_data_services.repositories.blueprints import RepositoriesBP
 from renku_data_services.search.blueprints import SearchBP
@@ -182,7 +182,6 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         url_prefix=url_prefix,
         connected_services_repo=dm.connected_services_repo,
         authenticator=dm.authenticator,
-        internal_gitlab_authenticator=dm.gitlab_authenticator,
     )
     repositories = RepositoriesBP(
         name="repositories",
@@ -197,10 +196,10 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         authenticator=dm.authenticator,
         nb_config=dm.config.nb_config,
         internal_gitlab_authenticator=dm.gitlab_authenticator,
-        git_repo=dm.git_repositories_repo,
         rp_repo=dm.rp_repo,
         user_repo=dm.kc_user_repo,
         storage_repo=dm.storage_repo,
+        git_provider_helper=dm.git_provider_helper,
     )
     notebooks_new = NotebooksNewBP(
         name="notebooks",
@@ -218,11 +217,19 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         cluster_repo=dm.cluster_repo,
         internal_gitlab_authenticator=dm.gitlab_authenticator,
         metrics=dm.metrics,
+        connected_svcs_repo=dm.connected_services_repo,
+        git_provider_helper=dm.git_provider_helper,
     )
     platform_config = PlatformConfigBP(
         name="platform_config",
         url_prefix=url_prefix,
         platform_repo=dm.platform_repo,
+        authenticator=dm.authenticator,
+    )
+    platform_redirects = PlatformUrlRedirectBP(
+        name="platform_redirects",
+        url_prefix=url_prefix,
+        url_redirect_repo=dm.url_redirect_repo,
         authenticator=dm.authenticator,
     )
     search = SearchBP(
@@ -278,12 +285,13 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
             platform_config.blueprint(),
             search.blueprint(),
             data_connectors.blueprint(),
+            platform_redirects.blueprint(),
         ]
     )
     if builds is not None:
         app.blueprint(builds.blueprint())
 
-    # We need to patch sanic_extz as since version 24.12 they only send a string representation of errors
+    # We need to patch sanic_ext as since version 24.12 they only send a string representation of errors
     import sanic_ext.extras.validation.setup
 
     sanic_ext.extras.validation.setup.validate_body = _patched_validate_body
