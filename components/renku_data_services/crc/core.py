@@ -16,6 +16,7 @@ def validate_cluster(body: apispec.Cluster) -> models.ClusterSettings:
         session_host=body.session_host,
         session_port=body.session_port,
         session_path=body.session_path,
+        session_ingress_class_name=body.session_ingress_class_name,
         session_ingress_annotations=body.session_ingress_annotations.model_dump(),
         session_tls_secret_name=body.session_tls_secret_name,
         session_storage_class=body.session_storage_class,
@@ -35,6 +36,7 @@ def validate_cluster_patch(patch: apispec.ClusterPatch) -> models.ClusterPatch:
         session_host=patch.session_host,
         session_port=patch.session_port,
         session_path=patch.session_path,
+        session_ingress_class_name=patch.session_ingress_class_name,
         session_ingress_annotations=patch.session_ingress_annotations.model_dump()
         if patch.session_ingress_annotations is not None
         else None,

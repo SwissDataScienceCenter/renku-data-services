@@ -12,7 +12,6 @@ cluster_payload = {
     "session_path": "/renku-sessions",
     "session_tls_secret_name": "a-server-domain-name-tls",
     "session_ingress_annotations": {
-        "kubernetes.io/ingress.class": "nginx",
         "cert-manager.io/cluster-issuer": "letsencrypt-production",
         "nginx.ingress.kubernetes.io/configuration-snippet": """more_set_headers "Content-Security-Policy: """
         + """frame-ancestors 'self'""",
@@ -21,6 +20,12 @@ cluster_payload = {
 
 cluster_payload_with_storage = deepcopy(cluster_payload)
 cluster_payload_with_storage["session_storage_class"] = "an-arbitrary-class-name"
+
+cluster_payload_with_ingress_class_name = deepcopy(cluster_payload)
+cluster_payload_with_ingress_class_name["session_ingress_class_name"] = "an-arbitrary-ingress-class-name"
+
+cluster_payload_with_both = deepcopy(cluster_payload_with_storage)
+cluster_payload_with_both.update(cluster_payload_with_ingress_class_name)
 
 
 @pytest.mark.parametrize(
@@ -46,8 +51,10 @@ async def test_clusters_get(
     [
         (401, False, "/api/data/clusters/", cluster_payload),
         (401, False, "/api/data/clusters/", cluster_payload_with_storage),
+        (401, False, "/api/data/clusters/", cluster_payload_with_ingress_class_name),
         (201, True, "/api/data/clusters/", cluster_payload),
         (201, True, "/api/data/clusters/", cluster_payload_with_storage),
+        (201, True, "/api/data/clusters/", cluster_payload_with_ingress_class_name),
     ],
 )
 @pytest.mark.asyncio
@@ -148,6 +155,10 @@ put_patch_common_test_inputs = [
     (201, True, None, cluster_payload, cluster_payload),
     (201, True, None, cluster_payload_with_storage, cluster_payload_with_storage),
     (201, True, None, cluster_payload_with_storage, cluster_payload),
+    (201, True, None, cluster_payload_with_ingress_class_name, cluster_payload_with_ingress_class_name),
+    (201, True, None, cluster_payload_with_ingress_class_name, cluster_payload),
+    (201, True, None, cluster_payload_with_both, cluster_payload_with_both),
+    (201, True, None, cluster_payload_with_both, cluster_payload),
     (
         422,
         True,

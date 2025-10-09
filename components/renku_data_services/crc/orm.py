@@ -164,6 +164,7 @@ class ClusterORM(BaseORM):
     session_host: Mapped[str] = mapped_column(String(256))
     session_port: Mapped[int] = mapped_column(Integer)
     session_path: Mapped[str] = mapped_column(String())
+    session_ingress_class_name: Mapped[str | None] = mapped_column(String())
     session_ingress_annotations: Mapped[dict[str, str]] = mapped_column(JSONVariant)
     session_tls_secret_name: Mapped[str] = mapped_column(String(256))
     session_storage_class: Mapped[str | None] = mapped_column(String(256))
@@ -180,6 +181,7 @@ class ClusterORM(BaseORM):
             session_host=self.session_host,
             session_port=self.session_port,
             session_path=self.session_path,
+            session_ingress_class_name=self.session_ingress_class_name,
             session_ingress_annotations=self.session_ingress_annotations,
             session_tls_secret_name=self.session_tls_secret_name,
             session_storage_class=self.session_storage_class,
@@ -198,6 +200,7 @@ class ClusterORM(BaseORM):
             session_host=cluster.session_host,
             session_port=cluster.session_port,
             session_path=cluster.session_path,
+            session_ingress_class_name=cluster.session_ingress_class_name,
             session_ingress_annotations=cluster.session_ingress_annotations,
             session_tls_secret_name=cluster.session_tls_secret_name,
             session_storage_class=cluster.session_storage_class,

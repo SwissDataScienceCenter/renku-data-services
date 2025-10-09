@@ -406,7 +406,9 @@ async def launch_notebook_helper(
         cluster = await nb_config.k8s_client.cluster_by_class_id(resource_class_id, user)
         session_namespace = cluster.namespace
         with contextlib.suppress(errors.MissingResourceError):
-            (_, _, _, host, _, _) = (await nb_config.cluster_rp.select(cluster.id)).get_ingress_parameters(server_name)
+            (_, _, _, host, _, _, _) = (await nb_config.cluster_rp.select(cluster.id)).get_ingress_parameters(
+                server_name
+            )
 
     elif server_options is not None:
         if isinstance(server_options, dict):

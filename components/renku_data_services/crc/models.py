@@ -203,6 +203,7 @@ class ClusterPatch:
     session_host: str | None
     session_port: int | None
     session_path: str | None
+    session_ingress_class_name: str | None
     session_ingress_annotations: dict[str, Any] | None
     session_tls_secret_name: str | None
     session_storage_class: str | None
@@ -219,6 +220,7 @@ class ClusterSettings:
     session_host: str
     session_port: int
     session_path: str
+    session_ingress_class_name: str | None = None
     session_ingress_annotations: dict[str, Any]
     session_tls_secret_name: str
     session_storage_class: str | None
@@ -234,6 +236,7 @@ class ClusterSettings:
             session_host=self.session_host,
             session_port=self.session_port,
             session_path=self.session_path,
+            session_ingress_class_name=self.session_ingress_class_name,
             session_ingress_annotations=self.session_ingress_annotations,
             session_tls_secret_name=self.session_tls_secret_name,
             session_storage_class=self.session_storage_class,
@@ -245,7 +248,9 @@ class ClusterSettings:
 
         return self.session_storage_class
 
-    def get_ingress_parameters(self, server_name: str) -> tuple[str, str, str, str, TlsSecret | None, dict[str, str]]:
+    def get_ingress_parameters(
+        self, server_name: str
+    ) -> tuple[str, str, str, str, TlsSecret | None, str | None, dict[str, str]]:
         """Returns the ingress parameters of the cluster."""
 
         host = self.session_host
@@ -259,13 +264,25 @@ class ClusterSettings:
         else:
             base_server_url = f"{self.session_protocol.value}://{host}:{self.session_port}{base_server_path}"
         base_server_https_url = base_server_url
+        ingress_class_name = self.session_ingress_class_name
         ingress_annotations = self.session_ingress_annotations
+
+        if ingress_class_name is None:
+            ingress_class_name = ingress_annotations.get("kubernetes.io/ingress.class")
 
         tls_secret = (
             None if self.session_tls_secret_name is None else TlsSecret(adopt=False, name=self.session_tls_secret_name)
         )
 
-        return base_server_path, base_server_url, base_server_https_url, host, tls_secret, ingress_annotations
+        return (
+            base_server_path,
+            base_server_url,
+            base_server_https_url,
+            host,
+            tls_secret,
+            ingress_class_name,
+            ingress_annotations,
+        )
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -374,6 +391,7 @@ class ResourcePool:
                     session_host=tmp["session_host"],
                     session_port=tmp["session_port"],
                     session_path=tmp["session_path"],
+                    session_ingress_class_name=tmp.get("session_ingress_class_name"),
                     session_ingress_annotations=tmp["session_ingress_annotations"],
                     session_tls_secret_name=tmp["session_tls_secret_name"],
                     session_storage_class=tmp["session_storage_class"],
