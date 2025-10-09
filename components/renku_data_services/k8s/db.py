@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterable, Callable
 from dataclasses import dataclass, field
 from typing import Optional
+from uuid import uuid4
 
 import sqlalchemy
 from kubernetes import client
@@ -146,8 +147,8 @@ class QuotaRepository:
         )
 
     def _quota_to_manifest(self, quota: models.Quota) -> client.V1ResourceQuota:
-        if quota.id is None:
-            raise errors.ValidationError(message="The id of a quota has to be set when it is created.")
+        # if quota.id is None:
+        #     raise errors.ValidationError(message="The id of a quota has to be set when it is created.")
         return client.V1ResourceQuota(
             metadata=client.V1ObjectMeta(labels={self._label_name: self._label_value}, name=quota.id),
             spec=client.V1ResourceQuotaSpec(
@@ -184,10 +185,13 @@ class QuotaRepository:
         )
         return [self._quota_from_manifest(q) for q in quotas]
 
-    def create_quota(self, quota: models.Quota) -> models.Quota:
+    def create_quota(self, new_quota: models.UnsavedQuota) -> models.Quota:
         """Create a resource quota and priority class."""
-
-        metadata = {"labels": {self._label_name: self._label_value}, "name": quota.id}
+        quota_id = str(uuid4())
+        quota = models.Quota(
+            cpu=new_quota.cpu, memory=new_quota.memory, gpu=new_quota.gpu, gpu_kind=new_quota.gpu_kind, id=quota_id
+        )
+        metadata = {"labels": {self._label_name: self._label_value}, "name": quota_id}
         quota_manifest = self._quota_to_manifest(quota)
 
         # Check if we have a priority class with the given name, return it or create one otherwise.
@@ -225,7 +229,6 @@ class QuotaRepository:
 
     def update_quota(self, quota: models.Quota) -> models.Quota:
         """Update a specific resource quota."""
-
         quota_manifest = self._quota_to_manifest(quota)
         self.rq_client.patch_resource_quota(name=quota.id, namespace=self.namespace, body=quota_manifest)
         return quota

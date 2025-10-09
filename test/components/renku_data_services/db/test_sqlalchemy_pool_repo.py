@@ -245,7 +245,7 @@ async def test_resource_class_create(
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
         inserted_class = await pool_repo.insert_resource_class(
-            resource_class=rc, resource_pool_id=inserted_rp.id, api_user=admin_user
+            new_resource_class=rc, resource_pool_id=inserted_rp.id, api_user=admin_user
         )
 
         assert inserted_class is not None
@@ -378,7 +378,7 @@ async def test_insert_class_in_nonexisting_rp(
     run_migrations_for_app("common")
     with pytest.raises(errors.MissingResourceError):
         await app_manager_instance.rp_repo.insert_resource_class(
-            resource_class=rc, resource_pool_id=99999, api_user=admin_user
+            new_resource_class=rc, resource_pool_id=99999, api_user=admin_user
         )
 
 

@@ -1,7 +1,7 @@
 """Compute resource control (CRC) app."""
 
 import asyncio
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 
 from sanic import HTTPResponse, Request, empty, json
 from sanic_ext import validate
@@ -17,12 +17,16 @@ from renku_data_services.crc import apispec, models
 from renku_data_services.crc.core import (
     validate_cluster,
     validate_cluster_patch,
-    validate_remote,
-    validate_remote_patch,
-    validate_remote_put,
+    validate_quota_patch,
+    validate_quota_put,
+    validate_resource_class,
+    validate_resource_class_patch,
+    validate_resource_class_put,
+    validate_resource_pool,
+    validate_resource_pool_patch,
+    validate_resource_pool_put,
 )
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository, UserRepository
-from renku_data_services.k8s.db import QuotaRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.models import UserInfo
 
@@ -56,18 +60,8 @@ class ResourcePoolsBP(CustomBlueprint):
         @only_admins
         @validate(json=apispec.ResourcePool)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.ResourcePool) -> HTTPResponse:
-            cluster = None
-            if body.cluster_id is not None:
-                cluster = await self.cluster_repo.select(ULID.from_str(body.cluster_id))
-            remote = None
-            if body.remote:
-                validate_remote(body=body.remote)
-                remote = body.remote.model_dump(exclude_none=True, mode="json")
-                body.remote = None
-            rp = models.ResourcePool.from_dict(
-                {**body.model_dump(exclude_none=True), "cluster": cluster, "remote": remote}
-            )
-            res = await self.rp_repo.insert_resource_pool(api_user=user, resource_pool=rp)
+            new_resource_pool = validate_resource_pool(body=body)
+            res = await self.rp_repo.insert_resource_pool(api_user=user, new_resource_pool=new_resource_pool)
             return validated_json(apispec.ResourcePoolWithId, res, status=201)
 
         return "/resource_pools", ["POST"], _post
@@ -114,21 +108,9 @@ class ResourcePoolsBP(CustomBlueprint):
         async def _put(
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.ResourcePoolPut
         ) -> HTTPResponse:
-            # We need to manually set remote to a RemoteConfigurationPatch object
-            remote = validate_remote_put(body=body.remote)
-            body.remote = None
-
-            res = await self.rp_repo.update_resource_pool(
-                api_user=user,
-                id=resource_pool_id,
-                remote=remote,
-                **body.model_dump(exclude_none=True),
-            )
-            if res is None:
-                raise errors.MissingResourceError(
-                    message=f"The resource pool with ID {resource_pool_id} cannot be found."
-                )
-            return validated_json(apispec.ResourcePoolWithId, res)
+            put = validate_resource_pool_put(body=body)
+            rp = await self.rp_repo.update_resource_pool(api_user=user, resource_pool_id=resource_pool_id, update=put)
+            return validated_json(apispec.ResourcePoolWithId, rp)
 
         return "/resource_pools/<resource_pool_id>", ["PUT"], _put
 
@@ -142,22 +124,9 @@ class ResourcePoolsBP(CustomBlueprint):
         async def _patch(
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.ResourcePoolPatch
         ) -> HTTPResponse:
-            remote = None
-            if body.remote:
-                remote = validate_remote_patch(body=body.remote)
-                body.remote = None
-
-            res = await self.rp_repo.update_resource_pool(
-                api_user=user,
-                id=resource_pool_id,
-                remote=remote,
-                **body.model_dump(exclude_none=True),
-            )
-            if res is None:
-                raise errors.MissingResourceError(
-                    message=f"The resource pool with ID {resource_pool_id} cannot be found."
-                )
-            return validated_json(apispec.ResourcePoolWithId, res)
+            patch = validate_resource_pool_patch(body=body)
+            rp = await self.rp_repo.update_resource_pool(api_user=user, resource_pool_id=resource_pool_id, update=patch)
+            return validated_json(apispec.ResourcePoolWithId, rp)
 
         return "/resource_pools/<resource_pool_id>", ["PATCH"], _patch
 
@@ -316,9 +285,9 @@ class ClassesBP(CustomBlueprint):
         async def _post(
             _: Request, user: base_models.APIUser, body: apispec.ResourceClass, resource_pool_id: int
         ) -> HTTPResponse:
-            cls = models.ResourceClass.from_dict(body.model_dump())
+            cls = validate_resource_class(body=body)
             res = await self.repo.insert_resource_class(
-                api_user=user, resource_class=cls, resource_pool_id=resource_pool_id
+                api_user=user, new_resource_class=cls, resource_pool_id=resource_pool_id
             )
             return validated_json(apispec.ResourceClassWithId, res, 201)
 
@@ -375,10 +344,18 @@ class ClassesBP(CustomBlueprint):
         async def _put(
             _: Request, user: base_models.APIUser, body: apispec.ResourceClass, resource_pool_id: int, class_id: int
         ) -> HTTPResponse:
-            res = await self.repo.update_resource_class(
-                user, resource_pool_id, class_id, put=True, **body.model_dump(exclude_none=True)
+            put = validate_resource_class_put(body=body)
+            rc = await self.repo.update_resource_class(
+                api_user=user,
+                resource_pool_id=resource_pool_id,
+                resource_class_id=class_id,
+                update=put,
             )
-            return validated_json(apispec.ResourceClassWithId, res)
+            return validated_json(apispec.ResourceClassWithId, rc)
+            # res = await self.repo.update_resource_class(
+            #     user, resource_pool_id, class_id, put=True, **body.model_dump(exclude_none=True)
+            # )
+            # return validated_json(apispec.ResourceClassWithId, res)
 
         return "/resource_pools/<resource_pool_id>/classes/<class_id>", ["PUT"], _put
 
@@ -396,10 +373,14 @@ class ClassesBP(CustomBlueprint):
             resource_pool_id: int,
             class_id: int,
         ) -> HTTPResponse:
-            res = await self.repo.update_resource_class(
-                user, resource_pool_id, class_id, put=False, **body.model_dump(exclude_none=True)
+            patch = validate_resource_class_patch(body=body)
+            rc = await self.repo.update_resource_class(
+                api_user=user,
+                resource_pool_id=resource_pool_id,
+                resource_class_id=class_id,
+                update=patch,
             )
-            return validated_json(apispec.ResourceClassWithId, res)
+            return validated_json(apispec.ResourceClassWithId, rc)
 
         return "/resource_pools/<resource_pool_id>/classes/<class_id>", ["PATCH"], _patch
 
@@ -465,7 +446,7 @@ class QuotaBP(CustomBlueprint):
     """Handlers for dealing with a quota."""
 
     rp_repo: ResourcePoolRepository
-    quota_repo: QuotaRepository
+    # quota_repo: QuotaRepository
     authenticator: base_models.Authenticator
 
     def get(self) -> BlueprintFactoryResponse:
@@ -474,17 +455,8 @@ class QuotaBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @validate_db_ids
         async def _get(_: Request, user: base_models.APIUser, resource_pool_id: int) -> HTTPResponse:
-            rps = await self.rp_repo.get_resource_pools(api_user=user, id=resource_pool_id)
-            if len(rps) < 1:
-                raise errors.MissingResourceError(
-                    message=f"The resource pool with ID {resource_pool_id} cannot be found."
-                )
-            rp = rps[0]
-            if rp.quota is None:
-                raise errors.MissingResourceError(
-                    message=f"The resource pool with ID {resource_pool_id} does not have a quota."
-                )
-            return validated_json(apispec.QuotaWithId, rp.quota)
+            quota = await self.rp_repo.get_quota(api_user=user, resource_pool_id=resource_pool_id)
+            return validated_json(apispec.QuotaWithId, quota)
 
         return "/resource_pools/<resource_pool_id>/quota", ["GET"], _get
 
@@ -498,7 +470,11 @@ class QuotaBP(CustomBlueprint):
         async def _put(
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.QuotaWithId
         ) -> HTTPResponse:
-            return await self._put_patch(resource_pool_id, body, api_user=user)
+            put = validate_quota_put(body=body)
+            quota = await self.rp_repo.update_quota(
+                api_user=user, resource_pool_id=resource_pool_id, update=put, quota_put_id=body.id
+            )
+            return validated_json(apispec.QuotaWithId, quota)
 
         return "/resource_pools/<resource_pool_id>/quota", ["PUT"], _put
 
@@ -512,30 +488,11 @@ class QuotaBP(CustomBlueprint):
         async def _patch(
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.QuotaPatch
         ) -> HTTPResponse:
-            return await self._put_patch(resource_pool_id, body, api_user=user)
+            patch = validate_quota_patch(body=body)
+            quota = await self.rp_repo.update_quota(api_user=user, resource_pool_id=resource_pool_id, update=patch)
+            return validated_json(apispec.QuotaWithId, quota)
 
         return "/resource_pools/<resource_pool_id>/quota", ["PATCH"], _patch
-
-    async def _put_patch(
-        self, resource_pool_id: int, body: apispec.QuotaPatch | apispec.QuotaWithId, api_user: base_models.APIUser
-    ) -> HTTPResponse:
-        rps = await self.rp_repo.get_resource_pools(api_user=api_user, id=resource_pool_id)
-        if len(rps) < 1:
-            raise errors.MissingResourceError(message=f"Cannot find the resource pool with ID {resource_pool_id}.")
-        rp = rps[0]
-        if rp.quota is None:
-            raise errors.MissingResourceError(
-                message=f"The resource pool with ID {resource_pool_id} does not have a quota."
-            )
-        old_quota = rp.quota
-        new_quota = models.Quota.from_dict({**asdict(old_quota), **body.model_dump(exclude_none=True)})
-        for rc in rp.classes:
-            if not new_quota.is_resource_class_compatible(rc):
-                raise errors.ValidationError(
-                    message=f"The quota {new_quota} is not compatible with the resource class {rc}."
-                )
-        new_quota = self.quota_repo.update_quota(new_quota)
-        return validated_json(apispec.QuotaWithId, new_quota)
 
 
 @dataclass(kw_only=True)

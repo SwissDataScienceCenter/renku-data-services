@@ -10,7 +10,7 @@ from asyncio import gather
 from collections.abc import AsyncGenerator, Callable, Collection, Coroutine, Sequence
 from dataclasses import asdict, dataclass, field
 from functools import wraps
-from typing import Any, Concatenate, Optional, ParamSpec, TypeVar, cast
+from typing import Any, Concatenate, Optional, ParamSpec, TypeVar
 
 from sqlalchemy import NullPool, delete, false, select, true
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -23,6 +23,7 @@ from renku_data_services import errors
 from renku_data_services.base_models import RESET
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
+from renku_data_services.crc.core import validate_resource_class_update, validate_resource_pool_update
 from renku_data_services.crc.models import ClusterPatch, ClusterSettings, SavedClusterSettings, SessionProtocol
 from renku_data_services.crc.orm import ClusterORM
 from renku_data_services.k8s.db import QuotaRepository
@@ -152,7 +153,7 @@ class ResourcePoolRepository(_Base):
         super().__init__(session_maker, quotas_repo)
         self.__cluster_repo = ClusterRepository(session_maker=self.session_maker)
 
-    async def initialize(self, async_connection_url: str, rp: models.ResourcePool) -> None:
+    async def initialize(self, async_connection_url: str, rp: models.UnsavedResourcePool) -> None:
         """Add the default resource pool if it does not already exist."""
         engine = create_async_engine(async_connection_url, poolclass=NullPool)
         session_maker = async_sessionmaker(
@@ -164,7 +165,7 @@ class ResourcePoolRepository(_Base):
             res = await session.execute(stmt)
             default_rp = res.scalars().first()
             if default_rp is None:
-                orm = schemas.ResourcePoolORM.load(rp)
+                orm = schemas.ResourcePoolORM.from_unsaved_model(new_resource_pool=rp, quota=None, cluster=None)
                 session.add(orm)
 
     async def get_resource_pools(
@@ -254,7 +255,7 @@ class ResourcePoolRepository(_Base):
     ) -> list[models.ResourcePool]:
         """Get resource pools from database with indication of which resource class matches the specified criteria."""
         async with self.session_maker() as session:
-            criteria = models.ResourceClass(
+            criteria = models.UnsavedResourceClass(
                 name="criteria",
                 cpu=cpu,
                 gpu=gpu,
@@ -276,30 +277,31 @@ class ResourcePoolRepository(_Base):
             # NOTE: The line below ensures that the right users can access the right resources, do not remove.
             stmt = _resource_pool_access_control(api_user, stmt)
             res = await session.execute(stmt)
-            return [i.dump(self.quotas_repo.get_quota(i.quota), criteria) for i in res.scalars().all()]
+            return [
+                i.dump(quota=self.quotas_repo.get_quota(i.quota), class_match_criteria=criteria)
+                for i in res.scalars().all()
+            ]
 
     @_only_admins
     async def insert_resource_pool(
-        self, api_user: base_models.APIUser, resource_pool: models.ResourcePool
+        self, api_user: base_models.APIUser, new_resource_pool: models.UnsavedResourcePool
     ) -> models.ResourcePool:
         """Insert resource pool into database."""
-        quota = None
-        if resource_pool.quota is not None:
-            for rc in resource_pool.classes:
-                if not resource_pool.quota.is_resource_class_compatible(rc):
-                    raise errors.ValidationError(
-                        message=f"The quota {quota} is not compatible with resource class {rc}"
-                    )
-            quota = self.quotas_repo.create_quota(models.Quota.from_dict(asdict(resource_pool.quota)))
-            resource_pool = resource_pool.set_quota(quota)
 
-        orm = schemas.ResourcePoolORM.load(resource_pool)
+        cluster = None
+        if new_resource_pool.cluster_id:
+            cluster = await self.__cluster_repo.select(cluster_id=new_resource_pool.cluster_id)
+
+        quota = None
+        if new_resource_pool.quota is not None:
+            quota = self.quotas_repo.create_quota(new_quota=new_resource_pool.quota)
+
+        resource_pool = schemas.ResourcePoolORM.from_unsaved_model(
+            new_resource_pool=new_resource_pool, quota=quota, cluster=cluster
+        )
+
         async with self.session_maker() as session, session.begin():
-            if orm.idle_threshold == 0:
-                orm.idle_threshold = None
-            if orm.hibernation_threshold == 0:
-                orm.hibernation_threshold = None
-            if orm.default:
+            if resource_pool.default:
                 stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.default == true())
                 res = await session.execute(stmt)
                 default_rps = res.unique().scalars().all()
@@ -307,14 +309,11 @@ class ResourcePoolRepository(_Base):
                     raise errors.ValidationError(
                         message="There can only be one default resource pool and one already exists."
                     )
-            if not orm.remote_provider_id:
-                orm.remote_provider_id = None
-            session.add(orm)
 
+            session.add(resource_pool)
             await session.flush()
-            await session.refresh(orm)
-
-            return orm.dump(quota)
+            await session.refresh(resource_pool)
+            return resource_pool.dump(quota=quota)
 
     async def get_classes(
         self,
@@ -355,12 +354,15 @@ class ResourcePoolRepository(_Base):
     async def insert_resource_class(
         self,
         api_user: base_models.APIUser,
-        resource_class: models.ResourceClass,
+        new_resource_class: models.UnsavedResourceClass,
         *,
         resource_pool_id: Optional[int] = None,
     ) -> models.ResourceClass:
         """Insert a resource class in the database."""
-        cls = schemas.ResourceClassORM.load(resource_class)
+        resource_class = schemas.ResourceClassORM.from_unsaved_model(
+            new_resource_class=new_resource_class, resource_pool_id=resource_pool_id
+        )
+
         async with self.session_maker() as session, session.begin():
             if resource_pool_id is not None:
                 stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == resource_pool_id)
@@ -370,129 +372,117 @@ class ResourcePoolRepository(_Base):
                     raise errors.MissingResourceError(
                         message=f"Resource pool with id {resource_pool_id} does not exist."
                     )
-                if cls.default and len(rp.classes) > 0 and any([icls.default for icls in rp.classes]):
+                if resource_class.default and len(rp.classes) > 0 and any([icls.default for icls in rp.classes]):
                     raise errors.ValidationError(
                         message="There can only be one default resource class per resource pool."
                     )
                 quota = self.quotas_repo.get_quota(rp.quota) if rp.quota else None
-                if quota and not quota.is_resource_class_compatible(resource_class):
+                if quota and not quota.is_resource_class_compatible(new_resource_class):
                     raise errors.ValidationError(
                         message="The resource class {resource_class} is not compatible with the quota {quota}."
                     )
-                cls.resource_pool = rp
-                cls.resource_pool_id = rp.id
 
-            session.add(cls)
-        return cls.dump()
+            session.add(resource_class)
+            await session.flush()
+            await session.refresh(resource_class)
+            return resource_class.dump()
 
     @_only_admins
-    async def update_resource_pool(self, api_user: base_models.APIUser, id: int, **kwargs: Any) -> models.ResourcePool:
+    async def update_resource_pool(
+        self, api_user: base_models.APIUser, resource_pool_id: int, update: models.ResourcePoolPatch
+    ) -> models.ResourcePool:
         """Update an existing resource pool in the database."""
         async with self.session_maker() as session, session.begin():
             stmt = (
                 select(schemas.ResourcePoolORM)
-                .where(schemas.ResourcePoolORM.id == id)
+                .where(schemas.ResourcePoolORM.id == resource_pool_id)
                 .options(selectinload(schemas.ResourcePoolORM.classes))
             )
-            res = await session.execute(stmt)
-            rp = res.scalars().first()
+            res = await session.scalars(stmt)
+            rp = res.one_or_none()
             if rp is None:
-                raise errors.MissingResourceError(message=f"Resource pool with id {id} cannot be found")
+                raise errors.MissingResourceError(message=f"Resource pool with id {resource_pool_id} cannot be found")
             quota = self.quotas_repo.get_quota(rp.quota) if rp.quota else None
-            if len(kwargs) == 0:
-                return rp.dump(quota)
 
-            if kwargs.get("idle_threshold") == 0:
-                kwargs["idle_threshold"] = None
-            if kwargs.get("hibernation_threshold") == 0:
-                kwargs["hibernation_threshold"] = None
-            if kwargs.get("cluster_id") == "":
-                kwargs["cluster_id"] = None
-            # NOTE: The .update method on the model validates the update to the resource pool
-            old_rp_model = rp.dump(quota)
-            new_rp_model = old_rp_model.update(**kwargs)
+            validate_resource_pool_update(existing=rp.dump(quota=quota), update=update)
+
+            if update.name is not None:
+                rp.name = update.name
+            if update.public is not None:
+                rp.public = update.public
+            if update.default is not None:
+                rp.default = update.default
+            if update.idle_threshold == 0:
+                # Using "0" removes the value
+                rp.idle_threshold = None
+            elif update.idle_threshold is not None:
+                rp.idle_threshold = update.idle_threshold
+            if update.hibernation_threshold == 0:
+                # Using "0" removes the value
+                rp.hibernation_threshold = None
+            elif update.hibernation_threshold is not None:
+                rp.hibernation_threshold = update.hibernation_threshold
+
+            if update.cluster_id is RESET:
+                rp.cluster_id = None
+            elif isinstance(update.cluster_id, ULID):
+                cluster = await self.__cluster_repo.select(update.cluster_id)
+                rp.cluster_id = cluster.id
+
+            if update.quota is RESET and rp.quota:
+                # Remove the existing quota
+                self.quotas_repo.delete_quota(name=rp.quota)
+            elif isinstance(update.quota, models.QuotaPatch) and rp.quota is None:
+                # Create a new quota, the `update.quota` object has already been validated
+                assert update.quota.cpu is not None
+                assert update.quota.memory is not None
+                assert update.quota.gpu is not None
+                new_quota = models.UnsavedQuota(
+                    cpu=update.quota.cpu,
+                    memory=update.quota.memory,
+                    gpu=update.quota.gpu,
+                )
+                quota = self.quotas_repo.create_quota(new_quota=new_quota)
+                rp.quota = quota.id
+            elif isinstance(update.quota, models.QuotaPatch):
+                assert rp.quota is not None
+                assert quota is not None
+                # Update the existing quota
+                updated_quota = models.Quota(
+                    cpu=update.quota.cpu if update.quota.cpu is not None else quota.cpu,
+                    memory=update.quota.memory if update.quota.memory is not None else quota.memory,
+                    gpu=update.quota.gpu if update.quota.gpu is not None else quota.gpu,
+                    gpu_kind=update.quota.gpu_kind if update.quota.gpu_kind is not None else quota.gpu_kind,
+                    id=quota.id,
+                )
+                quota = self.quotas_repo.update_quota(quota=updated_quota)
+                rp.quota = quota.id
+
             new_classes_coroutines = []
-            for key, val in kwargs.items():
-                match key:
-                    case "name" | "public" | "default" | "idle_threshold" | "hibernation_threshold":
-                        setattr(rp, key, val)
-                    case "cluster_id":
-                        cluster_id = val
-                        cluster = None
+            if update.classes is not None:
+                for rc in update.classes:
+                    new_classes_coroutines.append(
+                        self.update_resource_class(
+                            api_user=api_user, resource_pool_id=resource_pool_id, resource_class_id=rc.id, update=rc
+                        )
+                    )
 
-                        if cluster_id is not None:
-                            cluster = await self.__cluster_repo.select(ULID.from_str(cluster_id))
+            if update.remote is RESET:
+                rp.remote_provider_id = None
+                rp.remote_json = None
+            if isinstance(update.remote, models.RemoteConfigurationFirecrestPatch):
+                rp.remote_provider_id = (
+                    update.remote.provider_id if update.remote.provider_id is not None else rp.remote_provider_id
+                )
+                remote_json = rp.remote_json if rp.remote_json is not None else dict()
+                remote_json.update(update.remote.to_dict())
+                del remote_json["provider_id"]
+                rp.remote_json = remote_json
 
-                        rp.cluster_id = cluster_id
-                        new_rp_model = new_rp_model.update(cluster=cluster)
-                    case "quota":
-                        if val is None:
-                            continue
-
-                        # For updating a quota, there are two options:
-                        # 1. no quota exists --> create a new one
-                        # 2. a quota exists and can only be updated, not replaced (the ids, if provided, must match)
-
-                        new_id = val.get("id")
-                        quota_id = quota.id if quota is not None else None
-
-                        # the id must match for update
-                        match (quota_id, new_id):
-                            case (None, _):
-                                pass
-                            case (quota_id, None):
-                                val["id"] = quota_id
-                            case (quota_id, new_id):
-                                if quota_id != new_id:
-                                    raise errors.ValidationError(
-                                        message="The ID of an existing quota cannot be updated, "
-                                        f"please remove the ID field from the request or use ID {quota_id}."
-                                    )
-
-                        new_quota = models.Quota.from_dict(val)
-
-                        if new_id is None and quota is None:
-                            new_quota = self.quotas_repo.create_quota(new_quota)
-                        else:
-                            new_quota = self.quotas_repo.update_quota(new_quota)
-
-                        rp.quota = new_quota.id
-                        new_rp_model = new_rp_model.update(quota=new_quota)
-                    case "classes":
-                        for cls in val:
-                            class_id = cls.pop("id")
-                            cls.pop("matching", None)
-                            if len(cls) == 0:
-                                raise errors.ValidationError(
-                                    message="More fields than the id of the class should be provided when updating it"
-                                )
-                            new_classes_coroutines.append(
-                                self.update_resource_class(
-                                    api_user, resource_pool_id=id, resource_class_id=class_id, **cls
-                                )
-                            )
-                    case "remote":
-                        if val is None:
-                            continue
-                        if val is RESET:
-                            rp.remote_provider_id = None
-                            rp.remote_json = None
-                            new_rp_model = new_rp_model.update(remote=None)
-                            continue
-                        if isinstance(val, models.RemoteConfigurationFirecrestPatch):
-                            assert new_rp_model.remote is not None
-                            rp.remote_provider_id = val.provider_id
-                            remote_json = new_rp_model.remote.to_dict()
-                            del remote_json["provider_id"]
-                            rp.remote_json = remote_json
-                            continue
-                        raise errors.ProgrammingError(message=f"Unexpected update value for field remote: {val}")
-                    case _:
-                        pass
-            new_classes = await gather(*new_classes_coroutines)
-            if new_classes is not None and len(new_classes) > 0:
-                new_rp_model = new_rp_model.update(classes=new_classes)
-            return new_rp_model
+            await gather(*new_classes_coroutines)
+            await session.flush()
+            await session.refresh(rp)
+            return rp.dump(quota=quota)
 
     @_only_admins
     async def delete_resource_pool(self, api_user: base_models.APIUser, id: int) -> None:
@@ -529,7 +519,11 @@ class ResourcePoolRepository(_Base):
 
     @_only_admins
     async def update_resource_class(
-        self, api_user: base_models.APIUser, resource_pool_id: int, resource_class_id: int, **kwargs: Any
+        self,
+        api_user: base_models.APIUser,
+        resource_pool_id: int,
+        resource_class_id: int,
+        update: models.ResourceClassPatch | models.ResourceClassPatchWithId,
     ) -> models.ResourceClass:
         """Update a specific resource class."""
         async with self.session_maker() as session, session.begin():
@@ -540,8 +534,8 @@ class ResourcePoolRepository(_Base):
                 .join(schemas.ResourcePoolORM, schemas.ResourceClassORM.resource_pool)
                 .options(selectinload(schemas.ResourceClassORM.resource_pool))
             )
-            res = await session.execute(stmt)
-            cls: Optional[schemas.ResourceClassORM] = res.scalars().first()
+            res = await session.scalars(stmt)
+            cls = res.one_or_none()
             if cls is None:
                 raise errors.MissingResourceError(
                     message=(
@@ -550,61 +544,78 @@ class ResourcePoolRepository(_Base):
                         "associated with the resource pool"
                     )
                 )
-            for k, v in kwargs.items():
-                match k:
-                    case "node_affinities":
-                        v = cast(list[dict[str, str | bool]], v)
-                        existing_affinities: dict[str, schemas.NodeAffintyORM] = {i.key: i for i in cls.node_affinities}
-                        new_affinities: dict[str, schemas.NodeAffintyORM] = {
-                            i["key"]: schemas.NodeAffintyORM(**i) for i in v
-                        }
-                        for new_affinity_key, new_affinity in new_affinities.items():
-                            if new_affinity_key in existing_affinities:
-                                # UPDATE existing affinity
-                                existing_affinity = existing_affinities[new_affinity_key]
-                                if (
-                                    new_affinity.required_during_scheduling
-                                    != existing_affinity.required_during_scheduling
-                                ):
-                                    existing_affinity.required_during_scheduling = (
-                                        new_affinity.required_during_scheduling
-                                    )
-                            else:
-                                # CREATE a brand new affinity
-                                cls.node_affinities.append(new_affinity)
-                        # REMOVE an affinity
-                        for existing_affinity_key, existing_affinity in existing_affinities.items():
-                            if existing_affinity_key not in new_affinities:
-                                cls.node_affinities.remove(existing_affinity)
-                    case "tolerations":
-                        v = cast(list[str], v)
-                        existing_tolerations: dict[str, schemas.TolerationORM] = {
-                            tol.key: tol for tol in cls.tolerations
-                        }
-                        new_tolerations: dict[str, schemas.TolerationORM] = {
-                            tol: schemas.TolerationORM(key=tol) for tol in v
-                        }
-                        for new_tol_key, new_tol in new_tolerations.items():
-                            if new_tol_key not in existing_tolerations:
-                                # CREATE a brand new toleration
-                                cls.tolerations.append(new_tol)
-                        # REMOVE a toleration
-                        for existing_tol_key, existing_tol in existing_tolerations.items():
-                            if existing_tol_key not in new_tolerations:
-                                cls.tolerations.remove(existing_tol)
-                    case _:
-                        setattr(cls, k, v)
+
+            validate_resource_class_update(existing=cls.dump(), update=update)
+
+            if update.name is not None:
+                cls.name = update.name
+            if update.cpu is not None:
+                cls.cpu = update.cpu
+            if update.memory is not None:
+                cls.memory = update.memory
+            if update.max_storage is not None:
+                cls.max_storage = update.max_storage
+            if update.gpu is not None:
+                cls.gpu = update.gpu
+            if update.default is not None:
+                cls.default = update.default
+            if update.default_storage is not None:
+                cls.default_storage = update.default_storage
+
+            if update.node_affinities is not None:
+                existing_affinities: dict[str, schemas.NodeAffintyORM] = {i.key: i for i in cls.node_affinities}
+                new_affinities: dict[str, schemas.NodeAffintyORM] = {
+                    i.key: schemas.NodeAffintyORM(
+                        key=i.key,
+                        required_during_scheduling=i.required_during_scheduling,
+                    )
+                    for i in update.node_affinities
+                }
+                for new_affinity_key, new_affinity in new_affinities.items():
+                    if new_affinity_key in existing_affinities:
+                        # UPDATE existing affinity
+                        existing_affinity = existing_affinities[new_affinity_key]
+                        if new_affinity.required_during_scheduling != existing_affinity.required_during_scheduling:
+                            existing_affinity.required_during_scheduling = new_affinity.required_during_scheduling
+                    else:
+                        # CREATE a brand new affinity
+                        cls.node_affinities.append(new_affinity)
+                # REMOVE an affinity
+                for existing_affinity_key, existing_affinity in existing_affinities.items():
+                    if existing_affinity_key not in new_affinities:
+                        cls.node_affinities.remove(existing_affinity)
+
+            if update.tolerations is not None:
+                existing_tolerations: dict[str, schemas.TolerationORM] = {tol.key: tol for tol in cls.tolerations}
+                new_tolerations: dict[str, schemas.TolerationORM] = {
+                    tol: schemas.TolerationORM(key=tol) for tol in update.tolerations
+                }
+                for new_tol_key, new_tol in new_tolerations.items():
+                    if new_tol_key not in existing_tolerations:
+                        # CREATE a brand new toleration
+                        cls.tolerations.append(new_tol)
+                # REMOVE a toleration
+                for existing_tol_key, existing_tol in existing_tolerations.items():
+                    if existing_tol_key not in new_tolerations:
+                        cls.tolerations.remove(existing_tol)
+
+            # NOTE: do we need to perform this check?
             if cls.resource_pool is None:
                 raise errors.BaseError(
                     message="Unexpected internal error.",
                     detail=f"The resource class {resource_class_id} is not associated with any resource pool.",
                 )
-            quota = self.quotas_repo.get_quota(cls.resource_pool.quota) if cls.resource_pool.quota else None
+
+            await session.flush()
+            await session.refresh(cls)
+
             cls_model = cls.dump()
+            quota = self.quotas_repo.get_quota(cls_model.quota) if cls_model.quota else None
             if quota and not quota.is_resource_class_compatible(cls_model):
                 raise errors.ValidationError(
                     message=f"The resource class {cls_model} is not compatible with the quota {quota}"
                 )
+
             return cls_model
 
     @_only_admins
@@ -662,6 +673,54 @@ class ResourcePoolRepository(_Base):
                 )
             stmt = delete(schemas.NodeAffintyORM).where(schemas.NodeAffintyORM.resource_class_id == class_id)
             await session.execute(stmt)
+
+    async def get_quota(self, api_user: base_models.APIUser, resource_pool_id: int) -> models.Quota:
+        """Get the quota of a resource pool."""
+        rps = await self.get_resource_pools(api_user=api_user, id=resource_pool_id)
+        if len(rps) < 1:
+            raise errors.MissingResourceError(message=f"Cannot find the resource pool with ID {resource_pool_id}.")
+        rp = rps[0]
+        if rp.quota is None:
+            raise errors.MissingResourceError(
+                message=f"The resource pool with ID {resource_pool_id} does not have a quota."
+            )
+        return rp.quota
+
+    @_only_admins
+    async def update_quota(
+        self,
+        api_user: base_models.APIUser,
+        resource_pool_id: int,
+        update: models.QuotaPatch,
+        quota_put_id: str | None = None,
+    ) -> models.Quota:
+        """Update the quota of a resource pool."""
+        rps = await self.get_resource_pools(api_user=api_user, id=resource_pool_id)
+        if len(rps) < 1:
+            raise errors.MissingResourceError(message=f"Cannot find the resource pool with ID {resource_pool_id}.")
+        rp = rps[0]
+        if rp.quota is None:
+            raise errors.MissingResourceError(
+                message=f"The resource pool with ID {resource_pool_id} does not have a quota."
+            )
+        old_quota = rp.quota
+        new_quota = models.Quota(
+            cpu=update.cpu if update.cpu is not None else old_quota.cpu,
+            memory=update.memory if update.memory is not None else old_quota.memory,
+            gpu=update.gpu if update.gpu is not None else old_quota.gpu,
+            gpu_kind=update.gpu_kind if update.gpu_kind is not None else old_quota.gpu_kind,
+            id=quota_put_id or old_quota.id,
+        )
+        if new_quota.id != old_quota.id:
+            raise errors.ValidationError(message="The 'id' field of a quota is immutable.")
+
+        for rc in rp.classes:
+            if not new_quota.is_resource_class_compatible(rc):
+                raise errors.ValidationError(
+                    message=f"The quota {new_quota} is not compatible with the resource class {rc}."
+                )
+
+        return self.quotas_repo.update_quota(quota=new_quota)
 
 
 @dataclass

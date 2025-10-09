@@ -107,9 +107,9 @@ def _get_classname() -> Generator[str, None, None]:
 
 def generate_default_resource_pool(
     server_options: ServerOptions, defaults: ServerOptionsDefaults
-) -> models.ResourcePool:
+) -> models.UnsavedResourcePool:
     """Generate a resource pool from the notebook service style server options."""
-    clses: list[models.ResourceClass] = []
+    clses: list[models.UnsavedResourceClass] = []
     largest_attribute = server_options.find_largest_attribute()
     options_xref = {
         "cpu_request": "cpu",
@@ -135,9 +135,9 @@ def generate_default_resource_pool(
         cls["name"] = next(class_names)
         cls["max_storage"] = max_storage
         cls["default_storage"] = round(defaults.disk_request / 1_000_000_000)
-        clses.append(models.ResourceClass.from_dict(cls))
+        clses.append(models.UnsavedResourceClass(**cls))
     clses.append(
-        models.ResourceClass(
+        models.UnsavedResourceClass(
             cpu=defaults.cpu_request,
             memory=round(defaults.mem_request / 1_000_000_000),
             gpu=defaults.gpu_request,
@@ -147,7 +147,7 @@ def generate_default_resource_pool(
             default_storage=round(defaults.disk_request / 1_000_000_000),
         )
     )
-    return models.ResourcePool(
+    return models.UnsavedResourcePool(
         classes=clses,
         default=True,
         public=True,
