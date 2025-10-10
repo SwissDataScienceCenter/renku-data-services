@@ -557,6 +557,7 @@ class ResourcePoolRepository(_Base):
                 cls.max_storage = update.max_storage
             if update.gpu is not None:
                 cls.gpu = update.gpu
+            # TODO: setting a resource class as the default should unset the default field of the current default class
             if update.default is not None:
                 cls.default = update.default
             if update.default_storage is not None:

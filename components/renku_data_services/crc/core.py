@@ -269,7 +269,26 @@ def validate_resource_pool_put(body: apispec.ResourcePoolPut) -> models.Resource
 def validate_resource_pool_update(existing: models.ResourcePool, update: models.ResourcePoolPatch) -> None:
     """Validate the update to a resource pool."""
     name = update.name if update.name is not None else existing.name
-    # classes: list[ResourceClass]
+    classes = existing.classes
+    for rc in update.classes or []:
+        found = next(filter(lambda tup: tup[1].id == rc.id, enumerate(classes)), None)
+        if found is None:
+            raise errors.ValidationError(
+                message=f"Resource class '{rc.id}' does not exist in resource pool '{existing.id}'."
+            )
+        idx, existing_rc = found
+        classes[idx] = models.ResourceClass(
+            name=rc.name if rc.name is not None else existing_rc.name,
+            cpu=rc.cpu if rc.cpu is not None else existing_rc.cpu,
+            memory=rc.memory if rc.memory is not None else existing_rc.memory,
+            max_storage=rc.max_storage if rc.max_storage is not None else existing_rc.max_storage,
+            gpu=rc.gpu if rc.gpu is not None else existing_rc.gpu,
+            id=existing_rc.id,
+            default=rc.default if rc.default is not None else existing_rc.default,
+            default_storage=rc.default_storage if rc.default_storage is not None else existing_rc.default_storage,
+            node_affinities=rc.node_affinities if rc.node_affinities is not None else existing_rc.node_affinities,
+            tolerations=rc.tolerations if rc.tolerations is not None else existing_rc.tolerations,
+        )
     quota: models.Quota | models.UnsavedQuota | ResetType = existing.quota if existing.quota else RESET
     if update.quota is RESET:
         quota = RESET
@@ -341,8 +360,6 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
             partition=update.remote.partition if update.remote.partition is not None else existing.remote.partition,
         )
 
-    # cluster: SavedClusterSettings | None = None
-
     if len(name) > 40:
         # TODO: Should this be added to the API spec instead?
         raise errors.ValidationError(message="'name' cannot be longer than 40 characters.")
@@ -357,21 +374,20 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
     if (idle_threshold and idle_threshold < 0) or (hibernation_threshold and hibernation_threshold < 0):
         raise errors.ValidationError(message="Idle threshold and hibernation threshold need to be larger than 0.")
 
-    # quota = validate_quota(body=body.quota) if body.quota else None
-    # classes = [validate_resource_class(body=new_cls) for new_cls in body.classes]
-
-    # default_classes: list[models.UnsavedResourceClass] = []
-    # for cls in classes:
-    #     if quota is not None and not quota.is_resource_class_compatible(cls):
-    #         raise errors.ValidationError(
-    #             message=f"The resource class with name {cls.name} is not compatible with the quota."
-    #         )
-    #     if cls.default:
-    #         default_classes.append(cls)
-    # if len(default_classes) != 1:
-    #     raise errors.ValidationError(message="One default class is required in each resource pool.")
-
-    # remote = validate_remote(body=body.remote) if body.remote else None
+    default_classes: list[models.ResourceClass] = []
+    for cls in classes:
+        if (
+            isinstance(quota, models.Quota)
+            or isinstance(quota, models.UnsavedQuota)
+            and not quota.is_resource_class_compatible(cls)
+        ):
+            raise errors.ValidationError(
+                message=f"The resource class with name {cls.name} is not compatible with the quota."
+            )
+        if cls.default:
+            default_classes.append(cls)
+    if len(default_classes) != 1:
+        raise errors.ValidationError(message="One default class is required in each resource pool.")
 
 
 def validate_cluster(body: apispec.Cluster) -> models.ClusterSettings:

@@ -352,10 +352,6 @@ class ClassesBP(CustomBlueprint):
                 update=put,
             )
             return validated_json(apispec.ResourceClassWithId, rc)
-            # res = await self.repo.update_resource_class(
-            #     user, resource_pool_id, class_id, put=True, **body.model_dump(exclude_none=True)
-            # )
-            # return validated_json(apispec.ResourceClassWithId, res)
 
         return "/resource_pools/<resource_pool_id>/classes/<class_id>", ["PUT"], _put
 
@@ -446,7 +442,6 @@ class QuotaBP(CustomBlueprint):
     """Handlers for dealing with a quota."""
 
     rp_repo: ResourcePoolRepository
-    # quota_repo: QuotaRepository
     authenticator: base_models.Authenticator
 
     def get(self) -> BlueprintFactoryResponse:

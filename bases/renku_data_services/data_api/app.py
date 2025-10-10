@@ -85,7 +85,6 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         url_prefix=url_prefix,
         rp_repo=dm.rp_repo,
         authenticator=dm.authenticator,
-        # quota_repo=dm.quota_repo,
     )
     users = KCUsersBP(name="users", url_prefix=url_prefix, repo=dm.kc_user_repo, authenticator=dm.authenticator)
     user_secrets = UserSecretsBP(

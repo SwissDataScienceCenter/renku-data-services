@@ -137,21 +137,6 @@ class ResourceClassORM(BaseORM):
             node_affinities=node_affinities,
         )
 
-    # @classmethod
-    # def load(cls, resource_class: models.ResourceClass) -> ResourceClassORM:
-    #     """Create a ORM object from the resource class model."""
-    #     return cls(
-    #         name=resource_class.name,
-    #         cpu=resource_class.cpu,
-    #         memory=resource_class.memory,
-    #         max_storage=resource_class.max_storage,
-    #         gpu=resource_class.gpu,
-    #         default=resource_class.default,
-    #         default_storage=resource_class.default_storage,
-    #         node_affinities=[NodeAffintyORM.load(affinity) for affinity in resource_class.node_affinities],
-    #         tolerations=[TolerationORM(key=toleration) for toleration in resource_class.tolerations],
-    #     )
-
     def dump(
         self, matching_criteria: models.ResourceClass | models.UnsavedResourceClass | None = None
     ) -> models.ResourceClass:
@@ -307,37 +292,6 @@ class ResourcePoolORM(BaseORM):
             cluster_id=cluster.id if cluster else None,
         )
 
-    # @classmethod
-    # def load(cls, resource_pool: models.ResourcePool) -> ResourcePoolORM:
-    #     """Create an ORM object from the resource pool model."""
-    #     quota = None
-    #     if resource_pool.quota is not None:
-    #         quota = resource_pool.quota.id
-
-    #     cluster_id = None
-    #     if resource_pool.cluster is not None:
-    #         cluster_id = resource_pool.cluster.id
-
-    #     remote_provider_id = None
-    #     remote_json = None
-    #     if resource_pool.remote:
-    #         remote_provider_id = resource_pool.remote.provider_id
-    #         remote_json = resource_pool.remote.to_dict()
-    #         del remote_json["provider_id"]
-
-    #     return cls(
-    #         name=resource_pool.name,
-    #         quota=quota,
-    #         classes=[ResourceClassORM.load(resource_class) for resource_class in resource_pool.classes],
-    #         idle_threshold=resource_pool.idle_threshold,
-    #         hibernation_threshold=resource_pool.hibernation_threshold,
-    #         public=resource_pool.public,
-    #         default=resource_pool.default,
-    #         remote_provider_id=remote_provider_id,
-    #         remote_json=remote_json,
-    #         cluster_id=cluster_id,
-    #     )
-
     def dump(
         self,
         quota: models.Quota | None,
@@ -407,14 +361,6 @@ class NodeAffintyORM(BaseORM):
     )
     required_during_scheduling: Mapped[bool] = mapped_column(default=False)
     id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
-
-    # @classmethod
-    # def load(cls, affinity: models.NodeAffinity) -> NodeAffintyORM:
-    #     """Create an ORM object from the node affinity model."""
-    #     return cls(
-    #         key=affinity.key,
-    #         required_during_scheduling=affinity.required_during_scheduling,
-    #     )
 
     def dump(self) -> models.NodeAffinity:
         """Create a node affinity model from the ORM object."""

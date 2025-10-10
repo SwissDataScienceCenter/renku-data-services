@@ -147,8 +147,6 @@ class QuotaRepository:
         )
 
     def _quota_to_manifest(self, quota: models.Quota) -> client.V1ResourceQuota:
-        # if quota.id is None:
-        #     raise errors.ValidationError(message="The id of a quota has to be set when it is created.")
         return client.V1ResourceQuota(
             metadata=client.V1ObjectMeta(labels={self._label_name: self._label_value}, name=quota.id),
             spec=client.V1ResourceQuotaSpec(
