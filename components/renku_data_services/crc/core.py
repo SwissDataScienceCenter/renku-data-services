@@ -376,11 +376,7 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
 
     default_classes: list[models.ResourceClass] = []
     for cls in classes:
-        if (
-            isinstance(quota, models.Quota)
-            or isinstance(quota, models.UnsavedQuota)
-            and not quota.is_resource_class_compatible(cls)
-        ):
+        if (isinstance(quota, (models.Quota, models.UnsavedQuota))) and not quota.is_resource_class_compatible(cls):
             raise errors.ValidationError(
                 message=f"The resource class with name {cls.name} is not compatible with the quota."
             )

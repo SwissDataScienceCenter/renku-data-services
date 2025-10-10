@@ -130,6 +130,7 @@ class ResourceClassORM(BaseORM):
             cpu=new_resource_class.cpu,
             memory=new_resource_class.memory,
             max_storage=new_resource_class.max_storage,
+            default=new_resource_class.default,
             default_storage=new_resource_class.default_storage,
             gpu=new_resource_class.gpu,
             resource_pool_id=resource_pool_id,

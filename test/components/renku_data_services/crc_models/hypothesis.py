@@ -47,7 +47,7 @@ def node_affinity_strat(draw):
 @st.composite
 def rc_non_default_strat(draw):
     try:
-        return models.ResourceClass(
+        return models.UnsavedResourceClass(
             name=draw(a_name),
             cpu=draw(a_rc_cpu),
             gpu=draw(a_rc_gpu),
@@ -64,7 +64,7 @@ def rc_non_default_strat(draw):
 @st.composite
 def rc_default_strat(draw):
     try:
-        return models.ResourceClass(
+        return models.UnsavedResourceClass(
             name=draw(a_name),
             cpu=draw(a_rc_cpu),
             gpu=draw(a_rc_gpu),
@@ -93,7 +93,7 @@ def rp_strat(draw):
     idle_threshold = draw(a_threshold)
     hibernation_threshold = draw(a_threshold)
     try:
-        return models.ResourcePool(
+        return models.UnsavedResourcePool(
             name=name,
             classes=classes,
             quota=quota,
