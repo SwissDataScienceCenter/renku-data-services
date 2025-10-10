@@ -434,7 +434,7 @@ def sort_rp_classes(classes: list[rp_models.ResourceClass]) -> list[rp_models.Re
 
 
 async def create_rp(
-    rp: rp_models.ResourcePool, repo: ResourcePoolRepository, api_user: base_models.APIUser
+    rp: rp_models.UnsavedResourcePool, repo: ResourcePoolRepository, api_user: base_models.APIUser
 ) -> rp_models.ResourcePool:
     inserted_rp = await repo.insert_resource_pool(api_user, rp)
 

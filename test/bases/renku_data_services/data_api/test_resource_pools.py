@@ -916,7 +916,7 @@ async def test_put_tolerations(
 ) -> None:
     valid_resource_pool_payload["classes"][0]["tolerations"] = ["toleration1"]
     _, res = await create_rp(valid_resource_pool_payload, sanic_client)
-    assert res.status_code == 201
+    assert res.status_code == 201, res.text
     rp = res.json
     rp_id = rp["id"]
     assert len(rp["classes"]) > 0
@@ -932,13 +932,13 @@ async def test_put_tolerations(
         headers=admin_headers,
         data=json.dumps(new_class),
     )
-    assert res.status_code == 200
+    assert res.status_code == 200, res.text
     assert res.json["tolerations"] == ["toleration2", "toleration3"]
     _, res = await sanic_client.get(
         f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
         headers=admin_headers,
     )
-    assert res.status_code == 200
+    assert res.status_code == 200, res.text
     assert res.json["tolerations"] == ["toleration2", "toleration3"]
 
 
