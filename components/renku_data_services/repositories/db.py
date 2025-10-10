@@ -4,6 +4,7 @@ from collections.abc import Callable
 from typing import Literal
 from urllib.parse import urlparse
 
+from authlib.integrations.httpx_client import OAuthError
 from httpx import AsyncClient as HttpClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +14,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.connected_services import orm as connected_services_schemas
 from renku_data_services.connected_services.db import ConnectedServicesRepository
+from renku_data_services.connected_services.utils import GitHubProviderType, get_github_provider_type
 from renku_data_services.repositories import models
 from renku_data_services.repositories.provider_adapters import (
     get_internal_gitlab_adapter,
@@ -28,10 +30,18 @@ class GitRepositoriesRepository:
         session_maker: Callable[..., AsyncSession],
         connected_services_repo: ConnectedServicesRepository,
         internal_gitlab_url: str | None,
+        enable_internal_gitlab: bool,
     ):
         self.session_maker = session_maker
         self.connected_services_repo = connected_services_repo
         self.internal_gitlab_url = internal_gitlab_url
+        self.enable_internal_gitlab = enable_internal_gitlab
+
+    def __include_repository_provider(self, c: connected_services_schemas.OAuth2ClientORM, repo_netloc: str) -> bool:
+        github_type = get_github_provider_type(c)
+        return urlparse(c.url).netloc == repo_netloc and (
+            not github_type or github_type == GitHubProviderType.standard_app
+        )
 
     async def get_repository(
         self,
@@ -47,19 +57,19 @@ class GitRepositoriesRepository:
             result_clients = await session.scalars(select(connected_services_schemas.OAuth2ClientORM))
             clients = result_clients.all()
 
-        matched_client = next(filter(lambda x: urlparse(x.url).netloc == repository_netloc, clients), None)
-
-        if self.internal_gitlab_url:
-            internal_gitlab_netloc = urlparse(self.internal_gitlab_url).netloc
-            if matched_client is None and internal_gitlab_netloc == repository_netloc:
-                return await self._get_repository_from_internal_gitlab(
-                    repository_url=repository_url,
-                    user=internal_gitlab_user,
-                    etag=etag,
-                    internal_gitlab_url=self.internal_gitlab_url,
-                )
+        matched_client = next(filter(lambda x: self.__include_repository_provider(x, repository_netloc), clients), None)
 
         if matched_client is None:
+            if self.enable_internal_gitlab and self.internal_gitlab_url:
+                internal_gitlab_netloc = urlparse(self.internal_gitlab_url).netloc
+                if internal_gitlab_netloc == repository_netloc:
+                    return await self._get_repository_from_internal_gitlab(
+                        repository_url=repository_url,
+                        user=internal_gitlab_user,
+                        etag=etag,
+                        internal_gitlab_url=self.internal_gitlab_url,
+                    )
+
             raise errors.MissingResourceError(message=f"No OAuth2 Client found for repository {repository_url}.")
 
         async with self.session_maker() as session:
@@ -120,7 +130,15 @@ class GitRepositoriesRepository:
             headers = adapter.api_common_headers or dict()
             if etag:
                 headers["If-None-Match"] = etag
-            response = await oauth2_client.get(request_url, headers=headers)
+            try:
+                response = await oauth2_client.get(request_url, headers=headers)
+            except OAuthError as err:
+                if err.error == "bad_refresh_token":
+                    raise errors.InvalidTokenError(
+                        message="The refresh token for the repository has expired or is invalid.",
+                        detail=f"Please reconnect your integration for {repository_url} and try again.",
+                    ) from err
+                raise
 
             if response.status_code == 304:
                 return "304"

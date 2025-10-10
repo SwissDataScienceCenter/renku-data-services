@@ -33,10 +33,10 @@ class ServerStatusEnum(Enum):
 class StepStatusEnum(Enum):
     """Enum for status of a session start step."""
 
-    ready: str = "ready"  # An init job completely done or container fully running
-    waiting: str = "waiting"  # Waiting to start
-    executing: str = "executing"  # Running but not complete or fully ready
-    failed: str = "failed"
+    ready = "ready"  # An init job completely done or container fully running
+    waiting = "waiting"  # Waiting to start
+    executing = "executing"  # Running but not complete or fully ready
+    failed = "failed"
 
     @classmethod
     def list(cls) -> list[str]:

@@ -10,19 +10,8 @@ from typing import Any, Concatenate, ParamSpec, Protocol, TypeVar, cast
 import httpx
 from deepmerge import Merger
 from sqlalchemy.ext.asyncio import AsyncSession
-from tenacity import retry, stop_after_attempt, stop_after_delay, wait_fixed
 
 from renku_data_services import errors
-
-
-@retry(stop=(stop_after_attempt(20) | stop_after_delay(300)), wait=wait_fixed(2), reraise=True)
-def oidc_discovery(url: str, realm: str) -> dict[str, Any]:
-    """Get OIDC configuration."""
-    url = f"{url}/realms/{realm}/.well-known/openid-configuration"
-    res = httpx.get(url, verify=get_ssl_context(), timeout=5)
-    if res.status_code == 200:
-        return cast(dict[str, Any], res.json())
-    raise errors.ConfigurationError(message=f"Cannot successfully do OIDC discovery with url {url}.")
 
 
 @functools.lru_cache(1)

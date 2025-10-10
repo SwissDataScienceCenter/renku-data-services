@@ -175,6 +175,21 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - oauth2
+    delete:
+      summary: Delete an OAuth2 connection
+      parameters:
+        - in: path
+          name: connection_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: If deleted successfully
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - oauth2
   /oauth2/connections/{connection_id}/account:
     get:
       summary: Get the account information for this OAuth2 connection for the currently authenticated user if their account is connected
@@ -272,6 +287,10 @@ components:
           $ref: "#/components/schemas/ProviderUrl"
         use_pkce:
           $ref: "#/components/schemas/UsePKCE"
+        image_registry_url:
+          $ref: "#/components/schemas/ImageRegistryUrl"
+        oidc_issuer_url:
+          $ref: "#/components/schemas/OidcIssuerUrl"
       required:
         - id
         - kind
@@ -303,6 +322,10 @@ components:
           $ref: "#/components/schemas/ProviderUrl"
         use_pkce:
           $ref: "#/components/schemas/UsePKCE"
+        image_registry_url:
+          $ref: "#/components/schemas/ImageRegistryUrl"
+        oidc_issuer_url:
+          $ref: "#/components/schemas/OidcIssuerUrl"
       required:
         - id
         - kind
@@ -330,6 +353,10 @@ components:
           $ref: "#/components/schemas/ProviderUrl"
         use_pkce:
           $ref: "#/components/schemas/UsePKCE"
+        image_registry_url:
+          $ref: "#/components/schemas/ImageRegistryUrl"
+        oidc_issuer_url:
+          $ref: "#/components/schemas/OidcIssuerUrl"
     ConnectionList:
       type: array
       items:
@@ -404,6 +431,7 @@ components:
         - "drive"
         - "onedrive"
         - "dropbox"
+        - "generic_oidc"
       example: "gitlab"
     ApplicationSlug:
       description: |
@@ -468,6 +496,17 @@ components:
           minimum: 1
           maximum: 100
           default: 20
+    ImageRegistryUrl:
+      type: string
+      description: |
+        This should contain no paths, just the domain for the registry and the scheme
+        (http or https) to access the image registry API.
+      example: https://registry.gitlab.com
+    OidcIssuerUrl:
+      type: string
+      description: |
+        The URL for OpenID Connect client discovery. Used for providers of kind 'generic_oidc'.
+      example: https://renkulab.io/auth/realms/Renku
     ErrorResponse:
       type: object
       properties:

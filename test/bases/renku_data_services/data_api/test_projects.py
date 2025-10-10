@@ -1,20 +1,19 @@
 """Tests for projects blueprint."""
 
+import asyncio
 import time
-from base64 import b64decode
 from typing import Any
 
 import pytest
 from httpx import Response
+from sanic_testing.testing import SanicASGITestClient
 from sqlalchemy import select
+from syrupy.filters import props
 from ulid import ULID
 
-from components.renku_data_services.message_queue.avro_models.io.renku.events import v2 as avro_schema_v2
-from renku_data_services.app_config.config import Config
-from renku_data_services.message_queue.avro_models.io.renku.events.v2.member_role import MemberRole
-from renku_data_services.message_queue.models import deserialize_binary
+from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.users.models import UserInfo
-from test.bases.renku_data_services.data_api.utils import deserialize_event, merge_headers
+from test.bases.renku_data_services.data_api.utils import merge_headers
 
 
 @pytest.fixture
@@ -44,19 +43,20 @@ def update_project(sanic_client, user_headers, get_project):
 
 
 @pytest.mark.asyncio
-async def test_project_creation(sanic_client, user_headers, regular_user: UserInfo, app_config) -> None:
+async def test_project_creation(sanic_client, user_headers, regular_user: UserInfo, app_manager) -> None:
     payload = {
         "name": "Renku Native Project",
         "slug": "project-slug",
         "description": "First Renku native project",
         "visibility": "public",
         "repositories": ["http://renkulab.io/repository-1", "http://renkulab.io/repository-2"],
-        "namespace": regular_user.namespace.slug,
+        "namespace": regular_user.namespace.path.serialize(),
         "keywords": ["keyword 1", "keyword.2", "keyword-3", "KEYWORD_4"],
         "documentation": "$\\sqrt(2)$",
+        "secrets_mount_directory": "/etc/renku_secrets",
     }
 
-    await app_config.event_repo.delete_all_events()
+    await app_manager.search_updates_repo.clear_all()
 
     _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
 
@@ -75,23 +75,14 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
     assert project["created_by"] == "user"
     assert "template_id" not in project or project["template_id"] is None
     assert project["is_template"] is False
+    assert project["secrets_mount_directory"] == "/etc/renku_secrets"
+    app_manager.metrics.project_created.assert_called_once()
     project_id = project["id"]
 
-    events = await app_config.event_repo.get_pending_events()
-    assert len(events) == 2
-    project_created_event = next((e for e in events if e.get_message_type() == "project.created"), None)
-    assert project_created_event
-    created_event = deserialize_binary(
-        b64decode(project_created_event.payload["payload"]), avro_schema_v2.ProjectCreated
-    )
-    assert created_event.name == payload["name"]
-    assert created_event.slug == payload["slug"]
-    assert created_event.repositories == payload["repositories"]
-    project_auth_added = next((e for e in events if e.get_message_type() == "projectAuth.added"), None)
-    assert project_auth_added
-    auth_event = deserialize_binary(b64decode(project_auth_added.payload["payload"]), avro_schema_v2.ProjectMemberAdded)
-    assert auth_event.userId == "user"
-    assert auth_event.role == MemberRole.OWNER
+    search_updates = await app_manager.search_updates_repo.select_next(10)
+    assert len(search_updates) == 1
+    for e in search_updates:
+        assert e.entity_type == "Project"
 
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
 
@@ -119,7 +110,7 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
     assert "template_id" not in project or project["template_id"] is None
     assert project["is_template"] is False
 
-    # same as above, but using namespace/slug to retrieve the pr
+    # same as above, but using namespace/slug to retrieve the project
     _, response = await sanic_client.get(
         f"/api/data/namespaces/{payload['namespace']}/projects/{payload['slug']}",
         params={"with_documentation": True},
@@ -128,9 +119,10 @@ async def test_project_creation(sanic_client, user_headers, regular_user: UserIn
 
     assert response.status_code == 200, response.text
     project = response.json
+    assert project["id"] == project_id
     assert project["name"] == "Renku Native Project"
     assert project["slug"] == "project-slug"
-    assert project["namespace"] == regular_user.namespace.slug
+    assert project["namespace"] == regular_user.namespace.path.serialize()
     assert project["documentation"] == "$\\sqrt(2)$"
 
 
@@ -140,7 +132,7 @@ async def test_project_creation_with_default_values(
 ) -> None:
     payload = {
         "name": "Project with Default Values",
-        "namespace": regular_user.namespace.slug,
+        "namespace": regular_user.namespace.path.serialize(),
     }
 
     _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
@@ -156,6 +148,7 @@ async def test_project_creation_with_default_values(
     assert project["created_by"] == "user"
     assert len(project["keywords"]) == 0
     assert len(project["repositories"]) == 0
+    assert project["secrets_mount_directory"] == "/secrets"
 
 
 @pytest.mark.asyncio
@@ -167,17 +160,17 @@ async def test_create_project_with_invalid_visibility(sanic_client, user_headers
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("keyword", ["invalid chars '", "Nön English"])
-async def test_create_project_with_invalid_keywords(sanic_client, user_headers, keyword) -> None:
+async def test_create_project_with_invalid_keywords(sanic_client, user_headers) -> None:
+    keyword = "this keyword is way too long........................................................................"
     _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json={"keywords": [keyword]})
 
     assert response.status_code == 422, response.text
-    assert "String should match pattern '^[A-Za-z0-9\\s\\-_.]*$'" in response.json["error"]["message"]
+    assert "String should have at most 99 characters" in response.json["error"]["message"]
 
 
 @pytest.mark.asyncio
 async def test_project_creation_with_invalid_namespace(sanic_client, user_headers, member_1_user: UserInfo) -> None:
-    namespace = member_1_user.namespace.slug
+    namespace = member_1_user.namespace.path.serialize()
     _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}", headers=user_headers)
     assert response.status_code == 200, response.text
     payload = {
@@ -193,7 +186,7 @@ async def test_project_creation_with_invalid_namespace(sanic_client, user_header
 
 @pytest.mark.asyncio
 async def test_project_creation_with_conflicting_slug(sanic_client, user_headers, regular_user) -> None:
-    namespace = regular_user.namespace.slug
+    namespace = regular_user.namespace.path.serialize()
     payload = {
         "name": "Existing project",
         "namespace": namespace,
@@ -213,6 +206,42 @@ async def test_project_creation_with_conflicting_slug(sanic_client, user_headers
 
 
 @pytest.mark.asyncio
+async def test_project_creation_with_duplicate_repositories(sanic_client, user_headers, regular_user) -> None:
+    namespace = regular_user.namespace.path.serialize()
+    payload = {
+        "name": "My Project",
+        "namespace": namespace,
+        "repositories": [
+            "https://github.com/SwissDataScienceCenter/renku-data-services.git",
+            "https://github.com/SwissDataScienceCenter/renku-data-services.git",
+        ],
+    }
+
+    _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
+
+    assert response.status_code == 201, response.text
+    project = response.json
+    assert project["repositories"] == ["https://github.com/SwissDataScienceCenter/renku-data-services.git"]
+
+
+@pytest.mark.asyncio
+async def test_project_creation_with_invalid_repository(sanic_client, user_headers, regular_user) -> None:
+    namespace = regular_user.namespace.path.serialize()
+    payload = {
+        "name": "My Project",
+        "namespace": namespace,
+        "repositories": [
+            "git@github.com:SwissDataScienceCenter/renku-data-services.git",
+        ],
+    }
+
+    _, response = await sanic_client.post("/api/data/projects", headers=user_headers, json=payload)
+
+    assert response.status_code == 422, response.text
+    assert "is not a valid HTTP or HTTPS URL" in response.json["error"]["message"]
+
+
+@pytest.mark.asyncio
 async def test_get_a_project(create_project, get_project) -> None:
     # Create some projects
     await create_project("Project 1")
@@ -226,7 +255,7 @@ async def test_get_a_project(create_project, get_project) -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_all_projects_with_pagination(create_project, sanic_client, user_headers) -> None:
+async def test_get_all_projects_with_pagination(create_project, sanic_client, user_headers, snapshot) -> None:
     # Create some projects
     for i in range(1, 10):
         await create_project(f"Project {i}")
@@ -256,6 +285,7 @@ async def test_get_all_projects_with_pagination(create_project, sanic_client, us
     assert response.headers["per-page"] == "4"
     assert response.headers["total"] == "9"
     assert response.headers["total-pages"] == "3"
+    assert response.json == snapshot(exclude=props("id", "creation_date", "updated_at", "etag"))
 
 
 @pytest.mark.asyncio
@@ -328,7 +358,9 @@ async def test_result_is_sorted_by_creation_date(create_project, sanic_client, u
 
 
 @pytest.mark.asyncio
-async def test_delete_project(create_project, sanic_client, user_headers, app_config) -> None:
+async def test_delete_project(create_project, sanic_client, user_headers, app_manager) -> None:
+    await app_manager.search_updates_repo.clear_all()
+
     # Create some projects
     await create_project("Project 1")
     await create_project("Project 2")
@@ -342,14 +374,12 @@ async def test_delete_project(create_project, sanic_client, user_headers, app_co
 
     assert response.status_code == 204, response.text
 
-    events = await app_config.event_repo.get_pending_events()
-    assert len(events) == 15
-    project_removed_event = next((e for e in events if e.get_message_type() == "project.removed"), None)
-    assert project_removed_event
-    removed_event = deserialize_binary(
-        b64decode(project_removed_event.payload["payload"]), avro_schema_v2.ProjectRemoved
-    )
-    assert removed_event.id == project_id
+    # Check search updates
+    search_updates = await app_manager.search_updates_repo.select_next(20)
+    assert len(search_updates) == 5
+    assert len(set([e.entity_id for e in search_updates])) == 5
+    deleted_project = next(x for x in search_updates if x.entity_id == project["id"])
+    assert deleted_project.payload == {"id": project["id"], "deleted": True}
 
     # Get all projects
     _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
@@ -359,7 +389,8 @@ async def test_delete_project(create_project, sanic_client, user_headers, app_co
 
 
 @pytest.mark.asyncio
-async def test_patch_project(create_project, get_project, sanic_client, user_headers, app_config) -> None:
+async def test_patch_project(create_project, get_project, sanic_client, user_headers, app_manager) -> None:
+    await app_manager.search_updates_repo.clear_all()
     # Create some projects
     await create_project("Project 1")
     project = await create_project("Project 2", repositories=["http://renkulab.io/repository-0"], keywords=["keyword"])
@@ -374,22 +405,17 @@ async def test_patch_project(create_project, get_project, sanic_client, user_hea
         "visibility": "public",
         "repositories": ["http://renkulab.io/repository-1", "http://renkulab.io/repository-2"],
         "documentation": "$\\infty$",
+        "secrets_mount_directory": "/etc/new/location",
     }
     project_id = project["id"]
     _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=headers, json=patch)
 
     assert response.status_code == 200, response.text
 
-    events = await app_config.event_repo.get_pending_events()
-    assert len(events) == 11
-    project_updated_event = next((e for e in events if e.get_message_type() == "project.updated"), None)
-    assert project_updated_event
-    updated_event = deserialize_binary(
-        b64decode(project_updated_event.payload["payload"]), avro_schema_v2.ProjectUpdated
-    )
-    assert updated_event.name == patch["name"]
-    assert updated_event.description == patch["description"]
-    assert updated_event.repositories == patch["repositories"]
+    # Check search updates
+    search_updates = await app_manager.search_updates_repo.select_next(20)
+    assert len(search_updates) == 3
+    assert len(set([e.entity_id for e in search_updates])) == 3
 
     # Get the project
     project = await get_project(project_id=project_id)
@@ -404,6 +430,7 @@ async def test_patch_project(create_project, get_project, sanic_client, user_hea
         "http://renkulab.io/repository-2",
     }
     assert "documentation" not in project
+    assert project["secrets_mount_directory"] == "/etc/new/location"
 
     _, response = await sanic_client.get(
         f"/api/data/projects/{project_id}", params={"with_documentation": True}, headers=user_headers
@@ -416,7 +443,7 @@ async def test_patch_project(create_project, get_project, sanic_client, user_hea
 
 @pytest.mark.asyncio
 async def test_keywords_are_not_modified_in_patch(
-    create_project, get_project, sanic_client, user_headers, app_config
+    create_project, get_project, sanic_client, user_headers, app_manager
 ) -> None:
     # Create some projects
     await create_project("Project 1")
@@ -441,7 +468,7 @@ async def test_keywords_are_not_modified_in_patch(
 
 @pytest.mark.asyncio
 async def test_keywords_are_deleted_in_patch(
-    create_project, get_project, sanic_client, user_headers, app_config
+    create_project, get_project, sanic_client, user_headers, app_manager
 ) -> None:
     # Create some projects
     await create_project("Project 1")
@@ -512,7 +539,7 @@ async def test_patch_visibility_to_public_shows_project(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("field", ["id", "slug", "created_by", "creation_date"])
+@pytest.mark.parametrize("field", ["id", "created_by", "creation_date"])
 async def test_cannot_patch_reserved_fields(create_project, get_project, sanic_client, user_headers, field) -> None:
     project = await create_project("Project 1")
     original_value = project[field]
@@ -559,7 +586,7 @@ async def test_cannot_patch_without_if_match_header(create_project, get_project,
 async def test_patch_project_invalid_namespace(
     create_project, sanic_client, user_headers, member_1_user: UserInfo
 ) -> None:
-    namespace = member_1_user.namespace.slug
+    namespace = member_1_user.namespace.path.serialize()
     _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}", headers=user_headers)
     assert response.status_code == 200, response.text
     project = await create_project("Project 1")
@@ -601,6 +628,79 @@ async def test_patch_description_as_editor_and_keep_namespace_and_visibility(
     assert response.json.get("namespace") == project["namespace"]
     assert response.json.get("visibility") == project["visibility"]
     assert response.json.get("description") == "Updated description"
+
+
+@pytest.mark.asyncio
+async def test_patch_project_slug(
+    sanic_client,
+    create_project,
+    get_project,
+    user_headers,
+) -> None:
+    await create_project("Project 1")
+    await create_project("Project 2")
+    project = await create_project("My project", documentation="Hello, World!")
+    project_id = project["id"]
+    namespace = project["namespace"]
+    old_slug = project["slug"]
+    await create_project("Project 3")
+
+    # Patch a project
+    headers = merge_headers(user_headers, {"If-Match": project["etag"]})
+    new_slug = "some-updated-slug"
+    patch = {"slug": new_slug}
+    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=headers, json=patch)
+
+    assert response.status_code == 200, response.text
+
+    # Check that the project's slug has been updated
+    project = await get_project(project_id=project_id)
+    assert project["id"] == project_id
+    assert project["name"] == "My project"
+    assert project["namespace"] == namespace
+    assert project["slug"] == new_slug
+
+    # Check that we can get the project with the new slug
+    _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}/projects/{new_slug}", headers=user_headers)
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == project_id
+
+    # Check that we can get the project with the old slug
+    _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}/projects/{old_slug}", headers=user_headers)
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == project_id
+    _, response = await sanic_client.get(
+        f"/api/data/namespaces/{namespace}/projects/{old_slug}",
+        params={"with_documentation": True},
+        headers=user_headers,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == project_id
+    assert response.json.get("documentation") == "Hello, World!"
+
+
+@pytest.mark.asyncio
+async def test_patch_project_reset_secrets_mount_directory(
+    create_project, get_project, sanic_client, user_headers
+) -> None:
+    project = await create_project("My Project", secrets_mount_directory="/etc/fancy/location")
+    assert project["secrets_mount_directory"] == "/etc/fancy/location"
+
+    # Patch a project
+    user_headers.update({"If-Match": project["etag"]})
+    patch = {"secrets_mount_directory": ""}
+    project_id = project["id"]
+    _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=user_headers, json=patch)
+
+    assert response.status_code == 200, response.text
+
+    # Get the project
+    project = await get_project(project_id=project_id)
+
+    assert project["secrets_mount_directory"] == "/secrets"
 
 
 @pytest.mark.asyncio
@@ -693,7 +793,7 @@ async def test_get_projects_with_direct_membership(sanic_client, user_headers, m
     # Add member_1 to Project 2
     roles = [{"id": member_1_user.id, "role": "editor"}]
     _, response = await sanic_client.patch(
-        f"/api/data/projects/{project_2["id"]}/members", headers=user_headers, json=roles
+        f"/api/data/projects/{project_2['id']}/members", headers=user_headers, json=roles
     )
     assert response.status_code == 200, response.text
 
@@ -759,7 +859,7 @@ async def test_add_project_members(
     sanic_client,
     regular_user,
     user_headers,
-    app_config,
+    app_manager,
     member_1_user: UserInfo,
     member_2_user: UserInfo,
 ) -> None:
@@ -798,7 +898,9 @@ async def test_add_project_members(
 
 
 @pytest.mark.asyncio
-async def test_delete_project_members(create_project, sanic_client, user_headers, app_config: Config) -> None:
+async def test_delete_project_members(
+    create_project, sanic_client, user_headers, app_manager: DependencyManager
+) -> None:
     project = await create_project("Project 1")
     project_id = project["id"]
 
@@ -824,7 +926,7 @@ async def test_delete_project_members(create_project, sanic_client, user_headers
 
 
 @pytest.mark.asyncio
-async def test_null_byte_middleware(sanic_client, user_headers, regular_user, app_config) -> None:
+async def test_null_byte_middleware(sanic_client, user_headers, regular_user, app_manager) -> None:
     payload = {
         "name": "Renku Native \x00Project",
         "slug": "project-slug",
@@ -1011,7 +1113,7 @@ async def test_get_project_permissions_cascading_from_group(
 
 @pytest.mark.asyncio
 async def test_project_slug_case(
-    app_config: Config,
+    app_manager: DependencyManager,
     create_project,
     create_group,
     sanic_client,
@@ -1041,7 +1143,7 @@ async def test_project_slug_case(
     assert res.status_code == 422
     # Change the slug of the project to be upper case in the DB
     uppercase_slug = "NEW_project_SLUG"
-    async with app_config.db.async_session_maker() as session, session.begin():
+    async with app_manager.config.db.async_session_maker() as session, session.begin():
         stmt = select(ProjectORM).where(ProjectORM.id == project_id)
         proj_orm = await session.scalar(stmt)
         assert proj_orm is not None
@@ -1071,7 +1173,10 @@ async def test_project_slug_case(
 
 
 @pytest.mark.asyncio
-async def test_project_copy_basics(sanic_client, app_config, user_headers, regular_user, create_project) -> None:
+async def test_project_copy_basics(
+    sanic_client, app_manager, user_headers, regular_user, create_project, snapshot
+) -> None:
+    await app_manager.search_updates_repo.clear_all()
     await create_project("Project 1")
     project = await create_project(
         "Project 2",
@@ -1079,6 +1184,7 @@ async def test_project_copy_basics(sanic_client, app_config, user_headers, regul
         keywords=["tag 1", "tag 2"],
         repositories=["http://repository-1.ch", "http://repository-2.ch"],
         visibility="public",
+        documentation="test documentation",
     )
     await create_project("Project 3")
     project_id = project["id"]
@@ -1086,35 +1192,32 @@ async def test_project_copy_basics(sanic_client, app_config, user_headers, regul
     payload = {
         "name": "Renku Native Project",
         "slug": "project-slug",
-        "namespace": regular_user.namespace.slug,
+        "namespace": regular_user.namespace.path.serialize(),
     }
-
-    await app_config.event_repo.delete_all_events()
 
     _, response = await sanic_client.post(f"/api/data/projects/{project_id}/copies", headers=user_headers, json=payload)
 
     assert response.status_code == 201, response.text
     copy_project = response.json
-    assert copy_project["name"] == "Renku Native Project"
-    assert copy_project["slug"] == "project-slug"
-    assert copy_project["created_by"] == "user"
-    assert copy_project["namespace"] == regular_user.namespace.slug
-    assert copy_project["description"] == "Template project"
-    assert copy_project["visibility"] == project["visibility"]
-    assert copy_project["keywords"] == ["tag 1", "tag 2"]
-    assert copy_project["repositories"] == project["repositories"]
+    assert copy_project["namespace"] == regular_user.namespace.path.serialize()
+    assert copy_project["template_id"] == project_id
+    assert copy_project == snapshot(exclude=props("id", "updated_at", "creation_date", "etag", "template_id"))
 
-    events = await app_config.event_repo.get_pending_events()
-    assert len(events) == 2
-    project_created_event = next(e for e in events if e.get_message_type() == "project.created")
-    project_created = deserialize_event(project_created_event)
-    assert project_created.name == payload["name"]
-    assert project_created.slug == payload["slug"]
-    assert project_created.repositories == project["repositories"]
-    project_auth_added_event = next(e for e in events if e.get_message_type() == "projectAuth.added")
-    project_auth_added = deserialize_event(project_auth_added_event)
-    assert project_auth_added.userId == "user"
-    assert project_auth_added.role == MemberRole.OWNER
+    _, response = await sanic_client.get(
+        f"/api/data/projects/{copy_project["id"]}", params={"with_documentation": True}, headers=user_headers
+    )
+    assert response.status_code == 200, response.text
+    copy_project = response.json
+    assert copy_project == snapshot(exclude=props("id", "updated_at", "creation_date", "etag", "template_id"))
+
+    # Check search updates
+    search_updates = await app_manager.search_updates_repo.select_next(20)
+    assert len(search_updates) == 4
+    assert len(set([e.entity_type for e in search_updates])) == 1
+    assert search_updates[0].entity_type == "Project"
+    search_doc = next(x for x in search_updates if x.entity_id == copy_project["id"])
+    assert search_doc.payload["slug"] == "project-slug"
+    assert search_doc.payload["name"] == "Renku Native Project"
 
     project_id = copy_project["id"]
 
@@ -1125,7 +1228,7 @@ async def test_project_copy_basics(sanic_client, app_config, user_headers, regul
     assert copy_project["name"] == "Renku Native Project"
     assert copy_project["slug"] == "project-slug"
     assert copy_project["created_by"] == "user"
-    assert copy_project["namespace"] == regular_user.namespace.slug
+    assert copy_project["namespace"] == regular_user.namespace.path.serialize()
     assert copy_project["description"] == "Template project"
     assert copy_project["visibility"] == "public"
     assert copy_project["keywords"] == ["tag 1", "tag 2"]
@@ -1145,10 +1248,10 @@ async def test_project_copy_includes_session_launchers(
     project = await create_project("Project")
     project_id = project["id"]
     environment = await create_session_environment("Some environment")
-    launcher_1 = await create_session_launcher("Launcher 1", project["id"], environment={"id": environment["id"]})
-    launcher_2 = await create_session_launcher("Launcher 2", project["id"], environment={"id": environment["id"]})
+    launcher_1 = await create_session_launcher("Launcher 1", project_id, environment={"id": environment["id"]})
+    launcher_2 = await create_session_launcher("Launcher 2", project_id, environment={"id": environment["id"]})
 
-    copy_project = await create_project_copy(project_id, regular_user.namespace.slug, "Copy Project")
+    copy_project = await create_project_copy(project_id, regular_user.namespace.path.serialize(), "Copy Project")
     project_id = copy_project["id"]
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}/session_launchers", headers=user_headers)
 
@@ -1157,7 +1260,152 @@ async def test_project_copy_includes_session_launchers(
     assert {launcher["name"] for launcher in launchers} == {"Launcher 1", "Launcher 2"}
     assert launchers[0]["project_id"] == launchers[1]["project_id"] == project_id
     # NOTE: Check that new launchers are created
-    assert {launcher["id"] for launcher in launchers} != {launcher_1["id"], launcher_2["id"]}
+    assert not any({launcher["id"] in {launcher_1["id"], launcher_2["id"]} for launcher in launchers})
+    # NOTE: Check that session environments are the same since they are global
+    assert launchers[0]["environment"]["id"] == launchers[1]["environment"]["id"] == environment["id"]
+
+
+@pytest.mark.asyncio
+async def test_project_copy_creates_new_custom_environment_instance(
+    sanic_client,
+    user_headers,
+    regular_user,
+    create_project,
+    create_session_launcher,
+    create_project_copy,
+    create_resource_pool,
+) -> None:
+    project = await create_project("Project")
+    project_id = project["id"]
+    resource_pool = await create_resource_pool(admin=True)
+    launcher_with_custom_env = await create_session_launcher(
+        "Launcher",
+        project_id,
+        environment={
+            "container_image": "some_image:some_tag",
+            "environment_kind": "CUSTOM",
+            "environment_image_source": "image",
+            "name": "custom_env",
+            "description": "Custom environment",
+            "port": 42,
+            "default_url": "/lab",
+            "uid": 2000,
+            "gid": 2000,
+            "working_directory": "/work",
+            "mount_directory": "/work",
+            "command": ["python"],
+            "args": ["script.py"],
+        },
+        resource_class_id=resource_pool["classes"][0]["id"],
+        disk_storage=42,
+        env_variables=[{"name": "KEY_NUMBER_1", "value": "a value"}],
+    )
+
+    await asyncio.sleep(1)
+
+    copy_project = await create_project_copy(project_id, regular_user.namespace.path.serialize(), "Copy Project")
+    project_id = copy_project["id"]
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/session_launchers", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    launcher = response.json[0]
+    # NOTE: Check that a new launcher is created
+    assert launcher["id"] != launcher_with_custom_env["id"]
+    assert launcher["project_id"] == project_id
+    assert launcher["name"] == launcher_with_custom_env["name"]
+    assert launcher["description"] == launcher_with_custom_env["description"]
+    assert launcher["resource_class_id"] == launcher_with_custom_env["resource_class_id"]
+    assert launcher["disk_storage"] == launcher_with_custom_env["disk_storage"]
+    assert launcher["creation_date"] != launcher_with_custom_env["creation_date"]
+    # NOTE: Check that a new environment is created
+    environment = launcher["environment"]
+    assert environment["id"] != launcher_with_custom_env["environment"]["id"]
+    assert environment["name"] == launcher_with_custom_env["environment"]["name"]
+    assert environment["creation_date"] != launcher_with_custom_env["environment"]["creation_date"]
+    assert environment["description"] == launcher_with_custom_env["environment"]["description"]
+    assert environment["container_image"] == launcher_with_custom_env["environment"]["container_image"]
+    assert environment["default_url"] == launcher_with_custom_env["environment"]["default_url"]
+    assert environment["uid"] == launcher_with_custom_env["environment"]["uid"]
+    assert environment["gid"] == launcher_with_custom_env["environment"]["gid"]
+    assert environment["working_directory"] == launcher_with_custom_env["environment"]["working_directory"]
+    assert environment["mount_directory"] == launcher_with_custom_env["environment"]["mount_directory"]
+    assert environment["port"] == launcher_with_custom_env["environment"]["port"]
+    assert environment["command"] == launcher_with_custom_env["environment"]["command"]
+    assert environment["args"] == launcher_with_custom_env["environment"]["args"]
+    assert environment["is_archived"] == launcher_with_custom_env["environment"]["is_archived"]
+
+
+@pytest.mark.asyncio
+async def test_project_copy_creates_new_build_and_environment_instances(
+    sanic_client,
+    user_headers,
+    regular_user,
+    create_project,
+    create_session_launcher,
+    create_project_copy,
+    create_resource_pool,
+    snapshot,
+) -> None:
+    project = await create_project("Project")
+    project_id = project["id"]
+    resource_pool = await create_resource_pool(admin=True)
+    launcher = await create_session_launcher(
+        "Launcher",
+        project_id,
+        environment={
+            "repository": "https://github.com/some/repo",
+            "builder_variant": "python",
+            "frontend_variant": "vscodium",
+            "environment_image_source": "build",
+        },
+        resource_class_id=resource_pool["classes"][0]["id"],
+        disk_storage=42,
+    )
+
+    await asyncio.sleep(1)
+
+    copy_project = await create_project_copy(project_id, regular_user.namespace.path.serialize(), "Copy Project")
+    copy_project_id = copy_project["id"]
+    _, response = await sanic_client.get(
+        f"/api/data/projects/{copy_project_id}/session_launchers", headers=user_headers
+    )
+
+    assert response.status_code == 200, response.text
+    copied_launcher = response.json[0]
+    # NOTE: Check that a new launcher is created
+    assert copied_launcher["id"] != launcher["id"]
+    assert copied_launcher["creation_date"] != launcher["creation_date"]
+    assert copied_launcher["project_id"] == copy_project_id
+    assert copied_launcher == snapshot(exclude=props("id", "creation_date", "environment", "project_id"))
+    # NOTE: Check that a new environment is created
+    environment = copied_launcher["environment"]
+    assert environment["id"] != launcher["environment"]["id"]
+    assert environment["creation_date"] != launcher["environment"]["creation_date"]
+    assert environment == snapshot(exclude=props("id", "creation_date"))
+    # NOTE: Check that build parameters are copied
+    build_parameters = environment["build_parameters"]
+    assert build_parameters == snapshot
+
+    # Patch the build parameters to make sure that it doesn't change the original builder parameter
+    patch_payload = {"environment": {"build_parameters": {"repository": "new_repo"}}}
+    _, response = await sanic_client.patch(
+        f"/api/data/session_launchers/{copied_launcher['id']}", headers=user_headers, json=patch_payload
+    )
+    assert response.status_code == 200, response.text
+
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/session_launchers", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    original_build_parameters = response.json[0]["environment"]["build_parameters"]
+    assert original_build_parameters["repository"] == "https://github.com/some/repo"
+
+    _, response = await sanic_client.get(
+        f"/api/data/projects/{copy_project_id}/session_launchers", headers=user_headers
+    )
+
+    assert response.status_code == 200, response.text
+    copy_build_parameters = response.json[0]["environment"]["build_parameters"]
+    assert copy_build_parameters["repository"] == "new_repo"
 
 
 @pytest.mark.asyncio
@@ -1174,7 +1422,7 @@ async def test_project_copy_includes_data_connector_links(
     data_connector_1, link_1 = await create_data_connector_and_link_project("Data Connector 1", project_id=project_id)
     data_connector_2, link_2 = await create_data_connector_and_link_project("Data Connector 2", project_id=project_id)
 
-    copy_project = await create_project_copy(project_id, regular_user.namespace.slug, "Copy Project")
+    copy_project = await create_project_copy(project_id, regular_user.namespace.path.serialize(), "Copy Project")
     project_id = copy_project["id"]
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}/data_connector_links", headers=user_headers)
 
@@ -1187,6 +1435,49 @@ async def test_project_copy_includes_data_connector_links(
 
 
 @pytest.mark.asyncio
+async def test_project_copy_includes_public_data_connector_links_owned_by_others(
+    sanic_client: SanicASGITestClient,
+    user_headers: dict[str, str],
+    regular_user: UserInfo,
+    member_1_headers: dict[str, str],
+    member_1_user: UserInfo,
+    member_2_headers: dict[str, str],
+    member_2_user: UserInfo,
+    create_project,
+    create_project_copy,
+    create_data_connector,
+    link_data_connector,
+) -> None:
+    project = await create_project("Project", visibility="public")
+    project_id = project["id"]
+    dc1 = await create_data_connector("dc1", member_1_user, member_1_headers, visibility="public")
+    dc2 = await create_data_connector("dc2", member_1_user, member_1_headers, visibility="public")
+    assert "id" in dc1
+    assert "id" in dc2
+    link1_res = await link_data_connector(project_id, dc1["id"], user_headers)
+    link2_res = await link_data_connector(project_id, dc2["id"], user_headers)
+    link1 = link1_res.json
+    link2 = link2_res.json
+
+    copy_project = await create_project_copy(
+        project_id,
+        member_2_user.namespace.path.serialize(),
+        "Copy Project",
+        user=member_2_user,
+    )
+    project_copy_id = copy_project["id"]
+    _, response = await sanic_client.get(
+        f"/api/data/projects/{project_copy_id}/data_connector_links", headers=member_2_headers
+    )
+    assert response.status_code == 200, response.text
+    data_connector_links = response.json
+    assert {d["data_connector_id"] for d in data_connector_links} == {dc1["id"], dc2["id"]}
+    assert data_connector_links[0]["project_id"] == data_connector_links[1]["project_id"] == project_copy_id
+    # NOTE: Check that new data connector links are created
+    assert {d["id"] for d in data_connector_links} != {link1["id"], link2["id"]}
+
+
+@pytest.mark.asyncio
 async def test_project_get_all_copies(
     sanic_client, admin_user, regular_user, admin_headers, user_headers, create_project, create_project_copy
 ) -> None:
@@ -1195,10 +1486,10 @@ async def test_project_get_all_copies(
     await create_project("Project 3")
     project_id = project["id"]
 
-    copy_1 = await create_project_copy(project_id, regular_user.namespace.slug, "Copy 1")
-    copy_2 = await create_project_copy(project_id, admin_user.namespace.slug, "Copy 2", user=admin_user)
+    copy_1 = await create_project_copy(project_id, regular_user.namespace.path.serialize(), "Copy 1")
+    copy_2 = await create_project_copy(project_id, admin_user.namespace.path.serialize(), "Copy 2", user=admin_user)
     copy_3 = await create_project_copy(
-        project_id, admin_user.namespace.slug, "Copy 3", user=admin_user, visibility="public"
+        project_id, admin_user.namespace.path.serialize(), "Copy 3", user=admin_user, visibility="public"
     )
 
     # NOTE: Admins can see all copies
@@ -1223,24 +1514,24 @@ async def test_project_get_all_writable_copies(
     project = await create_project("Project")
     project_id = project["id"]
 
-    copy_1 = await create_project_copy(project_id, regular_user.namespace.slug, "Copy 1")
+    copy_1 = await create_project_copy(project_id, regular_user.namespace.path.serialize(), "Copy 1")
     copy_2 = await create_project_copy(
         project_id,
-        admin_user.namespace.slug,
+        admin_user.namespace.path.serialize(),
         "Copy 2",
         user=admin_user,
         visibility="public",
     )
     copy_3 = await create_project_copy(
         project_id,
-        admin_user.namespace.slug,
+        admin_user.namespace.path.serialize(),
         "Copy 3",
         user=admin_user,
         members=[{"id": regular_user.id, "role": "viewer"}],
     )
     copy_4 = await create_project_copy(
         project_id,
-        admin_user.namespace.slug,
+        admin_user.namespace.path.serialize(),
         "Copy 4",
         user=admin_user,
         members=[{"id": regular_user.id, "role": "editor"}],
@@ -1266,8 +1557,8 @@ async def test_project_copies_are_not_deleted_when_template_is_deleted(
     project = await create_project("Template Project")
     project_id = project["id"]
 
-    copy_1 = await create_project_copy(project_id, regular_user.namespace.slug, "Copy 1")
-    copy_2 = await create_project_copy(project_id, regular_user.namespace.slug, "Copy 2")
+    copy_1 = await create_project_copy(project_id, regular_user.namespace.path.serialize(), "Copy 1")
+    copy_2 = await create_project_copy(project_id, regular_user.namespace.path.serialize(), "Copy 2")
 
     _, response = await sanic_client.delete(f"/api/data/projects/{project_id}", headers=user_headers)
 
@@ -1287,8 +1578,12 @@ async def test_project_copy_and_set_visibility(
     project = await create_project("Template Project")
     project_id = project["id"]
 
-    public_copy = await create_project_copy(project_id, regular_user.namespace.slug, "Copy 1", visibility="public")
-    private_copy = await create_project_copy(project_id, regular_user.namespace.slug, "Copy 2", visibility="private")
+    public_copy = await create_project_copy(
+        project_id, regular_user.namespace.path.serialize(), "Copy 1", visibility="public"
+    )
+    private_copy = await create_project_copy(
+        project_id, regular_user.namespace.path.serialize(), "Copy 2", visibility="private"
+    )
 
     _, response = await sanic_client.get("/api/data/projects", headers=user_headers)
 
@@ -1305,7 +1600,7 @@ async def test_project_copy_non_existing_project(sanic_client, user_headers, reg
     payload = {
         "name": "Renku Native Project",
         "slug": "project-slug",
-        "namespace": regular_user.namespace.slug,
+        "namespace": regular_user.namespace.path.serialize(),
     }
 
     _, response = await sanic_client.post(f"/api/data/projects/{project_id}/copies", headers=user_headers, json=payload)
@@ -1321,7 +1616,7 @@ async def test_project_copy_invalid_project_id(sanic_client, user_headers, regul
     payload = {
         "name": "Renku Native Project",
         "slug": "project-slug",
-        "namespace": regular_user.namespace.slug,
+        "namespace": regular_user.namespace.path.serialize(),
     }
 
     _, response = await sanic_client.post(f"/api/data/projects/{project_id}/copies", headers=user_headers, json=payload)
@@ -1337,7 +1632,7 @@ async def test_project_copy_with_no_access(sanic_client, user_headers, regular_u
     payload = {
         "name": "Renku Native Project",
         "slug": "project-slug",
-        "namespace": regular_user.namespace.slug,
+        "namespace": regular_user.namespace.path.serialize(),
     }
 
     _, response = await sanic_client.post(f"/api/data/projects/{project_id}/copies", headers=user_headers, json=payload)
@@ -1362,19 +1657,18 @@ async def test_project_copy_succeeds_even_if_data_connector_is_inaccessible(
     environment = await create_session_environment("Environment")
     await create_session_launcher("Launcher", project["id"], environment={"id": environment["id"]})
     # NOTE: Create a data connector that regular user cannot access
-    await create_data_connector_and_link_project("Connector", project_id=project_id, admin=True)
+    await create_data_connector_and_link_project("Admin Connector", project_id=project_id, admin=True)
 
     payload = {
         "name": "Copy Project",
         "slug": "project-slug",
-        "namespace": regular_user.namespace.slug,
+        "namespace": regular_user.namespace.path.serialize(),
     }
 
     _, response = await sanic_client.post(f"/api/data/projects/{project_id}/copies", headers=user_headers, json=payload)
 
-    # NOTE: The copy is created, but the status code indicates that one or more data connectors cannot be copied
-    assert response.status_code == 403, response.text
-    assert "The project was copied but there is no permission to copy data connectors" in response.text
+    # TODO: What should happen to DCs and DC links when you copy a project?
+    assert response.status_code == 201, response.text
 
 
 @pytest.mark.asyncio
@@ -1403,7 +1697,7 @@ async def test_project_unlink_from_template_project(
     project = await create_project("Project")
     project_id = project["id"]
 
-    project = await create_project_copy(project_id, regular_user.namespace.slug, "Copy Project")
+    project = await create_project_copy(project_id, regular_user.namespace.path.serialize(), "Copy Project")
     project_id = project["id"]
 
     # NOTE: A null value won't change anything
@@ -1426,3 +1720,135 @@ async def test_project_unlink_from_template_project(
 
     project = await get_project(project_id)
     assert "template_id" not in project or project["template_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_get_project_after_group_moved(
+    create_project,
+    create_group,
+    sanic_client,
+    user_headers,
+) -> None:
+    await create_project("Project 1")
+    await create_project("Project 2")
+    group = await create_group("test-group")
+    group_slug = group["slug"]
+    project = await create_project("My project", namespace=group_slug, documentation="Hello, World!")
+    project_id = project["id"]
+    await create_project("Project 3")
+
+    new_group_slug = "test-group-updated"
+    patch = {"slug": new_group_slug}
+    _, response = await sanic_client.patch(f"/api/data/groups/{group_slug}", headers=user_headers, json=patch)
+    assert response.status_code == 200, response.text
+
+    # Check that the project's namespace has been updated
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}", headers=user_headers)
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == project_id
+    assert response.json.get("namespace") == new_group_slug
+    assert response.json.get("slug") == "my-project"
+
+    # Check that we can get the project with the new namespace
+    _, response = await sanic_client.get(
+        f"/api/data/namespaces/{new_group_slug}/projects/{project['slug']}", headers=user_headers
+    )
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == project_id
+
+    # Check that we can get the project with the old namespace
+    _, response = await sanic_client.get(
+        f"/api/data/namespaces/{group_slug}/projects/{project['slug']}", headers=user_headers
+    )
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == project_id
+    _, response = await sanic_client.get(
+        f"/api/data/namespaces/{group_slug}/projects/{project['slug']}",
+        params={"with_documentation": True},
+        headers=user_headers,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json.get("id") == project_id
+    assert response.json.get("documentation") == "Hello, World!"
+
+
+@pytest.mark.asyncio
+async def test_migrate_v1_project(
+    sanic_client,
+    app_manager,
+    user_headers,
+    regular_user: UserInfo,
+) -> None:
+    v1_id = 1122
+    v1_project = {
+        "project": {
+            "name": "New Migrated Project",
+            "slug": "new-project-slug",
+            "namespace": regular_user.namespace.path.serialize(),
+            "description": "Old project for migration",
+            "repositories": ["http://old-repository.com"],
+            "visibility": "private",
+            "keywords": ["old", "project"],
+        },
+        "session_launcher": {
+            "name": "My Renku Session :)",
+            "container_image": "renku/renkulab-py:3.10-0.18.1",
+            "default_url": "/lab",
+        },
+    }
+
+    _, response = await sanic_client.post(
+        f"/api/data/renku_v1_projects/{v1_id}/migrations", headers=user_headers, json=v1_project
+    )
+
+    assert response.status_code == 201, response.text
+    migrated_project = response.json
+    assert migrated_project["name"] == "New Migrated Project"
+    assert migrated_project["slug"] == "new-project-slug"
+    assert migrated_project["created_by"] == "user"
+    assert migrated_project["namespace"] == regular_user.namespace.path.serialize()
+    assert migrated_project["description"] == "Old project for migration"
+    assert migrated_project["visibility"] == "private"
+    assert migrated_project["keywords"] == ["old", "project"]
+    assert migrated_project["repositories"] == ["http://old-repository.com"]
+
+    migrated_project_id = migrated_project["id"]
+    _, response = await sanic_client.get(f"/api/data/projects/{migrated_project_id}", headers=user_headers)
+    assert response.status_code == 200, response.text
+    migrated_project = response.json
+    assert migrated_project["name"] == "New Migrated Project"
+    assert migrated_project["slug"] == "new-project-slug"
+    assert migrated_project["created_by"] == "user"
+    assert migrated_project["namespace"] == regular_user.namespace.path.serialize()
+    assert migrated_project["description"] == "Old project for migration"
+    assert migrated_project["visibility"] == "private"
+    assert migrated_project["keywords"] == ["old", "project"]
+    assert migrated_project["repositories"] == ["http://old-repository.com"]
+
+    _, response = await sanic_client.get(f"/api/data/renku_v1_projects/{v1_id}/migrations", headers=user_headers)
+    assert response.status_code == 200, response.text
+    migrated_project = response.json
+    assert migrated_project["name"] == "New Migrated Project"
+    assert migrated_project["slug"] == "new-project-slug"
+    assert migrated_project["created_by"] == "user"
+    assert migrated_project["namespace"] == regular_user.namespace.path.serialize()
+    assert migrated_project["description"] == "Old project for migration"
+    assert migrated_project["visibility"] == "private"
+    assert migrated_project["keywords"] == ["old", "project"]
+    assert migrated_project["repositories"] == ["http://old-repository.com"]
+    project_id = migrated_project["id"]
+
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/migration_info", headers=user_headers)
+    assert response.status_code == 200, response.text
+    migrated_project = response.json
+    assert migrated_project["v1_id"] == v1_id
+    assert migrated_project["project_id"] == project_id
+
+    _, response = await sanic_client.get("/api/data/renku_v1_projects/migrations", headers=user_headers)
+    assert response.status_code == 200, response.text
+    migrated_projects = response.json
+    assert {project_migration["v1_id"] for project_migration in migrated_projects} == {1122}

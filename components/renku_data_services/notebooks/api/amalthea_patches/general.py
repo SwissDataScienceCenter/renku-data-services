@@ -1,5 +1,8 @@
 """General patches for the jupyter server session."""
 
+from __future__ import annotations
+
+from numbers import Number
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -7,7 +10,7 @@ if TYPE_CHECKING:
     from renku_data_services.notebooks.api.classes.server import UserServer
 
 
-def session_tolerations(server: "UserServer") -> list[dict[str, Any]]:
+def session_tolerations(server: UserServer) -> list[dict[str, Any]]:
     """Patch for node taint tolerations.
 
     The static tolerations from the configuration are ignored
@@ -37,7 +40,7 @@ def session_tolerations(server: "UserServer") -> list[dict[str, Any]]:
     ]
 
 
-def session_affinity(server: "UserServer") -> list[dict[str, Any]]:
+def session_affinity(server: UserServer) -> list[dict[str, Any]]:
     """Patch for session affinities.
 
     The static affinities from the configuration are ignored
@@ -105,7 +108,7 @@ def session_affinity(server: "UserServer") -> list[dict[str, Any]]:
     ]
 
 
-def session_node_selector(server: "UserServer") -> list[dict[str, Any]]:
+def session_node_selector(server: UserServer) -> list[dict[str, Any]]:
     """Patch for a node selector.
 
     If node affinities are specified in the server options
@@ -127,7 +130,7 @@ def session_node_selector(server: "UserServer") -> list[dict[str, Any]]:
     return []
 
 
-def priority_class(server: "UserServer") -> list[dict[str, Any]]:
+def priority_class(server: UserServer) -> list[dict[str, Any]]:
     """Set the priority class for the session, used to enforce resource quotas."""
     if server.server_options.priority_class is None:
         return []
@@ -145,7 +148,7 @@ def priority_class(server: "UserServer") -> list[dict[str, Any]]:
     ]
 
 
-def test(server: "UserServer") -> list[dict[str, Any]]:
+def test(server: UserServer) -> list[dict[str, Any]]:
     """Test the server patches.
 
     RFC 6901 patches support test statements that will cause the whole patch
@@ -177,7 +180,7 @@ def test(server: "UserServer") -> list[dict[str, Any]]:
     return patches
 
 
-def oidc_unverified_email(server: "UserServer") -> list[dict[str, Any]]:
+def oidc_unverified_email(server: UserServer) -> list[dict[str, Any]]:
     """Allow users whose email is unverified in Keycloak to still be able to access their sessions."""
     patches = []
     if server.user.is_authenticated:
@@ -201,35 +204,34 @@ def oidc_unverified_email(server: "UserServer") -> list[dict[str, Any]]:
     return patches
 
 
-def dev_shm(server: "UserServer") -> list[dict[str, Any]]:
+def dev_shm(server: UserServer) -> list[dict[str, Any]]:
     """Patches the /dev/shm folder used by some ML libraries for passing data between different processes."""
-    patches = []
-    if server.server_options.storage:
-        patches.append(
-            {
-                "type": "application/json-patch+json",
-                "patch": [
-                    {
-                        "op": "add",
-                        "path": "/statefulset/spec/template/spec/volumes/-",
-                        "value": {
-                            "name": "shm",
-                            "emptyDir": {
-                                "medium": "Memory",
-                                # NOTE: We are giving /dev/shm up to half of the memory request
-                                "sizeLimit": int(server.server_options.storage / 2),
-                            },
+    return [
+        {
+            "type": "application/json-patch+json",
+            "patch": [
+                {
+                    "op": "add",
+                    "path": "/statefulset/spec/template/spec/volumes/-",
+                    "value": {
+                        "name": "shm",
+                        "emptyDir": {
+                            "medium": "Memory",
+                            # NOTE: We are giving /dev/shm up to half of the memory request
+                            "sizeLimit": int(server.server_options.memory / 2)
+                            if isinstance(server.server_options.memory, Number)
+                            else "1Gi",
                         },
                     },
-                    {
-                        "op": "add",
-                        "path": "/statefulset/spec/template/spec/containers/1/volumeMounts/-",
-                        "value": {
-                            "mountPath": "/dev/shm",  # nosec B108
-                            "name": "shm",
-                        },
+                },
+                {
+                    "op": "add",
+                    "path": "/statefulset/spec/template/spec/containers/0/volumeMounts/-",
+                    "value": {
+                        "mountPath": "/dev/shm",  # nosec B108
+                        "name": "shm",
                     },
-                ],
-            }
-        )
-    return patches
+                },
+            ],
+        }
+    ]

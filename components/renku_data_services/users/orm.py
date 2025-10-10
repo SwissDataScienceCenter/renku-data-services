@@ -1,9 +1,11 @@
 """SQLAlchemy schemas for the CRC database."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Optional
 
-from sqlalchemy import JSON, DateTime, Identity, Integer, LargeBinary, MetaData, String
+from sqlalchemy import JSON, Boolean, DateTime, Identity, Integer, LargeBinary, MetaData, String, true
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 
@@ -28,7 +30,7 @@ class UserORM(BaseORM):
 
     __tablename__ = "users"
     keycloak_id: Mapped[str] = mapped_column(String(36), unique=True, index=True)
-    namespace: Mapped["NamespaceORM"] = relationship(repr=False, back_populates="user", lazy="selectin")
+    namespace: Mapped[NamespaceORM] = relationship(repr=False, back_populates="user", lazy="selectin")
     first_name: Mapped[Optional[str]] = mapped_column(String(256), default=None)
     last_name: Mapped[Optional[str]] = mapped_column(String(256), default=None)
     email: Mapped[Optional[str]] = mapped_column(String(320), default=None, index=True)
@@ -42,18 +44,18 @@ class UserORM(BaseORM):
             first_name=self.first_name,
             last_name=self.last_name,
             email=self.email,
-            namespace=self.namespace.dump(),
+            namespace=self.namespace.dump_user_namespace(),
         )
 
     @classmethod
-    def load(cls, user: UserInfo) -> "UserORM":
+    def load(cls, user: UserInfo) -> UserORM:
         """Create an ORM object from the user object."""
         return cls(
             keycloak_id=user.id,
             first_name=user.first_name,
             last_name=user.last_name,
             email=user.email,
-            namespace=NamespaceORM.load(user.namespace),
+            namespace=NamespaceORM.load_user(user.namespace),
         )
 
 
@@ -79,14 +81,26 @@ class UserPreferencesORM(BaseORM):
     pinned_projects: Mapped[dict[str, Any]] = mapped_column("pinned_projects", JSONVariant)
     """Pinned projects."""
 
+    show_project_migration_banner: Mapped[bool] = mapped_column(
+        "show_project_migration_banner",
+        Boolean,
+        server_default=true(),
+    )
+    """Show project migration banner."""
+
     @classmethod
-    def load(cls, user_preferences: UserPreferences) -> "UserPreferencesORM":
+    def load(cls, user_preferences: UserPreferences) -> UserPreferencesORM:
         """Create UserPreferencesORM from the user preferences model."""
         return cls(
             user_id=user_preferences.user_id,
             pinned_projects=user_preferences.pinned_projects.model_dump(),
+            show_project_migration_banner=user_preferences.show_project_migration_banner,
         )
 
     def dump(self) -> UserPreferences:
         """Create a user preferences model from the ORM object."""
-        return UserPreferences(user_id=self.user_id, pinned_projects=PinnedProjects.from_dict(self.pinned_projects))
+        return UserPreferences(
+            user_id=self.user_id,
+            pinned_projects=PinnedProjects.from_dict(self.pinned_projects),
+            show_project_migration_banner=self.show_project_migration_banner,
+        )

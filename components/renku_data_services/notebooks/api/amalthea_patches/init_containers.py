@@ -1,5 +1,7 @@
 """Patches for init containers."""
 
+from __future__ import annotations
+
 import json
 import os
 from dataclasses import asdict
@@ -9,9 +11,22 @@ from typing import TYPE_CHECKING, Any
 from kubernetes import client
 
 from renku_data_services.base_models.core import AnonymousAPIUser, AuthenticatedAPIUser
-from renku_data_services.notebooks.api.amalthea_patches.utils import get_certificates_volume_mounts
+from renku_data_services.notebooks.api.amalthea_patches.utils import (
+    get_certificates_volume_mounts,
+    get_certificates_volume_mounts_unserialized,
+)
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.config import NotebooksConfig
+from renku_data_services.notebooks.crs import (
+    EmptyDir,
+    ExtraVolume,
+    ExtraVolumeMount,
+    InitContainer,
+    SecretAsVolume,
+)
+from renku_data_services.notebooks.models import SessionExtraResources
+from renku_data_services.project import constants as project_constants
+from renku_data_services.project.models import SessionSecret
 
 if TYPE_CHECKING:
     # NOTE: If these are directly imported then you get circular imports.
@@ -26,6 +41,8 @@ async def git_clone_container_v2(
     workspace_mount_path: PurePosixPath,
     work_dir: PurePosixPath,
     lfs_auto_fetch: bool = False,
+    uid: int = 1000,
+    gid: int = 1000,
 ) -> dict[str, Any] | None:
     """Returns the specification for the container that clones the user's repositories for new operator."""
     amalthea_session_work_volume: str = "amalthea-volume"
@@ -41,7 +58,6 @@ async def git_clone_container_v2(
 
     prefix = "GIT_CLONE_"
     env = [
-        {"name": f"{prefix}WORKSPACE_MOUNT_PATH", "value": workspace_mount_path.as_posix()},
         {
             "name": f"{prefix}MOUNT_PATH",
             "value": work_dir.as_posix(),
@@ -86,6 +102,7 @@ async def git_clone_container_v2(
         },
     ]
     if user.is_authenticated:
+        env.append({"name": f"{prefix}GIT_PROXY_PORT", "value": str(config.sessions.git_proxy.port)})
         if user.email:
             env.append(
                 {"name": f"{prefix}USER__EMAIL", "value": user.email},
@@ -133,10 +150,10 @@ async def git_clone_container_v2(
         },
         "securityContext": {
             "allowPrivilegeEscalation": False,
-            "fsGroup": 100,
-            "runAsGroup": 100,
-            "runAsUser": 1000,
+            "runAsGroup": gid,
+            "runAsUser": uid,
             "runAsNonRoot": True,
+            "capabilities": {"drop": ["ALL"]},
         },
         "volumeMounts": [
             {
@@ -149,7 +166,7 @@ async def git_clone_container_v2(
     }
 
 
-async def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
+async def git_clone_container(server: UserServer) -> dict[str, Any] | None:
     """Returns the specification for the container that clones the user's repositories."""
     repositories = await server.repositories()
     if not repositories:
@@ -165,12 +182,8 @@ async def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
     prefix = "GIT_CLONE_"
     env = [
         {
-            "name": f"{prefix}WORKSPACE_MOUNT_PATH",
-            "value": server.workspace_mount_path.as_posix(),
-        },
-        {
             "name": f"{prefix}MOUNT_PATH",
-            "value": server.work_dir.as_posix(),
+            "value": server.workspace_mount_path.as_posix(),
         },
         {
             "name": f"{prefix}LFS_AUTO_FETCH",
@@ -258,7 +271,6 @@ async def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
         },
         "securityContext": {
             "allowPrivilegeEscalation": False,
-            "fsGroup": 100,
             "runAsGroup": 100,
             "runAsUser": 1000,
             "runAsNonRoot": True,
@@ -274,7 +286,7 @@ async def git_clone_container(server: "UserServer") -> dict[str, Any] | None:
     }
 
 
-async def git_clone(server: "UserServer") -> list[dict[str, Any]]:
+async def git_clone(server: UserServer) -> list[dict[str, Any]]:
     """The patch for the init container that clones the git repository."""
     container = await git_clone_container(server)
     if not container:
@@ -293,6 +305,16 @@ async def git_clone(server: "UserServer") -> list[dict[str, Any]]:
     ]
 
 
+def certificates_volume_mounts(config: NotebooksConfig) -> list[ExtraVolumeMount]:
+    """Get the volume mounts for the CA certificates."""
+    return get_certificates_volume_mounts_unserialized(
+        config,
+        etc_certs=True,
+        custom_certs=True,
+        read_only_etc_certs=True,
+    )
+
+
 def certificates_container(config: NotebooksConfig) -> tuple[client.V1Container, list[client.V1Volume]]:
     """The specification for the container that setups self signed CAs."""
     init_container = client.V1Container(
@@ -303,6 +325,13 @@ def certificates_container(config: NotebooksConfig) -> tuple[client.V1Container,
             etc_certs=True,
             custom_certs=True,
             read_only_etc_certs=False,
+        ),
+        security_context=client.V1SecurityContext(
+            allow_privilege_escalation=False,
+            run_as_group=1000,
+            run_as_user=1000,
+            run_as_non_root=True,
+            capabilities=client.V1Capabilities(drop=["ALL"]),
         ),
         resources={
             "requests": {
@@ -358,7 +387,7 @@ def certificates(config: NotebooksConfig) -> list[dict[str, Any]]:
     return patches
 
 
-def download_image_container(server: "UserServer") -> client.V1Container:
+def download_image_container(server: UserServer) -> client.V1Container:
     """Adds a container that does not do anything but simply downloads the session image at startup."""
     container = client.V1Container(
         name="download-image",
@@ -375,7 +404,7 @@ def download_image_container(server: "UserServer") -> client.V1Container:
     return container
 
 
-def download_image(server: "UserServer") -> list[dict[str, Any]]:
+def download_image(server: UserServer) -> list[dict[str, Any]]:
     """Adds a container that does not do anything but simply downloads the session image at startup."""
     container = download_image_container(server)
     api_client = client.ApiClient()
@@ -391,3 +420,66 @@ def download_image(server: "UserServer") -> list[dict[str, Any]]:
             ],
         },
     ]
+
+
+def user_secrets_extras(
+    user: AuthenticatedAPIUser | AnonymousAPIUser,
+    config: NotebooksConfig,
+    secrets_mount_directory: str,
+    k8s_secret_name: str,
+    session_secrets: list[SessionSecret],
+) -> SessionExtraResources | None:
+    """The session extras which decrypts user secrets to be mounted in the session."""
+    if not session_secrets or user.is_anonymous:
+        return None
+
+    volume_k8s_secrets = ExtraVolume(
+        name=f"{k8s_secret_name}-volume",
+        secret=SecretAsVolume(
+            secretName=k8s_secret_name,
+        ),
+    )
+    volume_decrypted_secrets = ExtraVolume(name="user-secrets-volume", emptyDir=EmptyDir(medium="Memory"))
+
+    decrypted_volume_mount = ExtraVolumeMount(
+        name="user-secrets-volume",
+        mountPath=secrets_mount_directory or project_constants.DEFAULT_SESSION_SECRETS_MOUNT_DIR.as_posix(),
+        readOnly=True,
+    )
+
+    init_container = InitContainer.model_validate(
+        dict(
+            name="init-user-secrets",
+            image=config.user_secrets.image,
+            env=[
+                dict(name="DATA_SERVICE_URL", value=config.data_service_url),
+                dict(name="RENKU_ACCESS_TOKEN", value=user.access_token or ""),
+                dict(name="ENCRYPTED_SECRETS_MOUNT_PATH", value="/encrypted"),
+                dict(name="DECRYPTED_SECRETS_MOUNT_PATH", value="/decrypted"),
+            ],
+            volumeMounts=[
+                dict(
+                    name=f"{k8s_secret_name}-volume",
+                    mountPath="/encrypted",
+                    readOnly=True,
+                ),
+                dict(
+                    name="user-secrets-volume",
+                    mountPath="/decrypted",
+                    readOnly=False,
+                ),
+            ],
+            resources={
+                "requests": {
+                    "cpu": "50m",
+                    "memory": "50Mi",
+                }
+            },
+        )
+    )
+
+    return SessionExtraResources(
+        init_containers=[init_container],
+        volumes=[volume_k8s_secrets, volume_decrypted_secrets],
+        volume_mounts=[decrypted_volume_mount],
+    )

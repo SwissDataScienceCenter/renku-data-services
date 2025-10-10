@@ -1,5 +1,6 @@
 """Schema for cloudstorage config."""
 
+import json
 from configparser import ConfigParser
 from io import StringIO
 from pathlib import PurePosixPath
@@ -8,9 +9,8 @@ from typing import Any, Final, Optional, Protocol, Self
 from kubernetes import client
 from marshmallow import EXCLUDE, Schema, ValidationError, fields, validates_schema
 
-from renku_data_services.base_models import APIUser
 from renku_data_services.notebooks.api.classes.cloud_storage import ICloudStorageRequest
-from renku_data_services.notebooks.config import NotebooksConfig
+from renku_data_services.storage.models import CloudStorage
 
 _sanitize_for_serialization = client.ApiClient().sanitize_for_serialization
 
@@ -57,54 +57,55 @@ class RCloneStorage(ICloudStorageRequest):
         readonly: bool,
         mount_folder: str,
         name: Optional[str],
-        config: NotebooksConfig,
+        secrets: dict[str, str],  # "Mapping between secret ID (key) and secret name (value)
+        storage_class: str,
+        user_secret_key: str | None = None,
     ) -> None:
         """Creates a cloud storage instance without validating the configuration."""
-        self.config = config
         self.configuration = configuration
         self.source_path = source_path
         self.mount_folder = mount_folder
         self.readonly = readonly
         self.name = name
+        self.secrets = secrets
+        self.base_name: str | None = None
+        self.user_secret_key = user_secret_key
+        self.storage_class = storage_class
 
     @classmethod
     async def storage_from_schema(
         cls,
         data: dict[str, Any],
-        user: APIUser,
-        internal_gitlab_user: APIUser,
-        project_id: int,
         work_dir: PurePosixPath,
-        config: NotebooksConfig,
+        saved_storage: CloudStorage | None,
+        storage_class: str,
+        user_secret_key: str | None = None,
     ) -> Self:
         """Create storage object from request."""
         name = None
-        if data.get("storage_id"):
-            # Load from storage service
-            if user.access_token is None:
-                raise ValidationError("Storage mounting is only supported for logged-in users.")
-            if project_id < 1:
-                raise ValidationError("Could not get gitlab project id")
-            (
-                configuration,
-                source_path,
-                target_path,
-                readonly,
-                name,
-            ) = await config.storage_validator.get_storage_by_id(
-                user, internal_gitlab_user, project_id, data["storage_id"]
-            )
-            configuration = {**configuration, **(configuration or {})}
-            readonly = readonly
+        if saved_storage:
+            configuration = {**saved_storage.configuration.model_dump(), **(data.get("configuration", {}))}
+            readonly = saved_storage.readonly
+            name = saved_storage.name
         else:
             source_path = data["source_path"]
             target_path = data["target_path"]
             configuration = data["configuration"]
             readonly = data.get("readonly", True)
-        mount_folder = str(work_dir / target_path)
 
-        await config.storage_validator.validate_storage_configuration(configuration, source_path)
-        return cls(source_path, configuration, readonly, mount_folder, name, config)
+        # NOTE: This is used only in Renku v1, there we do not save secrets for storage
+        secrets: dict[str, str] = {}
+        mount_folder = str(work_dir / target_path)
+        return cls(
+            source_path=source_path,
+            configuration=configuration,
+            readonly=readonly,
+            mount_folder=mount_folder,
+            name=name,
+            storage_class=storage_class,
+            secrets=secrets,
+            user_secret_key=user_secret_key,
+        )
 
     def pvc(
         self,
@@ -115,6 +116,8 @@ class RCloneStorage(ICloudStorageRequest):
     ) -> client.V1PersistentVolumeClaim:
         """The PVC for mounting cloud storage."""
         return client.V1PersistentVolumeClaim(
+            api_version="v1",
+            kind="PersistentVolumeClaim",
             metadata=client.V1ObjectMeta(
                 name=base_name,
                 namespace=namespace,
@@ -124,7 +127,7 @@ class RCloneStorage(ICloudStorageRequest):
             spec=client.V1PersistentVolumeClaimSpec(
                 access_modes=["ReadOnlyMany" if self.readonly else "ReadWriteMany"],
                 resources=client.V1VolumeResourceRequirements(requests={"storage": "10Gi"}),
-                storage_class_name=self.config.cloud_storage.storage_class,
+                storage_class_name=self.storage_class,
             ),
         )
 
@@ -159,9 +162,16 @@ class RCloneStorage(ICloudStorageRequest):
             "remotePath": self.source_path,
             "configData": self.config_string(self.name or base_name),
         }
+        string_data.update(self.mount_options())
+        # NOTE: in Renku v1 this function is not directly called so the base name
+        # comes from the user_secret_key property on the class instance
+        if self.user_secret_key:
+            string_data["secretKey"] = self.user_secret_key
         if user_secret_key:
             string_data["secretKey"] = user_secret_key
         return client.V1Secret(
+            api_version="v1",
+            kind="Secret",
             metadata=client.V1ObjectMeta(
                 name=base_name,
                 namespace=namespace,
@@ -179,6 +189,7 @@ class RCloneStorage(ICloudStorageRequest):
         annotations: dict[str, str] | None = None,
     ) -> list[dict[str, Any]]:
         """Get server manifest patch."""
+        self.base_name = base_name
         patches = []
         patches.append(
             {
@@ -216,17 +227,43 @@ class RCloneStorage(ICloudStorageRequest):
         """
         if not self.configuration:
             raise ValidationError("Missing configuration for cloud storage")
-        # TODO Use RCloneValidator.get_real_configuration(...) instead.
-        real_config = dict(self.configuration)
-        if real_config["type"] == "s3" and real_config.get("provider") == "Switch":
+
+        # Transform configuration for polybox or switchDrive
+        storage_type = self.configuration.get("type", "")
+        access = self.configuration.get("provider", "")
+
+        if storage_type == "polybox" or storage_type == "switchDrive":
+            self.configuration["type"] = "webdav"
+            self.configuration["provider"] = ""
+            # NOTE: Without the vendor field mounting storage and editing files results in the modification
+            # time for touched files to be temporarily set to `1999-09-04` which causes the text
+            # editor to complain that the file has changed and whether it should overwrite new changes.
+            self.configuration["vendor"] = "owncloud"
+
+        if access == "shared" and storage_type == "polybox":
+            self.configuration["url"] = "https://polybox.ethz.ch/public.php/webdav/"
+        elif access == "shared" and storage_type == "switchDrive":
+            self.configuration["url"] = "https://drive.switch.ch/public.php/webdav/"
+        elif access == "personal" and storage_type == "polybox":
+            self.configuration["url"] = "https://polybox.ethz.ch/remote.php/webdav/"
+        elif access == "personal" and storage_type == "switchDrive":
+            self.configuration["url"] = "https://drive.switch.ch/remote.php/webdav/"
+
+        # Extract the user from the public link
+        if access == "shared" and storage_type in {"polybox", "switchDrive"}:
+            public_link = self.configuration.get("public_link", "")
+            user_identifier = public_link.split("/")[-1]
+            self.configuration["user"] = user_identifier
+
+        if self.configuration["type"] == "s3" and self.configuration.get("provider", None) == "Switch":
             # Switch is a fake provider we add for users, we need to replace it since rclone itself
             # doesn't know it
-            real_config["provider"] = "Other"
-        elif real_config["type"] == "openbis":
-            real_config["type"] = "sftp"
-            real_config["port"] = "2222"
-            real_config["user"] = "?"
-            real_config["pass"] = real_config.pop("session_token")
+            self.configuration["provider"] = "Other"
+        elif self.configuration["type"] == "openbis":
+            self.configuration["type"] = "sftp"
+            self.configuration["port"] = "2222"
+            self.configuration["user"] = "?"
+            self.configuration["pass"] = self.configuration.pop("session_token")
 
         parser = ConfigParser()
         parser.add_section(name)
@@ -236,7 +273,7 @@ class RCloneStorage(ICloudStorageRequest):
                 return "true" if value else "false"
             return str(value)
 
-        for k, v in real_config.items():
+        for k, v in self.configuration.items():
             parser.set(name, k, _stringify(v))
         stringio = StringIO()
         parser.write(stringio)
@@ -250,7 +287,35 @@ class RCloneStorage(ICloudStorageRequest):
             readonly=override.readonly if override.readonly is not None else self.readonly,
             configuration=override.configuration if override.configuration else self.configuration,
             name=self.name,
-            config=self.config,
+            secrets=self.secrets,
+            storage_class=self.storage_class,
+            user_secret_key=self.user_secret_key,
+        )
+
+    def mount_options(self) -> dict[str, str]:
+        """Returns extra mount options for this storage."""
+        if not self.configuration:
+            raise ValidationError("Missing configuration for cloud storage")
+
+        vfs_options: dict[str, Any] = dict()
+        mount_options: dict[str, Any] = dict()
+        storage_type = self.configuration.get("type", "")
+        if storage_type == "doi":
+            vfs_options["CacheMode"] = "full"
+            mount_options["AttrTimeout"] = "41s"
+
+        options: dict[str, str] = dict()
+        if vfs_options:
+            options["vfsOpt"] = json.dumps(vfs_options)
+        if mount_options:
+            options["mountOpt"] = json.dumps(mount_options)
+        return options
+
+    def __repr__(self) -> str:
+        """Override to make sure no secrets or sensitive configuration gets printed in logs."""
+        return (
+            f"{RCloneStorageRequest.__name__}(name={self.name}, source_path={self.source_path}, "
+            f"mount_folder={self.mount_folder}, readonly={self.readonly})"
         )
 
 

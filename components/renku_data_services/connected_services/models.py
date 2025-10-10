@@ -2,15 +2,41 @@
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 
 from ulid import ULID
 
-from renku_data_services.connected_services.apispec import ConnectionStatus, ProviderKind, RepositorySelection
+from renku_data_services.users.db import APIUser
+
+
+class ProviderKind(StrEnum):
+    """The kind of platform we connnect to."""
+
+    gitlab = "gitlab"
+    github = "github"
+    drive = "drive"
+    onedrive = "onedrive"
+    dropbox = "dropbox"
+    generic_oidc = "generic_oidc"
+
+
+class ConnectionStatus(StrEnum):
+    """The status of a connection."""
+
+    connected = "connected"
+    pending = "pending"
+
+
+class RepositorySelection(StrEnum):
+    """The repository selection for GitHub applications."""
+
+    all = "all"
+    selected = "selected"
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class OAuth2Client:
+class UnsavedOAuth2Client:
     """OAuth2 Client model."""
 
     id: str
@@ -22,6 +48,14 @@ class OAuth2Client:
     scope: str
     url: str
     use_pkce: bool
+    image_registry_url: str | None = None
+    oidc_issuer_url: str | None = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class OAuth2Client(UnsavedOAuth2Client):
+    """OAuth2 Client model."""
+
     created_by_id: str
     creation_date: datetime
     updated_at: datetime
@@ -39,6 +73,8 @@ class OAuth2ClientPatch:
     scope: str | None
     url: str | None
     use_pkce: bool | None
+    image_registry_url: str | None
+    oidc_issuer_url: str | None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -48,6 +84,10 @@ class OAuth2Connection:
     id: ULID
     provider_id: str
     status: ConnectionStatus
+
+    def is_connected(self) -> bool:
+        """Returns whether this connection is in status 'connected'."""
+        return self.status == ConnectionStatus.connected
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -115,3 +155,40 @@ class AppInstallationList:
 
     total_count: int
     installations: list[AppInstallation]
+
+
+@dataclass(frozen=True, eq=True)
+class ConnectedUser:
+    """A user and the corresponding oauth2 connection."""
+
+    connection: OAuth2Connection
+    user: APIUser
+
+    def is_connected(self) -> bool:
+        """Returns whether the connection is in status 'connected'."""
+        return self.connection.is_connected()
+
+
+@dataclass(frozen=True, eq=True)
+class ImageProvider:
+    """Result when retrieving provider information for an image."""
+
+    provider: OAuth2Client
+    connected_user: ConnectedUser | None
+    registry_url: str
+
+    def is_connected(self) -> bool:
+        """Returns whether the connection exists and is in status 'connected'."""
+        return self.connected_user is not None and self.connected_user.is_connected()
+
+    @property
+    def connection(self) -> OAuth2Connection | None:
+        """Return the connection if present."""
+        if self.connected_user:
+            return self.connected_user.connection
+        else:
+            return None
+
+    def __str__(self) -> str:
+        conn = f"connection={self.connection.id}" if self.connection else "connection=None"
+        return f"ImageProvider(provider={self.provider.id}/{self.provider.kind}, {conn})"

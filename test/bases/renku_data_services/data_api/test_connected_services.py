@@ -8,18 +8,18 @@ import pytest_asyncio
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 
-from renku_data_services.app_config import Config
 from renku_data_services.connected_services.dummy_async_oauth2_client import DummyAsyncOAuth2Client
 from renku_data_services.data_api.app import register_all_handlers
+from renku_data_services.data_api.dependencies import DependencyManager
 from test.utils import SanicReusableASGITestClient
 
 
 @pytest_asyncio.fixture
-async def oauth2_test_client(app_config: Config) -> SanicASGITestClient:
-    app_config.async_oauth2_client_class = DummyAsyncOAuth2Client
-    app_config.connected_services_repo.async_oauth2_client_class = DummyAsyncOAuth2Client
-    app = Sanic(app_config.app_name)
-    app = register_all_handlers(app, app_config)
+async def oauth2_test_client(app_manager: DependencyManager) -> SanicASGITestClient:
+    app_manager.async_oauth2_client_class = DummyAsyncOAuth2Client
+    app_manager.connected_services_repo.async_oauth2_client_class = DummyAsyncOAuth2Client
+    app = Sanic(app_manager.app_name)
+    app = register_all_handlers(app, app_manager)
     async with SanicReusableASGITestClient(app) as client:
         yield client
 
@@ -214,9 +214,12 @@ async def test_patch_oauth2_provider(sanic_client: SanicASGITestClient, admin_he
 
     payload = {
         "app_slug": "my-new-example",
+        "kind": "generic_oidc",
         "display_name": "New display name",
         "scope": "read write",
         "url": "https://my-new-example.org",
+        "image_registry_url": "https://a-registry/",
+        "oidc_issuer_url": "https://my-issuer",
     }
 
     _, res = await sanic_client.patch(f"/api/data/oauth2/providers/{provider_id}", headers=admin_headers, json=payload)
@@ -224,9 +227,12 @@ async def test_patch_oauth2_provider(sanic_client: SanicASGITestClient, admin_he
     assert res.status_code == 200, res.text
     assert res.json is not None
     assert res.json.get("app_slug") == "my-new-example"
+    assert res.json.get("kind") == "generic_oidc"
     assert res.json.get("display_name") == "New display name"
     assert res.json.get("scope") == "read write"
     assert res.json.get("url") == "https://my-new-example.org"
+    assert res.json.get("image_registry_url") == "https://a-registry/"
+    assert res.json.get("oidc_issuer_url") == "https://my-issuer"
 
 
 @pytest.mark.asyncio
@@ -400,7 +406,7 @@ async def test_get_installations_gitlab(
 async def test_get_installations_github(
     oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_connection
 ):
-    connection = await create_oauth2_connection("provider_1", kind="github")
+    connection = await create_oauth2_connection("provider_1", kind="github", url="https://github.com")
     connection_id = connection["id"]
 
     _, res = await oauth2_test_client.get(
@@ -421,3 +427,20 @@ async def test_get_installations_github(
     assert res.headers.get("per-page") == "20"
     assert res.headers.get("total") == "1"
     assert res.headers.get("total-pages") == "1"
+
+
+@pytest.mark.asyncio
+async def test_get_no_installations_ghcrio(
+    oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_connection
+):
+    connection = await create_oauth2_connection("provider_1", kind="github", image_registry_url="https://ghcr.io")
+    connection_id = connection["id"]
+
+    _, res = await oauth2_test_client.get(
+        f"/api/data/oauth2/connections/{connection_id}/installations", headers=user_headers
+    )
+
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    installations_list = res.json
+    assert len(installations_list) == 0

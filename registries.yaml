@@ -1,0 +1,4 @@
+mirrors:
+  "shipwright-registry.local:5000":
+    endpoint:
+      - http://k3d-shipwright-registry.local:5000

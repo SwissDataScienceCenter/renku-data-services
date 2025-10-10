@@ -1,5 +1,7 @@
 """Patches for injecting custom certificates in session containers."""
 
+from __future__ import annotations
+
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -10,7 +12,7 @@ if TYPE_CHECKING:
     from renku_data_services.notebooks.api.classes.server import UserServer
 
 
-def proxy(server: "UserServer") -> list[dict[str, Any]]:
+def proxy(server: UserServer) -> list[dict[str, Any]]:
     """Injects custom certificates volumes in the oauth2 proxy container."""
     etc_cert_volume_mounts = get_certificates_volume_mounts(
         server.config,

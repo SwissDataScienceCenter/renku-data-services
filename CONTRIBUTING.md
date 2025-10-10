@@ -7,7 +7,7 @@ The sections below provide guidelines for various types of contributions.
 
 ### Bug Reports and Feature Requests
 
-**Do not report security issues as bugs**, instead email us at contact@datascience.ch
+**Do not report security issues as bugs**, instead email us at security@renku.io or [open a security advisory](https://github.com/SwissDataScienceCenter/renku-data-services/security/advisories/new)
 
 Bugs and feature requests should be reported on GitHub [Issues](https://github.com/SwissDataScienceCenter/renku-data-services/issues).
 

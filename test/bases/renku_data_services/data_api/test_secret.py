@@ -2,7 +2,7 @@
 
 import time
 from base64 import b64decode
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -11,8 +11,9 @@ from sanic_testing.testing import SanicASGITestClient
 from ulid import ULID
 
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
-from renku_data_services.secrets.core import rotate_encryption_keys, rotate_single_encryption_key
+from renku_data_services.k8s.models import K8sSecret
 from renku_data_services.secrets.models import Secret, SecretKind
+from renku_data_services.secrets_storage_api.dependencies import DependencyManager
 from renku_data_services.users import apispec
 from renku_data_services.utils.cryptography import (
     decrypt_rsa,
@@ -26,9 +27,17 @@ from renku_data_services.utils.cryptography import (
 @pytest.fixture
 def create_secret(sanic_client: SanicASGITestClient, user_headers):
     async def create_secret_helper(
-        name: str, value: str, kind: str = "general", expiration_timestamp: str = None
+        name: str,
+        value: str,
+        kind: str = "general",
+        default_filename: str | None = None,
+        expiration_timestamp: str | None = None,
     ) -> dict[str, Any]:
-        payload = {"name": name, "value": value, "kind": kind, "expiration_timestamp": expiration_timestamp}
+        payload = {"name": name, "value": value, "kind": kind}
+        if default_filename:
+            payload["default_filename"] = default_filename
+        if expiration_timestamp:
+            payload["expiration_timestamp"] = expiration_timestamp
 
         _, response = await sanic_client.post("/api/data/user/secrets", headers=user_headers, json=payload)
 
@@ -50,9 +59,20 @@ async def test_create_secrets(sanic_client: SanicASGITestClient, user_headers, k
 
     assert response.status_code == 201, response.text
     assert response.json is not None
-    assert response.json.keys() == {"id", "name", "kind", "expiration_timestamp", "modification_date"}
-    assert response.json["name"] == "my-secret"
+    assert response.json.keys() == {
+        "id",
+        "name",
+        "default_filename",
+        "modification_date",
+        "kind",
+        "session_secret_slot_ids",
+        "data_connector_ids",
+        "expiration_timestamp",
+    }
     assert response.json["id"] is not None
+    assert response.json["name"] == "my-secret"
+    assert response.json["default_filename"] is not None
+    assert response.json["modification_date"] is not None
     assert response.json["kind"] == kind
     assert response.json["expiration_timestamp"] is None
     assert response.json["modification_date"] is not None
@@ -84,7 +104,7 @@ async def test_get_one_secret(sanic_client: SanicASGITestClient, user_headers, c
     secret = await create_secret("secret-2", "value-2")
     await create_secret("secret-3", "value-3")
 
-    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret["id"]}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret['id']}", headers=user_headers)
     assert response.status_code == 200, response.text
     assert response.json is not None
     assert response.json["name"] == secret["name"]
@@ -98,13 +118,13 @@ async def test_get_one_secret_not_expired(sanic_client: SanicASGITestClient, use
     secret_1 = await create_secret("secret-1", "value-1", expiration_timestamp=expiration_timestamp)
     secret_2 = await create_secret("secret-2", "value-2", expiration_timestamp="2029-12-31")
 
-    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret_1["id"]}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret_1['id']}", headers=user_headers)
     assert response.status_code == 200, response.text
     assert response.json is not None
     assert response.json["name"] == "secret-1"
     assert response.json["id"] == secret_1["id"]
 
-    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret_2["id"]}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret_2['id']}", headers=user_headers)
     assert response.status_code == 200, response.text
     assert response.json is not None
     assert response.json["name"] == "secret-2"
@@ -112,7 +132,7 @@ async def test_get_one_secret_not_expired(sanic_client: SanicASGITestClient, use
 
     time.sleep(20)
 
-    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret_1["id"]}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret_1['id']}", headers=user_headers)
     assert response.status_code == 404
 
 
@@ -176,7 +196,7 @@ async def test_get_delete_a_secret(sanic_client: SanicASGITestClient, user_heade
     secret = await create_secret("secret-2", "value-2")
     await create_secret("secret-3", "value-3")
 
-    _, response = await sanic_client.delete(f"/api/data/user/secrets/{secret["id"]}", headers=user_headers)
+    _, response = await sanic_client.delete(f"/api/data/user/secrets/{secret['id']}", headers=user_headers)
     assert response.status_code == 204, response.text
 
     _, response = await sanic_client.get("/api/data/user/secrets", headers=user_headers)
@@ -192,12 +212,12 @@ async def test_get_update_a_secret(sanic_client: SanicASGITestClient, user_heade
     await create_secret("secret-3", "value-3")
 
     _, response = await sanic_client.patch(
-        f"/api/data/user/secrets/{secret["id"]}", headers=user_headers, json={"name": "new-name", "value": "new-value"}
+        f"/api/data/user/secrets/{secret['id']}", headers=user_headers, json={"name": "new-name", "value": "new-value"}
     )
     assert response.status_code == 422
 
     _, response = await sanic_client.patch(
-        f"/api/data/user/secrets/{secret["id"]}", headers=user_headers, json={"value": "new-value"}
+        f"/api/data/user/secrets/{secret['id']}", headers=user_headers, json={"value": "new-value"}
     )
     assert response.status_code == 200, response.text
     assert response.json is not None
@@ -206,7 +226,7 @@ async def test_get_update_a_secret(sanic_client: SanicASGITestClient, user_heade
     assert response.json["expiration_timestamp"] is None
     assert "value" not in response.json
 
-    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret["id"]}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret['id']}", headers=user_headers)
     assert response.status_code == 200, response.text
     assert response.json is not None
     assert response.json["id"] == secret["id"]
@@ -215,13 +235,13 @@ async def test_get_update_a_secret(sanic_client: SanicASGITestClient, user_heade
     assert "value" not in response.json
 
     _, response = await sanic_client.patch(
-        f"/api/data/user/secrets/{secret["id"]}",
+        f"/api/data/user/secrets/{secret['id']}",
         headers=user_headers,
         json={"value": "newest-value", "expiration_timestamp": "2029-12-31"},
     )
     assert response.status_code == 200, response.text
 
-    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret["id"]}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret['id']}", headers=user_headers)
     assert response.status_code == 200, response.text
     assert response.json is not None
     assert response.json["id"] == secret["id"]
@@ -238,7 +258,7 @@ async def test_cannot_get_another_user_secret(
     secret = await create_secret("secret-2", "value-2")
     await create_secret("secret-3", "value-3")
 
-    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret["id"]}", headers=admin_headers)
+    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret['id']}", headers=admin_headers)
     assert response.status_code == 404, response.text
     assert "cannot be found" in response.json["error"]["message"]
 
@@ -263,14 +283,14 @@ async def test_anonymous_users_cannot_create_secrets(sanic_client: SanicASGITest
 async def test_secret_encryption_decryption(
     sanic_client: SanicASGITestClient,
     secrets_sanic_client: SanicASGITestClient,
-    secrets_storage_app_config,
+    secrets_storage_app_manager,
     user_headers,
     create_secret,
 ) -> None:
     """Test adding a secret and decrypting it in the secret service."""
-    secret1 = await create_secret("secret-1", "value-1")
+    secret1 = await create_secret("secret-1", "value-1", default_filename="secret-1")
     secret1_id = secret1["id"]
-    secret2 = await create_secret("secret-2", "value-2")
+    secret2 = await create_secret("secret-2", "value-2", default_filename="secret-2")
     secret2_id = secret2["id"]
 
     payload = {
@@ -289,24 +309,26 @@ async def test_secret_encryption_decryption(
 
     _, response = await secrets_sanic_client.post("/api/secrets/kubernetes", headers=user_headers, json=payload)
     assert response.status_code == 201
-    assert "test-secret" in secrets_storage_app_config.core_client.secrets
-    k8s_secret = secrets_storage_app_config.core_client.secrets["test-secret"].data
-    assert k8s_secret.keys() == {"secret-1", "secret-2"}
+    assert "test-secret" in secrets_storage_app_manager.secret_client.secrets
+    k8s_secret: K8sSecret = secrets_storage_app_manager.secret_client.secrets["test-secret"]
+    secrets = k8s_secret.manifest.get("data", {})
+
+    assert secrets.keys() == {"secret-1", "secret-2"}
 
     _, response = await sanic_client.get("/api/data/user/secret_key", headers=user_headers)
     assert response.status_code == 200
     assert "secret_key" in response.json
     secret_key = response.json["secret_key"]
 
-    assert decrypt_string(secret_key.encode(), "user", b64decode(k8s_secret["secret-1"])) == "value-1"
-    assert decrypt_string(secret_key.encode(), "user", b64decode(k8s_secret["secret-2"])) == "value-2"
+    assert decrypt_string(secret_key.encode(), "user", b64decode(secrets["secret-1"])) == "value-1"
+    assert decrypt_string(secret_key.encode(), "user", b64decode(secrets["secret-2"])) == "value-2"
 
 
 @pytest.mark.asyncio
 async def test_secret_encryption_decryption_with_key_mapping(
     sanic_client: SanicASGITestClient,
     secrets_sanic_client: SanicASGITestClient,
-    secrets_storage_app_config,
+    secrets_storage_app_manager,
     user_headers,
     create_secret,
 ) -> None:
@@ -315,11 +337,13 @@ async def test_secret_encryption_decryption_with_key_mapping(
     secret1_id = secret1["id"]
     secret2 = await create_secret("secret-2", "value-2")
     secret2_id = secret2["id"]
+    secret3 = await create_secret("secret-3", "value-3")
+    secret3_id = secret3["id"]
 
     payload = {
         "name": "test-secret",
         "namespace": "test-namespace",
-        "secret_ids": [secret1_id, secret2_id],
+        "secret_ids": [secret1_id, secret2_id, secret3_id],
         "owner_references": [
             {
                 "apiVersion": "amalthea.dev/v1alpha1",
@@ -331,22 +355,26 @@ async def test_secret_encryption_decryption_with_key_mapping(
         "key_mapping": {
             secret1_id: "access_key_id",
             secret2_id: "secret_access_key",
+            secret3_id: ["secret-3-one", "secret-3-two"],
         },
     }
 
     _, response = await secrets_sanic_client.post("/api/secrets/kubernetes", headers=user_headers, json=payload)
     assert response.status_code == 201
-    assert "test-secret" in secrets_storage_app_config.core_client.secrets
-    k8s_secret = secrets_storage_app_config.core_client.secrets["test-secret"].data
-    assert k8s_secret.keys() == {"access_key_id", "secret_access_key"}
+    assert "test-secret" in secrets_storage_app_manager.secret_client.secrets
+    k8s_secret: K8sSecret = secrets_storage_app_manager.secret_client.secrets["test-secret"]
+    secrets = k8s_secret.manifest.get("data", {})
+    assert secrets.keys() == {"access_key_id", "secret_access_key", "secret-3-one", "secret-3-two"}
 
     _, response = await sanic_client.get("/api/data/user/secret_key", headers=user_headers)
     assert response.status_code == 200
     assert "secret_key" in response.json
     secret_key = response.json["secret_key"]
 
-    assert decrypt_string(secret_key.encode(), "user", b64decode(k8s_secret["access_key_id"])) == "value-1"
-    assert decrypt_string(secret_key.encode(), "user", b64decode(k8s_secret["secret_access_key"])) == "value-2"
+    assert decrypt_string(secret_key.encode(), "user", b64decode(secrets["access_key_id"])) == "value-1"
+    assert decrypt_string(secret_key.encode(), "user", b64decode(secrets["secret_access_key"])) == "value-2"
+    assert decrypt_string(secret_key.encode(), "user", b64decode(secrets["secret-3-one"])) == "value-3"
+    assert decrypt_string(secret_key.encode(), "user", b64decode(secrets["secret-3-two"])) == "value-3"
 
     # NOTE: Test missing secret_id in key mapping
     payload["key_mapping"] = {secret1_id: "access_key_id"}
@@ -357,7 +385,7 @@ async def test_secret_encryption_decryption_with_key_mapping(
     assert response.json["error"]["message"] == "Key mapping must include all requested secret IDs"
 
     # NOTE: Test duplicated key mapping
-    payload["key_mapping"] = {secret1_id: "access_key_id", secret2_id: "access_key_id"}
+    payload["key_mapping"] = {secret1_id: "access_key_id", secret2_id: "access_key_id", secret3_id: "secret-3"}
 
     _, response = await secrets_sanic_client.post("/api/secrets/kubernetes", headers=user_headers, json=payload)
 
@@ -380,13 +408,17 @@ async def test_single_secret_rotation():
 
     secret = Secret(
         id=ULID(),
-        name="test_secret",
+        name="My secret",
+        default_filename="test_secret",
         encrypted_value=encrypted_value,
         encrypted_key=encrypted_key,
         kind=SecretKind.general,
+        modification_date=datetime.now(tz=UTC),
+        session_secret_slot_ids=[],
+        data_connector_ids=[],
     )
 
-    rotated_secret = await rotate_single_encryption_key(secret, user_id, new_key, old_key)
+    rotated_secret = await secret.rotate_single_encryption_key(user_id, new_key, old_key)
 
     assert rotated_secret is not None
     with pytest.raises(ValueError):
@@ -399,12 +431,14 @@ async def test_single_secret_rotation():
 
     # ensure that rotating again does nothing
 
-    result = await rotate_single_encryption_key(rotated_secret, user_id, new_key, old_key)
+    result = await rotated_secret.rotate_single_encryption_key(user_id, new_key, old_key)
     assert result is None
 
 
 @pytest.mark.asyncio
-async def test_secret_rotation(sanic_client, secrets_storage_app_config, create_secret, user_headers, users):
+async def test_secret_rotation(
+    sanic_client, secrets_storage_app_manager: DependencyManager, create_secret, user_headers, users
+):
     """Test rotating multiple secrets."""
 
     for i in range(10):
@@ -412,15 +446,14 @@ async def test_secret_rotation(sanic_client, secrets_storage_app_config, create_
 
     new_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     admin = InternalServiceAdmin(id=ServiceAdminId.secrets_rotation)
-    await rotate_encryption_keys(
+    await secrets_storage_app_manager.user_secrets_repo.rotate_encryption_keys(
         admin,
         new_key,
-        secrets_storage_app_config.secrets_service_private_key,
-        secrets_storage_app_config.user_secrets_repo,
+        secrets_storage_app_manager.config.secrets.private_key,
         batch_size=5,
     )
 
-    secrets = [s async for s in secrets_storage_app_config.user_secrets_repo.get_all_secrets_batched(admin, 100)]
+    secrets = [s async for s in secrets_storage_app_manager.user_secrets_repo.get_all_secrets_batched(admin, 100)]
     batch = secrets[0]
     assert len(batch) == 10
 
@@ -434,3 +467,24 @@ async def test_secret_rotation(sanic_client, secrets_storage_app_config, create_
         decrypted_value = decrypt_string(new_encryption_key, users[1].id, secret.encrypted_value).encode()  # type: ignore
         decrypted_value = decrypt_string(secret_key.encode(), users[1].id, decrypted_value)
         assert f"secret-{decrypted_value}" == secret.name
+
+
+@pytest.mark.asyncio
+async def test_patch_user_secret(sanic_client: SanicASGITestClient, user_headers, create_secret) -> None:
+    secret = await create_secret("a-secret", "value-2")
+    secret_id = secret["id"]
+
+    payload = {"name": "A very important secret", "default_filename": "my-secret.txt"}
+
+    _, response = await sanic_client.patch(f"/api/data/user/secrets/{secret_id}", headers=user_headers, json=payload)
+
+    assert response.status_code == 200, response.text
+
+    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret_id}", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json["id"] == secret_id
+    assert "value" not in response.json
+    assert response.json.get("name") == "A very important secret"
+    assert response.json.get("default_filename") == "my-secret.txt"

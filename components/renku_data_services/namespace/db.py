@@ -7,28 +7,40 @@ import string
 from collections.abc import AsyncGenerator, Callable
 from contextlib import nullcontext
 from datetime import UTC, datetime
+from typing import Any, overload
 
-from sanic.log import logger
-from sqlalchemy import delete, func, select, text
+from sqlalchemy import Select, delete, func, select, text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
+from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.sql.functions import count as sa_count
+from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.authz.models import CheckPermissionItem, Member, MembershipChange, Role, Scope, UnsavedMember
-from renku_data_services.base_api.pagination import PaginationRequest
-from renku_data_services.message_queue import events
-from renku_data_services.message_queue.avro_models.io.renku.events.v2 import GroupAdded, GroupRemoved, GroupUpdated
-from renku_data_services.message_queue.db import EventRepository
-from renku_data_services.message_queue.interface import IMessageQueue
-from renku_data_services.message_queue.redis_queue import dispatch_message
+from renku_data_services.base_api.pagination import PaginationRequest, paginate_queries
+from renku_data_services.base_models.core import (
+    DataConnectorInProjectPath,
+    DataConnectorPath,
+    NamespacePath,
+    NamespaceSlug,
+    ProjectPath,
+    Slug,
+)
+from renku_data_services.data_connectors.models import DataConnector
 from renku_data_services.namespace import models
 from renku_data_services.namespace import orm as schemas
+from renku_data_services.project.orm import ProjectORM
+from renku_data_services.search.db import SearchUpdatesRepo
+from renku_data_services.search.decorators import update_search_document
 from renku_data_services.users import models as user_models
 from renku_data_services.users import orm as user_schemas
 from renku_data_services.utils.core import with_db_transaction
+
+logger = logging.getLogger(__name__)
 
 
 class GroupRepository:
@@ -37,18 +49,16 @@ class GroupRepository:
     def __init__(
         self,
         session_maker: Callable[..., AsyncSession],
-        event_repo: EventRepository,
         group_authz: Authz,
-        message_queue: IMessageQueue,
+        search_updates_repo: SearchUpdatesRepo,
     ) -> None:
         self.session_maker = session_maker
         self.authz: Authz = group_authz
-        self.event_repo: EventRepository = event_repo
-        self.message_queue: IMessageQueue = message_queue
+        self.search_updates_repo = search_updates_repo
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.insert_many, ResourceType.user_namespace)
-    @dispatch_message(events.InsertUserNamespace)
+    @update_search_document
     async def generate_user_namespaces(self, *, session: AsyncSession | None = None) -> list[user_models.UserInfo]:
         """Generate user namespaces if the user table has data and the namespaces table is empty."""
         if not session:
@@ -90,6 +100,8 @@ class GroupRepository:
             groups_orm = result.scalars().all()
 
             stmt_count = select(func.count()).select_from(schemas.GroupORM)
+            if direct_member:
+                stmt_count = stmt_count.where(schemas.GroupORM.id.in_(group_ids))
             result = await session.execute(stmt_count)
             n_total_elements = result.scalar() or 0
             return [g.dump() for g in groups_orm], n_total_elements
@@ -105,18 +117,18 @@ class GroupRepository:
                 yield group.dump()
 
     async def _get_group(
-        self, session: AsyncSession, user: base_models.APIUser, slug: str, load_members: bool = False
+        self, session: AsyncSession, user: base_models.APIUser, slug: Slug, load_members: bool = False
     ) -> tuple[schemas.GroupORM, list[Member]]:
         transaction = nullcontext() if session.in_transaction() else session.begin()
         async with transaction:
             stmt = select(schemas.GroupORM).where(
-                schemas.GroupORM.namespace.has(schemas.NamespaceORM.slug == slug.lower())
+                schemas.GroupORM.namespace.has(schemas.NamespaceORM.slug == slug.value.lower())
             )
             group = await session.scalar(stmt)
             if not group:
                 stmt_old_ns = (
                     select(schemas.NamespaceOldORM)
-                    .where(schemas.NamespaceOldORM.slug == slug.lower())
+                    .where(schemas.NamespaceOldORM.slug == slug.value.lower())
                     .order_by(schemas.NamespaceOldORM.created_at.desc())
                     .limit(1)
                     .options(
@@ -135,7 +147,7 @@ class GroupRepository:
                 members = await self.authz.members(user, ResourceType.group, group.id)
             return group, members
 
-    async def get_group(self, user: base_models.APIUser, slug: str) -> models.Group:
+    async def get_group(self, user: base_models.APIUser, slug: Slug) -> models.Group:
         """Get a group from the DB."""
         async with self.session_maker() as session:
             group_orm, _ = await self._get_group(session, user, slug)
@@ -143,7 +155,7 @@ class GroupRepository:
 
     @with_db_transaction
     async def get_group_members(
-        self, user: base_models.APIUser, slug: str, *, session: AsyncSession | None = None
+        self, user: base_models.APIUser, slug: Slug, *, session: AsyncSession | None = None
     ) -> list[models.GroupMemberDetails]:
         """Get all the users that are direct members of a group."""
         if not session:
@@ -169,24 +181,24 @@ class GroupRepository:
         ]
 
     @with_db_transaction
-    @dispatch_message(GroupUpdated)
+    @update_search_document
     async def update_group(
-        self, user: base_models.APIUser, slug: str, patch: models.GroupPatch, *, session: AsyncSession | None = None
+        self, user: base_models.APIUser, slug: Slug, patch: models.GroupPatch, *, session: AsyncSession | None = None
     ) -> models.Group:
         """Update a group in the DB."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
         group, _ = await self._get_group(session, user, slug)
-        if group.namespace.slug != slug.lower():
+        if group.namespace.slug != slug.value.lower():
             raise errors.UpdatingWithStaleContentError(
-                message=f"You cannot update a group by using its old slug {slug}.",
+                message=f"You cannot update a group by using its old slug {slug.value}.",
                 detail=f"The latest slug is {group.namespace.slug}, please use this for updates.",
             )
 
         authorized = await self.authz.has_permission(user, ResourceType.group, group.id, Scope.DELETE)
         if not authorized:
             raise errors.MissingResourceError(
-                message=f"Group with slug '{slug}' does not exist or you do not have access to it."
+                message=f"Group with slug '{slug.value}' does not exist or you do not have access to it."
             )
 
         new_slug_str = patch.slug.lower() if patch.slug is not None else None
@@ -209,11 +221,10 @@ class GroupRepository:
         return group.dump()
 
     @with_db_transaction
-    @dispatch_message(events.GroupMembershipChanged)
     async def update_group_members(
         self,
         user: base_models.APIUser,
-        slug: str,
+        slug: Slug,
         members: list[UnsavedMember],
         *,
         session: AsyncSession | None = None,
@@ -222,9 +233,9 @@ class GroupRepository:
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
         group, _ = await self._get_group(session, user, slug, load_members=True)
-        if group.namespace.slug != slug.lower():
+        if group.namespace.slug != slug.value.lower():
             raise errors.UpdatingWithStaleContentError(
-                message=f"You cannot update group members by using an old group slug {slug}.",
+                message=f"You cannot update group members by using an old group slug {slug.value}.",
                 detail=f"The latest slug is {group.namespace.slug}, please use this for updates.",
             )
 
@@ -235,9 +246,9 @@ class GroupRepository:
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.delete, ResourceType.group)
-    @dispatch_message(GroupRemoved)
+    @update_search_document
     async def delete_group(
-        self, user: base_models.APIUser, slug: str, *, session: AsyncSession | None = None
+        self, user: base_models.APIUser, slug: Slug, *, session: AsyncSession | None = None
     ) -> models.DeletedGroup | None:
         """Delete a specific group."""
         if not session:
@@ -247,9 +258,9 @@ class GroupRepository:
             group, _ = await self._get_group(session, user, slug)
         except errors.MissingResourceError:
             return None
-        if group.namespace.slug != slug.lower():
+        if group.namespace.slug != slug.value.lower():
             raise errors.UpdatingWithStaleContentError(
-                message=f"You cannot delete a group by using an old group slug {slug}.",
+                message=f"You cannot delete a group by using an old group slug {slug.value}.",
                 detail=f"The latest slug is {group.namespace.slug}, please use this for deletions.",
             )
         # NOTE: We have a stored procedure that gets triggered when a project slug is removed to remove the project.
@@ -261,9 +272,8 @@ class GroupRepository:
         return models.DeletedGroup(id=group.id)
 
     @with_db_transaction
-    @dispatch_message(events.GroupMembershipChanged)
     async def delete_group_member(
-        self, user: base_models.APIUser, slug: str, user_id_to_delete: str, *, session: AsyncSession | None = None
+        self, user: base_models.APIUser, slug: Slug, user_id_to_delete: str, *, session: AsyncSession | None = None
     ) -> list[MembershipChange]:
         """Delete a specific group member."""
         if not session:
@@ -276,7 +286,7 @@ class GroupRepository:
 
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.create, ResourceType.group)
-    @dispatch_message(GroupAdded)
+    @update_search_document
     async def insert_group(
         self,
         user: base_models.APIUser,
@@ -306,13 +316,13 @@ class GroupRepository:
                 raise errors.ValidationError(
                     message="The slug for the group should be unique but it already exists in the database",
                     detail="Please modify the slug field and then retry",
-                )
+                ) from err
             raise err
         # NOTE: This is needed to populate the relationship fields in the group after inserting the ID above
         await session.refresh(group)
         return group.dump()
 
-    async def get_group_permissions(self, user: base_models.APIUser, slug: str) -> models.GroupPermissions:
+    async def get_group_permissions(self, user: base_models.APIUser, slug: Slug) -> models.GroupPermissions:
         """Get the permissions of the user on a given group."""
         group = await self.get_group(user=user, slug=slug)
 
@@ -335,8 +345,12 @@ class GroupRepository:
         return permissions
 
     async def get_namespaces(
-        self, user: base_models.APIUser, pagination: PaginationRequest, minimum_role: Role | None = None
-    ) -> tuple[list[models.Namespace], int]:
+        self,
+        user: base_models.APIUser,
+        pagination: PaginationRequest,
+        minimum_role: Role | None = None,
+        kinds: list[models.NamespaceKind] | None = None,
+    ) -> tuple[list[models.UserNamespace | models.GroupNamespace | models.ProjectNamespace], int]:
         """Get all namespaces."""
         scope = Scope.READ
         if minimum_role == Role.VIEWER:
@@ -347,27 +361,45 @@ class GroupRepository:
             scope = Scope.DELETE
 
         async with self.session_maker() as session, session.begin():
-            group_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.group, scope)
-            group_ns_stmt = select(schemas.NamespaceORM).where(schemas.NamespaceORM.group_id.in_(group_ids))
-            output = []
-            personal_ns_stmt = select(schemas.NamespaceORM).where(schemas.NamespaceORM.user_id == user.id)
-            personal_ns = await session.scalar(personal_ns_stmt)
-            if personal_ns and pagination.page == 1:
-                output.append(personal_ns.dump())
-            # NOTE: in the first page the personal namespace is added, so the offset and per page params are modified
-            group_per_page = pagination.per_page - 1 if personal_ns and pagination.page == 1 else pagination.per_page
-            group_offset = pagination.offset - 1 if personal_ns and pagination.page > 1 else pagination.offset
-            group_ns = await session.scalars(
-                group_ns_stmt.limit(group_per_page).offset(group_offset).order_by(schemas.NamespaceORM.id)
-            )
-            group_count = (
-                await session.scalar(group_ns_stmt.with_only_columns(func.count(schemas.NamespaceORM.id))) or 0
-            )
-            if personal_ns is not None:
-                group_count += 1
-            for ns_orm in group_ns:
-                output.append(ns_orm.dump())
-            return output, group_count
+            group_ids: list[str] = []
+            project_ids: list[str] = []
+            user_ids: list[str] = []
+            if not kinds or models.NamespaceKind.group in kinds:
+                group_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.group, scope)
+            if (not kinds or models.NamespaceKind.user in kinds) and user.id:
+                user_ids.append(user.id)
+            if not kinds or models.NamespaceKind.project in kinds:
+                project_ids = await self.authz.resources_with_permission(user, user.id, ResourceType.project, scope)
+
+            queries: list[tuple[Select[tuple[Any]], int]] = [
+                (
+                    select(schemas.NamespaceORM)
+                    .where(schemas.NamespaceORM.user_id.in_(user_ids))
+                    .order_by(schemas.NamespaceORM.id),
+                    len(user_ids),
+                ),
+                (
+                    select(schemas.NamespaceORM)
+                    .where(schemas.NamespaceORM.group_id.in_(group_ids))
+                    .order_by(schemas.NamespaceORM.id),
+                    len(group_ids),
+                ),
+                (select(ProjectORM).where(ProjectORM.id.in_(project_ids)).order_by(ProjectORM.id), len(project_ids)),
+            ]
+
+            results = await paginate_queries(pagination, session, queries)
+            output: list[models.UserNamespace | models.GroupNamespace | models.ProjectNamespace] = []
+            for res in results:
+                match res:
+                    case schemas.NamespaceORM():
+                        output.append(res.dump())
+                    case ProjectORM():
+                        output.append(res.dump_as_namespace())
+                    case x:
+                        raise errors.ProgrammingError(
+                            message=f"Got an unexpected type of object when listing namespaces {type(x)}"
+                        )
+            return output, len(group_ids) + len(user_ids) + len(project_ids)
 
     async def _get_user_namespaces(self) -> AsyncGenerator[user_models.UserInfo, None]:
         """Lists all user namespaces without regard for authorization or permissions, used for migrations."""
@@ -378,15 +410,26 @@ class GroupRepository:
             async for namespace in namespaces:
                 yield namespace.dump_user()
 
-    async def get_namespace_by_slug(self, user: base_models.APIUser, slug: str) -> models.Namespace | None:
+    async def get_namespace_by_slug(
+        self, user: base_models.APIUser, slug: NamespaceSlug, session: AsyncSession | None = None
+    ) -> models.UserNamespace | models.GroupNamespace | None:
         """Get the namespace identified by a given slug."""
-        async with self.session_maker() as session, session.begin():
-            ns = await session.scalar(select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == slug.lower()))
+        session_ctx: AsyncSession | nullcontext = nullcontext()
+        transaction: AsyncSessionTransaction | nullcontext = nullcontext()
+        if session is None:
+            session = self.session_maker()
+            session_ctx = session
+            transaction = session.begin()
+
+        async with session_ctx, transaction:
+            ns = await session.scalar(
+                select(schemas.NamespaceORM).where(schemas.NamespaceORM.slug == slug.value.lower())
+            )
             old_ns = None
             if not ns:
                 old_ns = await session.scalar(
                     select(schemas.NamespaceOldORM)
-                    .where(schemas.NamespaceOldORM.slug == slug.lower())
+                    .where(schemas.NamespaceOldORM.slug == slug.value.lower())
                     .order_by(schemas.NamespaceOldORM.created_at.desc())
                     .limit(1)
                 )
@@ -409,6 +452,236 @@ class GroupRepository:
                 )
             return ns.dump()
 
+    @overload
+    async def get_namespace_by_path(
+        self,
+        user: base_models.APIUser,
+        path: NamespacePath,
+        session: AsyncSession | None = None,
+    ) -> models.UserNamespace | models.GroupNamespace | None: ...
+    @overload
+    async def get_namespace_by_path(
+        self,
+        user: base_models.APIUser,
+        path: ProjectPath,
+        session: AsyncSession | None = None,
+    ) -> models.ProjectNamespace | None: ...
+
+    async def get_namespace_by_path(
+        self,
+        user: base_models.APIUser,
+        path: NamespacePath | ProjectPath,
+        session: AsyncSession | None = None,
+    ) -> models.UserNamespace | models.GroupNamespace | models.ProjectNamespace | None:
+        """Get the namespace identified by a given slug.
+
+        If a DB session is not passed in, the one will be started and closed in this function.
+        """
+        not_found_message = f"The namespace with path {path} cannot be found or you do not have permissions to view it"
+
+        session_ctx: AsyncSession | nullcontext = nullcontext()
+        transaction: AsyncSessionTransaction | nullcontext = nullcontext()
+        if session is None:
+            session = self.session_maker()
+            session_ctx = session
+            transaction = session.begin()
+
+        match path:
+            case NamespacePath(usr_or_grp_slug):
+                ns = await self.get_namespace_by_slug(user, usr_or_grp_slug, session)
+                return ns
+            case ProjectPath(usr_or_grp_slug, prj_slug):
+                async with session_ctx, transaction:
+                    stmt = (
+                        select(schemas.EntitySlugORM)
+                        .where(schemas.EntitySlugORM.namespace.has(schemas.NamespaceORM.slug == usr_or_grp_slug.value))
+                        .where(schemas.EntitySlugORM.project_id.is_not(None))
+                        .where(schemas.EntitySlugORM.slug == prj_slug.value)
+                        .where(schemas.EntitySlugORM.data_connector_id.is_(None))
+                        .options(selectinload(schemas.EntitySlugORM.project).joinedload(ProjectORM.slug))
+                    )
+                    prj = await session.scalar(stmt)
+                    if not prj or not prj.project_id:
+                        raise errors.MissingResourceError(message=not_found_message)
+                    allowed = await self.authz.has_permission(user, ResourceType.project, prj.project_id, Scope.READ)
+                    if not allowed:
+                        raise errors.MissingResourceError(message=not_found_message)
+                    return prj.dump_project_namespace()
+            case _:
+                raise errors.ValidationError(
+                    message=f"Received an unsupported number of slugs when looking up namespace by slugs {path}"
+                )
+
+    async def move_data_connector(
+        self,
+        user: base_models.APIUser,
+        dc: DataConnector,
+        new: DataConnectorPath | DataConnectorInProjectPath,
+        session: AsyncSession | None = None,
+    ) -> None:
+        """Rename or move a namespace."""
+
+        async def _check_ns_permissions(
+            user: base_models.APIUser, authz: Authz, ns: models.Namespace, scope: Scope
+        ) -> None:
+            """Helper function to check for namespace permissions."""
+            is_user_namespace = ns.kind == models.NamespaceKind.user
+            ns_id = ns.id if is_user_namespace else ns.underlying_resource_id
+            allowed = await authz.has_permission(user, ns.kind.to_resource_type(), ns_id, scope)
+            if not allowed:
+                raise errors.missing_or_unauthorized(ns.kind, ns.underlying_resource_id)
+
+        async def _get_dc_slug(session: AsyncSession, dc_id: ULID) -> schemas.EntitySlugORM:
+            """Helper function to get the data connector slug or raise an exception."""
+            dc_slug = await session.scalar(
+                select(schemas.EntitySlugORM).where(schemas.EntitySlugORM.data_connector_id == dc_id)
+            )
+            if not dc_slug:
+                raise errors.missing_or_unauthorized(ResourceType.data_connector, dc_id)
+            return dc_slug
+
+        async def _check_dc_slug_not_taken(
+            session: AsyncSession, new_namespace: models.Namespace, new_slug: Slug
+        ) -> None:
+            """Helper function to make sure a new data connector slug is available."""
+            stmt = (
+                select(sa_count("*"))
+                .select_from(schemas.EntitySlugORM)
+                .where(schemas.EntitySlugORM.namespace_id == new_namespace.id)
+                .where(schemas.EntitySlugORM.data_connector_id.is_not(None))
+                .where(schemas.EntitySlugORM.slug == new_slug.value)
+            )
+            if new_namespace.kind == models.NamespaceKind.project:
+                stmt = stmt.where(schemas.EntitySlugORM.project_id == new_namespace.underlying_resource_id)
+            else:
+                stmt = stmt.where(schemas.EntitySlugORM.project_id.is_(None))
+
+            cnt = await session.scalar(stmt)
+            if cnt is not None and cnt > 0:
+                raise errors.ValidationError(
+                    message=f"The owner already has a data connector with slug {new_slug}, please try a different one"
+                )
+
+        async def _upsert_old_dc_slug(session: AsyncSession, old_dc_slug: schemas.EntitySlugORM) -> None:
+            """This function checks if an old entity slug exists and if so then it updates it.
+
+            If the old entity slug does not exists then it inserts one.
+            This is needed so that when a slug is renamed then the old slug still points to the new
+            and current entity.
+            """
+            stmt = select(schemas.EntitySlugOldORM).where(schemas.EntitySlugOldORM.slug == old_dc_slug.slug)
+            if old_dc_slug.project_id is not None:
+                stmt.where(schemas.EntitySlugOldORM.project_id == old_dc_slug.project_id)
+            else:
+                stmt.where(schemas.EntitySlugOldORM.project_id.is_(None))
+            if old_dc_slug.data_connector_id is not None:
+                stmt.where(schemas.EntitySlugOldORM.data_connector_id == old_dc_slug.data_connector_id)
+            else:
+                stmt.where(schemas.EntitySlugOldORM.data_connector_id.is_(None))
+            existing_old_slug = await session.scalar(stmt)
+
+            if not existing_old_slug:
+                session.add(
+                    schemas.EntitySlugOldORM(
+                        slug=old_dc_slug.slug,
+                        latest_slug_id=old_dc_slug.id,
+                        project_id=old_dc_slug.project_id,
+                        data_connector_id=old_dc_slug.data_connector_id,
+                    )
+                )
+                return
+
+            existing_old_slug.slug = old_dc_slug.slug
+            existing_old_slug.latest_slug_id = old_dc_slug.id
+            existing_old_slug.project_id = old_dc_slug.project_id
+            existing_old_slug.data_connector_id = old_dc_slug.data_connector_id
+
+        session_ctx: AsyncSession | nullcontext = nullcontext()
+        transaction: AsyncSessionTransaction | nullcontext = nullcontext()
+        if session is None:
+            session = self.session_maker()
+            session_ctx = session
+            transaction = session.begin()
+
+        async with session_ctx, transaction:
+            required_scope = Scope.WRITE if dc.namespace.path == new.parent() else Scope.DELETE
+            allowed_dc = await self.authz.has_permission(user, ResourceType.data_connector, dc.id, required_scope)
+            if not allowed_dc:
+                raise errors.missing_or_unauthorized(ResourceType.data_connector, dc.id)
+            dc_slug = await _get_dc_slug(session, dc.id)
+
+            match dc.path.parent(), new.parent(), dc.path.last(), new.last():
+                case (new_path, old_path, old_slug, new_slug) if new_path == old_path and old_slug == new_slug:
+                    pass
+                case (new_path, old_path, old_slug, new_slug) if new_path == old_path and old_slug != new_slug:
+                    await _check_dc_slug_not_taken(session, dc.namespace, new_slug)
+                    await _upsert_old_dc_slug(session, dc_slug)
+                    dc_slug.slug = new_slug.value
+                case (NamespacePath(), NamespacePath() as new_path, old_slug, new_slug):
+                    new_usr_grp_ns = await self.get_namespace_by_path(user, new_path, session)
+                    if new_usr_grp_ns is None:
+                        raise errors.MissingResourceError(
+                            message=f"The data connector namespace {new.parent()} cannot be found or "
+                            "you do not have sufficient permissions to access it."
+                        )
+                    await _check_ns_permissions(user, self.authz, dc.namespace, Scope.WRITE)
+                    await _check_ns_permissions(user, self.authz, new_usr_grp_ns, Scope.WRITE)
+                    await _check_dc_slug_not_taken(session, new_usr_grp_ns, new_slug)
+                    await _upsert_old_dc_slug(session, dc_slug)
+                    dc_slug.namespace_id = new_usr_grp_ns.id
+                    if old_slug != new_slug:
+                        dc_slug.slug = new_slug.value
+                case (ProjectPath(), ProjectPath() as new_path, old_slug, new_slug):
+                    new_proj_ns = await self.get_namespace_by_path(user, new_path, session)
+                    if new_proj_ns is None:
+                        raise errors.MissingResourceError(
+                            message=f"The data connector namespace {new_path} cannot be found or "
+                            "you do not have sufficient permissions to access it."
+                        )
+                    await _check_ns_permissions(user, self.authz, dc.namespace, Scope.WRITE)
+                    await _check_ns_permissions(user, self.authz, new_proj_ns, Scope.WRITE)
+                    await _check_dc_slug_not_taken(session, new_proj_ns, new_slug)
+                    await _upsert_old_dc_slug(session, dc_slug)
+                    dc_slug.project_id = new_proj_ns.underlying_resource_id
+                    dc_slug.namespace_id = new_proj_ns.id
+                    if old_slug != new_slug:
+                        dc_slug.slug = new_slug.value
+                case (ProjectPath(), NamespacePath() as new_path, old_slug, new_slug):
+                    new_usr_grp_ns = await self.get_namespace_by_path(user, new_path, session)
+                    if new_usr_grp_ns is None:
+                        raise errors.MissingResourceError(
+                            message=f"The data connector namespace {new_path} cannot be found or "
+                            "you do not have sufficient permissions to access it."
+                        )
+                    await _check_ns_permissions(user, self.authz, dc.namespace, Scope.WRITE)
+                    await _check_ns_permissions(user, self.authz, new_usr_grp_ns, Scope.WRITE)
+                    await _check_dc_slug_not_taken(session, new_usr_grp_ns, new_slug)
+                    await _upsert_old_dc_slug(session, dc_slug)
+                    dc_slug.project_id = None
+                    dc_slug.namespace_id = new_usr_grp_ns.id
+                    if old_slug != new_slug:
+                        dc_slug.slug = new_slug.value
+                case (NamespacePath(), ProjectPath() as new_path, old_slug, new_slug):
+                    new_proj_ns = await self.get_namespace_by_path(user, new_path, session)
+                    if new_proj_ns is None:
+                        raise errors.MissingResourceError(
+                            message=f"The data connector namespace {new_path} cannot be found or "
+                            "you do not have sufficient permissions to access it."
+                        )
+                    await _check_ns_permissions(user, self.authz, dc.namespace, Scope.WRITE)
+                    await _check_ns_permissions(user, self.authz, new_proj_ns, Scope.WRITE)
+                    await _check_dc_slug_not_taken(session, new_proj_ns, new_slug)
+                    await _upsert_old_dc_slug(session, dc_slug)
+                    dc_slug.project_id = new_proj_ns.underlying_resource_id
+                    dc_slug.namespace_id = new_proj_ns.id
+                    if old_slug != new_slug:
+                        dc_slug.slug = new_slug.value
+                case _:
+                    raise errors.ProgrammingError(
+                        message=f"Received unexpected old ({dc.path}) and new ({new}) "
+                        "path combination when changing data connector ownership."
+                    )
+
     async def get_user_namespace(self, user_id: str) -> models.Namespace | None:
         """Get the namespace corresponding to a given user."""
         async with self.session_maker() as session, session.begin():
@@ -417,7 +690,7 @@ class GroupRepository:
                 return None
             if not ns.user or not ns.user_id:
                 raise errors.ProgrammingError(message="Found a namespace that has no user associated with it.")
-            return ns.dump()
+            return ns.dump_user_namespace()
 
     async def _create_user_namespace_slug(
         self, session: AsyncSession, user_slug: str, retry_enumerate: int = 0, retry_random: bool = False

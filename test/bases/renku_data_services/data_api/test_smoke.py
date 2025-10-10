@@ -65,4 +65,6 @@ def test_apispec_conflicts() -> None:
         try:
             merger.merge(base_dict, to_merge)
         except ApispecMergeError as err:
-            assert False, f"There was an unexpected conflict when merging {input_file} at field {err.path}\n{err.diff}"
+            raise AssertionError(
+                f"There was an unexpected conflict when merging {input_file} at field {err.path}\n{err.diff}"
+            ) from err

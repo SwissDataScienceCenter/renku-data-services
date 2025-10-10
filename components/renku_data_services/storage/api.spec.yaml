@@ -365,6 +365,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/RCloneOption"
+      required:
+        - name
+        - description
+        - prefix
+        - options
     RCloneOption:
       type: object
       description: Single field on an RClone storage, like "remote" or "access_key_id"
@@ -405,6 +410,9 @@ components:
               provider:
                 type: string
                 description: The provider this value is applicable for. Empty if valid for all providers.
+            required:
+              - value
+              - help
         required:
           type: boolean
           description: whether the option is required or not
@@ -423,7 +431,18 @@ components:
         type:
           type: string
           description: data type of option value. RClone has more options but they map to the ones listed here.
-          enum: ["int", "bool", "string", "Time", "Duration", "MultiEncoder", "SizeSuffix", "SpaceSepList", "CommaSepList", "Tristate"]
+          enum: ["int", "bool", "string", "stringArray", "Time", "Duration", "MultiEncoder", "SizeSuffix", "SpaceSepList", "CommaSepList", "Tristate", "Encoding", "Bits"]
+      required:
+        - name
+        - help
+        - default
+        - default_str
+        - required
+        - ispassword
+        - sensitive
+        - advanced
+        - exclusive
+        - type
     Ulid:
       description: ULID identifier
       type: string

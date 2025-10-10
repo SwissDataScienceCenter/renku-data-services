@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass
 
 from sanic import HTTPResponse, Request, empty, json
 from sanic_ext import validate
+from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
@@ -13,8 +14,15 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_api.misc import validate_body_root_model, validate_db_ids, validate_query
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.crc import apispec, models
-from renku_data_services.crc.db import ResourcePoolRepository, UserRepository
-from renku_data_services.k8s.quota import QuotaRepository
+from renku_data_services.crc.core import (
+    validate_cluster,
+    validate_cluster_patch,
+    validate_remote,
+    validate_remote_patch,
+    validate_remote_put,
+)
+from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository, UserRepository
+from renku_data_services.k8s.db import QuotaRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
 from renku_data_services.users.models import UserInfo
 
@@ -25,6 +33,7 @@ class ResourcePoolsBP(CustomBlueprint):
 
     rp_repo: ResourcePoolRepository
     user_repo: UserRepository
+    cluster_repo: ClusterRepository
     authenticator: base_models.Authenticator
 
     def get_all(self) -> BlueprintFactoryResponse:
@@ -47,7 +56,17 @@ class ResourcePoolsBP(CustomBlueprint):
         @only_admins
         @validate(json=apispec.ResourcePool)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.ResourcePool) -> HTTPResponse:
-            rp = models.ResourcePool.from_dict(body.model_dump(exclude_none=True))
+            cluster = None
+            if body.cluster_id is not None:
+                cluster = await self.cluster_repo.select(ULID.from_str(body.cluster_id))
+            remote = None
+            if body.remote:
+                validate_remote(body=body.remote)
+                remote = body.remote.model_dump(exclude_none=True, mode="json")
+                body.remote = None
+            rp = models.ResourcePool.from_dict(
+                {**body.model_dump(exclude_none=True), "cluster": cluster, "remote": remote}
+            )
             res = await self.rp_repo.insert_resource_pool(api_user=user, resource_pool=rp)
             return validated_json(apispec.ResourcePoolWithId, res, status=201)
 
@@ -95,9 +114,14 @@ class ResourcePoolsBP(CustomBlueprint):
         async def _put(
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.ResourcePoolPut
         ) -> HTTPResponse:
+            # We need to manually set remote to a RemoteConfigurationPatch object
+            remote = validate_remote_put(body=body.remote)
+            body.remote = None
+
             res = await self.rp_repo.update_resource_pool(
                 api_user=user,
                 id=resource_pool_id,
+                remote=remote,
                 **body.model_dump(exclude_none=True),
             )
             if res is None:
@@ -118,9 +142,15 @@ class ResourcePoolsBP(CustomBlueprint):
         async def _patch(
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.ResourcePoolPatch
         ) -> HTTPResponse:
+            remote = None
+            if body.remote:
+                remote = validate_remote_patch(body=body.remote)
+                body.remote = None
+
             res = await self.rp_repo.update_resource_pool(
                 api_user=user,
                 id=resource_pool_id,
+                remote=remote,
                 **body.model_dump(exclude_none=True),
             )
             if res is None:
@@ -556,10 +586,103 @@ class UserResourcePoolsBP(CustomBlueprint):
         if not user_check:
             raise errors.MissingResourceError(message=f"User with user ID {user_id} cannot be found")
         rps = await self.repo.update_user_resource_pools(
-            keycloak_id=user_id, resource_pool_ids=resource_pool_ids.root, append=post, api_user=api_user
+            keycloak_id=user_id,
+            resource_pool_ids=[i.root for i in resource_pool_ids.root],
+            append=post,
+            api_user=api_user,
         )
         return validated_json(
             apispec.ResourcePoolsWithId,
             rps,
             status=201 if post else 200,
         )
+
+
+@dataclass(kw_only=True)
+class ClustersBP(CustomBlueprint):
+    """Handlers for dealing with the cluster definitions."""
+
+    repo: ClusterRepository
+    authenticator: base_models.Authenticator
+
+    def get_all(self) -> BlueprintFactoryResponse:
+        """Get the cluster descriptions."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        async def _handler(_request: Request, user: base_models.APIUser) -> HTTPResponse:
+            clusters = [c async for c in self.repo.select_all()]
+
+            return validated_json(apispec.ClustersWithId, clusters)
+
+        return "/clusters", ["GET"], _handler
+
+    def post(self) -> BlueprintFactoryResponse:
+        """Create a cluster description."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate(json=apispec.Cluster)
+        async def _handler(_request: Request, user: base_models.APIUser, body: apispec.Cluster) -> HTTPResponse:
+            cluster = validate_cluster(body)
+            cluster = await self.repo.insert(user, cluster)
+
+            return validated_json(apispec.ClusterWithId, cluster, status=201)
+
+        return "/clusters", ["POST"], _handler
+
+    def get(self) -> BlueprintFactoryResponse:
+        """Get the cluster descriptions."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        async def _handler(_request: Request, user: base_models.APIUser, cluster_id: ULID) -> HTTPResponse:
+            cluster = await self.repo.select(cluster_id)
+
+            return validated_json(apispec.ClusterWithId, cluster, status=200)
+
+        return "/clusters/<cluster_id>", ["GET"], _handler
+
+    def put(self) -> BlueprintFactoryResponse:
+        """Update the cluster descriptions."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate(json=apispec.Cluster)
+        async def _handler(
+            _request: Request, user: base_models.APIUser, cluster_id: ULID, body: apispec.Cluster
+        ) -> HTTPResponse:
+            cluster = validate_cluster(body)
+            cluster = await self.repo.update(user, cluster.to_cluster_patch(), cluster_id)
+
+            return validated_json(apispec.ClusterWithId, cluster, status=201)
+
+        return "/clusters/<cluster_id>", ["PUT"], _handler
+
+    def patch(self) -> BlueprintFactoryResponse:
+        """Patch the cluster descriptions."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate(json=apispec.ClusterPatch)
+        async def _handler(
+            _request: Request, user: base_models.APIUser, cluster_id: ULID, body: apispec.ClusterPatch
+        ) -> HTTPResponse:
+            patch = validate_cluster_patch(body)
+            cluster = await self.repo.update(user, patch, cluster_id)
+
+            return validated_json(apispec.ClusterWithId, cluster, status=201)
+
+        return "/clusters/<cluster_id>", ["PATCH"], _handler
+
+    def delete(self) -> BlueprintFactoryResponse:
+        """Remove the cluster description."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        async def _handler(_request: Request, user: base_models.APIUser, cluster_id: ULID) -> HTTPResponse:
+            await self.repo.delete(user, cluster_id)
+
+            return HTTPResponse(status=204)
+
+        return "/clusters/<cluster_id>", ["DELETE"], _handler

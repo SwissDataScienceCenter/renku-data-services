@@ -1,29 +1,40 @@
 import json
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from copy import deepcopy
-from typing import Any
+from typing import Any, Protocol
 
+import pytest
 import pytest_asyncio
 from authzed.api.v1 import Relationship, RelationshipUpdate, SubjectReference, WriteRelationshipsRequest
+from httpx import Response
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 from ulid import ULID
 
-from components.renku_data_services.utils.middleware import validate_null_byte
-from renku_data_services.app_config.config import Config
+import renku_data_services.search.core as search_core
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.authz.authz import _AuthzConverter
 from renku_data_services.base_models import Slug
+from renku_data_services.base_models.core import APIUser, InternalServiceAdmin, NamespacePath, ServiceAdminId
 from renku_data_services.data_api.app import register_all_handlers
+from renku_data_services.data_api.dependencies import DependencyManager
+from renku_data_services.data_connectors.apispec import DataConnector as ApiDataConnector
 from renku_data_services.migrations.core import run_migrations_for_app
-from renku_data_services.namespace.models import Namespace, NamespaceKind
-from renku_data_services.secrets.config import Config as SecretsConfig
+from renku_data_services.namespace.apispec import GroupResponse as ApiGroup
+from renku_data_services.namespace.models import UserNamespace
+from renku_data_services.project.apispec import Project as ApiProject
+from renku_data_services.search.apispec import SearchResult
 from renku_data_services.secrets_storage_api.app import register_all_handlers as register_secrets_handlers
+from renku_data_services.secrets_storage_api.dependencies import DependencyManager as SecretsDependencyManager
+from renku_data_services.solr import entity_schema
+from renku_data_services.solr.solr_client import DefaultSolrClient
+from renku_data_services.solr.solr_migrate import SchemaMigrator
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import UserInfo
-from test.bases.renku_data_services.background_jobs.test_sync import get_kc_users
-from test.utils import SanicReusableASGITestClient
+from renku_data_services.utils.middleware import validate_null_byte
+from test.bases.renku_data_services.data_tasks.test_sync import get_kc_users
+from test.utils import SanicReusableASGITestClient, TestDependencyManager
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -33,8 +44,11 @@ async def admin_user() -> UserInfo:
         first_name="Admin",
         last_name="Doe",
         email="admin.doe@gmail.com",
-        namespace=Namespace(
-            id=ULID(), slug="admin.doe", kind=NamespaceKind.user, underlying_resource_id="admin", created_by="admin"
+        namespace=UserNamespace(
+            id=ULID(),
+            underlying_resource_id="admin",
+            created_by="admin",
+            path=NamespacePath.from_strings("admin.doe"),
         ),
     )
 
@@ -46,8 +60,11 @@ async def regular_user() -> UserInfo:
         first_name="User",
         last_name="Doe",
         email="user.doe@gmail.com",
-        namespace=Namespace(
-            id=ULID(), slug="user.doe", kind=NamespaceKind.user, underlying_resource_id="user", created_by="user"
+        namespace=UserNamespace(
+            id=ULID(),
+            underlying_resource_id="user",
+            created_by="user",
+            path=NamespacePath.from_strings("user.doe"),
         ),
     )
 
@@ -59,12 +76,11 @@ async def member_1_user() -> UserInfo:
         first_name="Member-1",
         last_name="Doe",
         email="member-1.doe@gmail.com",
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="member-1.doe",
-            kind=NamespaceKind.user,
             underlying_resource_id="member-1",
             created_by="member-1",
+            path=NamespacePath.from_strings("member-1.doe"),
         ),
     )
 
@@ -76,12 +92,11 @@ async def member_2_user() -> UserInfo:
         first_name="Member-2",
         last_name="Doe",
         email="member-2.doe@gmail.com",
-        namespace=Namespace(
+        namespace=UserNamespace(
             id=ULID(),
-            slug="member-2.doe",
-            kind=NamespaceKind.user,
             underlying_resource_id="member-2",
             created_by="member-2",
+            path=NamespacePath.from_strings("member-2.doe"),
         ),
     )
 
@@ -160,11 +175,39 @@ async def unauthorized_headers() -> dict[str, str]:
     return {"Authorization": "Bearer {}"}
 
 
+@pytest.fixture
+def headers_from_user(
+    admin_user: UserInfo,
+    admin_headers: dict[str, str],
+    regular_user: UserInfo,
+    user_headers: dict[str, str],
+    member_1_user: UserInfo,
+    member_1_headers: dict[str, str],
+    member_2_user: UserInfo,
+    member_2_headers: dict[str, str],
+    unauthorized_headers: dict[str, str],
+) -> Callable[[UserInfo], dict[str, str]]:
+    def _headers_from_user(user: UserInfo) -> dict[str, str]:
+        match user.id:
+            case admin_user.id:
+                return admin_headers
+            case regular_user.id:
+                return user_headers
+            case member_1_user.id:
+                return member_1_headers
+            case member_2_user.id:
+                return member_2_headers
+            case _:
+                return unauthorized_headers
+
+    return _headers_from_user
+
+
 @pytest_asyncio.fixture
 async def bootstrap_admins(
-    sanic_client_with_migrations, app_config_instance: Config, event_loop, admin_user: UserInfo
+    sanic_client_with_migrations, app_manager_instance: DependencyManager, event_loop, admin_user: UserInfo
 ) -> None:
-    authz = app_config_instance.authz
+    authz = app_manager_instance.authz
     rels: list[RelationshipUpdate] = []
     sub = SubjectReference(object=_AuthzConverter.user(admin_user.id))
     rels.append(
@@ -177,10 +220,10 @@ async def bootstrap_admins(
 
 
 @pytest_asyncio.fixture(scope="session")
-async def sanic_app_no_migrations(app_config: Config, users: list[UserInfo], admin_user: UserInfo) -> Sanic:
-    app_config.kc_api = DummyKeycloakAPI(users=get_kc_users(users), user_roles={admin_user.id: ["renku-admin"]})
-    app = Sanic(app_config.app_name)
-    app = register_all_handlers(app, app_config)
+async def sanic_app_no_migrations(app_manager: DependencyManager, users: list[UserInfo], admin_user: UserInfo) -> Sanic:
+    app_manager.kc_api = DummyKeycloakAPI(users=get_kc_users(users), user_roles={admin_user.id: ["renku-admin"]})
+    app = Sanic(app_manager.app_name)
+    app = register_all_handlers(app, app_manager)
     app.register_middleware(validate_null_byte, "request")
     validator = RCloneValidator()
     app.ext.dependency(validator)
@@ -195,27 +238,90 @@ async def sanic_client_no_migrations(sanic_app_no_migrations: Sanic) -> AsyncGen
 
 @pytest_asyncio.fixture
 async def sanic_client_with_migrations(
-    sanic_client_no_migrations: SanicASGITestClient, app_config_instance
+    sanic_client_no_migrations: SanicASGITestClient, app_manager_instance
 ) -> SanicASGITestClient:
     run_migrations_for_app("common")
+
     return sanic_client_no_migrations
 
 
 @pytest_asyncio.fixture
 async def sanic_client(
-    sanic_client_with_migrations: SanicASGITestClient, app_config_instance, bootstrap_admins
+    sanic_client_with_migrations: SanicASGITestClient, app_manager_instance, bootstrap_admins
 ) -> SanicASGITestClient:
-    await app_config_instance.kc_user_repo.initialize(app_config_instance.kc_api)
-    await sync_admins_from_keycloak(app_config_instance.kc_api, app_config_instance.authz)
-    await app_config_instance.group_repo.generate_user_namespaces()
+    await app_manager_instance.kc_user_repo.initialize(app_manager_instance.kc_api)
+    await sync_admins_from_keycloak(app_manager_instance.kc_api, app_manager_instance.authz)
+    await app_manager_instance.group_repo.generate_user_namespaces()
     return sanic_client_with_migrations
+
+
+@pytest_asyncio.fixture
+async def sanic_client_with_solr(sanic_client: SanicASGITestClient, app_manager) -> SanicASGITestClient:
+    migrator = SchemaMigrator(app_manager.config.solr)
+    await migrator.migrate(entity_schema.all_migrations)
+
+    return sanic_client
+
+
+class SearchReprovisionCall(Protocol):
+    """The type for the `search_reprovision` fixture."""
+
+    async def __call__(self) -> None: ...
+
+
+@pytest_asyncio.fixture
+async def search_reprovision(app_manager_instance: DependencyManager, search_push_updates) -> SearchReprovisionCall:
+    admin = InternalServiceAdmin(id=ServiceAdminId.search_reprovision)
+
+    async def search_reprovision_helper() -> None:
+        await app_manager_instance.search_reprovisioning.run_reprovision(admin)
+        await search_push_updates(clear_index=False)
+
+    return search_reprovision_helper
+
+
+@pytest_asyncio.fixture
+async def search_push_updates(app_manager_instance: DependencyManager):
+    async def search_push_updates_helper(clear_index: bool = True) -> None:
+        async with DefaultSolrClient(app_manager_instance.config.solr) as client:
+            if clear_index:
+                await client.delete("*:*")
+            await search_core.update_solr(app_manager_instance.search_updates_repo, client, 10)
+
+    return search_push_updates_helper
+
+
+class SearchQueryCall(Protocol):
+    """The type for the `search_query` fixture."""
+
+    async def __call__(self, query_str: str, user: UserInfo | None = None) -> SearchResult: ...
+
+
+@pytest_asyncio.fixture
+async def search_query(sanic_client_with_solr, admin_user: UserInfo) -> SearchQueryCall:
+    async def search_query_helper(query_str: str, user: UserInfo | None = None) -> SearchResult:
+        headers = __make_headers(user, admin=user.id == admin_user.id) if user is not None else {}
+        _, response = await sanic_client_with_solr.get(
+            "/api/data/search/query", params={"q": query_str}, headers=headers or {}
+        )
+        assert response.status_code == 200, response.text
+        return SearchResult.model_validate(response.json)
+
+    return search_query_helper
 
 
 @pytest_asyncio.fixture
 async def create_project(sanic_client, user_headers, admin_headers, regular_user, admin_user):
     async def create_project_helper(
-        name: str, admin: bool = False, members: list[dict[str, str]] = None, **payload
+        name: str,
+        admin: bool = False,
+        members: list[dict[str, str]] | None = None,
+        description: str | None = None,
+        sanic_client=sanic_client,
+        **payload,
     ) -> dict[str, Any]:
+        if members is None:
+            members = []
         headers = admin_headers if admin else user_headers
         user = admin_user if admin else regular_user
         payload = payload.copy()
@@ -223,6 +329,8 @@ async def create_project(sanic_client, user_headers, admin_headers, regular_user
             payload.update({"name": name})
         if "namespace" not in payload:
             payload.update({"namespace": f"{user.first_name}.{user.last_name}".lower()})
+        if "description" not in payload and description is not None:
+            payload.update({"description": description})
 
         _, response = await sanic_client.post("/api/data/projects", headers=headers, json=payload)
 
@@ -241,8 +349,65 @@ async def create_project(sanic_client, user_headers, admin_headers, regular_user
     return create_project_helper
 
 
+class CreateProjectCall(Protocol):
+    async def __call__(
+        self,
+        name: str,
+        user: UserInfo | None = None,
+        members: list[dict[str, str]] | None = None,
+        **payload,
+    ) -> ApiProject: ...
+
+
 @pytest_asyncio.fixture
-async def create_project_copy(sanic_client, user_headers, admin_headers, regular_user, admin_user):
+async def create_project_model(sanic_client, regular_user: UserInfo, admin_user: UserInfo) -> CreateProjectCall:
+    async def create_project_helper(
+        name: str, user: UserInfo | None = None, members: list[dict[str, str]] | None = None, **payload
+    ) -> ApiProject:
+        if "name" not in payload:
+            payload.update({"name": name})
+
+        user = user or regular_user
+        headers = __make_headers(user, admin=user.id == admin_user.id)
+        if "namespace" not in payload:
+            payload.update({"namespace": user.namespace.path.serialize()})
+
+        _, response = await sanic_client.post("/api/data/projects", headers=headers, json=payload)
+
+        assert response.status_code == 201, response.text
+        project = response.json
+
+        if members:
+            _, response = await sanic_client.patch(
+                f"/api/data/projects/{project['id']}/members", headers=headers, json=members
+            )
+
+            assert response.status_code == 200, response.text
+
+        return ApiProject.model_validate(project)
+
+    return create_project_helper
+
+
+class CreateUserCall(Protocol):
+    async def __call__(self, user: APIUser) -> UserInfo: ...
+
+
+@pytest_asyncio.fixture
+async def create_user(app_manager_instance: TestDependencyManager) -> CreateUserCall:
+    repo = app_manager_instance.kc_user_repo
+
+    async def create_user_helper(user: APIUser) -> UserInfo:
+        info = await repo.get_or_create_user(user, user.id or "")
+        if info is None:
+            raise Exception(f"User {user} could not be created")
+        return info
+
+    return create_user_helper
+
+
+@pytest_asyncio.fixture
+async def create_project_copy(sanic_client, user_headers, headers_from_user):
     async def create_project_copy_helper(
         id: str,
         namespace: str,
@@ -252,7 +417,7 @@ async def create_project_copy(sanic_client, user_headers, admin_headers, regular
         members: list[dict[str, str]] = None,
         **payload,
     ) -> dict[str, Any]:
-        headers = user_headers if user is None or user is regular_user else admin_headers
+        headers = headers_from_user(user) if user is not None else user_headers
         copy_payload = {"slug": Slug.from_name(name).value}
         copy_payload.update(payload)
         copy_payload.update({"namespace": namespace, "name": name})
@@ -299,6 +464,38 @@ async def create_group(sanic_client, user_headers, admin_headers):
     return create_group_helper
 
 
+class CreateGroupCall(Protocol):
+    async def __call__(
+        self, name: str, user: UserInfo | None = None, members: list[dict[str, str]] | None = None, **payload
+    ) -> ApiGroup: ...
+
+
+@pytest_asyncio.fixture
+async def create_group_model(sanic_client, regular_user: UserInfo, admin_user: UserInfo) -> CreateGroupCall:
+    async def create_group_helper(
+        name: str, user: UserInfo | None = None, members: list[dict[str, str]] | None = None, **payload
+    ) -> ApiGroup:
+        user = user or regular_user
+        headers = __make_headers(user, admin=user.id == admin_user.id)
+        group_payload = {"slug": Slug.from_name(name).value, "name": name}
+        group_payload.update(payload)
+        _, response = await sanic_client.post("/api/data/groups", headers=headers, json=group_payload)
+
+        assert response.status_code == 201, response.text
+        group = response.json
+
+        if members:
+            _, response = await sanic_client.patch(
+                f"/api/data/groups/{group['slug']}/members", headers=headers, json=members
+            )
+
+            assert response.status_code == 200, response.text
+
+        return ApiGroup.model_validate(group)
+
+    return create_group_helper
+
+
 @pytest_asyncio.fixture
 async def create_session_environment(sanic_client: SanicASGITestClient, admin_headers):
     async def create_session_environment_helper(name: str, **payload) -> dict[str, Any]:
@@ -306,6 +503,7 @@ async def create_session_environment(sanic_client: SanicASGITestClient, admin_he
         payload.update({"name": name})
         payload["description"] = payload.get("description") or "A session environment."
         payload["container_image"] = payload.get("container_image") or "some_image:some_tag"
+        payload["environment_image_source"] = payload.get("environment_image_source") or "image"
 
         _, res = await sanic_client.post("/api/data/environments", headers=admin_headers, json=payload)
 
@@ -327,6 +525,7 @@ async def create_session_launcher(sanic_client: SanicASGITestClient, user_header
                 "environment_kind": "CUSTOM",
                 "name": "Test",
                 "container_image": "some_image:some_tag",
+                "environment_image_source": "image",
             }
 
         _, res = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
@@ -349,7 +548,7 @@ async def create_data_connector(sanic_client: SanicASGITestClient, regular_user:
             "name": name,
             "description": "A data connector",
             "visibility": "private",
-            "namespace": user.namespace.slug,
+            "namespace": user.namespace.path.serialize(),
             "storage": {
                 "configuration": {
                     "type": "s3",
@@ -369,6 +568,41 @@ async def create_data_connector(sanic_client: SanicASGITestClient, regular_user:
         return response.json
 
     return create_data_connector_helper
+
+
+class CreateDataConnectorCall(Protocol):
+    async def __call__(self, name: str, user: UserInfo | None = None, **payload) -> ApiDataConnector: ...
+
+
+@pytest_asyncio.fixture
+async def create_data_connector_model(
+    sanic_client: SanicASGITestClient, regular_user: UserInfo, admin_user: UserInfo
+) -> CreateDataConnectorCall:
+    async def create_dc_helper(name: str, user: UserInfo | None = None, **payload) -> ApiDataConnector:
+        user = user or regular_user
+        headers = __make_headers(user, admin=user.id == admin_user.id)
+        dc_payload = {
+            "name": name,
+            "visibility": "private",
+            "namespace": user.namespace.path.serialize(),
+            "storage": {
+                "configuration": {
+                    "type": "s3",
+                    "provider": "AWS",
+                    "region": "us-east-1",
+                },
+                "source_path": "bucket/my-folder",
+                "target_path": "my/target",
+            },
+            "keywords": [],
+        }
+        dc_payload.update(payload)
+        _, response = await sanic_client.post("/api/data/data_connectors", headers=headers, json=dc_payload)
+
+        assert response.status_code == 201, response.text
+        return ApiDataConnector.model_validate(response.json)
+
+    return create_dc_helper
 
 
 @pytest_asyncio.fixture
@@ -406,7 +640,7 @@ def create_openbis_data_connector(sanic_client: SanicASGITestClient, regular_use
 
 @pytest_asyncio.fixture
 async def create_data_connector_and_link_project(
-    sanic_client, regular_user, user_headers, admin_user, admin_headers, create_data_connector
+    regular_user, user_headers, admin_user, admin_headers, create_data_connector, link_data_connector
 ):
     async def create_data_connector_and_link_project_helper(
         name: str, project_id: str, admin: bool = False, **payload
@@ -416,13 +650,7 @@ async def create_data_connector_and_link_project(
 
         data_connector = await create_data_connector(name, user=user, headers=headers, **payload)
         data_connector_id = data_connector["id"]
-        payload = {"project_id": project_id}
-
-        _, response = await sanic_client.post(
-            f"/api/data/data_connectors/{data_connector_id}/project_links", headers=headers, json=payload
-        )
-
-        assert response.status_code == 201, response.text
+        response = await link_data_connector(project_id, data_connector_id, headers=headers)
         data_connector_link = response.json
 
         return data_connector, data_connector_link
@@ -430,12 +658,25 @@ async def create_data_connector_and_link_project(
     return create_data_connector_and_link_project_helper
 
 
+@pytest.fixture
+def link_data_connector(sanic_client: SanicASGITestClient):
+    async def _link_data_connector(project_id: str, dc_id: str, headers: dict[str, str]) -> Response:
+        payload = {"project_id": project_id}
+        _, response = await sanic_client.post(
+            f"/api/data/data_connectors/{dc_id}/project_links", headers=headers, json=payload
+        )
+        assert response.status_code == 201, response.text
+        return response
+
+    return _link_data_connector
+
+
 @pytest_asyncio.fixture
-async def create_resource_pool(sanic_client, user_headers, admin_headers):
+async def create_resource_pool(sanic_client, user_headers, admin_headers, valid_resource_pool_payload):
     async def create_resource_pool_helper(admin: bool = False, **payload) -> dict[str, Any]:
         headers = admin_headers if admin else user_headers
-        payload = payload.copy()
-        _, res = await sanic_client.post("/api/data/resource_pools", headers=headers, json=payload)
+        valid_resource_pool_payload.update(payload)
+        _, res = await sanic_client.post("/api/data/resource_pools", headers=headers, json=valid_resource_pool_payload)
         assert res.status_code == 201, res.text
         assert res.json is not None
         return res.json
@@ -489,10 +730,10 @@ async def valid_resource_class_payload() -> dict[str, Any]:
 
 @pytest_asyncio.fixture
 async def secrets_sanic_client(
-    secrets_storage_app_config: SecretsConfig, users: list[UserInfo]
+    secrets_storage_app_manager: SecretsDependencyManager, users: list[UserInfo]
 ) -> AsyncGenerator[SanicASGITestClient, None]:
-    app = Sanic(secrets_storage_app_config.app_name)
-    app = register_secrets_handlers(app, secrets_storage_app_config)
+    app = Sanic(secrets_storage_app_manager.config.app_name)
+    app = register_secrets_handlers(app, secrets_storage_app_manager)
     async with SanicReusableASGITestClient(app) as client:
         yield client
 
@@ -504,3 +745,18 @@ def pytest_addoption(parser):
 @pytest_asyncio.fixture(scope="session")
 def disable_cluster_creation(request):
     return request.config.getoption("--disable-cluster-creation")
+
+
+def __make_headers(user: UserInfo, admin: bool = False) -> dict[str, str]:
+    access_token = json.dumps(
+        {
+            "is_admin": admin,
+            "id": user.id,
+            "name": f"{user.first_name} {user.last_name}",
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "email": user.email,
+            "full_name": f"{user.first_name} {user.last_name}",
+        }
+    )
+    return {"Authorization": f"Bearer {access_token}"}

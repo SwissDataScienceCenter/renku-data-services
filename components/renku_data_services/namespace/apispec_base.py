@@ -1,7 +1,15 @@
 """Base models for API specifications."""
 
+import pydantic
 from pydantic import BaseModel, field_validator
 from ulid import ULID
+
+# NOTE: We are monkeypatching the regex engine for the root model because
+# the datamodel code generator that makes classes from the API spec does not
+# support setting this for the root model and by default the root model is using
+# the rust regex create which does not support lookahead/behind regexs and we need
+# that functionality to parse slugs and prevent certain suffixes in slug names.
+pydantic.RootModel.model_config = {"regex_engine": "python-re"}
 
 
 class BaseAPISpec(BaseModel):

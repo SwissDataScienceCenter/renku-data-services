@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Any
 
+from pydantic import ValidationError as PydanticValidationError
 from sanic import HTTPResponse, Request, empty
 from sanic.response import JSONResponse
 from sanic_ext import validate
@@ -21,12 +22,23 @@ from renku_data_services.storage.rclone import RCloneValidator
 
 def dump_storage_with_sensitive_fields(storage: models.CloudStorage, validator: RCloneValidator) -> dict[str, Any]:
     """Dump a CloudStorage model alongside sensitive fields."""
-    return apispec.CloudStorageGet.model_validate(
-        {
-            "storage": apispec.CloudStorageWithId.model_validate(storage).model_dump(exclude_none=True),
-            "sensitive_fields": validator.get_private_fields(storage.configuration),
-        }
-    ).model_dump(exclude_none=True)
+    try:
+        body = apispec.CloudStorageGet.model_validate(
+            {
+                "storage": apispec.CloudStorageWithId.model_validate(storage).model_dump(exclude_none=True),
+                "sensitive_fields": [
+                    option.model_dump(exclude_none=True, by_alias=True)
+                    for option in validator.get_private_fields(storage.configuration)
+                ],
+            }
+        ).model_dump(exclude_none=True)
+    except PydanticValidationError as err:
+        parts = [".".join(str(i) for i in field["loc"]) + ": " + field["msg"] for field in err.errors()]
+        message = (
+            f"The server could not construct a valid response. Errors found in the following fields: {', '.join(parts)}"
+        )
+        raise errors.ProgrammingError(message=message) from err
+    return body
 
 
 @dataclass(kw_only=True)

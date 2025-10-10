@@ -1,5 +1,7 @@
 """Patches for the git sidecar container."""
 
+from __future__ import annotations
+
 import os
 from typing import TYPE_CHECKING, Any
 
@@ -8,7 +10,7 @@ if TYPE_CHECKING:
     from renku_data_services.notebooks.api.classes.server import UserServer
 
 
-async def main(server: "UserServer") -> list[dict[str, Any]]:
+async def main(server: UserServer) -> list[dict[str, Any]]:
     """Adds the git sidecar container to the session statefulset."""
     # NOTE: Sessions can be persisted only for registered users
     if not server.user.is_authenticated:
@@ -28,6 +30,7 @@ async def main(server: "UserServer") -> list[dict[str, Any]]:
     if gl_project_path:
         volume_mount["subPath"] = f"{gl_project_path}"
 
+    # noinspection PyListCreation
     patches = [
         {
             "type": "application/json-patch+json",
@@ -100,10 +103,10 @@ async def main(server: "UserServer") -> list[dict[str, Any]]:
                         ],
                         "securityContext": {
                             "allowPrivilegeEscalation": False,
-                            "fsGroup": 100,
                             "runAsGroup": 1000,
                             "runAsUser": 1000,
                             "runAsNonRoot": True,
+                            "capabilities": {"drop": ["ALL"]},
                         },
                         "volumeMounts": [volume_mount],
                         "livenessProbe": {
@@ -156,12 +159,12 @@ async def main(server: "UserServer") -> list[dict[str, Any]]:
                 {
                     "op": "add",
                     "path": "/statefulset/spec/template/spec/containers/1/args/-",
-                    "value": (f"--skip-auth-route=^/sessions/{server.server_name}/sidecar/health$"),
+                    "value": f"--skip-auth-route=^/sessions/{server.server_name}/sidecar/health$",
                 },
                 {
                     "op": "add",
                     "path": "/statefulset/spec/template/spec/containers/1/args/-",
-                    "value": (f"--skip-auth-route=^/sessions/{server.server_name}/sidecar/health/$"),
+                    "value": f"--skip-auth-route=^/sessions/{server.server_name}/sidecar/health/$",
                 },
                 {
                     "op": "add",
@@ -171,7 +174,7 @@ async def main(server: "UserServer") -> list[dict[str, Any]]:
                 {
                     "op": "add",
                     "path": "/statefulset/spec/template/spec/containers/1/args/-",
-                    "value": (f"--skip-auth-route=^/sessions/{server.server_name}/sidecar/jsonrpc/map$"),
+                    "value": f"--skip-auth-route=^/sessions/{server.server_name}/sidecar/jsonrpc/map$",
                 },
                 {
                     "op": "add",
@@ -194,7 +197,7 @@ async def main(server: "UserServer") -> list[dict[str, Any]]:
                         "kind": "Service",
                         "metadata": {
                             "name": f"{server.server_name}-rpc-server",
-                            "namespace": server.k8s_client.preferred_namespace,
+                            "namespace": server.k8s_namespace(),
                         },
                         "spec": {
                             "ports": [

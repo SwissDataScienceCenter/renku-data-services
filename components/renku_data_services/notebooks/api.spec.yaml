@@ -21,9 +21,16 @@ paths:
             minLength: 1
         responses:
           '200':
-            description: The Docker image is available.
-          '404':
-            description: The Docker image is not available.
+            content:
+              application/json:
+                schema:
+                  "$ref": "#/components/schemas/ImageCheckResponse"
+          '422':
+            content:
+              application/json:
+                schema:
+                  "$ref": "#/components/schemas/ErrorResponse"
+            description: The image url is malformed.
         tags:
         - notebooks
   "/notebooks/logs/{server_name}":
@@ -71,26 +78,6 @@ paths:
           description: Server options such as CPU, memory, storage, etc.
       tags:
       - notebooks
-  "/notebooks/old/servers":
-    post:
-      summary: Launch a new session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LaunchNotebookRequestOld"
-      responses:
-        "201":
-          description: The project was created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/NotebookResponse"
-        default:
-          $ref: "#/components/responses/Error"
-      tags:
-        - notebooks
   "/notebooks/servers":
     post:
       summary: Launch a new session
@@ -99,7 +86,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/LaunchNotebookRequest"
+              $ref: "#/components/schemas/LaunchNotebookRequestOld"
       responses:
         "201":
           description: The project was created
@@ -387,15 +374,17 @@ paths:
           minLength: 1
       responses:
         "200":
-          description: The docker image can be found
-        "404":
-          description: The docker image cannot be found or the user does not have permissions to access it
+          description: Information about the accessibility of the image
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        default:
-          $ref: "#/components/responses/Error"
+                "$ref": "#/components/schemas/ImageCheckResponse"
+        "422":
+          description: The image url is malformed.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
       tags:
         - sessions
 components:
@@ -439,6 +428,27 @@ components:
       - anonymous
       - registered
       type: object
+    EnvVariableOverrides:
+      description: Environment variable overrides for the session pod
+      type: array
+      items:
+        $ref: "#/components/schemas/EnvVarOverride"
+    EnvVarOverride:
+      description: Override an env variable defined in the session launcher
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 256
+          # based on https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap03.html#tag_03_235
+          pattern: "^[a-zA-Z_][a-zA-Z0-9_]*$"
+          example: MY_VAR
+        value:
+          type: string
+          maxLength: 500
+      required:
+        - name
+        - value
     ErrorResponse:
       type: object
       properties:
@@ -885,6 +895,8 @@ components:
           type: integer
         cloudstorage:
           $ref: "#/components/schemas/SessionCloudStoragePostList"
+        env_variable_overrides:
+          $ref: "#/components/schemas/EnvVariableOverrides"
       required:
         - launcher_id
       type: object
@@ -1033,7 +1045,53 @@ components:
       maxLength: 50
       pattern: '^[a-z]([-a-z0-9]*[a-z0-9])?$'
       example: d185e68d-d43-renku-2-b9ac279a4e8a85ac28d08
+    ImageCheckResponse:
+      type: object
+      properties:
+        accessible:
+          type: boolean
+          description: Whether the image is accessible or not.
+        connection:
+          "$ref": "#/components/schemas/ImageConnection"
+        provider:
+          "$ref": "#/components/schemas/ImageProvider"
+      required:
+        - accessible
+    ImageConnection:
+      type: object
+      properties:
+        id:
+          type: string
+        provider_id:
+          type: string
+        status:
+          "$ref": "#/components/schemas/ImageConnectionStatus"
+      required:
+        - id
+        - provider_id
+        - status
+    ImageConnectionStatus:
+      type: string
+      enum:
+        - connected
+        - pending
+        - invalid_credentials
+    ImageProvider:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        url:
+          type: string
+      required:
+        - id
+        - name
+        - url
   responses:
+    ImageCheckResponse:
+      description: Information about whether a docker image is available or not and if there is a connected service then which connected service can be used to access the image.
     Error:
       description: The schema for all 4xx and 5xx responses
       content:

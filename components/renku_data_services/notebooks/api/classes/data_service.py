@@ -1,125 +1,27 @@
 """Helpers for interacting wit the data service."""
 
+from __future__ import annotations
+
+import os
 from dataclasses import dataclass, field
-from typing import Any, NamedTuple, Optional, cast
+from typing import Optional
 from urllib.parse import urljoin, urlparse
 
-import httpx
-from sanic.log import logger
-
+from renku_data_services.app_config import logging
 from renku_data_services.base_models import APIUser
+from renku_data_services.connected_services.db import ConnectedServicesRepository
+from renku_data_services.connected_services.utils import GitHubProviderType, get_github_provider_type
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.crc.models import ResourceClass, ResourcePool
 from renku_data_services.notebooks.api.classes.repository import (
     INTERNAL_GITLAB_PROVIDER,
     GitProvider,
-    OAuth2Connection,
-    OAuth2Provider,
 )
 from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
-from renku_data_services.notebooks.errors.intermittent import IntermittentError
-from renku_data_services.notebooks.errors.user import (
-    AuthenticationError,
-    InvalidCloudStorageConfiguration,
-    InvalidComputeResourceError,
-    MissingResourceError,
-)
+from renku_data_services.notebooks.config.dynamic import _GitConfig, _SessionConfig
+from renku_data_services.notebooks.errors.user import InvalidComputeResourceError
 
-
-class CloudStorageConfig(NamedTuple):
-    """Cloud storage configuration."""
-
-    config: dict[str, Any]
-    source_path: str
-    target_path: str
-    readonly: bool
-    name: str
-
-
-@dataclass
-class StorageValidator:
-    """Cloud storage validator."""
-
-    storage_url: str
-
-    def __post_init__(self) -> None:
-        self.storage_url = self.storage_url.rstrip("/")
-
-    async def get_storage_by_id(
-        self, user: APIUser, internal_gitlab_user: APIUser, project_id: int, storage_id: str
-    ) -> CloudStorageConfig:
-        """Get a specific cloud storage configuration by ID."""
-        headers = None
-        if user is not None and user.access_token is not None and internal_gitlab_user.access_token is not None:
-            headers = {
-                "Authorization": f"bearer {user.access_token}",
-                "Gitlab-Access-Token": user.access_token,
-            }
-        # TODO: remove project_id once authz on the data service works properly
-        request_url = self.storage_url + f"/storage/{storage_id}?project_id={project_id}"
-        logger.info(f"getting storage info by id: {request_url}")
-        async with httpx.AsyncClient(timeout=10) as client:
-            res = await client.get(request_url, headers=headers)
-        if res.status_code == 404:
-            raise MissingResourceError(message=f"Couldn't find cloud storage with id {storage_id}")
-        if res.status_code == 401:
-            raise AuthenticationError("User is not authorized to access this storage on this project.")
-        if res.status_code != 200:
-            raise IntermittentError(
-                message="The data service sent an unexpected response, please try again later",
-            )
-        storage = res.json()["storage"]
-        return CloudStorageConfig(
-            config=storage["configuration"],
-            source_path=storage["source_path"],
-            target_path=storage["target_path"],
-            readonly=storage.get("readonly", True),
-            name=storage["name"],
-        )
-
-    async def validate_storage_configuration(self, configuration: dict[str, Any], source_path: str) -> None:
-        """Validate the cloud storage configuration."""
-        async with httpx.AsyncClient(timeout=10) as client:
-            res = await client.post(self.storage_url + "/storage_schema/validate", json=configuration)
-        if res.status_code == 422:
-            raise InvalidCloudStorageConfiguration(
-                message=f"The provided cloud storage configuration isn't valid: {res.json()}",
-            )
-        if res.status_code != 204:
-            raise IntermittentError(
-                message="The data service sent an unexpected response, please try again later",
-            )
-
-    async def obscure_password_fields_for_storage(self, configuration: dict[str, Any]) -> dict[str, Any]:
-        """Obscures password fields for use with rclone."""
-        async with httpx.AsyncClient(timeout=10) as client:
-            res = await client.post(self.storage_url + "/storage_schema/obscure", json=configuration)
-
-        if res.status_code != 200:
-            raise InvalidCloudStorageConfiguration(
-                message=f"Couldn't obscure password fields for configuration: {res.json()}"
-            )
-
-        return cast(dict[str, Any], res.json())
-
-
-@dataclass
-class DummyStorageValidator:
-    """Dummy cloud storage validator used for testing."""
-
-    async def get_storage_by_id(
-        self, user: APIUser, internal_gitlab_user: APIUser, project_id: int, storage_id: str
-    ) -> CloudStorageConfig:
-        """Get storage by ID."""
-        raise NotImplementedError()
-
-    async def validate_storage_configuration(self, configuration: dict[str, Any], source_path: str) -> None:
-        """Validate the cloud storage configuration."""
-        raise NotImplementedError()
-
-    async def obscure_password_fields_for_storage(self, configuration: dict[str, Any]) -> dict[str, Any]:
-        """Obscure the password fields in a cloud storage configuration."""
-        raise NotImplementedError()
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -247,76 +149,74 @@ class DummyCRCValidator:
         return self.options
 
 
-@dataclass
 class GitProviderHelper:
-    """Calls to the data service to configure git providers."""
+    """Gets the list of providers."""
 
-    service_url: str
-    renku_url: str
-    internal_gitlab_url: str
-
-    def __post_init__(self) -> None:
-        self.service_url = self.service_url.rstrip("/")
-        self.renku_url = self.renku_url.rstrip("/")
+    def __init__(
+        self,
+        connected_services_repo: ConnectedServicesRepository,
+        service_url: str,
+        renku_url: str,
+        internal_gitlab_url: str,
+        enable_internal_gitlab: bool,
+    ) -> None:
+        self.connected_services_repo = connected_services_repo
+        self.renku_url = renku_url.rstrip("/")
+        self.service_url = service_url.rstrip("/")
+        self.internal_gitlab_url: str = internal_gitlab_url
+        self.enable_internal_gitlab: bool = enable_internal_gitlab
 
     async def get_providers(self, user: APIUser) -> list[GitProvider]:
         """Get the providers for the specific user."""
         if user is None or user.access_token is None:
             return []
-        connections = await self.get_oauth2_connections(user=user)
+
+        logger.debug(f"Get git providers for user {user.id}")
+
+        connections = await self.connected_services_repo.get_oauth2_connections(user)
         providers: dict[str, GitProvider] = dict()
         for c in connections:
             if c.provider_id in providers:
                 continue
-            provider = await self.get_oauth2_provider(c.provider_id)
+            provider = await self.connected_services_repo.get_oauth2_client(c.provider_id, user)
+            if get_github_provider_type(provider) == GitHubProviderType.oauth_app:
+                continue
             access_token_url = urljoin(
                 self.renku_url,
                 urlparse(f"{self.service_url}/oauth2/connections/{c.id}/token").path,
             )
             providers[c.provider_id] = GitProvider(
-                id=c.provider_id,
-                url=provider.url,
-                connection_id=c.id,
-                access_token_url=access_token_url,
+                id=c.provider_id, url=provider.url, connection_id=str(c.id), access_token_url=access_token_url
             )
 
         providers_list = list(providers.values())
         # Insert the internal GitLab as the first provider
-        internal_gitlab_access_token_url = urljoin(self.renku_url, "/api/auth/gitlab/exchange")
-        providers_list.insert(
-            0,
-            GitProvider(
-                id=INTERNAL_GITLAB_PROVIDER,
-                url=self.internal_gitlab_url,
-                connection_id="",
-                access_token_url=internal_gitlab_access_token_url,
-            ),
-        )
+        if self.enable_internal_gitlab and self.internal_gitlab_url:
+            internal_gitlab_access_token_url = urljoin(self.renku_url, "/api/auth/gitlab/exchange")
+            providers_list.insert(
+                0,
+                GitProvider(
+                    id=INTERNAL_GITLAB_PROVIDER,
+                    url=self.internal_gitlab_url,
+                    connection_id="",
+                    access_token_url=internal_gitlab_access_token_url,
+                ),
+            )
         return providers_list
 
-    async def get_oauth2_connections(self, user: APIUser | None = None) -> list[OAuth2Connection]:
-        """Get oauth2 connections."""
-        if user is None or user.access_token is None:
-            return []
-        request_url = f"{self.service_url}/oauth2/connections"
-        headers = {"Authorization": f"bearer {user.access_token}"}
-        async with httpx.AsyncClient(timeout=10) as client:
-            res = await client.get(request_url, headers=headers)
-        if res.status_code != 200:
-            raise IntermittentError(message="The data service sent an unexpected response, please try again later")
-        connections = res.json()
-        connections = [OAuth2Connection.from_dict(c) for c in connections if c["status"] == "connected"]
-        return connections
-
-    async def get_oauth2_provider(self, provider_id: str) -> OAuth2Provider:
-        """Get a specific provider."""
-        request_url = f"{self.service_url}/oauth2/providers/{provider_id}"
-        async with httpx.AsyncClient(timeout=10) as client:
-            res = await client.get(request_url)
-        if res.status_code != 200:
-            raise IntermittentError(message="The data service sent an unexpected response, please try again later")
-        provider = res.json()
-        return OAuth2Provider.from_dict(provider)
+    @classmethod
+    def create(cls, csr: ConnectedServicesRepository, enable_internal_gitlab: bool) -> GitProviderHelper:
+        """Create an instance."""
+        sessions_config = _SessionConfig.from_env()
+        git_config = _GitConfig.from_env(enable_internal_gitlab=enable_internal_gitlab)
+        data_service_url = os.environ.get("NB_DATA_SERVICE_URL", "http://127.0.0.1:8000")
+        return GitProviderHelper(
+            connected_services_repo=csr,
+            service_url=data_service_url,
+            renku_url=f"http://{sessions_config.ingress.host}",
+            internal_gitlab_url=git_config.url,
+            enable_internal_gitlab=enable_internal_gitlab,
+        )
 
 
 @dataclass
