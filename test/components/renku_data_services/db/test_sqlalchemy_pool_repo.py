@@ -235,7 +235,7 @@ async def test_resource_pool_delete(
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
 async def test_resource_class_create(
-    rc: models.ResourceClass,
+    rc: models.UnsavedResourceClass,
     rp: models.UnsavedResourcePool,
     app_manager_instance: DependencyManager,
     admin_user: base_models.APIUser,
@@ -247,7 +247,9 @@ async def test_resource_class_create(
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
         inserted_class = await pool_repo.insert_resource_class(
-            new_resource_class=rc, resource_pool_id=inserted_rp.id, api_user=admin_user
+            api_user=admin_user,
+            resource_pool_id=inserted_rp.id,
+            new_resource_class=rc,
         )
 
         assert inserted_class is not None
@@ -392,7 +394,11 @@ async def test_update_quota_in_nonexisting_rp(
 ) -> None:
     run_migrations_for_app("common")
     with pytest.raises(errors.MissingResourceError):
-        await app_manager_instance.rp_repo.update_resource_pool(id=99999, api_user=admin_user, quota=new_quota_id)
+        await app_manager_instance.rp_repo.update_resource_pool(
+            api_user=admin_user,
+            resource_pool_id=99999,
+            update=models.ResourcePoolPatch(quota=models.QuotaPatch(cpu=999, memory=999, gpu=999)),
+        )
 
 
 @given(public_rp=public_rp_strat, private_rp=private_rp_strat)

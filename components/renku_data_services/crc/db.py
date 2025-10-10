@@ -296,11 +296,10 @@ class ResourcePoolRepository(_Base):
         if new_resource_pool.quota is not None:
             quota = self.quotas_repo.create_quota(new_quota=new_resource_pool.quota)
 
-        resource_pool = schemas.ResourcePoolORM.from_unsaved_model(
-            new_resource_pool=new_resource_pool, quota=quota, cluster=cluster
-        )
-
         async with self.session_maker() as session, session.begin():
+            resource_pool = schemas.ResourcePoolORM.from_unsaved_model(
+                new_resource_pool=new_resource_pool, quota=quota, cluster=cluster
+            )
             if resource_pool.default:
                 stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.default == true())
                 res = await session.execute(stmt)
@@ -359,11 +358,12 @@ class ResourcePoolRepository(_Base):
         resource_pool_id: Optional[int] = None,
     ) -> models.ResourceClass:
         """Insert a resource class in the database."""
-        resource_class = schemas.ResourceClassORM.from_unsaved_model(
-            new_resource_class=new_resource_class, resource_pool_id=resource_pool_id
-        )
-
         async with self.session_maker() as session, session.begin():
+            resource_class = schemas.ResourceClassORM.from_unsaved_model(
+                new_resource_class=new_resource_class, resource_pool_id=resource_pool_id
+            )
+            print(f"resource_class = {resource_class.resource_pool_id}")
+
             if resource_pool_id is not None:
                 stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == resource_pool_id)
                 res = await session.execute(stmt)
@@ -372,6 +372,7 @@ class ResourcePoolRepository(_Base):
                     raise errors.MissingResourceError(
                         message=f"Resource pool with id {resource_pool_id} does not exist."
                     )
+                resource_class.resource_pool = rp
                 if resource_class.default and len(rp.classes) > 0 and any([icls.default for icls in rp.classes]):
                     raise errors.ValidationError(
                         message="There can only be one default resource class per resource pool."
