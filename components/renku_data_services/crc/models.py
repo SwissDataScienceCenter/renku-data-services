@@ -89,7 +89,6 @@ class UnsavedResourceClass(ResourcesCompareMixin):
     default_storage: int = 1
     node_affinities: list[NodeAffinity] = field(default_factory=list)
     tolerations: list[str] = field(default_factory=list)
-    # quota: str | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
