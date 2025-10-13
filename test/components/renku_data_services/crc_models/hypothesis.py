@@ -76,9 +76,7 @@ def rc_default_strat(draw):
         assume(False)
 
 
-quota_strat = st.builds(
-    models.Quota, cpu=a_quota_cpu, gpu=a_quota_gpu, memory=a_quota_memory, id=st.just("random_arbitrary_value")
-)
+quota_strat = st.builds(models.UnsavedQuota, cpu=a_quota_cpu, gpu=a_quota_gpu, memory=a_quota_memory)
 quota_strat_w_id = st.builds(models.Quota, cpu=a_quota_cpu, gpu=a_quota_gpu, memory=a_quota_memory, id=a_uuid_string)
 
 
