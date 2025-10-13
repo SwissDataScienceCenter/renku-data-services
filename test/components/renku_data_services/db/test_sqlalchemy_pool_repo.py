@@ -327,7 +327,7 @@ async def test_resource_class_update(
     inserted_rp = None
     pool_repo = app_manager_instance.rp_repo
     try:
-        inserted_rp = await pool_repo.insert_resource_pool(resource_pool=rp, api_user=admin_user)
+        inserted_rp = await pool_repo.insert_resource_pool(new_resource_pool=rp, api_user=admin_user)
         assert inserted_rp is not None
         assert inserted_rp.id is not None
         assert len(inserted_rp.classes) > 0
@@ -335,16 +335,11 @@ async def test_resource_class_update(
         assert len(default_rcs) == 1
         rc_to_update = default_rcs[0]
         assert rc_to_update.id is not None
-        new_rc_dict = asdict(rc_to_update)
-        for k, v in rc_update.items():
-            new_rc_dict[k] += v
-        new_rc_dict.pop("id")
         updated_rc = await pool_repo.update_resource_class(
+            api_user=admin_user,
             resource_pool_id=inserted_rp.id,
             resource_class_id=rc_to_update.id,
-            put=False,
-            api_user=admin_user,
-            **new_rc_dict,
+            update=models.ResourceClassPatch(**rc_update),
         )
 
         retrieved_rps = await pool_repo.get_resource_pools(id=inserted_rp.id, api_user=admin_user)
