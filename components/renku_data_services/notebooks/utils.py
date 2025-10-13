@@ -1,8 +1,10 @@
 """Utilities for notebooks."""
 
 import renku_data_services.crc.models as crc_models
+from renku_data_services.base_models.core import RESET
 from renku_data_services.notebooks.crs import (
     Affinity,
+    AffinityPatch,
     MatchExpression,
     NodeAffinity,
     NodeSelectorTerm,
@@ -126,6 +128,21 @@ def node_affinity_from_resource_class(
     else:
         affinity.nodeAffinity = rc_node_affinity
     return affinity
+
+
+def node_affinity_patch_from_resource_class(
+    resource_class: crc_models.ResourceClass, default_affinity: Affinity
+) -> AffinityPatch:
+    """Create a patch for the session affinity."""
+    affinity = node_affinity_from_resource_class(resource_class, default_affinity)
+    patch = AffinityPatch(nodeAffinity=RESET, podAffinity=RESET, podAntiAffinity=RESET)
+    if affinity.nodeAffinity:
+        patch.nodeAffinity = affinity.nodeAffinity
+    if affinity.podAffinity:
+        patch.podAffinity = affinity.podAffinity
+    if affinity.podAntiAffinity:
+        patch.podAntiAffinity = affinity.podAntiAffinity
+    return patch
 
 
 def tolerations_from_resource_class(

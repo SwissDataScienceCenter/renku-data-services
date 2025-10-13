@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field, field_serializer, field_validator, model_
 from pydantic.types import HashableItemType
 from ulid import ULID
 
+from renku_data_services.base_models.core import ResetType
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
@@ -33,6 +34,8 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     MatchExpression,
     NodeAffinity,
     NodeSelectorTerm,
+    PodAffinity,
+    PodAntiAffinity,
     Preference,
     PreferredDuringSchedulingIgnoredDuringExecutionItem,
     ReconcileStrategy,
@@ -375,36 +378,61 @@ class AmaltheaSessionV1Alpha1(_ASModel):
         return url
 
 
+class ResourcesPatch(BaseCRD):
+    """Resource requests and limits patch."""
+
+    limits: Mapping[str, LimitsStr | Limits | ResetType] | ResetType | None = None
+    requests: Mapping[str, RequestsStr | Requests | ResetType] | ResetType | None = None
+
+
 class AmaltheaSessionV1Alpha1SpecSessionPatch(BaseCRD):
     """Patch for the main session config."""
 
-    resources: Resources | None = None
-    shmSize: int | str | None = None
-    storage: Storage | None = None
+    resources: ResourcesPatch | ResetType | None = None
+    shmSize: int | str | ResetType | None = None
+    storage: Storage | ResetType | None = None
     imagePullPolicy: ImagePullPolicy | None = None
-    extraVolumeMounts: list[ExtraVolumeMount] | None = None
+    extraVolumeMounts: list[ExtraVolumeMount] | ResetType | None = None
 
 
 class AmaltheaSessionV1Alpha1MetadataPatch(BaseCRD):
     """Patch for the metadata of an amalthea session."""
 
-    annotations: dict[str, str] | None = None
+    annotations: dict[str, str | ResetType] | ResetType | None = None
+
+
+class AffinityPatch(BaseCRD):
+    """Patch for the affinity of a session."""
+
+    nodeAffinity: NodeAffinity | ResetType | None = None
+    podAffinity: PodAffinity | ResetType | None = None
+    podAntiAffinity: PodAntiAffinity | ResetType | None = None
+
+
+class CullingPatch(Culling):
+    """Patch for the culling durations of a session."""
+
+    maxAge: timedelta | ResetType | None = None  # type:ignore[assignment]
+    maxFailedDuration: timedelta | ResetType | None = None  # type:ignore[assignment]
+    maxHibernatedDuration: timedelta | ResetType | None = None  # type:ignore[assignment]
+    maxIdleDuration: timedelta | ResetType | None = None  # type:ignore[assignment]
+    maxStartingDuration: timedelta | ResetType | None = None  # type:ignore[assignment]
 
 
 class AmaltheaSessionV1Alpha1SpecPatch(BaseCRD):
     """Patch for the spec of an amalthea session."""
 
-    extraContainers: list[ExtraContainer] | None = None
-    extraVolumes: list[ExtraVolume] | None = None
+    extraContainers: list[ExtraContainer] | ResetType | None = None
+    extraVolumes: list[ExtraVolume] | ResetType | None = None
     hibernated: bool | None = None
-    initContainers: list[InitContainer] | None = None
-    imagePullSecrets: list[ImagePullSecret] | None = None
-    priorityClassName: str | None = None
-    tolerations: list[Toleration] | None = None
-    affinity: Affinity | None = None
+    initContainers: list[InitContainer] | ResetType | None = None
+    imagePullSecrets: list[ImagePullSecret] | ResetType | None = None
+    priorityClassName: str | ResetType | None = None
+    tolerations: list[Toleration] | ResetType | None = None
+    affinity: AffinityPatch | ResetType | None = None
     session: AmaltheaSessionV1Alpha1SpecSessionPatch | None = None
-    culling: Culling | None = None
-    service_account_name: str | None = None
+    culling: CullingPatch | ResetType | None = None
+    service_account_name: str | ResetType | None = None
 
 
 class AmaltheaSessionV1Alpha1Patch(BaseCRD):
@@ -414,8 +442,12 @@ class AmaltheaSessionV1Alpha1Patch(BaseCRD):
     spec: AmaltheaSessionV1Alpha1SpecPatch
 
     def to_rfc7386(self) -> dict[str, Any]:
-        """Generate the patch to be applied to the session."""
-        return self.model_dump(exclude_none=True)
+        """Generate the patch to be applied to the session.
+
+        Note that when the value for a key in the patch is anything other than a
+        dictionary then the rfc7386 patch will replace, not merge.
+        """
+        return self.model_dump(exclude_none=True, mode="json")
 
 
 def safe_parse_duration(val: Any) -> timedelta:
