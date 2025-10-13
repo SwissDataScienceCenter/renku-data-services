@@ -113,13 +113,26 @@ async def test_resource_pool_update_classes(
     try:
         inserted_rp = await create_rp(rp, pool_repo, api_user=admin_user)
         assert inserted_rp.id is not None
-        old_classes = [asdict(cls) for cls in list(inserted_rp.classes)]
-        new_classes_dicts = [{**cls, **data.draw(rc_update_reqs_dict)} for cls in old_classes]
-        new_classes_models = [models.ResourceClass.from_dict(cls) for cls in new_classes_dicts]
-        new_classes_models = sort_rp_classes(new_classes_models)
+        rc_update_reqs = [{"id": rc.id, **data.draw(rc_update_reqs_dict)} for rc in inserted_rp.classes]
+        classes_update = [
+            models.ResourceClassPatchWithId(
+                id=rc["id"],
+                cpu=rc.get("cpu"),
+                gpu=rc.get("gpu"),
+                memory=rc.get("memory"),
+                max_storage=rc.get("max_storage"),
+            )
+            for rc in rc_update_reqs
+        ]
+        expected_updated_classes = [
+            models.ResourceClass(**{**asdict(rc), **rc_update, "node_affinities": rc.node_affinities})
+            for rc, rc_update in zip(inserted_rp.classes, rc_update_reqs, strict=True)
+        ]
 
         updated_rp = await pool_repo.update_resource_pool(
-            id=inserted_rp.id, classes=new_classes_dicts, api_user=admin_user
+            api_user=admin_user,
+            resource_pool_id=inserted_rp.id,
+            update=models.ResourcePoolPatch(classes=classes_update),
         )
 
         assert updated_rp.id == inserted_rp.id
@@ -127,7 +140,7 @@ async def test_resource_pool_update_classes(
         assert sort_rp_classes(
             updated_rp.classes,
         ) == sort_rp_classes(
-            new_classes_models,
+            expected_updated_classes,
         )
         retrieved_rps = await pool_repo.get_resource_pools(id=inserted_rp.id, api_user=admin_user)
         assert len(retrieved_rps) == 1
