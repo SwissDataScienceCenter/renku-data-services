@@ -179,6 +179,10 @@ class K8sSecret(K8sObject):
             patch.append(
                 {"op": "replace", "path": "/metadata/annotations", "value": self.manifest.metadata.annotations},
             )
+        if "ownerReferences" in self.manifest.metadata:
+            patch.append(
+                {"op": "replace", "path": "/metadata/ownerReferences", "value": self.manifest.metadata.ownerReferences},
+            )
         return patch
 
 

@@ -47,10 +47,12 @@ class K8sSecretsBP(CustomBlueprint):
                 result = await self.client.create_secret(secret)
             except kr8s.ServerError as e:
                 if not e.response:
-                    raise
+                    raise errors.SecretCreationError(
+                        message=f"An error occurred creating secrets: {str(type(e))}"
+                    ) from None
                 if e.response.status_code == 409:
                     # NOTE: It means that the secret already exists, so we try to patch
-                    patch_res = await self.client.patch_secret(secret, patch=secret.to_patch())
+                    result = await self.client.patch_secret(secret, patch=secret.to_patch())
             except Exception as e:
                 # don't wrap the error, we don't want secrets accidentally leaking.
                 raise errors.SecretCreationError(
