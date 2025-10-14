@@ -381,7 +381,6 @@ class DependencyManager:
             project_repo=project_repo,
             data_connector_repo=data_connector_repo,
         )
-
         return cls(
             config,
             authenticator=authenticator,
