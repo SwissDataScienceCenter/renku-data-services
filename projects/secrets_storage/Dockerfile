@@ -39,4 +39,4 @@ RUN apt-get update && apt-get install -y \
 USER $USER_UID:$USER_GID
 WORKDIR /app
 COPY --from=builder /app/env ./env
-ENTRYPOINT ["tini", "-g", "--", "env/bin/python", "-m", "renku_data_services.secrets_storage_api.main"]
+ENTRYPOINT ["tini", "-g", "--", "env/bin/python", "-m", "renku_data_services.secrets_storage_api.main", "--single-process"]
