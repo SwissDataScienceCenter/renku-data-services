@@ -1,9 +1,10 @@
 """Implementation of staging metrics service."""
 
-from renku_data_services.base_models.core import APIUser
+from renku_data_services.base_models.core import APIUser, AuthenticatedAPIUser
 from renku_data_services.base_models.metrics import MetricsEvent, MetricsMetadata, MetricsService
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.metrics.utils import anonymize_user_id
+from renku_data_services.users.models import UserInfo
 
 
 class StagingMetricsService(MetricsService):
@@ -24,6 +25,30 @@ class StagingMetricsService(MetricsService):
 
         anonymous_user_id = anonymize_user_id(user)
         await self._metrics_repo.store_event(event=event.value, anonymous_user_id=anonymous_user_id, metadata=metadata)
+
+    async def identify_user(self, user: UserInfo, metadata: MetricsMetadata) -> None:
+        """Send a user's identity to metrics."""
+
+        # We populate 'metadata' with the user's details.
+        if user.email:
+            metadata["email"] = metadata.get("email") or user.email
+        if user.first_name:
+            metadata["first_name"] = metadata.get("first_name") or user.first_name
+        if user.last_name:
+            metadata["last_name"] = metadata.get("last_name") or user.last_name
+        if user.namespace.latest_slug:
+            metadata["username"] = metadata.get("username") or user.namespace.latest_slug
+
+        # NOTE: Only the 'id' field is used when we call `_store_event()`.
+        api_user = AuthenticatedAPIUser(
+            id=user.id,
+            access_token="",  # nosec B106
+            email=user.email or "",
+            first_name=user.first_name,
+            last_name=user.last_name,
+            is_admin=False,
+        )
+        await self._store_event(MetricsEvent.identify_user, api_user, metadata)
 
     async def session_started(self, user: APIUser, metadata: MetricsMetadata) -> None:
         """Store session started event in staging table."""

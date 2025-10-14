@@ -18,6 +18,7 @@ from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.base_api.auth import APIUser, only_authenticated
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
+from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.base_models.nel import Nel
 from renku_data_services.errors import errors
 from renku_data_services.namespace.db import GroupRepository
@@ -89,10 +90,11 @@ class UserRepo(DbUsernameResolver):
     group_repo: GroupRepository
     search_updates_repo: SearchUpdatesRepo
     encryption_key: bytes | None = field(repr=False)
+    metrics: MetricsService
     authz: Authz
 
     def __post_init__(self) -> None:
-        self._users_sync = UsersSync(self.session_maker, self.group_repo, self, self.authz)
+        self._users_sync = UsersSync(self.session_maker, self.group_repo, self, self.metrics, self.authz)
 
     def make_session(self) -> AsyncSession:
         """Create a db session."""
@@ -259,11 +261,13 @@ class UsersSync:
         session_maker: Callable[..., AsyncSession],
         group_repo: GroupRepository,
         user_repo: UserRepo,
+        metrics: MetricsService,
         authz: Authz,
     ) -> None:
         self.session_maker = session_maker
         self.group_repo = group_repo
         self.user_repo = user_repo
+        self.metrics = metrics
         self.authz = authz
         self.search_updates_repo = user_repo.search_updates_repo
 
@@ -341,7 +345,10 @@ class UsersSync:
         return UserInfoUpdate(old_user, existing_user.dump())
 
     async def users_sync(self, kc_api: IKeycloakAPI) -> None:
-        """Sync all users from Keycloak into the users database."""
+        """Sync all users from Keycloak into the users database.
+
+        This method also updates the users' data stored for product metrics.
+        """
         logger.info("Starting a total user database sync.")
         kc_users = kc_api.get_users()
 
@@ -351,7 +358,11 @@ class UsersSync:
             db_user = await self._get_user(kc_user.id)
             if db_user != kc_user:
                 logger.info(f"Inserting or updating user {db_user} -> {kc_user}")
-                await self.update_or_insert_user(user=kc_user)
+                update = await self.update_or_insert_user(user=kc_user)
+                db_user = update.new
+            # TODO: identify user
+            if db_user is not None:
+                await self.metrics.identify_user(user=db_user, metadata={})
 
         # NOTE: If asyncio.gather is used here you quickly exhaust all DB connections
         # or timeout on waiting for available connections

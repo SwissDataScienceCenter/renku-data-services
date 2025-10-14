@@ -4,6 +4,7 @@ from enum import StrEnum
 from typing import Protocol
 
 from renku_data_services.base_models.core import APIUser
+from renku_data_services.users.models import UserInfo
 
 
 class MetricsEvent(StrEnum):
@@ -14,6 +15,7 @@ class MetricsEvent(StrEnum):
     data_connector_linked = "data_connector_linked"
     group_created = "group_created"
     group_member_added = "group_member_added"
+    identify_user = "identify_user"
     project_created = "project_created"
     project_member_added = "project_member_added"
     search_queried = "search_queried"
@@ -31,6 +33,10 @@ type MetricsMetadata = dict[str, str | int | bool]
 
 class MetricsService(Protocol):
     """Protocol for sending product metrics."""
+
+    async def identify_user(self, user: UserInfo, metadata: MetricsMetadata) -> None:
+        """Send a user's identity to metrics."""
+        ...
 
     async def session_started(self, user: APIUser, metadata: MetricsMetadata) -> None:
         """Send session start event to metrics."""
