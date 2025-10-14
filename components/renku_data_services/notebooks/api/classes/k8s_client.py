@@ -413,7 +413,7 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
 
         return await self.__secrets_client.create_secret(secret)
 
-    async def patch_secret(self, secret: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
+    async def patch_secret(self, secret: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sSecret:
         """Patch a secret."""
 
         return await self.__secrets_client.patch_secret(secret, patch)

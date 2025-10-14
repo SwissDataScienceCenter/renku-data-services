@@ -161,6 +161,26 @@ class K8sSecret(K8sObject):
             type=self.manifest.get("type"),
         )
 
+    def to_patch(self) -> list[dict[str, Any]]:
+        """Create a rfc6902 patch that would take an existing secret and patch it to this state."""
+        if self.manifest.get("stringData"):
+            raise NotImplementedError("Patching a secret with stringData field is not implemented.")
+        patch = [
+            {"op": "replace", "path": "/data", "value": self.manifest.data},
+            {"op": "replace", "path": "/type", "value": self.manifest.get("type", "Opaque")},
+        ]
+        if "metadata" not in self.manifest:
+            return patch
+        if "labels" in self.manifest.metadata:
+            patch.append(
+                {"op": "replace", "path": "/metadata/labels", "value": self.manifest.metadata.labels},
+            )
+        if "annotations" in self.manifest.metadata:
+            patch.append(
+                {"op": "replace", "path": "/metadata/annotations", "value": self.manifest.metadata.annotations},
+            )
+        return patch
+
 
 @dataclass
 class K8sObjectFilter:

@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 
+import kr8s
 from cryptography.hazmat.primitives.asymmetric import rsa
 from sanic import Request, json
 from sanic.response import JSONResponse
@@ -44,6 +45,12 @@ class K8sSecretsBP(CustomBlueprint):
 
             try:
                 result = await self.client.create_secret(secret)
+            except kr8s.ServerError as e:
+                if not e.response:
+                    raise
+                if e.response.status_code == 409:
+                    # NOTE: It means that the secret already exists, so we try to patch
+                    patch_res = await self.client.patch_secret(secret, patch=secret.to_patch())
             except Exception as e:
                 # don't wrap the error, we don't want secrets accidentally leaking.
                 raise errors.SecretCreationError(
