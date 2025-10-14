@@ -120,7 +120,6 @@ class ResourceClassPatch:
     gpu: int | None = None
     default: bool | None = None
     default_storage: int | None = None
-    matching: Optional[bool] = None
     node_affinities: list[NodeAffinity] | None = None
     tolerations: list[str] | None = None
 
