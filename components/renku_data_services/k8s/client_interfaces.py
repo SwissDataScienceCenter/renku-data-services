@@ -41,7 +41,7 @@ class SecretClient(Protocol):
         """Create a secret."""
         ...
 
-    async def patch_secret(self, secret: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
+    async def patch_secret(self, secret: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sSecret:
         """Patch an existing secret."""
         ...
 

@@ -82,10 +82,10 @@ class K8sSecretClient(SecretClient):
 
         return K8sSecret.from_k8s_object(await self.__client.create(secret, False))
 
-    async def patch_secret(self, secret: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
+    async def patch_secret(self, secret: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sSecret:
         """Patch a secret."""
 
-        return await self.__client.patch(secret, patch)
+        return K8sSecret.from_k8s_object(await self.__client.patch(secret, patch))
 
     async def delete_secret(self, secret: K8sObjectMeta) -> None:
         """Delete a secret."""
@@ -198,7 +198,7 @@ class DummyCoreClient(ResourceQuotaClient, SecretClient):
             self.secrets[secret.name] = secret
             return secret
 
-    async def patch_secret(self, secret: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
+    async def patch_secret(self, secret: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sSecret:
         """Patch a secret."""
         # NOTE: This is only needed if the create_namespaced_secret can raise a conflict 409 status code
         # error when it tries to create a secret that already exists. But the dummy client never raises
