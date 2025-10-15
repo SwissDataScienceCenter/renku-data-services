@@ -1,6 +1,6 @@
 """crc modules converters and validators."""
 
-from typing import overload
+from typing import Literal, overload
 from urllib.parse import urlparse
 
 from ulid import ULID
@@ -58,22 +58,31 @@ def validate_resource_class(body: apispec.ResourceClass) -> models.UnsavedResour
 
 
 @overload
-def validate_resource_class_patch_or_put(body: apispec.ResourceClassPatch) -> models.ResourceClassPatch: ...
+def validate_resource_class_patch_or_put(
+    body: apispec.ResourceClassPatch, method: Literal["PATCH"]
+) -> models.ResourceClassPatch: ...
 @overload
-def validate_resource_class_patch_or_put(body: apispec.ResourceClassPatchWithId) -> models.ResourceClassPatchWithId: ...
+def validate_resource_class_patch_or_put(
+    body: apispec.ResourceClassPatchWithId, method: Literal["PATCH"]
+) -> models.ResourceClassPatchWithId: ...
 @overload
-def validate_resource_class_patch_or_put(body: apispec.ResourceClass) -> models.ResourceClassPatch: ...
+def validate_resource_class_patch_or_put(
+    body: apispec.ResourceClass, method: Literal["PUT"]
+) -> models.ResourceClassPatch: ...
 @overload
-def validate_resource_class_patch_or_put(body: apispec.ResourceClassWithId) -> models.ResourceClassPatchWithId: ...
+def validate_resource_class_patch_or_put(
+    body: apispec.ResourceClassWithId, method: Literal["PUT"]
+) -> models.ResourceClassPatchWithId: ...
 def validate_resource_class_patch_or_put(
     body: apispec.ResourceClassPatch
     | apispec.ResourceClassPatchWithId
     | apispec.ResourceClass
     | apispec.ResourceClassWithId,
+    method: Literal["PATCH", "PUT"],
 ) -> models.ResourceClassPatch | models.ResourceClassPatchWithId:
     """Validate the patch to a resource class."""
-    rc_id = body.id if isinstance(body, apispec.ResourceClassPatchWithId) else None
-    node_affinities = None
+    rc_id = body.id if isinstance(body, (apispec.ResourceClassPatchWithId, apispec.ResourceClassWithId)) else None
+    node_affinities: list[models.NodeAffinity] | None = [] if method == "PUT" else None
     if body.node_affinities:
         node_affinities = sorted(
             (
@@ -82,7 +91,7 @@ def validate_resource_class_patch_or_put(
             ),
             key=lambda x: (x.key, x.required_during_scheduling),
         )
-    tolerations = None
+    tolerations: list[str] | None = [] if method == "PUT" else None
     if body.tolerations:
         tolerations = sorted(t.root for t in body.tolerations or [])
     if rc_id:
@@ -186,7 +195,9 @@ def validate_resource_pool(body: apispec.ResourcePool) -> models.UnsavedResource
 
 def validate_resource_pool_patch(body: apispec.ResourcePoolPatch) -> models.ResourcePoolPatch:
     """Validate the patch to a resource pool."""
-    classes = [validate_resource_class_patch_or_put(body=rc) for rc in body.classes] if body.classes else None
+    classes = (
+        [validate_resource_class_patch_or_put(body=rc, method="PATCH") for rc in body.classes] if body.classes else None
+    )
     quota = validate_quota_put_patch(body=body.quota) if body.quota else None
     remote = validate_remote_patch(body=body.remote) if body.remote else None
     return models.ResourcePoolPatch(
@@ -205,7 +216,9 @@ def validate_resource_pool_patch(body: apispec.ResourcePoolPatch) -> models.Reso
 def validate_resource_pool_put(body: apispec.ResourcePoolPut) -> models.ResourcePoolPatch:
     """Validate the put request for a resource pool."""
     # NOTE: the current behavior is to do a PATCH-style update on nested classes for "PUT resource pool"
-    classes = [validate_resource_class_patch_or_put(body=rc) for rc in body.classes] if body.classes else None
+    classes = (
+        [validate_resource_class_patch_or_put(body=rc, method="PUT") for rc in body.classes] if body.classes else None
+    )
     quota = validate_quota_put_patch(body=body.quota) if body.quota else RESET
     remote = validate_remote_put(body=body.remote)
     return models.ResourcePoolPatch(

@@ -342,7 +342,7 @@ class ClassesBP(CustomBlueprint):
         async def _put(
             _: Request, user: base_models.APIUser, body: apispec.ResourceClass, resource_pool_id: int, class_id: int
         ) -> HTTPResponse:
-            put = validate_resource_class_patch_or_put(body=body)
+            put = validate_resource_class_patch_or_put(body=body, method="PUT")
             rc = await self.repo.update_resource_class(
                 api_user=user,
                 resource_pool_id=resource_pool_id,
@@ -367,7 +367,7 @@ class ClassesBP(CustomBlueprint):
             resource_pool_id: int,
             class_id: int,
         ) -> HTTPResponse:
-            patch = validate_resource_class_patch_or_put(body=body)
+            patch = validate_resource_class_patch_or_put(body=body, method="PATCH")
             rc = await self.repo.update_resource_class(
                 api_user=user,
                 resource_pool_id=resource_pool_id,
