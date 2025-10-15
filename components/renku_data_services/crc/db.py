@@ -471,7 +471,7 @@ class ResourcePoolRepository(_Base):
             if update.remote is RESET:
                 rp.remote_provider_id = None
                 rp.remote_json = None
-            if isinstance(update.remote, models.RemoteConfigurationFirecrestPatch):
+            elif isinstance(update.remote, models.RemoteConfigurationFirecrestPatch):
                 rp.remote_provider_id = (
                     update.remote.provider_id if update.remote.provider_id is not None else rp.remote_provider_id
                 )
@@ -524,7 +524,7 @@ class ResourcePoolRepository(_Base):
         api_user: base_models.APIUser,
         resource_pool_id: int,
         resource_class_id: int,
-        update: models.ResourceClassPatch | models.ResourceClassPatchWithId,
+        update: models.ResourceClassPatch,
     ) -> models.ResourceClass:
         """Update a specific resource class."""
         async with self.session_maker() as session, session.begin():
@@ -548,6 +548,7 @@ class ResourcePoolRepository(_Base):
 
             validate_resource_class_update(existing=cls.dump(), update=update)
 
+            # NOTE: updating the 'default' field is not supported, so it is skipped below
             if update.name is not None:
                 cls.name = update.name
             if update.cpu is not None:
@@ -558,9 +559,6 @@ class ResourcePoolRepository(_Base):
                 cls.max_storage = update.max_storage
             if update.gpu is not None:
                 cls.gpu = update.gpu
-            # TODO: setting a resource class as the default should unset the default field of the current default class
-            if update.default is not None:
-                cls.default = update.default
             if update.default_storage is not None:
                 cls.default_storage = update.default_storage
 

@@ -58,11 +58,18 @@ def validate_resource_class(body: apispec.ResourceClass) -> models.UnsavedResour
 
 
 @overload
-def validate_resource_class_patch(body: apispec.ResourceClassPatch) -> models.ResourceClassPatch: ...
+def validate_resource_class_patch_or_put(body: apispec.ResourceClassPatch) -> models.ResourceClassPatch: ...
 @overload
-def validate_resource_class_patch(body: apispec.ResourceClassPatchWithId) -> models.ResourceClassPatchWithId: ...
-def validate_resource_class_patch(
-    body: apispec.ResourceClassPatch | apispec.ResourceClassPatchWithId,
+def validate_resource_class_patch_or_put(body: apispec.ResourceClassPatchWithId) -> models.ResourceClassPatchWithId: ...
+@overload
+def validate_resource_class_patch_or_put(body: apispec.ResourceClass) -> models.ResourceClassPatch: ...
+@overload
+def validate_resource_class_patch_or_put(body: apispec.ResourceClassWithId) -> models.ResourceClassPatchWithId: ...
+def validate_resource_class_patch_or_put(
+    body: apispec.ResourceClassPatch
+    | apispec.ResourceClassPatchWithId
+    | apispec.ResourceClass
+    | apispec.ResourceClassWithId,
 ) -> models.ResourceClassPatch | models.ResourceClassPatchWithId:
     """Validate the patch to a resource class."""
     rc_id = body.id if isinstance(body, apispec.ResourceClassPatchWithId) else None
@@ -104,60 +111,17 @@ def validate_resource_class_patch(
     )
 
 
-@overload
-def validate_resource_class_put(body: apispec.ResourceClass) -> models.ResourceClassPatch: ...
-@overload
-def validate_resource_class_put(body: apispec.ResourceClassWithId) -> models.ResourceClassPatchWithId: ...
-def validate_resource_class_put(
-    body: apispec.ResourceClass | apispec.ResourceClassWithId,
-) -> models.ResourceClassPatch | models.ResourceClassPatchWithId:
-    """Validate the put request for a resource class."""
-    rc_id = body.id if isinstance(body, apispec.ResourceClassWithId) else None
-    node_affinities = []
-    if body.node_affinities:
-        node_affinities = sorted(
-            (
-                models.NodeAffinity(key=na.key, required_during_scheduling=na.required_during_scheduling)
-                for na in body.node_affinities or []
-            ),
-            key=lambda x: (x.key, x.required_during_scheduling),
-        )
-    tolerations = []
-    if body.tolerations:
-        tolerations = sorted(t.root for t in body.tolerations or [])
-    if rc_id:
-        return models.ResourceClassPatchWithId(
-            id=rc_id,
-            name=body.name,
-            cpu=body.cpu,
-            memory=body.memory,
-            max_storage=body.max_storage,
-            gpu=body.gpu,
-            default=body.default,
-            default_storage=body.default_storage,
-            node_affinities=node_affinities,
-            tolerations=tolerations,
-        )
-    return models.ResourceClassPatch(
-        name=body.name,
-        cpu=body.cpu,
-        memory=body.memory,
-        max_storage=body.max_storage,
-        gpu=body.gpu,
-        default=body.default,
-        default_storage=body.default_storage,
-        node_affinities=node_affinities,
-        tolerations=tolerations,
-    )
-
-
 def validate_resource_class_update(
-    existing: models.ResourceClass, update: models.ResourceClassPatch | models.ResourceClassPatchWithId
+    existing: models.ResourceClass,
+    update: models.ResourceClassPatch,
 ) -> None:
     """Validate the update to a resource class."""
     name = update.name if update.name is not None else existing.name
     max_storage = update.max_storage if update.max_storage is not None else existing.max_storage
     default_storage = update.default_storage if update.default_storage is not None else existing.default_storage
+
+    if update.default is not None and existing.default != update.default:
+        raise errors.ValidationError(message="Changing the default class in a resource pool is not supported.")
 
     if len(name) > 40:
         # TODO: Should this be added to the API spec instead?
@@ -222,8 +186,8 @@ def validate_resource_pool(body: apispec.ResourcePool) -> models.UnsavedResource
 
 def validate_resource_pool_patch(body: apispec.ResourcePoolPatch) -> models.ResourcePoolPatch:
     """Validate the patch to a resource pool."""
-    classes = [validate_resource_class_patch(body=rc) for rc in body.classes] if body.classes else None
-    quota = validate_quota_patch(body=body.quota) if body.quota else None
+    classes = [validate_resource_class_patch_or_put(body=rc) for rc in body.classes] if body.classes else None
+    quota = validate_quota_put_patch(body=body.quota) if body.quota else None
     remote = validate_remote_patch(body=body.remote) if body.remote else None
     return models.ResourcePoolPatch(
         name=body.name,
@@ -241,8 +205,8 @@ def validate_resource_pool_patch(body: apispec.ResourcePoolPatch) -> models.Reso
 def validate_resource_pool_put(body: apispec.ResourcePoolPut) -> models.ResourcePoolPatch:
     """Validate the put request for a resource pool."""
     # NOTE: the current behavior is to do a PATCH-style update on nested classes for "PUT resource pool"
-    classes = [validate_resource_class_put(body=rc) for rc in body.classes] if body.classes else None
-    quota = validate_quota_put(body=body.quota) if body.quota else RESET
+    classes = [validate_resource_class_patch_or_put(body=rc) for rc in body.classes] if body.classes else None
+    quota = validate_quota_put_patch(body=body.quota) if body.quota else RESET
     remote = validate_remote_put(body=body.remote)
     return models.ResourcePoolPatch(
         name=body.name,

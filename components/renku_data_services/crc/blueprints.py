@@ -17,11 +17,9 @@ from renku_data_services.crc import apispec, models
 from renku_data_services.crc.core import (
     validate_cluster,
     validate_cluster_patch,
-    validate_quota_patch,
-    validate_quota_put,
+    validate_quota_put_patch,
     validate_resource_class,
-    validate_resource_class_patch,
-    validate_resource_class_put,
+    validate_resource_class_patch_or_put,
     validate_resource_pool,
     validate_resource_pool_patch,
     validate_resource_pool_put,
@@ -344,7 +342,7 @@ class ClassesBP(CustomBlueprint):
         async def _put(
             _: Request, user: base_models.APIUser, body: apispec.ResourceClass, resource_pool_id: int, class_id: int
         ) -> HTTPResponse:
-            put = validate_resource_class_put(body=body)
+            put = validate_resource_class_patch_or_put(body=body)
             rc = await self.repo.update_resource_class(
                 api_user=user,
                 resource_pool_id=resource_pool_id,
@@ -369,7 +367,7 @@ class ClassesBP(CustomBlueprint):
             resource_pool_id: int,
             class_id: int,
         ) -> HTTPResponse:
-            patch = validate_resource_class_patch(body=body)
+            patch = validate_resource_class_patch_or_put(body=body)
             rc = await self.repo.update_resource_class(
                 api_user=user,
                 resource_pool_id=resource_pool_id,
@@ -465,7 +463,7 @@ class QuotaBP(CustomBlueprint):
         async def _put(
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.QuotaWithId
         ) -> HTTPResponse:
-            put = validate_quota_put(body=body)
+            put = validate_quota_put_patch(body=body)
             quota = await self.rp_repo.update_quota(
                 api_user=user, resource_pool_id=resource_pool_id, update=put, quota_put_id=body.id
             )
@@ -483,7 +481,7 @@ class QuotaBP(CustomBlueprint):
         async def _patch(
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.QuotaPatch
         ) -> HTTPResponse:
-            patch = validate_quota_patch(body=body)
+            patch = validate_quota_put_patch(body=body)
             quota = await self.rp_repo.update_quota(api_user=user, resource_pool_id=resource_pool_id, update=patch)
             return validated_json(apispec.QuotaWithId, quota)
 

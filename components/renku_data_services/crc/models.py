@@ -125,19 +125,10 @@ class ResourceClassPatch:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class ResourceClassPatchWithId:
+class ResourceClassPatchWithId(ResourceClassPatch):
     """Model for changes requested on a resource class from patching/putting a resource pool."""
 
     id: int
-    name: str | None = None
-    cpu: float | None = None
-    memory: int | None = None
-    max_storage: int | None = None
-    gpu: int | None = None
-    default: bool | None = None
-    default_storage: int | None = None
-    node_affinities: list[NodeAffinity] | None = None
-    tolerations: list[str] | None = None
 
 
 class GpuKind(StrEnum):

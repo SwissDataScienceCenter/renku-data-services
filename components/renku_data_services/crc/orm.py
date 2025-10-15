@@ -271,8 +271,8 @@ class ResourcePoolORM(BaseORM):
     ) -> ResourcePoolORM:
         """Create a new ORM object from an usaved resource pool model."""
         classes = [
-            ResourceClassORM.from_unsaved_model(new_resource_class=cls, resource_pool_id=None)
-            for cls in new_resource_pool.classes
+            ResourceClassORM.from_unsaved_model(new_resource_class=rc, resource_pool_id=None)
+            for rc in new_resource_pool.classes
         ]
         remote_provider_id = None
         remote_json = None
