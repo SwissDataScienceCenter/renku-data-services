@@ -189,6 +189,7 @@ class TestDependencyManager(DependencyManager):
 
         authz = NonCachingAuthz(config.authz_config)
         search_updates_repo = SearchUpdatesRepo(session_maker=config.db.async_session_maker)
+        metrics_mock = MagicMock(spec=MetricsService)
         group_repo = GroupRepository(
             session_maker=config.db.async_session_maker,
             group_authz=authz,
@@ -199,6 +200,7 @@ class TestDependencyManager(DependencyManager):
             group_repo=group_repo,
             search_updates_repo=search_updates_repo,
             encryption_key=config.secrets.encryption_key,
+            metrics=metrics_mock,
             authz=authz,
         )
 
@@ -297,7 +299,6 @@ class TestDependencyManager(DependencyManager):
         )
         cluster_repo = ClusterRepository(session_maker=config.db.async_session_maker)
         metrics_repo = MetricsRepository(session_maker=config.db.async_session_maker)
-        metrics_mock = MagicMock(spec=MetricsService)
         git_provider_helper = GitProviderHelper(connected_services_repo, "", "", "", config.enable_internal_gitlab)
         return cls(
             config=config,
