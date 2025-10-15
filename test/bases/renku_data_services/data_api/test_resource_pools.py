@@ -916,7 +916,7 @@ async def test_put_tolerations(
 ) -> None:
     valid_resource_pool_payload["classes"][0]["tolerations"] = ["toleration1"]
     _, res = await create_rp(valid_resource_pool_payload, sanic_client)
-    assert res.status_code == 201
+    assert res.status_code == 201, res.text
     rp = res.json
     rp_id = rp["id"]
     assert len(rp["classes"]) > 0
@@ -932,13 +932,13 @@ async def test_put_tolerations(
         headers=admin_headers,
         data=json.dumps(new_class),
     )
-    assert res.status_code == 200
+    assert res.status_code == 200, res.text
     assert res.json["tolerations"] == ["toleration2", "toleration3"]
     _, res = await sanic_client.get(
         f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
         headers=admin_headers,
     )
-    assert res.status_code == 200
+    assert res.status_code == 200, res.text
     assert res.json["tolerations"] == ["toleration2", "toleration3"]
 
 
@@ -1289,3 +1289,65 @@ async def test_resource_pool_patch_remote(
     assert res.json is not None
     rp = res.json
     assert "remote" not in rp
+
+
+@pytest.mark.asyncio
+async def test_resource_pool_empty_patch_noop(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    # First, create a resource pool
+    payload = deepcopy(resource_pool_payload)
+    if "cluster_id" in payload:
+        payload["cluster_id"] = None
+    payload["public"] = True
+
+    _, res = await create_rp(payload, sanic_client)
+    assert res.status_code == 201, res.text
+    rp_id = res.json["id"]
+    original_rp = res.json
+
+    # Patch with an empty patch
+    patch = {}
+
+    _, res = await sanic_client.patch(f"/api/data/resource_pools/{rp_id}", headers=admin_headers, json=patch)
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    rp = res.json
+    assert rp == original_rp
+
+
+@pytest.mark.asyncio
+async def test_resource_class_empty_patch_noop(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    # First, create a resource pool
+    payload = deepcopy(resource_pool_payload)
+    if "cluster_id" in payload:
+        payload["cluster_id"] = None
+    payload["public"] = True
+
+    _, res = await create_rp(payload, sanic_client)
+    assert res.status_code == 201, res.text
+    rp_id = res.json["id"]
+
+    # Get the default class in the pool
+    default_rc = None
+    for rc in res.json.get("classes", []):
+        if rc.get("default"):
+            default_rc = rc
+    assert default_rc is not None
+    assert default_rc.get("id") != ""
+    rc_id = default_rc["id"]
+
+    # Patch with an empty patch
+    patch = {}
+
+    _, res = await sanic_client.patch(
+        f"/api/data/resource_pools/{rp_id}/classes/{rc_id}", headers=admin_headers, json=patch
+    )
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    rc = res.json
+    assert rc == default_rc

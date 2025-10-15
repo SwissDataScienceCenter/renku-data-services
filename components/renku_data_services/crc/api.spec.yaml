@@ -1104,7 +1104,7 @@ components:
         default_storage:
           $ref: "#/components/schemas/Storage"
         default:
-          $ref: "#/components/schemas/DefaultFlag"
+          $ref: "#/components/schemas/DefaultFlagPatch"
         tolerations:
           $ref: "#/components/schemas/K8sLabelList"
         node_affinities:
@@ -1131,7 +1131,7 @@ components:
         id:
           $ref: "#/components/schemas/IntegerId"
         default:
-          $ref: "#/components/schemas/DefaultFlag"
+          $ref: "#/components/schemas/DefaultFlagPatch"
         tolerations:
           $ref: "#/components/schemas/K8sLabelList"
         node_affinities:
@@ -1331,9 +1331,9 @@ components:
         name:
           $ref: "#/components/schemas/Name"
         public:
-          $ref: "#/components/schemas/PublicFlag"
+          $ref: "#/components/schemas/PublicFlagPatch"
         default:
-          $ref: "#/components/schemas/DefaultFlag"
+          $ref: "#/components/schemas/DefaultFlagPatch"
         remote:
           $ref: "#/components/schemas/RemoteConfigurationPatch"
         idle_threshold:
@@ -1696,10 +1696,18 @@ components:
       description: A default selection for resource classes or resource pools
       default: false
       example: false
+    DefaultFlagPatch:
+      type: boolean
+      description: A default selection for resource classes or resource pools
+      example: false
     PublicFlag:
       type: boolean
       description: A resource pool whose classes can be accessed by anyone
       default: false
+      example: false
+    PublicFlagPatch:
+      type: boolean
+      description: A resource pool whose classes can be accessed by anyone
       example: false
     RemoteConfiguration:
       type: object

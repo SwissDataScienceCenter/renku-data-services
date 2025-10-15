@@ -77,10 +77,10 @@ from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
 from renku_data_services.users.models import UnsavedUserInfo
 from renku_data_services.utils.core import merge_api_specs
 
-default_resource_pool = crc_models.ResourcePool(
+default_resource_pool = crc_models.UnsavedResourcePool(
     name="default",
     classes=[
-        crc_models.ResourceClass(
+        crc_models.UnsavedResourceClass(
             name="small",
             cpu=0.5,
             memory=1,
@@ -88,7 +88,7 @@ default_resource_pool = crc_models.ResourcePool(
             gpu=0,
             default=True,
         ),
-        crc_models.ResourceClass(
+        crc_models.UnsavedResourceClass(
             name="large",
             cpu=1.0,
             memory=2,
@@ -147,7 +147,7 @@ class DependencyManager:
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
     default_resource_pool_file: str | None = None
-    default_resource_pool: crc_models.ResourcePool = default_resource_pool
+    default_resource_pool: crc_models.UnsavedResourcePool = default_resource_pool
     async_oauth2_client_class: type[AsyncOAuth2Client] = AsyncOAuth2Client
 
     @staticmethod
@@ -193,7 +193,7 @@ class DependencyManager:
 
         if self.default_resource_pool_file is not None:
             with open(self.default_resource_pool_file) as f:
-                self.default_resource_pool = crc_models.ResourcePool.from_dict(safe_load(f))
+                self.default_resource_pool = crc_models.UnsavedResourcePool(**safe_load(f))
         if (
             self.config.server_options.defaults_path is not None
             and self.config.server_options.ui_choices_path is not None
