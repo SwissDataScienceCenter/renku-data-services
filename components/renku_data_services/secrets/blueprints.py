@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 
-import kr8s
 from cryptography.hazmat.primitives.asymmetric import rsa
 from sanic import Request, json
 from sanic.response import JSONResponse
@@ -11,7 +10,6 @@ from sanic_ext import validate
 from renku_data_services import base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
-from renku_data_services.errors import errors
 from renku_data_services.k8s.client_interfaces import SecretClient
 from renku_data_services.secrets import apispec
 from renku_data_services.secrets.core import create_or_patch_secret, validate_secret
