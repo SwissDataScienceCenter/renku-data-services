@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from typing import Any, Optional, Protocol, Self
-from uuid import uuid4
 
 from renku_data_services import errors
-from renku_data_services.base_models import RESET, ResetType
-from renku_data_services.errors import ValidationError
+from renku_data_services.base_models import ResetType
 from renku_data_services.k8s.constants import ClusterId
 from renku_data_services.notebooks.cr_amalthea_session import TlsSecret
 
@@ -78,10 +75,20 @@ class NodeAffinity:
     key: str
     required_during_scheduling: bool = False
 
-    @classmethod
-    def from_dict(cls, data: dict) -> NodeAffinity:
-        """Create a node affinity from a dictionary."""
-        return cls(**data)
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedResourceClass(ResourcesCompareMixin):
+    """Model for a resource class yet to be saved."""
+
+    name: str
+    cpu: float
+    memory: int
+    max_storage: int
+    gpu: int
+    default: bool = False
+    default_storage: int = 1
+    node_affinities: list[NodeAffinity] = field(default_factory=list)
+    tolerations: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -93,7 +100,7 @@ class ResourceClass(ResourcesCompareMixin):
     memory: int
     max_storage: int
     gpu: int
-    id: Optional[int] = None
+    id: int
     default: bool = False
     default_storage: int = 1
     matching: Optional[bool] = None
@@ -101,46 +108,27 @@ class ResourceClass(ResourcesCompareMixin):
     tolerations: list[str] = field(default_factory=list)
     quota: str | None = None
 
-    def __post_init__(self) -> None:
-        if len(self.name) > 40:
-            raise ValidationError(message="'name' cannot be longer than 40 characters.")
-        if self.default_storage > self.max_storage:
-            raise ValidationError(message="The default storage cannot be larger than the max allowable storage.")
-        # We need to sort node affinities and tolerations to make '__eq__' reliable
-        object.__setattr__(
-            self, "node_affinities", sorted(self.node_affinities, key=lambda x: (x.key, x.required_during_scheduling))
-        )
-        object.__setattr__(self, "tolerations", sorted(self.tolerations))
 
-    @classmethod
-    def from_dict(cls, data: dict) -> ResourceClass:
-        """Create the model from a plain dictionary."""
-        node_affinities: list[NodeAffinity] = []
-        tolerations: list[str] = []
-        quota: str | None = None
-        if data.get("node_affinities"):
-            node_affinities = [
-                NodeAffinity.from_dict(affinity) if isinstance(affinity, dict) else affinity
-                for affinity in data.get("node_affinities", [])
-            ]
-        if isinstance(data.get("tolerations"), list):
-            tolerations = [toleration for toleration in data["tolerations"]]
-        if data_quota := data.get("quota"):
-            if isinstance(data_quota, str):
-                quota = data_quota
-            elif isinstance(data_quota, Quota):
-                quota = data_quota.id
-        return cls(**{**data, "tolerations": tolerations, "node_affinities": node_affinities, "quota": quota})
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ResourceClassPatch:
+    """Model for changes requested on a resource class."""
 
-    def is_quota_valid(self, quota: Quota) -> bool:
-        """Determine if a quota is compatible with the resource class."""
-        return quota >= self
+    name: str | None = None
+    cpu: float | None = None
+    memory: int | None = None
+    max_storage: int | None = None
+    gpu: int | None = None
+    default: bool | None = None
+    default_storage: int | None = None
+    node_affinities: list[NodeAffinity] | None = None
+    tolerations: list[str] | None = None
 
-    def update(self, **kwargs: dict) -> ResourceClass:
-        """Update a field of the resource class and return a new copy."""
-        if not kwargs:
-            return self
-        return ResourceClass.from_dict({**asdict(self), **kwargs})
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ResourceClassPatchWithId(ResourceClassPatch):
+    """Model for changes requested on a resource class from patching/putting a resource pool."""
+
+    id: int
 
 
 class GpuKind(StrEnum):
@@ -148,6 +136,20 @@ class GpuKind(StrEnum):
 
     NVIDIA = "nvidia.com"
     AMD = "amd.com"
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedQuota(ResourcesCompareMixin):
+    """Model for a quota yet to be saved."""
+
+    cpu: float
+    memory: int
+    gpu: int
+    gpu_kind: GpuKind = GpuKind.NVIDIA
+
+    def is_resource_class_compatible(self, rc: ResourceClass | UnsavedResourceClass) -> bool:
+        """Determine if a resource class is compatible with the quota."""
+        return rc <= self
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -160,30 +162,19 @@ class Quota(ResourcesCompareMixin):
     gpu_kind: GpuKind = GpuKind.NVIDIA
     id: str
 
-    @classmethod
-    def from_dict(cls, data: dict) -> Quota:
-        """Create the model from a plain dictionary."""
-        instance = deepcopy(data)
-
-        match instance.get("gpu_kind"):
-            case None:
-                instance["gpu_kind"] = GpuKind.NVIDIA
-            case GpuKind():
-                pass
-            case x:
-                instance["gpu_kind"] = GpuKind[x]
-
-        match instance.get("id"):
-            case None:
-                instance["id"] = str(uuid4())
-            case "":
-                instance["id"] = str(uuid4())
-
-        return cls(**instance)
-
-    def is_resource_class_compatible(self, rc: ResourceClass) -> bool:
+    def is_resource_class_compatible(self, rc: ResourceClass | UnsavedResourceClass) -> bool:
         """Determine if a resource class is compatible with the quota."""
         return rc <= self
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class QuotaPatch:
+    """Model for changes requested on a quota."""
+
+    cpu: float | None = None
+    memory: int | None = None
+    gpu: int | None = None
+    gpu_kind: GpuKind | None = None
 
 
 class SessionProtocol(StrEnum):
@@ -293,138 +284,34 @@ class SavedClusterSettings(ClusterSettings):
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedResourcePool:
+    """Model for a resource pool yet to be saved."""
+
+    name: str
+    classes: list[UnsavedResourceClass]
+    quota: UnsavedQuota | None = None
+    idle_threshold: int | None = None
+    hibernation_threshold: int | None = None
+    default: bool = False
+    public: bool = False
+    remote: RemoteConfigurationFirecrest | None = None
+    cluster_id: ClusterId | None = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
 class ResourcePool:
     """Resource pool model."""
 
     name: str
     classes: list[ResourceClass]
     quota: Quota | None = None
-    id: int | None = None
+    id: int
     idle_threshold: int | None = None
     hibernation_threshold: int | None = None
     default: bool = False
     public: bool = False
     remote: RemoteConfigurationFirecrest | None = None
     cluster: SavedClusterSettings | None = None
-
-    def __post_init__(self) -> None:
-        """Validate the resource pool after initialization."""
-        if len(self.name) > 40:
-            raise ValidationError(message="'name' cannot be longer than 40 characters.")
-        if self.default and not self.public:
-            raise ValidationError(message="The default resource pool has to be public.")
-        if self.default and self.quota is not None:
-            raise ValidationError(message="A default resource pool cannot have a quota.")
-        if self.remote and self.default:
-            raise ValidationError(message="The default resource pool cannot start remote sessions.")
-        if self.remote and self.public:
-            raise ValidationError(message="A resource pool which starts remote sessions cannot be public.")
-        if (self.idle_threshold and self.idle_threshold < 0) or (
-            self.hibernation_threshold and self.hibernation_threshold < 0
-        ):
-            raise ValidationError(message="Idle threshold and hibernation threshold need to be larger than 0.")
-
-        if self.idle_threshold == 0:
-            object.__setattr__(self, "idle_threshold", None)
-        if self.hibernation_threshold == 0:
-            object.__setattr__(self, "hibernation_threshold", None)
-
-        default_classes = []
-        for cls in list(self.classes):
-            if self.quota is not None and not self.quota.is_resource_class_compatible(cls):
-                raise ValidationError(
-                    message=f"The resource class with name {cls.name} is not compatible with the quota."
-                )
-            if cls.default:
-                default_classes.append(cls)
-        if len(default_classes) != 1:
-            raise ValidationError(message="One default class is required in each resource pool.")
-
-    def set_quota(self, val: Quota) -> ResourcePool:
-        """Set the quota for a resource pool."""
-        for cls in list(self.classes):
-            if not val.is_resource_class_compatible(cls):
-                raise ValidationError(
-                    message=f"The resource class with name {cls.name} is not compatible with the quota."
-                )
-        return self.from_dict({**asdict(self), "quota": val})
-
-    def update(self, **kwargs: Any) -> ResourcePool:
-        """Determine if an update to a resource pool is valid and if valid create new updated resource pool."""
-        if self.default and "default" in kwargs and not kwargs["default"]:
-            raise ValidationError(message="A default resource pool cannot be made non-default.")
-        if "remote" in kwargs and kwargs["remote"] is RESET:
-            kwargs["remote"] = None
-        if "remote" in kwargs and isinstance(kwargs["remote"], RemoteConfigurationFirecrestPatch):
-            remote_dict: dict[str, Any] = self.remote.to_dict() if self.remote else dict()
-            remote_dict.update(kwargs["remote"].to_dict())
-            kwargs["remote"] = remote_dict
-        return ResourcePool.from_dict({**asdict(self), **kwargs})
-
-    @classmethod
-    def from_dict(cls, data: dict) -> ResourcePool:
-        """Create the model from a plain dictionary."""
-        cluster: SavedClusterSettings | None = None
-        quota: Quota | None = None
-        classes: list[ResourceClass] = []
-        remote: RemoteConfigurationFirecrest | None = None
-
-        if "quota" in data and isinstance(data["quota"], dict):
-            quota = Quota.from_dict(data["quota"])
-        elif "quota" in data and isinstance(data["quota"], Quota):
-            quota = data["quota"]
-
-        if "classes" in data and isinstance(data["classes"], set):
-            classes = [ResourceClass.from_dict(c) if isinstance(c, dict) else c for c in list(data["classes"])]
-        elif "classes" in data and isinstance(data["classes"], list):
-            classes = [ResourceClass.from_dict(c) if isinstance(c, dict) else c for c in data["classes"]]
-
-        match tmp := data.get("cluster"):
-            case SavedClusterSettings():
-                # This has to be before the dict() case, as this is also an instance of dict.
-                cluster = tmp
-            case dict():
-                cluster = SavedClusterSettings(
-                    name=tmp["name"],
-                    config_name=tmp["config_name"],
-                    session_protocol=tmp["session_protocol"],
-                    session_host=tmp["session_host"],
-                    session_port=tmp["session_port"],
-                    session_path=tmp["session_path"],
-                    session_ingress_class_name=tmp.get("session_ingress_class_name"),
-                    session_ingress_annotations=tmp["session_ingress_annotations"],
-                    session_tls_secret_name=tmp["session_tls_secret_name"],
-                    session_storage_class=tmp["session_storage_class"],
-                    id=tmp["id"],
-                    service_account_name=tmp.get("service_account_name"),
-                )
-            case None:
-                cluster = None
-            case unknown:
-                raise errors.ValidationError(message=f"Got unexpected cluster data {unknown} when creating model")
-
-        match tmp := data.get("remote"):
-            case RemoteConfigurationFirecrest():
-                remote = tmp
-            case dict():
-                remote = RemoteConfigurationFirecrest.from_dict(tmp)
-            case None:
-                remote = None
-            case unknown:
-                raise errors.ValidationError(message=f"Got unexpected remote data {unknown} when creating model")
-
-        return cls(
-            name=data["name"],
-            id=data.get("id"),
-            classes=classes,
-            quota=quota,
-            default=data.get("default", False),
-            public=data.get("public", False),
-            remote=remote,
-            idle_threshold=data.get("idle_threshold"),
-            hibernation_threshold=data.get("hibernation_threshold"),
-            cluster=cluster,
-        )
 
     def get_resource_class(self, resource_class_id: int) -> ResourceClass | None:
         """Find a specific resource class in the resource pool by the resource class id."""
@@ -439,6 +326,21 @@ class ResourcePool:
             if rc.default:
                 return rc
         return None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ResourcePoolPatch:
+    """Model for changes requested on a resource pool."""
+
+    name: str | None = None
+    classes: list[ResourceClassPatchWithId] | None = None
+    quota: QuotaPatch | ResetType | None = None
+    idle_threshold: int | None = None
+    hibernation_threshold: int | None = None
+    default: bool | None = None
+    public: bool | None = None
+    remote: RemoteConfigurationPatch | None = None
+    cluster_id: ClusterId | ResetType | None = None
 
 
 class RemoteConfigurationKind(StrEnum):

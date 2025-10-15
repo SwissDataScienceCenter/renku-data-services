@@ -26,7 +26,7 @@ a_quota_gpu = st.integers(min_value=200, max_value=1000)
 a_quota_storage = st.integers(min_value=2000, max_value=10000)
 a_quota_memory = st.integers(min_value=64, max_value=1000)
 a_row_id = st.integers(min_value=1, max_value=SQL_BIGINT_MAX)
-a_name = st.text(min_size=5, alphabet=st.characters(codec="utf-8", exclude_characters=["\x00"]))
+a_name = st.text(min_size=5, max_size=40, alphabet=st.characters(codec="utf-8", exclude_characters=["\x00"]))
 a_uuid_string = st.uuids(version=4).map(lambda x: str(x))
 a_bool = st.booleans()
 a_tolerations_list = st.lists(a_uuid_string, min_size=3, max_size=3)
@@ -47,7 +47,7 @@ def node_affinity_strat(draw):
 @st.composite
 def rc_non_default_strat(draw):
     try:
-        return models.ResourceClass(
+        return models.UnsavedResourceClass(
             name=draw(a_name),
             cpu=draw(a_rc_cpu),
             gpu=draw(a_rc_gpu),
@@ -64,7 +64,7 @@ def rc_non_default_strat(draw):
 @st.composite
 def rc_default_strat(draw):
     try:
-        return models.ResourceClass(
+        return models.UnsavedResourceClass(
             name=draw(a_name),
             cpu=draw(a_rc_cpu),
             gpu=draw(a_rc_gpu),
@@ -76,9 +76,7 @@ def rc_default_strat(draw):
         assume(False)
 
 
-quota_strat = st.builds(
-    models.Quota, cpu=a_quota_cpu, gpu=a_quota_gpu, memory=a_quota_memory, id=st.just("random_arbitrary_value")
-)
+quota_strat = st.builds(models.UnsavedQuota, cpu=a_quota_cpu, gpu=a_quota_gpu, memory=a_quota_memory)
 quota_strat_w_id = st.builds(models.Quota, cpu=a_quota_cpu, gpu=a_quota_gpu, memory=a_quota_memory, id=a_uuid_string)
 
 
@@ -93,7 +91,7 @@ def rp_strat(draw):
     idle_threshold = draw(a_threshold)
     hibernation_threshold = draw(a_threshold)
     try:
-        return models.ResourcePool(
+        return models.UnsavedResourcePool(
             name=name,
             classes=classes,
             quota=quota,
