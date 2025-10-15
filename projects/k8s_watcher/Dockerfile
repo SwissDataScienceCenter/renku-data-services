@@ -37,5 +37,8 @@ RUN apt-get update && apt-get install -y \
     adduser --gid $USER_GID --uid $USER_UID renku
 USER $USER_UID:$USER_GID
 WORKDIR /app
+# NOTE: On Openshift or clusters with similar setup writing to other locations will not be allowed.
+# So we set the directory to /tmp. The library requires the env variable name to be lowercase.
+ENV prometheus_multiproc_dir=/tmp
 COPY --from=builder /app/env ./env
 ENTRYPOINT ["tini", "-g", "--", "env/bin/python", "-m", "renku_data_services.k8s_cache.main"]

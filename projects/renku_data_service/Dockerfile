@@ -47,4 +47,7 @@ USER $USER_UID:$USER_GID
 WORKDIR /app
 COPY --from=builder /app/env ./env
 ENV DB_POOL_SIZE=10
+# NOTE: On Openshift or clusters with similar setup writing to other locations will not be allowed.
+# So we set the directory to /tmp. The library requires the env variable name to be lowercase.
+ENV prometheus_multiproc_dir=/tmp
 ENTRYPOINT ["tini", "-g", "--", "env/bin/python", "-m", "renku_data_services.data_api.main", "--single-process"]
