@@ -1,6 +1,7 @@
 """The entrypoint for the secrets storage application."""
 
 import argparse
+import os
 from multiprocessing import Lock
 from os import environ
 from typing import Any
@@ -81,4 +82,8 @@ if __name__ == "__main__":
     loader = AppLoader(factory=create_app)
     app = loader.load()
     app.prepare(**args)
-    Sanic.serve(primary=app, app_loader=loader)
+    if os.name == "posix" and args.get("single_process", False):
+        Sanic.start_method = "fork"
+        Sanic.serve(primary=app)
+    else:
+        Sanic.serve(primary=app, app_loader=loader)
