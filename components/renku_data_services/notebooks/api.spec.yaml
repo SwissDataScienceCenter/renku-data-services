@@ -25,6 +25,7 @@ paths:
               application/json:
                 schema:
                   "$ref": "#/components/schemas/ImageCheckResponse"
+            description: The image check has completed successfully
           '422':
             content:
               application/json:
@@ -893,8 +894,10 @@ components:
           default:
           nullable: true
           type: integer
-        cloudstorage:
-          $ref: "#/components/schemas/SessionCloudStoragePostList"
+        # cloudstorage:
+        #   $ref: "#/components/schemas/SessionCloudStoragePostList"
+        data_connectors_overrides:
+          $ref: "#/components/schemas/SessionDataConnectorsOverrideList"
         env_variable_overrides:
           $ref: "#/components/schemas/EnvVariableOverrides"
       required:
@@ -1015,28 +1018,60 @@ components:
       minLength: 26
       maxLength: 26
       pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
-    SessionCloudStoragePostList:
+    SessionDataConnectorsOverrideList:
       type: array
       items:
-        "$ref": "#/components/schemas/SessionCloudStoragePost"
-    SessionCloudStoragePost:
+        $ref: "#/components/schemas/SessionDataConnectorsOverride"
+    SessionDataConnectorsOverride:
       type: object
       properties:
-        configuration:
-          type: object
-          additionalProperties: true
-        readonly:
+        skip:
           type: boolean
-        source_path:
-          type: string
-        target_path:
-          type: string
-        storage_id:
+          description: The corresponding data connector will not be mounted if `skip` is set to `true`.
+          default: false
+        data_connector_id:
           allOf:
-            - "$ref": "#/components/schemas/Ulid"
-            - description: If the storage_id is provided then this config must replace an existing storage config in the session
+            - $ref: "#/components/schemas/Ulid"
+            - description: |
+                The `data_connector_id` must match an existing data connector from the session launcher's project.
+        storage_type:
+          $ref: "#/components/schemas/StorageType"
+        configuration:
+          $ref: "#/components/schemas/RCloneConfig"
+        source_path:
+          $ref: "#/components/schemas/SourcePath"
+        target_path:
+          $ref: "#/components/schemas/TargetPath"
+        readonly:
+          $ref: "#/components/schemas/StorageReadOnly"
       required:
-        - storage_id
+        - data_connector_id
+    RCloneConfig:
+      type: object
+      description: Dictionary of rclone key:value pairs (based on schema from '/storage_schema')
+      additionalProperties:
+        oneOf:
+          - type: integer
+          - type: string
+            nullable: true
+          - type: boolean
+          - type: object
+    SourcePath:
+      description: the source path to mount, usually starts with bucket/container name
+      type: string
+      example: bucket/my/storage/folder/
+    TargetPath:
+      description: the target path relative to the working directory where the storage should be mounted
+      type: string
+      example: my/project/folder
+    StorageType:
+      description: same as rclone prefix/ rclone config type. Ignored in requests, but returned in responses for convenience.
+      type: string
+      readOnly: true
+    StorageReadOnly:
+      description: Whether this storage should be mounted readonly or not
+      type: boolean
+      default: true
     ServerName:
       type: string
       minLength: 5
