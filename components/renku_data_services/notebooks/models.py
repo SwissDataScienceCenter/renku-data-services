@@ -2,10 +2,11 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from kubernetes.client import V1ObjectMeta, V1Secret
 from pydantic import AliasGenerator, BaseModel, Field, Json
+from ulid import ULID
 
 from renku_data_services.data_connectors.models import DataConnectorSecret
 from renku_data_services.errors import errors
@@ -169,3 +170,43 @@ class SessionExtraResources:
             volume_mounts=self.volume_mounts + added_extras.volume_mounts,
             volumes=self.volumes + added_extras.volumes,
         )
+
+
+@dataclass(eq=True, kw_only=True)
+class SessionDataConnectorOverride:
+    """Model for a data connector override."""
+
+    skip: bool
+    data_connector_id: ULID
+    configuration: dict[str, Any] | None
+    source_path: str | None
+    target_path: str | None
+    readonly: bool | None
+    # configuration: Optional[
+    #     Dict[str, Union[int, Optional[str], bool, Dict[str, Any]]]
+    # ] = None
+    # source_path: Optional[str] = Field(
+    #     None,
+    #     description="the source path to mount, usually starts with bucket/container name",
+    #     examples=["bucket/my/storage/folder/"],
+    # )
+    # target_path: Optional[str] = Field(
+    #     None,
+    #     description="the target path relative to the working directory where the storage should be mounted",
+    #     examples=["my/project/folder"],
+    # )
+    # readonly: Optional[bool] = Field(
+    #     True, description="Whether this storage should be mounted readonly or not"
+    # )
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLaunchRequest:
+    """Model for requesting a session launch."""
+
+    launcher_id: ULID
+    disk_storage: int | None
+    resource_class_id: int | None
+    # data_connectors_overrides: Optional[List[SessionDataConnectorsOverride]] = None
+    data_connectors_overrides: list[SessionDataConnectorOverride] | None
+    env_variable_overrides: list[SessionEnvVar] | None

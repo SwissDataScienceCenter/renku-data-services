@@ -887,15 +887,11 @@ components:
         launcher_id:
           $ref: "#/components/schemas/Ulid"
         disk_storage:
-          default: 1
           type: integer
           description: The size of disk storage for the session, in gigabytes
         resource_class_id:
-          default:
           nullable: true
           type: integer
-        # cloudstorage:
-        #   $ref: "#/components/schemas/SessionCloudStoragePostList"
         data_connectors_overrides:
           $ref: "#/components/schemas/SessionDataConnectorsOverrideList"
         env_variable_overrides:
@@ -1021,8 +1017,8 @@ components:
     SessionDataConnectorsOverrideList:
       type: array
       items:
-        $ref: "#/components/schemas/SessionDataConnectorsOverride"
-    SessionDataConnectorsOverride:
+        $ref: "#/components/schemas/SessionDataConnectorOverride"
+    SessionDataConnectorOverride:
       type: object
       properties:
         skip:
@@ -1034,8 +1030,6 @@ components:
             - $ref: "#/components/schemas/Ulid"
             - description: |
                 The `data_connector_id` must match an existing data connector from the session launcher's project.
-        storage_type:
-          $ref: "#/components/schemas/StorageType"
         configuration:
           $ref: "#/components/schemas/RCloneConfig"
         source_path:
@@ -1064,10 +1058,6 @@ components:
       description: the target path relative to the working directory where the storage should be mounted
       type: string
       example: my/project/folder
-    StorageType:
-      description: same as rclone prefix/ rclone config type. Ignored in requests, but returned in responses for convenience.
-      type: string
-      readOnly: true
     StorageReadOnly:
       description: Whether this storage should be mounted readonly or not
       type: boolean
