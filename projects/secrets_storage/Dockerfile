@@ -28,18 +28,18 @@ RUN env/bin/pip --no-cache-dir install projects/secrets_storage/dist/*.whl
 FROM python:3.13-slim-bookworm
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
-ENV prometheus_multiproc_dir=/prometheus
-ENV PROMETHEUS_MULTIPROC_DIR=/prometheus
-RUN mkdir /prometheus && chown $USER_UID:$USER_GID /prometheus
 RUN apt-get update && apt-get install -y \
     tini vim-tiny procps curl && \
     rm -rf /var/lib/apt/lists/* && \
     groupadd --gid $USER_GID renku && \
     adduser --gid $USER_GID --uid $USER_UID renku
+# NOTE: The prometheus library requires the env variable name to be lowercase.
+ENV prometheus_multiproc_dir=/prometheus
+ENV PROMETHEUS_MULTIPROC_DIR=/prometheus
+RUN mkdir -p /prometheus \
+    && chown $USER_UID:0 /prometheus \
+    && chmod 770 /prometheus
 USER $USER_UID:$USER_GID
 WORKDIR /app
-# NOTE: On Openshift or clusters with similar setup writing to other locations will not be allowed.
-# So we set the directory to /tmp. The library requires the env variable name to be lowercase.
-ENV prometheus_multiproc_dir=/tmp
 COPY --from=builder /app/env ./env
 ENTRYPOINT ["tini", "-g", "--", "env/bin/python", "-m", "renku_data_services.secrets_storage_api.main", "--single-process"]
