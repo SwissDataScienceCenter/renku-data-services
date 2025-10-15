@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from base64 import b64encode
 
+import kr8s
 from box import Box
 from cryptography.hazmat.primitives.asymmetric import rsa
 from kr8s.objects import Secret
@@ -11,6 +12,8 @@ from kubernetes import client as k8s_client
 from ulid import ULID
 
 from renku_data_services import base_models, errors
+from renku_data_services.app_config import logging
+from renku_data_services.k8s.client_interfaces import SecretClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import GVK, K8sSecret, sanitizer
 from renku_data_services.secrets import apispec
@@ -20,6 +23,8 @@ from renku_data_services.utils.cryptography import (
     decrypt_rsa,
     decrypt_string,
 )
+
+logger = logging.getLogger(__name__)
 
 
 async def validate_secret(
@@ -104,3 +109,25 @@ async def validate_secret(
         gvk=GVK(group="core", version=Secret.version, kind="Secret"),
         manifest=Box(sanitizer(v1_secret)),
     )
+
+
+async def create_or_patch_secret(client: SecretClient, secret: K8sSecret) -> K8sSecret:
+    """Create or patch a secret if it already exists."""
+    logger.info(f"Creating secret {secret.namespace}/{secret.name}")
+    try:
+        result = await client.create_secret(secret)
+    except kr8s.ServerError as e:
+        if not e.response:
+            # don't wrap the error, we don't want secrets accidentally leaking.
+            raise errors.SecretCreationError(message=f"An error occurred creating secrets: {str(type(e))}") from None
+        if e.response.status_code == 409:
+            # NOTE: It means that the secret already exists, so we try to patch
+            msg = f"The secret {secret.namespace}/{secret.name} already exists, will try to patch it."
+            # TODO: Add sentry integration to the secret service
+            # sentry_sdk.capture_message(msg, level="warning")
+            logger.warning(msg)
+            result = await client.patch_secret(secret, patch=secret.to_patch())
+    except Exception as e:
+        # don't wrap the error, we don't want secrets accidentally leaking.
+        raise errors.SecretCreationError(message=f"An error occurred creating secrets: {str(type(e))}") from None
+    return result

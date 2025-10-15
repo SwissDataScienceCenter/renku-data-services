@@ -183,6 +183,7 @@ class K8sSecret(K8sObject):
             patch.append(
                 {"op": "replace", "path": "/metadata/ownerReferences", "value": self.manifest.metadata.ownerReferences},
             )
+        # We never create 'finalizers' nor 'managedFields', so we do not patch them.
         return patch
 
 
