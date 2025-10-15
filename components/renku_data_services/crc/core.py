@@ -19,16 +19,7 @@ def validate_quota(body: apispec.QuotaWithOptionalId) -> models.UnsavedQuota:
     )
 
 
-def validate_quota_patch(body: apispec.QuotaPatch) -> models.QuotaPatch:
-    """Validate the patch to a quota."""
-    return models.QuotaPatch(
-        cpu=body.cpu,
-        memory=body.memory,
-        gpu=body.gpu,
-    )
-
-
-def validate_quota_put(body: apispec.QuotaWithId) -> models.QuotaPatch:
+def validate_quota_put_patch(body: apispec.QuotaWithId | apispec.QuotaPatch) -> models.QuotaPatch:
     """Validate the put request for a quota."""
     return models.QuotaPatch(
         cpu=body.cpu,
