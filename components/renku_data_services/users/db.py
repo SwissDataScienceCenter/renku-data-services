@@ -298,7 +298,9 @@ class UsersSync:
                 patch=UserPatch.from_unsaved_user_info(user),
             )
         else:
-            return await self._insert_user(session=session, user=user)
+            update = await self._insert_user(session=session, user=user)
+            await self.metrics.identify_user(user=update.new, metadata={})
+            return update
 
     async def _insert_user(self, session: AsyncSession, user: UnsavedUserInfo) -> UserInfoUpdate:
         """Insert a user."""
