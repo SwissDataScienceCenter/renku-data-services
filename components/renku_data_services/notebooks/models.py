@@ -11,6 +11,7 @@ from ulid import ULID
 from renku_data_services.data_connectors.models import DataConnectorSecret
 from renku_data_services.errors import errors
 from renku_data_services.errors.errors import ProgrammingError
+from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorageRequestOverride
 from renku_data_services.notebooks.crs import (
     AmaltheaSessionV1Alpha1,
     DataSource,
@@ -173,7 +174,7 @@ class SessionExtraResources:
 
 
 @dataclass(eq=True, kw_only=True)
-class SessionDataConnectorOverride:
+class SessionDataConnectorOverride(RCloneStorageRequestOverride):
     """Model for a data connector override."""
 
     skip: bool
@@ -182,22 +183,6 @@ class SessionDataConnectorOverride:
     source_path: str | None
     target_path: str | None
     readonly: bool | None
-    # configuration: Optional[
-    #     Dict[str, Union[int, Optional[str], bool, Dict[str, Any]]]
-    # ] = None
-    # source_path: Optional[str] = Field(
-    #     None,
-    #     description="the source path to mount, usually starts with bucket/container name",
-    #     examples=["bucket/my/storage/folder/"],
-    # )
-    # target_path: Optional[str] = Field(
-    #     None,
-    #     description="the target path relative to the working directory where the storage should be mounted",
-    #     examples=["my/project/folder"],
-    # )
-    # readonly: Optional[bool] = Field(
-    #     True, description="Whether this storage should be mounted readonly or not"
-    # )
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

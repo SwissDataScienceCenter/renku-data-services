@@ -253,13 +253,12 @@ def __get_gitlab_image_pull_secret(
     return ExtraSecret(secret)
 
 
-async def get_data_connectors(
+async def get_data_sources(
     nb_config: NotebooksConfig,
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     server_name: str,
     data_connectors_stream: AsyncIterator[DataConnectorWithSecrets],
     work_dir: PurePosixPath,
-    # cloud_storage_overrides: list[apispec.SessionCloudStoragePost],
     data_connectors_overrides: list[SessionDataConnectorOverride],
     user_repo: UserRepo,
 ) -> SessionExtraResources:
@@ -300,6 +299,7 @@ async def get_data_connectors(
                 message=f"You have requested a data connector with ID {dc_id} which does not exist "
                 "or you don't have access to."
             )
+        # NOTE: if 'skip' is true, we do not mount that data connector
         if dco.skip:
             del dcs[dc_id]
         if dco.target_path is not None and not PurePosixPath(dco.target_path).is_absolute():
@@ -748,7 +748,7 @@ async def start_session(
 
     # Data connectors
     session_extras = session_extras.concat(
-        await get_data_connectors(
+        await get_data_sources(
             nb_config=nb_config,
             server_name=server_name,
             user=user,
