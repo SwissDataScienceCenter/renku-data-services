@@ -76,7 +76,6 @@ from renku_data_services.notebooks.crs import (
     SessionLocation,
     ShmSizeStr,
     SizeStr,
-    State,
     Storage,
 )
 from renku_data_services.notebooks.models import (
@@ -85,6 +84,8 @@ from renku_data_services.notebooks.models import (
     SessionEnvVar,
     SessionExtraResources,
     SessionLaunchRequest,
+    SessionPatchRequest,
+    SessionState,
 )
 from renku_data_services.notebooks.util.kubernetes_ import (
     renku_2_make_server_name,
@@ -339,8 +340,7 @@ async def get_data_sources(
         )
 
     # Add annotations to track skipped data connectors
-    # TODO: track data connectors with overrides
-    annotations: dict[str, str] = dict()
+    annotations: dict[str, str] = {"renku.io/mounted_data_connectors_ids": json.dumps(sorted(dcs.keys()))}
     if skipped_dcs:
         annotations["renku.io/skipped_data_connectors_ids"] = json.dumps(sorted(skipped_dcs))
 
@@ -350,6 +350,46 @@ async def get_data_sources(
         secrets=secrets,
         data_connector_secrets=dcs_secrets,
     )
+
+
+async def patch_data_sources(
+    existing_session: AmaltheaSessionV1Alpha1,
+    nb_config: NotebooksConfig,
+    user: AnonymousAPIUser | AuthenticatedAPIUser,
+    server_name: str,
+    data_connectors_stream: AsyncIterator[DataConnectorWithSecrets],
+    work_dir: PurePosixPath,
+    data_connectors_overrides: list[SessionDataConnectorOverride],
+    user_repo: UserRepo,
+) -> None:  # -> SessionExtraResources:
+    """Handle patching data sources."""
+
+    # First, collect the data connectors we already mount in the session
+    existing_dcs: set[str] = set()
+    secret_name_prefix = f"{server_name}-ds-"
+    for ds in existing_session.spec.dataSources or []:
+        if not ds.secretRef:
+            continue
+        if ds.secretRef.name.startswith(secret_name_prefix):
+            dc_id = str(ULID.from_str(ds.secretRef.name.strip(secret_name_prefix).upper()))
+            existing_dcs.add(dc_id)
+    logger.warning(f"existing_dcs = {existing_dcs}")
+
+    # Collect the data connectors we already skip
+    existing_skipped_dcs: set[str] = set(
+        json.loads(existing_session.metadata.annotations.get("renku.io/skipped_data_connectors_ids", "[]"))
+    )
+    logger.warning(f"existing_skipped_dcs = {existing_skipped_dcs}")
+
+    # First, validate
+    new_dcs: dict[str, DataConnectorWithSecrets] = dict()
+    async for dc in data_connectors_stream:
+        dc_id = str(dc.data_connector.id)
+        if (dc_id not in existing_dcs) and (dc_id not in existing_skipped_dcs):
+            new_dcs[dc_id] = dc
+    logger.warning(f"new_dcs = {sorted(new_dcs.keys())}")
+
+    pass
 
 
 async def request_dc_secret_creation(
@@ -669,7 +709,6 @@ def get_remote_env(
 
 async def start_session(
     request: Request,
-    # body: apispec.SessionPostRequest,
     launch_request: SessionLaunchRequest,
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     internal_gitlab_user: APIUser,
@@ -765,7 +804,6 @@ async def start_session(
             user=user,
             data_connectors_stream=data_connectors_stream,
             work_dir=work_dir,
-            # cloud_storage_overrides=body.cloudstorage or [],
             data_connectors_overrides=launch_request.data_connectors_overrides or [],
             user_repo=user_repo,
         )
@@ -828,11 +866,6 @@ async def start_session(
             }
         )
     )
-    # annotations: dict[str, str] = {
-    #     "renku.io/project_id": str(launcher.project_id),
-    #     "renku.io/launcher_id": str(launcher_id),
-    #     "renku.io/resource_class_id": str(resource_class_id),
-    # }
 
     # Authentication
     if isinstance(user, AuthenticatedAPIUser):
@@ -994,17 +1027,19 @@ async def start_session(
 
 
 async def patch_session(
-    body: apispec.SessionPatchRequest,
+    patch_request: SessionPatchRequest,
     session_id: str,
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     internal_gitlab_user: APIUser,
     nb_config: NotebooksConfig,
     git_provider_helper: GitProviderHelperProto,
+    connected_svcs_repo: ConnectedServicesRepository,
+    data_connector_secret_repo: DataConnectorSecretRepository,
     project_repo: ProjectRepository,
     project_session_secret_repo: ProjectSessionSecretRepository,
     rp_repo: ResourcePoolRepository,
     session_repo: SessionRepository,
-    connected_svcs_repo: ConnectedServicesRepository,
+    user_repo: UserRepo,
     metrics: MetricsService,
 ) -> AmaltheaSessionV1Alpha1:
     """Patch an Amalthea session."""
@@ -1024,43 +1059,43 @@ async def patch_session(
     # TODO: Some patching should only be done when the session is in some states to avoid inadvertent restarts
     # Refresh tokens for git proxy
     if (
-        body.state is not None
-        and body.state.value.lower() == State.Hibernated.value.lower()
-        and body.state.value.lower() != session.status.state.value.lower()
+        patch_request.state is not None
+        and patch_request.state == SessionState.hibernated
+        and patch_request.state.value.lower() != session.status.state.value.lower()
     ):
         # Session is being hibernated
         patch.spec.hibernated = True
         is_getting_hibernated = True
     elif (
-        body.state is not None
-        and body.state.value.lower() == State.Running.value.lower()
-        and session.status.state.value.lower() != body.state.value.lower()
+        patch_request.state is not None
+        and patch_request.state == SessionState.running
+        and session.status.state.value.lower() != patch_request.state.value.lower()
     ):
         # Session is being resumed
         patch.spec.hibernated = False
         await metrics.user_requested_session_resume(user, metadata={"session_id": session_id})
 
     # Resource class
-    if body.resource_class_id is not None:
-        new_cluster = await nb_config.k8s_v2_client.cluster_by_class_id(body.resource_class_id, user)
+    if patch_request.resource_class_id is not None:
+        new_cluster = await nb_config.k8s_v2_client.cluster_by_class_id(patch_request.resource_class_id, user)
         if new_cluster.id != cluster.id:
             raise errors.ValidationError(
                 message=(
-                    f"The requested resource class {body.resource_class_id} is not in the "
+                    f"The requested resource class {patch_request.resource_class_id} is not in the "
                     f"same cluster {cluster.id} as the current resource class {session.resource_class_id()}."
                 )
             )
-        rp = await rp_repo.get_resource_pool_from_class(user, body.resource_class_id)
-        rc = rp.get_resource_class(body.resource_class_id)
+        rp = await rp_repo.get_resource_pool_from_class(user, patch_request.resource_class_id)
+        rc = rp.get_resource_class(patch_request.resource_class_id)
         if not rc:
             raise errors.MissingResourceError(
-                message=f"The resource class you requested with ID {body.resource_class_id} does not exist"
+                message=f"The resource class you requested with ID {patch_request.resource_class_id} does not exist"
             )
         # TODO: reject session classes which change the cluster
         if not patch.metadata:
             patch.metadata = AmaltheaSessionV1Alpha1MetadataPatch()
         # Patch the resource class ID in the annotations
-        patch.metadata.annotations = {"renku.io/resource_class_id": str(body.resource_class_id)}
+        patch.metadata.annotations = {"renku.io/resource_class_id": str(patch_request.resource_class_id)}
         if not patch.spec.session:
             patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()
         patch.spec.session.resources = resources_from_resource_class(rc)
@@ -1095,6 +1130,7 @@ async def patch_session(
     session_secrets = await project_session_secret_repo.get_all_session_secrets_from_project(
         user=user, project_id=project.id
     )
+    data_connectors_stream = data_connector_secret_repo.get_data_connectors_with_secrets(user, project.id)
     git_providers = await git_provider_helper.get_providers(user=user)
     repositories = repositories_from_project(project, git_providers)
 
@@ -1110,7 +1146,28 @@ async def patch_session(
         )
     )
 
-    # Data connectors: skip
+    # Data connectors
+    await patch_data_sources(
+        existing_session=session,
+        nb_config=nb_config,
+        server_name=server_name,
+        user=user,
+        data_connectors_stream=data_connectors_stream,
+        work_dir=work_dir,
+        data_connectors_overrides=[],  # patch_request.data_connectors_overrides or [],
+        user_repo=user_repo,
+    )
+    # session_extras = session_extras.concat(
+    #     await get_data_sources(
+    #         nb_config=nb_config,
+    #         server_name=server_name,
+    #         user=user,
+    #         data_connectors_stream=data_connectors_stream,
+    #         work_dir=work_dir,
+    #         data_connectors_overrides=launch_request.data_connectors_overrides or [],
+    #         user_repo=user_repo,
+    #     )
+    # )
     # TODO: How can we patch data connectors? Should we even patch them?
     # TODO: The fact that `start_session()` accepts overrides for data connectors
     # TODO: but that we do not save these overrides (e.g. as annotations) means that
@@ -1287,4 +1344,12 @@ def validate_session_post_request(body: apispec.SessionPostRequest) -> SessionLa
         resource_class_id=body.resource_class_id,
         data_connectors_overrides=data_connectors_overrides,
         env_variable_overrides=env_variable_overrides,
+    )
+
+
+def validate_session_patch_request(body: apispec.SessionPatchRequest) -> SessionPatchRequest:
+    """Validate a session patch request."""
+    return SessionPatchRequest(
+        resource_class_id=body.resource_class_id,
+        state=SessionState(body.state.value) if body.state else None,
     )

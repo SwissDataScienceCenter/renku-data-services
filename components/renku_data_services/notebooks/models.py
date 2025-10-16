@@ -1,6 +1,7 @@
 """Basic models for amalthea sessions."""
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, cast
 
@@ -197,6 +198,20 @@ class SessionLaunchRequest:
     launcher_id: ULID
     disk_storage: int | None
     resource_class_id: int | None
-    # data_connectors_overrides: Optional[List[SessionDataConnectorsOverride]] = None
     data_connectors_overrides: list[SessionDataConnectorOverride] | None
     env_variable_overrides: list[SessionEnvVar] | None
+
+
+class SessionState(StrEnum):
+    """Session state."""
+
+    running = "running"
+    hibernated = "hibernated"
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionPatchRequest:
+    """Model for patching a session."""
+
+    resource_class_id: int | None
+    state: SessionState | None
