@@ -381,13 +381,37 @@ async def patch_data_sources(
     )
     logger.warning(f"existing_skipped_dcs = {existing_skipped_dcs}")
 
-    # First, validate
+    # Collect the previously skipped data connectors we should mount now
+    newly_unskipped_dcs: set[str] = set()
+    for dco in data_connectors_overrides:
+        dc_id = str(dco.data_connector_id)
+        if dc_id in existing_skipped_dcs and not dco.skip:
+            newly_unskipped_dcs.add(dc_id)
+    logger.warning(f"newly_unskipped_dcs = {newly_unskipped_dcs}")
+
+    # Collect the new data connectors
     new_dcs: dict[str, DataConnectorWithSecrets] = dict()
     async for dc in data_connectors_stream:
         dc_id = str(dc.data_connector.id)
-        if (dc_id not in existing_dcs) and (dc_id not in existing_skipped_dcs):
+        if (dc_id in newly_unskipped_dcs) or ((dc_id not in existing_dcs) and (dc_id not in existing_skipped_dcs)):
             new_dcs[dc_id] = dc
     logger.warning(f"new_dcs = {sorted(new_dcs.keys())}")
+
+    async def new_dcs_stream() -> AsyncIterator[DataConnectorWithSecrets]:
+        for dc in new_dcs.values():
+            yield dc
+
+    session_extras = await get_data_sources(
+        nb_config=nb_config,
+        server_name=server_name,
+        user=user,
+        data_connectors_stream=new_dcs_stream(),
+        work_dir=work_dir,
+        data_connectors_overrides=data_connectors_overrides,
+        user_repo=user_repo,
+    )
+    logger.warning(f"session_extras.annotations = {session_extras.annotations}")
+    logger.warning(f"session_extras.data_sources = {session_extras.data_sources}")
 
     pass
 
@@ -1154,6 +1178,7 @@ async def patch_session(
         user=user,
         data_connectors_stream=data_connectors_stream,
         work_dir=work_dir,
+        # TODO: allow 'data_connectors_overrides' to be passed on the PATCH endpoint
         data_connectors_overrides=[],  # patch_request.data_connectors_overrides or [],
         user_repo=user_repo,
     )
