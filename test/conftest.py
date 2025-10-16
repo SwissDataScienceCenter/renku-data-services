@@ -1,6 +1,7 @@
 """Fixtures for testing."""
 
 import asyncio
+from datetime import time
 import logging as ll
 import os
 import secrets
@@ -16,6 +17,7 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
+import requests
 import uvloop
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -308,80 +310,120 @@ async def __wait_for_solr(host: str, port: int) -> None:
                     await asyncio.sleep(1)
 
 
+@pytest.fixture
+def run_solr_locally():
+    return os.environ.get("TEST_RUN_SOLR_LOCALLY", "false") == "true"
+
+
 @pytest_asyncio.fixture(scope="session")
-async def solr_instance(tmp_path_factory, monkeysession, solr_bin_path):
-    solr_root = tmp_path_factory.mktemp("solr")
-    solr_bin = solr_bin_path
-    port = free_port()
-    logger.info(f"Starting SOLR at port {port}")
-    args = [
-        solr_bin,
-        "start",
-        "-f",
-        "--jvm-opts",
-        "-Xmx256M -Xms256M",
-        "--host",
-        "localhost",
-        "--port",
-        f"{port}",
-        "-s",
-        f"{solr_root}",
-        "-t",
-        f"{solr_root}",
-        "--user-managed",
-    ]
-    logger.info(f"Starting SOLR via: {args}")
-    proc = subprocess.Popen(
-        args,
-        env={"PATH": os.getenv("PATH", ""), "SOLR_LOGS_DIR": f"{solr_root}", "SOLR_ULIMIT_CHECKS": "false"},
-    )
-    monkeysession.setenv("SOLR_TEST_PORT", f"{port}")
-    monkeysession.setenv("SOLR_ROOT_DIR", solr_root)
-    monkeysession.setenv("SOLR_URL", f"http://localhost:{port}")
+async def solr_instance(tmp_path_factory, monkeysession, solr_bin_path, run_solr_locally):
+    if run_solr_locally:
+        # Solr should be started in the same environment as the tests
+        solr_root = tmp_path_factory.mktemp("solr")
+        solr_bin = solr_bin_path
+        port = free_port()
+        logger.info(f"Starting SOLR at port {port}")
+        args = [
+            solr_bin,
+            "start",
+            "-f",
+            "--jvm-opts",
+            "-Xmx256M -Xms256M",
+            "--host",
+            "localhost",
+            "--port",
+            f"{port}",
+            "-s",
+            f"{solr_root}",
+            "-t",
+            f"{solr_root}",
+            "--user-managed",
+        ]
+        logger.info(f"Starting SOLR via: {args}")
+        proc = subprocess.Popen(
+            args,
+            env={"PATH": os.getenv("PATH", ""), "SOLR_LOGS_DIR": f"{solr_root}", "SOLR_ULIMIT_CHECKS": "false"},
+        )
+        monkeysession.setenv("SOLR_TEST_PORT", f"{port}")
+        monkeysession.setenv("SOLR_ROOT_DIR", solr_root)
+        solr_url = f"http://localhost:{port}"
+        await __wait_for_solr("localhost", port)
+    else:
+        # NOTE: Solr is already running in a separate container
+        monkeysession.setenv("SOLR_TEST_PORT", "8983")
+        solr_url = "http://localhost:8983"
 
-    await __wait_for_solr("localhost", port)
-
-    yield
-    try:
-        proc.terminate()
-    except Exception as err:
-        logger.error(f"Encountered error when shutting down solr for testing {err}")
-        proc.kill()
+    monkeysession.setenv("SOLR_URL", solr_url)
+    yield solr_url
+    if run_solr_locally:
+        try:
+            proc.terminate()
+        except Exception as err:
+            logger.error(f"Encountered error when shutting down solr for testing {err}")
+            proc.kill()
 
 
 @pytest.fixture
-def solr_core(solr_instance, monkeypatch):
+def solr_core(solr_instance, monkeypatch, solr_bin_path, run_solr_locally):
     core_name = "test_core_" + str(ULID()).lower()[-12:]
     monkeypatch.setenv("SOLR_TEST_CORE", core_name)
     monkeypatch.setenv("SOLR_CORE", core_name)
-    return core_name
+    solr_url = solr_instance
+
+    if run_solr_locally:
+        # Solr will run in the same container / environment as the tests
+        solr_bin = solr_bin_path
+        result = subprocess.run([solr_bin, "create", "--solr-url", solr_url, "-c", core_name])
+        result.check_returncode()
+
+        # Unfortunately, solr creates core directories with only read permissions
+        # Then changing the schema via the api fails, because it can't write to that file
+        root_dir = os.getenv("SOLR_ROOT_DIR")
+        conf_file = f"{root_dir}/{core_name}/conf/managed-schema.xml"
+        os.chmod(conf_file, stat.S_IRUSR | stat.S_IWUSR | stat.S_IROTH | stat.S_IRGRP)
+
+        # we also need to create the configset/_default directory to make
+        # core-admin commands work
+        if not os.path.isdir(f"{root_dir}/configsets/_default"):
+            os.makedirs(f"{root_dir}/configsets/_default")
+            copy_tree(f"{root_dir}/{core_name}/conf", f"{root_dir}/configsets/_default/conf")
+    else:
+        # Solr is running in a container already
+        create_url = f"{solr_url}/admin/cores"
+
+        # Create the core
+        params = {
+            "action": "CREATE",
+            "name": core_name,
+            "configSet": "_default",
+        }
+        resp = requests.get(create_url, params=params)
+        resp.raise_for_status()
+        print(f"✅ Created Solr core: {core_name}")
+
+        # Wait briefly to ensure Solr finishes initializing
+        time.sleep(2)
+
+    yield core_name
+
+    if run_solr_locally:
+        pass
+    else:
+        # Teardown: unload the core
+        unload_url = f"{solr_url}/admin/cores"
+        params = {
+            "action": "UNLOAD",
+            "core": core_name,
+            "deleteInstanceDir": "true",
+        }
+        resp = requests.get(unload_url, params=params)
+        resp.raise_for_status()
+        print(f"🧹 Unloaded Solr core: {core_name}")
 
 
 @pytest.fixture()
-def solr_config(solr_core, solr_bin_path):
-    core = solr_core
-    solr_port = os.getenv("SOLR_TEST_PORT")
-    if solr_port is None:
-        raise ValueError("No SOLR_TEST_PORT env variable found")
-
-    solr_url = f"http://localhost:{solr_port}"
-    solr_config = SolrClientConfig(base_url=solr_url, core=core)
-    solr_bin = solr_bin_path
-    result = subprocess.run([solr_bin, "create", "--solr-url", solr_url, "-c", core])
-    result.check_returncode()
-
-    # Unfortunately, solr creates core directories with only read permissions
-    # Then changing the schema via the api fails, because it can't write to that file
-    root_dir = os.getenv("SOLR_ROOT_DIR")
-    conf_file = f"{root_dir}/{core}/conf/managed-schema.xml"
-    os.chmod(conf_file, stat.S_IRUSR | stat.S_IWUSR | stat.S_IROTH | stat.S_IRGRP)
-
-    # we also need to create the configset/_default directory to make
-    # core-admin commands work
-    if not os.path.isdir(f"{root_dir}/configsets/_default"):
-        os.makedirs(f"{root_dir}/configsets/_default")
-        copy_tree(f"{root_dir}/{core}/conf", f"{root_dir}/configsets/_default/conf")
-
+def solr_config(solr_core, solr_instance):
+    solr_config = SolrClientConfig(base_url=solr_instance, core=solr_core)
     return solr_config
 
 

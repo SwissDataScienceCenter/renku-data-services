@@ -85,7 +85,7 @@ services:
     command:
       - bash
       - -c
-      - 'precreate-core renku-search-dev; exec solr -f -Dsolr.modules=analysis-extras'
+      - "cp -r /opt/solr/server/solr/configsets /var/solr/data/; precreate-core renku-search-dev; exec solr -f -Dsolr.modules=analysis-extras"
 
 volumes:
   postgres-data:
