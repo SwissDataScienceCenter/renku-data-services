@@ -34,7 +34,6 @@
 			"version": "21",
 			"jdkDistro": "open"
 		},
-		"./solr": {},
 		"ghcr.io/devcontainers/features/go:1": {},
 		"./rclone": {
 			"rclone_repository": "https://github.com/SwissDataScienceCenter/rclone.git",
