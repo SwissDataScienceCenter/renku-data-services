@@ -362,7 +362,6 @@ class UsersSync:
                 logger.info(f"Inserting or updating user {db_user} -> {kc_user}")
                 update = await self.update_or_insert_user(user=kc_user)
                 db_user = update.new
-            # TODO: identify user
             if db_user is not None:
                 await self.metrics.identify_user(user=db_user, metadata={})
 

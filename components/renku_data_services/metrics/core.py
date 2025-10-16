@@ -30,6 +30,7 @@ class StagingMetricsService(MetricsService):
         """Send a user's identity to metrics."""
 
         # We populate 'metadata' with the user's details.
+        metadata["user_id"] = metadata.get("user_id") or user.id
         if user.email:
             metadata["email"] = metadata.get("email") or user.email
         if user.first_name:
