@@ -1,7 +1,6 @@
 """Fixtures for testing."""
 
 import asyncio
-from datetime import time
 import logging as ll
 import os
 import secrets
@@ -9,6 +8,7 @@ import socket
 import stat
 import subprocess
 from collections.abc import AsyncGenerator
+from datetime import time
 from distutils.dir_util import copy_tree
 from multiprocessing import Lock
 from pathlib import Path

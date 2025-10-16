@@ -30,10 +30,6 @@
 			"command": "alias k=kubectl"
 		},
 		"./k3d": {},
-		"ghcr.io/devcontainers/features/java:1": {
-			"version": "21",
-			"jdkDistro": "open"
-		},
 		"ghcr.io/devcontainers/features/go:1": {},
 		"./rclone": {
 			"rclone_repository": "https://github.com/SwissDataScienceCenter/rclone.git",
