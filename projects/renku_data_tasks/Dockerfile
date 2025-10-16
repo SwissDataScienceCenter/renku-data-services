@@ -33,6 +33,12 @@ RUN apt-get update && apt-get install -y \
     rm -rf /var/lib/apt/lists/* && \
     groupadd --gid $USER_GID renku && \
     adduser --gid $USER_GID --uid $USER_UID renku
+# NOTE: The prometheus library requires the env variable name to be lowercase.
+ENV prometheus_multiproc_dir=/prometheus
+ENV PROMETHEUS_MULTIPROC_DIR=/prometheus
+RUN mkdir -p /prometheus \
+    && chown $USER_UID:0 /prometheus \
+    && chmod 770 /prometheus
 USER $USER_UID:$USER_GID
 WORKDIR /app
 COPY --from=builder /app/env ./env
