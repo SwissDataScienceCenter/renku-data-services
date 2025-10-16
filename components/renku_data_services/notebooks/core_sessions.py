@@ -302,6 +302,7 @@ async def get_data_sources(
         # NOTE: if 'skip' is true, we do not mount that data connector
         if dco.skip:
             del dcs[dc_id]
+            continue
         if dco.target_path is not None and not PurePosixPath(dco.target_path).is_absolute():
             dco.target_path = (work_dir / dco.target_path).as_posix()
         dcs[dc_id] = dcs[dc_id].with_override(dco)
