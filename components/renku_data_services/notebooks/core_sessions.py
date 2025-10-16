@@ -267,6 +267,7 @@ async def get_data_sources(
     secrets: list[ExtraSecret] = []
     dcs: dict[str, RCloneStorage] = {}
     dcs_secrets: dict[str, list[DataConnectorSecret]] = {}
+    skipped_dcs: set[str] = set()
     user_secret_key: str | None = None
     async for dc in data_connectors_stream:
         mount_folder = (
@@ -301,6 +302,7 @@ async def get_data_sources(
             )
         # NOTE: if 'skip' is true, we do not mount that data connector
         if dco.skip:
+            skipped_dcs.add(dc_id)
             del dcs[dc_id]
             continue
         if dco.target_path is not None and not PurePosixPath(dco.target_path).is_absolute():
@@ -335,7 +337,15 @@ async def get_data_sources(
                 accessMode="ReadOnlyMany" if cs.readonly else "ReadWriteOnce",
             )
         )
+
+    # Add annotations to track skipped data connectors
+    # TODO: track data connectors with overrides
+    annotations: dict[str, str] = dict()
+    if skipped_dcs:
+        annotations["renku.io/skipped_data_connectors_ids"] = json.dumps(sorted(skipped_dcs))
+
     return SessionExtraResources(
+        annotations=annotations,
         data_sources=data_sources,
         secrets=secrets,
         data_connector_secrets=dcs_secrets,
@@ -809,11 +819,20 @@ async def start_session(
     )
 
     # Annotations
-    annotations: dict[str, str] = {
-        "renku.io/project_id": str(launcher.project_id),
-        "renku.io/launcher_id": str(launcher_id),
-        "renku.io/resource_class_id": str(resource_class_id),
-    }
+    session_extras = session_extras.concat(
+        SessionExtraResources(
+            annotations={
+                "renku.io/project_id": str(launcher.project_id),
+                "renku.io/launcher_id": str(launcher_id),
+                "renku.io/resource_class_id": str(resource_class_id),
+            }
+        )
+    )
+    # annotations: dict[str, str] = {
+    #     "renku.io/project_id": str(launcher.project_id),
+    #     "renku.io/launcher_id": str(launcher_id),
+    #     "renku.io/resource_class_id": str(resource_class_id),
+    # }
 
     # Authentication
     if isinstance(user, AuthenticatedAPIUser):
@@ -891,7 +910,7 @@ async def start_session(
     env.extend(launcher_env_variables)
 
     session = AmaltheaSessionV1Alpha1(
-        metadata=Metadata(name=server_name, annotations=annotations),
+        metadata=Metadata(name=server_name, annotations=session_extras.annotations),
         spec=AmaltheaSessionSpec(
             location=session_location,
             imagePullSecrets=[ImagePullSecret(name=image_secret.name, adopt=True)] if image_secret else [],

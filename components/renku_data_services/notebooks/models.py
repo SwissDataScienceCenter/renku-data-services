@@ -147,6 +147,7 @@ class ExtraSecret:
 class SessionExtraResources:
     """Represents extra resources to add to an amalthea session."""
 
+    annotations: dict[str, str] = field(default_factory=dict)
     containers: list[ExtraContainer] = field(default_factory=list)
     data_connector_secrets: dict[str, list[DataConnectorSecret]] = field(default_factory=dict)
     data_sources: list[DataSource] = field(default_factory=list)
@@ -159,10 +160,14 @@ class SessionExtraResources:
         """Concatenates these session extras with more session extras."""
         if added_extras is None:
             return self
+        annotations: dict[str, str] = dict()
+        annotations.update(self.annotations)
+        annotations.update(added_extras.annotations)
         data_connector_secrets: dict[str, list[DataConnectorSecret]] = dict()
         data_connector_secrets.update(self.data_connector_secrets)
         data_connector_secrets.update(added_extras.data_connector_secrets)
         return SessionExtraResources(
+            annotations=annotations,
             containers=self.containers + added_extras.containers,
             data_connector_secrets=data_connector_secrets,
             data_sources=self.data_sources + added_extras.data_sources,
