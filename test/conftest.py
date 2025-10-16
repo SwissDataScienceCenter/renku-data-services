@@ -7,11 +7,11 @@ import secrets
 import socket
 import stat
 import subprocess
+import time
 from collections.abc import AsyncGenerator
-from datetime import time
-from distutils.dir_util import copy_tree
 from multiprocessing import Lock
 from pathlib import Path
+from shutil import copytree, rmtree
 from uuid import uuid4
 
 import httpx
@@ -310,16 +310,16 @@ async def __wait_for_solr(host: str, port: int) -> None:
                     await asyncio.sleep(1)
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def run_solr_locally():
     return os.environ.get("TEST_RUN_SOLR_LOCALLY", "false") == "true"
 
 
 @pytest_asyncio.fixture(scope="session")
-async def solr_instance(tmp_path_factory, monkeysession, solr_bin_path, run_solr_locally):
+async def solr_instance(solr_root_dir, monkeysession, solr_bin_path, run_solr_locally):
     if run_solr_locally:
         # Solr should be started in the same environment as the tests
-        solr_root = tmp_path_factory.mktemp("solr")
+        solr_root = solr_root_dir
         solr_bin = solr_bin_path
         port = free_port()
         logger.info(f"Starting SOLR at port {port}")
@@ -364,66 +364,97 @@ async def solr_instance(tmp_path_factory, monkeysession, solr_bin_path, run_solr
 
 
 @pytest.fixture
-def solr_core(solr_instance, monkeypatch, solr_bin_path, run_solr_locally):
-    core_name = "test_core_" + str(ULID()).lower()[-12:]
-    monkeypatch.setenv("SOLR_TEST_CORE", core_name)
-    monkeypatch.setenv("SOLR_CORE", core_name)
-    solr_url = solr_instance
+def solr_core_name():
+    return "test_core_" + str(ULID()).lower()[-12:]
 
+
+@pytest.fixture(scope="session")
+def solr_root_dir(run_solr_locally, tmp_path_factory):
+    """The location where the `configsets` folder is found and all cores."""
     if run_solr_locally:
+        return tmp_path_factory.mktemp("solr")
+    else:
+        return Path("/var/solr/data")
+
+
+@pytest.fixture
+def solr_configset(solr_core_name, solr_root_dir: Path, solr_bin_path, run_solr_locally, solr_instance):
+    solr_url = solr_instance
+    configset_name = f"{solr_core_name}-configset"
+    root_dir = solr_root_dir
+    if run_solr_locally:
+        # The _default configset is not there when running locally
+        # So we create a dummy core and then copy the _deefault configset from  it
+        tmp_core = "tmp_core_" + str(ULID()).lower()[-12:]
         # Solr will run in the same container / environment as the tests
         solr_bin = solr_bin_path
-        result = subprocess.run([solr_bin, "create", "--solr-url", solr_url, "-c", core_name])
+        result = subprocess.run([solr_bin, "create", "--solr-url", solr_url, "-c", tmp_core])
         result.check_returncode()
 
         # Unfortunately, solr creates core directories with only read permissions
         # Then changing the schema via the api fails, because it can't write to that file
-        root_dir = os.getenv("SOLR_ROOT_DIR")
-        conf_file = f"{root_dir}/{core_name}/conf/managed-schema.xml"
+        conf_file = root_dir / f"{tmp_core}/conf/managed-schema.xml"
         os.chmod(conf_file, stat.S_IRUSR | stat.S_IWUSR | stat.S_IROTH | stat.S_IRGRP)
 
         # we also need to create the configset/_default directory to make
         # core-admin commands work
-        if not os.path.isdir(f"{root_dir}/configsets/_default"):
-            os.makedirs(f"{root_dir}/configsets/_default")
-            copy_tree(f"{root_dir}/{core_name}/conf", f"{root_dir}/configsets/_default/conf")
-    else:
-        # Solr is running in a container already
-        create_url = f"{solr_url}/admin/cores"
+        if not os.path.isdir(root_dir / "configsets/_default"):
+            os.makedirs(root_dir / "configsets/_default")
+            copytree(root_dir / f"{tmp_core}/conf", root_dir / "configsets/_default/conf")
 
-        # Create the core
-        params = {
-            "action": "CREATE",
-            "name": core_name,
-            "configSet": "_default",
-        }
-        resp = requests.get(create_url, params=params)
-        resp.raise_for_status()
-        print(f"✅ Created Solr core: {core_name}")
+    # NOTE: The configset contains the schema, so 2 different cores cannot really use
+    # the same configset.
+    configset_path = root_dir / "configsets" / configset_name
+    copytree(root_dir / "configsets/_default", configset_path)
+    yield solr_core_name, configset_name
+    rmtree(configset_path)
 
-        # Wait briefly to ensure Solr finishes initializing
-        time.sleep(2)
+
+@pytest.fixture
+def solr_core(solr_instance, monkeypatch, solr_configset):
+    core_name = solr_core_name
+    monkeypatch.setenv("SOLR_TEST_CORE", core_name)
+    monkeypatch.setenv("SOLR_CORE", core_name)
+    solr_url = solr_instance
+    create_url = f"{solr_url}/solr/admin/cores"
+    core_name, configset_name = solr_configset
+
+    # Create the core
+    params = {
+        "action": "CREATE",
+        "name": core_name,
+        "configSet": configset_name,
+    }
+    resp = requests.get(create_url, params=params)
+    resp.raise_for_status()
+    print(f"✅ Created Solr core: {core_name}")
+
+    # Wait briefly to ensure Solr finishes initializing
+    time.sleep(2)
 
     yield core_name
 
-    if run_solr_locally:
-        pass
-    else:
-        # Teardown: unload the core
-        unload_url = f"{solr_url}/admin/cores"
-        params = {
-            "action": "UNLOAD",
-            "core": core_name,
-            "deleteInstanceDir": "true",
-        }
-        resp = requests.get(unload_url, params=params)
-        resp.raise_for_status()
-        print(f"🧹 Unloaded Solr core: {core_name}")
+    # Teardown: unload the core
+    unload_url = f"{solr_url}/solr/admin/cores"
+    params = {
+        "action": "UNLOAD",
+        "core": core_name,
+        "deleteInstanceDir": "true",
+    }
+    resp = requests.get(unload_url, params=params)
+    resp.raise_for_status()
+    print(f"🧹 Unloaded Solr core: {core_name}")
 
 
 @pytest.fixture()
 def solr_config(solr_core, solr_instance):
     solr_config = SolrClientConfig(base_url=solr_instance, core=solr_core)
+    return solr_config
+
+
+@pytest.fixture()
+def solr_config_no_core(solr_core_name, solr_instance):
+    solr_config = SolrClientConfig(base_url=solr_instance, core=solr_core_name)
     return solr_config
 
 

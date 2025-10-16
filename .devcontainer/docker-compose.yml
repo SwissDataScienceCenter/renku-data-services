@@ -4,6 +4,7 @@ services:
     volumes:
       - ../:/workspace:cached
       - .poetry_cache/:/poetry_cache:delegated
+      - solr_data:/var/solr
     # Overrides default command so things don't shut down after the process ends.
     entrypoint: sleep infinity
     environment:
@@ -31,6 +32,8 @@ services:
       - db
       - authz
       - solr
+    group_add:
+      - "8983" # Allows access to the solr data in the shared volume
 
   db:
     image: postgres:latest
@@ -85,7 +88,9 @@ services:
     command:
       - bash
       - -c
-      - "cp -r /opt/solr/server/solr/configsets /var/solr/data/; precreate-core renku-search-dev; exec solr -f -Dsolr.modules=analysis-extras"
+      - "chown -R solr:solr /var/solr; cp -r /opt/solr/server/solr/configsets /var/solr/data/; precreate-core renku-search-dev; chmod -R g+rw /var/solr; exec solr -f -Dsolr.modules=analysis-extras"
+    group_add:
+      - "1000" # Allows access to the solr data in the shared volume
 
 volumes:
   postgres-data:
