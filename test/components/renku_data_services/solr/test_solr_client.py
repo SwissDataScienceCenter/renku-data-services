@@ -276,18 +276,17 @@ async def test_status_for_existing_core(solr_config):
 
 
 @pytest.mark.asyncio
-async def test_create_new_core(solr_config):
-    random_name = "".join(random.choices(string.ascii_lowercase + string.digits, k=9))
+async def test_create_new_core(solr_config_no_core):
+    solr_config = solr_config_no_core
     async with DefaultSolrAdminClient(solr_config) as client:
-        res = await client.create(random_name)
+        res = await client.create(None)
         assert res is None
 
-    next_cfg = SolrClientConfig(base_url=solr_config.base_url, core=random_name, user=solr_config.user)
-    async with DefaultSolrAdminClient(next_cfg) as client:
+    async with DefaultSolrAdminClient(solr_config) as client:
         res = await client.core_status(None)
         assert res is not None
 
-    async with DefaultSolrClient(next_cfg) as client:
+    async with DefaultSolrClient(solr_config) as client:
         resp = await client.modify_schema(
             SchemaCommandList(
                 [
@@ -296,7 +295,7 @@ async def test_create_new_core(solr_config):
                 ]
             )
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp.text
 
 
 @pytest.mark.asyncio

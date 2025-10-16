@@ -407,17 +407,16 @@ def solr_configset(solr_core_name, solr_root_dir: Path, solr_bin_path, run_solr_
     configset_path = root_dir / "configsets" / configset_name
     copytree(root_dir / "configsets/_default", configset_path)
     yield solr_core_name, configset_name
-    rmtree(configset_path)
+    rmtree(configset_path, ignore_errors=True)
 
 
 @pytest.fixture
-def solr_core(solr_instance, monkeypatch, solr_configset):
-    core_name = solr_core_name
+def solr_core(solr_instance, monkeypatch, solr_configset, solr_root_dir):
+    core_name, configset_name = solr_configset
     monkeypatch.setenv("SOLR_TEST_CORE", core_name)
     monkeypatch.setenv("SOLR_CORE", core_name)
     solr_url = solr_instance
     create_url = f"{solr_url}/solr/admin/cores"
-    core_name, configset_name = solr_configset
 
     # Create the core
     params = {
@@ -432,29 +431,33 @@ def solr_core(solr_instance, monkeypatch, solr_configset):
     # Wait briefly to ensure Solr finishes initializing
     time.sleep(2)
 
-    yield core_name
+    yield core_name, configset_name
 
     # Teardown: unload the core
     unload_url = f"{solr_url}/solr/admin/cores"
     params = {
         "action": "UNLOAD",
         "core": core_name,
+        "configSet": configset_name,
         "deleteInstanceDir": "true",
     }
     resp = requests.get(unload_url, params=params)
     resp.raise_for_status()
+    rmtree(solr_root_dir / core_name, ignore_errors=True)
     print(f"🧹 Unloaded Solr core: {core_name}")
 
 
 @pytest.fixture()
 def solr_config(solr_core, solr_instance):
-    solr_config = SolrClientConfig(base_url=solr_instance, core=solr_core)
+    core_name, configset_name = solr_core
+    solr_config = SolrClientConfig(base_url=solr_instance, core=core_name, configset=configset_name)
     return solr_config
 
 
 @pytest.fixture()
-def solr_config_no_core(solr_core_name, solr_instance):
-    solr_config = SolrClientConfig(base_url=solr_instance, core=solr_core_name)
+def solr_config_no_core(solr_configset, solr_instance):
+    solr_core_name, solr_configset_name = solr_configset
+    solr_config = SolrClientConfig(base_url=solr_instance, core=solr_core_name, configset=solr_configset_name)
     return solr_config
 
 
