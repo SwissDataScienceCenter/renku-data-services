@@ -34,14 +34,17 @@ RUN env/bin/pip --no-cache-dir install projects/renku_data_service/dist/*.whl
 FROM python:3.13-slim-bookworm
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
-ENV prometheus_multiproc_dir=/prometheus
-ENV PROMETHEUS_MULTIPROC_DIR=/prometheus
-RUN mkdir /prometheus && chown $USER_UID:$USER_GID /prometheus
 RUN apt-get update && apt-get install -y \
     tini vim-tiny procps curl && \
     rm -rf /var/lib/apt/lists/* && \
     groupadd --gid $USER_GID renku && \
     adduser --gid $USER_GID --uid $USER_UID renku
+# NOTE: The prometheus library requires the env variable name to be lowercase.
+ENV prometheus_multiproc_dir=/prometheus
+ENV PROMETHEUS_MULTIPROC_DIR=/prometheus
+RUN mkdir -p /prometheus \
+    && chown $USER_UID:0 /prometheus \
+    && chmod 770 /prometheus
 COPY --from=builder /usr/bin/rclone /usr/bin
 USER $USER_UID:$USER_GID
 WORKDIR /app
