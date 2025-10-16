@@ -371,7 +371,7 @@ async def patch_data_sources(
         if not ds.secretRef:
             continue
         if ds.secretRef.name.startswith(secret_name_prefix):
-            dc_id = str(ULID.from_str(ds.secretRef.name.strip(secret_name_prefix).upper()))
+            dc_id = str(ULID.from_str(ds.secretRef.name[len(secret_name_prefix) :].upper()))
             existing_dcs.add(dc_id)
     logger.warning(f"existing_dcs = {existing_dcs}")
 
