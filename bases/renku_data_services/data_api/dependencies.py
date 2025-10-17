@@ -277,6 +277,8 @@ class DependencyManager:
 
         authz = Authz(config.authz_config)
         search_updates_repo = SearchUpdatesRepo(session_maker=config.db.async_session_maker)
+        metrics_repo = MetricsRepository(session_maker=config.db.async_session_maker)
+        metrics = StagingMetricsService(enabled=config.posthog.enabled, metrics_repo=metrics_repo)
         group_repo = GroupRepository(
             session_maker=config.db.async_session_maker,
             group_authz=authz,
@@ -287,6 +289,7 @@ class DependencyManager:
             group_repo=group_repo,
             search_updates_repo=search_updates_repo,
             encryption_key=config.secrets.encryption_key,
+            metrics=metrics,
             authz=authz,
         )
 
@@ -378,8 +381,6 @@ class DependencyManager:
             project_repo=project_repo,
             data_connector_repo=data_connector_repo,
         )
-        metrics_repo = MetricsRepository(session_maker=config.db.async_session_maker)
-        metrics = StagingMetricsService(enabled=config.posthog.enabled, metrics_repo=metrics_repo)
         return cls(
             config,
             authenticator=authenticator,

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from renku_data_services.authz.authz import Authz
 from renku_data_services.data_tasks.config import Config
+from renku_data_services.metrics.core import StagingMetricsService
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project.db import ProjectRepository
@@ -34,6 +35,7 @@ class DependencyManager:
             cfg = Config.from_env()
         search_updates_repo = SearchUpdatesRepo(cfg.db.async_session_maker)
         metrics_repo = MetricsRepository(cfg.db.async_session_maker)
+        metrics = StagingMetricsService(enabled=cfg.posthog.enabled, metrics_repo=metrics_repo)
         authz = Authz(cfg.authz)
         group_repo = GroupRepository(
             cfg.db.async_session_maker,
@@ -51,12 +53,14 @@ class DependencyManager:
             group_repo=group_repo,
             search_updates_repo=search_updates_repo,
             encryption_key=None,
+            metrics=metrics,
             authz=authz,
         )
         syncer = UsersSync(
             cfg.db.async_session_maker,
             group_repo=group_repo,
             user_repo=user_repo,
+            metrics=metrics,
             authz=authz,
         )
         kc_api: IKeycloakAPI
