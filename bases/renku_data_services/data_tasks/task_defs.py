@@ -23,6 +23,7 @@ from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import ResourceType, _AuthzConverter, _Relation
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
+from renku_data_services.base_models.metrics import MetricsEvent
 from renku_data_services.data_tasks.dependencies import DependencyManager
 from renku_data_services.data_tasks.taskman import TaskDefininions
 from renku_data_services.namespace.models import NamespaceKind
@@ -57,16 +58,27 @@ async def send_metrics_to_posthog(dm: DependencyManager) -> None:
             processed_ids = []
             async for metric in metrics:
                 try:
-                    posthog.capture(
-                        distinct_id=metric.anonymous_user_id,
-                        timestamp=metric.timestamp,
-                        event=metric.event,
-                        properties=metric.metadata_ or {},
-                        # This is sent to avoid duplicate events if multiple instances of data service are running.
-                        # Posthog deduplicates events with the same timestamp, distinct_id, event, and uuid fields:
-                        # https://github.com/PostHog/posthog/issues/17211#issuecomment-1723136534
-                        uuid=metric.id.to_uuid4(),
-                    )
+                    if metric.event == MetricsEvent.identify_user.value:
+                        posthog.identify(
+                            distinct_id=metric.anonymous_user_id,
+                            timestamp=metric.timestamp,
+                            properties=metric.metadata_ or {},
+                            # This is sent to avoid duplicate events if multiple instances of data service are running.
+                            # Posthog deduplicates events with the same timestamp, distinct_id, event, and uuid fields:
+                            # https://github.com/PostHog/posthog/issues/17211#issuecomment-1723136534
+                            uuid=metric.id.to_uuid4(),
+                        )
+                    else:
+                        posthog.capture(
+                            distinct_id=metric.anonymous_user_id,
+                            timestamp=metric.timestamp,
+                            event=metric.event,
+                            properties=metric.metadata_ or {},
+                            # This is sent to avoid duplicate events if multiple instances of data service are running.
+                            # Posthog deduplicates events with the same timestamp, distinct_id, event, and uuid fields:
+                            # https://github.com/PostHog/posthog/issues/17211#issuecomment-1723136534
+                            uuid=metric.id.to_uuid4(),
+                        )
                 except Exception as e:
                     logger.error(f"Failed to process metrics event {metric.id}: {e}")
                 else:

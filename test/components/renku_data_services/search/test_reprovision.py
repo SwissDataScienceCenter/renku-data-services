@@ -1,6 +1,7 @@
 """Tests for reprovision module."""
 
 from dataclasses import dataclass
+from unittest.mock import MagicMock
 
 import pytest
 from ulid import ULID
@@ -8,6 +9,7 @@ from ulid import ULID
 from renku_data_services.authz.authz import Authz
 from renku_data_services.authz.models import Visibility
 from renku_data_services.base_models.core import APIUser, NamespacePath
+from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.data_connectors.db import DataConnectorRepository
 from renku_data_services.data_connectors.models import (
     CloudStorageCore,
@@ -50,7 +52,7 @@ def make_setup(app_manager_instance, solr_config) -> Setup:
     search_updates = SearchUpdatesRepo(sess)
     authz = Authz(app_manager_instance.config.authz_config)
     gr = GroupRepository(sess, authz, search_updates)
-    ur = UserRepo(sess, gr, search_updates, None, authz)
+    ur = UserRepo(sess, gr, search_updates, None, MagicMock(spec=MetricsService), authz)
     pr = ProjectRepository(sess, gr, search_updates, authz)
     dcr = DataConnectorRepository(sess, authz, pr, gr, search_updates)
     sr = SearchReprovision(
