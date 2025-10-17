@@ -406,6 +406,7 @@ def solr_configset(solr_core_name, solr_root_dir: Path, solr_bin_path, run_solr_
     # the same configset.
     configset_path = root_dir / "configsets" / configset_name
     copytree(root_dir / "configsets/_default", configset_path)
+    os.chmod(configset_path / "conf" / "managed-schema.xml", 0o770)
     yield solr_core_name, configset_name
     rmtree(configset_path, ignore_errors=True)
 
