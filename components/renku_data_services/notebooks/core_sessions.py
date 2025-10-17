@@ -340,7 +340,8 @@ async def get_data_sources(
         )
 
     # Add annotations to track skipped data connectors
-    annotations: dict[str, str] = {"renku.io/mounted_data_connectors_ids": json.dumps(sorted(dcs.keys()))}
+    # annotations: dict[str, str] = {"renku.io/mounted_data_connectors_ids": json.dumps(sorted(dcs.keys()))}
+    annotations: dict[str, str] = dict()
     if skipped_dcs:
         annotations["renku.io/skipped_data_connectors_ids"] = json.dumps(sorted(skipped_dcs))
 
