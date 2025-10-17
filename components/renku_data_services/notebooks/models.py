@@ -2,14 +2,16 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from kubernetes.client import V1ObjectMeta, V1Secret
 from pydantic import AliasGenerator, BaseModel, Field, Json
+from ulid import ULID
 
 from renku_data_services.data_connectors.models import DataConnectorSecret
 from renku_data_services.errors import errors
 from renku_data_services.errors.errors import ProgrammingError
+from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorageRequestOverride
 from renku_data_services.notebooks.crs import (
     AmaltheaSessionV1Alpha1,
     DataSource,
@@ -169,3 +171,26 @@ class SessionExtraResources:
             volume_mounts=self.volume_mounts + added_extras.volume_mounts,
             volumes=self.volumes + added_extras.volumes,
         )
+
+
+@dataclass(eq=True, kw_only=True)
+class SessionDataConnectorOverride(RCloneStorageRequestOverride):
+    """Model for a data connector override."""
+
+    skip: bool
+    data_connector_id: ULID
+    configuration: dict[str, Any] | None
+    source_path: str | None
+    target_path: str | None
+    readonly: bool | None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLaunchRequest:
+    """Model for requesting a session launch."""
+
+    launcher_id: ULID
+    disk_storage: int | None
+    resource_class_id: int | None
+    data_connectors_overrides: list[SessionDataConnectorOverride] | None
+    env_variable_overrides: list[SessionEnvVar] | None
