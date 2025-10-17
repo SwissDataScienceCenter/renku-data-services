@@ -192,6 +192,5 @@ class SessionLaunchRequest:
     launcher_id: ULID
     disk_storage: int | None
     resource_class_id: int | None
-    # data_connectors_overrides: Optional[List[SessionDataConnectorsOverride]] = None
     data_connectors_overrides: list[SessionDataConnectorOverride] | None
     env_variable_overrides: list[SessionEnvVar] | None

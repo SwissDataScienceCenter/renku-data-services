@@ -755,7 +755,6 @@ async def start_session(
             user=user,
             data_connectors_stream=data_connectors_stream,
             work_dir=work_dir,
-            # cloud_storage_overrides=body.cloudstorage or [],
             data_connectors_overrides=launch_request.data_connectors_overrides or [],
             user_repo=user_repo,
         )
@@ -1196,7 +1195,6 @@ def _deduplicate_target_paths(dcs: dict[str, RCloneStorage]) -> dict[str, RClone
         dc_ids.append(dc_id)
         mount_folders[new_mount_folder] = dc_ids
         result_dcs[dc_id] = dc.with_override(
-            # override=apispec.SessionCloudStoragePost(storage_id=dc_id, target_path=new_mount_folder)
             override=SessionDataConnectorOverride(
                 skip=False,
                 data_connector_id=ULID.from_str(dc_id),
