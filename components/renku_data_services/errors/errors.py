@@ -175,6 +175,17 @@ class CannotStartBuildError(ProgrammingError):
     message: str = "An error occurred creating an image build."
 
 
+@dataclass
+class RequestCancelledError(ProgrammingError):
+    """Raised when the server is stopped or the client making the request stops it before it finishes."""
+
+    code: int = 1513
+    message: str = (
+        "The server was stopped or the client making the request stopped it before it finished. "
+        "Please just retry the reuqest."
+    )
+
+
 def missing_or_unauthorized(resource_type: str | StrEnum, id: str | int | ULID) -> MissingResourceError:
     """Generate a missing resource error with an ambiguous message."""
     return MissingResourceError(
