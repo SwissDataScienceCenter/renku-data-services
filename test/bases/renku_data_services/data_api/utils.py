@@ -152,7 +152,65 @@ class K3DCluster(AbstractContextManager):
             return f.read()
 
 
-def setup_amalthea(install_name: str, app_name: str, version: str, cluster: K3DCluster) -> None:
+class KindCluster(AbstractContextManager):
+    """Context manager that will create and tear down a k3s cluster"""
+
+    def __init__(
+        self,
+        cluster_name: str,
+        kubeconfig=".kind-kubeconfig.yaml",
+        extra_images: list[str] | None = None,
+    ):
+        self.cluster_name = cluster_name
+        if extra_images is None:
+            extra_images = []
+        self.extra_images = extra_images
+        self.kubeconfig = kubeconfig
+        self.env = os.environ.copy()
+        self.env["KUBECONFIG"] = self.kubeconfig
+
+    def __enter__(self):
+        """create kind cluster"""
+
+        create_cluster = [
+            "kind",
+            "create",
+            "cluster",
+            "--name",
+            self.cluster_name,
+            "--kubeconfig",
+            self.kubeconfig,
+        ]
+
+        try:
+            subprocess.run(create_cluster, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=self.env, check=True)
+        except subprocess.SubprocessError as err:
+            if err.output is not None:
+                print(err.output.decode())
+            else:
+                print(err)
+            raise
+
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """delete kind cluster"""
+
+        self._delete_cluster()
+        return False
+
+    def _delete_cluster(self):
+        """delete kind cluster"""
+
+        delete_cluster = ["kind", "delete", "cluster", "--name", self.cluster_name, "--kubeconfig", self.kubeconfig]
+        subprocess.run(delete_cluster, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=self.env, check=True)
+
+    def config_yaml(self):
+        with open(self.kubeconfig) as f:
+            return f.read()
+
+
+def setup_amalthea(install_name: str, app_name: str, version: str, cluster: K3DCluster | KindCluster) -> None:
     k8s_config.load_kube_config_from_dict(yaml.safe_load(cluster.config_yaml()))
 
     core_api = k8s_client.CoreV1Api()

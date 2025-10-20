@@ -1,27 +1,17 @@
 """Tests for notebook blueprints."""
 
 import asyncio
-import contextlib
-from collections.abc import AsyncGenerator, AsyncIterator, Generator
+from collections.abc import AsyncIterator, Generator
 from contextlib import suppress
-from datetime import timedelta
 from unittest.mock import MagicMock
 from uuid import uuid4
 
-import kr8s
 import pytest
 import pytest_asyncio
 from kr8s import NotFoundError
 from sanic_testing.testing import SanicASGITestClient
 
-from renku_data_services.k8s.clients import K8sClusterClient
-from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
-from renku_data_services.k8s.models import ClusterConnection
-from renku_data_services.k8s.watcher import K8sWatcher, k8s_object_handler
 from renku_data_services.notebooks.api.classes.k8s_client import JupyterServerV1Alpha1Kr8s
-from renku_data_services.notebooks.constants import JUPYTER_SESSION_GVK
-
-from .utils import ClusterRequired, setup_amalthea
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -59,7 +49,9 @@ def pod_name(server_name: str) -> str:
 
 
 @pytest_asyncio.fixture()
-async def jupyter_server(renku_image: str, server_name: str) -> AsyncIterator[JupyterServerV1Alpha1Kr8s]:
+async def jupyter_server(
+    renku_image: str, server_name: str, notebooks_fixtures
+) -> AsyncIterator[JupyterServerV1Alpha1Kr8s]:
     """Fake server for non pod related tests"""
 
     server = await JupyterServerV1Alpha1Kr8s(
@@ -86,6 +78,7 @@ async def jupyter_server(renku_image: str, server_name: str) -> AsyncIterator[Ju
                         },
                     },
                 },
+                "routing": {"tlsEnabled": False, "host": "some.host"},
             },
         }
     )
@@ -174,7 +167,7 @@ def fake_gitlab(mocker, fake_gitlab_projects, fake_gitlab_project_info):
     return gitlab
 
 
-async def wait_for(sanic_client: SanicASGITestClient, user_headers, server_name: str, max_timeout: int = 20):
+async def wait_for(sanic_client: SanicASGITestClient, user_headers, server_name: str, max_timeout: int = 60):
     res = None
     waited = 0
     for t in list(range(0, max_timeout)):
@@ -258,144 +251,121 @@ async def test_check_docker_image(sanic_client: SanicASGITestClient, user_header
     assert res.status_code == expected_status_code, res.text
 
 
-@pytest.mark.skip()
-class TestNotebooks(ClusterRequired):
-    @pytest.fixture(scope="class", autouse=True)
-    def amalthea(self, cluster, app_manager) -> Generator[None, None]:
-        if cluster is not None:
-            setup_amalthea("amalthea-js", "amalthea", "0.21.0", cluster)
-        app_manager.config.nb_config._kr8s_api.push(asyncio.run(kr8s.asyncio.api()))
+@pytest.fixture
+def notebooks_fixtures(cluster, amalthea_installation, jupyter_server_k8s_watcher) -> Generator[None, None]:
+    yield
 
-        yield
-        app_manager.config.nb_config._kr8s_api.pop()
 
-    @pytest_asyncio.fixture(scope="class", autouse=True)
-    async def k8s_watcher(self, amalthea, app_manager) -> AsyncGenerator[None, None]:
-        clusters = {
-            DEFAULT_K8S_CLUSTER: K8sClusterClient(
-                ClusterConnection(
-                    id=DEFAULT_K8S_CLUSTER,
-                    namespace=app_manager.config.nb_config.k8s.renku_namespace,
-                    api=app_manager.config.nb_config._kr8s_api.current,
-                )
-            )
-        }
+@pytest.mark.sessions
+@pytest.mark.asyncio
+async def test_user_server_list(
+    sanic_client: SanicASGITestClient, authenticated_user_headers, fake_gitlab, jupyter_server, notebooks_fixtures
+):
+    """Validate that the user server list endpoint answers correctly"""
 
-        # sleep to give amalthea a chance to create the CRDs, otherwise the watcher can error out
-        await asyncio.sleep(1)
-        watcher = K8sWatcher(
-            handler=k8s_object_handler(
-                app_manager.config.nb_config.k8s_db_cache, app_manager.metrics, app_manager.rp_repo
-            ),
-            clusters=clusters,
-            kinds=[JUPYTER_SESSION_GVK],
-            db_cache=app_manager.config.nb_config.k8s_db_cache,
-        )
-        asyncio.create_task(watcher.start())
-        yield
-        with contextlib.suppress(TimeoutError):
-            await watcher.stop(timeout=timedelta(seconds=1))
+    await asyncio.sleep(1)  # wait a bit for k8s events to be processed in the background
 
-    @pytest.mark.asyncio
-    async def test_user_server_list(
-        self, sanic_client: SanicASGITestClient, authenticated_user_headers, fake_gitlab, jupyter_server
-    ):
-        """Validate that the user server list endpoint answers correctly"""
+    _, res = await sanic_client.get("/api/data/notebooks/servers", headers=authenticated_user_headers)
 
-        await asyncio.sleep(1)  # wait a bit for k8s events to be processed in the background
+    assert res.status_code == 200, res.text
+    assert "servers" in res.json
+    assert len(res.json["servers"]) == 1
 
-        _, res = await sanic_client.get("/api/data/notebooks/servers", headers=authenticated_user_headers)
 
-        assert res.status_code == 200, res.text
-        assert "servers" in res.json
-        assert len(res.json["servers"]) == 1
+@pytest.mark.sessions
+@pytest.mark.asyncio
+@pytest.mark.parametrize("server_exists,expected_status_code", [(False, 404), (True, 200)])
+async def test_log_retrieval(
+    sanic_client: SanicASGITestClient,
+    server_exists,
+    expected_status_code,
+    authenticated_user_headers,
+    fake_gitlab,
+    notebooks_fixtures,
+    jupyter_server,
+):
+    """Validate that the logs endpoint answers correctly"""
 
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize("server_exists,expected_status_code", [(False, 404), (True, 200)])
-    async def test_log_retrieval(
-        self,
-        sanic_client: SanicASGITestClient,
-        server_exists,
-        jupyter_server,
-        expected_status_code,
-        authenticated_user_headers,
-        fake_gitlab,
-    ):
-        """Validate that the logs endpoint answers correctly"""
+    server_name = "unknown_server"
+    if server_exists:
+        server_name = jupyter_server.name
+        await wait_for(sanic_client, authenticated_user_headers, server_name)
 
-        server_name = "unknown_server"
-        if server_exists:
-            server_name = jupyter_server.name
-            await wait_for(sanic_client, authenticated_user_headers, server_name)
+    _, res = await sanic_client.get(f"/api/data/notebooks/logs/{server_name}", headers=authenticated_user_headers)
 
-        _, res = await sanic_client.get(f"/api/data/notebooks/logs/{server_name}", headers=authenticated_user_headers)
+    assert res.status_code == expected_status_code, res.text
 
-        assert res.status_code == expected_status_code, res.text
 
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize("server_exists,expected_status_code", [(False, 204), (True, 204)])
-    async def test_stop_server(
-        self,
-        sanic_client: SanicASGITestClient,
-        server_exists,
-        jupyter_server,
-        expected_status_code,
-        authenticated_user_headers,
-        fake_gitlab,
-    ):
-        server_name = "unknown_server"
-        if server_exists:
-            server_name = jupyter_server.name
+@pytest.mark.sessions
+@pytest.mark.asyncio
+@pytest.mark.parametrize("server_exists,expected_status_code", [(False, 204), (True, 204)])
+async def test_stop_server(
+    sanic_client: SanicASGITestClient,
+    server_exists,
+    jupyter_server,
+    expected_status_code,
+    authenticated_user_headers,
+    fake_gitlab,
+    notebooks_fixtures,
+):
+    server_name = "unknown_server"
+    if server_exists:
+        server_name = jupyter_server.name
 
-        _, res = await sanic_client.delete(
-            f"/api/data/notebooks/servers/{server_name}", headers=authenticated_user_headers
-        )
+    _, res = await sanic_client.delete(f"/api/data/notebooks/servers/{server_name}", headers=authenticated_user_headers)
 
-        assert res.status_code == expected_status_code, res.text
+    assert res.status_code == expected_status_code, res.text
 
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        "server_exists,expected_status_code, patch",
-        [(False, 404, {}), (True, 200, {"state": "hibernated"})],
+
+@pytest.mark.sessions
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "server_exists,expected_status_code, patch",
+    [(False, 404, {}), (True, 200, {"state": "hibernated"})],
+)
+async def test_patch_server(
+    sanic_client: SanicASGITestClient,
+    server_exists,
+    jupyter_server,
+    expected_status_code,
+    patch,
+    authenticated_user_headers,
+    fake_gitlab,
+    notebooks_fixtures,
+):
+    server_name = "unknown_server"
+    if server_exists:
+        server_name = jupyter_server.name
+        await wait_for(sanic_client, authenticated_user_headers, server_name)
+
+    _, res = await sanic_client.patch(
+        f"/api/data/notebooks/servers/{server_name}", json=patch, headers=authenticated_user_headers
     )
-    async def test_patch_server(
-        self,
-        sanic_client: SanicASGITestClient,
-        server_exists,
-        jupyter_server,
-        expected_status_code,
-        patch,
-        authenticated_user_headers,
-        fake_gitlab,
-    ):
-        server_name = "unknown_server"
-        if server_exists:
-            server_name = jupyter_server.name
-            await wait_for(sanic_client, authenticated_user_headers, server_name)
 
-        _, res = await sanic_client.patch(
-            f"/api/data/notebooks/servers/{server_name}", json=patch, headers=authenticated_user_headers
-        )
+    assert res.status_code == expected_status_code, res.text
 
-        assert res.status_code == expected_status_code, res.text
 
-    @pytest.mark.asyncio
-    async def test_start_server(self, sanic_client: SanicASGITestClient, authenticated_user_headers, fake_gitlab):
-        data = {
-            "branch": "main",
-            "commit_sha": "ee4b1c9fedc99abe5892ee95320bbd8471c5985b",
-            "namespace": "test-ns-start-server",
-            "project": "my-test",
-            "image": "alpine:3",
-        }
+@pytest.mark.sessions
+@pytest.mark.asyncio
+async def test_start_server(
+    sanic_client: SanicASGITestClient,
+    authenticated_user_headers,
+    fake_gitlab,
+    notebooks_fixtures,
+):
+    data = {
+        "branch": "main",
+        "commit_sha": "ee4b1c9fedc99abe5892ee95320bbd8471c5985b",
+        "namespace": "test-ns-start-server",
+        "project": "my-test",
+        "image": "alpine:3",
+    }
 
-        _, res = await sanic_client.post("/api/data/notebooks/servers/", json=data, headers=authenticated_user_headers)
+    _, res = await sanic_client.post("/api/data/notebooks/servers/", json=data, headers=authenticated_user_headers)
 
-        assert res.status_code == 201, res.text
+    assert res.status_code == 201, res.text
 
-        server_name: str = res.json["name"]
-        _, res = await sanic_client.delete(
-            f"/api/data/notebooks/servers/{server_name}", headers=authenticated_user_headers
-        )
+    server_name: str = res.json["name"]
+    _, res = await sanic_client.delete(f"/api/data/notebooks/servers/{server_name}", headers=authenticated_user_headers)
 
-        assert res.status_code == 204, res.text
+    assert res.status_code == 204, res.text
