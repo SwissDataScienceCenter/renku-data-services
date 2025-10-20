@@ -182,7 +182,7 @@ class RequestCancelledError(ProgrammingError):
     code: int = 1513
     message: str = (
         "The server was stopped or the client making the request stopped it before it finished. "
-        "Please just retry the reuqest."
+        "Please just retry the request."
     )
 
 
