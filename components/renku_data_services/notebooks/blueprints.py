@@ -28,6 +28,8 @@ from renku_data_services.notebooks.config import GitProviderHelperProto, Noteboo
 from renku_data_services.notebooks.core_sessions import (
     patch_session,
     start_session,
+    validate_session_patch_request,
+    validate_session_post_request,
 )
 from renku_data_services.notebooks.errors.intermittent import AnonymousUserPatchError
 from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
@@ -219,9 +221,10 @@ class NotebooksNewBP(CustomBlueprint):
             internal_gitlab_user: APIUser,
             body: apispec.SessionPostRequest,
         ) -> JSONResponse:
+            launch_request = validate_session_post_request(body=body)
             session, created = await start_session(
                 request=request,
-                body=body,
+                launch_request=launch_request,
                 user=user,
                 internal_gitlab_user=internal_gitlab_user,
                 nb_config=self.nb_config,
@@ -289,19 +292,22 @@ class NotebooksNewBP(CustomBlueprint):
             session_id: str,
             body: apispec.SessionPatchRequest,
         ) -> HTTPResponse:
+            patch_request = validate_session_patch_request(body=body)
             new_session = await patch_session(
-                body=body,
+                patch_request=patch_request,
                 session_id=session_id,
                 user=user,
                 internal_gitlab_user=internal_gitlab_user,
                 nb_config=self.nb_config,
                 git_provider_helper=self.git_provider_helper,
+                connected_svcs_repo=self.connected_svcs_repo,
+                data_connector_secret_repo=self.data_connector_secret_repo,
                 project_repo=self.project_repo,
                 project_session_secret_repo=self.project_session_secret_repo,
                 rp_repo=self.rp_repo,
                 session_repo=self.session_repo,
+                user_repo=self.user_repo,
                 metrics=self.metrics,
-                connected_svcs_repo=self.connected_svcs_repo,
             )
             return json(new_session.as_apispec().model_dump(exclude_none=True, mode="json"))
 

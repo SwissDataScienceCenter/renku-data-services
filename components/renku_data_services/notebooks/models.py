@@ -1,15 +1,18 @@
 """Basic models for amalthea sessions."""
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from kubernetes.client import V1ObjectMeta, V1Secret
 from pydantic import AliasGenerator, BaseModel, Field, Json
+from ulid import ULID
 
 from renku_data_services.data_connectors.models import DataConnectorSecret
 from renku_data_services.errors import errors
 from renku_data_services.errors.errors import ProgrammingError
+from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorageRequestOverride
 from renku_data_services.notebooks.crs import (
     AmaltheaSessionV1Alpha1,
     DataSource,
@@ -145,6 +148,7 @@ class ExtraSecret:
 class SessionExtraResources:
     """Represents extra resources to add to an amalthea session."""
 
+    annotations: dict[str, str] = field(default_factory=dict)
     containers: list[ExtraContainer] = field(default_factory=list)
     data_connector_secrets: dict[str, list[DataConnectorSecret]] = field(default_factory=dict)
     data_sources: list[DataSource] = field(default_factory=list)
@@ -157,10 +161,14 @@ class SessionExtraResources:
         """Concatenates these session extras with more session extras."""
         if added_extras is None:
             return self
+        annotations: dict[str, str] = dict()
+        annotations.update(self.annotations)
+        annotations.update(added_extras.annotations)
         data_connector_secrets: dict[str, list[DataConnectorSecret]] = dict()
         data_connector_secrets.update(self.data_connector_secrets)
         data_connector_secrets.update(added_extras.data_connector_secrets)
         return SessionExtraResources(
+            annotations=annotations,
             containers=self.containers + added_extras.containers,
             data_connector_secrets=data_connector_secrets,
             data_sources=self.data_sources + added_extras.data_sources,
@@ -169,3 +177,41 @@ class SessionExtraResources:
             volume_mounts=self.volume_mounts + added_extras.volume_mounts,
             volumes=self.volumes + added_extras.volumes,
         )
+
+
+@dataclass(eq=True, kw_only=True)
+class SessionDataConnectorOverride(RCloneStorageRequestOverride):
+    """Model for a data connector override."""
+
+    skip: bool
+    data_connector_id: ULID
+    configuration: dict[str, Any] | None
+    source_path: str | None
+    target_path: str | None
+    readonly: bool | None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionLaunchRequest:
+    """Model for requesting a session launch."""
+
+    launcher_id: ULID
+    disk_storage: int | None
+    resource_class_id: int | None
+    data_connectors_overrides: list[SessionDataConnectorOverride] | None
+    env_variable_overrides: list[SessionEnvVar] | None
+
+
+class SessionState(StrEnum):
+    """Session state."""
+
+    running = "running"
+    hibernated = "hibernated"
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class SessionPatchRequest:
+    """Model for patching a session."""
+
+    resource_class_id: int | None
+    state: SessionState | None
