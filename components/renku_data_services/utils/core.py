@@ -4,8 +4,10 @@ import functools
 import os
 import ssl
 from collections.abc import Awaitable, Callable
+from datetime import datetime, timedelta
 from typing import Any, Concatenate, ParamSpec, Protocol, TypeVar, cast
 
+import httpx
 from deepmerge import Merger
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -78,3 +80,81 @@ def with_db_transaction(
             return await f(self, *args, **kwargs)
 
     return transaction_wrapper
+
+
+def _get_url(host: str) -> str:
+    return f"https://{host}/openbis/openbis/rmi-application-server-v3.json"
+
+
+async def get_openbis_session_token(
+    host: str,
+    username: str = "AnonymousUser",
+    password: str | None = None,
+    timeout: int = 12,
+) -> str:
+    """Requests an openBIS session token with the user's login credentials."""
+    if username == "AnonymousUser" and password is None:
+        login = {"method": "loginAsAnonymousUser", "params": [], "id": "1", "jsonrpc": "2.0"}
+    else:
+        assert password
+        login = {"method": "login", "params": [username, password], "id": "2", "jsonrpc": "2.0"}
+
+    async with httpx.AsyncClient(verify=get_ssl_context(), timeout=5) as client:
+        response = await client.post(_get_url(host), json=login, timeout=timeout)
+        if response.status_code == 200:
+            json: dict[str, str] = response.json()
+            if "result" in json:
+                return json["result"]
+            raise Exception("No session token was returned. Username and password may be incorrect.")
+
+        raise Exception("An openBIS session token related request failed.")
+
+
+async def get_openbis_pat(
+    host: str,
+    session_id: str,
+    personal_access_token_session_name: str = "renku",
+    minimum_validity_in_days: int = 2,
+    timeout: int = 12,
+) -> tuple[str, datetime]:
+    """Requests an openBIS PAT with an openBIS session ID."""
+    url = _get_url(host)
+
+    async with httpx.AsyncClient(verify=get_ssl_context(), timeout=5) as client:
+        get_server_information = {"method": "getServerInformation", "params": [session_id], "id": "2", "jsonrpc": "2.0"}
+        response = await client.post(url, json=get_server_information, timeout=timeout)
+        if response.status_code == 200:
+            json1: dict[str, dict[str, str]] = response.json()
+            if "error" not in json1:
+                personal_access_tokens_max_validity_period = int(
+                    json1["result"]["personal-access-tokens-max-validity-period"]
+                )
+                valid_from = datetime.now()
+                valid_to = valid_from + timedelta(seconds=personal_access_tokens_max_validity_period)
+                validity_in_days = (valid_to - valid_from).days
+                if validity_in_days >= minimum_validity_in_days:
+                    create_personal_access_tokens = {
+                        "method": "createPersonalAccessTokens",
+                        "params": [
+                            session_id,
+                            {
+                                "@type": "as.dto.pat.create.PersonalAccessTokenCreation",
+                                "sessionName": personal_access_token_session_name,
+                                "validFromDate": int(valid_from.timestamp() * 1000),
+                                "validToDate": int(valid_to.timestamp() * 1000),
+                            },
+                        ],
+                        "id": "2",
+                        "jsonrpc": "2.0",
+                    }
+                    response = await client.post(url, json=create_personal_access_tokens, timeout=timeout)
+                    if response.status_code == 200:
+                        json2: dict[str, list[dict[str, str]]] = response.json()
+                        return json2["result"][0]["permId"], valid_to
+                else:
+                    raise Exception(
+                        "The maximum allowed validity period of a personal access token is less than "
+                        f"{minimum_validity_in_days} days."
+                    )
+
+        raise Exception("An openBIS personal access token related request failed.")
