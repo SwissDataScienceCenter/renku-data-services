@@ -1,6 +1,7 @@
 """Data connectors blueprint."""
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from sanic import Request
@@ -8,7 +9,7 @@ from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
 from ulid import ULID
 
-from renku_data_services import base_models
+from renku_data_services import base_models, errors
 from renku_data_services.base_api.auth import (
     authenticate,
     only_authenticated,
@@ -38,8 +39,8 @@ from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
     DataConnectorSecretRepository,
 )
-from renku_data_services.errors import errors
 from renku_data_services.storage.rclone import RCloneValidator
+from renku_data_services.utils.core import get_openbis_pat
 
 
 @dataclass(kw_only=True)
@@ -418,8 +419,15 @@ class DataConnectorsBP(CustomBlueprint):
             secrets = await self.data_connector_secret_repo.get_data_connector_secrets(
                 user=user, data_connector_id=data_connector_id
             )
+            data_connector = await self.data_connector_repo.get_data_connector(
+                user=user, data_connector_id=data_connector_id
+            )
             return validated_json(
-                apispec.DataConnectorSecretsList, [self._dump_data_connector_secret(secret) for secret in secrets]
+                apispec.DataConnectorSecretsList,
+                [
+                    self._dump_data_connector_secret(secret)
+                    for secret in self._adjust_secrets(secrets, data_connector.storage)
+                ],
             )
 
         return "/data_connectors/<data_connector_id:ulid>/secrets", ["GET"], _get_secrets
@@ -435,13 +443,59 @@ class DataConnectorsBP(CustomBlueprint):
             user: base_models.APIUser,
             data_connector_id: ULID,
             body: apispec.DataConnectorSecretPatchList,
+            validator: RCloneValidator,
         ) -> JSONResponse:
             unsaved_secrets = validate_data_connector_secrets_patch(put=body)
+            data_connector = await self.data_connector_repo.get_data_connector(
+                user=user, data_connector_id=data_connector_id
+            )
+            storage = data_connector.storage
+            provider = validator.providers[storage.storage_type]
+            sensitive_lookup = [o.name for o in provider.options if o.sensitive]
+            for secret in unsaved_secrets:
+                if secret.name in sensitive_lookup:
+                    continue
+                raise errors.ValidationError(
+                    message=f"The '{secret.name}' property is not marked sensitive and can not be saved in the secret "
+                    f"storage."
+                )
+            expiration_timestamp = None
+
+            if storage.storage_type == "openbis":
+
+                async def openbis_transform_session_token_to_pat() -> (
+                    tuple[list[models.DataConnectorSecretUpdate], datetime]
+                ):
+                    if len(unsaved_secrets) == 1 and unsaved_secrets[0].name == "session_token":
+                        if unsaved_secrets[0].value is not None:
+                            try:
+                                openbis_pat = await get_openbis_pat(
+                                    storage.configuration["host"], unsaved_secrets[0].value
+                                )
+                                return (
+                                    [models.DataConnectorSecretUpdate(name="pass", value=openbis_pat[0])],
+                                    openbis_pat[1],
+                                )
+                            except Exception as e:
+                                raise errors.ProgrammingError(message=str(e)) from e
+                        raise errors.ValidationError(message="The openBIS session token must be a string value.")
+
+                    raise errors.ValidationError(message="The openBIS storage has only one secret: session_token")
+
+                (
+                    unsaved_secrets,
+                    expiration_timestamp,
+                ) = await openbis_transform_session_token_to_pat()
+
             secrets = await self.data_connector_secret_repo.patch_data_connector_secrets(
-                user=user, data_connector_id=data_connector_id, secrets=unsaved_secrets
+                user=user,
+                data_connector_id=data_connector_id,
+                secrets=unsaved_secrets,
+                expiration_timestamp=expiration_timestamp,
             )
             return validated_json(
-                apispec.DataConnectorSecretsList, [self._dump_data_connector_secret(secret) for secret in secrets]
+                apispec.DataConnectorSecretsList,
+                [self._dump_data_connector_secret(secret) for secret in self._adjust_secrets(secrets, storage)],
             )
 
         return "/data_connectors/<data_connector_id:ulid>/secrets", ["PATCH"], _patch_secrets
@@ -507,6 +561,22 @@ class DataConnectorsBP(CustomBlueprint):
             creation_date=link.creation_date,
             created_by=link.created_by,
         )
+
+    @staticmethod
+    def _adjust_secrets(
+        secrets: list[models.DataConnectorSecret], storage: models.CloudStorageCore
+    ) -> list[models.DataConnectorSecret]:
+        if storage.storage_type == "openbis":
+            for i, secret in enumerate(secrets):
+                if secret.name == "pass":
+                    secrets[i] = models.DataConnectorSecret(
+                        name="session_token",
+                        user_id=secret.user_id,
+                        data_connector_id=secret.data_connector_id,
+                        secret_id=secret.secret_id,
+                    )
+                    break
+        return secrets
 
     @staticmethod
     def _dump_data_connector_secret(secret: models.DataConnectorSecret) -> dict[str, Any]:
