@@ -52,6 +52,34 @@ class RCloneValidator:
 
         provider.validate_config(configuration, keep_sensitive=keep_sensitive)
 
+    def validate_sensitive_data(
+        self, configuration: Union["RCloneConfig", dict[str, Any]], sensitive_data: dict[str, str]
+    ) -> None:
+        """Validates whether the provided sensitive data is marked as sensitive in the rclone schema."""
+        sensitive_options = self.get_provider(configuration).sensitive_options
+        sensitive_options_name_lookup = [o.name for o in sensitive_options]
+        sensitive_data_counter = 0
+        for key, value in sensitive_data.items():
+            if len(value) > 0 and key in sensitive_options_name_lookup:
+                sensitive_data_counter += 1
+                continue
+            raise errors.ValidationError(message=f"The '{key}' property is not marked as sensitive.")
+
+    def get_real_configuration(self, configuration: Union["RCloneConfig", dict[str, Any]]) -> dict[str, Any]:
+        """Converts a Renku rclone configuration to a real rclone config."""
+        real_config = dict(configuration)
+
+        if real_config["type"] == "s3" and real_config.get("provider") == "Switch":
+            # Switch is a fake provider we add for users, we need to replace it since rclone itself
+            # doesn't know it
+            real_config["provider"] = "Other"
+        elif configuration["type"] == "openbis":
+            real_config["type"] = "sftp"
+            real_config["port"] = "2222"
+            real_config["user"] = "?"
+            real_config["pass"] = real_config.pop("session_token")
+        return real_config
+
     async def test_connection(
         self, configuration: Union["RCloneConfig", dict[str, Any]], source_path: str
     ) -> ConnectionResult:
@@ -62,7 +90,7 @@ class RCloneValidator:
             return ConnectionResult(False, str(e))
 
         # Obscure configuration and transform if needed
-        obscured_config = await self.obscure_config(configuration)
+        obscured_config = await self.obscure_config(self.get_real_configuration(configuration))
         transformed_config = self.inject_default_values(self.transform_polybox_switchdriver_config(obscured_config))
 
         with tempfile.NamedTemporaryFile(mode="w+", delete=False, encoding="utf-8") as f:
@@ -71,6 +99,8 @@ class RCloneValidator:
             f.close()
             args = [
                 "lsf",
+                "--low-level-retries=1",  # Connection tests should fail fast.
+                "--retries=1",  # Connection tests should fail fast.
                 "--config",
                 f.name,
                 f"temp:{source_path}",

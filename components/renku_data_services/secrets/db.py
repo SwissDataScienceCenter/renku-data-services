@@ -6,12 +6,12 @@ import asyncio
 import random
 import string
 from collections.abc import AsyncGenerator, Callable, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import cast
 
 from cryptography.hazmat.primitives.asymmetric import rsa
 from prometheus_client import Counter, Enum
-from sqlalchemy import delete, select
+from sqlalchemy import Select, delete, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
@@ -147,11 +147,23 @@ class UserSecretsRepo:
         self.user_repo = user_repo
         self.secret_service_public_key = secret_service_public_key
 
+    def _get_stmt(self, requested_by: APIUser) -> Select[tuple[SecretORM]]:
+        return (
+            select(SecretORM)
+            .where(SecretORM.user_id == requested_by.id)
+            .where(
+                or_(
+                    SecretORM.expiration_timestamp.is_(None),
+                    SecretORM.expiration_timestamp > datetime.now(UTC) + timedelta(seconds=120),
+                )
+            )
+        )
+
     @only_authenticated
     async def get_user_secrets(self, requested_by: APIUser, kind: SecretKind) -> list[Secret]:
         """Get all user's secrets from the database."""
         async with self.session_maker() as session:
-            stmt = select(SecretORM).where(SecretORM.user_id == requested_by.id).where(SecretORM.kind == kind)
+            stmt = self._get_stmt(requested_by).where(SecretORM.kind == kind)
             res = await session.execute(stmt)
             orm = res.scalars().all()
             return [o.dump() for o in orm]
@@ -160,7 +172,7 @@ class UserSecretsRepo:
     async def get_secret_by_id(self, requested_by: APIUser, secret_id: ULID) -> Secret:
         """Get a specific user secret from the database."""
         async with self.session_maker() as session:
-            stmt = select(SecretORM).where(SecretORM.user_id == requested_by.id).where(SecretORM.id == secret_id)
+            stmt = self._get_stmt(requested_by).where(SecretORM.id == secret_id)
             res = await session.execute(stmt)
             orm = res.scalar_one_or_none()
             if not orm:
@@ -187,11 +199,12 @@ class UserSecretsRepo:
         async with self.session_maker() as session, session.begin():
             secret_orm = SecretORM(
                 name=secret.name,
-                default_filename=default_filename,
                 user_id=requested_by.id,
                 encrypted_value=encrypted_value,
                 encrypted_key=encrypted_key,
                 kind=secret.kind,
+                expiration_timestamp=secret.expiration_timestamp,
+                default_filename=default_filename,
             )
             session.add(secret_orm)
 
@@ -212,9 +225,7 @@ class UserSecretsRepo:
         """Update a secret."""
 
         async with self.session_maker() as session, session.begin():
-            result = await session.execute(
-                select(SecretORM).where(SecretORM.id == secret_id).where(SecretORM.user_id == requested_by.id)
-            )
+            result = await session.execute(self._get_stmt(requested_by).where(SecretORM.id == secret_id))
             secret = result.scalar_one_or_none()
             if secret is None:
                 raise errors.MissingResourceError(message=f"The secret with id '{secret_id}' cannot be found")
@@ -239,6 +250,8 @@ class UserSecretsRepo:
                     secret_value=patch.secret_value,
                 )
                 secret.update(encrypted_value=encrypted_value, encrypted_key=encrypted_key)
+            if patch.expiration_timestamp is not None:
+                secret.expiration_timestamp = patch.expiration_timestamp
 
             return secret.dump()
 
@@ -247,9 +260,7 @@ class UserSecretsRepo:
         """Delete a secret."""
 
         async with self.session_maker() as session, session.begin():
-            result = await session.execute(
-                select(SecretORM).where(SecretORM.id == secret_id).where(SecretORM.user_id == requested_by.id)
-            )
+            result = await session.execute(self._get_stmt(requested_by).where(SecretORM.id == secret_id))
             secret = result.scalar_one_or_none()
             if secret is None:
                 return None
