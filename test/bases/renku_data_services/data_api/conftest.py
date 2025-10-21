@@ -4,6 +4,7 @@ import json
 from collections.abc import AsyncGenerator, Callable
 from copy import deepcopy
 from datetime import timedelta
+from pathlib import Path
 from typing import Any, Protocol
 
 import pytest
@@ -739,21 +740,20 @@ def __make_headers(user: UserInfo, admin: bool = False) -> dict[str, str]:
 
 
 @pytest.fixture(scope="session")
-def monkeysession():
-    with pytest.MonkeyPatch.context() as mp:
-        yield mp
-
-
-@pytest.fixture(scope="session")
 def cluster_name():
     return f"k8s-cluster-{str(ULID()).lower()}"
 
 
 @pytest.fixture(scope="session")
-def cluster(cluster_name, monkeysession):
-    cluster = KindCluster(cluster_name)
-    monkeysession.setenv("KUBECONFIG", cluster.kubeconfig)
-    with cluster:
+def kubeconfig_path(monkeysession):
+    kconf = ".kind-kubeconfig.yaml"
+    monkeysession.setenv("KUBECONFIG", kconf)
+    return Path(kconf)
+
+
+@pytest.fixture(scope="session")
+def cluster(cluster_name, kubeconfig_path):
+    with KindCluster(cluster_name, kubeconfig=str(kubeconfig_path)) as cluster:
         yield cluster
 
 
