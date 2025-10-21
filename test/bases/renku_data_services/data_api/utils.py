@@ -218,7 +218,7 @@ def setup_amalthea(install_name: str, app_name: str, version: str, cluster: K3DC
     helm_cmds = [
         ["helm", "repo", "add", "renku", "https://swissdatasciencecenter.github.io/helm-charts"],
         ["helm", "repo", "update"],
-        ["helm", "upgrade", "--install", install_name, f"renku/{app_name}", "--version", version],
+        ["helm", "upgrade", "--install", install_name, f"renku/{app_name}", "--version", version, "--wait"],
     ]
 
     for cmd in helm_cmds:

@@ -256,6 +256,7 @@ def notebooks_fixtures(cluster, amalthea_installation, jupyter_server_k8s_watche
     yield
 
 
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 @pytest.mark.sessions
 @pytest.mark.asyncio
 async def test_user_server_list(
@@ -272,6 +273,7 @@ async def test_user_server_list(
     assert len(res.json["servers"]) == 1
 
 
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 @pytest.mark.sessions
 @pytest.mark.asyncio
 @pytest.mark.parametrize("server_exists,expected_status_code", [(False, 404), (True, 200)])
@@ -296,6 +298,7 @@ async def test_log_retrieval(
     assert res.status_code == expected_status_code, res.text
 
 
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 @pytest.mark.sessions
 @pytest.mark.asyncio
 @pytest.mark.parametrize("server_exists,expected_status_code", [(False, 204), (True, 204)])
@@ -317,6 +320,7 @@ async def test_stop_server(
     assert res.status_code == expected_status_code, res.text
 
 
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 @pytest.mark.sessions
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
@@ -345,6 +349,7 @@ async def test_patch_server(
     assert res.status_code == expected_status_code, res.text
 
 
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 @pytest.mark.sessions
 @pytest.mark.asyncio
 async def test_start_server(
