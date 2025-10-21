@@ -1,11 +1,9 @@
 import json
 import os
-import shutil
 import subprocess
 from contextlib import AbstractContextManager
 from typing import Any
 
-import pytest
 import yaml
 from kubernetes import client as k8s_client
 from kubernetes import config as k8s_config
@@ -59,18 +57,16 @@ def dataclass_to_str(object) -> str:
     return json.dumps(data, sort_keys=True, default=str)
 
 
-class K3DCluster(AbstractContextManager):
+class KindCluster(AbstractContextManager):
     """Context manager that will create and tear down a k3s cluster"""
 
     def __init__(
         self,
         cluster_name: str,
-        k3s_image="latest",
-        kubeconfig=".k3d-config.yaml",
+        kubeconfig=".kind-kubeconfig.yaml",
         extra_images: list[str] | None = None,
     ):
         self.cluster_name = cluster_name
-        self.k3s_image = k3s_image
         if extra_images is None:
             extra_images = []
         self.extra_images = extra_images
@@ -82,21 +78,13 @@ class K3DCluster(AbstractContextManager):
         """create kind cluster"""
 
         create_cluster = [
-            "k3d",
-            "cluster",
+            "kind",
             "create",
+            "cluster",
+            "--name",
             self.cluster_name,
-            "--agents",
-            "1",
-            "--image",
-            self.k3s_image,
-            "--no-lb",
-            "--verbose",
-            "--wait",
-            "--k3s-arg",
-            "--disable=traefik@server:0",
-            "--k3s-arg",
-            "--disable=metrics-server@server:0",
+            "--kubeconfig",
+            self.kubeconfig,
         ]
 
         try:
@@ -107,31 +95,6 @@ class K3DCluster(AbstractContextManager):
             else:
                 print(err)
             raise
-
-        extra_commands = []
-
-        for extra_image in self.extra_images:
-            upload_image = [
-                "k3d",
-                "image",
-                "import",
-                extra_image,
-                "-c",
-                self.cluster_name,
-            ]
-
-            extra_commands.append(upload_image)
-
-        for command in extra_commands:
-            try:
-                subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=self.env, check=True)
-            except subprocess.SubprocessError as err:
-                if err.output is not None:
-                    print(err.output.decode())
-                else:
-                    print(err)
-                self._delete_cluster()
-                raise
 
         return self
 
@@ -144,7 +107,7 @@ class K3DCluster(AbstractContextManager):
     def _delete_cluster(self):
         """delete kind cluster"""
 
-        delete_cluster = ["k3d", "cluster", "delete", self.cluster_name]
+        delete_cluster = ["kind", "delete", "cluster", "--name", self.cluster_name, "--kubeconfig", self.kubeconfig]
         subprocess.run(delete_cluster, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=self.env, check=True)
 
     def config_yaml(self):
@@ -152,7 +115,7 @@ class K3DCluster(AbstractContextManager):
             return f.read()
 
 
-def setup_amalthea(install_name: str, app_name: str, version: str, cluster: K3DCluster) -> None:
+def setup_amalthea(install_name: str, app_name: str, version: str, cluster: KindCluster) -> None:
     k8s_config.load_kube_config_from_dict(yaml.safe_load(cluster.config_yaml()))
 
     core_api = k8s_client.CoreV1Api()
@@ -160,7 +123,7 @@ def setup_amalthea(install_name: str, app_name: str, version: str, cluster: K3DC
     helm_cmds = [
         ["helm", "repo", "add", "renku", "https://swissdatasciencecenter.github.io/helm-charts"],
         ["helm", "repo", "update"],
-        ["helm", "upgrade", "--install", install_name, f"renku/{app_name}", "--version", version],
+        ["helm", "upgrade", "--install", install_name, f"renku/{app_name}", "--version", version, "--wait"],
     ]
 
     for cmd in helm_cmds:
@@ -179,19 +142,3 @@ def setup_amalthea(install_name: str, app_name: str, version: str, cluster: K3DC
             break
     else:
         raise AssertionError("Timeout waiting on amalthea to run") from None
-
-
-class ClusterRequired:
-    @pytest.fixture(scope="class", autouse=True)
-    def cluster(self, disable_cluster_creation) -> K3DCluster | None:
-        if disable_cluster_creation:
-            cmd = ["kubectl", "--kubeconfig", os.path.expanduser("~/.kube/config"), "config", "view", "--raw"]
-            with open(".k3d-config.yaml", "w") as config:
-                subprocess.run(cmd, stdout=config, check=True)
-            yield
-        else:
-            if shutil.which("k3d") is None:
-                pytest.skip("Requires k3d for cluster creation")
-
-            with K3DCluster("renku-test-notebooks") as cluster:
-                yield cluster

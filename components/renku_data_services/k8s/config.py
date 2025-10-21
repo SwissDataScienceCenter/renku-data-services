@@ -67,7 +67,7 @@ class KubeConfigEnv(KubeConfig):
     """Get a kube config from the environment."""
 
     def __init__(self) -> None:
-        super().__init__(ns=os.environ.get("K8S_NAMESPACE", "default"))
+        super().__init__(ns=os.environ.get("K8S_NAMESPACE", "default"), kubeconfig=os.environ.get("KUBECONFIG"))
 
 
 async def from_kubeconfig_file(kubeconfig_path: str) -> KubeConfig:

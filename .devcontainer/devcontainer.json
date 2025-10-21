@@ -29,7 +29,9 @@
 		"ghcr.io/EliiseS/devcontainer-features/bash-profile:1": {
 			"command": "alias k=kubectl"
 		},
-		"./k3d": {},
+		"ghcr.io/devcontainers-extra/features/kind:1": {
+			"version": "v0.30.0"
+		},
 		"ghcr.io/devcontainers/features/go:1": {},
 		"./rclone": {
 			"rclone_repository": "https://github.com/SwissDataScienceCenter/rclone.git",
