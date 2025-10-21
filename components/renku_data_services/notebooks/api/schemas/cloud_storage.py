@@ -228,9 +228,14 @@ class RCloneStorage(ICloudStorageRequest):
         if not self.configuration:
             raise ValidationError("Missing configuration for cloud storage")
 
-        # Transform configuration for polybox or switchDrive
+        # Transform configuration for polybox, switchDrive or sftp
         storage_type = self.configuration.get("type", "")
         access = self.configuration.get("provider", "")
+
+        if storage_type == "sftp":
+            # Do not allow retries for sftp
+            # Reference: https://rclone.org/docs/#globalconfig
+            self.configuration["override.low_level_retries"] = 1
 
         if storage_type == "polybox" or storage_type == "switchDrive":
             self.configuration["type"] = "webdav"
