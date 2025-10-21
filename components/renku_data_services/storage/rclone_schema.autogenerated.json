@@ -1685,7 +1685,7 @@
       {
         "Name": "client_credentials",
         "FieldName": "",
-        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.",
+        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.\n\nNote that this option is NOT supported by all backends.",
         "Default": false,
         "Value": null,
         "Hide": 0,
@@ -3452,7 +3452,7 @@
       {
         "Name": "client_credentials",
         "FieldName": "",
-        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.",
+        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.\n\nNote that this option is NOT supported by all backends.",
         "Default": false,
         "Value": null,
         "Hide": 0,
@@ -4579,7 +4579,7 @@
       {
         "Name": "client_credentials",
         "FieldName": "",
-        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.",
+        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.\n\nNote that this option is NOT supported by all backends.",
         "Default": false,
         "Value": null,
         "Hide": 0,
@@ -5618,6 +5618,23 @@
         "Type": "bool"
       },
       {
+        "Name": "allow_insecure_tls_ciphers",
+        "FieldName": "",
+        "Help": "Allow insecure TLS ciphers\n\nSetting this flag will allow the usage of the following TLS ciphers in addition to the secure defaults:\n\n- TLS_RSA_WITH_AES_128_GCM_SHA256\n",
+        "Default": false,
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "false",
+        "ValueStr": "false",
+        "Type": "bool"
+      },
+      {
         "Name": "shut_timeout",
         "FieldName": "",
         "Help": "Maximum time to wait for data connection closing status.",
@@ -5962,7 +5979,7 @@
       {
         "Name": "client_credentials",
         "FieldName": "",
-        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.",
+        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.\n\nNote that this option is NOT supported by all backends.",
         "Default": false,
         "Value": null,
         "Hide": 0,
@@ -6283,6 +6300,10 @@
           {
             "Value": "us-east4",
             "Help": "Northern Virginia"
+          },
+          {
+            "Value": "us-east5",
+            "Help": "Ohio"
           },
           {
             "Value": "us-west1",
@@ -6615,7 +6636,7 @@
       {
         "Name": "client_credentials",
         "FieldName": "",
-        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.",
+        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.\n\nNote that this option is NOT supported by all backends.",
         "Default": false,
         "Value": null,
         "Hide": 0,
@@ -7173,7 +7194,7 @@
       {
         "Name": "client_credentials",
         "FieldName": "",
-        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.",
+        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.\n\nNote that this option is NOT supported by all backends.",
         "Default": false,
         "Value": null,
         "Hide": 0,
@@ -8230,7 +8251,7 @@
       {
         "Name": "client_credentials",
         "FieldName": "",
-        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.",
+        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.\n\nNote that this option is NOT supported by all backends.",
         "Default": false,
         "Value": null,
         "Hide": 0,
@@ -8928,6 +8949,23 @@
         "Type": "mtime|atime|btime|ctime"
       },
       {
+        "Name": "hashes",
+        "FieldName": "",
+        "Help": "Comma separated list of supported checksum types.",
+        "Default": [],
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "",
+        "ValueStr": "",
+        "Type": "CommaSepList"
+      },
+      {
         "Name": "encoding",
         "FieldName": "",
         "Help": "The encoding for the backend.\n\nSee the [encoding section in the overview](/overview/#encoding) for more info.",
@@ -9116,7 +9154,7 @@
       {
         "Name": "client_credentials",
         "FieldName": "",
-        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.",
+        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.\n\nNote that this option is NOT supported by all backends.",
         "Default": false,
         "Value": null,
         "Hide": 0,
@@ -9759,7 +9797,7 @@
       {
         "Name": "client_credentials",
         "FieldName": "",
-        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.",
+        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.\n\nNote that this option is NOT supported by all backends.",
         "Default": false,
         "Value": null,
         "Hide": 0,
@@ -11066,7 +11104,47 @@
     ],
     "Aliases": null,
     "Hide": false,
-    "MetadataInfo": null
+    "MetadataInfo": {
+      "System": {
+        "opc-meta-atime": {
+          "Help": "Time of last access",
+          "Type": "ISO 8601",
+          "Example": "2025-06-30T22:27:43-04:00",
+          "ReadOnly": false
+        },
+        "opc-meta-btime": {
+          "Help": "Time of file birth (creation)",
+          "Type": "ISO 8601",
+          "Example": "2025-06-30T22:27:43-04:00",
+          "ReadOnly": false
+        },
+        "opc-meta-gid": {
+          "Help": "Group ID of owner",
+          "Type": "decimal number",
+          "Example": "500",
+          "ReadOnly": false
+        },
+        "opc-meta-mode": {
+          "Help": "File type and mode",
+          "Type": "octal, unix style",
+          "Example": "0100664",
+          "ReadOnly": false
+        },
+        "opc-meta-mtime": {
+          "Help": "Time of last modification",
+          "Type": "ISO 8601",
+          "Example": "2025-06-30T22:27:43-04:00",
+          "ReadOnly": false
+        },
+        "opc-meta-uid": {
+          "Help": "User ID of owner",
+          "Type": "decimal number",
+          "Example": "500",
+          "ReadOnly": false
+        }
+      },
+      "Help": "User metadata is stored as opc-meta- keys."
+    }
   },
   {
     "Name": "pcloud",
@@ -11161,7 +11239,7 @@
       {
         "Name": "client_credentials",
         "FieldName": "",
-        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.",
+        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.\n\nNote that this option is NOT supported by all backends.",
         "Default": false,
         "Value": null,
         "Hide": 0,
@@ -11452,6 +11530,23 @@
         "Type": "SizeSuffix"
       },
       {
+        "Name": "upload_cutoff",
+        "FieldName": "",
+        "Help": "Cutoff for switching to chunked upload.\n\nAny files larger than this will be uploaded in chunks of chunk_size.\nThe minimum is 0 and the maximum is 5 GiB.",
+        "Default": 209715200,
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "200Mi",
+        "ValueStr": "200Mi",
+        "Type": "SizeSuffix"
+      },
+      {
         "Name": "chunk_size",
         "FieldName": "",
         "Help": "Chunk size for multipart uploads.\n\t\nLarge files will be uploaded in chunks of this size.\n\nNote that this is stored in memory and there may be up to\n\"--transfers\" * \"--pikpak-upload-concurrency\" chunks stored at once\nin memory.\n\nIf you are transferring large files over high-speed links and you have\nenough memory, then increasing this will speed up the transfers.\n\nRclone will automatically increase the chunk size when uploading a\nlarge file of known size to stay below the 10,000 chunks limit.\n\nIncreasing the chunk size decreases the accuracy of the progress\nstatistics displayed with \"-P\" flag.",
@@ -11472,7 +11567,7 @@
         "Name": "upload_concurrency",
         "FieldName": "",
         "Help": "Concurrency for multipart uploads.\n\nThis is the number of chunks of the same file that are uploaded\nconcurrently for multipart uploads.\n\nNote that chunks are stored in memory and there may be up to\n\"--transfers\" * \"--pikpak-upload-concurrency\" chunks stored at once\nin memory.\n\nIf you are uploading small numbers of large files over high-speed links\nand these uploads do not fully utilize your bandwidth, then increasing\nthis may help to speed up the transfers.",
-        "Default": 5,
+        "Default": 4,
         "Value": null,
         "Hide": 0,
         "Required": false,
@@ -11481,8 +11576,8 @@
         "Advanced": true,
         "Exclusive": false,
         "Sensitive": false,
-        "DefaultStr": "5",
-        "ValueStr": "5",
+        "DefaultStr": "4",
+        "ValueStr": "4",
         "Type": "int"
       },
       {
@@ -11732,7 +11827,7 @@
       {
         "Name": "client_credentials",
         "FieldName": "",
-        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.",
+        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.\n\nNote that this option is NOT supported by all backends.",
         "Default": false,
         "Value": null,
         "Hide": 0,
@@ -12145,7 +12240,7 @@
       {
         "Name": "client_credentials",
         "FieldName": "",
-        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.",
+        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.\n\nNote that this option is NOT supported by all backends.",
         "Default": false,
         "Value": null,
         "Hide": 0,
@@ -12587,7 +12682,7 @@
   },
   {
     "Name": "s3",
-    "Description": "Amazon S3 Compliant Storage Providers including AWS, Alibaba, ArvanCloud, Ceph, ChinaMobile, Cloudflare, DigitalOcean, Dreamhost, Exaba, FlashBlade, GCS, HuaweiOBS, IBMCOS, IDrive, IONOS, LyveCloud, Leviia, Liara, Linode, Magalu, Mega, Minio, Netease, Outscale, Petabox, RackCorp, Rclone, Scaleway, SeaweedFS, Selectel, StackPath, Storj, Synology, TencentCOS, Wasabi, Qiniu and others",
+    "Description": "Amazon S3 Compliant Storage Providers including AWS, Alibaba, ArvanCloud, Ceph, ChinaMobile, Cloudflare, DigitalOcean, Dreamhost, Exaba, FlashBlade, GCS, HuaweiOBS, IBMCOS, IDrive, IONOS, LyveCloud, Leviia, Liara, Linode, Magalu, Mega, Minio, Netease, Outscale, OVHcloud, Petabox, RackCorp, Rclone, Scaleway, SeaweedFS, Selectel, StackPath, Storj, Synology, TencentCOS, Wasabi, Qiniu, Zata and others",
     "Prefix": "s3",
     "Options": [
       {
@@ -12694,6 +12789,10 @@
             "Help": "OUTSCALE Object Storage (OOS)"
           },
           {
+            "Value": "OVHcloud",
+            "Help": "OVHcloud Object Storage"
+          },
+          {
             "Value": "Petabox",
             "Help": "Petabox Object Storage"
           },
@@ -12740,6 +12839,10 @@
           {
             "Value": "Qiniu",
             "Help": "Qiniu Object Storage (Kodo)"
+          },
+          {
+            "Value": "Zata",
+            "Help": "Zata (S3 compatible Gateway)"
           },
           {
             "Value": "Other",
@@ -13225,6 +13328,30 @@
       {
         "Name": "region",
         "FieldName": "",
+        "Help": "Region where you can connect with.\n",
+        "Provider": "Zata",
+        "Default": "",
+        "Value": null,
+        "Examples": [
+          {
+            "Value": "us-east-1",
+            "Help": "Indore, Madhya Pradesh, India"
+          }
+        ],
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": false,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "",
+        "ValueStr": "",
+        "Type": "string"
+      },
+      {
+        "Name": "region",
+        "FieldName": "",
         "Help": "Region where your bucket will be created and your data stored.\n",
         "Provider": "IONOS",
         "Default": "",
@@ -13281,6 +13408,86 @@
           {
             "Value": "ap-northeast-1",
             "Help": "Tokyo, Japan"
+          }
+        ],
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": false,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "",
+        "ValueStr": "",
+        "Type": "string"
+      },
+      {
+        "Name": "region",
+        "FieldName": "",
+        "Help": "Region where your bucket will be created and your data stored.\n",
+        "Provider": "OVHcloud",
+        "Default": "",
+        "Value": null,
+        "Examples": [
+          {
+            "Value": "gra",
+            "Help": "Gravelines, France"
+          },
+          {
+            "Value": "rbx",
+            "Help": "Roubaix, France"
+          },
+          {
+            "Value": "sbg",
+            "Help": "Strasbourg, France"
+          },
+          {
+            "Value": "eu-west-par",
+            "Help": "Paris, France (3AZ)"
+          },
+          {
+            "Value": "de",
+            "Help": "Frankfurt, Germany"
+          },
+          {
+            "Value": "uk",
+            "Help": "London, United Kingdom"
+          },
+          {
+            "Value": "waw",
+            "Help": "Warsaw, Poland"
+          },
+          {
+            "Value": "bhs",
+            "Help": "Beauharnois, Canada"
+          },
+          {
+            "Value": "ca-east-tor",
+            "Help": "Toronto, Canada"
+          },
+          {
+            "Value": "sgp",
+            "Help": "Singapore"
+          },
+          {
+            "Value": "ap-southeast-syd",
+            "Help": "Sydney, Australia"
+          },
+          {
+            "Value": "ap-south-mum",
+            "Help": "Mumbai, India"
+          },
+          {
+            "Value": "us-east-va",
+            "Help": "Vint Hill, Virginia, USA"
+          },
+          {
+            "Value": "us-west-or",
+            "Help": "Hillsboro, Oregon, USA"
+          },
+          {
+            "Value": "rbx-archive",
+            "Help": "Roubaix, France (Cold Archive)"
           }
         ],
         "Hide": 0,
@@ -13402,7 +13609,7 @@
         "Name": "region",
         "FieldName": "",
         "Help": "Region to connect to.\n\nLeave blank if you are using an S3 clone and you don't have a region.",
-        "Provider": "!AWS,Alibaba,ArvanCloud,ChinaMobile,Cloudflare,FlashBlade,IONOS,Petabox,Liara,Linode,Magalu,Qiniu,RackCorp,Scaleway,Selectel,Storj,Synology,TencentCOS,HuaweiOBS,IDrive,Mega",
+        "Provider": "!AWS,Alibaba,ArvanCloud,ChinaMobile,Cloudflare,FlashBlade,IONOS,Petabox,Liara,Linode,Magalu,OVHcloud,Qiniu,RackCorp,Scaleway,Selectel,Storj,Synology,TencentCOS,HuaweiOBS,IDrive,Mega,Zata",
         "Default": "",
         "Value": null,
         "Examples": [
@@ -14357,6 +14564,101 @@
       {
         "Name": "endpoint",
         "FieldName": "",
+        "Help": "Endpoint for OVHcloud Object Storage.",
+        "Provider": "OVHcloud",
+        "Default": "",
+        "Value": null,
+        "Examples": [
+          {
+            "Value": "s3.gra.io.cloud.ovh.net",
+            "Help": "OVHcloud Gravelines, France",
+            "Provider": "OVHcloud"
+          },
+          {
+            "Value": "s3.rbx.io.cloud.ovh.net",
+            "Help": "OVHcloud Roubaix, France",
+            "Provider": "OVHcloud"
+          },
+          {
+            "Value": "s3.sbg.io.cloud.ovh.net",
+            "Help": "OVHcloud Strasbourg, France",
+            "Provider": "OVHcloud"
+          },
+          {
+            "Value": "s3.eu-west-par.io.cloud.ovh.net",
+            "Help": "OVHcloud Paris, France (3AZ)",
+            "Provider": "OVHcloud"
+          },
+          {
+            "Value": "s3.de.io.cloud.ovh.net",
+            "Help": "OVHcloud Frankfurt, Germany",
+            "Provider": "OVHcloud"
+          },
+          {
+            "Value": "s3.uk.io.cloud.ovh.net",
+            "Help": "OVHcloud London, United Kingdom",
+            "Provider": "OVHcloud"
+          },
+          {
+            "Value": "s3.waw.io.cloud.ovh.net",
+            "Help": "OVHcloud Warsaw, Poland",
+            "Provider": "OVHcloud"
+          },
+          {
+            "Value": "s3.bhs.io.cloud.ovh.net",
+            "Help": "OVHcloud Beauharnois, Canada",
+            "Provider": "OVHcloud"
+          },
+          {
+            "Value": "s3.ca-east-tor.io.cloud.ovh.net",
+            "Help": "OVHcloud Toronto, Canada",
+            "Provider": "OVHcloud"
+          },
+          {
+            "Value": "s3.sgp.io.cloud.ovh.net",
+            "Help": "OVHcloud Singapore",
+            "Provider": "OVHcloud"
+          },
+          {
+            "Value": "s3.ap-southeast-syd.io.cloud.ovh.net",
+            "Help": "OVHcloud Sydney, Australia",
+            "Provider": "OVHcloud"
+          },
+          {
+            "Value": "s3.ap-south-mum.io.cloud.ovh.net",
+            "Help": "OVHcloud Mumbai, India",
+            "Provider": "OVHcloud"
+          },
+          {
+            "Value": "s3.us-east-va.io.cloud.ovh.us",
+            "Help": "OVHcloud Vint Hill, Virginia, USA",
+            "Provider": "OVHcloud"
+          },
+          {
+            "Value": "s3.us-west-or.io.cloud.ovh.us",
+            "Help": "OVHcloud Hillsboro, Oregon, USA",
+            "Provider": "OVHcloud"
+          },
+          {
+            "Value": "s3.rbx-archive.io.cloud.ovh.net",
+            "Help": "OVHcloud Roubaix, France (Cold Archive)",
+            "Provider": "OVHcloud"
+          }
+        ],
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": false,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "",
+        "ValueStr": "",
+        "Type": "string"
+      },
+      {
+        "Name": "endpoint",
+        "FieldName": "",
         "Help": "Endpoint for Scaleway Object Storage.",
         "Provider": "Scaleway",
         "Default": "",
@@ -14749,6 +15051,30 @@
       {
         "Name": "endpoint",
         "FieldName": "",
+        "Help": "Endpoint for Zata Object Storage.",
+        "Provider": "Zata",
+        "Default": "",
+        "Value": null,
+        "Examples": [
+          {
+            "Value": "idr01.zata.ai",
+            "Help": "South Asia Endpoint"
+          }
+        ],
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": false,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "",
+        "ValueStr": "",
+        "Type": "string"
+      },
+      {
+        "Name": "endpoint",
+        "FieldName": "",
         "Help": "Endpoint for Selectel Object Storage.",
         "Provider": "Selectel",
         "Default": "",
@@ -14774,7 +15100,7 @@
         "Name": "endpoint",
         "FieldName": "",
         "Help": "Endpoint for S3 API.\n\nRequired when using an S3 clone.",
-        "Provider": "!AWS,ArvanCloud,IBMCOS,IDrive,IONOS,TencentCOS,HuaweiOBS,Alibaba,ChinaMobile,GCS,Liara,Linode,LyveCloud,Magalu,Scaleway,Selectel,StackPath,Storj,Synology,RackCorp,Qiniu,Petabox",
+        "Provider": "!AWS,ArvanCloud,IBMCOS,IDrive,IONOS,TencentCOS,HuaweiOBS,Alibaba,ChinaMobile,GCS,Liara,Linode,LyveCloud,Magalu,OVHcloud,Scaleway,Selectel,StackPath,Storj,Synology,RackCorp,Qiniu,Petabox,Zata",
         "Default": "",
         "Value": null,
         "Examples": [
@@ -15568,7 +15894,7 @@
         "Name": "location_constraint",
         "FieldName": "",
         "Help": "Location constraint - must be set to match the Region.\n\nLeave blank if not sure. Used when creating buckets only.",
-        "Provider": "!AWS,Alibaba,ArvanCloud,HuaweiOBS,ChinaMobile,Cloudflare,FlashBlade,IBMCOS,IDrive,IONOS,Leviia,Liara,Linode,Magalu,Outscale,Qiniu,RackCorp,Scaleway,Selectel,StackPath,Storj,TencentCOS,Petabox,Mega",
+        "Provider": "!AWS,Alibaba,ArvanCloud,HuaweiOBS,ChinaMobile,Cloudflare,FlashBlade,IBMCOS,IDrive,IONOS,Leviia,Liara,Linode,Magalu,Outscale,OVHcloud,Qiniu,RackCorp,Scaleway,Selectel,StackPath,Storj,TencentCOS,Petabox,Mega",
         "Default": "",
         "Value": null,
         "Hide": 0,
@@ -16407,6 +16733,23 @@
         "Type": "bool"
       },
       {
+        "Name": "use_arn_region",
+        "FieldName": "",
+        "Help": "If true, enables arn region support for the service.",
+        "Default": false,
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "false",
+        "ValueStr": "false",
+        "Type": "bool"
+      },
+      {
         "Name": "leave_parts_on_error",
         "FieldName": "",
         "Help": "If true avoid calling abort upload on a failure, leaving all successfully uploaded parts on S3 for manual recovery.\n\nIt should be set to true for resuming uploads across different sessions.\n\nWARNING: Storing parts of an incomplete multipart upload counts towards space usage on S3 and will add additional costs if not cleaned up.\n",
@@ -16708,7 +17051,7 @@
       {
         "Name": "version_at",
         "FieldName": "",
-        "Help": "Show file versions as they were at the specified time.\n\nThe parameter should be a date, \"2006-01-02\", datetime \"2006-01-02\n15:04:05\" or a duration for that long ago, eg \"100d\" or \"1h\".\n\nNote that when using this no file write operations are permitted,\nso you can't upload files or delete them.\n\nSee [the time option docs](/docs/#time-option) for valid formats.\n",
+        "Help": "Show file versions as they were at the specified time.\n\nThe parameter should be a date, \"2006-01-02\", datetime \"2006-01-02\n15:04:05\" or a duration for that long ago, eg \"100d\" or \"1h\".\n\nNote that when using this no file write operations are permitted,\nso you can't upload files or delete them.\n\nSee [the time option docs](/docs/#time-options) for valid formats.\n",
         "Default": "0001-01-01T00:00:00Z",
         "Value": null,
         "Hide": 0,
@@ -17259,7 +17602,7 @@
         "Name": "encoding",
         "FieldName": "",
         "Help": "The encoding for the backend.\n\nSee the [encoding section in the overview](/overview/#encoding) for more info.",
-        "Default": 16850954,
+        "Default": 50405386,
         "Value": null,
         "Hide": 0,
         "Required": false,
@@ -17268,8 +17611,8 @@
         "Advanced": true,
         "Exclusive": false,
         "Sensitive": false,
-        "DefaultStr": "Slash,DoubleQuote,BackSlash,Ctl,InvalidUtf8",
-        "ValueStr": "Slash,DoubleQuote,BackSlash,Ctl,InvalidUtf8",
+        "DefaultStr": "Slash,DoubleQuote,BackSlash,Ctl,InvalidUtf8,Dot",
+        "ValueStr": "Slash,DoubleQuote,BackSlash,Ctl,InvalidUtf8,Dot",
         "Type": "Encoding"
       },
       {
@@ -17624,9 +17967,26 @@
         "Type": "string"
       },
       {
+        "Name": "hashes",
+        "FieldName": "",
+        "Help": "Comma separated list of supported checksum types.",
+        "Default": [],
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "",
+        "ValueStr": "",
+        "Type": "CommaSepList"
+      },
+      {
         "Name": "md5sum_command",
         "FieldName": "",
-        "Help": "The command used to read md5 hashes.\n\nLeave blank for autodetect.",
+        "Help": "The command used to read MD5 hashes.\n\nLeave blank for autodetect.",
         "Default": "",
         "Value": null,
         "Hide": 0,
@@ -17643,7 +18003,92 @@
       {
         "Name": "sha1sum_command",
         "FieldName": "",
-        "Help": "The command used to read sha1 hashes.\n\nLeave blank for autodetect.",
+        "Help": "The command used to read SHA-1 hashes.\n\nLeave blank for autodetect.",
+        "Default": "",
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "",
+        "ValueStr": "",
+        "Type": "string"
+      },
+      {
+        "Name": "crc32sum_command",
+        "FieldName": "",
+        "Help": "The command used to read CRC-32 hashes.\n\nLeave blank for autodetect.",
+        "Default": "",
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "",
+        "ValueStr": "",
+        "Type": "string"
+      },
+      {
+        "Name": "sha256sum_command",
+        "FieldName": "",
+        "Help": "The command used to read SHA-256 hashes.\n\nLeave blank for autodetect.",
+        "Default": "",
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "",
+        "ValueStr": "",
+        "Type": "string"
+      },
+      {
+        "Name": "blake3sum_command",
+        "FieldName": "",
+        "Help": "The command used to read BLAKE3 hashes.\n\nLeave blank for autodetect.",
+        "Default": "",
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "",
+        "ValueStr": "",
+        "Type": "string"
+      },
+      {
+        "Name": "xxh3sum_command",
+        "FieldName": "",
+        "Help": "The command used to read XXH3 hashes.\n\nLeave blank for autodetect.",
+        "Default": "",
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "",
+        "ValueStr": "",
+        "Type": "string"
+      },
+      {
+        "Name": "xxh128sum_command",
+        "FieldName": "",
+        "Help": "The command used to read XXH128 hashes.\n\nLeave blank for autodetect.",
         "Default": "",
         "Value": null,
         "Hide": 0,
@@ -18096,7 +18541,7 @@
       {
         "Name": "client_credentials",
         "FieldName": "",
-        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.",
+        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.\n\nNote that this option is NOT supported by all backends.",
         "Default": false,
         "Value": null,
         "Hide": 0,
@@ -18510,6 +18955,23 @@
         "DefaultStr": "true",
         "ValueStr": "true",
         "Type": "bool"
+      },
+      {
+        "Name": "kerberos_ccache",
+        "FieldName": "",
+        "Help": "Path to the Kerberos credential cache (krb5cc).\n\nOverrides the default KRB5CCNAME environment variable and allows this\ninstance of the SMB backend to use a different Kerberos cache file.\nThis is useful when mounting multiple SMB with different credentials\nor running in multi-user environments.\n\nSupported formats:\n  - FILE:/path/to/ccache   – Use the specified file.\n  - DIR:/path/to/ccachedir – Use the primary file inside the specified directory.\n  - /path/to/ccache        – Interpreted as a file path.",
+        "Default": "",
+        "Value": null,
+        "Hide": 0,
+        "Required": false,
+        "IsPassword": false,
+        "NoPrefix": false,
+        "Advanced": true,
+        "Exclusive": false,
+        "Sensitive": false,
+        "DefaultStr": "",
+        "ValueStr": "",
+        "Type": "string"
       },
       {
         "Name": "encoding",
@@ -20328,7 +20790,7 @@
       {
         "Name": "client_credentials",
         "FieldName": "",
-        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.",
+        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.\n\nNote that this option is NOT supported by all backends.",
         "Default": false,
         "Value": null,
         "Hide": 0,
@@ -20509,7 +20971,7 @@
       {
         "Name": "client_credentials",
         "FieldName": "",
-        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.",
+        "Help": "Use client credentials OAuth flow.\n\nThis will use the OAUTH2 client Credentials Flow as described in RFC 6749.\n\nNote that this option is NOT supported by all backends.",
         "Default": false,
         "Value": null,
         "Hide": 0,

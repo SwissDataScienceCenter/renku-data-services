@@ -54,6 +54,7 @@ class SolrClientConfig:
     core: str
     user: Optional[SolrUser] = None
     timeout: int = 600
+    configset: str = "_default"
 
     @classmethod
     def from_env(cls) -> SolrClientConfig:
@@ -74,7 +75,10 @@ class SolrClientConfig:
         return cls(url, core, user, timeout)
 
     def __str__(self) -> str:
-        return f"SolrClientConfig(base_url={self.base_url}, core={self.core}, user={self.user}, timeout={self.timeout})"
+        return (
+            f"SolrClientConfig(base_url={self.base_url}, core={self.core}, user={self.user}, timeout={self.timeout}"
+            f", configset={self.configset})"
+        )
 
 
 class SolrClientException(BaseError, ABC):
@@ -795,7 +799,7 @@ class DefaultSolrAdminClient(SolrAdminClient):
     async def create(self, core_name: str | None) -> None:
         """Create a core with the given `core_name` or the name provided in the config object."""
         core = core_name or self.config.core
-        data = {"create": {"name": core, "configSet": "_default"}}
+        data = {"create": {"name": core, "configSet": self.config.configset}}
         resp = await self.delegate.post("", json=data)
         if not resp.is_success:
             raise SolrClientCreateCoreException(core, resp)

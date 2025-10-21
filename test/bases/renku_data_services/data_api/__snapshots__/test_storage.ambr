@@ -1947,6 +1947,8 @@
             Use client credentials OAuth flow.
             
             This will use the OAUTH2 client Credentials Flow as described in RFC 6749.
+            
+            Note that this option is NOT supported by all backends.
           ''',
           'ispassword': False,
           'name': 'client_credentials',
@@ -2452,6 +2454,8 @@
             Use client credentials OAuth flow.
             
             This will use the OAUTH2 client Credentials Flow as described in RFC 6749.
+            
+            Note that this option is NOT supported by all backends.
           ''',
           'ispassword': False,
           'name': 'client_credentials',
@@ -3453,6 +3457,8 @@
             Use client credentials OAuth flow.
             
             This will use the OAUTH2 client Credentials Flow as described in RFC 6749.
+            
+            Note that this option is NOT supported by all backends.
           ''',
           'ispassword': False,
           'name': 'client_credentials',
@@ -4409,6 +4415,25 @@
         }),
         dict({
           'advanced': True,
+          'default': False,
+          'default_str': 'false',
+          'exclusive': False,
+          'help': '''
+            Allow insecure TLS ciphers
+            
+            Setting this flag will allow the usage of the following TLS ciphers in addition to the secure defaults:
+            
+            - TLS_RSA_WITH_AES_128_GCM_SHA256
+  
+          ''',
+          'ispassword': False,
+          'name': 'allow_insecure_tls_ciphers',
+          'required': False,
+          'sensitive': False,
+          'type': 'bool',
+        }),
+        dict({
+          'advanced': True,
           'default': 60000000000.0,
           'default_str': '1m0s',
           'exclusive': False,
@@ -4701,6 +4726,8 @@
             Use client credentials OAuth flow.
             
             This will use the OAUTH2 client Credentials Flow as described in RFC 6749.
+            
+            Note that this option is NOT supported by all backends.
           ''',
           'ispassword': False,
           'name': 'client_credentials',
@@ -5043,6 +5070,10 @@
               'value': 'us-east4',
             }),
             dict({
+              'help': 'Ohio',
+              'value': 'us-east5',
+            }),
+            dict({
               'help': 'Oregon',
               'value': 'us-west1',
             }),
@@ -5325,6 +5356,8 @@
             Use client credentials OAuth flow.
             
             This will use the OAUTH2 client Credentials Flow as described in RFC 6749.
+            
+            Note that this option is NOT supported by all backends.
           ''',
           'ispassword': False,
           'name': 'client_credentials',
@@ -5739,6 +5772,8 @@
             Use client credentials OAuth flow.
             
             This will use the OAUTH2 client Credentials Flow as described in RFC 6749.
+            
+            Note that this option is NOT supported by all backends.
           ''',
           'ispassword': False,
           'name': 'client_credentials',
@@ -6509,6 +6544,8 @@
             Use client credentials OAuth flow.
             
             This will use the OAUTH2 client Credentials Flow as described in RFC 6749.
+            
+            Note that this option is NOT supported by all backends.
           ''',
           'ispassword': False,
           'name': 'client_credentials',
@@ -6856,6 +6893,8 @@
             Use client credentials OAuth flow.
             
             This will use the OAUTH2 client Credentials Flow as described in RFC 6749.
+            
+            Note that this option is NOT supported by all backends.
           ''',
           'ispassword': False,
           'name': 'client_credentials',
@@ -7367,6 +7406,8 @@
             Use client credentials OAuth flow.
             
             This will use the OAUTH2 client Credentials Flow as described in RFC 6749.
+            
+            Note that this option is NOT supported by all backends.
           ''',
           'ispassword': False,
           'name': 'client_credentials',
@@ -8631,6 +8672,8 @@
             Use client credentials OAuth flow.
             
             This will use the OAUTH2 client Credentials Flow as described in RFC 6749.
+            
+            Note that this option is NOT supported by all backends.
           ''',
           'ispassword': False,
           'name': 'client_credentials',
@@ -8877,6 +8920,23 @@
         }),
         dict({
           'advanced': True,
+          'default': 209715200.0,
+          'default_str': '200Mi',
+          'exclusive': False,
+          'help': '''
+            Cutoff for switching to chunked upload.
+            
+            Any files larger than this will be uploaded in chunks of chunk_size.
+            The minimum is 0 and the maximum is 5 GiB.
+          ''',
+          'ispassword': False,
+          'name': 'upload_cutoff',
+          'required': False,
+          'sensitive': False,
+          'type': 'SizeSuffix',
+        }),
+        dict({
+          'advanced': True,
           'default': 5242880.0,
           'default_str': '5Mi',
           'exclusive': False,
@@ -8906,8 +8966,8 @@
         }),
         dict({
           'advanced': True,
-          'default': 5.0,
-          'default_str': '5',
+          'default': 4.0,
+          'default_str': '4',
           'exclusive': False,
           'help': '''
             Concurrency for multipart uploads.
@@ -9082,6 +9142,8 @@
             Use client credentials OAuth flow.
             
             This will use the OAUTH2 client Credentials Flow as described in RFC 6749.
+            
+            Note that this option is NOT supported by all backends.
           ''',
           'ispassword': False,
           'name': 'client_credentials',
@@ -9433,6 +9495,8 @@
             Use client credentials OAuth flow.
             
             This will use the OAUTH2 client Credentials Flow as described in RFC 6749.
+            
+            Note that this option is NOT supported by all backends.
           ''',
           'ispassword': False,
           'name': 'client_credentials',
@@ -9815,7 +9879,7 @@
       'prefix': 'quatrix',
     }),
     dict({
-      'description': 'Amazon S3 Compliant Storage Providers including AWS, Alibaba, ArvanCloud, Ceph, ChinaMobile, Cloudflare, DigitalOcean, Dreamhost, Exaba, FlashBlade, GCS, HuaweiOBS, IBMCOS, IDrive, IONOS, LyveCloud, Leviia, Liara, Linode, Magalu, Mega, Minio, Netease, Outscale, Petabox, RackCorp, Rclone, Scaleway, SeaweedFS, Selectel, StackPath, Storj, Synology, TencentCOS, Wasabi, Qiniu and others',
+      'description': 'Amazon S3 Compliant Storage Providers including AWS, Alibaba, ArvanCloud, Ceph, ChinaMobile, Cloudflare, DigitalOcean, Dreamhost, Exaba, FlashBlade, GCS, HuaweiOBS, IBMCOS, IDrive, IONOS, LyveCloud, Leviia, Liara, Linode, Magalu, Mega, Minio, Netease, Outscale, OVHcloud, Petabox, RackCorp, Rclone, Scaleway, SeaweedFS, Selectel, StackPath, Storj, Synology, TencentCOS, Wasabi, Qiniu, Zata and others',
       'name': 's3',
       'options': list([
         dict({
@@ -9920,6 +9984,10 @@
               'value': 'Outscale',
             }),
             dict({
+              'help': 'OVHcloud Object Storage',
+              'value': 'OVHcloud',
+            }),
+            dict({
               'help': 'Petabox Object Storage',
               'value': 'Petabox',
             }),
@@ -9966,6 +10034,10 @@
             dict({
               'help': 'Qiniu Object Storage (Kodo)',
               'value': 'Qiniu',
+            }),
+            dict({
+              'help': 'Zata (S3 compatible Gateway)',
+              'value': 'Zata',
             }),
             dict({
               'help': 'Any other S3 compatible provider',
@@ -10530,6 +10602,28 @@
           'default_str': '',
           'examples': list([
             dict({
+              'help': 'Indore, Madhya Pradesh, India',
+              'value': 'us-east-1',
+            }),
+          ]),
+          'exclusive': False,
+          'help': '''
+            Region where you can connect with.
+  
+          ''',
+          'ispassword': False,
+          'name': 'region',
+          'provider': 'Zata',
+          'required': False,
+          'sensitive': False,
+          'type': 'string',
+        }),
+        dict({
+          'advanced': False,
+          'default': '',
+          'default_str': '',
+          'examples': list([
+            dict({
               'help': 'Frankfurt, Germany',
               'value': 'de',
             }),
@@ -10588,6 +10682,84 @@
           'ispassword': False,
           'name': 'region',
           'provider': 'Outscale',
+          'required': False,
+          'sensitive': False,
+          'type': 'string',
+        }),
+        dict({
+          'advanced': False,
+          'default': '',
+          'default_str': '',
+          'examples': list([
+            dict({
+              'help': 'Gravelines, France',
+              'value': 'gra',
+            }),
+            dict({
+              'help': 'Roubaix, France',
+              'value': 'rbx',
+            }),
+            dict({
+              'help': 'Strasbourg, France',
+              'value': 'sbg',
+            }),
+            dict({
+              'help': 'Paris, France (3AZ)',
+              'value': 'eu-west-par',
+            }),
+            dict({
+              'help': 'Frankfurt, Germany',
+              'value': 'de',
+            }),
+            dict({
+              'help': 'London, United Kingdom',
+              'value': 'uk',
+            }),
+            dict({
+              'help': 'Warsaw, Poland',
+              'value': 'waw',
+            }),
+            dict({
+              'help': 'Beauharnois, Canada',
+              'value': 'bhs',
+            }),
+            dict({
+              'help': 'Toronto, Canada',
+              'value': 'ca-east-tor',
+            }),
+            dict({
+              'help': 'Singapore',
+              'value': 'sgp',
+            }),
+            dict({
+              'help': 'Sydney, Australia',
+              'value': 'ap-southeast-syd',
+            }),
+            dict({
+              'help': 'Mumbai, India',
+              'value': 'ap-south-mum',
+            }),
+            dict({
+              'help': 'Vint Hill, Virginia, USA',
+              'value': 'us-east-va',
+            }),
+            dict({
+              'help': 'Hillsboro, Oregon, USA',
+              'value': 'us-west-or',
+            }),
+            dict({
+              'help': 'Roubaix, France (Cold Archive)',
+              'value': 'rbx-archive',
+            }),
+          ]),
+          'exclusive': False,
+          'help': '''
+            Region where your bucket will be created and your data stored.
+  
+          ''',
+          'ispassword': False,
+          'name': 'region',
+          'provider': 'OVHcloud',
           'required': False,
           'sensitive': False,
           'type': 'string',
@@ -10718,7 +10890,7 @@
           ''',
           'ispassword': False,
           'name': 'region',
-          'provider': '!AWS,Alibaba,ArvanCloud,ChinaMobile,Cloudflare,FlashBlade,IONOS,Petabox,Liara,Linode,Magalu,Qiniu,RackCorp,Scaleway,Selectel,Storj,Synology,TencentCOS,HuaweiOBS,IDrive,Mega',
+          'provider': '!AWS,Alibaba,ArvanCloud,ChinaMobile,Cloudflare,FlashBlade,IONOS,Petabox,Liara,Linode,Magalu,OVHcloud,Qiniu,RackCorp,Scaleway,Selectel,Storj,Synology,TencentCOS,HuaweiOBS,IDrive,Mega,Zata',
           'required': False,
           'sensitive': False,
           'type': 'string',
@@ -11626,6 +11798,96 @@
           'default_str': '',
           'examples': list([
             dict({
+              'help': 'OVHcloud Gravelines, France',
+              'provider': 'OVHcloud',
+              'value': 's3.gra.io.cloud.ovh.net',
+            }),
+            dict({
+              'help': 'OVHcloud Roubaix, France',
+              'provider': 'OVHcloud',
+              'value': 's3.rbx.io.cloud.ovh.net',
+            }),
+            dict({
+              'help': 'OVHcloud Strasbourg, France',
+              'provider': 'OVHcloud',
+              'value': 's3.sbg.io.cloud.ovh.net',
+            }),
+            dict({
+              'help': 'OVHcloud Paris, France (3AZ)',
+              'provider': 'OVHcloud',
+              'value': 's3.eu-west-par.io.cloud.ovh.net',
+            }),
+            dict({
+              'help': 'OVHcloud Frankfurt, Germany',
+              'provider': 'OVHcloud',
+              'value': 's3.de.io.cloud.ovh.net',
+            }),
+            dict({
+              'help': 'OVHcloud London, United Kingdom',
+              'provider': 'OVHcloud',
+              'value': 's3.uk.io.cloud.ovh.net',
+            }),
+            dict({
+              'help': 'OVHcloud Warsaw, Poland',
+              'provider': 'OVHcloud',
+              'value': 's3.waw.io.cloud.ovh.net',
+            }),
+            dict({
+              'help': 'OVHcloud Beauharnois, Canada',
+              'provider': 'OVHcloud',
+              'value': 's3.bhs.io.cloud.ovh.net',
+            }),
+            dict({
+              'help': 'OVHcloud Toronto, Canada',
+              'provider': 'OVHcloud',
+              'value': 's3.ca-east-tor.io.cloud.ovh.net',
+            }),
+            dict({
+              'help': 'OVHcloud Singapore',
+              'provider': 'OVHcloud',
+              'value': 's3.sgp.io.cloud.ovh.net',
+            }),
+            dict({
+              'help': 'OVHcloud Sydney, Australia',
+              'provider': 'OVHcloud',
+              'value': 's3.ap-southeast-syd.io.cloud.ovh.net',
+            }),
+            dict({
+              'help': 'OVHcloud Mumbai, India',
+              'provider': 'OVHcloud',
+              'value': 's3.ap-south-mum.io.cloud.ovh.net',
+            }),
+            dict({
+              'help': 'OVHcloud Vint Hill, Virginia, USA',
+              'provider': 'OVHcloud',
+              'value': 's3.us-east-va.io.cloud.ovh.us',
+            }),
+            dict({
+              'help': 'OVHcloud Hillsboro, Oregon, USA',
+              'provider': 'OVHcloud',
+              'value': 's3.us-west-or.io.cloud.ovh.us',
+            }),
+            dict({
+              'help': 'OVHcloud Roubaix, France (Cold Archive)',
+              'provider': 'OVHcloud',
+              'value': 's3.rbx-archive.io.cloud.ovh.net',
+            }),
+          ]),
+          'exclusive': False,
+          'help': 'Endpoint for OVHcloud Object Storage.',
+          'ispassword': False,
+          'name': 'endpoint',
+          'provider': 'OVHcloud',
+          'required': False,
+          'sensitive': False,
+          'type': 'string',
+        }),
+        dict({
+          'advanced': False,
+          'default': '',
+          'default_str': '',
+          'examples': list([
+            dict({
               'help': 'Amsterdam Endpoint',
               'value': 's3.nl-ams.scw.cloud',
             }),
@@ -11978,6 +12240,25 @@
           'default_str': '',
           'examples': list([
             dict({
+              'help': 'South Asia Endpoint',
+              'value': 'idr01.zata.ai',
+            }),
+          ]),
+          'exclusive': False,
+          'help': 'Endpoint for Zata Object Storage.',
+          'ispassword': False,
+          'name': 'endpoint',
+          'provider': 'Zata',
+          'required': False,
+          'sensitive': False,
+          'type': 'string',
+        }),
+        dict({
+          'advanced': False,
+          'default': '',
+          'default_str': '',
+          'examples': list([
+            dict({
               'help': 'Saint Petersburg',
               'value': 's3.ru-1.storage.selcloud.ru',
             }),
@@ -12195,7 +12476,7 @@
           ''',
           'ispassword': False,
           'name': 'endpoint',
-          'provider': '!AWS,ArvanCloud,IBMCOS,IDrive,IONOS,TencentCOS,HuaweiOBS,Alibaba,ChinaMobile,GCS,Liara,Linode,LyveCloud,Magalu,Scaleway,Selectel,StackPath,Storj,Synology,RackCorp,Qiniu,Petabox,Switch',
+          'provider': '!AWS,ArvanCloud,IBMCOS,IDrive,IONOS,TencentCOS,HuaweiOBS,Alibaba,ChinaMobile,GCS,Liara,Linode,LyveCloud,Magalu,OVHcloud,Scaleway,Selectel,StackPath,Storj,Synology,RackCorp,Qiniu,Petabox,Zata,Switch',
           'required': True,
           'sensitive': False,
           'type': 'string',
@@ -12789,7 +13070,7 @@
           ''',
           'ispassword': False,
           'name': 'location_constraint',
-          'provider': '!AWS,Alibaba,ArvanCloud,HuaweiOBS,ChinaMobile,Cloudflare,FlashBlade,IBMCOS,IDrive,IONOS,Leviia,Liara,Linode,Magalu,Outscale,Qiniu,RackCorp,Scaleway,Selectel,StackPath,Storj,TencentCOS,Petabox,Mega',
+          'provider': '!AWS,Alibaba,ArvanCloud,HuaweiOBS,ChinaMobile,Cloudflare,FlashBlade,IBMCOS,IDrive,IONOS,Leviia,Liara,Linode,Magalu,Outscale,OVHcloud,Qiniu,RackCorp,Scaleway,Selectel,StackPath,Storj,TencentCOS,Petabox,Mega',
           'required': False,
           'sensitive': False,
           'type': 'string',
@@ -13690,6 +13971,18 @@
           'default': False,
           'default_str': 'false',
           'exclusive': False,
+          'help': 'If true, enables arn region support for the service.',
+          'ispassword': False,
+          'name': 'use_arn_region',
+          'required': False,
+          'sensitive': False,
+          'type': 'bool',
+        }),
+        dict({
+          'advanced': True,
+          'default': False,
+          'default_str': 'false',
+          'exclusive': False,
           'help': '''
             If true avoid calling abort upload on a failure, leaving all successfully uploaded parts on S3 for manual recovery.
             
@@ -14039,7 +14332,7 @@
             Note that when using this no file write operations are permitted,
             so you can't upload files or delete them.
             
-            See [the time option docs](/docs/#time-option) for valid formats.
+            See [the time option docs](/docs/#time-options) for valid formats.
   
           ''',
           'ispassword': False,
@@ -14558,8 +14851,8 @@
         }),
         dict({
           'advanced': True,
-          'default': 16850954.0,
-          'default_str': 'Slash,DoubleQuote,BackSlash,Ctl,InvalidUtf8',
+          'default': 50405386.0,
+          'default_str': 'Slash,DoubleQuote,BackSlash,Ctl,InvalidUtf8,Dot',
           'exclusive': False,
           'help': '''
             The encoding for the backend.
@@ -14876,11 +15169,24 @@
         }),
         dict({
           'advanced': True,
+          'default': list([
+          ]),
+          'default_str': '',
+          'exclusive': False,
+          'help': 'Comma separated list of supported checksum types.',
+          'ispassword': False,
+          'name': 'hashes',
+          'required': False,
+          'sensitive': False,
+          'type': 'CommaSepList',
+        }),
+        dict({
+          'advanced': True,
           'default': '',
           'default_str': '',
           'exclusive': False,
           'help': '''
-            The command used to read md5 hashes.
+            The command used to read MD5 hashes.
             
             Leave blank for autodetect.
           ''',
@@ -14896,12 +15202,92 @@
           'default_str': '',
           'exclusive': False,
           'help': '''
-            The command used to read sha1 hashes.
+            The command used to read SHA-1 hashes.
             
             Leave blank for autodetect.
           ''',
           'ispassword': False,
           'name': 'sha1sum_command',
+          'required': False,
+          'sensitive': False,
+          'type': 'string',
+        }),
+        dict({
+          'advanced': True,
+          'default': '',
+          'default_str': '',
+          'exclusive': False,
+          'help': '''
+            The command used to read CRC-32 hashes.
+            
+            Leave blank for autodetect.
+          ''',
+          'ispassword': False,
+          'name': 'crc32sum_command',
+          'required': False,
+          'sensitive': False,
+          'type': 'string',
+        }),
+        dict({
+          'advanced': True,
+          'default': '',
+          'default_str': '',
+          'exclusive': False,
+          'help': '''
+            The command used to read SHA-256 hashes.
+            
+            Leave blank for autodetect.
+          ''',
+          'ispassword': False,
+          'name': 'sha256sum_command',
+          'required': False,
+          'sensitive': False,
+          'type': 'string',
+        }),
+        dict({
+          'advanced': True,
+          'default': '',
+          'default_str': '',
+          'exclusive': False,
+          'help': '''
+            The command used to read BLAKE3 hashes.
+            
+            Leave blank for autodetect.
+          ''',
+          'ispassword': False,
+          'name': 'blake3sum_command',
+          'required': False,
+          'sensitive': False,
+          'type': 'string',
+        }),
+        dict({
+          'advanced': True,
+          'default': '',
+          'default_str': '',
+          'exclusive': False,
+          'help': '''
+            The command used to read XXH3 hashes.
+            
+            Leave blank for autodetect.
+          ''',
+          'ispassword': False,
+          'name': 'xxh3sum_command',
+          'required': False,
+          'sensitive': False,
+          'type': 'string',
+        }),
+        dict({
+          'advanced': True,
+          'default': '',
+          'default_str': '',
+          'exclusive': False,
+          'help': '''
+            The command used to read XXH128 hashes.
+            
+            Leave blank for autodetect.
+          ''',
+          'ispassword': False,
+          'name': 'xxh128sum_command',
           'required': False,
           'sensitive': False,
           'type': 'string',
@@ -15391,6 +15777,8 @@
             Use client credentials OAuth flow.
             
             This will use the OAUTH2 client Credentials Flow as described in RFC 6749.
+            
+            Note that this option is NOT supported by all backends.
           ''',
           'ispassword': False,
           'name': 'client_credentials',
@@ -15760,6 +16148,30 @@
           'required': False,
           'sensitive': False,
           'type': 'bool',
+        }),
+        dict({
+          'advanced': True,
+          'default': '',
+          'default_str': '',
+          'exclusive': False,
+          'help': '''
+            Path to the Kerberos credential cache (krb5cc).
+            
+            Overrides the default KRB5CCNAME environment variable and allows this
+            instance of the SMB backend to use a different Kerberos cache file.
+            This is useful when mounting multiple SMB with different credentials
+            or running in multi-user environments.
+            
+            Supported formats:
+              - FILE:/path/to/ccache   – Use the specified file.
+              - DIR:/path/to/ccachedir – Use the primary file inside the specified directory.
+              - /path/to/ccache        – Interpreted as a file path.
+          ''',
+          'ispassword': False,
+          'name': 'kerberos_ccache',
+          'required': False,
+          'sensitive': False,
+          'type': 'string',
         }),
         dict({
           'advanced': True,
@@ -17224,6 +17636,8 @@
             Use client credentials OAuth flow.
             
             This will use the OAUTH2 client Credentials Flow as described in RFC 6749.
+            
+            Note that this option is NOT supported by all backends.
           ''',
           'ispassword': False,
           'name': 'client_credentials',
@@ -17343,6 +17757,8 @@
             Use client credentials OAuth flow.
             
             This will use the OAUTH2 client Credentials Flow as described in RFC 6749.
+            
+            Note that this option is NOT supported by all backends.
           ''',
           'ispassword': False,
           'name': 'client_credentials',

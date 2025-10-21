@@ -63,13 +63,13 @@
       devshellToolsPkgs = devshell-tools.packages.${system};
 
       rclone-sdsc = pkgs.rclone.overrideAttrs (old: {
-        version = "1.70.0";
+        version = "1.71.2";
         vendorHash = "sha256-9yEWEM96cRUzp1mRXEzxvOaBZQsf7Zifoe163OtJCPw=";
         nativeInstallCheckInputs = [];
         src = pkgs.fetchFromGitHub {
           owner = "SwissDataScienceCenter";
           repo = "rclone";
-          rev = "v1.70.0+renku-1";
+          rev = "v1.71.2+renku-1";
           sha256 = "sha256-JJk3H9aExACIxSGwZYgZzuefeoZtJrTUrv7ffk+Xpzg=";
         };
       });
