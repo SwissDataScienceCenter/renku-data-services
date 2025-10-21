@@ -33,7 +33,7 @@
 		"ghcr.io/devcontainers/features/go:1": {},
 		"./rclone": {
 			"rclone_repository": "https://github.com/SwissDataScienceCenter/rclone.git",
-			"rclone_ref": "v1.70.0+renku-1"
+			"rclone_ref": "v1.71.2+renku-1"
 		}
 	},
 	"overrideFeatureInstallOrder": [
