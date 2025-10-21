@@ -48,7 +48,11 @@ class ConnectedServicesRepository:
         self.session_maker = session_maker
         self.encryption_key = encryption_key
         self.async_oauth2_client_class = async_oauth2_client_class
-        self.supported_image_registry_providers = {models.ProviderKind.gitlab, models.ProviderKind.github}
+        self.supported_image_registry_providers = {
+            models.ProviderKind.gitlab,
+            models.ProviderKind.github,
+            models.ProviderKind.dockerhub,
+        }
 
     async def get_oauth2_clients(
         self,
@@ -251,6 +255,40 @@ class ConnectedServicesRepository:
 
                 return url
 
+    async def custom_connect(self, user: APIUser, client_id: str, token: dict[str, Any]) -> ULID:
+        """Adds a custom connection using the opaque token as given."""
+        if not user.is_authenticated or user.id is None:
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+
+        if client_id == "" or token == {} or token.get("access_token") is None:
+            raise errors.ValidationError(message="Client id and token are mandatory")
+
+        token_set = self._encrypt_token_set(token=token, user_id=user.id)
+        supported_providers = {models.ProviderKind.dockerhub}
+        async with self.session_maker() as session, session.begin():
+            result = await session.scalars(
+                select(schemas.OAuth2ClientORM)
+                .where(schemas.OAuth2ClientORM.id == client_id)
+                .where(schemas.OAuth2ClientORM.kind.in_(supported_providers))
+            )
+            client = result.one_or_none()
+            if client is None:
+                raise errors.MissingResourceError(
+                    message=f"OAuth2 Client with id '{client_id}' does not exist or doesn't support direct connections."
+                )
+
+            conn_orm = schemas.OAuth2ConnectionORM(
+                user_id=user.id,
+                client_id=client_id,
+                token=token_set,
+                state=None,
+                status=models.ConnectionStatus.connected,
+                code_verifier=None,
+                next_url=None,
+            )
+            session.add(conn_orm)
+            return conn_orm.id
+
     async def authorize_callback(self, state: str, raw_url: str, callback_url: str) -> str | None:
         """Performs the OAuth2 authorization callback.
 
@@ -385,10 +423,21 @@ class ConnectedServicesRepository:
                 raise errors.UnauthorizedError(message="OAuth2 token for connected service invalid or expired.") from e
 
             if response.status_code > 200:
-                raise errors.UnauthorizedError(message=f"Could not get account information.{response.json()}")
+                raise errors.UnauthorizedError(message=f"Could not get account information.{response.text}")
 
             account = adapter.api_validate_account_response(response)
             return account
+
+    async def get_non_oauth2_token(self, connection_id: ULID, user: base_models.APIUser) -> models.OAuth2TokenSet:
+        """Return the connection token."""
+        if not user.is_authenticated or user.id is None:
+            raise errors.MissingResourceError(
+                message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."
+            )
+
+        connection = await self._get_valid_connection(connection_id, user)
+        token = self._decrypt_token_set(token=connection.token or {}, user_id=user.id)
+        return token
 
     async def get_oauth2_connection_token(
         self, connection_id: ULID, user: base_models.APIUser
@@ -449,11 +498,16 @@ class ConnectedServicesRepository:
             assert image_provider.connected_user is not None
             user = image_provider.connected_user.user
             conn = image_provider.connected_user.connection
-            token_set = await self.get_oauth2_connection_token(conn.id, user)
+            if image_provider.provider.kind == models.ProviderKind.dockerhub:
+                token_set = await self.get_non_oauth2_token(conn.id, user)
+            else:
+                token_set = await self.get_oauth2_connection_token(conn.id, user)
             access_token = token_set.access_token
             if access_token:
-                logger.debug(f"Use connection {conn.id} to {image_provider.provider.id} for user {user.id}")
-                repo_api = repo_api.with_oauth2_token(access_token)
+                logger.debug(
+                    f"Use connection {conn.id} to {image_provider.provider.id} for user {user.id}/{token_set.username}"
+                )
+                repo_api = repo_api.with_oauth2_token(access_token, token_set.username)
         return repo_api
 
     async def get_oauth2_app_installations(
@@ -495,16 +549,10 @@ class ConnectedServicesRepository:
 
             return models.AppInstallationList(total_count=0, installations=[])
 
-    @asynccontextmanager
-    async def get_async_oauth2_client(
+    async def _get_valid_connection(
         self, connection_id: ULID, user: base_models.APIUser
-    ) -> AsyncGenerator[tuple[AsyncOAuth2Client, schemas.OAuth2ConnectionORM, ProviderAdapter], None]:
-        """Get the AsyncOAuth2Client for the given connection_id and user."""
-        if not user.is_authenticated or user.id is None:
-            raise errors.MissingResourceError(
-                message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."
-            )
-
+    ) -> schemas.OAuth2ConnectionORM:
+        """Return a valid, connected connection."""
         async with self.session_maker() as session:
             result = await session.scalars(
                 select(schemas.OAuth2ConnectionORM)
@@ -520,9 +568,20 @@ class ConnectedServicesRepository:
 
             if connection.status != models.ConnectionStatus.connected or connection.token is None:
                 raise errors.UnauthorizedError(message=f"OAuth2 connection with id '{connection_id}' is not valid.")
+            return connection
 
-            client = connection.client
-            token = self._decrypt_token_set(token=connection.token, user_id=user.id)
+    @asynccontextmanager
+    async def get_async_oauth2_client(
+        self, connection_id: ULID, user: base_models.APIUser
+    ) -> AsyncGenerator[tuple[AsyncOAuth2Client, schemas.OAuth2ConnectionORM, ProviderAdapter], None]:
+        """Get the AsyncOAuth2Client for the given connection_id and user."""
+        if not user.is_authenticated or user.id is None:
+            raise errors.MissingResourceError(
+                message=f"OAuth2 connection with id '{connection_id}' does not exist or you do not have access to it."
+            )
+        connection = await self._get_valid_connection(connection_id, user)
+        client = connection.client
+        token = self._decrypt_token_set(token=connection.token or {}, user_id=user.id)
 
         async def update_token(token: dict[str, Any], refresh_token: str | None = None) -> None:
             if refresh_token is None:
