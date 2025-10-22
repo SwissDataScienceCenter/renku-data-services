@@ -90,6 +90,7 @@ class DeletedProject:
     """Indicates that a project was deleted."""
 
     id: ULID
+    data_connectors: list[ULID]
 
 
 @dataclass
