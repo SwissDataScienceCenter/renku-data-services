@@ -329,6 +329,7 @@ class ShipwrightClient:
                 # NOTE: This occurs when the container is still starting, but we try to read its logs
                 continue
             except httpx.HTTPStatusError as err:
+                # NOTE: This occurs when the container is waiting to start, but we try to read its logs
                 if err.response.status_code == 400:
                     continue
                 raise
