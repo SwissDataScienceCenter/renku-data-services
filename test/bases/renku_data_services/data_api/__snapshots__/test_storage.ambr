@@ -14897,7 +14897,7 @@
           'ispassword': False,
           'name': 'host',
           'required': True,
-          'sensitive': True,
+          'sensitive': False,
           'type': 'string',
         }),
         dict({
