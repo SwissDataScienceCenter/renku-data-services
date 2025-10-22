@@ -28,6 +28,8 @@ from test.bases.renku_data_services.data_api.conftest import (
 )
 
 
+# TODO: figure out how to run search tests fully parallel
+@pytest.mark.xdist_group("search")
 @pytest.mark.asyncio
 async def test_direct_member_search(
     create_user: CreateUserCall,
@@ -102,6 +104,8 @@ async def test_direct_member_search(
     assert_search_result(result, [gr_lidl, gr_visma, p1, p2, p3, p4, p5])
 
 
+# TODO: figure out how to run search tests fully parallel
+@pytest.mark.xdist_group("search")
 @pytest.mark.asyncio
 async def test_inherited_member_search(
     create_user: CreateUserCall,
@@ -160,6 +164,8 @@ async def test_inherited_member_search(
     assert_search_result(result, [p2, p4, gr_visma, gr_lidl], check_order=False)
 
 
+# TODO: figure out how to run search tests fully parallel
+@pytest.mark.xdist_group("search")
 @pytest.mark.asyncio
 async def test_projects(
     search_reprovision: SearchReprovisionCall, create_project_model: CreateProjectCall, search_query: SearchQueryCall
@@ -175,6 +181,8 @@ async def test_projects(
     assert_search_result(result, [p1, p3, p2], check_order=True)
 
 
+# TODO: figure out how to run search tests fully parallel
+@pytest.mark.xdist_group("search")
 @pytest.mark.asyncio
 async def test_distance(
     search_reprovision: SearchReprovisionCall, create_project_model: CreateProjectCall, search_query: SearchQueryCall
@@ -192,6 +200,8 @@ async def test_distance(
     assert __entity_id(result.items[0]) == p1.id
 
 
+# TODO: figure out how to run search tests fully parallel
+@pytest.mark.xdist_group("search")
 @pytest.mark.asyncio
 async def test_search_by_entity_type(
     create_project_model: CreateProjectCall,

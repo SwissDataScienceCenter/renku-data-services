@@ -84,6 +84,7 @@ result
 
 # tests
 .k3d-config.yaml
+.kind-kubeconfig.yaml
 
 # Misc
 *.pem
