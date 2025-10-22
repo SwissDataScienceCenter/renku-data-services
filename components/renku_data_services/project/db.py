@@ -401,13 +401,20 @@ class ProjectRepository:
         if project is None:
             return None
 
+        dcs = await session.execute(
+            select(ns_schemas.EntitySlugORM.data_connector_id)
+            .where(ns_schemas.EntitySlugORM.project_id == project_id)
+            .where(ns_schemas.EntitySlugORM.data_connector_id.is_not(None))
+        )
+        dcs = [e for e in dcs.scalars().all() if e]
+
         await session.execute(delete(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
 
         await session.execute(
             delete(storage_schemas.CloudStorageORM).where(storage_schemas.CloudStorageORM.project_id == str(project_id))
         )
 
-        return models.DeletedProject(id=project.id)
+        return models.DeletedProject(id=project.id, data_connectors=dcs)
 
     async def get_project_permissions(self, user: base_models.APIUser, project_id: ULID) -> models.ProjectPermissions:
         """Get the permissions of the user on a given project."""

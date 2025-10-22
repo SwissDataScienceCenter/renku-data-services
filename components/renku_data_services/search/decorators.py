@@ -63,7 +63,10 @@ def update_search_document(
 
             case DeletedProject() as p:
                 record = DeleteDoc.project(p.id)
+                dcs = [DeleteDoc.data_connector(id) for id in p.data_connectors]
                 await self.search_updates_repo.upsert(record)
+                for d in dcs:
+                    await self.search_updates_repo.upsert(d)
 
             case UserInfo() as u:
                 await self.search_updates_repo.upsert(u)
