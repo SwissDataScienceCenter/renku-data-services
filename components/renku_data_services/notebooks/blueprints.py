@@ -28,6 +28,7 @@ from renku_data_services.notebooks.config import GitProviderHelperProto, Noteboo
 from renku_data_services.notebooks.core_sessions import (
     patch_session,
     start_session,
+    validate_session_post_request,
 )
 from renku_data_services.notebooks.errors.intermittent import AnonymousUserPatchError
 from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
@@ -219,9 +220,10 @@ class NotebooksNewBP(CustomBlueprint):
             internal_gitlab_user: APIUser,
             body: apispec.SessionPostRequest,
         ) -> JSONResponse:
+            launch_request = validate_session_post_request(body=body)
             session, created = await start_session(
                 request=request,
-                body=body,
+                launch_request=launch_request,
                 user=user,
                 internal_gitlab_user=internal_gitlab_user,
                 nb_config=self.nb_config,
