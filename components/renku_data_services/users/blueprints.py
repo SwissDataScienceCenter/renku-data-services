@@ -152,6 +152,7 @@ class UserSecretsBP(CustomBlueprint):
             return validated_json(
                 apispec.SecretsList,
                 [self._dump_secret(s) for s in secrets],
+                exclude_none=False,
             )
 
         return "/user/secrets", ["GET"], _get_all
@@ -166,6 +167,7 @@ class UserSecretsBP(CustomBlueprint):
             return validated_json(
                 apispec.SecretWithId,
                 self._dump_secret(secret),
+                exclude_none=False,
             )
 
         return "/user/secrets/<secret_id:ulid>", ["GET"], _get_one
@@ -179,7 +181,9 @@ class UserSecretsBP(CustomBlueprint):
         async def _post(_: Request, user: base_models.APIUser, body: apispec.SecretPost) -> JSONResponse:
             new_secret = validate_unsaved_secret(body)
             inserted_secret = await self.secret_repo.insert_secret(requested_by=user, secret=new_secret)
-            return validated_json(apispec.SecretWithId, self._dump_secret(inserted_secret), status=201)
+            return validated_json(
+                apispec.SecretWithId, self._dump_secret(inserted_secret), exclude_none=False, status=201
+            )
 
         return "/user/secrets", ["POST"], _post
 
@@ -199,6 +203,7 @@ class UserSecretsBP(CustomBlueprint):
             return validated_json(
                 apispec.SecretWithId,
                 self._dump_secret(updated_secret),
+                exclude_none=False,
             )
 
         return "/user/secrets/<secret_id:ulid>", ["PATCH"], _patch
@@ -223,6 +228,7 @@ class UserSecretsBP(CustomBlueprint):
             default_filename=secret.default_filename,
             kind=secret.kind.value,
             modification_date=secret.modification_date,
+            expiration_timestamp=secret.expiration_timestamp,
             session_secret_slot_ids=[str(item) for item in secret.session_secret_slot_ids],
             data_connector_ids=[str(item) for item in secret.data_connector_ids],
         )
