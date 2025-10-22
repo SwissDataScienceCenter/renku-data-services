@@ -223,7 +223,6 @@ class NotebooksNewBP(CustomBlueprint):
             launch_request = validate_session_post_request(body=body)
             session, created = await start_session(
                 request=request,
-                # body=body,
                 launch_request=launch_request,
                 user=user,
                 internal_gitlab_user=internal_gitlab_user,
