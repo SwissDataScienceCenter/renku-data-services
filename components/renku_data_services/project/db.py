@@ -24,6 +24,7 @@ from renku_data_services.authz.models import CheckPermissionItem, Member, Member
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models import RESET, ProjectPath, ProjectSlug
 from renku_data_services.base_models.core import Slug
+from renku_data_services.data_connectors import orm as dc_schemas
 from renku_data_services.namespace import orm as ns_schemas
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project import apispec as project_apispec
@@ -413,6 +414,9 @@ class ProjectRepository:
         await session.execute(
             delete(storage_schemas.CloudStorageORM).where(storage_schemas.CloudStorageORM.project_id == str(project_id))
         )
+
+        if dcs != []:
+            await session.execute(delete(dc_schemas.DataConnectorORM).where(dc_schemas.DataConnectorORM.id.in_(dcs)))
 
         return models.DeletedProject(id=project.id, data_connectors=dcs)
 
