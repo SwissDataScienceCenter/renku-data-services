@@ -659,7 +659,6 @@ def get_remote_env(
 
 async def start_session(
     request: Request,
-    # body: apispec.SessionPostRequest,
     launch_request: SessionLaunchRequest,
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     internal_gitlab_user: APIUser,
