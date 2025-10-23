@@ -100,7 +100,21 @@ async def test_remove_group_removes_descendant_entities(app_manager_instance: De
     updates = await repo.select_next(10)
 
     assert len(updates) == 4
-    print(f"done: {updates}")
+    del_group = next(g for g in updates if g.entity_id == group.id)
+    assert del_group.entity_type == "Group"
+    assert del_group.payload["deleted"]
+
+    del_proj = next(p for p in updates if p.entity_id == proj1.id)
+    assert del_proj.entity_type == "Project"
+    assert del_proj.payload["deleted"]
+
+    del_dc1 = next(d for d in updates if d.entity_id == dc_in_proj.id)
+    assert del_dc1.entity_type == "DataConnector"
+    assert del_dc1.payload["deleted"]
+
+    del_dc2 = next(d for d in updates if d.entity_id == dc_in_group.id)
+    assert del_dc2.entity_type == "DataConnector"
+    assert del_dc2.payload["deleted"]
 
 
 @pytest.mark.asyncio
@@ -126,7 +140,7 @@ async def test_remove_project_removes_data_connector(app_manager_instance: Depen
             created_by=user.id,
         ),
     )
-    dc_in_proj = await dc_repo.insert_namespaced_data_connector(
+    dc = await dc_repo.insert_namespaced_data_connector(
         user,
         UnsavedDataConnector(
             name="dc 1",
@@ -154,6 +168,13 @@ async def test_remove_project_removes_data_connector(app_manager_instance: Depen
 
     updates = await repo.select_next(10)
     assert len(updates) == 2
+    del_proj = next(p for p in updates if p.entity_id == proj1.id)
+    assert del_proj.entity_type == "Project"
+    assert del_proj.payload["deleted"]
+
+    del_dc = next(d for d in updates if d.entity_id == dc.id)
+    assert del_dc.entity_type == "DataConnector"
+    assert del_dc.payload["deleted"]
 
 
 @pytest.mark.asyncio
