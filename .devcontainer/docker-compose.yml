@@ -36,7 +36,7 @@ services:
       - "8983" # Allows access to the solr data in the shared volume
 
   db:
-    image: postgres:latest
+    image: postgres:16
     restart: unless-stopped
     volumes:
       - postgres-data:/var/lib/postgresql/data
