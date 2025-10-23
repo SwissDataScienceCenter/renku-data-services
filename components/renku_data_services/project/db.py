@@ -11,7 +11,7 @@ from pathlib import PurePosixPath
 from typing import Concatenate, ParamSpec, TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
-from sqlalchemy import ColumnElement, Select, delete, func, or_, select, update
+from sqlalchemy import ColumnElement, Select, delete, distinct, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer
 from sqlalchemy.sql.functions import coalesce
@@ -403,7 +403,7 @@ class ProjectRepository:
             return None
 
         dcs = await session.execute(
-            select(ns_schemas.EntitySlugORM.data_connector_id)
+            select(distinct(ns_schemas.EntitySlugORM.data_connector_id))
             .where(ns_schemas.EntitySlugORM.project_id == project_id)
             .where(ns_schemas.EntitySlugORM.data_connector_id.is_not(None))
         )
