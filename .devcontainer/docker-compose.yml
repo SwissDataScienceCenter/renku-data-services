@@ -30,8 +30,8 @@ services:
     network_mode: service:db
     depends_on:
       - db
-    #   - authz
-    #   - solr
+      - authz
+      - solr
     group_add:
       - "8983" # Allows access to the solr data in the shared volume
 
@@ -60,37 +60,37 @@ services:
       - "8888:80"
       - "8983:8983" # solr
 
-  # swagger:
-  #   image: swaggerapi/swagger-ui
-  #   environment:
-  #     SWAGGER_JSON_URL: http://localhost:8000/api/data/spec.json
-  #     PORT: "8080"
-  #   network_mode: service:db
+  swagger:
+    image: swaggerapi/swagger-ui
+    environment:
+      SWAGGER_JSON_URL: http://localhost:8000/api/data/spec.json
+      PORT: "8080"
+    network_mode: service:db
 
-  # authz:
-  #   image: authzed/spicedb:latest-debug
-  #   restart: unless-stopped
-  #   depends_on:
-  #     - db
-  #   environment:
-  #     SPICEDB_GRPC_PRESHARED_KEY: renku
-  #     SPICEDB_DATASTORE_CONN_URI: "postgres://renku:renku@127.0.0.1:5432/postgres"
-  #   network_mode: service:db
-  #   command:
-  #     - serve
+  authz:
+    image: authzed/spicedb:latest-debug
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      SPICEDB_GRPC_PRESHARED_KEY: renku
+      SPICEDB_DATASTORE_CONN_URI: "postgres://renku:renku@127.0.0.1:5432/postgres"
+    network_mode: service:db
+    command:
+      - serve
 
-  # solr:
-  #   image: solr:9
-  #   restart: unless-stopped
-  #   network_mode: service:db
-  #   volumes:
-  #     - solr_data:/var/solr
-  #   command:
-  #     - bash
-  #     - -c
-  #     - "chown -R solr:solr /var/solr; cp -r /opt/solr/server/solr/configsets /var/solr/data/; precreate-core renku-search-dev; chmod -R g+rw /var/solr; exec solr -f -Dsolr.modules=analysis-extras"
-  #   group_add:
-  #     - "1000" # Allows access to the solr data in the shared volume
+  solr:
+    image: solr:9
+    restart: unless-stopped
+    network_mode: service:db
+    volumes:
+      - solr_data:/var/solr
+    command:
+      - bash
+      - -c
+      - "chown -R solr:solr /var/solr; cp -r /opt/solr/server/solr/configsets /var/solr/data/; precreate-core renku-search-dev; chmod -R g+rw /var/solr; exec solr -f -Dsolr.modules=analysis-extras"
+    group_add:
+      - "1000" # Allows access to the solr data in the shared volume
 
 volumes:
   postgres-data:
