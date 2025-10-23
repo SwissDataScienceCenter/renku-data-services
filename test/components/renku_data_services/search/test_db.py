@@ -51,7 +51,7 @@ async def test_remove_group_removes_descendant_entities(app_manager_instance: De
     proj1 = await proj_repo.insert_project(
         user,
         UnsavedProject(
-            namespace="group3",
+            namespace=group.slug,
             name="proj in group 1",
             slug="proj-group-1",
             visibility=Visibility.PUBLIC,
