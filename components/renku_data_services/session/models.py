@@ -149,8 +149,8 @@ class EnvironmentPatch:
     mount_directory: PurePosixPath | ResetType | None = None
     uid: int | None = None
     gid: int | None = None
-    args: list[str] | None | ResetType = None
-    command: list[str] | None | ResetType = None
+    args: list[str] | ResetType | None = None
+    command: list[str] | ResetType | None = None
     is_archived: bool | None = None
     build_parameters: BuildParametersPatch | None = None
     environment_image_source: EnvironmentImageSource | None = None
