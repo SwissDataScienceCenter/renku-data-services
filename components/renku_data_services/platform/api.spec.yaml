@@ -158,6 +158,28 @@ paths:
             $ref: "#/components/responses/Error"
         tags:
           - platform
+  /platform/redirects-gitlab:
+    get:
+      summary: Return a list of redirects from GitLab URLs to new locations
+      parameters:
+        - in: query
+          description: query parameters
+          name: params
+          style: form
+          explode: true
+          schema:
+            $ref: "#/components/schemas/UrlRedirectPlansGetQuery"
+      responses:
+        "200":
+          description: A list of redirect plans
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UrlRedirectPlanList"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - platform
 components:
   schemas:
     PlatformConfig:
