@@ -102,7 +102,6 @@ def validate_build_parameters_patch(environment: apispec.BuildParametersPatch) -
 def validate_environment_patch(patch: apispec.EnvironmentPatch) -> models.EnvironmentPatch:
     """Validate the update to a session environment."""
     set_fields = patch.model_fields_set
-
     working_directory: PurePosixPath | ResetType | None
     match patch.working_directory:
         case "":
@@ -111,7 +110,6 @@ def validate_environment_patch(patch: apispec.EnvironmentPatch) -> models.Enviro
             working_directory = PurePosixPath(patch.working_directory)
         case _:
             working_directory = None
-
     mount_directory: PurePosixPath | ResetType | None
     match patch.mount_directory:
         case "":
@@ -120,7 +118,6 @@ def validate_environment_patch(patch: apispec.EnvironmentPatch) -> models.Enviro
             mount_directory = PurePosixPath(patch.mount_directory)
         case _:
             mount_directory = None
-
     command: list[str] | ResetType | None
     if "command" in set_fields and patch.command is None:
         command = RESET
@@ -128,7 +125,6 @@ def validate_environment_patch(patch: apispec.EnvironmentPatch) -> models.Enviro
         command = patch.command
     else:
         command = None
-
     args: list[str] | ResetType | None
     if "args" in set_fields and patch.args is None:
         args = RESET
@@ -136,7 +132,6 @@ def validate_environment_patch(patch: apispec.EnvironmentPatch) -> models.Enviro
         args = patch.args
     else:
         args = None
-
     return models.EnvironmentPatch(
         name=patch.name,
         description=patch.description,
