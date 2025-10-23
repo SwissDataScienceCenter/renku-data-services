@@ -64,13 +64,13 @@
 
       rclone-sdsc = pkgs.rclone.overrideAttrs (old: {
         version = "1.71.2";
-        vendorHash = "sha256-9yEWEM96cRUzp1mRXEzxvOaBZQsf7Zifoe163OtJCPw=";
+        vendorHash = "sha256-0RK2gc3InPZZnAEgv01fgG19cWeKCsBP6JN2OCVY8O4=";
         nativeInstallCheckInputs = [];
         src = pkgs.fetchFromGitHub {
           owner = "SwissDataScienceCenter";
           repo = "rclone";
           rev = "v1.71.2+renku-1";
-          sha256 = "sha256-JJk3H9aExACIxSGwZYgZzuefeoZtJrTUrv7ffk+Xpzg=";
+          sha256 = "sha256-NhPYEGPgpwe56zExrV3SiYsbKLb3/OuX+UOuezgJQ8w=";
         };
       });
 
@@ -117,6 +117,7 @@
           ZED_TOKEN = "dev";
 
           SOLR_BIN_PATH = "${devshellToolsPkgs.solr}/bin/solr";
+          TEST_RUN_SOLR_LOCALLY = "true";
 
           shellHook = ''
             PYENV_PATH=$(poetry env info --path)
@@ -150,7 +151,7 @@
         basedpyright
         rclone-sdsc
         azure-cli
-        k3d
+        kind
         (
           writeShellScriptBin "pg" ''
             psql -h $DB_HOST -p $DB_PORT -U dev $DB_NAME

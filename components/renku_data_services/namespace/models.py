@@ -20,6 +20,11 @@ class UnsavedGroup:
     name: str
     description: str | None = None
 
+    @property
+    def path(self) -> NamespacePath:
+        """Return the path of this group."""
+        return NamespacePath.from_strings(self.slug)
+
 
 @dataclass(kw_only=True)
 class Group(UnsavedGroup):
@@ -36,6 +41,8 @@ class DeletedGroup:
     """A group that was deleted from the DB."""
 
     id: ULID
+    data_connectors: list[ULID]
+    projects: list[ULID]
 
 
 @dataclass
