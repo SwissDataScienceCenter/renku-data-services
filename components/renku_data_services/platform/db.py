@@ -98,6 +98,25 @@ class UrlRedirectRepository:
             redirects = await results[0].all()
             return [r.dump() for r in redirects], results[1] or 0
 
+    async def get_redirect_configs_gitlab(
+        self,
+        user: base_models.APIUser,
+        pagination: PaginationRequest,
+    ) -> tuple[list[models.UrlRedirectConfig], int]:
+        """Get all url redirect configs for gitlab sources from the database."""
+        async with self.session_maker() as session:
+            stmt = select(schemas.UrlRedirectsORM).where(
+                schemas.UrlRedirectsORM.source_url.ilike("https://gitlab.%")
+            )
+            stmt.limit(pagination.per_page).offset(pagination.offset)
+            stmt_count = select(func.count()).select_from(
+                schemas.UrlRedirectsORM).where(
+                schemas.UrlRedirectsORM.source_url.ilike("https://gitlab.%")
+            )
+            results = await session.stream_scalars(stmt), await session.scalar(stmt_count)
+            redirects = await results[0].all()
+            return [r.dump() for r in redirects], results[1] or 0
+
     async def get_redirect_config_by_source_url(
         self, user: base_models.APIUser, source_url: str
     ) -> models.UrlRedirectConfig:

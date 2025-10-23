@@ -133,6 +133,27 @@ class PlatformUrlRedirectBP(CustomBlueprint):
 
         return "/platform/redirects", ["GET"], _get_all_redirects
 
+    def get_url_redirect_configs_gitlab(self) -> BlueprintFactoryResponse:
+        """List gitlab redirects."""
+
+        @authenticate(self.authenticator)
+        @validate_query(query=apispec.PaginationRequest)
+        @paginate
+        async def _get_all_redirects_gitlab(
+            _: Request,
+            user: base_models.APIUser,
+            pagination: PaginationRequest,
+            query: apispec.UrlRedirectPlansGetQuery,
+        ) -> tuple[list[dict[str, Any]], int]:
+            redirects, total_num = await self.url_redirect_repo.get_redirect_configs_gitlab(user=user, pagination=pagination)
+
+            redirects_list: list[dict[str, Any]] = [
+                validate_and_dump(apispec.UrlRedirectPlan, self._dump_redirect(r)) for r in redirects
+            ]
+            return redirects_list, total_num
+
+        return "/platform/redirects-gitlab", ["GET"], _get_all_redirects_gitlab
+
     def get_url_redirect_config(self) -> BlueprintFactoryResponse:
         """Get a specific redirect config."""
 
