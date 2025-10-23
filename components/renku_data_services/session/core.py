@@ -101,7 +101,7 @@ def validate_build_parameters_patch(environment: apispec.BuildParametersPatch) -
 
 def validate_environment_patch(patch: apispec.EnvironmentPatch) -> models.EnvironmentPatch:
     """Validate the update to a session environment."""
-    data_dict = patch.model_dump(exclude_unset=True, mode="json")
+    set_fields = patch.model_fields_set
     working_directory: PurePosixPath | ResetType | None
     match patch.working_directory:
         case "":
@@ -118,6 +118,20 @@ def validate_environment_patch(patch: apispec.EnvironmentPatch) -> models.Enviro
             mount_directory = PurePosixPath(patch.mount_directory)
         case _:
             mount_directory = None
+    command: list[str] | ResetType | None
+    if "command" in set_fields and patch.command is None:
+        command = RESET
+    elif isinstance(patch.command, list):
+        command = patch.command
+    else:
+        command = None
+    args: list[str] | ResetType | None
+    if "args" in set_fields and patch.args is None:
+        args = RESET
+    elif isinstance(patch.args, list):
+        args = patch.args
+    else:
+        args = None
     return models.EnvironmentPatch(
         name=patch.name,
         description=patch.description,
@@ -128,8 +142,8 @@ def validate_environment_patch(patch: apispec.EnvironmentPatch) -> models.Enviro
         mount_directory=mount_directory,
         uid=patch.uid,
         gid=patch.gid,
-        args=RESET if "args" in data_dict and data_dict["args"] is None else patch.args,
-        command=RESET if "command" in data_dict and data_dict["command"] is None else patch.command,
+        args=args,
+        command=command,
         is_archived=patch.is_archived,
         strip_path_prefix=patch.strip_path_prefix,
     )

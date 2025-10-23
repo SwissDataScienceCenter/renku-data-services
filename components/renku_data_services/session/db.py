@@ -250,10 +250,8 @@ class SessionRepository:
             environment.command = None
         elif isinstance(update.command, list):
             environment.command = update.command
-
         if update.is_archived is not None:
             environment.is_archived = update.is_archived
-
         if update.strip_path_prefix is not None:
             environment.strip_path_prefix = update.strip_path_prefix
 
