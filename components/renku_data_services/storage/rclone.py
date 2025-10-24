@@ -304,7 +304,10 @@ class RCloneOption(BaseModel):
             and self.exclusive
             and not any(e.value == str(value) and (not e.provider or e.provider == provider) for e in self.examples)
         ):
-            raise errors.ValidationError(message=f"Value '{value}' is not valid for field {self.name}")
+            valid_values = ", ".join([v.value for v in self.examples])
+            raise errors.ValidationError(
+                message=f"Value '{value}' is not valid for field {self.name}. Valid values are: {valid_values}"
+            )
         return cast(int | bool | dict | str, value)
 
 
@@ -323,7 +326,7 @@ class RCloneProviderSchema(BaseModel):
     @property
     def required_options(self) -> list[RCloneOption]:
         """Returns all required options for this provider."""
-        return [o for o in self.options if o.required]
+        return [o for o in self.options if o.required and not o.default]
 
     @property
     def sensitive_options(self) -> list[RCloneOption]:
