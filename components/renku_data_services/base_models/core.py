@@ -7,8 +7,9 @@ import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, StrEnum
-from typing import ClassVar, Never, NewType, Optional, Protocol, Self, TypeVar, overload
+from typing import Annotated, ClassVar, Never, NewType, Optional, Protocol, Self, TypeVar, overload
 
+from pydantic import PlainSerializer
 from sanic import Request
 
 from renku_data_services.errors import errors
@@ -400,9 +401,11 @@ class Authenticator(Protocol[AnyAPIUser]):
         ...
 
 
-ResetType = NewType("ResetType", object)
+__ResetType = NewType("__ResetType", object)
+ResetType = Annotated[__ResetType, PlainSerializer(lambda _: None, return_type=None)]
 """This type represents that a value that may be None should be reset back to None or null.
 This type should have only one instance, defined in the same file as this type.
+The value will be serialized by pydantic as None.
 """
 
 RESET: ResetType = ResetType(object())
