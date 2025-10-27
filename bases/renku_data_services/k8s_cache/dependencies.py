@@ -16,9 +16,6 @@ class DependencyManager:
 
     config: Config
 
-    # quota_repo: QuotaRepository
-    # _k8s_cache: K8sDbCache | None = None
-
     _quota_repo: QuotaRepository | None = field(default=None, repr=False, init=False)
     _k8s_cache: K8sDbCache | None = field(default=None, repr=False, init=False)
     _metrics_repo: MetricsRepository | None = field(default=None, repr=False, init=False)
