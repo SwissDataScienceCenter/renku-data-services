@@ -64,6 +64,12 @@ async def main() -> None:
     # create file for liveness probe
     with open("/tmp/cache_ready", "w") as f:  # nosec B108
         f.write("ready")
+    with sentry_sdk.new_scope() as scope:
+        scope.set_level("debug")
+        try:
+            raise RuntimeError("Test error")
+        except:  # noqa: E722
+            sentry_sdk.capture_exception()
     await watcher.wait()
 
 
