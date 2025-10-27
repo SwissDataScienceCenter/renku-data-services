@@ -2,6 +2,10 @@
 
 import asyncio
 
+import sentry_sdk
+from sentry_sdk.integrations.asyncio import AsyncioIntegration
+from sentry_sdk.integrations.grpc import GRPCIntegration
+
 from renku_data_services.app_config import logging
 from renku_data_services.k8s.clients import K8sClusterClient
 from renku_data_services.k8s.config import KubeConfigEnv, get_clusters
@@ -20,6 +24,21 @@ async def main() -> None:
     dm = DependencyManager.from_env()
     default_kubeconfig = KubeConfigEnv()
 
+    if dm.config.sentry.enabled:
+        logger.info("enabling sentry")
+        sentry_sdk.init(
+            dsn=dm.config.sentry.dsn,
+            environment=dm.config.sentry.environment,
+            release=dm.config.sentry.release or None,
+            integrations=[
+                AsyncioIntegration(),
+                GRPCIntegration(),
+            ],
+            enable_tracing=dm.config.sentry.sample_rate > 0,
+            traces_sample_rate=dm.config.sentry.sample_rate,
+            in_app_include=["renku_data_services"],
+        )
+
     clusters: dict[ClusterId, K8sClusterClient] = {}
     async for client in get_clusters(
         kube_conf_root_dir=dm.config.k8s.kube_config_root,
@@ -35,10 +54,10 @@ async def main() -> None:
         kinds.extend([BUILD_RUN_GVK, TASK_RUN_GVK])
     logger.info(f"Resources: {kinds}")
     watcher = K8sWatcher(
-        handler=k8s_object_handler(dm.k8s_cache, dm.metrics, rp_repo=dm.rp_repo),
+        handler=k8s_object_handler(dm.k8s_cache(), dm.metrics(), rp_repo=dm.rp_repo()),
         clusters=clusters,
         kinds=kinds,
-        db_cache=dm.k8s_cache,
+        db_cache=dm.k8s_cache(),
     )
     await watcher.start()
     logger.info("started watching resources")
