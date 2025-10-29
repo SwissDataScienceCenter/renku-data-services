@@ -354,7 +354,7 @@ class _LuceneQueryTransform(UserQueryVisitor[SolrUserQuery]):
 
     async def visit_namespace_is(self, ft: NamespaceIs) -> None:
         """Process the namespace-is segment."""
-        self.__append(st.field_is_any(Fields.namespace_path, ft.values.map(st.from_str)))
+        self.__append(st.namespace_path_is_any(ft.values))
 
     async def visit_created_by_is(self, ft: CreatedByIs) -> None:
         """Process the created-by segment."""
