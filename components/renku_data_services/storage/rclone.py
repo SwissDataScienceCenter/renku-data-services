@@ -63,7 +63,7 @@ class RCloneValidator:
 
         # Obscure configuration and transform if needed
         obscured_config = await self.obscure_config(configuration)
-        transformed_config = self.transform_polybox_switchdriver_config(obscured_config)
+        transformed_config = self.inject_default_values(self.transform_polybox_switchdriver_config(obscured_config))
 
         with tempfile.NamedTemporaryFile(mode="w+", delete=False, encoding="utf-8") as f:
             config = "\n".join(f"{k}={v}" for k, v in transformed_config.items())
@@ -165,6 +165,25 @@ class RCloneValidator:
             message=f"Could not resolve DOI {configuration.get("doi", "<unknown>")} or the hosting platform is not supported",  # noqa E501
             detail=f"Reason: {stderr.decode().strip()}",
         )
+
+    def inject_default_values(
+        self, config: Union["RCloneConfig", dict[str, Any]]
+    ) -> Union["RCloneConfig", dict[str, Any]]:
+        """Adds default values for required options that are not provided in the config."""
+        provider = self.get_provider(config)
+        for opt in provider.options:
+            if not opt.required or not opt.default or opt.name in config:
+                continue
+
+            match opt.default:
+                case RCloneTriState() as ts:
+                    def_val: Any = ts.value
+                case v:
+                    def_val = v
+
+            config.update({opt.name: def_val})
+
+        return config
 
     @staticmethod
     def transform_polybox_switchdriver_config(
