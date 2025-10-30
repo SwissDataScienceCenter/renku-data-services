@@ -264,7 +264,7 @@ class RCloneStorage(ICloudStorageRequest):
             # Switch is a fake provider we add for users, we need to replace it since rclone itself
             # doesn't know it
             self.configuration["provider"] = "Other"
-        parser = ConfigParser()
+        parser = ConfigParser(interpolation=None)
         parser.add_section(name)
 
         def _stringify(value: Any) -> str:
