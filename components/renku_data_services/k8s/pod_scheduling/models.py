@@ -353,13 +353,20 @@ class Toleration:
     If the operator is Exists, the value should be empty, otherwise just a regular string."""
 
 
-type NodeSelectorDict = dict[str, str] | None
+type AffinityField = Affinity | None
+"""Affinity field.
+
+See: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#affinity-v1-core.
+"""
+
+
+type NodeSelectorField = dict[str, str] | None
 """Node selector field.
 
 See: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#podspec-v1-core.
 """
 
-type Tolerations = list[Toleration] | None
+type TolerationsField = list[Toleration] | None
 """Tolerations field.
 
 See:  https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#podspec-v1-core.
