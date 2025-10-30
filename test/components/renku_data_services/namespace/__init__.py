@@ -1,1 +1,1 @@
-"""Only here to make pytest work."""
+"""Namespaces test module."""
