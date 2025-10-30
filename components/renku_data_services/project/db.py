@@ -22,7 +22,7 @@ from renku_data_services import errors
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.authz.models import CheckPermissionItem, Member, MembershipChange, Scope, Visibility
 from renku_data_services.base_api.pagination import PaginationRequest
-from renku_data_services.base_models import RESET
+from renku_data_services.base_models import RESET, ProjectPath, ProjectSlug
 from renku_data_services.base_models.core import Slug
 from renku_data_services.namespace import orm as ns_schemas
 from renku_data_services.namespace.db import GroupRepository
@@ -332,42 +332,16 @@ class ProjectRepository:
 
         if patch.name is not None:
             project.name = patch.name
+        new_path: ProjectPath | None = None
         if patch.namespace is not None and patch.namespace != old_project.namespace.path.first.value:
-            ns = await session.scalar(
-                select(ns_schemas.NamespaceORM).where(ns_schemas.NamespaceORM.slug == patch.namespace.lower())
-            )
-            if not ns:
-                raise errors.MissingResourceError(message=f"The namespace with slug {patch.namespace} does not exist")
-            if not ns.group_id and not ns.user_id:
-                raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
-            resource_type, resource_id = (
-                (ResourceType.group, ns.group_id) if ns.group and ns.group_id else (ResourceType.user_namespace, ns.id)
-            )
-            has_permission = await self.authz.has_permission(user, resource_type, resource_id, Scope.WRITE)
-            if not has_permission:
-                raise errors.ForbiddenError(
-                    message=f"The project cannot be moved because you do not have sufficient permissions with the namespace {patch.namespace}"  # noqa: E501
-                )
-            project.slug.namespace_id = ns.id
-            # Trigger update for ``updated_at`` column
-            await session.execute(update(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id).values())
+            new_path = ProjectPath.from_strings(patch.namespace, old_project.slug)
         if patch.slug is not None and patch.slug != old_project.slug:
-            namespace_id = project.slug.namespace_id
-            existing_entity = await session.scalar(
-                select(ns_schemas.EntitySlugORM)
-                .where(ns_schemas.EntitySlugORM.slug == patch.slug)
-                .where(ns_schemas.EntitySlugORM.namespace_id == namespace_id)
-            )
-            if existing_entity is not None:
-                raise errors.ConflictError(
-                    message=f"An entity with the slug '{project.slug.namespace.slug}/{patch.slug}' already exists."
-                )
-            session.add(
-                ns_schemas.EntitySlugOldORM(
-                    slug=old_project.slug, latest_slug_id=project.slug.id, project_id=project.id, data_connector_id=None
-                )
-            )
-            project.slug.slug = patch.slug
+            if new_path:
+                new_path = new_path.parent() / ProjectSlug(patch.slug)
+            else:
+                new_path = old_project.path.parent() / ProjectSlug(patch.slug)
+        if new_path:
+            await self.group_repo.move_project(user, old_project, new_path, session)
             # Trigger update for ``updated_at`` column
             await session.execute(update(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id).values())
         if patch.visibility is not None:

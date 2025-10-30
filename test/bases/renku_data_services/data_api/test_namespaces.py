@@ -605,7 +605,7 @@ def __dc_patch_slug(new_slug: str) -> DataConnectorPatch:
             ProjectPath.from_strings("grp1", "prj1"),
             ProjectPath.from_strings("grp2", "prj1"),
             __project_patch_namespace("grp1"),
-            IntegrityError,
+            ValidationError,
         ),
         (
             DataConnectorPath.from_strings("grp1", "dc1"),
@@ -629,7 +629,7 @@ def __dc_patch_slug(new_slug: str) -> DataConnectorPatch:
             DataConnectorInProjectPath.from_strings("grp1", "prj1", "dc1"),
             DataConnectorInProjectPath.from_strings("grp1", "prj1", "dc2"),
             __dc_patch_slug("dc1"),
-            ValidationError,
+            IntegrityError,
         ),
         (
             DataConnectorPath.from_strings("grp1", "dc1"),
