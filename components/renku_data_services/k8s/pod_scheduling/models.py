@@ -1,7 +1,8 @@
 """Models for internal logic."""
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from enum import StrEnum
+from typing import Any, Self
 
 
 class NodeSelectorRequirementOperator(StrEnum):
@@ -351,6 +352,25 @@ class Toleration:
     value: str | None = None
     """Value is the taint value the toleration matches to.
     If the operator is Exists, the value should be empty, otherwise just a regular string."""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Converts this instance into a dictionary for serialization."""
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Self:
+        """Convert a dict object into a Toleration instance."""
+        data_effect = data.get("effect")
+        effect = TolerationEffect(data_effect) if data_effect else None
+        data_operator = data.get("operator")
+        operator = TolerationOperator(data_operator) if data_operator else None
+        return cls(
+            effect=effect,
+            key=data.get("key"),
+            operator=operator,
+            tolerationSeconds=data.get("tolerationSeconds"),
+            value=data.get("value"),
+        )
 
 
 type AffinityField = Affinity | None
