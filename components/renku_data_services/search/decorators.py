@@ -83,7 +83,11 @@ def update_search_document(
 
             case DeletedGroup() as g:
                 record = DeleteDoc.group(g.id)
+                dcs = [DeleteDoc.data_connector(id) for id in g.data_connectors]
+                prs = [DeleteDoc.project(id) for id in g.projects]
                 await self.search_updates_repo.upsert(record)
+                for d in dcs + prs:
+                    await self.search_updates_repo.upsert(d)
 
             case DataConnector() as dc:
                 await self.search_updates_repo.upsert(dc)
