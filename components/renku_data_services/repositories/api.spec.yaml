@@ -72,6 +72,44 @@ components:
           $ref: "#/components/schemas/RepositoryMetadata"
       required:
         - provider_id
+    RepositoryProviderData:
+      type: object
+      additionalProperties: false
+      properties:
+        connection:
+          $ref: "#/components/schemas/ProviderConnection"
+        provider:
+          $ref: "#/components/schemas/ProviderData"
+        repository_metadata:
+          $ref: "#/components/schemas/RepositoryMetadata"
+      required:
+        - provider
+    ProviderConnection:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        provider_id:
+          $ref: "#/components/schemas/ProviderId"
+        status:
+          type: string
+      required:
+        - id
+        - provider_id
+        - status
+    ProviderData:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/ProviderId"
+        name:
+          type: string
+        url:
+          type: string
+      required:
+        - id
+        - name
+        - url
     RepositoryMetadata:
       type: object
       additionalProperties: false
