@@ -10,6 +10,7 @@ from typing import Any, Optional, Protocol, Self
 from renku_data_services import errors
 from renku_data_services.base_models import ResetType
 from renku_data_services.k8s.constants import ClusterId
+from renku_data_services.k8s.pod_scheduling import models as k8s_models
 from renku_data_services.notebooks.cr_amalthea_session import TlsSecret
 
 
@@ -88,7 +89,8 @@ class UnsavedResourceClass(ResourcesCompareMixin):
     default: bool = False
     default_storage: int = 1
     node_affinities: list[NodeAffinity] = field(default_factory=list)
-    tolerations: list[str] = field(default_factory=list)
+    # tolerations: list[str] = field(default_factory=list)
+    tolerations: list[k8s_models.Toleration] = field(default_factory=list)
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -105,7 +107,8 @@ class ResourceClass(ResourcesCompareMixin):
     default_storage: int = 1
     matching: Optional[bool] = None
     node_affinities: list[NodeAffinity] = field(default_factory=list)
-    tolerations: list[str] = field(default_factory=list)
+    # tolerations: list[str] = field(default_factory=list)
+    tolerations: list[k8s_models.Toleration] = field(default_factory=list)
     quota: str | None = None
 
 
@@ -121,7 +124,8 @@ class ResourceClassPatch:
     default: bool | None = None
     default_storage: int | None = None
     node_affinities: list[NodeAffinity] | None = None
-    tolerations: list[str] | None = None
+    # tolerations: list[str] | None = None
+    tolerations: list[k8s_models.Toleration] | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

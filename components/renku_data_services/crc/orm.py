@@ -26,6 +26,7 @@ from renku_data_services.crc import models
 from renku_data_services.crc.models import ClusterSettings, SavedClusterSettings, SessionProtocol
 from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import ClusterId
+from renku_data_services.k8s.pod_scheduling import models as k8s_models
 from renku_data_services.utils.sqlalchemy import ULIDType
 
 logger = logging.getLogger(__name__)
@@ -105,6 +106,12 @@ class ResourceClassORM(BaseORM):
         cascade="save-update, merge, delete",
         lazy="selectin",
     )
+    new_tolerations: Mapped[list[NewTolerationORM]] = relationship(
+        back_populates="resource_class",
+        default_factory=list,
+        cascade="save-update, merge, delete",
+        lazy="selectin",
+    )
     node_affinities: Mapped[list[NodeAffintyORM]] = relationship(
         back_populates="resource_class",
         default_factory=list,
@@ -124,7 +131,10 @@ class ResourceClassORM(BaseORM):
             )
             for affinity in new_resource_class.node_affinities
         ]
-        tolerations = [TolerationORM(key=toleration) for toleration in new_resource_class.tolerations]
+        # tolerations = [TolerationORM(key=toleration) for toleration in new_resource_class.tolerations]
+
+        new_tolerations = [NewTolerationORM.from_model(tol) for tol in new_resource_class.tolerations]
+
         return cls(
             name=new_resource_class.name,
             cpu=new_resource_class.cpu,
@@ -134,7 +144,8 @@ class ResourceClassORM(BaseORM):
             default_storage=new_resource_class.default_storage,
             gpu=new_resource_class.gpu,
             resource_pool_id=resource_pool_id,
-            tolerations=tolerations,
+            # tolerations=tolerations,
+            new_tolerations=new_tolerations,
             node_affinities=node_affinities,
         )
 
@@ -160,7 +171,8 @@ class ResourceClassORM(BaseORM):
             default=self.default,
             default_storage=self.default_storage,
             node_affinities=[affinity.dump() for affinity in self.node_affinities],
-            tolerations=[toleration.key for toleration in self.tolerations],
+            # tolerations=[toleration.key for toleration in self.tolerations],
+            tolerations=[tol.dump() for tol in self.new_tolerations],
             matching=matching,
             quota=self.resource_pool.quota if self.resource_pool else None,
         )
@@ -347,6 +359,32 @@ class TolerationORM(BaseORM):
         ForeignKey("resource_classes.id"), default=None, index=True
     )
     id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
+
+
+class NewTolerationORM(BaseORM):
+    """Toleration items for pod scheduling."""
+
+    __tablename__ = "new_tolerations"
+    id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
+    resource_class: Mapped[ResourceClassORM] = relationship(
+        back_populates="new_tolerations", lazy="selectin", init=False
+    )
+    resource_class_id: Mapped[int] = mapped_column(ForeignKey("resource_classes.id"), index=True, init=False)
+    contents: Mapped[dict[str, Any]] = mapped_column(JSONVariant, nullable=False)
+
+    def dump(self) -> k8s_models.Toleration:
+        """Create a toleration model from the ORM object."""
+        return k8s_models.Toleration.from_dict(data=self.contents)
+
+    @classmethod
+    def from_model(
+        cls,
+        toleration: k8s_models.Toleration,
+    ) -> NewTolerationORM:
+        """Create a new ORM object from an internal toleration model."""
+        return cls(
+            contents=toleration.to_dict(),
+        )
 
 
 class NodeAffintyORM(BaseORM):

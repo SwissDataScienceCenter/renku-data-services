@@ -20,6 +20,7 @@ from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from renku_data_services.app_config import logging
 from renku_data_services.base_models import RESET
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
@@ -28,6 +29,8 @@ from renku_data_services.crc.models import ClusterPatch, ClusterSettings, SavedC
 from renku_data_services.crc.orm import ClusterORM
 from renku_data_services.k8s.db import QuotaRepository
 from renku_data_services.users.db import UserRepo
+
+logger = logging.getLogger(__name__)
 
 
 class _Base:
@@ -338,8 +341,9 @@ class ResourcePoolRepository(_Base):
                 # NOTE: The line below ensures that the right users can access the right resources, do not remove.
                 stmt = _classes_user_access_control(api_user, stmt)
 
-            res = await session.execute(stmt)
-            orms = res.scalars().all()
+            res = await session.scalars(stmt)
+            orms = res.all()
+            logger.warning(f"Classes = {[orm.dump() for orm in orms]}")
             return [orm.dump() for orm in orms]
 
     async def get_resource_class(self, api_user: base_models.APIUser, id: int) -> models.ResourceClass:
@@ -586,18 +590,31 @@ class ResourcePoolRepository(_Base):
                         cls.node_affinities.remove(existing_affinity)
 
             if update.tolerations is not None:
-                existing_tolerations: dict[str, schemas.TolerationORM] = {tol.key: tol for tol in cls.tolerations}
-                new_tolerations: dict[str, schemas.TolerationORM] = {
-                    tol: schemas.TolerationORM(key=tol) for tol in update.tolerations
-                }
-                for new_tol_key, new_tol in new_tolerations.items():
-                    if new_tol_key not in existing_tolerations:
-                        # CREATE a brand new toleration
-                        cls.tolerations.append(new_tol)
-                # REMOVE a toleration
-                for existing_tol_key, existing_tol in existing_tolerations.items():
-                    if existing_tol_key not in new_tolerations:
-                        cls.tolerations.remove(existing_tol)
+                # existing_tolerations: dict[str, schemas.TolerationORM] = {tol.key: tol for tol in cls.tolerations}
+                # new_tolerations: dict[str, schemas.TolerationORM] = {
+                #     tol: schemas.TolerationORM(key=tol) for tol in update.tolerations
+                # }
+                # for new_tol_key, new_tol in new_tolerations.items():
+                #     if new_tol_key not in existing_tolerations:
+                #         # CREATE a brand new toleration
+                #         cls.tolerations.append(new_tol)
+                # # REMOVE a toleration
+                # for existing_tol_key, existing_tol in existing_tolerations.items():
+                #     if existing_tol_key not in new_tolerations:
+                #         cls.tolerations.remove(existing_tol)
+
+                # NOTE: the whole list of tolerations is updated
+                existing_tolerations = list(cls.new_tolerations)
+                for existing_tol, new_tol in zip(existing_tolerations, update.tolerations, strict=False):
+                    existing_tol.contents = new_tol.to_dict()
+
+                if len(update.tolerations) > len(existing_tolerations):
+                    # Add new tolerations
+                    for new_tol in update.tolerations[len(existing_tolerations) :]:
+                        cls.new_tolerations.append(schemas.NewTolerationORM.from_model(new_tol))
+                elif len(update.tolerations) < len(existing_tolerations):
+                    # Remove old tolerations
+                    cls.new_tolerations = cls.new_tolerations[: len(update.tolerations)]
 
             # NOTE: do we need to perform this check?
             if cls.resource_pool is None:
