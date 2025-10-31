@@ -413,15 +413,15 @@ class ResourcePoolRepository(_Base):
                 rp.public = update.public
             if update.default is not None:
                 rp.default = update.default
-            if update.idle_threshold == 0:
+            if update.idle_threshold == 0 or update.idle_threshold is RESET:
                 # Using "0" removes the value
                 rp.idle_threshold = None
-            elif update.idle_threshold is not None:
+            elif isinstance(update.idle_threshold, int):
                 rp.idle_threshold = update.idle_threshold
-            if update.hibernation_threshold == 0:
+            if update.hibernation_threshold == 0 or update.hibernation_threshold is RESET:
                 # Using "0" removes the value
                 rp.hibernation_threshold = None
-            elif update.hibernation_threshold is not None:
+            elif isinstance(update.hibernation_threshold, int):
                 rp.hibernation_threshold = update.hibernation_threshold
 
             if update.cluster_id is RESET:

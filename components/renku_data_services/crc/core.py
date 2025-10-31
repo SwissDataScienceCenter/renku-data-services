@@ -204,8 +204,8 @@ def validate_resource_pool_patch(body: apispec.ResourcePoolPatch) -> models.Reso
         name=body.name,
         classes=classes,
         quota=quota,
-        idle_threshold=body.idle_threshold,
-        hibernation_threshold=body.hibernation_threshold,
+        idle_threshold=RESET if body.idle_threshold == 0 else body.idle_threshold,
+        hibernation_threshold=RESET if body.hibernation_threshold == 0 else body.hibernation_threshold,
         default=body.default,
         public=body.public,
         remote=remote,
@@ -339,7 +339,9 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
         raise errors.ValidationError(message="The default resource pool cannot start remote sessions.")
     if isinstance(remote, models.RemoteConfigurationFirecrest) and public:
         raise errors.ValidationError(message="A resource pool which starts remote sessions cannot be public.")
-    if (idle_threshold and idle_threshold < 0) or (hibernation_threshold and hibernation_threshold < 0):
+    if (isinstance(idle_threshold, int) and idle_threshold < 0) or (
+        isinstance(hibernation_threshold, int) and hibernation_threshold < 0
+    ):
         raise errors.ValidationError(message="Idle threshold and hibernation threshold need to be larger than 0.")
 
     default_classes: list[models.ResourceClass] = []

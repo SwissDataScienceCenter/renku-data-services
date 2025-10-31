@@ -509,21 +509,24 @@ def get_culling(
     user: AuthenticatedAPIUser | AnonymousAPIUser, resource_pool: ResourcePool, nb_config: NotebooksConfig
 ) -> Culling:
     """Create the culling specification for an AmaltheaSession."""
-    idle_threshold_seconds = resource_pool.idle_threshold or nb_config.sessions.culling.registered.idle_seconds
     if user.is_anonymous:
         # NOTE: Anonymous sessions should not be hibernated at all, but there is no such option in Amalthea
         # So in this case we set a very low hibernation threshold so the session is deleted quickly after
         # it is hibernated.
-        hibernation_threshold_seconds = 1
+        hibernation_threshold: timedelta | None = timedelta(seconds=1)
     else:
-        hibernation_threshold_seconds = (
-            resource_pool.hibernation_threshold or nb_config.sessions.culling.registered.hibernated_seconds
+        hibernation_threshold = (
+            timedelta(seconds=resource_pool.hibernation_threshold)
+            if resource_pool.hibernation_threshold is not None
+            else None
         )
     return Culling(
         maxAge=timedelta(seconds=nb_config.sessions.culling.registered.max_age_seconds),
         maxFailedDuration=timedelta(seconds=nb_config.sessions.culling.registered.failed_seconds),
-        maxHibernatedDuration=timedelta(seconds=hibernation_threshold_seconds),
-        maxIdleDuration=timedelta(seconds=idle_threshold_seconds),
+        maxHibernatedDuration=hibernation_threshold,
+        maxIdleDuration=timedelta(seconds=resource_pool.idle_threshold)
+        if resource_pool.idle_threshold is not None
+        else None,
         maxStartingDuration=timedelta(seconds=nb_config.sessions.culling.registered.pending_seconds),
     )
 
