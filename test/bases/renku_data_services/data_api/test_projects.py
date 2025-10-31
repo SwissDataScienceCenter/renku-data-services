@@ -599,7 +599,7 @@ async def test_patch_project_invalid_namespace(
     project_id = project["id"]
     _, response = await sanic_client.patch(f"/api/data/projects/{project_id}", headers=headers, json=patch)
 
-    assert response.status_code == 403, response.text
+    assert response.status_code == 404, response.text
     assert "you do not have sufficient permissions" in response.json["error"]["message"]
 
 
@@ -1204,7 +1204,7 @@ async def test_project_copy_basics(
     assert copy_project == snapshot(exclude=props("id", "updated_at", "creation_date", "etag", "template_id"))
 
     _, response = await sanic_client.get(
-        f"/api/data/projects/{copy_project["id"]}", params={"with_documentation": True}, headers=user_headers
+        f"/api/data/projects/{copy_project['id']}", params={"with_documentation": True}, headers=user_headers
     )
     assert response.status_code == 200, response.text
     copy_project = response.json
@@ -1852,3 +1852,59 @@ async def test_migrate_v1_project(
     assert response.status_code == 200, response.text
     migrated_projects = response.json
     assert {project_migration["v1_id"] for project_migration in migrated_projects} == {1122}
+
+
+@pytest.mark.asyncio
+async def test_changing_project_slug_with_data_connectors_moves_data_connectors(
+    sanic_client,
+    user_headers,
+    create_project,
+    create_data_connector_and_link_project,
+) -> None:
+    project = await create_project("Project")
+    project_id = project["id"]
+    dc_namespace = f"{project['namespace']}/{project['slug']}"
+    data_connector_1, _ = await create_data_connector_and_link_project(
+        "Data Connector 1", project_id=project_id, namespace=dc_namespace
+    )
+    _, res = await sanic_client.patch(
+        f"/api/data/projects/{project_id}",
+        headers={"If-Match": project["etag"], **user_headers},
+        json={"slug": "new_slug"},
+    )
+    assert res.status_code == 200, res.text
+    _, res = await sanic_client.get(
+        f"/api/data/data_connectors/{data_connector_1['id']}",
+        headers=user_headers,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json["namespace"] == f"{project['namespace']}/new_slug"
+
+
+@pytest.mark.asyncio
+async def test_changing_project_namespace_with_data_connectors_moves_data_connectors(
+    sanic_client,
+    user_headers,
+    create_project,
+    create_data_connector_and_link_project,
+    create_group,
+) -> None:
+    group = await create_group("group")
+    project = await create_project("Project")
+    project_id = project["id"]
+    dc_namespace = f"{project['namespace']}/{project['slug']}"
+    data_connector_1, _ = await create_data_connector_and_link_project(
+        "Data Connector 1", project_id=project_id, namespace=dc_namespace
+    )
+    _, res = await sanic_client.patch(
+        f"/api/data/projects/{project_id}",
+        headers={"If-Match": project["etag"], **user_headers},
+        json={"namespace": group["slug"]},
+    )
+    assert res.status_code == 200, res.text
+    _, res = await sanic_client.get(
+        f"/api/data/data_connectors/{data_connector_1['id']}",
+        headers=user_headers,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json["namespace"] == f"{group['slug']}/{project['slug']}"
