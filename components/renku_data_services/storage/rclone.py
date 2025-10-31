@@ -63,7 +63,7 @@ class RCloneValidator:
 
         # Obscure configuration and transform if needed
         obscured_config = await self.obscure_config(configuration)
-        transformed_config = self.transform_polybox_switchdriver_config(obscured_config)
+        transformed_config = self.inject_default_values(self.transform_polybox_switchdriver_config(obscured_config))
 
         with tempfile.NamedTemporaryFile(mode="w+", delete=False, encoding="utf-8") as f:
             config = "\n".join(f"{k}={v}" for k, v in transformed_config.items())
@@ -79,6 +79,7 @@ class RCloneValidator:
             storage_type = cast(str, configuration.get("type"))
             if storage_type == "sftp":
                 args.extend(["--low-level-retries", "1"])
+            logger.debug(f"Execute: rclone {" ".join(args)}")
             proc = await asyncio.create_subprocess_exec(
                 "rclone",
                 *args,
@@ -165,6 +166,27 @@ class RCloneValidator:
             message=f"Could not resolve DOI {configuration.get("doi", "<unknown>")} or the hosting platform is not supported",  # noqa E501
             detail=f"Reason: {stderr.decode().strip()}",
         )
+
+    def inject_default_values(
+        self, config: Union["RCloneConfig", dict[str, Any]]
+    ) -> Union["RCloneConfig", dict[str, Any]]:
+        """Adds default values for required options that are not provided in the config."""
+        provider = self.get_provider(config)
+        cfg_provider: str | None = config.get("provider")
+
+        for opt in provider.options:
+            if not opt.required or not opt.default or opt.name in config or not opt.matches_provider(cfg_provider):
+                continue
+
+            match opt.default:
+                case RCloneTriState() as ts:
+                    def_val: Any = ts.value
+                case v:
+                    def_val = v
+
+            config.update({opt.name: def_val})
+
+        return config
 
     @staticmethod
     def transform_polybox_switchdriver_config(
@@ -304,7 +326,10 @@ class RCloneOption(BaseModel):
             and self.exclusive
             and not any(e.value == str(value) and (not e.provider or e.provider == provider) for e in self.examples)
         ):
-            raise errors.ValidationError(message=f"Value '{value}' is not valid for field {self.name}")
+            valid_values = ", ".join([v.value for v in self.examples])
+            raise errors.ValidationError(
+                message=f"Value '{value}' is not valid for field {self.name}. Valid values are: {valid_values}"
+            )
         return cast(int | bool | dict | str, value)
 
 
@@ -323,7 +348,7 @@ class RCloneProviderSchema(BaseModel):
     @property
     def required_options(self) -> list[RCloneOption]:
         """Returns all required options for this provider."""
-        return [o for o in self.options if o.required]
+        return [o for o in self.options if o.required and not o.default]
 
     @property
     def sensitive_options(self) -> list[RCloneOption]:
