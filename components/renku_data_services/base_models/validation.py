@@ -1,6 +1,7 @@
 """Base response validation used by services."""
 
 from collections.abc import Callable
+from dataclasses import asdict, is_dataclass
 from typing import Any
 
 from pydantic import BaseModel
@@ -21,6 +22,8 @@ def validate_and_dump(
 
     kwargs are passed on to the pydantic model `model_dump` method.
     """
+    if is_dataclass(data) and not isinstance(data, type):
+        data = asdict(data)
     try:
         body = model.model_validate(data).model_dump(exclude_none=exclude_none, mode="json", **kwargs)
     except PydanticValidationError as err:
