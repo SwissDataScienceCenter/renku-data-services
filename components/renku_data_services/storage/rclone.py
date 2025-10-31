@@ -79,6 +79,7 @@ class RCloneValidator:
             storage_type = cast(str, configuration.get("type"))
             if storage_type == "sftp":
                 args.extend(["--low-level-retries", "1"])
+            logger.debug(f"Execute: rclone {" ".join(args)}")
             proc = await asyncio.create_subprocess_exec(
                 "rclone",
                 *args,
@@ -171,8 +172,10 @@ class RCloneValidator:
     ) -> Union["RCloneConfig", dict[str, Any]]:
         """Adds default values for required options that are not provided in the config."""
         provider = self.get_provider(config)
+        cfg_provider: str | None = config.get("provider")
+
         for opt in provider.options:
-            if not opt.required or not opt.default or opt.name in config:
+            if not opt.required or not opt.default or opt.name in config or not opt.matches_provider(cfg_provider):
                 continue
 
             match opt.default:
