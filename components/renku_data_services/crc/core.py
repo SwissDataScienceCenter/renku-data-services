@@ -1,5 +1,6 @@
 """crc modules converters and validators."""
 
+from operator import attrgetter
 from typing import Literal, overload
 from urllib.parse import urlparse
 
@@ -8,6 +9,9 @@ from ulid import ULID
 from renku_data_services.base_models import RESET, ResetType
 from renku_data_services.crc import apispec, models
 from renku_data_services.errors import errors
+from renku_data_services.k8s.pod_scheduling import api as k8s_api
+from renku_data_services.k8s.pod_scheduling import models as k8s_models
+from renku_data_services.k8s.pod_scheduling import transforms as k8s_transforms
 
 
 def validate_quota(body: apispec.QuotaWithOptionalId) -> models.UnsavedQuota:
@@ -43,7 +47,9 @@ def validate_resource_class(body: apispec.ResourceClass) -> models.UnsavedResour
         ),
         key=lambda x: (x.key, x.required_during_scheduling),
     )
-    tolerations = sorted(t.root for t in body.tolerations or [])
+    api_tolerations = k8s_api.TolerationsField.model_validate(body.tolerations)
+    tolerations = k8s_transforms.transform_tolerations(body=api_tolerations) or []
+    tolerations = sorted(tolerations, key=attrgetter("key", "operator", "effect", "value"))
     return models.UnsavedResourceClass(
         name=body.name,
         cpu=body.cpu,
@@ -91,9 +97,14 @@ def validate_resource_class_patch_or_put(
             ),
             key=lambda x: (x.key, x.required_during_scheduling),
         )
-    tolerations: list[str] | None = [] if method == "PUT" else None
+    # tolerations: list[str] | None = [] if method == "PUT" else None
+    # if body.tolerations:
+    #     tolerations = sorted(t.root for t in body.tolerations or [])
+    tolerations: list[k8s_models.Toleration] | None = [] if method == "PUT" else None
     if body.tolerations:
-        tolerations = sorted(t.root for t in body.tolerations or [])
+        api_tolerations = k8s_api.TolerationsField.model_validate(body.tolerations)
+        tolerations = k8s_transforms.transform_tolerations(body=api_tolerations) or []
+        tolerations = sorted(tolerations, key=attrgetter("key", "operator", "effect", "value"))
     if rc_id:
         return models.ResourceClassPatchWithId(
             id=rc_id,

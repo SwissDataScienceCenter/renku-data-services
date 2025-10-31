@@ -131,7 +131,10 @@ class ResourceClassORM(BaseORM):
             )
             for affinity in new_resource_class.node_affinities
         ]
-        tolerations = [TolerationORM(key=toleration) for toleration in new_resource_class.tolerations]
+        # tolerations = [TolerationORM(key=toleration) for toleration in new_resource_class.tolerations]
+
+        new_tolerations = [NewTolerationORM.from_model(tol) for tol in new_resource_class.tolerations]
+
         return cls(
             name=new_resource_class.name,
             cpu=new_resource_class.cpu,
@@ -141,7 +144,8 @@ class ResourceClassORM(BaseORM):
             default_storage=new_resource_class.default_storage,
             gpu=new_resource_class.gpu,
             resource_pool_id=resource_pool_id,
-            tolerations=tolerations,
+            # tolerations=tolerations,
+            new_tolerations=new_tolerations,
             node_affinities=node_affinities,
         )
 
@@ -167,7 +171,8 @@ class ResourceClassORM(BaseORM):
             default=self.default,
             default_storage=self.default_storage,
             node_affinities=[affinity.dump() for affinity in self.node_affinities],
-            tolerations=[toleration.key for toleration in self.tolerations],
+            # tolerations=[toleration.key for toleration in self.tolerations],
+            tolerations=[tol.dump() for tol in self.new_tolerations],
             matching=matching,
             quota=self.resource_pool.quota if self.resource_pool else None,
         )
@@ -364,7 +369,7 @@ class NewTolerationORM(BaseORM):
     resource_class: Mapped[ResourceClassORM] = relationship(
         back_populates="new_tolerations", lazy="selectin", init=False
     )
-    resource_class_id: Mapped[int] = mapped_column(ForeignKey("resource_classes.id"), index=True)
+    resource_class_id: Mapped[int] = mapped_column(ForeignKey("resource_classes.id"), index=True, init=False)
     contents: Mapped[dict[str, Any]] = mapped_column(JSONVariant, nullable=False)
 
     def dump(self) -> k8s_models.Toleration:
@@ -375,11 +380,9 @@ class NewTolerationORM(BaseORM):
     def from_model(
         cls,
         toleration: k8s_models.Toleration,
-        resource_class_id: int,
     ) -> NewTolerationORM:
         """Create a new ORM object from an internal toleration model."""
         return cls(
-            resource_class_id=resource_class_id,
             contents=toleration.to_dict(),
         )
 

@@ -550,7 +550,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/K8sLabelList"
+                $ref: "#/components/schemas/Tolerations"
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -1075,7 +1075,7 @@ components:
         default:
           $ref: "#/components/schemas/DefaultFlag"
         tolerations:
-          $ref: "#/components/schemas/K8sLabelList"
+          $ref: "#/components/schemas/Tolerations"
         node_affinities:
           $ref: "#/components/schemas/NodeAffinityList"
       required: ["cpu", "memory", "gpu", "max_storage", "name", "default", "default_storage"]
@@ -1106,7 +1106,7 @@ components:
         default:
           $ref: "#/components/schemas/DefaultFlagPatch"
         tolerations:
-          $ref: "#/components/schemas/K8sLabelList"
+          $ref: "#/components/schemas/Tolerations"
         node_affinities:
           $ref: "#/components/schemas/NodeAffinityList"
       example:
@@ -1133,7 +1133,7 @@ components:
         default:
           $ref: "#/components/schemas/DefaultFlagPatch"
         tolerations:
-          $ref: "#/components/schemas/K8sLabelList"
+          $ref: "#/components/schemas/Tolerations"
         node_affinities:
           $ref: "#/components/schemas/NodeAffinityList"
       required: ["id"]
@@ -1161,7 +1161,7 @@ components:
         default:
           $ref: "#/components/schemas/DefaultFlag"
         tolerations:
-          $ref: "#/components/schemas/K8sLabelList"
+          $ref: "#/components/schemas/Tolerations"
         node_affinities:
           $ref: "#/components/schemas/NodeAffinityList"
       required: ["cpu", "memory", "gpu", "max_storage", "name", "id", "default", "default_storage"]
@@ -1197,7 +1197,7 @@ components:
         matching:
           type: boolean
         tolerations:
-          $ref: "#/components/schemas/K8sLabelList"
+          $ref: "#/components/schemas/Tolerations"
         node_affinities:
           $ref: "#/components/schemas/NodeAffinityList"
       required: ["cpu", "memory", "gpu", "max_storage", "name", "id", "default", "default_storage"]
@@ -1800,15 +1800,35 @@ components:
       description: A threshold in seconds after which a session gets culled/deleted (0 means no threshold)
       minimum: 0
       maximum: 2147483647
-    K8sLabelList:
+    Tolerations:
       type: array
-      description: A list of k8s labels used for tolerations
+      description: |
+        A list of toleration items used for pod scheduling in Kubernetes.
       items:
-        $ref: "#/components/schemas/K8sLabel"
-      example: ["test-label-1"]
-      uniqueItems: true
+        $ref: "#/components/schemas/Toleration"
       default: []
-      minItems: 0
+    Toleration:
+      type: object
+      description: |
+        A toleration item.
+        The pod this Toleration is attached to tolerates any taint
+        that matches the triple <key,value,effect>
+        using the matching operator <operator>.
+      additionalProperties: true
+      example:
+        effect: "NoSchedule"
+        key: "renku.io/dedicated"
+        operator: "Equal"
+        value: "user"
+    # K8sLabelList:
+    #   type: array
+    #   description: A list of k8s labels used for tolerations
+    #   items:
+    #     $ref: "#/components/schemas/K8sLabel"
+    #   example: ["test-label-1"]
+    #   uniqueItems: true
+    #   default: []
+    #   minItems: 0
     K8sLabel:
       type: string
       description: A valid K8s label

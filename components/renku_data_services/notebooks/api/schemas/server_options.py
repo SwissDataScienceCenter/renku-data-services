@@ -2,11 +2,13 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from operator import attrgetter
 from typing import Any, Optional, Self
 
 from marshmallow import Schema, fields
 
 from renku_data_services.crc.models import ResourceClass
+from renku_data_services.k8s.pod_scheduling import models as k8s_models
 from renku_data_services.notebooks.api.schemas.custom_fields import ByteSizeField, CpuField, GpuField
 from renku_data_services.notebooks.config.dynamic import CPUEnforcement
 from renku_data_services.notebooks.errors.programming import ProgrammingError
@@ -27,18 +29,18 @@ class NodeAffinity:
         }
 
 
-@dataclass
-class Toleration:
-    """Toleration used to schedule a session on tainted nodes."""
+# @dataclass
+# class Toleration:
+#     """Toleration used to schedule a session on tainted nodes."""
 
-    key: str
+#     key: str
 
-    def json_match_expression(self) -> dict[str, Any]:
-        """Create match expression for this class."""
-        return {
-            "key": self.key,
-            "operator": "Exists",
-        }
+#     def json_match_expression(self) -> dict[str, Any]:
+#         """Create match expression for this class."""
+#         return {
+#             "key": self.key,
+#             "operator": "Exists",
+#         }
 
 
 @dataclass
@@ -54,7 +56,7 @@ class ServerOptions:
     gigabytes: bool = False
     priority_class: Optional[str] = None
     node_affinities: list[NodeAffinity] = field(default_factory=list)
-    tolerations: list[Toleration] = field(default_factory=list)
+    tolerations: list[k8s_models.Toleration] = field(default_factory=list)
     resource_class_id: Optional[int] = None
     idle_threshold_seconds: Optional[int] = None
     hibernation_threshold_seconds: Optional[int] = None
@@ -69,7 +71,7 @@ class ServerOptions:
                 message="Cannot create a ServerOptions dataclass with node "
                 "affinities that are not of type NodeAffinity"
             )
-        if not all([isinstance(toleration, Toleration) for toleration in self.tolerations]):
+        if not all([isinstance(toleration, k8s_models.Toleration) for toleration in self.tolerations]):
             raise ProgrammingError(
                 message="Cannot create a ServerOptions dataclass with tolerations that are not of type Toleration"
             )
@@ -83,7 +85,8 @@ class ServerOptions:
         if not self.tolerations:
             self.tolerations = []
         else:
-            self.tolerations = sorted(self.tolerations, key=lambda x: x.key)
+            self.tolerations = sorted(self.tolerations, key=attrgetter("key", "operator", "effect", "value"))
+            # self.tolerations = sorted(self.tolerations, key=lambda x: x.key)
 
     def __compare(
         self,
@@ -191,7 +194,8 @@ class ServerOptions:
                 NodeAffinity(key=a.key, required_during_scheduling=a.required_during_scheduling)
                 for a in data.node_affinities
             ],
-            tolerations=[Toleration(t) for t in data.tolerations],
+            # tolerations=[Toleration(t) for t in data.tolerations],
+            tolerations=data.tolerations,
             resource_class_id=data.id,
         )
 
