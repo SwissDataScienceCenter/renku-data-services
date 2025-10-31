@@ -70,6 +70,10 @@ def __patch_schema_sensitive(spec: list[dict[str, Any]]) -> None:
             for option in storage["Options"]:
                 if option["Name"] == "account":
                     option["Sensitive"] = False
+        if storage["Prefix"] == "sftp":
+            for option in storage["Options"]:
+                if option["Name"] == "host":
+                    option["Sensitive"] = False
         if storage["Prefix"] == "webdav":
             for option in storage["Options"]:
                 if option["Name"] == "user":
