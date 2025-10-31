@@ -48,6 +48,11 @@ def from_str(input: str) -> SolrToken:
     return SolrToken(__escape_query(input))
 
 
+def prefix_search(input: str) -> SolrToken:
+    """Create a solr query part matching input prefixes."""
+    return SolrToken(f"{__escape_query(input)}*")
+
+
 def from_visibility(v: Visibility) -> SolrToken:
     """Create a solr query value for a visibility."""
     return SolrToken(v.value.lower())
@@ -101,6 +106,13 @@ def field_is_any(field: FieldName, value: Nel[SolrToken]) -> SolrToken:
     else:
         vs = fold_or(value)
         return field_is(field, SolrToken(f"({vs})"))
+
+
+def namespace_path_is_any(value: Nel[str]) -> SolrToken:
+    """Search for entities in the given namespaces or below."""
+    path_or_below = [x for k in [[from_str(e), prefix_search(f"{e}/")] for e in value] for x in k]
+    vs = fold_or(path_or_below)
+    return field_is(Fields.namespace_path, SolrToken(f"({vs})"))
 
 
 def type_is(et: EntityType) -> SolrToken:

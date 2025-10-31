@@ -88,7 +88,7 @@ async def test_from_term() -> None:
         Fields.keywords, Nel.of(st.from_str("k1"), st.from_str("w2"))
     )
     assert await to_solr(ctx, S.namespace_is("ns12")) == st.field_is_any(
-        Fields.namespace_path, Nel.of(st.from_str("ns12"))
+        Fields.namespace_path, Nel.of(st.from_str("ns12"), st.prefix_search("ns12/"))
     )
     assert await to_solr(ctx, S.created_by_is("12-34")) == st.field_is_any(
         Fields.created_by, Nel.of(st.from_str("12-34"))

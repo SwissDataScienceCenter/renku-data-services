@@ -225,12 +225,12 @@ def get_auth_secret_anonymous(nb_config: NotebooksConfig, server_name: str, requ
     return ExtraSecret(secret)
 
 
-def __get_gitlab_image_pull_secret(
+async def __get_gitlab_image_pull_secret(
     nb_config: NotebooksConfig, user: AuthenticatedAPIUser, image_pull_secret_name: str, access_token: str
 ) -> ExtraSecret:
     """Create a Kubernetes secret for private GitLab registry authentication."""
 
-    k8s_namespace = nb_config.k8s_client.namespace()
+    k8s_namespace = await nb_config.k8s_client.namespace()
 
     registry_secret = {
         "auths": {
@@ -605,7 +605,7 @@ async def get_image_pull_secret(
     ):
         needs_pull_secret = await __requires_image_pull_secret(nb_config, image, internal_gitlab_user)
         if needs_pull_secret:
-            v1_secret = __get_gitlab_image_pull_secret(
+            v1_secret = await __get_gitlab_image_pull_secret(
                 nb_config, user, f"{server_name}-image-secret-v1", internal_gitlab_user.access_token
             )
             return v1_secret
