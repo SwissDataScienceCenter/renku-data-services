@@ -11,6 +11,7 @@ from marshmallow import EXCLUDE, Schema, ValidationError, fields, validates_sche
 
 from renku_data_services.notebooks.api.classes.cloud_storage import ICloudStorageRequest
 from renku_data_services.storage.models import CloudStorage
+from renku_data_services.storage.rclone import RCloneValidator
 
 _sanitize_for_serialization = client.ApiClient().sanitize_for_serialization
 
@@ -71,6 +72,8 @@ class RCloneStorage(ICloudStorageRequest):
         self.base_name: str | None = None
         self.user_secret_key = user_secret_key
         self.storage_class = storage_class
+        validator = RCloneValidator()
+        validator.inject_default_values(self.configuration)
 
     @classmethod
     async def storage_from_schema(
