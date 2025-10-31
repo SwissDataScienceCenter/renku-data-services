@@ -372,6 +372,11 @@ class Toleration:
             value=data.get("value"),
         )
 
+    @staticmethod
+    def sort_key(item: "Toleration") -> tuple[str, str, str, str]:
+        """Key for sorting toleration items."""
+        return (item.key or "", item.operator or "", item.effect or "", item.value or "")
+
 
 type AffinityField = Affinity | None
 """Affinity field.

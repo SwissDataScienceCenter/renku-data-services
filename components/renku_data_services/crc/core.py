@@ -1,6 +1,5 @@
 """crc modules converters and validators."""
 
-from operator import attrgetter
 from typing import Literal, overload
 from urllib.parse import urlparse
 
@@ -51,7 +50,7 @@ def validate_resource_class(body: apispec.ResourceClass) -> models.UnsavedResour
         [tol.model_dump(mode="json") for tol in body.tolerations or []]
     )
     tolerations = k8s_transforms.transform_tolerations(body=api_tolerations) or []
-    tolerations = sorted(tolerations, key=attrgetter("key", "operator", "effect", "value"))
+    tolerations = sorted(tolerations, key=k8s_models.Toleration.sort_key)
     return models.UnsavedResourceClass(
         name=body.name,
         cpu=body.cpu,
@@ -108,7 +107,7 @@ def validate_resource_class_patch_or_put(
             [tol.model_dump(mode="json") for tol in body.tolerations]
         )
         tolerations = k8s_transforms.transform_tolerations(body=api_tolerations) or []
-        tolerations = sorted(tolerations, key=attrgetter("key", "operator", "effect", "value"))
+        tolerations = sorted(tolerations, key=k8s_models.Toleration.sort_key)
     if rc_id:
         return models.ResourceClassPatchWithId(
             id=rc_id,

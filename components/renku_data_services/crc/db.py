@@ -20,6 +20,7 @@ from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from renku_data_services.app_config import logging
 from renku_data_services.base_models import RESET
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
@@ -28,6 +29,8 @@ from renku_data_services.crc.models import ClusterPatch, ClusterSettings, SavedC
 from renku_data_services.crc.orm import ClusterORM
 from renku_data_services.k8s.db import QuotaRepository
 from renku_data_services.users.db import UserRepo
+
+logger = logging.getLogger(__name__)
 
 
 class _Base:
@@ -338,8 +341,9 @@ class ResourcePoolRepository(_Base):
                 # NOTE: The line below ensures that the right users can access the right resources, do not remove.
                 stmt = _classes_user_access_control(api_user, stmt)
 
-            res = await session.execute(stmt)
-            orms = res.scalars().all()
+            res = await session.scalars(stmt)
+            orms = res.all()
+            logger.warning(f"Classes = {[orm.dump() for orm in orms]}")
             return [orm.dump() for orm in orms]
 
     async def get_resource_class(self, api_user: base_models.APIUser, id: int) -> models.ResourceClass:

@@ -2,7 +2,6 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from operator import attrgetter
 from typing import Any, Optional, Self
 
 from marshmallow import Schema, fields
@@ -85,7 +84,7 @@ class ServerOptions:
         if not self.tolerations:
             self.tolerations = []
         else:
-            self.tolerations = sorted(self.tolerations, key=attrgetter("key", "operator", "effect", "value"))
+            self.tolerations = sorted(self.tolerations, key=k8s_models.Toleration.sort_key)
             # self.tolerations = sorted(self.tolerations, key=lambda x: x.key)
 
     def __compare(
