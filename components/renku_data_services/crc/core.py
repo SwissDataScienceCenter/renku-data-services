@@ -47,7 +47,9 @@ def validate_resource_class(body: apispec.ResourceClass) -> models.UnsavedResour
         ),
         key=lambda x: (x.key, x.required_during_scheduling),
     )
-    api_tolerations = k8s_api.TolerationsField.model_validate(body.tolerations)
+    api_tolerations = k8s_api.TolerationsField.model_validate(
+        [tol.model_dump(mode="json") for tol in body.tolerations or []]
+    )
     tolerations = k8s_transforms.transform_tolerations(body=api_tolerations) or []
     tolerations = sorted(tolerations, key=attrgetter("key", "operator", "effect", "value"))
     return models.UnsavedResourceClass(
@@ -102,7 +104,9 @@ def validate_resource_class_patch_or_put(
     #     tolerations = sorted(t.root for t in body.tolerations or [])
     tolerations: list[k8s_models.Toleration] | None = [] if method == "PUT" else None
     if body.tolerations:
-        api_tolerations = k8s_api.TolerationsField.model_validate(body.tolerations)
+        api_tolerations = k8s_api.TolerationsField.model_validate(
+            [tol.model_dump(mode="json") for tol in body.tolerations]
+        )
         tolerations = k8s_transforms.transform_tolerations(body=api_tolerations) or []
         tolerations = sorted(tolerations, key=attrgetter("key", "operator", "effect", "value"))
     if rc_id:
