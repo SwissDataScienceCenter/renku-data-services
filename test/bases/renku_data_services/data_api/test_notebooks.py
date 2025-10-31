@@ -3,20 +3,17 @@
 import asyncio
 from collections.abc import AsyncIterator, Generator
 from contextlib import suppress
-from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
 import pytest_asyncio
 from kr8s import NotFoundError
 from sanic_testing.testing import SanicASGITestClient
+from ulid import ULID
 
-from renku_data_services.notebooks.api.classes.k8s_client import JupyterServerV1Alpha1Kr8s
-
-
-@pytest.fixture(scope="module", autouse=True)
-def kubeconfig(monkeysession):
-    monkeysession.setenv("KUBECONFIG", ".k3d-config.yaml")
+from renku_data_services.base_models.core import APIUser
+from renku_data_services.data_api.dependencies import DependencyManager
+from renku_data_services.notebooks.crs import AmaltheaSessionSpec, AmaltheaSessionV1Alpha1, Resources, Session
 
 
 @pytest.fixture
@@ -28,7 +25,7 @@ def non_mocked_hosts() -> list:
 
 @pytest.fixture
 def renku_image() -> str:
-    return "renku/renkulab-py:3.10-0.24.0"
+    return "ghcr.io/swissdatasciencecenter/renku/py-basic-vscodium:2.9.0"
 
 
 @pytest.fixture
@@ -49,46 +46,44 @@ def pod_name(server_name: str) -> str:
 
 
 @pytest_asyncio.fixture()
-async def jupyter_server(
-    renku_image: str, server_name: str, notebooks_fixtures
-) -> AsyncIterator[JupyterServerV1Alpha1Kr8s]:
+async def amalthea_session(
+    renku_image: str,
+    server_name: str,
+    notebooks_fixtures,
+    app_manager_instance: DependencyManager,
+    regular_user_api_user: APIUser,
+) -> AsyncIterator[AmaltheaSessionV1Alpha1]:
     """Fake server for non pod related tests"""
 
-    server = await JupyterServerV1Alpha1Kr8s(
-        {
-            "metadata": {
-                "name": server_name,
-                "labels": {"renku.io/safe-username": "user", "renku.io/userId": "user"},
-                "annotations": {
-                    "renku.io/branch": "dummy",
-                    "renku.io/commit-sha": "sha",
-                    "renku.io/default_image_used": "default/image",
-                    "renku.io/namespace": "default",
-                    "renku.io/projectName": "dummy",
-                    "renku.io/repository": "dummy",
-                },
+    session = AmaltheaSessionV1Alpha1(
+        metadata=dict(
+            name=server_name,
+            labels={"renku.io/safe-username": regular_user_api_user.id, "renku.io/userId": regular_user_api_user.id},
+            annotations={
+                "renku.io/resource_class_id": "1",
+                "renku.io/project_id": str(ULID()),
+                "renku.io/launcher_id": str(ULID()),
             },
-            "spec": {
-                "jupyterServer": {
-                    "image": renku_image,
-                    "resources": {
-                        "requests": {
-                            "cpu": 0.1,
-                            "memory": 100_000_000,
-                        },
-                    },
-                },
-                "routing": {"tlsEnabled": False, "host": "some.host"},
-            },
-        }
+        ),
+        spec=AmaltheaSessionSpec(
+            session=Session(
+                image=renku_image,
+                resources=Resources(
+                    requests={
+                        "cpu": "100m",
+                        "memory": "1Gi",
+                    }
+                ),
+            ),
+            hibernated=False,
+        ),
     )
+    yield await app_manager_instance.config.nb_config.k8s_v2_client.create_session(session, regular_user_api_user)
 
-    await server.create()
-    yield server
     # NOTE: This is used also in tests that check if the server was properly stopped
     # in this case the server will already be gone when we try to delete it in the cleanup here.
     with suppress(NotFoundError):
-        await server.delete("Foreground")
+        await app_manager_instance.config.nb_config.k8s_v2_client.delete_session(server_name, regular_user_api_user.id)
 
 
 @pytest.fixture()
@@ -122,58 +117,13 @@ class AttributeDictionary(dict):
         return super().__setitem__(k, v)
 
 
-@pytest.fixture
-def fake_gitlab_project_info():
-    return AttributeDictionary(
-        {
-            "path": "my-test",
-            "path_with_namespace": "test-namespace/my-test",
-            "branches": {"main": AttributeDictionary({})},
-            "commits": {"ee4b1c9fedc99abe5892ee95320bbd8471c5985b": AttributeDictionary({})},
-            "id": 5407,
-            "http_url_to_repo": "https://gitlab-url.com/test-namespace/my-test.git",
-            "web_url": "https://gitlab-url.com/test-namespace/my-test",
-        }
-    )
-
-
-@pytest.fixture
-def fake_gitlab_projects(fake_gitlab_project_info):
-    class GitLabProject(AttributeDictionary):
-        def __init__(self):
-            super().__init__({})
-
-        def get(self, name, default=None):
-            if name not in self:
-                return fake_gitlab_project_info
-            return super().get(name, default)
-
-    return GitLabProject()
-
-
-@pytest.fixture()
-def fake_gitlab(mocker, fake_gitlab_projects, fake_gitlab_project_info):
-    gitlab = mocker.patch("renku_data_services.notebooks.api.classes.user.Gitlab")
-    get_project = mocker.patch("renku_data_services.notebooks.api.classes.user._get_project")
-    gitlab_mock = MagicMock()
-    gitlab_mock.auth = MagicMock()
-    gitlab_mock.projects = fake_gitlab_projects
-    gitlab_mock.user = AttributeDictionary(
-        {"username": "john.doe", "name": "John Doe", "email": "john.doe@notebooks-tests.renku.ch"}
-    )
-    gitlab_mock.url = "https://gitlab-url.com"
-    gitlab.return_value = gitlab_mock
-    get_project.return_value = fake_gitlab_project_info
-    return gitlab
-
-
 async def wait_for(sanic_client: SanicASGITestClient, user_headers, server_name: str, max_timeout: int = 60):
     res = None
     waited = 0
     for t in list(range(0, max_timeout)):
         waited = t + 1
-        _, res = await sanic_client.get("/api/data/notebooks/servers", headers=user_headers)
-        if res.status_code == 200 and res.json["servers"].get(server_name) is not None:
+        _, res = await sanic_client.get(f"/api/data/sessions/{server_name}", headers=user_headers)
+        if res.status_code == 200:
             return
         await asyncio.sleep(1)  # wait a bit for k8s events to be processed in the background
 
@@ -184,75 +134,21 @@ async def wait_for(sanic_client: SanicASGITestClient, user_headers, server_name:
 
 
 @pytest.mark.asyncio
-async def test_version(sanic_client: SanicASGITestClient, user_headers):
-    _, res = await sanic_client.get("/api/data/notebooks/version", headers=user_headers)
-
-    assert res.status_code == 200, res.text
-
-    assert res.json == {
-        "name": "renku-notebooks",
-        "versions": [
-            {
-                "data": {
-                    "anonymousSessionsEnabled": False,
-                    "cloudstorageClass": "csi-rclone",
-                    "cloudstorageEnabled": False,
-                    "defaultCullingThresholds": {
-                        "anonymous": {
-                            "hibernation": 1,
-                            "idle": 86400,
-                        },
-                        "registered": {
-                            "hibernation": 86400,
-                            "idle": 86400,
-                        },
-                    },
-                    "sshEnabled": False,
-                },
-                "version": "0.0.0",
-            },
-        ],
-    }
-
-
-@pytest.mark.asyncio
-async def test_server_options(sanic_client: SanicASGITestClient, user_headers):
-    _, res = await sanic_client.get("/api/data/notebooks/server_options", headers=user_headers)
-
-    assert res.status_code == 200, res.text
-    assert res.json == {
-        "cloudstorage": {"enabled": False},
-        "defaultUrl": {
-            "default": "/lab",
-            "displayName": "Default Environment",
-            "options": ["/lab"],
-            "order": 1,
-            "type": "enum",
-        },
-        "lfs_auto_fetch": {
-            "default": False,
-            "displayName": "Automatically fetch LFS data",
-            "order": 6,
-            "type": "boolean",
-        },
-    }
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("image,expected_status_code", [("python:3.12", 200), ("shouldnotexist:0.42", 404)])
-async def test_check_docker_image(sanic_client: SanicASGITestClient, user_headers, image, expected_status_code):
+@pytest.mark.parametrize("image,exists", [("python:3.12", True), ("shouldnotexist:0.42", False)])
+async def test_check_docker_image(sanic_client: SanicASGITestClient, user_headers, image, exists):
     """Validate that the images endpoint answers correctly.
 
     Needs the responses package in case docker queries must be mocked
     """
 
-    _, res = await sanic_client.get(f"/api/data/notebooks/images/?image_url={image}", headers=user_headers)
+    _, res = await sanic_client.get(f"/api/data/sessions/images/?image_url={image}", headers=user_headers)
 
-    assert res.status_code == expected_status_code, res.text
+    assert res.status_code == 200, res.text
+    assert res.json["accessible"] == exists
 
 
 @pytest.fixture
-def notebooks_fixtures(cluster, amalthea_installation, jupyter_server_k8s_watcher) -> Generator[None, None]:
+def notebooks_fixtures(cluster, amalthea_installation, amalthea_session_k8s_watcher) -> Generator[None, None]:
     yield
 
 
@@ -260,17 +156,20 @@ def notebooks_fixtures(cluster, amalthea_installation, jupyter_server_k8s_watche
 @pytest.mark.sessions
 @pytest.mark.asyncio
 async def test_user_server_list(
-    sanic_client: SanicASGITestClient, authenticated_user_headers, fake_gitlab, jupyter_server, notebooks_fixtures
+    sanic_client: SanicASGITestClient,
+    authenticated_user_headers,
+    amalthea_session: AmaltheaSessionV1Alpha1,
+    notebooks_fixtures,
 ):
     """Validate that the user server list endpoint answers correctly"""
 
     await asyncio.sleep(1)  # wait a bit for k8s events to be processed in the background
 
-    _, res = await sanic_client.get("/api/data/notebooks/servers", headers=authenticated_user_headers)
+    _, res = await sanic_client.get("/api/data/sessions", headers=authenticated_user_headers)
 
     assert res.status_code == 200, res.text
-    assert "servers" in res.json
-    assert len(res.json["servers"]) == 1
+    assert len(res.json) == 1
+    assert res.json[0]["name"] == amalthea_session.metadata.name
 
 
 @pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
@@ -282,18 +181,17 @@ async def test_log_retrieval(
     server_exists,
     expected_status_code,
     authenticated_user_headers,
-    fake_gitlab,
     notebooks_fixtures,
-    jupyter_server,
+    amalthea_session: AmaltheaSessionV1Alpha1,
 ):
     """Validate that the logs endpoint answers correctly"""
 
     server_name = "unknown_server"
     if server_exists:
-        server_name = jupyter_server.name
+        server_name = amalthea_session.metadata.name
         await wait_for(sanic_client, authenticated_user_headers, server_name)
 
-    _, res = await sanic_client.get(f"/api/data/notebooks/logs/{server_name}", headers=authenticated_user_headers)
+    _, res = await sanic_client.get(f"/api/data/sessions/{server_name}/logs", headers=authenticated_user_headers)
 
     assert res.status_code == expected_status_code, res.text
 
@@ -305,17 +203,16 @@ async def test_log_retrieval(
 async def test_stop_server(
     sanic_client: SanicASGITestClient,
     server_exists,
-    jupyter_server,
+    amalthea_session: AmaltheaSessionV1Alpha1,
     expected_status_code,
     authenticated_user_headers,
-    fake_gitlab,
     notebooks_fixtures,
 ):
     server_name = "unknown_server"
     if server_exists:
-        server_name = jupyter_server.name
+        server_name = amalthea_session.metadata.name
 
-    _, res = await sanic_client.delete(f"/api/data/notebooks/servers/{server_name}", headers=authenticated_user_headers)
+    _, res = await sanic_client.delete(f"/api/data/sessions/{server_name}", headers=authenticated_user_headers)
 
     assert res.status_code == expected_status_code, res.text
 
@@ -330,20 +227,19 @@ async def test_stop_server(
 async def test_patch_server(
     sanic_client: SanicASGITestClient,
     server_exists,
-    jupyter_server,
+    amalthea_session: AmaltheaSessionV1Alpha1,
     expected_status_code,
     patch,
     authenticated_user_headers,
-    fake_gitlab,
     notebooks_fixtures,
 ):
     server_name = "unknown_server"
     if server_exists:
-        server_name = jupyter_server.name
+        server_name = amalthea_session.metadata.name
         await wait_for(sanic_client, authenticated_user_headers, server_name)
 
     _, res = await sanic_client.patch(
-        f"/api/data/notebooks/servers/{server_name}", json=patch, headers=authenticated_user_headers
+        f"/api/data/sessions/{server_name}", json=patch, headers=authenticated_user_headers
     )
 
     assert res.status_code == expected_status_code, res.text
@@ -355,22 +251,32 @@ async def test_patch_server(
 async def test_start_server(
     sanic_client: SanicASGITestClient,
     authenticated_user_headers,
-    fake_gitlab,
     notebooks_fixtures,
+    create_session_launcher,
+    create_project,
+    renku_image,
+    create_resource_pool,
+    app_manager_instance: DependencyManager,
 ):
-    data = {
-        "branch": "main",
-        "commit_sha": "ee4b1c9fedc99abe5892ee95320bbd8471c5985b",
-        "namespace": "test-ns-start-server",
-        "project": "my-test",
-        "image": "alpine:3",
+    proj = await create_project("proj1")
+    env = {
+        "environment_kind": "CUSTOM",
+        "name": "Test",
+        "container_image": renku_image,
+        "environment_image_source": "image",
     }
+    launcher = await create_session_launcher("launcher_name", proj["id"], **{"environment": env})
+    data = {"launcher_id": launcher["id"], "resource_class_id": 1}
+    _ = await create_resource_pool(admin=True)
+    cookies = {app_manager_instance.config.nb_config.session_id_cookie_name: "session_id"}
 
-    _, res = await sanic_client.post("/api/data/notebooks/servers/", json=data, headers=authenticated_user_headers)
+    _, res = await sanic_client.post(
+        "/api/data/sessions/", json=data, headers=authenticated_user_headers, cookies=cookies
+    )
 
     assert res.status_code == 201, res.text
 
     server_name: str = res.json["name"]
-    _, res = await sanic_client.delete(f"/api/data/notebooks/servers/{server_name}", headers=authenticated_user_headers)
+    _, res = await sanic_client.delete(f"/api/data/sessions/{server_name}", headers=authenticated_user_headers)
 
     assert res.status_code == 204, res.text
