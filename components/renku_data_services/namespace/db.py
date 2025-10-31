@@ -65,13 +65,13 @@ async def _upsert_old_entity_slug(session: AsyncSession, old_entity_slug: schema
     """
     stmt = select(schemas.EntitySlugOldORM).where(schemas.EntitySlugOldORM.slug == old_entity_slug.slug)
     if old_entity_slug.project_id is not None:
-        stmt.where(schemas.EntitySlugOldORM.project_id == old_entity_slug.project_id)
+        stmt = stmt.where(schemas.EntitySlugOldORM.project_id == old_entity_slug.project_id)
     else:
-        stmt.where(schemas.EntitySlugOldORM.project_id.is_(None))
+        stmt = stmt.where(schemas.EntitySlugOldORM.project_id.is_(None))
     if old_entity_slug.data_connector_id is not None:
-        stmt.where(schemas.EntitySlugOldORM.data_connector_id == old_entity_slug.data_connector_id)
+        stmt = stmt.where(schemas.EntitySlugOldORM.data_connector_id == old_entity_slug.data_connector_id)
     else:
-        stmt.where(schemas.EntitySlugOldORM.data_connector_id.is_(None))
+        stmt = stmt.where(schemas.EntitySlugOldORM.data_connector_id.is_(None))
     existing_old_slug = await session.scalar(stmt)
 
     if not existing_old_slug:
