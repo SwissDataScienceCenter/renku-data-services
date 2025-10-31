@@ -9,7 +9,6 @@ import pytest
 import pytest_asyncio
 from kr8s import NotFoundError
 from sanic_testing.testing import SanicASGITestClient
-from ulid import ULID
 
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.data_api.dependencies import DependencyManager
@@ -52,17 +51,32 @@ async def amalthea_session(
     notebooks_fixtures,
     app_manager_instance: DependencyManager,
     regular_user_api_user: APIUser,
+    create_resource_pool,
+    create_project,
+    create_session_launcher,
 ) -> AsyncIterator[AmaltheaSessionV1Alpha1]:
     """Fake server for non pod related tests"""
 
+    rp = await create_resource_pool(admin=True)
+    assert "classes" in rp
+    assert len(rp["classes"]) >= 2
+    rc = rp["classes"][0]
+    proj = await create_project("proj1")
+    env = {
+        "environment_kind": "CUSTOM",
+        "name": "Test",
+        "container_image": renku_image,
+        "environment_image_source": "image",
+    }
+    launcher = await create_session_launcher("launcher_name", proj["id"], **{"environment": env})
     session = AmaltheaSessionV1Alpha1(
         metadata=dict(
             name=server_name,
             labels={"renku.io/safe-username": regular_user_api_user.id, "renku.io/userId": regular_user_api_user.id},
             annotations={
-                "renku.io/resource_class_id": "1",
-                "renku.io/project_id": str(ULID()),
-                "renku.io/launcher_id": str(ULID()),
+                "renku.io/resource_class_id": str(rc["id"]),
+                "renku.io/project_id": proj["id"],
+                "renku.io/launcher_id": launcher["id"],
             },
         ),
         spec=AmaltheaSessionSpec(
@@ -222,7 +236,7 @@ async def test_stop_server(
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "server_exists,expected_status_code, patch",
-    [(False, 404, {}), (True, 200, {"state": "hibernated"})],
+    [(False, 404, {}), (True, 200, {"state": "hibernated"}), (True, 200, {"resource_class_id": 2})],
 )
 async def test_patch_server(
     sanic_client: SanicASGITestClient,
@@ -243,6 +257,10 @@ async def test_patch_server(
     )
 
     assert res.status_code == expected_status_code, res.text
+    if expected_status_code == 200 and patch == {"state": "hibernated"}:
+        assert res.json["status"]["state"] == "hibernated"
+    if expected_status_code == 200 and "resource_class_id" in patch:
+        assert res.json["resource_class_id"] == patch["resource_class_id"]
 
 
 @pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
