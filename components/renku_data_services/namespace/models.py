@@ -41,6 +41,8 @@ class DeletedGroup:
     """A group that was deleted from the DB."""
 
     id: ULID
+    data_connectors: list[ULID]
+    projects: list[ULID]
 
 
 @dataclass
