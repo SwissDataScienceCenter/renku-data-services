@@ -40,6 +40,13 @@ class EnvironmentImageSource(StrEnum):
     build = "build"
 
 
+class Platform(StrEnum):
+    """The runtime platform."""
+
+    linux_amd64 = "linux/amd64"
+    linux_arm64 = "linux/arm64"
+
+
 class BuilderVariant(StrEnum):
     """The type of environment builder."""
 
@@ -59,6 +66,7 @@ class UnsavedBuildParameters:
     """The parameters of a build."""
 
     repository: str
+    platforms: list[str]
     builder_variant: str
     frontend_variant: str
     repository_revision: str | None = None
@@ -130,6 +138,7 @@ class BuildParametersPatch:
     """Patch for parameters of a build."""
 
     repository: str | None = None
+    platforms: list[str] | None = None
     builder_variant: str | None = None
     frontend_variant: str | None = None
     repository_revision: str | None = None

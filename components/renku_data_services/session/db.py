@@ -139,7 +139,11 @@ class SessionRepository:
         if environment.environment_image_source == models.EnvironmentImageSource.build:
             if not environment.build_parameters:
                 raise errors.ProgrammingError(message="Environment has no build parameters.")
+            platforms = [
+                schemas.BuildPlatformORM(platform=platform) for platform in environment.build_parameters.platforms
+            ]
             new_build_parameters = schemas.BuildParametersORM(
+                platforms=platforms,
                 builder_variant=environment.build_parameters.builder_variant,
                 frontend_variant=environment.build_parameters.frontend_variant,
                 repository=environment.build_parameters.repository,
@@ -165,7 +169,11 @@ class SessionRepository:
             raise errors.UnauthorizedError(
                 message="You have to be authenticated to insert an environment in the DB.", quiet=True
             )
+        platforms = [
+            schemas.BuildPlatformORM(platform=platform) for platform in new_build_parameters_environment.platforms
+        ]
         build_parameters_orm = schemas.BuildParametersORM(
+            platforms=platforms,
             builder_variant=new_build_parameters_environment.builder_variant,
             frontend_variant=new_build_parameters_environment.frontend_variant,
             repository=new_build_parameters_environment.repository,
@@ -419,7 +427,9 @@ class SessionRepository:
                 )
                 session.add(environment_orm)
             elif isinstance(launcher.environment, models.UnsavedBuildParameters):
+                platforms = [schemas.BuildPlatformORM(platform=platform) for platform in launcher.environment.platforms]
                 build_parameters_orm = schemas.BuildParametersORM(
+                    platforms=platforms,
                     builder_variant=launcher.environment.builder_variant,
                     frontend_variant=launcher.environment.frontend_variant,
                     repository=launcher.environment.repository,
@@ -719,7 +729,11 @@ class SessionRepository:
                 await session.flush()
             case models.UnsavedBuildParameters() as new_custom_built_environment, models.EnvironmentKind.CUSTOM:
                 # Custom environment with image is replaced by a custom environment with build
+                platforms = [
+                    schemas.BuildPlatformORM(platform=platform) for platform in new_custom_built_environment.platforms
+                ]
                 build_parameters_orm = schemas.BuildParametersORM(
+                    platforms=platforms,
                     builder_variant=new_custom_built_environment.builder_variant,
                     frontend_variant=new_custom_built_environment.frontend_variant,
                     repository=new_custom_built_environment.repository,

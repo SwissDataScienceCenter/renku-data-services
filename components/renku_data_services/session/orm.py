@@ -3,7 +3,18 @@
 from datetime import datetime
 from pathlib import PurePosixPath
 
-from sqlalchemy import JSON, BigInteger, Boolean, DateTime, MetaData, String, false, func
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Boolean,
+    DateTime,
+    Identity,
+    Integer,
+    MetaData,
+    String,
+    false,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
@@ -211,16 +222,43 @@ class BuildParametersORM(BaseORM):
 
     context_dir: Mapped[str | None] = mapped_column("context_dir", String(500), nullable=True, default=None)
 
+    platforms: Mapped[list["BuildPlatformORM"]] = relationship(
+        back_populates="build_parameters",
+        default_factory=list,
+        cascade="save-update, merge, delete",
+        lazy="joined",
+        order_by="BuildPlatformsORM.platform",
+    )
+
     def dump(self) -> models.BuildParameters:
         """Create a session build parameters model from the BuildParametersORM."""
+        platforms = [item.platform for item in self.platforms]
         return models.BuildParameters(
             id=self.id,
+            platforms=platforms,
             repository=self.repository,
             builder_variant=self.builder_variant,
             frontend_variant=self.frontend_variant,
             repository_revision=self.repository_revision or None,
             context_dir=self.context_dir or None,
         )
+
+
+class BuildPlatformORM(BaseORM):
+    """The build platforms referenced by build parameters."""
+
+    __tablename__ = "build_platforms"
+
+    id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, init=False)
+
+    platform: Mapped[str] = mapped_column("platform", String(99))
+
+    build_parameters_id: Mapped[ULID] = mapped_column(
+        "build_parameters_id",
+        ForeignKey(BuildParametersORM.id, ondelete="CASCADE", name="build_platforms_build_parameters_id_fk"),
+        init=False,
+    )
+    build_parameters: Mapped[BuildParametersORM] = relationship(back_populates="platforms", lazy="select", default=None)
 
 
 class BuildORM(BaseORM):

@@ -64,8 +64,27 @@ def validate_unsaved_build_parameters(
             )
         )
 
+    platforms: list[str] = [models.Platform.linux_amd64]
+    if environment.platforms:
+        platforms = [item.root for item in environment.platforms]
+    platforms = sorted(set(platforms))
+    if len(platforms) != 1:
+        raise errors.ValidationError(
+            message=f"Invalid value for the field 'platforms': {platforms}: "
+            "only one platform at a time is supported at the moment."
+        )
+    for platform in platforms:
+        if platform not in models.Platform:
+            raise errors.ValidationError(
+                message=(
+                    f"Invalid value for the field 'platforms': {platforms}: "
+                    f"Valid values are {[e.value for e in models.Platform]}"
+                )
+            )
+
     return models.UnsavedBuildParameters(
         repository=environment.repository,
+        platforms=platforms,
         builder_variant=environment.builder_variant,
         frontend_variant=environment.frontend_variant,
         repository_revision=environment.repository_revision if environment.repository_revision else None,
@@ -90,8 +109,30 @@ def validate_build_parameters_patch(environment: apispec.BuildParametersPatch) -
             )
         )
 
+    platforms: list[str] | None = None
+    if environment.platforms is not None:
+        if environment.platforms:
+            platforms = [item.root for item in environment.platforms]
+        else:
+            platforms = [models.Platform.linux_amd64]
+        platforms = sorted(set(platforms))
+        if len(platforms) != 1:
+            raise errors.ValidationError(
+                message=f"Invalid value for the field 'platforms': {platforms}: "
+                "only one platform at a time is supported at the moment."
+            )
+        for platform in platforms:
+            if platform not in models.Platform:
+                raise errors.ValidationError(
+                    message=(
+                        f"Invalid value for the field 'platforms': {platforms}: "
+                        f"Valid values are {[e.value for e in models.Platform]}"
+                    )
+                )
+
     return models.BuildParametersPatch(
         repository=environment.repository,
+        platforms=platforms,
         builder_variant=environment.builder_variant,
         frontend_variant=environment.frontend_variant,
         repository_revision=environment.repository_revision,
