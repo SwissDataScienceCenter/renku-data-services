@@ -274,6 +274,10 @@ class SessionRepository:
 
         if build_parameters.repository is not None:
             environment.build_parameters.repository = build_parameters.repository
+        if build_parameters.platforms is not None:
+            environment.build_parameters.platforms = [
+                schemas.BuildPlatformORM(platform=platform) for platform in build_parameters.platforms
+            ]
         if build_parameters.builder_variant is not None:
             environment.build_parameters.builder_variant = build_parameters.builder_variant
         if build_parameters.frontend_variant is not None:
