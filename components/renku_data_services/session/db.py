@@ -899,6 +899,15 @@ class SessionRepository:
                         message=f"Session environment with id '{build.environment_id}' already has a build in progress."
                     )
 
+            # We check that we build for a single target platform
+            if len(build_parameters.platforms) > 1:
+                raise errors.CannotStartBuildError(
+                    message=(
+                        f"Building images can target only one platform at a time. "
+                        f"Current value: {build_parameters.platforms}"
+                    )
+                )
+
             build_orm = schemas.BuildORM(
                 environment_id=build.environment_id,
                 status=models.BuildStatus.in_progress,
