@@ -1,0 +1,99 @@
+openapi: 3.0.2
+info:
+  title: Renku Data Services API
+  description: |
+    A service that allows alerts to be sent to users.
+  version: v1
+servers:
+  - url: /api/data
+paths:
+  /alerts:
+    post:
+      summary: Send an alert to a user.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AlertPost"
+      responses:
+        "201":
+          description: Alert successfully created
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Alert"
+      tags:
+        - alerts
+    get:
+      summary: Retrieve all active alerts for a user.
+      responses:
+        "200":
+          description: A list of active alerts for the user.
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/AlertList"
+      tags:
+        - alerts
+components:
+  schemas:
+    AlertList:
+      type: array
+      description: A list of alerts.
+      items:
+        $ref: "#/components/schemas/Alert"
+    AlertPost:
+      description: Data required to create an alert.
+      type: object
+      properties:
+        status:
+          $ref: "#/components/schemas/AlertStatus"
+        alerts:
+          type: array
+          description: The list of alerts.
+          items:
+            type: string
+          minItems: 1
+    AlertStatus:
+      type: string
+      description: The status of the alert.
+      enum:
+        - firing
+        - resolved
+    AlertLabels:
+      type: object
+      description: Labels associated with the alert.
+      additionalProperties:
+        type: string
+    AlertAnnotations:
+      type: object
+      description: Annotations associated with the alert.
+      additionalProperties:
+        type: string
+    Alert:
+      description: An alert sent to a user.
+      type: object
+      properties:
+        status:
+          $ref: "#/components/schemas/AlertStatus"
+        labels:
+          $ref: "#/components/schemas/AlertLabels"
+        annotations:
+          $ref: "#/components/schemas/AlertAnnotations"
+        startsAt:
+          type: string
+          format: date-time
+          description: The time the alert started.
+        endsAt:
+          type: string
+          format: date-time
+          description: The time the alert ended.
+        fingerprint:
+          type: string
+          description: The fingerprint of the alert.
+      required:
+        - status
+        - labels
+        - annotations
+        - fingerprint
