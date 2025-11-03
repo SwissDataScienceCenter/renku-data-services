@@ -225,7 +225,7 @@ class BuildParametersORM(BaseORM):
     platforms: Mapped[list["BuildPlatformORM"]] = relationship(
         back_populates="build_parameters",
         default_factory=list,
-        cascade="save-update, merge, delete",
+        cascade="save-update, merge, delete, delete-orphan",
         lazy="selectin",
         order_by="BuildPlatformORM.platform",
     )
