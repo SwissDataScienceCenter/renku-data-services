@@ -227,7 +227,7 @@ class BuildParametersORM(BaseORM):
         default_factory=list,
         cascade="save-update, merge, delete",
         lazy="joined",
-        order_by="BuildPlatformsORM.platform",
+        order_by="BuildPlatformORM.platform",
     )
 
     def dump(self) -> models.BuildParameters:
