@@ -1076,6 +1076,9 @@ class SessionRepository:
         git_repository_revision = build_parameters.repository_revision
         context_dir = build_parameters.context_dir
 
+        build_image = self.builds_config.build_builder_image or constants.BUILD_DEFAULT_BUILDER_IMAGE
+        run_image = self.builds_config.build_run_image or constants.BUILD_DEFAULT_RUN_IMAGE
+
         output_image_prefix = (
             self.builds_config.build_output_image_prefix or constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
         )
@@ -1086,6 +1089,20 @@ class SessionRepository:
         # TODO: define the build strategy from `build_parameters`
         build_strategy_name = self.builds_config.build_strategy_name or constants.BUILD_DEFAULT_BUILD_STRATEGY_NAME
         push_secret_name = self.builds_config.push_secret_name or constants.BUILD_DEFAULT_PUSH_SECRET_NAME
+
+        node_selector = self.builds_config.node_selector
+        tolerations = self.builds_config.tolerations
+
+        platform: str = models.Platform.linux_amd64.value
+        if build_parameters.platforms:
+            platform = models.Platform(build_parameters.platforms[0]).value
+        if self.builds_config.build_platform_overrides and platform in self.builds_config.build_platform_overrides:
+            overrides = self.builds_config.build_platform_overrides[platform]
+            build_image = overrides.builder_image or build_image
+            run_image = overrides.run_image or run_image
+            build_strategy_name = overrides.strategy_name or build_strategy_name
+            node_selector = overrides.node_selector or node_selector
+            tolerations = overrides.tolerations or tolerations
 
         retention_after_failed = (
             self.builds_config.buildrun_retention_after_failed or constants.BUILD_RUN_DEFAULT_RETENTION_AFTER_FAILED
@@ -1110,16 +1127,16 @@ class SessionRepository:
         return models.ShipwrightBuildRunParams(
             name=build.k8s_name,
             git_repository=git_repository,
-            build_image=self.builds_config.build_builder_image or constants.BUILD_DEFAULT_BUILDER_IMAGE,
-            run_image=self.builds_config.build_run_image or constants.BUILD_DEFAULT_RUN_IMAGE,
+            build_image=build_image,
+            run_image=run_image,
             output_image=output_image,
             build_strategy_name=build_strategy_name,
             push_secret_name=push_secret_name,
             retention_after_failed=retention_after_failed,
             retention_after_succeeded=retention_after_succeeded,
             build_timeout=build_timeout,
-            node_selector=self.builds_config.node_selector,
-            tolerations=self.builds_config.tolerations,
+            node_selector=node_selector,
+            tolerations=tolerations,
             labels=labels,
             annotations=annotations,
             frontend=build_parameters.frontend_variant,
