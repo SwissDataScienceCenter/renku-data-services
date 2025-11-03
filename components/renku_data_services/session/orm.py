@@ -226,7 +226,7 @@ class BuildParametersORM(BaseORM):
         back_populates="build_parameters",
         default_factory=list,
         cascade="save-update, merge, delete",
-        lazy="joined",
+        lazy="selectin",
         order_by="BuildPlatformORM.platform",
     )
 
@@ -255,7 +255,7 @@ class BuildPlatformORM(BaseORM):
 
     build_parameters_id: Mapped[ULID] = mapped_column(
         "build_parameters_id",
-        ForeignKey(BuildParametersORM.id, ondelete="CASCADE", name="build_platforms_build_parameters_id_fk"),
+        ForeignKey(BuildParametersORM.id, ondelete="CASCADE", name="build_platform_build_parameters_id_fk"),
         init=False,
     )
     build_parameters: Mapped[BuildParametersORM] = relationship(back_populates="platforms", lazy="select", default=None)

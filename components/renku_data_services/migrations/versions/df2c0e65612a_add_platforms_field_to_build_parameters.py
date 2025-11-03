@@ -28,7 +28,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["build_parameters_id"],
             ["sessions.build_parameters.id"],
-            name="build_platforms_build_parameters_id_fk",
+            name="build_platform_build_parameters_id_fk",
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id"),
