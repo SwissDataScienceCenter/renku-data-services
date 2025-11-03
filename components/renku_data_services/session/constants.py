@@ -14,16 +14,16 @@ BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX: Final[str] = "harbor.dev.renku.ch/renku-build
 BUILD_OUTPUT_IMAGE_NAME: Final[str] = "renku-build"
 """The container image name created from Renku builds."""
 
-BUILD_BUILDER_IMAGE: Final[str] = "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/selector:0.1.0"
+BUILD_DEFAULT_BUILDER_IMAGE: Final[str] = "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/selector:0.1.0"
 
-BUILD_RUN_IMAGE: Final[str] = "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/base-image:0.1.0"
+BUILD_DEFAULT_RUN_IMAGE: Final[str] = "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/base-image:0.1.0"
 BUILD_MOUNT_DIRECTORY: Final[PurePosixPath] = PurePosixPath("/home/renku/work")
 BUILD_WORKING_DIRECTORY: Final[PurePosixPath] = BUILD_MOUNT_DIRECTORY
 BUILD_UID: Final[int] = 1000
 BUILD_GID: Final[int] = 1000
 BUILD_PORT: Final[int] = 8888
-DEFAULT_URLS: Final[dict[str, str]] = {
-    "vscodium": "/",
+BUILD_DEFAULT_URL_PATH: Final[str] = "/"
+BUILD_URL_PATH_MAP: Final[dict[str, str]] = {
     "jupyterlab": "/lab",
 }
 
