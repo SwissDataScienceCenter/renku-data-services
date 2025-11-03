@@ -433,7 +433,9 @@ class SessionRepository:
                     created_by_id=user.id,
                     description=f"Generated environment for {launcher.name}",
                     container_image="image:unknown-at-the-moment",  # TODO: This should come from the build
-                    default_url=constants.DEFAULT_URLS.get(launcher.environment.frontend_variant, "/"),
+                    default_url=constants.BUILD_URL_PATH_MAP.get(
+                        launcher.environment.frontend_variant, constants.BUILD_DEFAULT_URL_PATH
+                    ),
                     port=constants.BUILD_PORT,  # TODO: This should come from the build
                     working_directory=constants.BUILD_WORKING_DIRECTORY,  # TODO: This should come from the build
                     mount_directory=constants.BUILD_MOUNT_DIRECTORY,  # TODO: This should come from the build
@@ -1085,8 +1087,8 @@ class SessionRepository:
         return models.ShipwrightBuildRunParams(
             name=build.k8s_name,
             git_repository=git_repository,
-            build_image=constants.BUILD_BUILDER_IMAGE,
-            run_image=constants.BUILD_RUN_IMAGE,
+            build_image=self.builds_config.build_builder_image or constants.BUILD_DEFAULT_BUILDER_IMAGE,
+            run_image=self.builds_config.build_run_image or constants.BUILD_DEFAULT_RUN_IMAGE,
             output_image=output_image,
             build_strategy_name=build_strategy_name,
             push_secret_name=push_secret_name,
