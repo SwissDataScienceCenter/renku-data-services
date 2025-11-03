@@ -154,7 +154,7 @@ class JupyterServerV1Alpha1(_JSModel):
         return i
 
 
-class Culling(_ASCulling):
+class CullingDurationParsingMixin(BaseCRD):
     """Amalthea session culling configuration."""
 
     @field_serializer("*", mode="wrap")
@@ -169,6 +169,12 @@ class Culling(_ASCulling):
         if isinstance(val, str):
             return safe_parse_duration(val)
         return handler(val)
+
+
+class Culling(_ASCulling, CullingDurationParsingMixin):
+    """Amalthea session culling configuration."""
+
+    pass
 
 
 class Requests(_Requests):
@@ -409,14 +415,14 @@ class AffinityPatch(BaseCRD):
     podAntiAffinity: PodAntiAffinity | ResetType | None = None
 
 
-class CullingPatch(Culling):
+class CullingPatch(CullingDurationParsingMixin):
     """Patch for the culling durations of a session."""
 
-    maxAge: timedelta | ResetType | None = None  # type:ignore[assignment]
-    maxFailedDuration: timedelta | ResetType | None = None  # type:ignore[assignment]
-    maxHibernatedDuration: timedelta | ResetType | None = None  # type:ignore[assignment]
-    maxIdleDuration: timedelta | ResetType | None = None  # type:ignore[assignment]
-    maxStartingDuration: timedelta | ResetType | None = None  # type:ignore[assignment]
+    maxAge: timedelta | ResetType | None = None
+    maxFailedDuration: timedelta | ResetType | None = None
+    maxHibernatedDuration: timedelta | ResetType | None = None
+    maxIdleDuration: timedelta | ResetType | None = None
+    maxStartingDuration: timedelta | ResetType | None = None
 
 
 class AmaltheaSessionV1Alpha1SpecPatch(BaseCRD):

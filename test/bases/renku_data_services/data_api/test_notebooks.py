@@ -258,6 +258,10 @@ async def test_patch_server(
 
     assert res.status_code == expected_status_code, res.text
     if expected_status_code == 200 and patch == {"state": "hibernated"}:
+        # NOTE: The status of amalthea needs a few seconds to update and show up in the response
+        await asyncio.sleep(2)
+        _, res = await sanic_client.get(f"/api/data/sessions/{server_name}", headers=authenticated_user_headers)
+        assert res.status_code == 200
         assert res.json["status"]["state"] == "hibernated"
     if expected_status_code == 200 and "resource_class_id" in patch:
         assert res.json["resource_class_id"] == patch["resource_class_id"]

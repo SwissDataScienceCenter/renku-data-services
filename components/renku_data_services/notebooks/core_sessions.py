@@ -469,13 +469,13 @@ def resources_patch_from_resource_class(resource_class: ResourceClass) -> Resour
     """Convert the resource class to a k8s resources spec."""
     gpu_name = GpuKind.NVIDIA.value + "/gpu"
     resources = resources_from_resource_class(resource_class)
-    requests: Mapping[str, Requests | RequestsStr | ResetType] | ResetType
-    limits: Mapping[str, Limits | LimitsStr | ResetType] | ResetType
+    requests: Mapping[str, Requests | RequestsStr | ResetType] | ResetType | None = None
+    limits: Mapping[str, Limits | LimitsStr | ResetType] | ResetType | None = None
     defaul_requests = {"memory": RESET, "cpu": RESET, gpu_name: RESET}
     default_limits = {"memory": RESET, "cpu": RESET, gpu_name: RESET}
-    if resources.requests:
+    if resources.requests is not None:
         requests = RESET if len(resources.requests.keys()) == 0 else {**defaul_requests, **resources.requests}
-    if resources.limits:
+    if resources.limits is not None:
         limits = RESET if len(resources.limits.keys()) == 0 else {**default_limits, **resources.limits}
     return ResourcesPatch(requests=requests, limits=limits)
 
@@ -1073,17 +1073,11 @@ async def patch_session(
                 )
             )
         rp = await rp_repo.get_resource_pool_from_class(user, body.resource_class_id)
-        try:
-            old_rp = await rp_repo.get_resource_pool_from_class(user, session.resource_class_id())
-        except (errors.MissingResourceError, errors.UnauthorizedError, errors.ForbiddenError):
-            old_rp = None
         rc = rp.get_resource_class(body.resource_class_id)
         if not rc:
             raise errors.MissingResourceError(
                 message=f"The resource class you requested with ID {body.resource_class_id} does not exist"
             )
-        if old_rp is not None and rp.cluster != old_rp.cluster:
-            raise errors.ValidationError(message="Changing resource pools with different clusters is not allowed.")
         if not patch.metadata:
             patch.metadata = AmaltheaSessionV1Alpha1MetadataPatch()
         # Patch the resource pool and class ID in the annotations
