@@ -46,6 +46,16 @@ class GitRepositoriesRepository:
             not github_type or github_type == GitHubProviderType.standard_app
         )
 
+    # - check url string
+    # - find provider in db (can't be done via a query, must load all and filter)
+    # - NO client found:
+    #   - check internal gitlab OR
+    #   - check if url is a git repository -> result
+    # - YES client found:
+    #  - find connection for user and provider
+    #  - get repo metadata with or without the connection (here we can use if-none-match)
+
+
     async def get_repository(
         self,
         repository_url: str,
