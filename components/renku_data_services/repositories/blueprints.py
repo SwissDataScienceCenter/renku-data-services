@@ -54,7 +54,7 @@ class RepositoriesBP(CustomBlueprint):
                 if result.repository_metadata and result.repository_metadata.etag is not None
                 else None
             )
-            return validated_json(apispec.RepositoryProviderMatch, result, headers=headers)
+            return validated_json(apispec.RepositoryProviderData, result, headers=headers)
 
         return "/repositories/<repository_url>", ["GET"], _get_one_repository
 

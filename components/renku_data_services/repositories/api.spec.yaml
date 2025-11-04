@@ -29,7 +29,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RepositoryProviderMatch"
+                $ref: "#/components/schemas/RepositoryProviderData"
         "404":
           description: There is no available provider for this repository.
         default:
@@ -60,18 +60,18 @@ paths:
         - repositories
 components:
   schemas:
-    RepositoryProviderMatch:
-      type: object
-      additionalProperties: false
-      properties:
-        provider_id:
-          $ref: "#/components/schemas/ProviderId"
-        connection_id:
-          $ref: "#/components/schemas/Ulid"
-        repository_metadata:
-          $ref: "#/components/schemas/RepositoryMetadata"
-      required:
-        - provider_id
+    # RepositoryProviderMatch:
+    #   type: object
+    #   additionalProperties: false
+    #   properties:
+    #     provider_id:
+    #       $ref: "#/components/schemas/ProviderId"
+    #     connection_id:
+    #       $ref: "#/components/schemas/Ulid"
+    #     repository_metadata:
+    #       $ref: "#/components/schemas/RepositoryMetadata"
+    #   required:
+    #     - provider_id
     RepositoryProviderData:
       type: object
       additionalProperties: false

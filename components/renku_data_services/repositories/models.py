@@ -35,3 +35,30 @@ class RepositoryProviderMatch:
     provider_id: str
     connection_id: ULID | None
     repository_metadata: RepositoryMetadata | None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProviderConnection:
+    """Repository connection data."""
+
+    id: ULID
+    provider_id: str
+    status: str
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ProviderData:
+    """Repository provider data."""
+
+    id: str
+    name: str
+    url: str
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class RepositoryProviderData:
+    """Repository provider match data."""
+
+    provider: ProviderData
+    connection: ProviderConnection | None
+    repository_metadata: RepositoryMetadata | None
