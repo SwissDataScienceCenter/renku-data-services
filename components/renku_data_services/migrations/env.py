@@ -16,6 +16,7 @@ from renku_data_services.secrets.orm import BaseORM as secrets
 from renku_data_services.session.orm import BaseORM as sessions
 from renku_data_services.storage.orm import BaseORM as storage
 from renku_data_services.users.orm import BaseORM as users
+from renku_data_services.notifications.orm import BaseORM as notifications
 
 all_metadata = [
     authz.metadata,
@@ -33,6 +34,7 @@ all_metadata = [
     storage.metadata,
     users.metadata,
     search.metadata,
+    notifications.metadata,
 ]
 
 run_migrations(all_metadata)
