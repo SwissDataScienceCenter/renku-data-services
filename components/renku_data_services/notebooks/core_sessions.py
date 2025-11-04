@@ -551,24 +551,13 @@ def get_culling_patch(
 ) -> CullingPatch:
     """Get the patch for the culling durations of a session."""
     culling = get_culling(user, resource_pool, nb_config)
-    patch = CullingPatch(
-        maxAge=RESET,
-        maxFailedDuration=RESET,
-        maxHibernatedDuration=RESET,
-        maxIdleDuration=RESET,
-        maxStartingDuration=RESET,
+    return CullingPatch(
+        maxAge=culling.maxAge or RESET,
+        maxFailedDuration=culling.maxFailedDuration or RESET,
+        maxHibernatedDuration=culling.maxHibernatedDuration or RESET,
+        maxIdleDuration=culling.maxIdleDuration or RESET,
+        maxStartingDuration=culling.maxStartingDuration or RESET,
     )
-    if culling.maxAge:
-        patch.maxAge = culling.maxAge
-    if culling.maxFailedDuration:
-        patch.maxFailedDuration = culling.maxFailedDuration
-    if culling.maxHibernatedDuration:
-        patch.maxHibernatedDuration = culling.maxHibernatedDuration
-    if culling.maxIdleDuration:
-        patch.maxIdleDuration = culling.maxIdleDuration
-    if culling.maxStartingDuration:
-        patch.maxStartingDuration = culling.maxStartingDuration
-    return patch
 
 
 async def __requires_image_pull_secret(nb_config: NotebooksConfig, image: str, internal_gitlab_user: APIUser) -> bool:

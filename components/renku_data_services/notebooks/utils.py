@@ -135,14 +135,11 @@ def node_affinity_patch_from_resource_class(
 ) -> AffinityPatch:
     """Create a patch for the session affinity."""
     affinity = node_affinity_from_resource_class(resource_class, default_affinity)
-    patch = AffinityPatch(nodeAffinity=RESET, podAffinity=RESET, podAntiAffinity=RESET)
-    if affinity.nodeAffinity:
-        patch.nodeAffinity = affinity.nodeAffinity
-    if affinity.podAffinity:
-        patch.podAffinity = affinity.podAffinity
-    if affinity.podAntiAffinity:
-        patch.podAntiAffinity = affinity.podAntiAffinity
-    return patch
+    return AffinityPatch(
+        nodeAffinity=affinity.nodeAffinity or RESET,
+        podAffinity=affinity.podAffinity or RESET,
+        podAntiAffinity=affinity.podAntiAffinity or RESET,
+    )
 
 
 def tolerations_from_resource_class(
