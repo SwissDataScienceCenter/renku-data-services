@@ -15,8 +15,8 @@ import renku_data_services.base_models as base_models
 import renku_data_services.connected_services
 import renku_data_services.crc
 import renku_data_services.data_connectors
-import renku_data_services.platform
 import renku_data_services.notifications
+import renku_data_services.platform
 import renku_data_services.repositories
 import renku_data_services.search
 import renku_data_services.storage

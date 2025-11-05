@@ -7,15 +7,12 @@ from sanic.response import JSONResponse
 from sanic_ext import validate
 
 import renku_data_services.base_models as base_models
-
 from renku_data_services.base_api.auth import (
     authenticate,
     only_admins,
 )
-
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models.validation import validated_json
-
 from renku_data_services.notifications import apispec
 from renku_data_services.notifications.core import validate_unsaved_alert
 from renku_data_services.notifications.db import NotificationsRepository

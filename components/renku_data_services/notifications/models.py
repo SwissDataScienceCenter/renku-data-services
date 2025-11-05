@@ -1,4 +1,4 @@
-"""Models for alerts"""
+"""Models for alerts."""
 
 from dataclasses import dataclass
 from datetime import datetime

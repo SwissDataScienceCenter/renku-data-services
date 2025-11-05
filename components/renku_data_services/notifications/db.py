@@ -1,6 +1,7 @@
 """Adapters for notification database classes."""
 
 from collections.abc import Callable
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
