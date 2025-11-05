@@ -9,7 +9,7 @@ from typing import Literal
 from ulid import ULID
 
 from renku_data_services.connected_services.orm import OAuth2ClientORM, OAuth2ConnectionORM
-from renku_data_services.repositories.git_repo import CheckUrlError
+from renku_data_services.repositories.git_repo import RepositoryError
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -109,15 +109,15 @@ class RepositoryDataResult:
 
     provider: ProviderData | None = None
     connection: ProviderConnection | None = None
-    error: CheckUrlError | None = None
+    error: RepositoryError | None = None
     metadata: Metadata | Literal["Unmodified"] | None = None
 
-    def with_metadata(self, rm: RepositoryMetadata | Literal["304"] | CheckUrlError) -> RepositoryDataResult:
+    def with_metadata(self, rm: RepositoryMetadata | Literal["304"] | RepositoryError) -> RepositoryDataResult:
         """Return a new result with metadatat set."""
         match rm:
             case "304":
                 return dataclasses.replace(self, metadata="Unmodified")
-            case CheckUrlError() as err:
+            case RepositoryError() as err:
                 return self.with_error(err)
             case RepositoryMetadata() as md:
                 return dataclasses.replace(self, metadata=Metadata.fromRepoMeta(md))
@@ -138,7 +138,7 @@ class RepositoryDataResult:
         """Return a new result with the connection set."""
         return self.with_connection(ProviderConnection.fromORM(c) if c else None)
 
-    def with_error(self, err: CheckUrlError | None) -> RepositoryDataResult:
+    def with_error(self, err: RepositoryError | None) -> RepositoryDataResult:
         """Return a new result with the error set."""
         return dataclasses.replace(self, error=err)
 

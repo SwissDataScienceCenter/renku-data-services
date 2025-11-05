@@ -18,6 +18,7 @@ from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.connected_services import orm as connected_services_schemas
 from renku_data_services.connected_services.db import ConnectedServicesRepository
+from renku_data_services.connected_services.models import ConnectionStatus
 from renku_data_services.connected_services.utils import GitHubProviderType, get_github_provider_type
 from renku_data_services.repositories import git_repo, models
 from renku_data_services.repositories.provider_adapters import (
@@ -51,7 +52,7 @@ class GitRepositoriesRepository:
         )
 
     # - check url string
-    # - find provider in db (can't be done via a query, must load all and filter)
+    # - find provider in db (can't be done via a query (easily), must load all and filter)
     # - NO client found:
     #   - check internal gitlab OR
     #   - check if url is a git repository -> result
@@ -66,12 +67,12 @@ class GitRepositoriesRepository:
         internal_gitlab_user: base_models.APIUser,
     ) -> models.RepositoryDataResult:
         """Get metadata about one repository."""
-        valid_url = git_repo.check_url_str(repository_url)
-        result = models.RepositoryDataResult(error=valid_url.get_error())
-        if result.error:
-            return result
-
-        valid_url = valid_url.successOrRaise()
+        match git_repo.check_url_str(repository_url):
+            case git_repo.RepositoryError() as err:
+                return models.RepositoryDataResult(error=err)
+            case url:
+                valid_url = url
+                result = models.RepositoryDataResult()
 
         provider = await self._find_client(valid_url)
         connection = await self._find_connection(user, provider) if provider else None
@@ -81,7 +82,7 @@ class GitRepositoriesRepository:
                 await self._get_repository_authenticated(
                     connection_id=connection.id, repository_url=repository_url, user=user, etag=etag
                 )
-                if connection
+                if connection and connection.status == ConnectionStatus.connected
                 else await self._get_repository_anonymously(repository_url=repository_url, client=provider, etag=etag)
             )
             result = result.with_metadata(repo_meta)
@@ -96,20 +97,20 @@ class GitRepositoriesRepository:
                     internal_gitlab_url=self.internal_gitlab_url,
                 )
                 result = result.with_metadata(repo_meta).with_provider(provider_data)
-            else:
-                repo_err = await self._check_arbitrary_git_repo(valid_url)
-                result = result.with_error(repo_err)
-                if repo_err is None:
-                    result = dataclasses.replace(
-                        result, metadata=models.Metadata(git_url=valid_url.geturl(), pull_permission=True)
-                    )
+
+        if not result.metadata:
+            repo_err = await self._check_arbitrary_git_repo(valid_url)
+            result = result.with_error(repo_err)
+            if repo_err is None:
+                result = dataclasses.replace(
+                    result, metadata=models.Metadata(git_url=valid_url.geturl(), pull_permission=True)
+                )
 
         return result
 
-    async def _check_arbitrary_git_repo(self, url: git_repo.GitUrl) -> git_repo.CheckUrlError | None:
+    async def _check_arbitrary_git_repo(self, url: git_repo.GitUrl) -> git_repo.RepositoryError | None:
         async with HttpClient(timeout=5) as http:
-            is_git_repo = await git_repo.check_git_repository(http, url)
-            return is_git_repo.get_error()
+            return await git_repo.check_git_repository(http, url)
 
     async def _find_connection(
         self, user: APIUser, client: connected_services_schemas.OAuth2ClientORM
@@ -145,22 +146,22 @@ class GitRepositoriesRepository:
 
     def _convert_metadata_response(
         self, adapter: GitProviderAdapter, response: Response
-    ) -> models.RepositoryMetadata | git_repo.CheckUrlError | Literal["304"]:
+    ) -> models.RepositoryMetadata | git_repo.RepositoryError | Literal["304"]:
         if response.status_code == 304:
             return "304"
         if response.status_code == 401:
-            return git_repo.CheckUrlError.metadata_unauthorized
+            return git_repo.RepositoryError.metadata_unauthorized
         if response.status_code > 200:
             logger.error(
                 f"Error status {response.status_code} returned for repository metadata: {response.request.url}"
             )
-            return git_repo.CheckUrlError.metadata_unknown
+            return git_repo.RepositoryError.metadata_unknown
 
         return adapter.api_validate_repository_response(response, is_anonymous=True)
 
     async def _get_repository_anonymously(
         self, repository_url: str, client: connected_services_schemas.OAuth2ClientORM, etag: str | None
-    ) -> models.RepositoryMetadata | git_repo.CheckUrlError | Literal["304"]:
+    ) -> models.RepositoryMetadata | git_repo.RepositoryError | Literal["304"]:
         """Get the metadata about a repository without using credentials."""
         logger.debug(f"Get repository anonymousliy: {repository_url}")
         async with HttpClient(timeout=5) as http:
@@ -174,7 +175,7 @@ class GitRepositoriesRepository:
 
     async def _get_repository_authenticated(
         self, connection_id: ULID, repository_url: str, user: base_models.APIUser, etag: str | None
-    ) -> models.RepositoryMetadata | Literal["304"] | git_repo.CheckUrlError:
+    ) -> models.RepositoryMetadata | Literal["304"] | git_repo.RepositoryError:
         """Get the metadata about a repository using an OAuth2 connection."""
         logger.debug(f"Get repository with oauth2 '{connection_id}': {repository_url}")
         async with self.connected_services_repo.get_async_oauth2_client(connection_id=connection_id, user=user) as (
@@ -201,7 +202,7 @@ class GitRepositoriesRepository:
 
     async def _get_repository_from_internal_gitlab(
         self, repository_url: str, user: base_models.APIUser, etag: str | None, internal_gitlab_url: str
-    ) -> models.RepositoryMetadata | Literal["304"] | git_repo.CheckUrlError:
+    ) -> models.RepositoryMetadata | Literal["304"] | git_repo.RepositoryError:
         """Get the metadata about a repository from the internal GitLab instance."""
         logger.debug(f"Get repository from internal gitlab: {repository_url}")
         async with HttpClient(timeout=5) as http:
