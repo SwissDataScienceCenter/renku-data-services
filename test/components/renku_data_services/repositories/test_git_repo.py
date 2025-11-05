@@ -1,7 +1,8 @@
 """Tests for the git_repo module."""
 
-from httpx import AsyncClient
 import pytest
+from httpx import AsyncClient
+
 from renku_data_services.repositories import git_repo
 
 
