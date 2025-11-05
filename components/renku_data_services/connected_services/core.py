@@ -33,7 +33,7 @@ def validate_oauth2_client_patch(patch: apispec.ProviderPatch) -> models.OAuth2C
 
 
 def validate_unsaved_oauth2_client(clnt: apispec.ProviderPost) -> models.UnsavedOAuth2Client:
-    """Validate the the creation of a new OAuth2 Client."""
+    """Validate the creation of a new OAuth2 Client."""
     if clnt.image_registry_url is not None:
         validate_image_registry_url(clnt.image_registry_url)
     kind = models.ProviderKind(clnt.kind.value)
