@@ -9,8 +9,8 @@ from renku_data_services.notifications import models
 from renku_data_services.notifications import orm as schemas
 
 
-class AlertsRepository:
-    """Repository for alerts."""
+class NotificationsRepository:
+    """Repository for Notifications."""
 
     def __init__(
         self,
