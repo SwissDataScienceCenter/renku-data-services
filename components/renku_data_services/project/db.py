@@ -642,6 +642,41 @@ class ProjectSessionSecretRepository:
 
             return secret_slot_orm.dump()
 
+    async def copy_session_secret_slot(
+        self, user: base_models.APIUser, project_id: ULID, session_secret_slot: models.SessionSecretSlot
+    ) -> models.SessionSecretSlot:
+        """Create a copy of the session secret slot in the target project."""
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.WRITE)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
+
+        async with self.session_maker() as session, session.begin():
+            res = await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
+            project = res.one_or_none()
+            if project is None:
+                raise errors.MissingResourceError(
+                    message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+                )
+
+            secret_slot_orm = schemas.SessionSecretSlotORM(
+                project_id=project_id,
+                name=session_secret_slot.name or session_secret_slot.filename,
+                description=session_secret_slot.description if session_secret_slot.description else None,
+                filename=session_secret_slot.filename,
+                created_by_id=user.id,
+            )
+
+            session.add(secret_slot_orm)
+            await session.flush()
+            await session.refresh(secret_slot_orm)
+
+            return secret_slot_orm.dump()
+
     async def update_session_secret_slot(
         self, user: base_models.APIUser, slot_id: ULID, patch: models.SessionSecretSlotPatch, etag: str
     ) -> models.SessionSecretSlot:
