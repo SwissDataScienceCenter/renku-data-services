@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
 from typing import Any, cast, override
 from urllib.parse import urlunparse
@@ -41,6 +41,7 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     ReconcileStrategy,
     RemoteSecretRef,
     RequiredDuringSchedulingIgnoredDuringExecution,
+    RequiredDuringSchedulingIgnoredDuringExecutionItem,
     Size,
     State,
     Status,
@@ -57,8 +58,17 @@ from renku_data_services.notebooks.cr_amalthea_session import Limits6 as _Limits
 from renku_data_services.notebooks.cr_amalthea_session import Limits7 as LimitsStr
 from renku_data_services.notebooks.cr_amalthea_session import Location as SessionLocation
 from renku_data_services.notebooks.cr_amalthea_session import Model as _ASModel
+from renku_data_services.notebooks.cr_amalthea_session import (
+    PreferredDuringSchedulingIgnoredDuringExecutionItem1 as PreferredPodAffinityItem,
+)
+from renku_data_services.notebooks.cr_amalthea_session import (
+    PreferredDuringSchedulingIgnoredDuringExecutionItem2 as PreferredPodAntiAffinityItem,
+)
 from renku_data_services.notebooks.cr_amalthea_session import Requests6 as _Requests
 from renku_data_services.notebooks.cr_amalthea_session import Requests7 as RequestsStr
+from renku_data_services.notebooks.cr_amalthea_session import (
+    RequiredDuringSchedulingIgnoredDuringExecutionItem1 as RequiredPodAntiAffinityItem,
+)
 from renku_data_services.notebooks.cr_amalthea_session import Resources3 as _Resources
 from renku_data_services.notebooks.cr_amalthea_session import Secret1 as SecretAsVolume
 from renku_data_services.notebooks.cr_amalthea_session import SecretRef as _SecretRef
@@ -407,12 +417,39 @@ class AmaltheaSessionV1Alpha1MetadataPatch(BaseCRD):
     annotations: dict[str, str | ResetType] | ResetType | None = None
 
 
+class NodeAffinityPatch(BaseCRD):
+    """Patch for the node affinity of a session."""
+
+    preferredDuringSchedulingIgnoredDuringExecution: (
+        Sequence[PreferredDuringSchedulingIgnoredDuringExecutionItem] | None | ResetType
+    ) = None
+    requiredDuringSchedulingIgnoredDuringExecution: (
+        RequiredDuringSchedulingIgnoredDuringExecution | None | ResetType
+    ) = None
+
+
+class PodAffinityPatch(BaseCRD):
+    """Patch for the pod affinity of a session."""
+
+    preferredDuringSchedulingIgnoredDuringExecution: Sequence[PreferredPodAffinityItem] | None | ResetType = None
+    requiredDuringSchedulingIgnoredDuringExecution: (
+        Sequence[RequiredDuringSchedulingIgnoredDuringExecutionItem] | None | ResetType
+    ) = None
+
+
+class PodAntiAffinityPatch(BaseCRD):
+    """Patch for the pod anti affinity of a session."""
+
+    preferredDuringSchedulingIgnoredDuringExecution: Sequence[PreferredPodAntiAffinityItem] | None | ResetType = None
+    requiredDuringSchedulingIgnoredDuringExecution: Sequence[RequiredPodAntiAffinityItem] | None | ResetType = None
+
+
 class AffinityPatch(BaseCRD):
     """Patch for the affinity of a session."""
 
-    nodeAffinity: NodeAffinity | ResetType | None = None
-    podAffinity: PodAffinity | ResetType | None = None
-    podAntiAffinity: PodAntiAffinity | ResetType | None = None
+    nodeAffinity: NodeAffinityPatch | ResetType | None = None
+    podAffinity: PodAffinityPatch | ResetType | None = None
+    podAntiAffinity: PodAntiAffinityPatch | ResetType | None = None
 
 
 class CullingPatch(CullingDurationParsingMixin):

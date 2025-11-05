@@ -1,13 +1,17 @@
 """Utilities for notebooks."""
 
 import renku_data_services.crc.models as crc_models
-from renku_data_services.base_models.core import RESET
+from renku_data_services.base_models.core import RESET, ResetType
+from renku_data_services.errors import errors
 from renku_data_services.notebooks.crs import (
     Affinity,
     AffinityPatch,
     MatchExpression,
     NodeAffinity,
+    NodeAffinityPatch,
     NodeSelectorTerm,
+    PodAffinityPatch,
+    PodAntiAffinityPatch,
     Preference,
     PreferredDuringSchedulingIgnoredDuringExecutionItem,
     RequiredDuringSchedulingIgnoredDuringExecution,
@@ -85,10 +89,10 @@ def intersect_node_affinities(
 
 def node_affinity_from_resource_class(
     resource_class: crc_models.ResourceClass,
-    default_affinity: Affinity,
-) -> Affinity:
+    default_affinity: Affinity | None,
+) -> Affinity | None:
     """Generate an affinity from the affinities stored in a resource class."""
-    rc_node_affinity = NodeAffinity()
+    rc_node_affinity: NodeAffinity | None = None
     required_expr = [
         MatchExpression(key=affinity.key, operator="Exists")
         for affinity in resource_class.node_affinities
@@ -100,6 +104,7 @@ def node_affinity_from_resource_class(
         if not affinity.required_during_scheduling
     ]
     if required_expr:
+        rc_node_affinity = NodeAffinity()
         rc_node_affinity.requiredDuringSchedulingIgnoredDuringExecution = (
             RequiredDuringSchedulingIgnoredDuringExecution(
                 nodeSelectorTerms=[
@@ -112,6 +117,8 @@ def node_affinity_from_resource_class(
             )
         )
     if preferred_expr:
+        if not rc_node_affinity:
+            rc_node_affinity = NodeAffinity()
         rc_node_affinity.preferredDuringSchedulingIgnoredDuringExecution = [
             PreferredDuringSchedulingIgnoredDuringExecutionItem(
                 weight=1,
@@ -122,24 +129,60 @@ def node_affinity_from_resource_class(
             )
         ]
 
-    affinity = default_affinity.model_copy(deep=True)
-    if affinity.nodeAffinity:
-        affinity.nodeAffinity = intersect_node_affinities(affinity.nodeAffinity, rc_node_affinity)
-    else:
-        affinity.nodeAffinity = rc_node_affinity
-    return affinity
+    match (default_affinity, rc_node_affinity):
+        case (None, None):
+            return None
+        case (None, NodeAffinity()):
+            return Affinity(nodeAffinity=rc_node_affinity)
+        case (Affinity(), None):
+            return default_affinity
+        case (Affinity(), NodeAffinity()):
+            affinity = default_affinity.model_copy(deep=True)
+            if affinity.nodeAffinity:
+                affinity.nodeAffinity = intersect_node_affinities(affinity.nodeAffinity, rc_node_affinity)
+            else:
+                affinity.nodeAffinity = rc_node_affinity
+            return affinity
+        case _:
+            raise errors.ProgrammingError(message="Cannot derive node affinity from resource class and defaults.")
 
 
 def node_affinity_patch_from_resource_class(
-    resource_class: crc_models.ResourceClass, default_affinity: Affinity
-) -> AffinityPatch:
+    resource_class: crc_models.ResourceClass, default_affinity: Affinity | None
+) -> AffinityPatch | ResetType:
     """Create a patch for the session affinity."""
     affinity = node_affinity_from_resource_class(resource_class, default_affinity)
-    return AffinityPatch(
-        nodeAffinity=affinity.nodeAffinity or RESET,
-        podAffinity=affinity.podAffinity or RESET,
-        podAntiAffinity=affinity.podAntiAffinity or RESET,
-    )
+    if not affinity:
+        return RESET
+    patch = AffinityPatch(nodeAffinity=RESET, podAffinity=RESET, podAntiAffinity=RESET)
+    if affinity.nodeAffinity:
+        patch.nodeAffinity = NodeAffinityPatch(
+            preferredDuringSchedulingIgnoredDuringExecution=(
+                affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution or RESET
+            ),
+            requiredDuringSchedulingIgnoredDuringExecution=(
+                affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution or RESET
+            ),
+        )
+    if affinity.podAffinity:
+        patch.podAffinity = PodAffinityPatch(
+            preferredDuringSchedulingIgnoredDuringExecution=(
+                affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution or RESET
+            ),
+            requiredDuringSchedulingIgnoredDuringExecution=(
+                affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution or RESET
+            ),
+        )
+    if affinity.podAntiAffinity:
+        patch.podAntiAffinity = PodAntiAffinityPatch(
+            preferredDuringSchedulingIgnoredDuringExecution=(
+                affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution or RESET
+            ),
+            requiredDuringSchedulingIgnoredDuringExecution=(
+                affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution or RESET
+            ),
+        )
+    return patch
 
 
 def tolerations_from_resource_class(
