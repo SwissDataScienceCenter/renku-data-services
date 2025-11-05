@@ -1478,6 +1478,36 @@ async def test_project_copy_includes_public_data_connector_links_owned_by_others
 
 
 @pytest.mark.asyncio
+async def test_project_copy_includes_secret_slots(
+    sanic_client: SanicASGITestClient,
+    user_headers: dict[str, str],
+    regular_user: UserInfo,
+    create_project,
+    create_session_secret_slot,
+    create_project_copy,
+) -> None:
+    project = await create_project("Project")
+    project_id = project["id"]
+
+    secret_slot_1 = await create_session_secret_slot("secret_1.txt", project_id)
+    secret_slot_2 = await create_session_secret_slot(
+        "secret_2.yml", project_id, name="Secret config", description="Some secret configuration."
+    )
+
+    copy_project = await create_project_copy(project_id, regular_user.namespace.path.serialize(), "Copy Project")
+    project_id = copy_project["id"]
+    _, response = await sanic_client.get(f"/api/data/projects/{project_id}/session_secret_slots", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    secret_slots = response.json
+    assert {secret_slot["filename"] for secret_slot in secret_slots} == {"secret_1.txt", "secret_2.yml"}
+    assert {secret_slot["project_id"] for secret_slot in secret_slots} == {project_id}
+    # NOTE: Check that new session secret slots are created
+    assert all(secret_slot["id"] not in {secret_slot_1["id"], secret_slot_2["id"]} for secret_slot in secret_slots)
+
+
+@pytest.mark.asyncio
 async def test_project_get_all_copies(
     sanic_client, admin_user, regular_user, admin_headers, user_headers, create_project, create_project_copy
 ) -> None:
