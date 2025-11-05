@@ -43,9 +43,7 @@ class NotificationsRepository:
 
         async with self.session_maker() as session:
             alerts = await session.scalars(
-                select(schemas.AlertORM)
-                .where(schemas.AlertORM.user_id == user.id)
-                .order_by(schemas.AlertORM.creation_date.desc())
+                select(schemas.AlertORM).where(schemas.AlertORM.user_id == user.id).order_by(schemas.AlertORM.id.desc())
             )
             alert_list = alerts.all()
             return [alert.dump() for alert in alert_list]

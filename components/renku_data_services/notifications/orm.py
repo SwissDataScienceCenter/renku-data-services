@@ -1,4 +1,4 @@
-"""SQLAlchemy schemas for the alerts database."""
+"""SQLAlchemy schemas for the notifications database."""
 
 from datetime import datetime
 
@@ -9,7 +9,7 @@ from ulid import ULID
 from renku_data_services.notifications import models
 from renku_data_services.utils.sqlalchemy import ULIDType
 
-metadata_obj = MetaData(schema="common")
+metadata_obj = MetaData(schema="notifications")
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
