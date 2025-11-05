@@ -441,6 +441,13 @@ class Affinity(BaseCRD):
         description="Describes pod anti-affinity scheduling rules (e.g. avoid putting this pod in the same node, zone, etc. as some other pod(s)).",
     )
 
+    @property
+    def is_empty(self) -> bool:
+        node_affinity_is_empty = not(self.nodeAffinity and (self.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution or self.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution))
+        pod_affinity_is_empty = not(self.podAffinity and (self.podAffinity.preferredDuringSchedulingIgnoredDuringExecution or self.podAffinity.requiredDuringSchedulingIgnoredDuringExecution))
+        pod_antiaffinity_is_empty = not(self.podAntiAffinity and (self.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution or self.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution))
+        return node_affinity_is_empty and pod_affinity_is_empty and pod_antiaffinity_is_empty
+
 
 class ExtraVolumeMount(BaseCRD):
     model_config = ConfigDict(

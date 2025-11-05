@@ -395,7 +395,7 @@ class _SessionConfig:
     termination_warning_duration_seconds: int = 12 * 60 * 60
     image_default_workdir: str = "/home/jovyan"
     node_selector: dict[str, str] = field(default_factory=dict)
-    affinity: dict[str, Any] | None = None
+    affinity: dict[str, Any] = field(default_factory=dict)
     tolerations: list[dict[str, str]] = field(default_factory=list)
     init_containers: list[str] = field(
         default_factory=lambda: [
@@ -407,11 +407,6 @@ class _SessionConfig:
 
     @classmethod
     def from_env(cls) -> Self:
-        affinity = (
-            yaml.safe_load(StringIO(os.environ["NB_SESSIONS__AFFINITY"]))
-            if os.environ.get("NB_SESSIONS__AFFINITY") is not None
-            else None
-        )
         return cls(
             culling=_SessionCullingConfig.from_env(),
             git_proxy=_GitProxyConfig.from_env(),
@@ -428,7 +423,7 @@ class _SessionConfig:
             termination_warning_duration_seconds=_parse_value_as_int(os.environ.get("", 12 * 60 * 60)),
             image_default_workdir="/home/jovyan",
             node_selector=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__NODE_SELECTOR", "{}"))),
-            affinity=affinity,
+            affinity=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__AFFINITY", "{}"))),
             tolerations=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__TOLERATIONS", "[]"))),
         )
 
@@ -461,8 +456,8 @@ class _SessionConfig:
         )
 
     @property
-    def affinity_model(self) -> Affinity | None:
-        return Affinity.model_validate(self.affinity) if self.affinity is not None else None
+    def affinity_model(self) -> Affinity:
+        return Affinity.model_validate(self.affinity)
 
     @property
     def tolerations_model(self) -> list[Toleration]:

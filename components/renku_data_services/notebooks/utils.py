@@ -2,7 +2,6 @@
 
 import renku_data_services.crc.models as crc_models
 from renku_data_services.base_models.core import RESET, ResetType
-from renku_data_services.errors import errors
 from renku_data_services.notebooks.crs import (
     Affinity,
     AffinityPatch,
@@ -87,12 +86,9 @@ def intersect_node_affinities(
     return output
 
 
-def node_affinity_from_resource_class(
-    resource_class: crc_models.ResourceClass,
-    default_affinity: Affinity | None,
-) -> Affinity | None:
+def node_affinity_from_resource_class(resource_class: crc_models.ResourceClass, default_affinity: Affinity) -> Affinity:
     """Generate an affinity from the affinities stored in a resource class."""
-    rc_node_affinity: NodeAffinity | None = None
+    rc_node_affinity = NodeAffinity()
     required_expr = [
         MatchExpression(key=affinity.key, operator="Exists")
         for affinity in resource_class.node_affinities
@@ -104,7 +100,6 @@ def node_affinity_from_resource_class(
         if not affinity.required_during_scheduling
     ]
     if required_expr:
-        rc_node_affinity = NodeAffinity()
         rc_node_affinity.requiredDuringSchedulingIgnoredDuringExecution = (
             RequiredDuringSchedulingIgnoredDuringExecution(
                 nodeSelectorTerms=[
@@ -117,8 +112,6 @@ def node_affinity_from_resource_class(
             )
         )
     if preferred_expr:
-        if not rc_node_affinity:
-            rc_node_affinity = NodeAffinity()
         rc_node_affinity.preferredDuringSchedulingIgnoredDuringExecution = [
             PreferredDuringSchedulingIgnoredDuringExecutionItem(
                 weight=1,
@@ -129,30 +122,20 @@ def node_affinity_from_resource_class(
             )
         ]
 
-    match (default_affinity, rc_node_affinity):
-        case (None, None):
-            return None
-        case (None, NodeAffinity()):
-            return Affinity(nodeAffinity=rc_node_affinity)
-        case (Affinity(), None):
-            return default_affinity
-        case (Affinity(), NodeAffinity()):
-            affinity = default_affinity.model_copy(deep=True)
-            if affinity.nodeAffinity:
-                affinity.nodeAffinity = intersect_node_affinities(affinity.nodeAffinity, rc_node_affinity)
-            else:
-                affinity.nodeAffinity = rc_node_affinity
-            return affinity
-        case _:
-            raise errors.ProgrammingError(message="Cannot derive node affinity from resource class and defaults.")
+    affinity = default_affinity.model_copy(deep=True)
+    if affinity.nodeAffinity:
+        affinity.nodeAffinity = intersect_node_affinities(affinity.nodeAffinity, rc_node_affinity)
+    else:
+        affinity.nodeAffinity = rc_node_affinity
+    return affinity
 
 
 def node_affinity_patch_from_resource_class(
-    resource_class: crc_models.ResourceClass, default_affinity: Affinity | None
+    resource_class: crc_models.ResourceClass, default_affinity: Affinity
 ) -> AffinityPatch | ResetType:
     """Create a patch for the session affinity."""
     affinity = node_affinity_from_resource_class(resource_class, default_affinity)
-    if not affinity:
+    if affinity.is_empty:
         return RESET
     patch = AffinityPatch(nodeAffinity=RESET, podAffinity=RESET, podAntiAffinity=RESET)
     if affinity.nodeAffinity:
