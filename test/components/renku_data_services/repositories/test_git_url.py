@@ -5,16 +5,17 @@ from httpx import AsyncClient
 
 from renku_data_services.repositories.git_url import GitUrl, GitUrlError
 
+bad_urls = ["", "abc", "http://", "localhost/repo", "ftp://test.com", "http://github.com"]
+good_urls = ["http://localhost:3000/my/repo", "https://github.com/SwissDataScienceCenter/renku"]
+
 
 def test_bad_urls() -> None:
-    bad_urls = ["", "abc", "http://", "localhost/repo", "ftp://test.com", "http://github.com"]
     for url in bad_urls:
         result = GitUrl.parse(url)
         assert isinstance(result, GitUrlError)
 
 
 def test_good_urls() -> None:
-    good_urls = ["http://localhost:3000/my/repo", "https://github.com/SwissDataScienceCenter/renku"]
     for url in good_urls:
         result = GitUrl.parse(url)
         assert isinstance(result, GitUrl)

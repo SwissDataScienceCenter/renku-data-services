@@ -3,7 +3,6 @@
 from dataclasses import dataclass
 from urllib.parse import unquote
 
-from renku_data_services.repositories.git_url import GitUrlError
 from sanic import HTTPResponse, Request
 from sanic.response import JSONResponse
 
@@ -16,6 +15,7 @@ from renku_data_services.base_models.validation import validated_json
 from renku_data_services.repositories import apispec, models
 from renku_data_services.repositories.apispec_base import RepositoryParams
 from renku_data_services.repositories.db import GitRepositoriesRepository
+from renku_data_services.repositories.git_url import GitUrlError
 from renku_data_services.repositories.utils import probe_repository
 
 
