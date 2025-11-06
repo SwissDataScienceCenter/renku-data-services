@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from urllib.parse import unquote
 
+from renku_data_services.repositories.git_url import GitUrlError
 from sanic import HTTPResponse, Request
 from sanic.response import JSONResponse
 
@@ -79,8 +80,17 @@ class RepositoriesBP(CustomBlueprint):
             if r.metadata and r.metadata != "Unmodified"
             else None
         )
+        error_code: apispec.ErrorCode | None
+        match r.error:
+            case GitUrlError() as e:
+                error_code = apispec.ErrorCode[e.value]
+            case models.RepositoryMetadataError() as e:
+                error_code = apispec.ErrorCode[e.value]
+            case None:
+                error_code = None
+
         return apispec.RepositoryProviderData(
-            status=status, connection=conn, provider=prov, metadata=meta, error_code=r.error.value if r.error else None
+            status=status, connection=conn, provider=prov, metadata=meta, error_code=error_code
         )
 
     def get_one_repository_probe(self) -> BlueprintFactoryResponse:

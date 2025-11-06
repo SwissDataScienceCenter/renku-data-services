@@ -97,7 +97,10 @@ components:
             - no_url_scheme
             - no_url_host
             - no_git_repo
+            - no_url_path
             - invalid_url_scheme
+            - metadata_unauthorized
+            - metadata_unknown
       required:
         - status
     ProviderConnection:
