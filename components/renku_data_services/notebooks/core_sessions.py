@@ -671,7 +671,6 @@ async def start_session(
     session_repo: SessionRepository,
     user_repo: UserRepo,
     metrics: MetricsService,
-    # connected_svcs_repo: ConnectedServicesRepository,
     image_check_repo: ImageCheckRepository,
 ) -> tuple[AmaltheaSessionV1Alpha1, bool]:
     """Start an Amalthea session.
