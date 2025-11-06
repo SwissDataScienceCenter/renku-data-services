@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import dataclasses
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Literal
 
 from ulid import ULID
 
 from renku_data_services.connected_services.orm import OAuth2ClientORM, OAuth2ConnectionORM
-from renku_data_services.repositories.git_repo import RepositoryError
+from renku_data_services.repositories.git_url import GitUrlError
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -103,6 +104,16 @@ class Metadata:
         )
 
 
+class RepositoryMetadataError(StrEnum):
+    """Possible errors when retrieving repository metadata."""
+
+    metadata_unauthorized = "metadata_unauthorized"
+    metadata_unknown = "metadata_unknown_error"
+
+
+type RepositoryError = GitUrlError | RepositoryMetadataError
+
+
 @dataclass(frozen=True, eq=True, kw_only=True)
 class RepositoryDataResult:
     """Information when retrieving a repository."""
@@ -117,7 +128,9 @@ class RepositoryDataResult:
         match rm:
             case "304":
                 return dataclasses.replace(self, metadata="Unmodified")
-            case RepositoryError() as err:
+            case GitUrlError() as err:
+                return self.with_error(err)
+            case RepositoryMetadataError() as err:
                 return self.with_error(err)
             case RepositoryMetadata() as md:
                 return dataclasses.replace(self, metadata=Metadata.fromRepoMeta(md))
