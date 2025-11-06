@@ -9,7 +9,7 @@ from contextlib import nullcontext
 from datetime import UTC, datetime
 from typing import Any, overload
 
-from sqlalchemy import Select, and_, delete, func, select, text
+from sqlalchemy import Select, and_, delete, distinct, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 from sqlalchemy.orm import joinedload, selectinload
@@ -30,6 +30,7 @@ from renku_data_services.base_models.core import (
     ProjectPath,
     Slug,
 )
+from renku_data_services.data_connectors import orm as dc_schemas
 from renku_data_services.data_connectors.models import DataConnector
 from renku_data_services.data_connectors.orm import DataConnectorORM
 from renku_data_services.namespace import models
@@ -311,13 +312,33 @@ class GroupRepository:
                 message=f"You cannot delete a group by using an old group slug {slug.value}.",
                 detail=f"The latest slug is {group.namespace.slug}, please use this for deletions.",
             )
-        # NOTE: We have a stored procedure that gets triggered when a project slug is removed to remove the project.
-        # This is required because the slug has a foreign key pointing to the project, so when a project is removed
-        # the slug is removed but the converse is not true. The stored procedure in migration 89aa4573cfa9 has the
-        # trigger and procedure that does the cleanup when a slug is removed.
+
+        dcs = await session.execute(
+            select(distinct(schemas.EntitySlugORM.data_connector_id))
+            .join(schemas.NamespaceORM, schemas.NamespaceORM.id == schemas.EntitySlugORM.namespace_id)
+            .where(schemas.NamespaceORM.group_id == group.id)
+            .where(schemas.EntitySlugORM.data_connector_id.is_not(None))
+        )
+        dcs = [e for e in dcs.scalars().all() if e]
+
+        projs = await session.execute(
+            select(distinct(schemas.EntitySlugORM.project_id))
+            .join(schemas.NamespaceORM, schemas.NamespaceORM.id == schemas.EntitySlugORM.namespace_id)
+            .where(schemas.NamespaceORM.group_id == group.id)
+            .where(schemas.EntitySlugORM.project_id.is_not(None))
+        )
+        projs = [e for e in projs.scalars().all() if e]
+
         stmt = delete(schemas.GroupORM).where(schemas.GroupORM.id == group.id)
         await session.execute(stmt)
-        return models.DeletedGroup(id=group.id)
+
+        if projs != []:
+            await session.execute(delete(ProjectORM).where(ProjectORM.id.in_(projs)))
+
+        if dcs != []:
+            await session.execute(delete(dc_schemas.DataConnectorORM).where(dc_schemas.DataConnectorORM.id.in_(dcs)))
+
+        return models.DeletedGroup(id=group.id, data_connectors=dcs, projects=projs)
 
     @with_db_transaction
     async def delete_group_member(

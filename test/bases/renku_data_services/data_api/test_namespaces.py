@@ -1,7 +1,6 @@
 import contextlib
 
 import pytest
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from renku_data_services.authz.models import Visibility
@@ -24,7 +23,6 @@ from renku_data_services.data_connectors.models import (
 )
 from renku_data_services.errors.errors import ConflictError, MissingResourceError, ValidationError
 from renku_data_services.namespace.models import UnsavedGroup
-from renku_data_services.namespace.orm import EntitySlugORM
 from renku_data_services.project.models import Project, ProjectPatch, UnsavedProject
 from renku_data_services.users.models import UserInfo
 
@@ -402,108 +400,6 @@ async def test_listing_project_namespaces(sanic_client, user_headers) -> None:
     assert response.json[1]["namespace_kind"] == "project"
     assert response.json[1]["slug"] == "proj2"
     assert response.json[1]["path"] == "test1/proj2"
-
-
-@pytest.mark.asyncio
-async def test_stored_procedure_cleanup_after_project_slug_deletion(
-    create_project,
-    user_headers,
-    app_manager: DependencyManager,
-    sanic_client,
-    create_data_connector,
-) -> None:
-    # We use stored procedures to remove a project when its slug is removed
-    proj = await create_project(name="test1")
-    proj_id = proj.get("id")
-    assert proj_id is not None
-    namespace = proj.get("namespace")
-    assert namespace is not None
-    proj_slug = proj.get("slug")
-    assert proj_slug is not None
-    _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}", headers=user_headers)
-    assert response.status_code == 200
-    dc = await create_data_connector(name="test-dc", namespace=f"{namespace}/{proj_slug}")
-    dc_id = dc.get("id")
-    assert dc_id is not None
-    assert dc is not None
-    async with app_manager.config.db.async_session_maker() as session, session.begin():
-        # We do not have APIs exposed that will remove the slug so this is the only way to trigger this
-        stmt = (
-            select(EntitySlugORM)
-            .where(EntitySlugORM.project_id == proj_id)
-            .where(EntitySlugORM.namespace_id.is_not(None))
-            .where(EntitySlugORM.data_connector_id.is_(None))
-        )
-        res = await session.scalar(stmt)
-        assert res is not None
-        await session.delete(res)
-        await session.flush()
-    # The project namespace is not there
-    _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}/{proj_slug}", headers=user_headers)
-    assert response.status_code == 404
-    # The user or group namespace is untouched
-    _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}", headers=user_headers)
-    assert response.status_code == 200
-    # The project and data connector are both gone
-    _, response = await sanic_client.get(f"/api/data/projects/{proj_id}", headers=user_headers)
-    assert response.status_code == 404
-    _, response = await sanic_client.get(f"/api/data/data_connectors/{dc_id}", headers=user_headers)
-    assert response.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_stored_procedure_cleanup_after_data_connector_slug_deletion(
-    create_project,
-    user_headers,
-    app_manager: DependencyManager,
-    sanic_client,
-    create_data_connector,
-) -> None:
-    # We use stored procedures to remove a data connector when its slug is removed
-    proj = await create_project(name="test1")
-    proj_id = proj.get("id")
-    assert proj_id is not None
-    namespace = proj.get("namespace")
-    assert namespace is not None
-    proj_slug = proj.get("slug")
-    assert proj_slug is not None
-    _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}", headers=user_headers)
-    assert response.status_code == 200
-    dc1 = await create_data_connector(name="test-dc", namespace=f"{namespace}/{proj_slug}")
-    dc1_id = dc1.get("id")
-    assert dc1_id is not None
-    assert dc1 is not None
-    dc2 = await create_data_connector(name="test-dc", namespace=namespace)
-    dc2_id = dc2.get("id")
-    assert dc2_id is not None
-    assert dc2 is not None
-    async with app_manager.config.db.async_session_maker() as session, session.begin():
-        # We do not have APIs exposed that will remove the slug so this is the only way to trigger this
-        stmt = select(EntitySlugORM).where(EntitySlugORM.data_connector_id == dc1_id)
-        scalars = await session.scalars(stmt)
-        res = scalars.one_or_none()
-        assert res is not None
-        await session.delete(res)
-        stmt = select(EntitySlugORM).where(EntitySlugORM.data_connector_id == dc2_id)
-        scalars = await session.scalars(stmt)
-        res = scalars.one_or_none()
-        assert res is not None
-        await session.delete(res)
-        await session.flush()
-    # The project namespace is still there
-    _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}/{proj_slug}", headers=user_headers)
-    assert response.status_code == 200
-    # The user or group namespace is untouched
-    _, response = await sanic_client.get(f"/api/data/namespaces/{namespace}", headers=user_headers)
-    assert response.status_code == 200
-    # The project is still there
-    _, response = await sanic_client.get(f"/api/data/projects/{proj_id}", headers=user_headers)
-    assert response.status_code == 200
-    # The data connectors are gone
-    _, response = await sanic_client.get(f"/api/data/data_connectors/{dc1_id}", headers=user_headers)
-    assert response.status_code == 404
-    _, response = await sanic_client.get(f"/api/data/data_connectors/{dc2_id}", headers=user_headers)
-    assert response.status_code == 404
 
 
 async def test_cleanup_with_group_deletion(
