@@ -66,7 +66,6 @@ async def get_image_platforms(
 
 def parse_manifest_response(response: httpx.Response) -> ImageIndex | ImageManifest:
     """Parse a manifest response."""
-
     content_type = response.headers.get("Content-Type")
     if content_type not in {
         ManifestMediaTypes.docker_list_v2,
@@ -84,12 +83,6 @@ def parse_manifest_response(response: httpx.Response) -> ImageIndex | ImageManif
 
 def parse_config_response(response: httpx.Response) -> ImageConfig:
     """Parse a config response."""
-
-    content_type = response.headers.get("Content-Type")
-    if content_type not in {
-        ManifestMediaTypes.docker_config_v2,
-        ManifestMediaTypes.oci_config_v1,
-    }:
-        raise errors.ValidationError(message=f"Unexpected content type {content_type}.")
-
+    # NOTE: it seems that the "Content-Type" is set to "application/octet-stream" by the Docker registry
+    # NOTE: so we do not validate it
     return ImageConfig.model_validate_json(response.content)
