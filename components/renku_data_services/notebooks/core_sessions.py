@@ -839,7 +839,6 @@ async def start_session(
         nb_config=nb_config,
         user=user,
         internal_gitlab_user=internal_gitlab_user,
-        # connected_svcs_repo=connected_svcs_repo,
         image_check_repo=image_check_repo,
     )
     if image_secret:
