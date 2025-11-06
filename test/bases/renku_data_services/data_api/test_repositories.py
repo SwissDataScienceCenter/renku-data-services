@@ -102,7 +102,7 @@ async def test_get_repository_without_connection(
     assert res.status_code == 200, res.text
     assert res.json is not None
     result = res.json
-    assert result.get("provider_id") == "provider_1"
+    assert result["provider"]["id"] == "provider_1"
     assert "connection_id" not in result
 
 
@@ -116,15 +116,13 @@ async def test_get_one_repository(oauth2_test_client: SanicASGITestClient, user_
     assert res.status_code == 200, res.text
     assert res.json is not None
     result = res.json
-    assert result.get("connection_id") == connection["id"]
-    assert result.get("provider_id") == "provider_1"
-    assert result.get("repository_metadata") is not None
-    repository_metadata = result["repository_metadata"]
-    assert repository_metadata.get("git_http_url") == repository_url
-    assert repository_metadata.get("permissions") is not None
-    permissions = repository_metadata["permissions"]
-    assert permissions.get("pull")
-    assert not permissions.get("push")
+    assert result["connection"]["id"] == connection["id"]
+    assert result["provider"]["id"] == "provider_1"
+    assert result.get("metadata") is not None
+    repository_metadata = result["metadata"]
+    assert repository_metadata.get("git_url") == repository_url
+    assert repository_metadata.get("pull_permission")
+    assert not repository_metadata.get("push_permission")
 
 
 @pytest.mark.asyncio
@@ -139,9 +137,9 @@ async def test_get_one_repository_not_found(
     assert res.status_code == 200, res.text
     assert res.json is not None
     result = res.json
-    assert result.get("connection_id") == connection["id"]
-    assert result.get("provider_id") == "provider_1"
-    assert result.get("repository_metadata") is None
+    assert result["connection"]["id"] == connection["id"]
+    assert result["provider"]["id"] == "provider_1"
+    assert result.get("metadata") is None
 
 
 @pytest.mark.asyncio
