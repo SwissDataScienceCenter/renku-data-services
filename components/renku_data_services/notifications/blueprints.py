@@ -39,11 +39,14 @@ class NotificationsBP(CustomBlueprint):
         return "/alerts", ["POST"], _post
 
     def get_all(self) -> BlueprintFactoryResponse:
-        """Get all alerts for the authenticated user."""
+        """Get all alerts for the authenticated user, optionally filtered by session name."""
 
         @authenticate(self.authenticator)
-        async def _get_all(_: Request, user: base_models.APIUser) -> JSONResponse:
-            alerts = await self.notifications_repo.get_alerts_for_user(user=user)
+        @validate(query=apispec.AlertsGetParametersQuery)
+        async def _get_all(
+            _: Request, user: base_models.APIUser, query: apispec.AlertsGetParametersQuery
+        ) -> JSONResponse:
+            alerts = await self.notifications_repo.get_alerts_for_user(user=user, session_name=query.session_name)
             return validated_json(apispec.AlertList, alerts)
 
         return "/alerts", ["GET"], _get_all

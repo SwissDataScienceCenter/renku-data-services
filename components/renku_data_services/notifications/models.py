@@ -1,4 +1,4 @@
-"""Models for alerts."""
+"""Models for notifications."""
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -12,6 +12,7 @@ class Alert:
 
     id: ULID
     user_id: str
+    session_name: str | None = None
     title: str
     message: str
     creation_date: datetime
@@ -22,5 +23,6 @@ class UnsavedAlert:
     """An alert that has not been persisted yet."""
 
     user_id: str
+    session_name: str | None = None
     title: str
     message: str

@@ -9,4 +9,5 @@ def validate_unsaved_alert(alert: apispec.AlertPost) -> models.UnsavedAlert:
         title=alert.title,
         message=alert.message,
         user_id=alert.user_id,
+        session_name=alert.session_name,
     )

@@ -27,6 +27,13 @@ paths:
         - alerts
     get:
       summary: Retrieve all active alerts for the authenticated user.
+      parameters:
+        - name: session_name
+          in: query
+          description: Optional filter to only retrieve alerts for a specific session.
+          required: false
+          schema:
+            $ref: "#/components/schemas/SessionName"
       responses:
         "200":
           description: A list of active alerts for the authenticated user.
@@ -56,6 +63,8 @@ components:
           $ref: "#/components/schemas/AlertMessage"
         user_id:
           $ref: "#/components/schemas/UserId"
+        session_name:
+          $ref: "#/components/schemas/SessionName"
         creation_date:
           type: string
           format: date-time
@@ -75,6 +84,8 @@ components:
           $ref: "#/components/schemas/AlertMessage"
         user_id:
           $ref: "#/components/schemas/UserId"
+        session_name:
+          $ref: "#/components/schemas/SessionName"
       required:
         - title
         - message
@@ -85,6 +96,9 @@ components:
     AlertMessage:
       type: string
       description: The message body of the alert.
+    SessionName:
+      type: string
+      description: The name of the session associated with the alert.
     UserId:
       type: string
       description: The ID of the user associated with the alert.

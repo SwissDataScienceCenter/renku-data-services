@@ -31,20 +31,27 @@ class NotificationsRepository:
                 title=alert.title,
                 message=alert.message,
                 user_id=alert.user_id,
+                session_name=alert.session_name,
             )
             session.add(alert_orm)
             await session.flush()
             await session.refresh(alert_orm)
             return alert_orm.dump()
 
-    async def get_alerts_for_user(self, user: base_models.APIUser) -> list[models.Alert]:
+    async def get_alerts_for_user(
+        self, user: base_models.APIUser, session_name: str | None = None
+    ) -> list[models.Alert]:
         """Get all alerts for a given user."""
         if user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session:
-            alerts = await session.scalars(
-                select(schemas.AlertORM).where(schemas.AlertORM.user_id == user.id).order_by(schemas.AlertORM.id.desc())
-            )
+            query = select(schemas.AlertORM).where(schemas.AlertORM.user_id == user.id)
+
+            if session_name is not None:
+                query = query.where(schemas.AlertORM.session_name == session_name)
+
+            query = query.order_by(schemas.AlertORM.id.desc())
+            alerts = await session.scalars(query)
             alert_list = alerts.all()
             return [alert.dump() for alert in alert_list]
