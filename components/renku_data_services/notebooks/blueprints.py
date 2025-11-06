@@ -365,7 +365,13 @@ class NotebooksNewBP(CustomBlueprint):
                     id=result.client.id, name=result.client.display_name, url=result.client.url
                 )
 
-            resp = apispec.ImageCheckResponse(accessible=result.accessible, connection=conn, provider=provider)
+            platforms = None
+            if result.platforms:
+                platforms = [apispec.ImagePlatform.model_validate(p) for p in result.platforms]
+
+            resp = apispec.ImageCheckResponse(
+                accessible=result.accessible, platforms=platforms, connection=conn, provider=provider
+            )
 
             return json(resp.model_dump(exclude_none=True, mode="json"))
 

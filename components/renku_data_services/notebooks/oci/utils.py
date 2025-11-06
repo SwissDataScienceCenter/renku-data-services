@@ -7,9 +7,9 @@ import httpx
 from renku_data_services import errors
 from renku_data_services.app_config import logging
 from renku_data_services.notebooks.oci.image_config import ImageConfig
-from renku_data_services.notebooks.oci.image_index import ImageIndex, Platform
+from renku_data_services.notebooks.oci.image_index import ImageIndex
 from renku_data_services.notebooks.oci.image_manifest import ImageManifest
-from renku_data_services.notebooks.oci.models import ManifestMediaTypes
+from renku_data_services.notebooks.oci.models import ManifestMediaTypes, Platform
 
 if TYPE_CHECKING:
     from renku_data_services.notebooks.api.classes.image import Image, ImageRepoDockerAPI
@@ -37,7 +37,16 @@ async def get_image_platforms(
                 or manifest.platform.architecture == "unknown"
             ):
                 continue
-            platforms.append(manifest.platform)
+            platforms.append(
+                Platform(
+                    architecture=manifest.platform.architecture,
+                    os=manifest.platform.os,
+                    os_features=list(manifest.platform.os_features) if manifest.platform.os_features else None,
+                    os_version=manifest.platform.os_version,
+                    variant=manifest.platform.variant,
+                )
+            )
+        platforms = sorted(set(platforms))
         return platforms
 
     try:
@@ -52,14 +61,12 @@ async def get_image_platforms(
         logger.warning(f"Error parsing image config: {err}")
         return None
 
-    platform = Platform.model_validate(
-        {
-            "architecture": parsed_config.architecture,
-            "os": parsed_config.os,
-            "os.feature": parsed_config.os_features,
-            "os.version": parsed_config.os_version,
-            "variant": parsed_config.variant,
-        },
+    platform = Platform(
+        architecture=parsed_config.architecture,
+        os=parsed_config.os,
+        os_features=list(parsed_config.os_features) if parsed_config.os_features else None,
+        os_version=parsed_config.os_version,
+        variant=parsed_config.variant,
     )
     return [platform]
 

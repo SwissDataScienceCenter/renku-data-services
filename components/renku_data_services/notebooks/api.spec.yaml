@@ -1076,6 +1076,8 @@ components:
         accessible:
           type: boolean
           description: Whether the image is accessible or not.
+        platforms:
+          $ref: "#/components/schemas/ImagePlatforms"
         connection:
           "$ref": "#/components/schemas/ImageConnection"
         provider:
@@ -1114,6 +1116,30 @@ components:
         - id
         - name
         - url
+    ImagePlatforms:
+      type: array
+      description: The list of platforms an image can run on.
+      items:
+        $ref: "#/components/schemas/ImagePlatform"
+    ImagePlatform:
+      type: object
+      description: A runtime platform.
+      properties:
+        architecture:
+          type: string
+        os:
+          type: string
+        os.version:
+          type: string
+        os.features:
+          type: array
+          items:
+            type: string
+        variant:
+          type: string
+      required:
+        - architecture
+        - os
   responses:
     ImageCheckResponse:
       description: Information about whether a docker image is available or not and if there is a connected service then which connected service can be used to access the image.

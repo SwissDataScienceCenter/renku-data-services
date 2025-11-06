@@ -27,7 +27,7 @@ from renku_data_services.connected_services.models import ImageProvider, OAuth2C
 from renku_data_services.errors import errors
 from renku_data_services.notebooks.api.classes.image import Image, ImageRepoDockerAPI
 from renku_data_services.notebooks.config import NotebooksConfig
-from renku_data_services.notebooks.oci.image_index import Platform
+from renku_data_services.notebooks.oci.models import Platform
 from renku_data_services.notebooks.oci.utils import get_image_platforms
 
 logger = logging.getLogger(__name__)
