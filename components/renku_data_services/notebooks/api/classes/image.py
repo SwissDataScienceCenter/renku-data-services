@@ -169,6 +169,17 @@ class ImageRepoDockerAPI:
         logger.debug(f"Checked image access: {image_digest_url}: {res.status_code}")
         return res.status_code, res
 
+    async def get_image_config_from_digest(self, image: Image, config_digest: str) -> httpx.Response:
+        """Query the docker API to get the configuration of an image from the config digest."""
+        token = await self._get_docker_token(image)
+        return await self.client.get(
+            f"{self.scheme}://{image.hostname}/v2/{image.name}/blobs/{config_digest}",
+            headers={
+                "Accept": "application/json",
+                "Authorization": f"Bearer {token}",
+            },
+        )
+
     async def get_image_config(self, image: Image) -> Optional[dict[str, Any]]:
         """Query the docker API to get the configuration of an image."""
         manifest = await self.get_image_manifest(image)
@@ -177,14 +188,7 @@ class ImageRepoDockerAPI:
         config_digest = manifest.get("config", {}).get("digest")
         if config_digest is None:
             return None
-        token = await self._get_docker_token(image)
-        res = await self.client.get(
-            f"{self.scheme}://{image.hostname}/v2/{image.name}/blobs/{config_digest}",
-            headers={
-                "Accept": "application/json",
-                "Authorization": f"Bearer {token}",
-            },
-        )
+        res = await self.get_image_config_from_digest(image, config_digest)
         if res.status_code != 200:
             return None
         return cast(dict[str, Any], res.json())

@@ -28,6 +28,7 @@ from renku_data_services.errors import errors
 from renku_data_services.notebooks.api.classes.image import Image, ImageRepoDockerAPI
 from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.notebooks.oci.image_index import Platform
+from renku_data_services.notebooks.oci.utils import get_image_platforms
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +115,7 @@ class ImageCheckRepository:
         except httpx.HTTPError as e:
             logger.info(f"Error connecting {reg_api.scheme}://{reg_api.hostname}: {e}")
             status_code = 0
+            response = None
 
         if status_code != 200 and connection is not None:
             try:
@@ -122,13 +124,14 @@ class ImageCheckRepository:
                 logger.info(f"Error getting connected account: {e}")
                 unauth_error = e
 
-        if status_code == 200:
-            # Get platforms information
-            pass
+        platforms = None
+        if status_code == 200 and response is not None:
+            platforms = await get_image_platforms(manifest_response=response, image=image, reg_api=reg_api)
+        logger.info(f"Platforms: {platforms}")
 
         return CheckResult(
             accessible=status_code == 200,
-            platforms=None,
+            platforms=platforms,
             response_code=status_code,
             image_provider=image_provider,
             token=reg_api.oauth2_token,
