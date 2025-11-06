@@ -982,7 +982,6 @@ async def patch_session(
     project_session_secret_repo: ProjectSessionSecretRepository,
     rp_repo: ResourcePoolRepository,
     session_repo: SessionRepository,
-    # connected_svcs_repo: ConnectedServicesRepository,
     image_check_repo: ImageCheckRepository,
     metrics: MetricsService,
 ) -> AmaltheaSessionV1Alpha1:
