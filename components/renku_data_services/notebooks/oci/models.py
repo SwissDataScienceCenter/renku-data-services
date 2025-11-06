@@ -19,8 +19,8 @@ class ManifestMediaTypes(StrEnum):
 class Platform:
     """Represents a runtime platform."""
 
-    architecture: str
     os: str
+    architecture: str
     variant: str | None = None
     os_version: str | None = None
     os_features: list[str] | None = None
