@@ -7,7 +7,6 @@ import random
 import string
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import UTC, datetime
-from pathlib import PurePosixPath
 from typing import Concatenate, ParamSpec, TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -368,9 +367,9 @@ class ProjectRepository:
             project.template_id = None
         if patch.is_template is not None:
             project.is_template = patch.is_template
-        if patch.secrets_mount_directory is not None and patch.secrets_mount_directory is RESET:
+        if patch.secrets_mount_directory is RESET:
             project.secrets_mount_directory = constants.DEFAULT_SESSION_SECRETS_MOUNT_DIR
-        elif patch.secrets_mount_directory is not None and isinstance(patch.secrets_mount_directory, PurePosixPath):
+        elif patch.secrets_mount_directory is not None:
             project.secrets_mount_directory = patch.secrets_mount_directory
 
         await session.flush()
