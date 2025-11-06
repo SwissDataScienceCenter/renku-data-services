@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from typing import Concatenate, ParamSpec, TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
-from sqlalchemy import ColumnElement, Select, delete, func, or_, select, update
+from sqlalchemy import ColumnElement, Select, delete, distinct, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer
 from sqlalchemy.sql.functions import coalesce
@@ -23,6 +23,7 @@ from renku_data_services.authz.models import CheckPermissionItem, Member, Member
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models import RESET, ProjectPath, ProjectSlug
 from renku_data_services.base_models.core import Slug
+from renku_data_services.data_connectors import orm as dc_schemas
 from renku_data_services.namespace import orm as ns_schemas
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project import apispec as project_apispec
@@ -400,13 +401,23 @@ class ProjectRepository:
         if project is None:
             return None
 
+        dcs = await session.execute(
+            select(distinct(ns_schemas.EntitySlugORM.data_connector_id))
+            .where(ns_schemas.EntitySlugORM.project_id == project_id)
+            .where(ns_schemas.EntitySlugORM.data_connector_id.is_not(None))
+        )
+        dcs = [e for e in dcs.scalars().all() if e]
+
         await session.execute(delete(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
 
         await session.execute(
             delete(storage_schemas.CloudStorageORM).where(storage_schemas.CloudStorageORM.project_id == str(project_id))
         )
 
-        return models.DeletedProject(id=project.id)
+        if dcs != []:
+            await session.execute(delete(dc_schemas.DataConnectorORM).where(dc_schemas.DataConnectorORM.id.in_(dcs)))
+
+        return models.DeletedProject(id=project.id, data_connectors=dcs)
 
     async def get_project_permissions(self, user: base_models.APIUser, project_id: ULID) -> models.ProjectPermissions:
         """Get the permissions of the user on a given project."""
