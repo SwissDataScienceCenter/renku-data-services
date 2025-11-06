@@ -594,10 +594,9 @@ async def test_storage_validate_connection(storage_test_client) -> None:
     _, res = await storage_test_client.post("/api/data/storage_schema/test_connection", data=json.dumps(body))
     assert res.status_code == 422
 
-    # body = {"configuration": {"type": "s3", "provider": "AWS"}, "source_path": "giab/"}
-    # _, res = await storage_test_client.post("/api/data/storage_schema/test_connection", data=json.dumps(body))
-    # assert res.status_code == 204
-    ## TODO ^ this fails now
+    body = {"configuration": {"type": "s3", "provider": "AWS"}, "source_path": "giab/"}
+    _, res = await storage_test_client.post("/api/data/storage_schema/test_connection", data=json.dumps(body))
+    assert res.status_code == 204
 
 
 @pytest.mark.asyncio
