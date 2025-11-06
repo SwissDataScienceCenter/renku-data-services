@@ -1120,7 +1120,6 @@ async def patch_session(
         image=image,
         server_name=server_name,
         nb_config=nb_config,
-        # connected_svcs_repo=connected_svcs_repo,
         image_check_repo=image_check_repo,
         user=user,
         internal_gitlab_user=internal_gitlab_user,
