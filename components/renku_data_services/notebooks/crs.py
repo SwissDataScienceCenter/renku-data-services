@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, field_serializer, field_validator, model_
 from pydantic.types import HashableItemType
 from ulid import ULID
 
-from renku_data_services.base_models.core import ResetType
+from renku_data_services.base_models.core import RESET, ResetType
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
@@ -171,6 +171,8 @@ class CullingDurationParsingMixin(BaseCRD):
     def __serialize_duration_field(self, val: Any, nxt: Any, _info: Any) -> Any:
         if isinstance(val, timedelta):
             return format_duration(val)
+        if val is RESET:
+            return None
         return nxt(val)
 
     @field_validator("*", mode="wrap")

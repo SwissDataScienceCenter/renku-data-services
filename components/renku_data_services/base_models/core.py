@@ -7,8 +7,9 @@ import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, StrEnum, auto
-from typing import ClassVar, Never, Optional, Protocol, Self, TypeVar, overload
+from typing import Any, ClassVar, Never, Optional, Protocol, Self, TypeVar, overload
 
+from pydantic_core import core_schema
 from sanic import Request
 
 from renku_data_services.errors import errors
@@ -421,6 +422,18 @@ class ResetType(Enum):
 
     def __str__(self) -> str:
         return "RESET"
+
+    @classmethod
+    def __get_pydantic_core_schema__(cls, *args: Any, **kwargs: Any) -> core_schema.AfterValidatorFunctionSchema:
+        """This enables pydantic to serialize this as None/null."""
+        return core_schema.no_info_after_validator_function(
+            cls,
+            core_schema.int_schema(),
+            serialization=core_schema.plain_serializer_function_ser_schema(
+                lambda _: None,
+                when_used="always",
+            ),
+        )
 
 
 RESET = ResetType.Reset
