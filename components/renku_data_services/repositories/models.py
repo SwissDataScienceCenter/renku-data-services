@@ -109,7 +109,7 @@ class RepositoryMetadataError(StrEnum):
 
     metadata_unauthorized = "metadata_unauthorized"
     metadata_validation = "metadata_validation"
-    metadata_unknown = "metadata_unknown_error"
+    metadata_unknown = "metadata_unknown"
 
 
 type RepositoryError = GitUrlError | RepositoryMetadataError
