@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import random
 import string
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, AsyncIterable, Callable
 from contextlib import nullcontext
 from datetime import UTC, datetime
 from typing import Any, overload
 
-from sqlalchemy import Select, delete, func, select, text
+from sqlalchemy import Select, and_, delete, distinct, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 from sqlalchemy.orm import joinedload, selectinload
@@ -30,17 +30,66 @@ from renku_data_services.base_models.core import (
     ProjectPath,
     Slug,
 )
+from renku_data_services.data_connectors import orm as dc_schemas
 from renku_data_services.data_connectors.models import DataConnector
+from renku_data_services.data_connectors.orm import DataConnectorORM
 from renku_data_services.namespace import models
 from renku_data_services.namespace import orm as schemas
+from renku_data_services.project.models import Project
 from renku_data_services.project.orm import ProjectORM
-from renku_data_services.search.db import SearchUpdatesRepo
+from renku_data_services.search.db import GlobalDataConnector, SearchUpdatesRepo
 from renku_data_services.search.decorators import update_search_document
 from renku_data_services.users import models as user_models
 from renku_data_services.users import orm as user_schemas
 from renku_data_services.utils.core import with_db_transaction
 
 logger = logging.getLogger(__name__)
+
+
+async def _check_namespace_permissions(
+    user: base_models.APIUser, authz: Authz, ns: models.Namespace, scope: Scope
+) -> None:
+    """Helper function to check for namespace permissions."""
+    is_user_namespace = ns.kind == models.NamespaceKind.user
+    ns_id = ns.id if is_user_namespace else ns.underlying_resource_id
+    allowed = await authz.has_permission(user, ns.kind.to_resource_type(), ns_id, scope)
+    if not allowed:
+        raise errors.missing_or_unauthorized(ns.kind, ns.underlying_resource_id)
+
+
+async def _upsert_old_entity_slug(session: AsyncSession, old_entity_slug: schemas.EntitySlugORM) -> None:
+    """This function checks if an old entity slug exists and if so then it updates it.
+
+    If the old entity slug does not exists then it inserts one.
+    This is needed so that when a slug is renamed then the old slug still points to the new
+    and current entity.
+    """
+    stmt = select(schemas.EntitySlugOldORM).where(schemas.EntitySlugOldORM.slug == old_entity_slug.slug)
+    if old_entity_slug.project_id is not None:
+        stmt = stmt.where(schemas.EntitySlugOldORM.project_id == old_entity_slug.project_id)
+    else:
+        stmt = stmt.where(schemas.EntitySlugOldORM.project_id.is_(None))
+    if old_entity_slug.data_connector_id is not None:
+        stmt = stmt.where(schemas.EntitySlugOldORM.data_connector_id == old_entity_slug.data_connector_id)
+    else:
+        stmt = stmt.where(schemas.EntitySlugOldORM.data_connector_id.is_(None))
+    existing_old_slug = await session.scalar(stmt)
+
+    if not existing_old_slug:
+        session.add(
+            schemas.EntitySlugOldORM(
+                slug=old_entity_slug.slug,
+                latest_slug_id=old_entity_slug.id,
+                project_id=old_entity_slug.project_id,
+                data_connector_id=old_entity_slug.data_connector_id,
+            )
+        )
+        return
+
+    existing_old_slug.slug = old_entity_slug.slug
+    existing_old_slug.latest_slug_id = old_entity_slug.id
+    existing_old_slug.project_id = old_entity_slug.project_id
+    existing_old_slug.data_connector_id = old_entity_slug.data_connector_id
 
 
 class GroupRepository:
@@ -263,13 +312,33 @@ class GroupRepository:
                 message=f"You cannot delete a group by using an old group slug {slug.value}.",
                 detail=f"The latest slug is {group.namespace.slug}, please use this for deletions.",
             )
-        # NOTE: We have a stored procedure that gets triggered when a project slug is removed to remove the project.
-        # This is required because the slug has a foreign key pointing to the project, so when a project is removed
-        # the slug is removed but the converse is not true. The stored procedure in migration 89aa4573cfa9 has the
-        # trigger and procedure that does the cleanup when a slug is removed.
+
+        dcs = await session.execute(
+            select(distinct(schemas.EntitySlugORM.data_connector_id))
+            .join(schemas.NamespaceORM, schemas.NamespaceORM.id == schemas.EntitySlugORM.namespace_id)
+            .where(schemas.NamespaceORM.group_id == group.id)
+            .where(schemas.EntitySlugORM.data_connector_id.is_not(None))
+        )
+        dcs = [e for e in dcs.scalars().all() if e]
+
+        projs = await session.execute(
+            select(distinct(schemas.EntitySlugORM.project_id))
+            .join(schemas.NamespaceORM, schemas.NamespaceORM.id == schemas.EntitySlugORM.namespace_id)
+            .where(schemas.NamespaceORM.group_id == group.id)
+            .where(schemas.EntitySlugORM.project_id.is_not(None))
+        )
+        projs = [e for e in projs.scalars().all() if e]
+
         stmt = delete(schemas.GroupORM).where(schemas.GroupORM.id == group.id)
         await session.execute(stmt)
-        return models.DeletedGroup(id=group.id)
+
+        if projs != []:
+            await session.execute(delete(ProjectORM).where(ProjectORM.id.in_(projs)))
+
+        if dcs != []:
+            await session.execute(delete(dc_schemas.DataConnectorORM).where(dc_schemas.DataConnectorORM.id.in_(dcs)))
+
+        return models.DeletedGroup(id=group.id, data_connectors=dcs, projects=projs)
 
     @with_db_transaction
     async def delete_group_member(
@@ -521,16 +590,6 @@ class GroupRepository:
     ) -> None:
         """Rename or move a namespace."""
 
-        async def _check_ns_permissions(
-            user: base_models.APIUser, authz: Authz, ns: models.Namespace, scope: Scope
-        ) -> None:
-            """Helper function to check for namespace permissions."""
-            is_user_namespace = ns.kind == models.NamespaceKind.user
-            ns_id = ns.id if is_user_namespace else ns.underlying_resource_id
-            allowed = await authz.has_permission(user, ns.kind.to_resource_type(), ns_id, scope)
-            if not allowed:
-                raise errors.missing_or_unauthorized(ns.kind, ns.underlying_resource_id)
-
         async def _get_dc_slug(session: AsyncSession, dc_id: ULID) -> schemas.EntitySlugORM:
             """Helper function to get the data connector slug or raise an exception."""
             dc_slug = await session.scalar(
@@ -562,40 +621,6 @@ class GroupRepository:
                     message=f"The owner already has a data connector with slug {new_slug}, please try a different one"
                 )
 
-        async def _upsert_old_dc_slug(session: AsyncSession, old_dc_slug: schemas.EntitySlugORM) -> None:
-            """This function checks if an old entity slug exists and if so then it updates it.
-
-            If the old entity slug does not exists then it inserts one.
-            This is needed so that when a slug is renamed then the old slug still points to the new
-            and current entity.
-            """
-            stmt = select(schemas.EntitySlugOldORM).where(schemas.EntitySlugOldORM.slug == old_dc_slug.slug)
-            if old_dc_slug.project_id is not None:
-                stmt.where(schemas.EntitySlugOldORM.project_id == old_dc_slug.project_id)
-            else:
-                stmt.where(schemas.EntitySlugOldORM.project_id.is_(None))
-            if old_dc_slug.data_connector_id is not None:
-                stmt.where(schemas.EntitySlugOldORM.data_connector_id == old_dc_slug.data_connector_id)
-            else:
-                stmt.where(schemas.EntitySlugOldORM.data_connector_id.is_(None))
-            existing_old_slug = await session.scalar(stmt)
-
-            if not existing_old_slug:
-                session.add(
-                    schemas.EntitySlugOldORM(
-                        slug=old_dc_slug.slug,
-                        latest_slug_id=old_dc_slug.id,
-                        project_id=old_dc_slug.project_id,
-                        data_connector_id=old_dc_slug.data_connector_id,
-                    )
-                )
-                return
-
-            existing_old_slug.slug = old_dc_slug.slug
-            existing_old_slug.latest_slug_id = old_dc_slug.id
-            existing_old_slug.project_id = old_dc_slug.project_id
-            existing_old_slug.data_connector_id = old_dc_slug.data_connector_id
-
         session_ctx: AsyncSession | nullcontext = nullcontext()
         transaction: AsyncSessionTransaction | nullcontext = nullcontext()
         if session is None:
@@ -615,7 +640,7 @@ class GroupRepository:
                     pass
                 case (new_path, old_path, old_slug, new_slug) if new_path == old_path and old_slug != new_slug:
                     await _check_dc_slug_not_taken(session, dc.namespace, new_slug)
-                    await _upsert_old_dc_slug(session, dc_slug)
+                    await _upsert_old_entity_slug(session, dc_slug)
                     dc_slug.slug = new_slug.value
                 case (NamespacePath(), NamespacePath() as new_path, old_slug, new_slug):
                     new_usr_grp_ns = await self.get_namespace_by_path(user, new_path, session)
@@ -624,10 +649,10 @@ class GroupRepository:
                             message=f"The data connector namespace {new.parent()} cannot be found or "
                             "you do not have sufficient permissions to access it."
                         )
-                    await _check_ns_permissions(user, self.authz, dc.namespace, Scope.WRITE)
-                    await _check_ns_permissions(user, self.authz, new_usr_grp_ns, Scope.WRITE)
+                    await _check_namespace_permissions(user, self.authz, dc.namespace, Scope.WRITE)
+                    await _check_namespace_permissions(user, self.authz, new_usr_grp_ns, Scope.WRITE)
                     await _check_dc_slug_not_taken(session, new_usr_grp_ns, new_slug)
-                    await _upsert_old_dc_slug(session, dc_slug)
+                    await _upsert_old_entity_slug(session, dc_slug)
                     dc_slug.namespace_id = new_usr_grp_ns.id
                     if old_slug != new_slug:
                         dc_slug.slug = new_slug.value
@@ -638,10 +663,10 @@ class GroupRepository:
                             message=f"The data connector namespace {new_path} cannot be found or "
                             "you do not have sufficient permissions to access it."
                         )
-                    await _check_ns_permissions(user, self.authz, dc.namespace, Scope.WRITE)
-                    await _check_ns_permissions(user, self.authz, new_proj_ns, Scope.WRITE)
+                    await _check_namespace_permissions(user, self.authz, dc.namespace, Scope.WRITE)
+                    await _check_namespace_permissions(user, self.authz, new_proj_ns, Scope.WRITE)
                     await _check_dc_slug_not_taken(session, new_proj_ns, new_slug)
-                    await _upsert_old_dc_slug(session, dc_slug)
+                    await _upsert_old_entity_slug(session, dc_slug)
                     dc_slug.project_id = new_proj_ns.underlying_resource_id
                     dc_slug.namespace_id = new_proj_ns.id
                     if old_slug != new_slug:
@@ -653,10 +678,10 @@ class GroupRepository:
                             message=f"The data connector namespace {new_path} cannot be found or "
                             "you do not have sufficient permissions to access it."
                         )
-                    await _check_ns_permissions(user, self.authz, dc.namespace, Scope.WRITE)
-                    await _check_ns_permissions(user, self.authz, new_usr_grp_ns, Scope.WRITE)
+                    await _check_namespace_permissions(user, self.authz, dc.namespace, Scope.WRITE)
+                    await _check_namespace_permissions(user, self.authz, new_usr_grp_ns, Scope.WRITE)
                     await _check_dc_slug_not_taken(session, new_usr_grp_ns, new_slug)
-                    await _upsert_old_dc_slug(session, dc_slug)
+                    await _upsert_old_entity_slug(session, dc_slug)
                     dc_slug.project_id = None
                     dc_slug.namespace_id = new_usr_grp_ns.id
                     if old_slug != new_slug:
@@ -668,10 +693,10 @@ class GroupRepository:
                             message=f"The data connector namespace {new_path} cannot be found or "
                             "you do not have sufficient permissions to access it."
                         )
-                    await _check_ns_permissions(user, self.authz, dc.namespace, Scope.WRITE)
-                    await _check_ns_permissions(user, self.authz, new_proj_ns, Scope.WRITE)
+                    await _check_namespace_permissions(user, self.authz, dc.namespace, Scope.WRITE)
+                    await _check_namespace_permissions(user, self.authz, new_proj_ns, Scope.WRITE)
                     await _check_dc_slug_not_taken(session, new_proj_ns, new_slug)
-                    await _upsert_old_dc_slug(session, dc_slug)
+                    await _upsert_old_entity_slug(session, dc_slug)
                     dc_slug.project_id = new_proj_ns.underlying_resource_id
                     dc_slug.namespace_id = new_proj_ns.id
                     if old_slug != new_slug:
@@ -680,6 +705,101 @@ class GroupRepository:
                     raise errors.ProgrammingError(
                         message=f"Received unexpected old ({dc.path}) and new ({new}) "
                         "path combination when changing data connector ownership."
+                    )
+
+    async def move_project(
+        self,
+        user: base_models.APIUser,
+        project: Project,
+        new: ProjectPath,
+        session: AsyncSession | None = None,
+    ) -> None:
+        """Rename or move a project."""
+
+        async def _get_project_slug(session: AsyncSession, project_id: ULID) -> schemas.EntitySlugORM:
+            """Helper function to get the project slug or raise an exception."""
+            project_slug = await session.scalar(
+                select(schemas.EntitySlugORM)
+                .where(schemas.EntitySlugORM.project_id == project_id)
+                .where(schemas.EntitySlugORM.data_connector_id.is_(None))
+            )
+            if not project_slug:
+                raise errors.missing_or_unauthorized(ResourceType.project, project_id)
+            return project_slug
+
+        async def _get_dcs_in_project(session: AsyncSession, project_id: ULID) -> AsyncIterable[DataConnectorORM]:
+            stmt = select(DataConnectorORM).where(
+                DataConnectorORM.slug.has(
+                    and_(
+                        schemas.EntitySlugORM.project_id == project_id,
+                        schemas.EntitySlugORM.data_connector_id.is_not(None),
+                    )
+                )
+            )
+            stream = await session.stream_scalars(stmt)
+            async for dc in stream:
+                yield dc
+
+        async def _check_proj_slug_not_taken(
+            session: AsyncSession, new_namespace: models.GroupNamespace | models.UserNamespace, new_slug: Slug
+        ) -> None:
+            """Helper function to make sure a new project slug is available."""
+            stmt = (
+                select(sa_count("*"))
+                .select_from(schemas.EntitySlugORM)
+                .where(schemas.EntitySlugORM.namespace_id == new_namespace.id)
+                .where(schemas.EntitySlugORM.data_connector_id.is_(None))
+                .where(schemas.EntitySlugORM.project_id.is_not(None))
+                .where(schemas.EntitySlugORM.slug == new_slug.value)
+            )
+
+            cnt = await session.scalar(stmt)
+            if cnt is not None and cnt > 0:
+                raise errors.ValidationError(
+                    message=f"The owner already has a project with slug {new_slug}, please try a different one"
+                )
+
+        session_ctx: AsyncSession | nullcontext = nullcontext()
+        transaction: AsyncSessionTransaction | nullcontext = nullcontext()
+        if session is None:
+            session = self.session_maker()
+            session_ctx = session
+            transaction = session.begin()
+
+        required_scope = Scope.DELETE
+        allowed = await self.authz.has_permission(user, ResourceType.project, project.id, required_scope)
+        if not allowed:
+            raise errors.missing_or_unauthorized(ResourceType.project, project.id)
+
+        async with session_ctx, transaction:
+            proj_slug = await _get_project_slug(session, project.id)
+            project_ns_changed = project.path.parent() != new.parent()
+            project_slug_changed = project.path.last() != new.last()
+            if project_ns_changed:
+                new_ns = await self.get_namespace_by_path(user, new.parent(), session)
+                if not new_ns:
+                    raise errors.missing_or_unauthorized("namespace", new.serialize())
+                await _check_namespace_permissions(user, self.authz, project.namespace, Scope.WRITE)
+                await _check_namespace_permissions(user, self.authz, new_ns, Scope.WRITE)
+                await _check_proj_slug_not_taken(session, new_ns, project.path.second)
+                await _upsert_old_entity_slug(session, proj_slug)
+                proj_slug.namespace_id = new_ns.id
+                await session.flush()
+                await session.refresh(proj_slug)
+            if project_slug_changed:
+                await _check_proj_slug_not_taken(session, project.namespace, new.last())
+                await _upsert_old_entity_slug(session, proj_slug)
+                proj_slug.slug = new.last().value
+                await session.flush()
+                await session.refresh(proj_slug)
+            if project_ns_changed or project_slug_changed:
+                # move all data connectors from the project in the new namespace too
+                async for dc in _get_dcs_in_project(session, project.id):
+                    dc_model = dc.dump()
+                    if isinstance(dc_model, GlobalDataConnector):
+                        continue
+                    await self.move_data_connector(
+                        user, dc_model, new / base_models.DataConnectorSlug(dc_model.slug), session
                     )
 
     async def get_user_namespace(self, user_id: str) -> models.Namespace | None:

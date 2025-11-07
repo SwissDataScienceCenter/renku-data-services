@@ -52,9 +52,10 @@ class ProjectsBP(CustomBlueprint):
     project_member_repo: ProjectMemberRepository
     user_repo: UserRepo
     authenticator: base_models.Authenticator
-    session_repo: SessionRepository
     data_connector_repo: DataConnectorRepository
     project_migration_repo: ProjectMigrationRepository
+    session_repo: SessionRepository
+    session_secret_repo: ProjectSessionSecretRepository
     metrics: MetricsService
 
     def get_all(self) -> BlueprintFactoryResponse:
@@ -182,6 +183,7 @@ class ProjectsBP(CustomBlueprint):
                 project_repo=self.project_repo,
                 session_repo=self.session_repo,
                 data_connector_repo=self.data_connector_repo,
+                session_secret_repo=self.session_secret_repo,
             )
             await self.metrics.project_created(
                 user, metadata={"project_creation_kind": ProjectCreationType.copied.value}

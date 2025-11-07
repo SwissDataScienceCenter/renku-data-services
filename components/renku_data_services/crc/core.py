@@ -260,7 +260,7 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
     quota: models.Quota | models.UnsavedQuota | ResetType = existing.quota if existing.quota else RESET
     if update.quota is RESET:
         quota = RESET
-    elif isinstance(update.quota, models.QuotaPatch) and existing.quota is None:
+    elif update.quota is not None and existing.quota is None:
         # The quota patch needs to contain all required fields
         cpu = update.quota.cpu
         if cpu is None:
@@ -294,7 +294,7 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
     remote: models.RemoteConfigurationFirecrest | ResetType = existing.remote if existing.remote else RESET
     if update.remote is RESET:
         remote = RESET
-    elif isinstance(update.remote, models.RemoteConfigurationFirecrestPatch) and existing.remote is None:
+    elif update.remote is not None and existing.remote is None:
         # The remote patch needs to contain all required fields
         kind = update.remote.kind
         if kind is None:

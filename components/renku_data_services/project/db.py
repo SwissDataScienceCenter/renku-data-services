@@ -7,11 +7,10 @@ import random
 import string
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import UTC, datetime
-from pathlib import PurePosixPath
 from typing import Concatenate, ParamSpec, TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
-from sqlalchemy import ColumnElement, Select, delete, func, or_, select, update
+from sqlalchemy import ColumnElement, Select, delete, distinct, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer
 from sqlalchemy.sql.functions import coalesce
@@ -22,8 +21,9 @@ from renku_data_services import errors
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.authz.models import CheckPermissionItem, Member, MembershipChange, Scope, Visibility
 from renku_data_services.base_api.pagination import PaginationRequest
-from renku_data_services.base_models import RESET
+from renku_data_services.base_models import RESET, ProjectPath, ProjectSlug
 from renku_data_services.base_models.core import Slug
+from renku_data_services.data_connectors import orm as dc_schemas
 from renku_data_services.namespace import orm as ns_schemas
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project import apispec as project_apispec
@@ -332,42 +332,16 @@ class ProjectRepository:
 
         if patch.name is not None:
             project.name = patch.name
+        new_path: ProjectPath | None = None
         if patch.namespace is not None and patch.namespace != old_project.namespace.path.first.value:
-            ns = await session.scalar(
-                select(ns_schemas.NamespaceORM).where(ns_schemas.NamespaceORM.slug == patch.namespace.lower())
-            )
-            if not ns:
-                raise errors.MissingResourceError(message=f"The namespace with slug {patch.namespace} does not exist")
-            if not ns.group_id and not ns.user_id:
-                raise errors.ProgrammingError(message="Found a namespace that has no group or user associated with it.")
-            resource_type, resource_id = (
-                (ResourceType.group, ns.group_id) if ns.group and ns.group_id else (ResourceType.user_namespace, ns.id)
-            )
-            has_permission = await self.authz.has_permission(user, resource_type, resource_id, Scope.WRITE)
-            if not has_permission:
-                raise errors.ForbiddenError(
-                    message=f"The project cannot be moved because you do not have sufficient permissions with the namespace {patch.namespace}"  # noqa: E501
-                )
-            project.slug.namespace_id = ns.id
-            # Trigger update for ``updated_at`` column
-            await session.execute(update(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id).values())
+            new_path = ProjectPath.from_strings(patch.namespace, old_project.slug)
         if patch.slug is not None and patch.slug != old_project.slug:
-            namespace_id = project.slug.namespace_id
-            existing_entity = await session.scalar(
-                select(ns_schemas.EntitySlugORM)
-                .where(ns_schemas.EntitySlugORM.slug == patch.slug)
-                .where(ns_schemas.EntitySlugORM.namespace_id == namespace_id)
-            )
-            if existing_entity is not None:
-                raise errors.ConflictError(
-                    message=f"An entity with the slug '{project.slug.namespace.slug}/{patch.slug}' already exists."
-                )
-            session.add(
-                ns_schemas.EntitySlugOldORM(
-                    slug=old_project.slug, latest_slug_id=project.slug.id, project_id=project.id, data_connector_id=None
-                )
-            )
-            project.slug.slug = patch.slug
+            if new_path:
+                new_path = new_path.parent() / ProjectSlug(patch.slug)
+            else:
+                new_path = old_project.path.parent() / ProjectSlug(patch.slug)
+        if new_path:
+            await self.group_repo.move_project(user, old_project, new_path, session)
             # Trigger update for ``updated_at`` column
             await session.execute(update(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id).values())
         if patch.visibility is not None:
@@ -393,9 +367,9 @@ class ProjectRepository:
             project.template_id = None
         if patch.is_template is not None:
             project.is_template = patch.is_template
-        if patch.secrets_mount_directory is not None and patch.secrets_mount_directory is RESET:
+        if patch.secrets_mount_directory is RESET:
             project.secrets_mount_directory = constants.DEFAULT_SESSION_SECRETS_MOUNT_DIR
-        elif patch.secrets_mount_directory is not None and isinstance(patch.secrets_mount_directory, PurePosixPath):
+        elif patch.secrets_mount_directory is not None:
             project.secrets_mount_directory = patch.secrets_mount_directory
 
         await session.flush()
@@ -427,13 +401,23 @@ class ProjectRepository:
         if project is None:
             return None
 
+        dcs = await session.execute(
+            select(distinct(ns_schemas.EntitySlugORM.data_connector_id))
+            .where(ns_schemas.EntitySlugORM.project_id == project_id)
+            .where(ns_schemas.EntitySlugORM.data_connector_id.is_not(None))
+        )
+        dcs = [e for e in dcs.scalars().all() if e]
+
         await session.execute(delete(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
 
         await session.execute(
             delete(storage_schemas.CloudStorageORM).where(storage_schemas.CloudStorageORM.project_id == str(project_id))
         )
 
-        return models.DeletedProject(id=project.id)
+        if dcs != []:
+            await session.execute(delete(dc_schemas.DataConnectorORM).where(dc_schemas.DataConnectorORM.id.in_(dcs)))
+
+        return models.DeletedProject(id=project.id, data_connectors=dcs)
 
     async def get_project_permissions(self, user: base_models.APIUser, project_id: ULID) -> models.ProjectPermissions:
         """Get the permissions of the user on a given project."""
@@ -659,6 +643,41 @@ class ProjectSessionSecretRepository:
                 name=secret_slot.name or secret_slot.filename,
                 description=secret_slot.description if secret_slot.description else None,
                 filename=secret_slot.filename,
+                created_by_id=user.id,
+            )
+
+            session.add(secret_slot_orm)
+            await session.flush()
+            await session.refresh(secret_slot_orm)
+
+            return secret_slot_orm.dump()
+
+    async def copy_session_secret_slot(
+        self, user: base_models.APIUser, project_id: ULID, session_secret_slot: models.SessionSecretSlot
+    ) -> models.SessionSecretSlot:
+        """Create a copy of the session secret slot in the target project."""
+        if not user.is_authenticated or user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        authorized = await self.authz.has_permission(user, ResourceType.project, project_id, Scope.WRITE)
+        if not authorized:
+            raise errors.MissingResourceError(
+                message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+            )
+
+        async with self.session_maker() as session, session.begin():
+            res = await session.scalars(select(schemas.ProjectORM).where(schemas.ProjectORM.id == project_id))
+            project = res.one_or_none()
+            if project is None:
+                raise errors.MissingResourceError(
+                    message=f"Project with id '{project_id}' does not exist or you do not have access to it."
+                )
+
+            secret_slot_orm = schemas.SessionSecretSlotORM(
+                project_id=project_id,
+                name=session_secret_slot.name or session_secret_slot.filename,
+                description=session_secret_slot.description if session_secret_slot.description else None,
+                filename=session_secret_slot.filename,
                 created_by_id=user.id,
             )
 
