@@ -6,7 +6,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum, StrEnum
+from enum import Enum, StrEnum, auto
 from typing import Annotated, ClassVar, Never, NewType, Optional, Protocol, Self, TypeVar, overload
 
 from pydantic import PlainSerializer
@@ -401,15 +401,31 @@ class Authenticator(Protocol[AnyAPIUser]):
         ...
 
 
-__ResetType = NewType("__ResetType", object)
-ResetType = Annotated[__ResetType, PlainSerializer(lambda _: None, return_type=None)]
-"""This type represents that a value that may be None should be reset back to None or null.
-This type should have only one instance, defined in the same file as this type.
-The value will be serialized by pydantic as None.
-"""
+class ResetType(Enum):
+    """This type represents that a value that may be None should be reset back to None.
 
-RESET: ResetType = ResetType(object())
-"""The single instance of the ResetType, can be compared to similar to None, i.e. `if value is RESET`"""
+    This type has a single instance, 'RESET', defined in the same file as this type.
+
+    Discussion about implementation: There is a in-progress PEP which once accepted would
+    make it simpler to define 'ResetType' and 'RESET'. Until that change is adopted,
+    using an enum with a single value comes with clear type-checking advantages.
+
+    See:
+    * PEP 661 - Sentinel Values: https://peps.python.org/pep-0661/
+    * Discussion about PEP 661: https://discuss.python.org/t/pep-661-sentinel-values/9126
+    """
+
+    Reset = auto()
+
+    def __repr__(self) -> str:
+        return "RESET"
+
+    def __str__(self) -> str:
+        return "RESET"
+
+
+RESET = ResetType.Reset
+"""The single instance of the ResetType, can be compared to similar to None, i.e. `if value is RESET`."""
 
 
 class ResourceType(StrEnum):
