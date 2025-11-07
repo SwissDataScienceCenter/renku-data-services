@@ -16,6 +16,7 @@ class Alert:
     title: str
     message: str
     creation_date: datetime
+    resolved_at: datetime | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -26,3 +27,10 @@ class UnsavedAlert:
     session_name: str | None = None
     title: str
     message: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class AlertPatch:
+    """A patch for an existing alert."""
+
+    resolved: bool | None = None

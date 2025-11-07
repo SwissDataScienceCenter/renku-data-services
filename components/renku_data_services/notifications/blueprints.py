@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from sanic import Request
 from sanic.response import JSONResponse
 from sanic_ext import validate
+from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services.base_api.auth import (
@@ -14,7 +15,7 @@ from renku_data_services.base_api.auth import (
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.notifications import apispec
-from renku_data_services.notifications.core import validate_unsaved_alert
+from renku_data_services.notifications.core import validate_alert_patch, validate_unsaved_alert
 from renku_data_services.notifications.db import NotificationsRepository
 
 
@@ -50,3 +51,18 @@ class NotificationsBP(CustomBlueprint):
             return validated_json(apispec.AlertList, alerts)
 
         return "/alerts", ["GET"], _get_all
+
+    def patch(self) -> BlueprintFactoryResponse:
+        """Partially update a specific alert."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate(json=apispec.AlertPatch)
+        async def _patch(
+            _: Request, user: base_models.APIUser, alert_id: ULID, body: apispec.AlertPatch
+        ) -> JSONResponse:
+            alert_patch = validate_alert_patch(body)
+            alert = await self.notifications_repo.update_alert(user=user, alert_id=alert_id, patch=alert_patch)
+            return validated_json(apispec.Alert, alert, 200)
+
+        return "/alerts/<alert_id:ulid>", ["PATCH"], _patch

@@ -44,6 +44,11 @@ class AlertORM(BaseORM):
     )
     """Creation date and time."""
 
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(
+        "resolved_at", DateTime(timezone=True), default=None, nullable=True
+    )
+    """Date and time when the alert was resolved, if applicable."""
+
     def dump(self) -> models.Alert:
         """Create an alert model from the AlertORM."""
         return models.Alert(
@@ -53,4 +58,5 @@ class AlertORM(BaseORM):
             user_id=self.user_id,
             session_name=self.session_name,
             creation_date=self.creation_date,
+            resolved_at=self.resolved_at,
         )

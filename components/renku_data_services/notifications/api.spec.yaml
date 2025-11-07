@@ -43,8 +43,50 @@ paths:
                 $ref: "#/components/schemas/AlertList"
       tags:
         - alerts
+  /alerts/{alert_id}:
+    patch:
+      summary: Resolve an alert. Requires admin permissions.
+      description: Mark an alert as resolved. The alert remains in the database but is no longer active.
+      parameters:
+        - in: path
+          name: alert_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/Ulid"
+          description: The ID of the alert to resolve.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AlertPatch"
+      responses:
+        "200":
+          description: Alert successfully updated
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Alert"
+        "404":
+          description: Alert not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - alerts
 components:
   schemas:
+    AlertPatch:
+      description: Data to update an alert.
+      type: object
+      additionalProperties: false
+      properties:
+        resolved:
+          type: boolean
+          description: Set to true to mark the alert as resolved. The resolved_at timestamp will be set automatically.
     Ulid:
       description: ULID identifier
       type: string
@@ -69,6 +111,11 @@ components:
           type: string
           format: date-time
           description: The date and time when the alert was created.
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: The date and time when the alert was resolved, or null if it is still active.
       required:
         - id
         - title
@@ -107,3 +154,33 @@ components:
       description: A list of alerts.
       items:
         $ref: "#/components/schemas/Alert"
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: integer
+              minimum: 0
+              exclusiveMinimum: true
+              example: 1404
+            detail:
+              type: string
+              example: A more detailed optional message showing what the problem was
+            message:
+              type: string
+              example: Something went wrong - please try again later
+          required:
+            - code
+            - message
+      required:
+        - error
+
+  responses:
+    Error:
+      description: The schema for all 4xx and 5xx responses
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
