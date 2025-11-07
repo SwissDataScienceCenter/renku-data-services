@@ -10,7 +10,7 @@ from renku_data_services.authz.models import Visibility
 from renku_data_services.base_models import RESET, APIUser, ResetType, Slug
 from renku_data_services.data_connectors.db import DataConnectorRepository
 from renku_data_services.project import apispec, models
-from renku_data_services.project.db import ProjectRepository
+from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
 from renku_data_services.session.db import SessionRepository
 
 
@@ -75,6 +75,7 @@ async def copy_project(
     project_repo: ProjectRepository,
     session_repo: SessionRepository,
     data_connector_repo: DataConnectorRepository,
+    session_secret_repo: ProjectSessionSecretRepository,
 ) -> models.Project:
     """Create a copy of a given project."""
     template = await project_repo.get_project(user=user, project_id=source_project_id, with_documentation=True)
@@ -94,6 +95,15 @@ async def copy_project(
         documentation=template.documentation,
     )
     project = await project_repo.insert_project(user, unsaved_project)
+
+    # NOTE: Copy session secret slots
+    secret_slots = await session_secret_repo.get_all_session_secret_slots_from_project(
+        user=user, project_id=source_project_id
+    )
+    for secret_slot in secret_slots:
+        await session_secret_repo.copy_session_secret_slot(
+            user=user, project_id=project.id, session_secret_slot=secret_slot
+        )
 
     # NOTE: Copy session launchers
     launchers = await session_repo.get_project_launchers(user=user, project_id=source_project_id)
