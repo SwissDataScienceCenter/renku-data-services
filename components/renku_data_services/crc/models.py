@@ -335,8 +335,8 @@ class ResourcePoolPatch:
     name: str | None = None
     classes: list[ResourceClassPatchWithId] | None = None
     quota: QuotaPatch | ResetType | None = None
-    idle_threshold: int | None = None
-    hibernation_threshold: int | None = None
+    idle_threshold: int | None | ResetType = None
+    hibernation_threshold: int | None | ResetType = None
     default: bool | None = None
     public: bool | None = None
     remote: RemoteConfigurationPatch | None = None
