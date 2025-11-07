@@ -108,6 +108,7 @@ class RepositoryMetadataError(StrEnum):
     """Possible errors when retrieving repository metadata."""
 
     metadata_unauthorized = "metadata_unauthorized"
+    metadata_validation = "metadata_validation"
     metadata_unknown = "metadata_unknown_error"
 
 
@@ -123,7 +124,9 @@ class RepositoryDataResult:
     error: RepositoryError | None = None
     metadata: Metadata | Literal["Unmodified"] | None = None
 
-    def with_metadata(self, rm: RepositoryMetadata | Literal["304"] | RepositoryError) -> RepositoryDataResult:
+    def with_metadata(
+        self, rm: Metadata | RepositoryMetadata | Literal["304"] | RepositoryError
+    ) -> RepositoryDataResult:
         """Return a new result with metadatat set."""
         match rm:
             case "304":
@@ -132,6 +135,8 @@ class RepositoryDataResult:
                 return self.with_error(err)
             case RepositoryMetadataError() as err:
                 return self.with_error(err)
+            case Metadata() as md:
+                return dataclasses.replace(self, metadata=md)
             case RepositoryMetadata() as md:
                 return dataclasses.replace(self, metadata=Metadata.fromRepoMeta(md))
 
