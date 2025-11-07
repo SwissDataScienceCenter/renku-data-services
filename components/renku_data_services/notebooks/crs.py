@@ -18,8 +18,8 @@ from renku_data_services.base_models.core import ResetType
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
+from renku_data_services.notebooks.cr_amalthea_session import Affinity as _Affinity
 from renku_data_services.notebooks.cr_amalthea_session import (
-    Affinity,
     Authentication,
     CodeRepository,
     DataSource,
@@ -517,3 +517,33 @@ def safe_parse_duration(val: Any) -> timedelta:
             case "ms":
                 return timedelta(microseconds=float(num))
     return cast(timedelta, parse_duration(val))
+
+
+class Affinity(_Affinity):
+    """Model for the affinity of an Amalthea session."""
+
+    @property
+    def is_empty(self) -> bool:
+        """Indicates whether there is anything set at all in any of the affinity fields, or they are just all empty."""
+        node_affinity_is_empty = not (
+            self.nodeAffinity
+            and (
+                self.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution
+                or self.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution
+            )
+        )
+        pod_affinity_is_empty = not (
+            self.podAffinity
+            and (
+                self.podAffinity.preferredDuringSchedulingIgnoredDuringExecution
+                or self.podAffinity.requiredDuringSchedulingIgnoredDuringExecution
+            )
+        )
+        pod_antiaffinity_is_empty = not (
+            self.podAntiAffinity
+            and (
+                self.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution
+                or self.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution
+            )
+        )
+        return node_affinity_is_empty and pod_affinity_is_empty and pod_antiaffinity_is_empty

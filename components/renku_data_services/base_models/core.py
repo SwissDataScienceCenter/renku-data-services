@@ -7,9 +7,8 @@ import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, StrEnum, auto
-from typing import Annotated, ClassVar, Never, NewType, Optional, Protocol, Self, TypeVar, overload
+from typing import ClassVar, Never, Optional, Protocol, Self, TypeVar, overload
 
-from pydantic import PlainSerializer
 from sanic import Request
 
 from renku_data_services.errors import errors
