@@ -16,8 +16,8 @@ logger = logging.getLogger(__file__)
 class GitUrlError(StrEnum):
     """Possible errors for testing an url string."""
 
-    no_url_scheme = "no_scheme"
-    no_url_host = "no_host"
+    no_url_scheme = "no_url_scheme"
+    no_url_host = "no_url_host"
     no_git_repo = "no_git_repo"
     no_url_path = "no_url_path"
     invalid_url_scheme = "invalid_url_scheme"

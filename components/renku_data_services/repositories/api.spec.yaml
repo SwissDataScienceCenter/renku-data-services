@@ -101,6 +101,7 @@ components:
             - invalid_url_scheme
             - metadata_unauthorized
             - metadata_unknown
+            - metadata_validation
       required:
         - status
     ProviderConnection:
