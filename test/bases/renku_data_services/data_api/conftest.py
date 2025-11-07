@@ -649,6 +649,24 @@ def link_data_connector(sanic_client: SanicASGITestClient):
 
 
 @pytest_asyncio.fixture
+async def create_session_secret_slot(sanic_client: SanicASGITestClient, user_headers: dict[str, str]):
+    async def create_session_secret_slot_helper(
+        filename: str, project_id: str, **payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        payload = payload.copy()
+        payload.update({"filename": filename, "project_id": project_id})
+        payload["description"] = payload.get("description") or "A secret slot."
+
+        _, res = await sanic_client.post("/api/data/session_secret_slots", headers=user_headers, json=payload)
+
+        assert res.status_code == 201, res.text
+        assert res.json is not None
+        return res.json
+
+    return create_session_secret_slot_helper
+
+
+@pytest_asyncio.fixture
 async def create_resource_pool(sanic_client, user_headers, admin_headers, valid_resource_pool_payload):
     async def create_resource_pool_helper(admin: bool = False, **payload) -> dict[str, Any]:
         headers = admin_headers if admin else user_headers
