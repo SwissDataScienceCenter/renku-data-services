@@ -13,7 +13,7 @@ from renku_data_services.utils.sqlalchemy import ULIDType
 
 # revision identifiers, used by Alembic.
 revision = "5ec28ea89e0a"
-down_revision = "ea52d750e389"
+down_revision = "d437be68a4fb"
 branch_labels = None
 depends_on = None
 
