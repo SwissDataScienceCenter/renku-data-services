@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
 from typing import Any, cast, override
 from urllib.parse import urlunparse
@@ -14,11 +14,12 @@ from pydantic import BaseModel, Field, field_serializer, field_validator, model_
 from pydantic.types import HashableItemType
 from ulid import ULID
 
+from renku_data_services.base_models.core import RESET, ResetType
 from renku_data_services.errors import errors
 from renku_data_services.notebooks import apispec
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
+from renku_data_services.notebooks.cr_amalthea_session import Affinity as _Affinity
 from renku_data_services.notebooks.cr_amalthea_session import (
-    Affinity,
     Authentication,
     CodeRepository,
     DataSource,
@@ -33,11 +34,14 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     MatchExpression,
     NodeAffinity,
     NodeSelectorTerm,
+    PodAffinity,
+    PodAntiAffinity,
     Preference,
     PreferredDuringSchedulingIgnoredDuringExecutionItem,
     ReconcileStrategy,
     RemoteSecretRef,
     RequiredDuringSchedulingIgnoredDuringExecution,
+    RequiredDuringSchedulingIgnoredDuringExecutionItem,
     Size,
     State,
     Status,
@@ -54,8 +58,17 @@ from renku_data_services.notebooks.cr_amalthea_session import Limits6 as _Limits
 from renku_data_services.notebooks.cr_amalthea_session import Limits7 as LimitsStr
 from renku_data_services.notebooks.cr_amalthea_session import Location as SessionLocation
 from renku_data_services.notebooks.cr_amalthea_session import Model as _ASModel
+from renku_data_services.notebooks.cr_amalthea_session import (
+    PreferredDuringSchedulingIgnoredDuringExecutionItem1 as PreferredPodAffinityItem,
+)
+from renku_data_services.notebooks.cr_amalthea_session import (
+    PreferredDuringSchedulingIgnoredDuringExecutionItem2 as PreferredPodAntiAffinityItem,
+)
 from renku_data_services.notebooks.cr_amalthea_session import Requests6 as _Requests
 from renku_data_services.notebooks.cr_amalthea_session import Requests7 as RequestsStr
+from renku_data_services.notebooks.cr_amalthea_session import (
+    RequiredDuringSchedulingIgnoredDuringExecutionItem1 as RequiredPodAntiAffinityItem,
+)
 from renku_data_services.notebooks.cr_amalthea_session import Resources3 as _Resources
 from renku_data_services.notebooks.cr_amalthea_session import Secret1 as SecretAsVolume
 from renku_data_services.notebooks.cr_amalthea_session import SecretRef as _SecretRef
@@ -151,13 +164,15 @@ class JupyterServerV1Alpha1(_JSModel):
         return i
 
 
-class Culling(_ASCulling):
+class CullingDurationParsingMixin(BaseCRD):
     """Amalthea session culling configuration."""
 
     @field_serializer("*", mode="wrap")
     def __serialize_duration_field(self, val: Any, nxt: Any, _info: Any) -> Any:
         if isinstance(val, timedelta):
             return format_duration(val)
+        if val is RESET:
+            return None
         return nxt(val)
 
     @field_validator("*", mode="wrap")
@@ -166,6 +181,12 @@ class Culling(_ASCulling):
         if isinstance(val, str):
             return safe_parse_duration(val)
         return handler(val)
+
+
+class Culling(_ASCulling, CullingDurationParsingMixin):
+    """Amalthea session culling configuration."""
+
+    pass
 
 
 class Requests(_Requests):
@@ -375,36 +396,88 @@ class AmaltheaSessionV1Alpha1(_ASModel):
         return url
 
 
+class ResourcesPatch(BaseCRD):
+    """Resource requests and limits patch."""
+
+    limits: Mapping[str, LimitsStr | Limits | ResetType] | ResetType | None = None
+    requests: Mapping[str, RequestsStr | Requests | ResetType] | ResetType | None = None
+
+
 class AmaltheaSessionV1Alpha1SpecSessionPatch(BaseCRD):
     """Patch for the main session config."""
 
-    resources: Resources | None = None
-    shmSize: int | str | None = None
-    storage: Storage | None = None
+    resources: ResourcesPatch | ResetType | None = None
+    shmSize: int | str | ResetType | None = None
+    storage: Storage | ResetType | None = None
     imagePullPolicy: ImagePullPolicy | None = None
-    extraVolumeMounts: list[ExtraVolumeMount] | None = None
+    extraVolumeMounts: list[ExtraVolumeMount] | ResetType | None = None
 
 
 class AmaltheaSessionV1Alpha1MetadataPatch(BaseCRD):
     """Patch for the metadata of an amalthea session."""
 
-    annotations: dict[str, str] | None = None
+    annotations: dict[str, str | ResetType] | ResetType | None = None
+
+
+class NodeAffinityPatch(BaseCRD):
+    """Patch for the node affinity of a session."""
+
+    preferredDuringSchedulingIgnoredDuringExecution: (
+        Sequence[PreferredDuringSchedulingIgnoredDuringExecutionItem] | None | ResetType
+    ) = None
+    requiredDuringSchedulingIgnoredDuringExecution: (
+        RequiredDuringSchedulingIgnoredDuringExecution | None | ResetType
+    ) = None
+
+
+class PodAffinityPatch(BaseCRD):
+    """Patch for the pod affinity of a session."""
+
+    preferredDuringSchedulingIgnoredDuringExecution: Sequence[PreferredPodAffinityItem] | None | ResetType = None
+    requiredDuringSchedulingIgnoredDuringExecution: (
+        Sequence[RequiredDuringSchedulingIgnoredDuringExecutionItem] | None | ResetType
+    ) = None
+
+
+class PodAntiAffinityPatch(BaseCRD):
+    """Patch for the pod anti affinity of a session."""
+
+    preferredDuringSchedulingIgnoredDuringExecution: Sequence[PreferredPodAntiAffinityItem] | None | ResetType = None
+    requiredDuringSchedulingIgnoredDuringExecution: Sequence[RequiredPodAntiAffinityItem] | None | ResetType = None
+
+
+class AffinityPatch(BaseCRD):
+    """Patch for the affinity of a session."""
+
+    nodeAffinity: NodeAffinityPatch | ResetType | None = None
+    podAffinity: PodAffinityPatch | ResetType | None = None
+    podAntiAffinity: PodAntiAffinityPatch | ResetType | None = None
+
+
+class CullingPatch(CullingDurationParsingMixin):
+    """Patch for the culling durations of a session."""
+
+    maxAge: timedelta | ResetType | None = None
+    maxFailedDuration: timedelta | ResetType | None = None
+    maxHibernatedDuration: timedelta | ResetType | None = None
+    maxIdleDuration: timedelta | ResetType | None = None
+    maxStartingDuration: timedelta | ResetType | None = None
 
 
 class AmaltheaSessionV1Alpha1SpecPatch(BaseCRD):
     """Patch for the spec of an amalthea session."""
 
-    extraContainers: list[ExtraContainer] | None = None
-    extraVolumes: list[ExtraVolume] | None = None
+    extraContainers: list[ExtraContainer] | ResetType | None = None
+    extraVolumes: list[ExtraVolume] | ResetType | None = None
     hibernated: bool | None = None
-    initContainers: list[InitContainer] | None = None
-    imagePullSecrets: list[ImagePullSecret] | None = None
-    priorityClassName: str | None = None
-    tolerations: list[Toleration] | None = None
-    affinity: Affinity | None = None
+    initContainers: list[InitContainer] | ResetType | None = None
+    imagePullSecrets: list[ImagePullSecret] | ResetType | None = None
+    priorityClassName: str | ResetType | None = None
+    tolerations: list[Toleration] | ResetType | None = None
+    affinity: AffinityPatch | ResetType | None = None
     session: AmaltheaSessionV1Alpha1SpecSessionPatch | None = None
-    culling: Culling | None = None
-    service_account_name: str | None = None
+    culling: CullingPatch | ResetType | None = None
+    service_account_name: str | ResetType | None = None
 
 
 class AmaltheaSessionV1Alpha1Patch(BaseCRD):
@@ -414,8 +487,12 @@ class AmaltheaSessionV1Alpha1Patch(BaseCRD):
     spec: AmaltheaSessionV1Alpha1SpecPatch
 
     def to_rfc7386(self) -> dict[str, Any]:
-        """Generate the patch to be applied to the session."""
-        return self.model_dump(exclude_none=True)
+        """Generate the patch to be applied to the session.
+
+        Note that when the value for a key in the patch is anything other than a
+        dictionary then the rfc7386 patch will replace, not merge.
+        """
+        return self.model_dump(exclude_none=True, mode="json")
 
 
 def safe_parse_duration(val: Any) -> timedelta:
@@ -442,3 +519,33 @@ def safe_parse_duration(val: Any) -> timedelta:
             case "ms":
                 return timedelta(microseconds=float(num))
     return cast(timedelta, parse_duration(val))
+
+
+class Affinity(_Affinity):
+    """Model for the affinity of an Amalthea session."""
+
+    @property
+    def is_empty(self) -> bool:
+        """Indicates whether there is anything set at all in any of the affinity fields, or they are just all empty."""
+        node_affinity_is_empty = not (
+            self.nodeAffinity
+            and (
+                self.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution
+                or self.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution
+            )
+        )
+        pod_affinity_is_empty = not (
+            self.podAffinity
+            and (
+                self.podAffinity.preferredDuringSchedulingIgnoredDuringExecution
+                or self.podAffinity.requiredDuringSchedulingIgnoredDuringExecution
+            )
+        )
+        pod_antiaffinity_is_empty = not (
+            self.podAntiAffinity
+            and (
+                self.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution
+                or self.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution
+            )
+        )
+        return node_affinity_is_empty and pod_affinity_is_empty and pod_antiaffinity_is_empty

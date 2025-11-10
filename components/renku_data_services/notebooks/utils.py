@@ -1,11 +1,16 @@
 """Utilities for notebooks."""
 
 import renku_data_services.crc.models as crc_models
+from renku_data_services.base_models.core import RESET, ResetType
 from renku_data_services.notebooks.crs import (
     Affinity,
+    AffinityPatch,
     MatchExpression,
     NodeAffinity,
+    NodeAffinityPatch,
     NodeSelectorTerm,
+    PodAffinityPatch,
+    PodAntiAffinityPatch,
     Preference,
     PreferredDuringSchedulingIgnoredDuringExecutionItem,
     RequiredDuringSchedulingIgnoredDuringExecution,
@@ -81,10 +86,7 @@ def intersect_node_affinities(
     return output
 
 
-def node_affinity_from_resource_class(
-    resource_class: crc_models.ResourceClass,
-    default_affinity: Affinity,
-) -> Affinity:
+def node_affinity_from_resource_class(resource_class: crc_models.ResourceClass, default_affinity: Affinity) -> Affinity:
     """Generate an affinity from the affinities stored in a resource class."""
     rc_node_affinity = NodeAffinity()
     required_expr = [
@@ -126,6 +128,44 @@ def node_affinity_from_resource_class(
     else:
         affinity.nodeAffinity = rc_node_affinity
     return affinity
+
+
+def node_affinity_patch_from_resource_class(
+    resource_class: crc_models.ResourceClass, default_affinity: Affinity
+) -> AffinityPatch | ResetType:
+    """Create a patch for the session affinity."""
+    affinity = node_affinity_from_resource_class(resource_class, default_affinity)
+    if affinity.is_empty:
+        return RESET
+    patch = AffinityPatch(nodeAffinity=RESET, podAffinity=RESET, podAntiAffinity=RESET)
+    if affinity.nodeAffinity:
+        patch.nodeAffinity = NodeAffinityPatch(
+            preferredDuringSchedulingIgnoredDuringExecution=(
+                affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution or RESET
+            ),
+            requiredDuringSchedulingIgnoredDuringExecution=(
+                affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution or RESET
+            ),
+        )
+    if affinity.podAffinity:
+        patch.podAffinity = PodAffinityPatch(
+            preferredDuringSchedulingIgnoredDuringExecution=(
+                affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution or RESET
+            ),
+            requiredDuringSchedulingIgnoredDuringExecution=(
+                affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution or RESET
+            ),
+        )
+    if affinity.podAntiAffinity:
+        patch.podAntiAffinity = PodAntiAffinityPatch(
+            preferredDuringSchedulingIgnoredDuringExecution=(
+                affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution or RESET
+            ),
+            requiredDuringSchedulingIgnoredDuringExecution=(
+                affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution or RESET
+            ),
+        )
+    return patch
 
 
 def tolerations_from_resource_class(

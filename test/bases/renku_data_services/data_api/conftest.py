@@ -30,7 +30,7 @@ from renku_data_services.k8s.watcher import K8sWatcher, k8s_object_handler
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.namespace.apispec import GroupResponse as ApiGroup
 from renku_data_services.namespace.models import UserNamespace
-from renku_data_services.notebooks.constants import JUPYTER_SESSION_GVK
+from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
 from renku_data_services.project.apispec import Project as ApiProject
 from renku_data_services.search.apispec import SearchResult
 from renku_data_services.secrets_storage_api.app import register_all_handlers as register_secrets_handlers
@@ -42,7 +42,7 @@ from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import UserInfo
 from renku_data_services.utils.middleware import validate_null_byte
-from test.bases.renku_data_services.data_api.utils import KindCluster, setup_amalthea
+from test.bases.renku_data_services.data_api.utils import KindCluster, create_api_user_from_user_info, setup_amalthea
 from test.bases.renku_data_services.data_tasks.test_sync import get_kc_users
 from test.utils import SanicReusableASGITestClient, TestDependencyManager
 
@@ -144,10 +144,9 @@ async def admin_headers(admin_user: UserInfo) -> dict[str, str]:
     return {"Authorization": f"Bearer {access_token}"}
 
 
-@pytest_asyncio.fixture
-async def user_headers(regular_user: UserInfo) -> dict[str, str]:
-    """Authentication headers for a normal user."""
-    access_token = json.dumps(
+@pytest.fixture
+def regular_user_access_token(regular_user: UserInfo) -> str:
+    return json.dumps(
         {
             "is_admin": False,
             "id": regular_user.id,
@@ -158,7 +157,17 @@ async def user_headers(regular_user: UserInfo) -> dict[str, str]:
             "full_name": f"{regular_user.first_name} {regular_user.last_name}",
         }
     )
-    return {"Authorization": f"Bearer {access_token}"}
+
+
+@pytest_asyncio.fixture
+async def user_headers(regular_user_access_token: str) -> dict[str, str]:
+    """Authentication headers for a normal user."""
+    return {"Authorization": f"Bearer {regular_user_access_token}"}
+
+
+@pytest_asyncio.fixture
+async def regular_user_api_user(regular_user: UserInfo, regular_user_access_token: str) -> APIUser:
+    return create_api_user_from_user_info(regular_user, regular_user_access_token, is_admin=False)
 
 
 @pytest_asyncio.fixture
@@ -777,11 +786,11 @@ def cluster(cluster_name, kubeconfig_path):
 
 @pytest.fixture(scope="session")
 def amalthea_installation(cluster):
-    setup_amalthea("amalthea", "amalthea", "0.22.0", cluster)
+    setup_amalthea("amalthea", "amalthea-sessions", "0.22.0", cluster)
 
 
 @pytest_asyncio.fixture
-async def jupyter_server_k8s_watcher(cluster, amalthea_installation, app_manager_instance):
+async def amalthea_session_k8s_watcher(cluster, amalthea_installation, app_manager_instance):
     app_manager = app_manager_instance
     default_kubeconfig = await from_kubeconfig_file(cluster.kubeconfig)
     clusters: dict[ClusterId, K8sClusterClient] = {}
@@ -797,7 +806,7 @@ async def jupyter_server_k8s_watcher(cluster, amalthea_installation, app_manager
     watcher = K8sWatcher(
         handler=k8s_object_handler(app_manager.config.nb_config.k8s_db_cache, app_manager.metrics, app_manager.rp_repo),
         clusters=clusters,
-        kinds=[JUPYTER_SESSION_GVK],
+        kinds=[AMALTHEA_SESSION_GVK],
         db_cache=app_manager.config.nb_config.k8s_db_cache,
     )
     asyncio.create_task(watcher.start())
