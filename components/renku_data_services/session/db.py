@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, nullcontext
 from datetime import UTC, datetime
-from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
@@ -230,13 +229,13 @@ class SessionRepository:
             environment.default_url = update.default_url
         if update.port is not None:
             environment.port = update.port
-        if update.working_directory is not None and update.working_directory is RESET:
+        if update.working_directory is RESET:
             environment.working_directory = None
-        elif update.working_directory is not None and isinstance(update.working_directory, PurePosixPath):
+        elif update.working_directory is not None:
             environment.working_directory = update.working_directory
-        if update.mount_directory is not None and update.mount_directory is RESET:
+        if update.mount_directory is RESET:
             environment.mount_directory = None
-        elif update.mount_directory is not None and isinstance(update.mount_directory, PurePosixPath):
+        elif update.mount_directory is not None:
             environment.mount_directory = update.mount_directory
         if update.uid is not None:
             environment.uid = update.uid
@@ -244,11 +243,11 @@ class SessionRepository:
             environment.gid = update.gid
         if update.args is RESET:
             environment.args = None
-        elif isinstance(update.args, list):
+        elif update.args is not None:
             environment.args = update.args
         if update.command is RESET:
             environment.command = None
-        elif isinstance(update.command, list):
+        elif update.command is not None:
             environment.command = update.command
         if update.is_archived is not None:
             environment.is_archived = update.is_archived

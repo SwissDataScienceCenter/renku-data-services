@@ -12,6 +12,7 @@ from sanic import Request
 from sanic_testing.testing import SanicASGITestClient, TestingResponse
 
 from renku_data_services.base_models import APIUser
+from renku_data_services.users.models import UserInfo
 
 
 async def create_rp(payload: dict[str, Any], test_client: SanicASGITestClient) -> tuple[Request, TestingResponse]:
@@ -142,3 +143,14 @@ def setup_amalthea(install_name: str, app_name: str, version: str, cluster: Kind
             break
     else:
         raise AssertionError("Timeout waiting on amalthea to run") from None
+
+
+def create_api_user_from_user_info(user: UserInfo, access_token: str, is_admin: bool = False) -> APIUser:
+    return APIUser(
+        id=user.id,
+        access_token=access_token,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        email=user.email,
+        is_admin=is_admin,
+    )

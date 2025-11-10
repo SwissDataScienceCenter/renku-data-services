@@ -128,11 +128,12 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         url_prefix=url_prefix,
         project_repo=dm.project_repo,
         project_member_repo=dm.project_member_repo,
-        authenticator=dm.authenticator,
         user_repo=dm.kc_user_repo,
-        session_repo=dm.session_repo,
+        authenticator=dm.authenticator,
         data_connector_repo=dm.data_connector_repo,
         project_migration_repo=dm.project_migration_repo,
+        session_repo=dm.session_repo,
+        session_secret_repo=dm.project_session_secret_repo,
         metrics=dm.metrics,
     )
     project_session_secrets = ProjectSessionSecretBP(

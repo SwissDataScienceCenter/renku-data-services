@@ -8,7 +8,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_co
 from sqlalchemy.schema import ForeignKey
 from ulid import ULID
 
-from renku_data_services.base_models.core import NamespacePath
+from renku_data_services.base_models.core import NamespacePath, ProjectSlug
 from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
 from renku_data_services.data_connectors.orm import DataConnectorORM
 from renku_data_services.errors import errors
@@ -386,8 +386,19 @@ class EntitySlugORM(BaseORM):
 
     def dump_namespace(self) -> models.UserNamespace | models.GroupNamespace | models.ProjectNamespace:
         """Dump the entity slug as a namespace."""
-        if self.project:
-            return self.dump_project_namespace()
+        if self.project and self.project_id:
+            return models.ProjectNamespace(
+                id=self.project_id,
+                created_by=self.project.created_by_id,
+                # NOTE: self.project.namespace_id may be different than self.namespace_id for a data connector
+                # if the namespace of the project has changed but the change has not been updated fully
+                # for the data connector
+                path=self.namespace.dump().path / ProjectSlug(self.project.slug.slug),
+                underlying_resource_id=self.project_id,
+                latest_slug=self.project.slug.slug,
+                name=self.project.name,
+                creation_date=self.project.creation_date,
+            )
         return self.namespace.dump()
 
     def dump_project_namespace(self) -> models.ProjectNamespace:

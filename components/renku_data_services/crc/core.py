@@ -204,8 +204,8 @@ def validate_resource_pool_patch(body: apispec.ResourcePoolPatch) -> models.Reso
         name=body.name,
         classes=classes,
         quota=quota,
-        idle_threshold=body.idle_threshold,
-        hibernation_threshold=body.hibernation_threshold,
+        idle_threshold=RESET if body.idle_threshold == 0 else body.idle_threshold,
+        hibernation_threshold=RESET if body.hibernation_threshold == 0 else body.hibernation_threshold,
         default=body.default,
         public=body.public,
         remote=remote,
@@ -260,7 +260,7 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
     quota: models.Quota | models.UnsavedQuota | ResetType = existing.quota if existing.quota else RESET
     if update.quota is RESET:
         quota = RESET
-    elif isinstance(update.quota, models.QuotaPatch) and existing.quota is None:
+    elif update.quota is not None and existing.quota is None:
         # The quota patch needs to contain all required fields
         cpu = update.quota.cpu
         if cpu is None:
@@ -294,7 +294,7 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
     remote: models.RemoteConfigurationFirecrest | ResetType = existing.remote if existing.remote else RESET
     if update.remote is RESET:
         remote = RESET
-    elif isinstance(update.remote, models.RemoteConfigurationFirecrestPatch) and existing.remote is None:
+    elif update.remote is not None and existing.remote is None:
         # The remote patch needs to contain all required fields
         kind = update.remote.kind
         if kind is None:
@@ -339,7 +339,9 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
         raise errors.ValidationError(message="The default resource pool cannot start remote sessions.")
     if isinstance(remote, models.RemoteConfigurationFirecrest) and public:
         raise errors.ValidationError(message="A resource pool which starts remote sessions cannot be public.")
-    if (idle_threshold and idle_threshold < 0) or (hibernation_threshold and hibernation_threshold < 0):
+    if (isinstance(idle_threshold, int) and idle_threshold < 0) or (
+        isinstance(hibernation_threshold, int) and hibernation_threshold < 0
+    ):
         raise errors.ValidationError(message="Idle threshold and hibernation threshold need to be larger than 0.")
 
     default_classes: list[models.ResourceClass] = []
