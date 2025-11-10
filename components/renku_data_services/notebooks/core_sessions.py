@@ -686,6 +686,8 @@ def get_remote_env(
         SessionEnvItem(name="RSC_REMOTE_KIND", value=remote.kind.value),
         SessionEnvItem(name="RSC_FIRECREST_API_URL", value=remote.api_url),
         SessionEnvItem(name="RSC_FIRECREST_SYSTEM_NAME", value=remote.system_name),
+        # TODO: remove fake start
+        SessionEnvItem(name="RSC_FAKE_START", value="false"),
     ]
     if remote.partition:
         env.append(SessionEnvItem(name="RSC_FIRECREST_PARTITION", value=remote.partition))
