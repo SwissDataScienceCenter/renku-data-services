@@ -24,7 +24,6 @@ services:
       POETRY_CACHE_DIR: "/poetry_cache"
       NB_SERVER_OPTIONS__DEFAULTS_PATH: /workspace/server_defaults.json
       NB_SERVER_OPTIONS__UI_CHOICES_PATH: /workspace/server_options.json
-      KUBECONFIG: "/workspace/.k3d-config.yaml"
       SOLR_URL: "http://localhost:8983"
       SOLR_CORE: "renku-search-dev"
     network_mode: service:db
