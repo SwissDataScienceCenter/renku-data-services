@@ -23,6 +23,8 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/Alert"
+        default:
+          $ref: "#/components/responses/Error"
       tags:
         - alerts
     get:
@@ -41,6 +43,8 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/AlertList"
+        default:
+          $ref: "#/components/responses/Error"
       tags:
         - alerts
   /alerts/{alert_id}:
