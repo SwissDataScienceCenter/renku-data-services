@@ -151,7 +151,9 @@ components:
       example: My Renku Session :)
     UserId:
       type: string
-      description: The ID of the user associated with the alert.
+      description: Keycloak user ID
+      example: f74a228b-1790-4276-af5f-25c2424e9b0c
+      pattern: "^[A-Za-z0-9]{1}[A-Za-z0-9-]+$"
     AlertList:
       type: array
       description: A list of alerts.
