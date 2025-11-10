@@ -144,8 +144,11 @@ components:
       type: string
       description: The message body of the alert.
     SessionName:
+      description: Renku session name
       type: string
-      description: The name of the session associated with the alert.
+      minLength: 1
+      maxLength: 99
+      example: My Renku Session :)
     UserId:
       type: string
       description: The ID of the user associated with the alert.
