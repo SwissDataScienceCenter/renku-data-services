@@ -125,6 +125,7 @@ components:
         - title
         - message
         - user_id
+        - creation_date
     AlertPost:
       description: Data required to create an alert.
       type: object
