@@ -54,14 +54,6 @@ class GitRepositoriesRepository:
             not github_type or github_type == GitHubProviderType.standard_app
         )
 
-    # - check url string
-    # - find provider in db (can't be done via a query (easily), must load all and filter)
-    # - NO client found:
-    #   - check internal gitlab OR
-    #   - check if url is a git repository -> result
-    # - YES client found:
-    #  - find connection for user and provider
-    #  - get repo metadata with or without the connection (here we can use if-none-match)
     async def get_repository(
         self,
         repository_url: str,
@@ -202,12 +194,8 @@ class GitRepositoriesRepository:
             try:
                 response = await oauth2_client.get(request_url, headers=headers)
             except OAuthError as err:
-                if err.error == "bad_refresh_token":
-                    raise errors.InvalidTokenError(
-                        message="The refresh token for the repository has expired or is invalid.",
-                        detail=f"Please reconnect your integration for {repository_url} and try again.",
-                    ) from err
-                raise
+                logger.warning(f"OAuth error accessing repository metadata: {err}", exc_info=err)
+                return models.RepositoryMetadataError.metadata_oauth
 
             return self._convert_metadata_response(adapter, response)
 

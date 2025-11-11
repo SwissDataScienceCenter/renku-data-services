@@ -109,6 +109,7 @@ class RepositoryMetadataError(StrEnum):
 
     metadata_unauthorized = "metadata_unauthorized"
     metadata_validation = "metadata_validation"
+    metadata_oauth = "metadata_oauth"
     metadata_unknown = "metadata_unknown"
 
 
