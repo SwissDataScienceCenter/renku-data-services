@@ -135,5 +135,7 @@ def tolerations_from_resource_class(
     output: list[Toleration] = []
     output.extend(default_tolerations)
     for tol in resource_class.tolerations:
-        output.append(Toleration(key=tol, operator="Exists"))
+        # output.append(Toleration(key=tol, operator="Exists"))
+        output.append(Toleration.model_validate(tol.to_dict()))
+
     return output
