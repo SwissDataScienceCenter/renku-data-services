@@ -55,6 +55,36 @@ class RepositoriesBP(CustomBlueprint):
 
         return "/repositories/<repository_url>", ["GET"], _get_one_repository
 
+    def get_one_repository_qp(self) -> BlueprintFactoryResponse:
+        """Get the metadata available about a repository."""
+
+        @authenticate_2(self.authenticator, self.internal_gitlab_authenticator)
+        @extract_if_none_match
+        async def _get_one_repository(
+            req: Request,
+            user: base_models.APIUser,
+            internal_gitlab_user: base_models.APIUser,
+            etag: str | None,
+        ) -> JSONResponse | HTTPResponse:
+            query_args: dict[str, str] = req.get_args() or {}
+            repository_url = query_args.get("url")
+            if repository_url is None:
+                return HTTPResponse(status=404)
+
+            result = await self.git_repositories_repo.get_repository(
+                repository_url=repository_url,
+                user=user,
+                etag=etag,
+                internal_gitlab_user=internal_gitlab_user,
+            )
+            if result.metadata == "Unmodified":
+                return HTTPResponse(status=304)
+            headers = {"ETag": result.metadata.etag} if result.metadata and result.metadata.etag else None
+            body = self._make_result(result)
+            return validated_json(apispec.RepositoryProviderData, body, headers=headers)
+
+        return "/repositories", ["GET"], _get_one_repository
+
     def _make_result(self, r: models.RepositoryDataResult) -> apispec.RepositoryProviderData:
         status = apispec.Status.unknown
         if r.is_success:
