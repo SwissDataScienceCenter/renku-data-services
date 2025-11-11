@@ -92,7 +92,7 @@ components:
         metadata:
           $ref: "#/components/schemas/Metadata"
         error_code:
-          type: str
+          type: string
           enum:
             - no_url_scheme
             - no_url_host
