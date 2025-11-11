@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 import pydantic
 from authlib.integrations.httpx_client import OAuthError
 from httpx import AsyncClient as HttpClient
-from httpx import Response
+from httpx import Response, TransportError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
@@ -177,8 +177,12 @@ class GitRepositoriesRepository:
         headers = adapter.api_common_headers or dict()
         if etag:
             headers["If-None-Match"] = etag
-        response = await self.httpClient.get(request_url, headers=headers)
-        return self._convert_metadata_response(adapter, response)
+        try:
+            response = await self.httpClient.get(request_url, headers=headers)
+            return self._convert_metadata_response(adapter, response)
+        except TransportError as err:
+            logger.debug(f"Error accessing url for git repo check ({err}): {request_url}")
+            return models.RepositoryMetadataError.metadata_unknown
 
     async def _get_repository_authenticated(
         self, connection_id: ULID, repository_url: GitUrl, user: base_models.APIUser, etag: str | None
@@ -240,5 +244,9 @@ class GitRepositoriesRepository:
             headers["Authorization"] = f"Bearer {user.access_token}"
         if etag:
             headers["If-None-Match"] = etag
-        response = await self.httpClient.get(request_url, headers=headers)
-        return self._convert_metadata_response(adapter, response)
+        try:
+            response = await self.httpClient.get(request_url, headers=headers)
+            return self._convert_metadata_response(adapter, response)
+        except TransportError as err:
+            logger.debug(f"Error accessing url for git repo check ({err}): {request_url}")
+            return models.RepositoryMetadataError.metadata_unknown
