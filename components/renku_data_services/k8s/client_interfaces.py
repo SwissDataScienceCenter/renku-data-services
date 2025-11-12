@@ -58,6 +58,7 @@ class SecretClient(Protocol):
         logger = logging.getLogger(SecretClient.__name__)
 
         result = await self.create_secret(secret)
+        # TODO: handle kr8s._exceptions.ServerError: secrets "flora-thieba-65c0e15c0a35" already exists
         if result.manifest.to_json() != secret.manifest.to_json():
             logger.warning(f"The secret {secret.namespace}/{secret.name} needs to be patched!")
             logger.warning(f"result = {result.manifest.to_json()}")
