@@ -11,6 +11,7 @@ from box import Box
 from kr8s import NotFoundError, ServerError
 from kr8s.asyncio.objects import APIObject, Pod, Secret, StatefulSet
 
+from renku_data_services.app_config import logging
 from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.errors import errors
@@ -428,4 +429,21 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
 
         This is equivalent to an upsert operation.
         """
-        return await self.__secrets_client.create_or_patch_secret(secret)
+        logger = logging.getLogger(SecretClient.__name__)
+
+        try:
+            result = await self.create_secret(secret)
+            # TODO: handle kr8s._exceptions.ServerError: secrets "flora-thieba-65c0e15c0a35" already exists
+        except ServerError as e:
+            if e.response is None or e.response.status_code != 409:
+                raise
+            # NOTE: If the response code is 409, it means that the secret already exists
+            #     result = None
+            # if result is None or result.manifest.to_json() != secret.manifest.to_json():
+            #     logger.warning(f"The secret {secret.namespace}/{secret.name} needs to be patched!")
+            #     logger.warning(f"result = {result.manifest.to_json()}")
+            #     logger.warning(f"secret = {secret.manifest.to_json()}")
+            #     logger.warning(f"secret.manifest.stringData = {secret.manifest.get("stringData")}")
+            logger.warning(f"Patching secret{secret.namespace}/{secret.name}")
+            result = await self.patch_secret(secret, secret.to_patch())
+        return result
