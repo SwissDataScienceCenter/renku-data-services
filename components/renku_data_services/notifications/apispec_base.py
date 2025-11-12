@@ -13,6 +13,7 @@ class BaseAPISpec(BaseModel):
         """Enables orm mode for pydantic."""
 
         from_attributes = True
+        extra = "forbid"
 
     @field_validator("*", mode="before", check_fields=False)
     @classmethod
