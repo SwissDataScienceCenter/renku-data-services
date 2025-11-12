@@ -279,6 +279,9 @@ class K8sClusterClient(K8sClient):
 
         try:
             logger.warning(f"__list() filter: {_filter}")
+            logger.warning(
+                f"__list() filter: {_filter.gvk.kr8s_kind}, {names}, {_filter.label_selector}", {_filter.namespace}
+            )
             res = self.__cluster.api.async_get(
                 _filter.gvk.kr8s_kind,
                 *names,
@@ -287,6 +290,7 @@ class K8sClusterClient(K8sClient):
             )
 
             async for r in res:
+                logger.warning(f"__list() res: {r}")
                 yield APIObjectInCluster(r, self.__cluster.id)
 
         except (kr8s.ServerError, kr8s.APITimeoutError, ValueError) as _e:
