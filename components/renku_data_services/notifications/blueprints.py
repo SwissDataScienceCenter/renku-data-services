@@ -8,14 +8,19 @@ from sanic_ext import validate
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
+import renku_data_services.errors as errors
 from renku_data_services.base_api.auth import (
     authenticate,
     only_admins,
 )
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models.validation import validated_json
-from renku_data_services.notifications import apispec
-from renku_data_services.notifications.core import validate_alert_patch, validate_unsaved_alert
+from renku_data_services.notifications import apispec, models
+from renku_data_services.notifications.core import (
+    validate_alert_patch,
+    validate_unsaved_alert,
+    transform_alertmanager_webhook,
+)
 from renku_data_services.notifications.db import NotificationsRepository
 
 
@@ -64,3 +69,42 @@ class NotificationsBP(CustomBlueprint):
             return validated_json(apispec.Alert, alert, 200)
 
         return "/alerts/<alert_id:ulid>", ["PATCH"], _patch
+
+    def post_webhook_alertmanager(self) -> BlueprintFactoryResponse:
+        """Process Alertmanager webhook."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate(json=apispec.AlertmanagerWebhook)
+        async def _post_webhook_alertmanager(
+            _: Request, user: base_models.APIUser, body: apispec.AlertmanagerWebhook
+        ) -> JSONResponse:
+            firing_alerts, resolved_alerts = transform_alertmanager_webhook(body)
+
+            for alert in firing_alerts:
+                try:
+                    await self.notifications_repo.create_alert(user=user, alert=alert)
+                except errors.ConflictError:
+                    pass  # Ignore duplicate unresolved alerts
+                except Exception as e:
+                    continue
+
+            for alert in resolved_alerts:
+                matching_alerts = await self.notifications_repo.get_alerts_by_properties(
+                    user=user,
+                    alert_id=None,
+                    user_id=alert.user_id,
+                    session_name=alert.session_name,
+                    title=alert.title,
+                    message=alert.message,
+                    created_at=None,
+                    resolved_at=None,
+                )
+
+                for matching_alert in matching_alerts:
+                    patch = models.AlertPatch(resolved=True)
+                    await self.notifications_repo.update_alert(user=user, alert_id=matching_alert.id, patch=patch)
+
+            return JSONResponse({}, status=200)
+
+        return "/alerts/webhook/alertmanager", ["POST"], _post_webhook_alertmanager

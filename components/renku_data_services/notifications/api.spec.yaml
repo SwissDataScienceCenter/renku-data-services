@@ -82,8 +82,123 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - alerts
+  /alerts/webhook/alertmanager:
+    post:
+      summary: Receive Prometheus Alertmanager webhooks. Requires admin permissions.
+      description: |
+        This endpoint receives webhooks from Prometheus Alertmanager and creates or resolves alerts accordingly. "firing" alerts will create new alerts, while "resolved" alerts will mark existing alerts as resolved. The payload must contain the necessary information to identify the user and session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AlertmanagerWebhook"
+      responses:
+        "200":
+          description: Webhook processed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Webhook processed successfully
+        "400":
+          description: Invalid webhook payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - alerts
 components:
   schemas:
+    AlertmanagerWebhook:
+      type: object
+      required:
+        - version
+        - groupKey
+        - status
+        - alerts
+      properties:
+        version:
+          type: string
+          description: Alertmanager version
+        groupKey:
+          type: string
+          description: Unique key for the group of alerts
+        status:
+          type: string
+          enum:
+            - firing
+            - resolved
+          description: The status of the alerts in this webhook
+        receiver:
+          type: string
+          description: The name of the receiver that got the alert
+        groupLabels:
+          type: object
+          description: Labels that are common to all alerts in the group
+          additionalProperties:
+            type: string
+        commonLabels:
+          type: object
+          additionalProperties:
+            type: string
+          description: Labels that are common to all alerts
+        commonAnnotations:
+          type: object
+          additionalProperties:
+            type: string
+        externalURL:
+          type: string
+          description: The external URL of the Alertmanager
+        alerts:
+          type: array
+          description: The list of alerts
+          items:
+            $ref: "#/components/schemas/AlertmanagerAlert"
+    AlertmanagerAlert:
+      type: object
+      required:
+        - status
+        - labels
+        - annotations
+        - startsAt
+      properties:
+        status:
+          type: string
+          enum:
+            - firing
+            - resolved
+          description: The status of the alert
+        labels:
+          type: object
+          description: Labels associated with the alert
+          additionalProperties:
+            type: string
+        annotations:
+          type: object
+          description: Annotations associated with the alert
+          additionalProperties:
+            type: string
+        startsAt:
+          type: string
+          format: date-time
+          description: The time when the alert started
+        endsAt:
+          type: string
+          format: date-time
+          description: The time when the alert ended
     AlertsGetQuery:
       description: Query parameters for getting alerts
       type: object
