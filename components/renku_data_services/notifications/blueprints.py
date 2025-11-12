@@ -44,9 +44,7 @@ class NotificationsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @validate(query=apispec.AlertsGetQuery)
-        async def _get_all(
-            _: Request, user: base_models.APIUser, query: apispec.AlertsGetQuery
-        ) -> JSONResponse:
+        async def _get_all(_: Request, user: base_models.APIUser, query: apispec.AlertsGetQuery) -> JSONResponse:
             alerts = await self.notifications_repo.get_alerts_for_user(user=user, session_name=query.session_name)
             return validated_json(apispec.AlertList, alerts)
 
