@@ -28,6 +28,21 @@ class NotificationsRepository:
         if not user.is_admin:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
+        async with self.session_maker() as session:
+            query = (
+                select(schemas.AlertORM)
+                .where(schemas.AlertORM.user_id == alert.user_id)
+                .where(schemas.AlertORM.title == alert.title)
+                .where(schemas.AlertORM.message == alert.message)
+                .where(schemas.AlertORM.session_name == alert.session_name)
+                .where(schemas.AlertORM.resolved_at.is_(None))
+            )
+
+            res = await session.scalars(query)
+            existing_alert = res.one_or_none()
+            if existing_alert is not None:
+                raise errors.ConflictError(message="An identical unresolved alert already exists.")
+
         async with self.session_maker() as session, session.begin():
             alert_orm = schemas.AlertORM(
                 title=alert.title,
