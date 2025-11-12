@@ -218,8 +218,14 @@ class GitRepositoriesRepository:
                 if err == models.RepositoryMetadataError.metadata_validation:
                     return err
                 else:
-                    logger.info(f"Got errror {err} when getting repo metadata with auth. Trying anonymously.")
-                    return await self._get_repository_anonymously(repository_url, client, etag)
+                    logger.info(f"Got error {err} when getting repo metadata with auth. Trying anonymously.")
+                    anon_result = await self._get_repository_anonymously(repository_url, client, etag)
+                    match anon_result:
+                        case models.RepositoryMetadataError() as anon_err:
+                            logger.info(f"Got error {anon_err} when trying anonmyously. Return original error")
+                            return err
+                        case _:
+                            return anon_result
 
     async def _get_repository_from_internal_gitlab(
         self, repository_url: GitUrl, user: base_models.APIUser, etag: str | None, internal_gitlab_url: str
