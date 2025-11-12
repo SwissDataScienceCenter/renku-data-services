@@ -12,7 +12,6 @@ from kr8s.asyncio.objects import APIObject
 from kr8s.objects import Secret
 from kubernetes_asyncio.client import V1Secret
 
-from renku_data_services.app_config import logging
 from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import DUMMY_TASK_RUN_USER_ID, ClusterId
 
@@ -238,11 +237,7 @@ class GVK:
         weird logic to split that. This method is essentially the reverse of the kr8s logic so we can hand it a
         string it will accept.
         """
-        if self.group is not None and self.group.lower() == self.CORE_GROUP:
-            logger = logging.getLogger(GVK.__name__)
-            logger.warning("core group!")
-            return f"{self.kind.lower()}/{self.version}"
-        if self.group is None:
+        if self.group is None or self.group.lower() == self.CORE_GROUP:
             # e.g. pod/v1
             return f"{self.kind.lower()}/{self.version}"
         # e.g. buildrun.shipwright.io/v1beta1
