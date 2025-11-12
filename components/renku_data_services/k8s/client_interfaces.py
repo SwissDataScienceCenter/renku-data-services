@@ -49,23 +49,6 @@ class SecretClient(Protocol):
         """Delete a secret."""
         ...
 
-    # async def create_or_patch_secret(self, secret: K8sSecret) -> K8sSecret:
-    #     """Create or patch a secret.
-
-    #     This is equivalent to an upsert operation.
-    #     """
-    #     logger = logging.getLogger(SecretClient.__name__)
-
-    #     result = await self.create_secret(secret)
-    #     # TODO: handle kr8s._exceptions.ServerError: secrets "flora-thieba-65c0e15c0a35" already exists
-    #     if result.manifest.to_json() != secret.manifest.to_json():
-    #         logger.warning(f"The secret {secret.namespace}/{secret.name} needs to be patched!")
-    #         logger.warning(f"result = {result.manifest.to_json()}")
-    #         logger.warning(f"secret = {secret.manifest.to_json()}")
-    #         logger.warning(f"secret.manifest.stringData = {secret.manifest.get("stringData")}")
-    #         result = await self.patch_secret(secret, secret.to_patch())
-    #     return result
-
 
 class PriorityClassClient(Protocol):
     """Methods to manipulate kubernetes Priority Class resources."""

@@ -444,6 +444,6 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
             #     logger.warning(f"result = {result.manifest.to_json()}")
             #     logger.warning(f"secret = {secret.manifest.to_json()}")
             #     logger.warning(f"secret.manifest.stringData = {secret.manifest.get("stringData")}")
-            logger.warning(f"Patching secret{secret.namespace}/{secret.name}")
+            logger.warning(f"Patching secret {secret.namespace}/{secret.name}")
             result = await self.patch_secret(secret, secret.to_patch())
         return result

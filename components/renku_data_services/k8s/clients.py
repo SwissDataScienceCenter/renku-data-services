@@ -16,6 +16,7 @@ from kubernetes import client, config
 from kubernetes.config.config_exception import ConfigException
 from kubernetes.config.incluster_config import SERVICE_CERT_FILENAME, SERVICE_TOKEN_FILENAME, InClusterConfigLoader
 
+from renku_data_services.app_config import logging
 from renku_data_services.errors import errors
 from renku_data_services.k8s.client_interfaces import K8sClient, PriorityClassClient, ResourceQuotaClient, SecretClient
 from renku_data_services.k8s.constants import ClusterId
@@ -268,12 +269,16 @@ class K8sClusterClient(K8sClient):
         return self.__cluster
 
     async def __list(self, _filter: K8sObjectFilter) -> AsyncIterable[APIObjectInCluster]:
+        logger = logging.getLogger(SecretClient.__name__)
         if _filter.cluster is not None and _filter.cluster != self.__cluster.id:
+            logger.warning("Skipping __list()!")
+            logger.warning(f"{_filter.cluster} != {self.__cluster.id}")
             return
 
         names = [_filter.name] if _filter.name is not None else []
 
         try:
+            logger.warning(f"__list() filter: {_filter}")
             res = self.__cluster.api.async_get(
                 _filter.gvk.kr8s_kind,
                 *names,
