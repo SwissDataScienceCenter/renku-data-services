@@ -49,7 +49,7 @@ class GitUrl:
             return GitUrlError.no_url_path
 
         # fix trailing slashes
-        if url.path.endswith("/"):
+        while url.path.endswith("/"):
             url = url._replace(path=url.path[:-1])
 
         return GitUrl(parsed_url=url)

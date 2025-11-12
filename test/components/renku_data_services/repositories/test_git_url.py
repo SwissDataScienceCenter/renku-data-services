@@ -31,3 +31,16 @@ async def test_check_http_repo() -> None:
 
     assert code_good is None, f"Unexpected error testing {good_url}: {code_good}"
     assert code_bad == GitUrlError.no_git_repo, f"Unexpected success testing {bad_url}"
+
+
+def test_remove_trailing_slashes() -> None:
+    urls = [
+        "http://github.com/SwissDataScienceCenter/renku",
+        "http://github.com/SwissDataScienceCenter/renku/",
+        "http://github.com/SwissDataScienceCenter/renku//",
+        "http://github.com/SwissDataScienceCenter/renku///",
+        "http://github.com/SwissDataScienceCenter/renku////",
+    ]
+    for url in urls:
+        git_url = GitUrl.unsafe(url)
+        assert git_url.render() == "http://github.com/SwissDataScienceCenter/renku"
