@@ -212,6 +212,9 @@ class ClusterConnection:
         return APIObjectInCluster(obj, self.id)
 
 
+GVK_CORE_GROUP: Final[str] = "core"
+
+
 @dataclass(kw_only=True, frozen=True)
 class GVK:
     """The information about the group, version and kind of a K8s object."""
@@ -220,12 +223,10 @@ class GVK:
     version: str
     group: str | None = None
 
-    CORE_GROUP: Final[str] = "core"
-
     @property
     def group_version(self) -> str:
         """Get the group and version joined by '/'."""
-        if self.group is None or self.group == self.CORE_GROUP:
+        if self.group is None or self.group == GVK_CORE_GROUP:
             return self.version
         return f"{self.group}/{self.version}"
 
@@ -237,7 +238,7 @@ class GVK:
         weird logic to split that. This method is essentially the reverse of the kr8s logic so we can hand it a
         string it will accept.
         """
-        if self.group is None or self.group.lower() == self.CORE_GROUP:
+        if self.group is None or self.group.lower() == GVK_CORE_GROUP:
             # e.g. pod/v1
             return f"{self.kind.lower()}/{self.version}"
         # e.g. buildrun.shipwright.io/v1beta1
