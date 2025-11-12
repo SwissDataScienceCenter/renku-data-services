@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Self, cast
+from typing import Any, Final, Self, cast
 
 import kubernetes
 from box import Box
@@ -148,7 +148,7 @@ class K8sSecret(K8sObject):
             name=secret.metadata.name,
             namespace=cluster.namespace,
             cluster=cluster.id,
-            gvk=GVK(group="core", version=Secret.version, kind="Secret"),
+            gvk=GVK(version=Secret.version, kind="Secret"),
             manifest=Box(sanitizer(secret)),
         )
 
@@ -212,6 +212,9 @@ class ClusterConnection:
         return APIObjectInCluster(obj, self.id)
 
 
+GVK_CORE_GROUP: Final[str] = "core"
+
+
 @dataclass(kw_only=True, frozen=True)
 class GVK:
     """The information about the group, version and kind of a K8s object."""
@@ -223,7 +226,7 @@ class GVK:
     @property
     def group_version(self) -> str:
         """Get the group and version joined by '/'."""
-        if self.group == "core" or self.group is None:
+        if self.group is None or self.group.lower() == GVK_CORE_GROUP:
             return self.version
         return f"{self.group}/{self.version}"
 
@@ -235,7 +238,7 @@ class GVK:
         weird logic to split that. This method is essentially the reverse of the kr8s logic so we can hand it a
         string it will accept.
         """
-        if self.group is None:
+        if self.group is None or self.group.lower() == GVK_CORE_GROUP:
             # e.g. pod/v1
             return f"{self.kind.lower()}/{self.version}"
         # e.g. buildrun.shipwright.io/v1beta1
@@ -245,7 +248,7 @@ class GVK:
     def from_kr8s_object(cls, kr8s_obj: type[APIObject] | APIObject) -> Self:
         """Extract GVK from a kr8s object."""
         if "/" in kr8s_obj.version:
-            grp_version_split = kr8s_obj.version.split("/")
+            grp_version_split = kr8s_obj.version.split("/", maxsplit=1)
             grp = grp_version_split[0]
             version = grp_version_split[1]
         else:

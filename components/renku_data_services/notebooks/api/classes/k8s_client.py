@@ -11,6 +11,7 @@ from box import Box
 from kr8s import NotFoundError, ServerError
 from kr8s.asyncio.objects import APIObject, Pod, Secret, StatefulSet
 
+from renku_data_services.app_config import logging
 from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.errors import errors
@@ -422,3 +423,19 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
         """Delete a secret."""
 
         return await self.__secrets_client.delete_secret(secret)
+
+    async def create_or_patch_secret(self, secret: K8sSecret) -> K8sSecret:
+        """Create or patch a secret.
+
+        This is equivalent to an upsert operation.
+        """
+        logger = logging.getLogger(NotebookK8sClient.__name__)
+        try:
+            result = await self.create_secret(secret)
+        except ServerError as e:
+            if e.response is None or e.response.status_code != 409:
+                raise
+            # NOTE: If the response code is 409, it means that the secret already exists
+            logger.debug(f"Patching secret {secret.namespace}/{secret.name}")
+            result = await self.patch_secret(secret, secret.to_patch())
+        return result
