@@ -60,6 +60,9 @@ class SecretClient(Protocol):
         result = await self.create_secret(secret)
         if result.manifest.to_json() != secret.manifest.to_json():
             logger.warning(f"The secret {secret.namespace}/{secret.name} needs to be patched!")
+            logger.warning(f"result = {result.manifest.to_json()}")
+            logger.warning(f"secret = {secret.manifest.to_json()}")
+            logger.warning(f"secret.manifest.stringData = {secret.manifest.get("stringData")}")
             result = await self.patch_secret(secret, secret.to_patch())
         return result
 
