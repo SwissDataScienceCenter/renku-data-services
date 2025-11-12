@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Self, cast
+from typing import Any, Final, Self, cast
 
 import kubernetes
 from box import Box
@@ -12,6 +12,7 @@ from kr8s.asyncio.objects import APIObject
 from kr8s.objects import Secret
 from kubernetes_asyncio.client import V1Secret
 
+from renku_data_services.app_config import logging
 from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import DUMMY_TASK_RUN_USER_ID, ClusterId
 
@@ -148,7 +149,7 @@ class K8sSecret(K8sObject):
             name=secret.metadata.name,
             namespace=cluster.namespace,
             cluster=cluster.id,
-            gvk=GVK(group="core", version=Secret.version, kind="Secret"),
+            gvk=GVK(version=Secret.version, kind="Secret"),
             manifest=Box(sanitizer(secret)),
         )
 
@@ -220,10 +221,12 @@ class GVK:
     version: str
     group: str | None = None
 
+    CORE_GROUP: Final[str] = "core"
+
     @property
     def group_version(self) -> str:
         """Get the group and version joined by '/'."""
-        if self.group == "core" or self.group is None:
+        if self.group is None or self.group == self.CORE_GROUP:
             return self.version
         return f"{self.group}/{self.version}"
 
@@ -235,6 +238,10 @@ class GVK:
         weird logic to split that. This method is essentially the reverse of the kr8s logic so we can hand it a
         string it will accept.
         """
+        if self.group is not None and self.group.lower() == self.CORE_GROUP:
+            logger = logging.getLogger(GVK.__name__)
+            logger.warning("core group!")
+            return f"{self.kind.lower()}/{self.version}"
         if self.group is None:
             # e.g. pod/v1
             return f"{self.kind.lower()}/{self.version}"
@@ -245,7 +252,7 @@ class GVK:
     def from_kr8s_object(cls, kr8s_obj: type[APIObject] | APIObject) -> Self:
         """Extract GVK from a kr8s object."""
         if "/" in kr8s_obj.version:
-            grp_version_split = kr8s_obj.version.split("/")
+            grp_version_split = kr8s_obj.version.split("/", maxsplit=1)
             grp = grp_version_split[0]
             version = grp_version_split[1]
         else:

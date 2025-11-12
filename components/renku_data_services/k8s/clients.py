@@ -269,7 +269,7 @@ class K8sClusterClient(K8sClient):
         return self.__cluster
 
     async def __list(self, _filter: K8sObjectFilter) -> AsyncIterable[APIObjectInCluster]:
-        logger = logging.getLogger(SecretClient.__name__)
+        logger = logging.getLogger(K8sClusterClient.__name__)
         if _filter.cluster is not None and _filter.cluster != self.__cluster.id:
             logger.warning("Skipping __list()!")
             logger.warning(f"{_filter.cluster} != {self.__cluster.id}")
