@@ -21,6 +21,7 @@ class GitUrlError(StrEnum):
     no_git_repo = "no_git_repo"
     no_url_path = "no_url_path"
     invalid_url_scheme = "invalid_url_scheme"
+    invalid_git_url = "invalid_git_url"
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -32,7 +33,7 @@ class GitUrl:
     @classmethod
     def parse(cls, url: str) -> GitUrlError | GitUrl:
         """Parse a string into a GitUrl."""
-        return cls.from_parsed(urlparse(url))
+        return cls.from_parsed(urlparse(url.strip()))
 
     @classmethod
     def from_parsed(cls, url: ParseResult) -> GitUrlError | GitUrl:
@@ -44,6 +45,12 @@ class GitUrl:
             return GitUrlError.invalid_url_scheme
         if url.netloc == "":
             return GitUrlError.no_url_host
+        # Don't allow localhost
+        if url.netloc.startswith("localhost:") or url.netloc == "localhost":
+            return GitUrlError.invalid_git_url
+        if url.netloc.startswith("127.0.0.1:") or url.netloc == "127.0.0.1":
+            return GitUrlError.invalid_git_url
+
         # An url without a path is not referring to a repository
         if url.path == "":
             return GitUrlError.no_url_path

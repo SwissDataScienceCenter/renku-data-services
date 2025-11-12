@@ -102,6 +102,8 @@ class GitRepositoriesRepository:
         return result
 
     async def _check_arbitrary_git_repo(self, url: GitUrl) -> models.RepositoryError | None:
+        if url.parsed_url.netloc == "localhost":
+            return models.RepositoryMetadataError.metadata_unknown
         return await url.check_http_git_repository(self.httpClient)
 
     async def _find_connection(

@@ -5,8 +5,19 @@ from httpx import AsyncClient
 
 from renku_data_services.repositories.git_url import GitUrl, GitUrlError
 
-bad_urls = ["", "abc", "http://", "localhost/repo", "ftp://test.com", "http://github.com"]
-good_urls = ["http://localhost:3000/my/repo", "https://github.com/SwissDataScienceCenter/renku"]
+bad_urls = [
+    "",
+    "abc",
+    "http://",
+    "localhost/repo",
+    "ftp://test.com",
+    "http://github.com",
+    "http://localhost:3000/my/repo",
+    "http://127.0.0.1:3000/my/repo",
+    "http://127.0.0.1/my/repo",
+    "http://localhost/my/repo",
+]
+good_urls = ["https://github.com/SwissDataScienceCenter/renku", "http://random/the/repo.git"]
 
 
 def test_bad_urls() -> None:
@@ -40,6 +51,17 @@ def test_remove_trailing_slashes() -> None:
         "http://github.com/SwissDataScienceCenter/renku//",
         "http://github.com/SwissDataScienceCenter/renku///",
         "http://github.com/SwissDataScienceCenter/renku////",
+    ]
+    for url in urls:
+        git_url = GitUrl.unsafe(url)
+        assert git_url.render() == "http://github.com/SwissDataScienceCenter/renku"
+
+
+def test_strip_url() -> None:
+    urls = [
+        "  http://github.com/SwissDataScienceCenter/renku  ",
+        "  http://github.com/SwissDataScienceCenter/renku/",
+        "http://github.com/SwissDataScienceCenter/renku  ",
     ]
     for url in urls:
         git_url = GitUrl.unsafe(url)

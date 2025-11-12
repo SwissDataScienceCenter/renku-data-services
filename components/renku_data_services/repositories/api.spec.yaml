@@ -99,6 +99,7 @@ components:
             - no_git_repo
             - no_url_path
             - invalid_url_scheme
+            - invalid_git_url
             - metadata_unauthorized
             - metadata_oauth
             - metadata_unknown
