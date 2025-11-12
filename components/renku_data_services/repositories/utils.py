@@ -2,15 +2,15 @@
 
 import httpx
 
+from renku_data_services.repositories.git_url import GitUrl, GitUrlError
+
 
 async def probe_repository(repository_url: str) -> bool:
     """Probe a repository to check if it is publicly available."""
-    async with httpx.AsyncClient(timeout=5) as client:
-        url = f"{repository_url}/info/refs?service=git-upload-pack"
-        try:
-            res = await client.get(url=url, follow_redirects=True)
-            if res.status_code != 200:
-                return False
-            return bool(res.headers.get("Content-Type") == "application/x-git-upload-pack-advertisement")
-        except httpx.HTTPError:
+    match GitUrl.parse(repository_url):
+        case GitUrl() as url:
+            async with httpx.AsyncClient(timeout=5) as client:
+                result = await url.check_http_git_repository(client)
+                return result is None
+        case GitUrlError():
             return False

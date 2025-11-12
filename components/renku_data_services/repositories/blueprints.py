@@ -139,3 +139,24 @@ class RepositoriesBP(CustomBlueprint):
             return HTTPResponse(status=200)
 
         return "/repositories/<repository_url>/probe", ["GET"], _get_one_repository_probe
+
+    def get_one_repository_probe_qp(self) -> BlueprintFactoryResponse:
+        """Probe a repository to check if it is publicly available."""
+
+        async def _get_one_repository_probe(req: Request) -> HTTPResponse:
+            query_args: dict[str, str] = req.get_args() or {}
+            repository_url = query_args.get("url")
+            if repository_url is None:
+                return HTTPResponse(status=404)
+
+            RepositoryParams.model_validate(dict(repository_url=repository_url))
+
+            result = await probe_repository(repository_url)
+
+            if not result:
+                raise errors.MissingResourceError(
+                    message=f"The repository at {repository_url} does not seem to be publicly accessible."
+                )
+            return HTTPResponse(status=200)
+
+        return "/repositories/probe", ["GET"], _get_one_repository_probe

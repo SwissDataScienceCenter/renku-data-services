@@ -78,12 +78,16 @@ class GitUrl:
         """Whether this url is a http/https url to a git repository."""
         service_url = self.render() + "/info/refs?service=git-upload-pack"
         try:
-            async with client.stream("GET", service_url) as r:
+            async with client.stream("GET", service_url, follow_redirects=True) as r:
                 if r.status_code == 200:
-                    return None
+                    return (
+                        None
+                        if bool(r.headers.get("Content-Type") == "application/x-git-upload-pack-advertisement")
+                        else GitUrlError.no_git_repo
+                    )
                 else:
                     return GitUrlError.no_git_repo
-        except httpx.TransportError as err:
+        except httpx.HTTPError as err:
             logger.debug(f"Error accessing url for git repo check ({err}): {self}")
             return GitUrlError.no_git_repo
 
