@@ -7,6 +7,7 @@ from typing import Any, Protocol
 
 from kubernetes_asyncio.client import V1DeleteOptions, V1PriorityClass, V1ResourceQuota
 
+from renku_data_services.app_config import logging
 from renku_data_services.k8s.models import K8sObject, K8sObjectFilter, K8sObjectMeta, K8sSecret
 
 
@@ -48,6 +49,19 @@ class SecretClient(Protocol):
     async def delete_secret(self, secret: K8sObjectMeta) -> None:
         """Delete a secret."""
         ...
+
+    async def create_or_patch_secret(self, secret: K8sSecret) -> K8sSecret:
+        """Create or patch a secret.
+
+        This is equivalent to an upsert operation.
+        """
+        logger = logging.getLogger(SecretClient.__name__)
+
+        result = await self.create_secret(secret)
+        if result.manifest.to_json() != secret.manifest.to_json():
+            logger.warning(f"The secret {secret.namespace}/{secret.name} needs to be patched!")
+            result = await self.patch_secret(secret, secret.to_patch())
+        return result
 
 
 class PriorityClassClient(Protocol):

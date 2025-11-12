@@ -422,3 +422,10 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
         """Delete a secret."""
 
         return await self.__secrets_client.delete_secret(secret)
+
+    async def create_or_patch_secret(self, secret: K8sSecret) -> K8sSecret:
+        """Create or patch a secret.
+
+        This is equivalent to an upsert operation.
+        """
+        return await self.__secrets_client.create_or_patch_secret(secret)

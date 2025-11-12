@@ -975,7 +975,7 @@ async def start_session(
     )
     secrets_to_create = session_extras.secrets or []
     for s in secrets_to_create:
-        await nb_config.k8s_v2_client.create_secret(K8sSecret.from_v1_secret(s.secret, cluster))
+        await nb_config.k8s_v2_client.create_or_patch_secret(K8sSecret.from_v1_secret(s.secret, cluster))
     try:
         session = await nb_config.k8s_v2_client.create_session(session, user)
     except Exception as err:
@@ -1186,7 +1186,8 @@ async def patch_session(
 
     secrets_to_create = session_extras.secrets or []
     for s in secrets_to_create:
-        await nb_config.k8s_v2_client.create_secret(K8sSecret.from_v1_secret(s.secret, cluster))
+        # await nb_config.k8s_v2_client.create_secret(K8sSecret.from_v1_secret(s.secret, cluster))
+        await nb_config.k8s_v2_client.create_or_patch_secret(K8sSecret.from_v1_secret(s.secret, cluster))
 
     patch_serialized = patch.to_rfc7386()
     if len(patch_serialized) == 0:
