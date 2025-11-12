@@ -226,7 +226,7 @@ class GVK:
     @property
     def group_version(self) -> str:
         """Get the group and version joined by '/'."""
-        if self.group is None or self.group == GVK_CORE_GROUP:
+        if self.group is None or self.group.lower() == GVK_CORE_GROUP:
             return self.version
         return f"{self.group}/{self.version}"
 
