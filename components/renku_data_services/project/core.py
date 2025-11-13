@@ -220,7 +220,9 @@ def _validate_repository(repository: str) -> str:
             return url.render()
         case git_url.GitUrlError() as err:
             logger.info(f"Provided repository url '{repository}' is invalid: {err}")
-            raise errors.ValidationError(message=f'The repository URL "{repository}" is not a valid HTTP or HTTPS URL.')
+            raise errors.ValidationError(
+                message=f'The repository URL "{repository}" is not a valid repository url: {err}.'
+            )
 
 
 def _validate_session_launcher_secret_slot_filename(filename: str) -> None:
