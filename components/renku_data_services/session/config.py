@@ -96,7 +96,7 @@ class BuildsConfig:
                 if parsed:
                     for platform, data in parsed.items():
                         if platform not in models.Platform:
-                            logger.error(f"Ignoring unkown platform {platform}.")
+                            logger.error(f"Ignoring unknown platform {platform}.")
                             continue
                         if build_platform_overrides is None:
                             build_platform_overrides = dict()
