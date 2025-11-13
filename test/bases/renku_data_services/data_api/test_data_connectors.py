@@ -843,7 +843,7 @@ async def test_patch_data_connector_with_invalid_namespace(
 
 
 @pytest.mark.asyncio
-async def test_patch_data_connector_as_editor(
+async def test_patch_data_connector_as_group_editor(
     sanic_client: SanicASGITestClient,
     create_data_connector,
     admin_headers,
@@ -865,9 +865,9 @@ async def test_patch_data_connector_as_editor(
 
     headers = merge_headers(user_headers, {"If-Match": data_connector["etag"]})
     patch = {
-        # Test that we do not require DELETE permission when sending the current namepace
+        # Test that we do require DELETE permission when sending the current namepace
         "namespace": data_connector["namespace"],
-        # Test that we do not require DELETE permission when sending the current visibility
+        # Test that we do require DELETE permission when sending the current visibility
         "visibility": data_connector["visibility"],
         "description": "A new description",
     }
@@ -875,11 +875,8 @@ async def test_patch_data_connector_as_editor(
         f"/api/data/data_connectors/{data_connector_id}", headers=headers, json=patch
     )
 
-    assert response.status_code == 200, response.text
+    assert response.status_code == 404, response.text
     assert response.json is not None
-    assert response.json.get("namespace") == data_connector["namespace"]
-    assert response.json.get("visibility") == data_connector["visibility"]
-    assert response.json.get("description") == "A new description"
 
 
 @pytest.mark.asyncio
@@ -1671,7 +1668,7 @@ async def test_get_data_connector_permissions_cascading_from_group(
         delete=False,
         change_membership=False,
     )
-    if role == "editor" or role == "owner":
+    if role == "owner":
         expected_permissions["write"] = True
     if role == "owner":
         expected_permissions["delete"] = True
