@@ -86,8 +86,8 @@ class NotificationsBP(CustomBlueprint):
                     await self.notifications_repo.create_alert(user=user, alert=alert)
                 except errors.ConflictError:
                     pass  # Ignore duplicate unresolved alerts
-                except Exception:
-                    continue
+                except Exception:  # nosec B110
+                    pass  # Ignore other errors to continue processing remaining alerts
 
             for alert in resolved_alerts:
                 matching_alerts = await self.notifications_repo.get_alerts_by_properties(
