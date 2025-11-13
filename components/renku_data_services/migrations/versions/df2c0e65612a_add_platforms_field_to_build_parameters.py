@@ -23,7 +23,7 @@ def upgrade() -> None:
     op.create_table(
         "build_platforms",
         sa.Column("id", sa.Integer(), sa.Identity(always=True), nullable=False),
-        sa.Column("platform", sa.String(length=99), nullable=False),
+        sa.Column("platform", sa.Enum("linux_amd64", "linux_arm64", name="build_platform"), nullable=False),
         sa.Column("build_parameters_id", ULIDType(), nullable=False),
         sa.ForeignKeyConstraint(
             ["build_parameters_id"],

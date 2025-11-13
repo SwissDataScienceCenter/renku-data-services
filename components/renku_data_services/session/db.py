@@ -1080,7 +1080,7 @@ class SessionRepository:
         git_repository_revision = build_parameters.repository_revision
         context_dir = build_parameters.context_dir
 
-        build_image = self.builds_config.build_builder_image or constants.BUILD_DEFAULT_BUILDER_IMAGE
+        builder_image = self.builds_config.build_builder_image or constants.BUILD_DEFAULT_BUILDER_IMAGE
         run_image = self.builds_config.build_run_image or constants.BUILD_DEFAULT_RUN_IMAGE
 
         output_image_prefix = (
@@ -1097,16 +1097,16 @@ class SessionRepository:
         node_selector = self.builds_config.node_selector
         tolerations = self.builds_config.tolerations
 
-        platform: str = models.Platform.linux_amd64.value
-        if build_parameters.platforms:
-            platform = models.Platform(build_parameters.platforms[0]).value
-        if self.builds_config.build_platform_overrides and platform in self.builds_config.build_platform_overrides:
-            overrides = self.builds_config.build_platform_overrides[platform]
-            build_image = overrides.builder_image or build_image
-            run_image = overrides.run_image or run_image
-            build_strategy_name = overrides.strategy_name or build_strategy_name
-            node_selector = overrides.node_selector or node_selector
-            tolerations = overrides.tolerations or tolerations
+        # platform: str = models.Platform.linux_amd64.value
+        # if build_parameters.platforms:
+        #     platform = models.Platform(build_parameters.platforms[0]).value
+        # if self.builds_config.build_platform_overrides and platform in self.builds_config.build_platform_overrides:
+        #     overrides = self.builds_config.build_platform_overrides[platform]
+        #     builder_image = overrides.builder_image or builder_image
+        #     run_image = overrides.run_image or run_image
+        #     build_strategy_name = overrides.strategy_name or build_strategy_name
+        #     node_selector = overrides.node_selector or node_selector
+        #     tolerations = overrides.tolerations or tolerations
 
         retention_after_failed = (
             self.builds_config.buildrun_retention_after_failed or constants.BUILD_RUN_DEFAULT_RETENTION_AFTER_FAILED
@@ -1128,10 +1128,10 @@ class SessionRepository:
             annotations["renku.io/launcher_id"] = str(launcher.id)
             annotations["renku.io/project_id"] = str(launcher.project_id)
 
-        return models.ShipwrightBuildRunParams(
+        params = models.ShipwrightBuildRunParams(
             name=build.k8s_name,
             git_repository=git_repository,
-            build_image=build_image,
+            builder_image=builder_image,
             run_image=run_image,
             output_image=output_image,
             build_strategy_name=build_strategy_name,
@@ -1147,6 +1147,16 @@ class SessionRepository:
             git_repository_revision=git_repository_revision,
             context_dir=context_dir,
         )
+
+        platform = models.Platform.linux_amd64
+        if build_parameters.platforms:
+            platform = build_parameters.platforms[0]
+        overrides = None
+        if self.builds_config.build_platform_overrides:
+            overrides = self.builds_config.build_platform_overrides.get(platform.value)
+        params = params.with_overrides(overrides=overrides)
+
+        return params
 
     async def _get_environment_authorization(
         self, session: AsyncSession, user: base_models.APIUser, environment: schemas.EnvironmentORM, scope: Scope

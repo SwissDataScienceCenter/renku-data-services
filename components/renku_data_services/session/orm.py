@@ -3,18 +3,7 @@
 from datetime import datetime
 from pathlib import PurePosixPath
 
-from sqlalchemy import (
-    JSON,
-    BigInteger,
-    Boolean,
-    DateTime,
-    Identity,
-    Integer,
-    MetaData,
-    String,
-    false,
-    func,
-)
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Enum, Identity, Integer, MetaData, String, false, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
@@ -251,7 +240,9 @@ class BuildPlatformORM(BaseORM):
 
     id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, init=False)
 
-    platform: Mapped[str] = mapped_column("platform", String(99))
+    platform: Mapped[models.Platform] = mapped_column(
+        "platform", Enum(models.Platform, name="build_platform"), nullable=False
+    )
 
     build_parameters_id: Mapped[ULID] = mapped_column(
         "build_parameters_id",
