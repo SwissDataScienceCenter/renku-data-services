@@ -1095,7 +1095,7 @@ async def test_get_project_permissions_cascading_from_group(
         delete=False,
         change_membership=False,
     )
-    if role == "editor" or role == "owner":
+    if role == "owner":
         expected_permissions["write"] = True
     if role == "owner":
         expected_permissions["delete"] = True
