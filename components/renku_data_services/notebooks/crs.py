@@ -184,7 +184,12 @@ class CullingDurationParsingMixin(BaseCRD):
 
 
 class Culling(_ASCulling, CullingDurationParsingMixin):
-    """Amalthea session culling configuration."""
+    """Amalthea session culling configuration.
+
+    A value of zero for any of the values indicates that the automatic action will never happen.
+    I.e. a value of zero for `maxIdleDuration` indicates that the session will never be hibernated
+    no matter how long it is idle.
+    """
 
     pass
 
