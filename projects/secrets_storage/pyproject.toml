@@ -28,6 +28,7 @@ packages = [
   { include = "renku_data_services/message_queue", from = "../../components" },
   { include = "renku_data_services/migrations", from = "../../components" },
   { include = "renku_data_services/namespace", from = "../../components" },
+  { include = "renku_data_services/notifications", from = "../../components" },
   { include = "renku_data_services/platform", from = "../../components" },
   { include = "renku_data_services/project", from = "../../components" },
   { include = "renku_data_services/repositories", from = "../../components" },

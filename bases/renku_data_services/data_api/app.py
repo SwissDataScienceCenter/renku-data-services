@@ -26,6 +26,7 @@ from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_connectors.blueprints import DataConnectorsBP
 from renku_data_services.namespace.blueprints import GroupsBP
 from renku_data_services.notebooks.blueprints import NotebooksBP, NotebooksNewBP
+from renku_data_services.notifications.blueprints import NotificationsBP
 from renku_data_services.platform.blueprints import PlatformConfigBP, PlatformUrlRedirectBP
 from renku_data_services.project.blueprints import ProjectsBP, ProjectSessionSecretBP
 from renku_data_services.repositories.blueprints import RepositoriesBP
@@ -258,6 +259,12 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         authenticator=dm.authenticator,
         metrics=dm.metrics,
     )
+    notifications = NotificationsBP(
+        name="notifications",
+        url_prefix=url_prefix,
+        notifications_repo=dm.notifications_repo,
+        authenticator=dm.authenticator,
+    )
     app.blueprint(
         [
             resource_pools.blueprint(),
@@ -286,6 +293,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
             search.blueprint(),
             data_connectors.blueprint(),
             platform_redirects.blueprint(),
+            notifications.blueprint(),
         ]
     )
     if builds is not None:
