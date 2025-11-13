@@ -1097,17 +1097,6 @@ class SessionRepository:
         node_selector = self.builds_config.node_selector
         tolerations = self.builds_config.tolerations
 
-        # platform: str = models.Platform.linux_amd64.value
-        # if build_parameters.platforms:
-        #     platform = models.Platform(build_parameters.platforms[0]).value
-        # if self.builds_config.build_platform_overrides and platform in self.builds_config.build_platform_overrides:
-        #     overrides = self.builds_config.build_platform_overrides[platform]
-        #     builder_image = overrides.builder_image or builder_image
-        #     run_image = overrides.run_image or run_image
-        #     build_strategy_name = overrides.strategy_name or build_strategy_name
-        #     node_selector = overrides.node_selector or node_selector
-        #     tolerations = overrides.tolerations or tolerations
-
         retention_after_failed = (
             self.builds_config.buildrun_retention_after_failed or constants.BUILD_RUN_DEFAULT_RETENTION_AFTER_FAILED
         )
