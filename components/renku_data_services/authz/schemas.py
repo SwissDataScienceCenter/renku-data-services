@@ -675,3 +675,94 @@ v7 = AuthzSchemaMigration(
     up=[WriteSchemaRequest(schema=_v7)],
     down=[WriteSchemaRequest(schema=_v6)],
 )
+
+
+_v8 = """\
+definition user {}
+
+definition group {
+    relation group_platform: platform
+    relation owner: user
+    relation editor: user
+    relation viewer: user
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = public_viewer + read_children
+    permission read_children = viewer + write
+    permission write = editor + delete
+    permission change_membership = delete
+    permission delete = owner + group_platform->is_admin
+    permission non_public_read = owner + editor + viewer - public_viewer
+    permission exclusive_owner = owner
+    permission exclusive_editor = editor
+    permission exclusive_member = viewer + editor + owner
+    permission direct_member = owner + editor + viewer
+}
+
+definition user_namespace {
+    relation user_namespace_platform: platform
+    relation owner: user
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = public_viewer + read_children
+    permission read_children = delete
+    permission write = delete
+    permission delete = owner + user_namespace_platform->is_admin
+    permission non_public_read = owner - public_viewer
+    permission exclusive_owner = owner
+    permission exclusive_member = owner
+    permission direct_member = owner
+}
+
+definition anonymous_user {}
+
+definition platform {
+    relation admin: user
+    permission is_admin = admin
+}
+
+definition project {
+    relation project_platform: platform
+    relation project_namespace: user_namespace | group
+    relation owner: user
+    relation editor: user
+    relation viewer: user
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = public_viewer + read_children
+    permission read_children = viewer + write + project_namespace->read_children
+    permission write = editor + delete + project_namespace->write
+    permission change_membership = delete
+    permission delete = owner + project_platform->is_admin + project_namespace->delete
+    permission non_public_read = owner + editor + viewer + project_namespace->read_children - public_viewer
+    permission exclusive_owner = owner + project_namespace->exclusive_owner
+    permission exclusive_editor = editor + project_namespace->exclusive_editor
+    permission exclusive_member = owner + editor + viewer + project_namespace->exclusive_member
+    permission direct_member = owner + editor + viewer
+}
+
+definition data_connector {
+    relation data_connector_platform: platform
+    relation data_connector_namespace: user_namespace | group | project
+    relation linked_to: project
+    relation owner: user
+    relation editor: user
+    relation viewer: user
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = public_viewer + viewer + write + data_connector_namespace->read_children
+    permission write = editor + delete + data_connector_namespace->write
+    permission change_membership = delete
+    permission delete = owner + data_connector_platform->is_admin + data_connector_namespace->delete
+    permission non_public_read = owner + editor + viewer + data_connector_namespace->read_children - public_viewer
+    permission exclusive_owner = owner + data_connector_namespace->exclusive_owner
+    permission exclusive_editor = editor + data_connector_namespace->exclusive_editor
+    permission exclusive_member = owner + editor + viewer + data_connector_namespace->exclusive_member
+    permission direct_member = owner + editor + viewer
+}"""
+"""This adds three permissions starting with `exclusive_` that are identifying the path of a role.
+
+They are used for reverse lookups (LookupResources) to determine which
+objects a specific user is an owner, editor or member.
+"""
+
+v8 = AuthzSchemaMigration(
+    up=[WriteSchemaRequest(schema=_v8)],
+    down=[WriteSchemaRequest(schema=_v7)],
+)
