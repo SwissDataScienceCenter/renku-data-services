@@ -17,9 +17,9 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.notifications import apispec, models
 from renku_data_services.notifications.core import (
+    transform_alertmanager_webhook,
     validate_alert_patch,
     validate_unsaved_alert,
-    transform_alertmanager_webhook,
 )
 from renku_data_services.notifications.db import NotificationsRepository
 
@@ -86,7 +86,7 @@ class NotificationsBP(CustomBlueprint):
                     await self.notifications_repo.create_alert(user=user, alert=alert)
                 except errors.ConflictError:
                     pass  # Ignore duplicate unresolved alerts
-                except Exception as e:
+                except Exception:
                     continue
 
             for alert in resolved_alerts:

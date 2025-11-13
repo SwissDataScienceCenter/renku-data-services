@@ -62,9 +62,9 @@ def transform_alertmanager_webhook(
     for alert in webhook.alerts:
         unsaved_alert = transform_alert_to_unsaved_alert(alert)
 
-        if alert.status == "firing":
+        if alert.status == apispec.Status.firing:
             firing_alerts.append(unsaved_alert)
-        elif alert.status == "resolved":
+        elif alert.status == apispec.Status.resolved:
             resolved_alerts.append(unsaved_alert)
 
     return firing_alerts, resolved_alerts
