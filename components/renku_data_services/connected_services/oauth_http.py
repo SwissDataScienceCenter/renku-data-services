@@ -462,11 +462,13 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCrypt):
 
             logger.info(f"Token for client {client.id} has keys: {', '.join(token.keys())}")
 
+            next_url = connection.next_url
             connection.token = self.encrypt_token_set(token=token, user_id=connection.user_id)
             connection.state = None
             connection.status = models.ConnectionStatus.connected
             connection.next_url = None
 
+        connection.next_url = next_url
         retval: OAuthHttpClient = DefaultOAuthClient(
             _SafeAsyncOAuthClient(
                 client_id=client.client_id,
