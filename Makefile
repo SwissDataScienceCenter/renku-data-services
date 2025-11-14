@@ -118,6 +118,12 @@ amalthea_schema:  ## Updates generates pydantic classes from CRDs
 shipwright_schema:  ## Updates the Shipwright pydantic classes
 	curl https://raw.githubusercontent.com/shipwright-io/build/refs/tags/v0.15.2/deploy/crds/shipwright.io_buildruns.yaml | yq '.spec.versions[] | select(.name == "v1beta1") | .schema.openAPIV3Schema' | poetry run datamodel-codegen --output components/renku_data_services/session/cr_shipwright_buildrun.py --base-class renku_data_services.session.cr_base.BaseCRD ${CR_CODEGEN_PARAMS}
 
+.PHONY: oci_schema
+oci_schema:  ## Updates the OCI classes
+	poetry run datamodel-codegen --url "https://raw.githubusercontent.com/opencontainers/image-spec/26647a49f642c7d22a1cd3aa0a48e4650a542269/schema/config-schema.json" --output components/renku_data_services/notebooks/oci/image_config.py --class-name ImageConfig --base-class renku_data_services.notebooks.oci.base_model.BaseOciModel ${CR_CODEGEN_PARAMS}
+	poetry run datamodel-codegen --url "https://raw.githubusercontent.com/opencontainers/image-spec/refs/tags/v1.1.1/schema/image-index-schema.json" --output components/renku_data_services/notebooks/oci/image_index.py --class-name ImageIndex --base-class renku_data_services.notebooks.oci.base_model.BaseOciModel ${CR_CODEGEN_PARAMS}
+	poetry run datamodel-codegen --url "https://raw.githubusercontent.com/opencontainers/image-spec/refs/tags/v1.1.1/schema/image-manifest-schema.json" --output components/renku_data_services/notebooks/oci/image_manifest.py --class-name ImageManifest --base-class renku_data_services.notebooks.oci.base_model.BaseOciModel ${CR_CODEGEN_PARAMS}
+
 ##@ Devcontainer
 
 .PHONY: devcontainer_up
