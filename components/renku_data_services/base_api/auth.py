@@ -180,9 +180,7 @@ def require_role(
                     message="Please provide valid access credentials in the Authorization header."
                 )
             if role not in user.roles:
-                raise errors.ForbiddenError(
-                    message=f"You do not have the required role '{role}' for this operation."
-                )
+                raise errors.ForbiddenError(message=f"You do not have the required role '{role}' for this operation.")
 
             # the user is authenticated and has the required role
             response = await f(request, user, *args, **kwargs)
