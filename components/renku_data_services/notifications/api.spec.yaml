@@ -199,6 +199,9 @@ components:
           type: string
           format: date-time
           description: The time when the alert ended
+        generatorURL:
+          type: string
+          description: The URL of the generator that created the alert
     AlertsGetQuery:
       description: Query parameters for getting alerts
       type: object
