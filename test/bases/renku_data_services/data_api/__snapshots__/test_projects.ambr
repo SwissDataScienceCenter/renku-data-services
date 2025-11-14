@@ -28,8 +28,8 @@
     'name': 'Renku Native Project',
     'namespace': 'user.doe',
     'repositories': list([
-      'http://repository-1.ch',
-      'http://repository-2.ch',
+      'http://repository-1.ch/repo1',
+      'http://repository-2.ch/repo2',
     ]),
     'secrets_mount_directory': '/secrets',
     'slug': 'project-slug',
@@ -49,8 +49,8 @@
     'name': 'Renku Native Project',
     'namespace': 'user.doe',
     'repositories': list([
-      'http://repository-1.ch',
-      'http://repository-2.ch',
+      'http://repository-1.ch/repo1',
+      'http://repository-2.ch/repo2',
     ]),
     'secrets_mount_directory': '/secrets',
     'slug': 'project-slug',

@@ -1,17 +1,20 @@
 """Business logic for projects."""
 
 from pathlib import PurePosixPath
-from urllib.parse import urlparse
 
 from ulid import ULID
 
 from renku_data_services import errors
+from renku_data_services.app_config import logging
 from renku_data_services.authz.models import Visibility
 from renku_data_services.base_models import RESET, APIUser, ResetType, Slug
 from renku_data_services.data_connectors.db import DataConnectorRepository
 from renku_data_services.project import apispec, models
 from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
+from renku_data_services.repositories import git_url
 from renku_data_services.session.db import SessionRepository
+
+logger = logging.getLogger(__file__)
 
 
 def validate_unsaved_project(body: apispec.ProjectPost, created_by: str) -> models.UnsavedProject:
@@ -212,11 +215,12 @@ def _validate_repositories(repositories: list[str] | None) -> list[str] | None:
 
 def _validate_repository(repository: str) -> str:
     """Validate a git repository."""
-    stripped = repository.strip()
-    parsed = urlparse(stripped)
-    if parsed.scheme not in ["http", "https"]:
-        raise errors.ValidationError(message=f'The repository URL "{repository}" is not a valid HTTP or HTTPS URL.')
-    return stripped
+    match git_url.GitUrl.parse(repository):
+        case git_url.GitUrl() as url:
+            return url.render()
+        case git_url.GitUrlError() as err:
+            logger.info(f"Provided repository url '{repository}' is invalid: {err}")
+            raise errors.ValidationError(message=f'The repository URL "{repository}" is not a valid HTTP or HTTPS URL.')
 
 
 def _validate_session_launcher_secret_slot_filename(filename: str) -> None:
