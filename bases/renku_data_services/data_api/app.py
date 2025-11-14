@@ -175,12 +175,14 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         name="oauth2_clients",
         url_prefix=url_prefix,
         connected_services_repo=dm.connected_services_repo,
+        oauth_http_client_factory=dm.oauth_http_client_factory,
         authenticator=dm.authenticator,
     )
     oauth2_connections = OAuth2ConnectionsBP(
         name="oauth2_connections",
         url_prefix=url_prefix,
         connected_services_repo=dm.connected_services_repo,
+        oauth_client_factory=dm.oauth_http_client_factory,
         authenticator=dm.authenticator,
     )
     repositories = RepositoriesBP(
@@ -219,6 +221,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         metrics=dm.metrics,
         connected_svcs_repo=dm.connected_services_repo,
         git_provider_helper=dm.git_provider_helper,
+        oauth_client_factory=dm.oauth_http_client_factory,
     )
     platform_config = PlatformConfigBP(
         name="platform_config",

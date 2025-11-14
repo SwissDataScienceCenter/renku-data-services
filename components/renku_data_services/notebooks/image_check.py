@@ -24,6 +24,7 @@ from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.connected_services.models import ImageProvider, OAuth2Client, OAuth2Connection
+from renku_data_services.connected_services.oauth_http import OAuthHttpClientFactory, OAuthHttpError
 from renku_data_services.errors import errors
 from renku_data_services.notebooks.api.classes.image import Image, ImageRepoDockerAPI
 from renku_data_services.notebooks.config import NotebooksConfig
@@ -89,17 +90,19 @@ async def check_image_path(
     image_path: str,
     user: APIUser,
     connected_services: ConnectedServicesRepository,
+    oauth_client_factory: OAuthHttpClientFactory,
     internal_gitlab_config: InternalGitLabConfig | None,
 ) -> CheckResult:
     """Check access to the given image."""
     image = Image.from_path(image_path)
-    return await check_image(image, user, connected_services, internal_gitlab_config)
+    return await check_image(image, user, connected_services, oauth_client_factory, internal_gitlab_config)
 
 
 async def check_image(
     image: Image,
     user: APIUser,
     connected_services: ConnectedServicesRepository,
+    oauth_client_factory: OAuthHttpClientFactory,
     intern_gl_cfg: InternalGitLabConfig | None,
 ) -> CheckResult:
     """Check access to the given image."""
@@ -134,11 +137,11 @@ async def check_image(
         result = 0
 
     if result != 200 and connection is not None:
-        try:
-            await connected_services.get_oauth2_connected_account(connection.id, user)
-        except errors.UnauthorizedError as e:
-            logger.info(f"Error getting connected account: {e}")
-            unauth_error = e
+        client = await oauth_client_factory.for_user_connection_raise(user, connection.id)
+        account = await client.get_connected_account()
+        if isinstance(account, OAuthHttpError):
+            logger.info(f"Error getting connected account: {account}")
+            unauth_error = errors.UnauthorizedError(message=f"Error getting oauth account: {account}")
 
     return CheckResult(
         accessible=result == 200,

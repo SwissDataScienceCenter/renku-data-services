@@ -14,6 +14,7 @@ from renku_data_services.base_models import AnonymousAPIUser, APIUser, Authentic
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.connected_services.models import ConnectionStatus
+from renku_data_services.connected_services.oauth_http import OAuthHttpClientFactory
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
@@ -208,6 +209,7 @@ class NotebooksNewBP(CustomBlueprint):
     cluster_repo: ClusterRepository
     connected_svcs_repo: ConnectedServicesRepository
     git_provider_helper: GitProviderHelperProto
+    oauth_client_factory: OAuthHttpClientFactory
 
     def start(self) -> BlueprintFactoryResponse:
         """Start a session with the new operator."""
@@ -237,6 +239,7 @@ class NotebooksNewBP(CustomBlueprint):
                 user_repo=self.user_repo,
                 metrics=self.metrics,
                 connected_svcs_repo=self.connected_svcs_repo,
+                oauth_client_factory=self.oauth_client_factory,
             )
             status = 201 if created else 200
             return json(session.as_apispec().model_dump(exclude_none=True, mode="json"), status)
@@ -304,6 +307,7 @@ class NotebooksNewBP(CustomBlueprint):
                 session_repo=self.session_repo,
                 metrics=self.metrics,
                 connected_svcs_repo=self.connected_svcs_repo,
+                oauth_client_factory=self.oauth_client_factory,
             )
             return json(new_session.as_apispec().model_dump(exclude_none=True, mode="json"))
 
@@ -341,6 +345,7 @@ class NotebooksNewBP(CustomBlueprint):
                 image,
                 user,
                 self.connected_svcs_repo,
+                self.oauth_client_factory,
                 image_check.InternalGitLabConfig(internal_gitlab_user, self.nb_config),
             )
             logger.info(f"Checked image {query.image_url}: {result}")

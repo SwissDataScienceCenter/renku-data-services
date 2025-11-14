@@ -23,6 +23,7 @@ from renku_data_services.app_config import logging
 from renku_data_services.base_models import RESET, AnonymousAPIUser, APIUser, AuthenticatedAPIUser, ResetType
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.connected_services.db import ConnectedServicesRepository
+from renku_data_services.connected_services.oauth_http import OAuthHttpClientFactory
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
 from renku_data_services.crc.models import (
     ClusterSettings,
@@ -610,11 +611,15 @@ def __format_image_pull_secret(secret_name: str, access_token: str, registry_dom
 
 
 async def __get_connected_services_image_pull_secret(
-    secret_name: str, connected_svcs_repo: ConnectedServicesRepository, image: str, user: APIUser
+    secret_name: str,
+    connected_svcs_repo: ConnectedServicesRepository,
+    oauth_client_factory: OAuthHttpClientFactory,
+    image: str,
+    user: APIUser,
 ) -> ExtraSecret | None:
     """Return a secret for accessing the image if one is available for the given user."""
     image_parsed = Image.from_path(image)
-    image_check_result = await ic.check_image(image_parsed, user, connected_svcs_repo, None)
+    image_check_result = await ic.check_image(image_parsed, user, connected_svcs_repo, oauth_client_factory, None)
     logger.debug(f"Set pull secret for {image} to connection {image_check_result.image_provider}")
     if not image_check_result.token:
         return None
@@ -636,11 +641,12 @@ async def get_image_pull_secret(
     user: APIUser,
     internal_gitlab_user: APIUser,
     connected_svcs_repo: ConnectedServicesRepository,
+    oauth_client_factory: OAuthHttpClientFactory,
 ) -> ExtraSecret | None:
     """Get an image pull secret."""
 
     v2_secret = await __get_connected_services_image_pull_secret(
-        f"{server_name}-image-secret", connected_svcs_repo, image, user
+        f"{server_name}-image-secret", connected_svcs_repo, oauth_client_factory, image, user
     )
     if v2_secret:
         return v2_secret
@@ -720,6 +726,7 @@ async def start_session(
     user_repo: UserRepo,
     metrics: MetricsService,
     connected_svcs_repo: ConnectedServicesRepository,
+    oauth_client_factory: OAuthHttpClientFactory,
 ) -> tuple[AmaltheaSessionV1Alpha1, bool]:
     """Start an Amalthea session.
 
@@ -888,6 +895,7 @@ async def start_session(
         user=user,
         internal_gitlab_user=internal_gitlab_user,
         connected_svcs_repo=connected_svcs_repo,
+        oauth_client_factory=oauth_client_factory,
     )
     if image_secret:
         session_extras = session_extras.concat(SessionExtraResources(secrets=[image_secret]))
@@ -1031,6 +1039,7 @@ async def patch_session(
     rp_repo: ResourcePoolRepository,
     session_repo: SessionRepository,
     connected_svcs_repo: ConnectedServicesRepository,
+    oauth_client_factory: OAuthHttpClientFactory,
     metrics: MetricsService,
 ) -> AmaltheaSessionV1Alpha1:
     """Patch an Amalthea session."""
@@ -1171,6 +1180,7 @@ async def patch_session(
         server_name=server_name,
         nb_config=nb_config,
         connected_svcs_repo=connected_svcs_repo,
+        oauth_client_factory=oauth_client_factory,
         user=user,
         internal_gitlab_user=internal_gitlab_user,
     )
