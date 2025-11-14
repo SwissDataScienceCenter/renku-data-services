@@ -191,7 +191,7 @@ class ShipwrightClient:
                         paramValues=[
                             crs.ParamValue(name="frontend", value=params.frontend),
                             crs.ParamValue(name="run-image", value=params.run_image),
-                            crs.ParamValue(name="builder-image", value=params.build_image),
+                            crs.ParamValue(name="builder-image", value=params.builder_image),
                         ],
                         output=crs.BuildOutput(
                             image=params.output_image,
