@@ -6,7 +6,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum, StrEnum, auto
+from enum import Enum, StrEnum
 from typing import Any, ClassVar, Never, Optional, Protocol, Self, TypeVar, overload
 
 from pydantic_core import core_schema
@@ -415,7 +415,7 @@ class ResetType(Enum):
     * Discussion about PEP 661: https://discuss.python.org/t/pep-661-sentinel-values/9126
     """
 
-    Reset = auto()
+    Reset = None
 
     def __repr__(self) -> str:
         return "RESET"
