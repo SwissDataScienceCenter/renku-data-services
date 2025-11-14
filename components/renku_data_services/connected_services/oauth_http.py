@@ -120,8 +120,8 @@ class _TokenCrypt(Protocol):
         ...
 
 
-class _SafeAsyncOAuthClient(AsyncOAuth2Client):  # type: ignore
-    def __init__(  # type: ignore # nosec: B105
+class _SafeAsyncOAuthClient(AsyncOAuth2Client):  # type: ignore  # nosec: B107
+    def __init__(  # type: ignore # nosec: B105, B107
         self,
         client_id=None,
         client_secret=None,
@@ -130,7 +130,7 @@ class _SafeAsyncOAuthClient(AsyncOAuth2Client):  # type: ignore
         scope=None,
         redirect_uri=None,
         token=None,
-        token_placement="header",
+        token_placement="header",  # nosec: B107
         update_token=None,
         leeway=60,
         **kwargs,
