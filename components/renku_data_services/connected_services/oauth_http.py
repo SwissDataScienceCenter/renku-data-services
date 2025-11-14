@@ -1,5 +1,6 @@
 """Module wrapping an oauth library."""
 
+import time
 from base64 import b64decode, b64encode
 from collections.abc import Callable, Coroutine
 from enum import StrEnum
@@ -36,8 +37,6 @@ from renku_data_services.utils import cryptography as crypt
 
 logger = logging.getLogger(__file__)
 
-#### mypy: ignore-errors
-
 
 class OAuthHttpFactoryError(StrEnum):
     """Errors possible in this module."""
@@ -64,7 +63,7 @@ class OAuthHttpClient(Protocol):
         ...
 
     async def get(
-        self, url: URL | str, *, params: QueryParamTypes | None = None, headers: HeaderTypes | None = None
+        self, url: URL | str, params: QueryParamTypes | None = None, headers: HeaderTypes | None = None
     ) -> Response:
         """Execute a get request."""
         ...
@@ -81,7 +80,9 @@ class OAuthHttpClient(Protocol):
         """Return the access token."""
         ...
 
-    async def get_oauth2_app_installations(self, pagination: PaginationRequest) -> models.AppInstallationList:
+    async def get_oauth2_app_installations(
+        self, pagination: PaginationRequest
+    ) -> OAuthHttpError | models.AppInstallationList:
         """Gets the users app installations if available."""
         ...
 
@@ -95,10 +96,13 @@ class OAuthHttpClientFactory(Protocol):
         """Create an oauth-http client for a given valid user and connection."""
         ...
 
-    async def create_authorization_url(
+    async def initiate_oauth_flow(
         self, user: APIUser, provider_id: str, callback_url: str | None = None, next_url: str | None = None
     ) -> OAuthHttpFactoryError | str:
-        """Create the authorization url to initiate the oauth flow. Creates a connection in the database."""
+        """Create the authorization url to initiate the oauth flow.
+
+        Creates a connection in the database or resets its status to 'pending'.
+        """
         ...
 
     async def fetch_token(
@@ -106,6 +110,110 @@ class OAuthHttpClientFactory(Protocol):
     ) -> OAuthHttpFactoryError | OAuthHttpClient:
         """Finishes the flow by trying to obtain a token given the response url from the authorization challenge."""
         ...
+
+
+class _TokenCrypt(Protocol):
+    """Can encrypt/decrypt sensitive fields of the token set."""
+
+    def encrypt_token_set(self, token: dict[str, Any], user_id: str) -> models.OAuth2TokenSet:
+        """Encrypts sensitive fields of token set before persisting at rest."""
+        ...
+
+    def decrypt_token_set(self, token: dict[str, Any], user_id: str) -> models.OAuth2TokenSet:
+        """Decrypts sensitive fields of token set."""
+        ...
+
+
+class _SafeAsyncOAuthClient(AsyncOAuth2Client):  # type: ignore
+    def __init__(  # type: ignore
+        self,
+        client_id=None,
+        client_secret=None,
+        token_endpoint_auth_method=None,
+        revocation_endpoint_auth_method=None,
+        scope=None,
+        redirect_uri=None,
+        token=None,
+        token_placement="header",
+        update_token=None,
+        leeway=60,
+        **kwargs,
+    ):
+        super().__init__(
+            client_id,
+            client_secret,
+            token_endpoint_auth_method,
+            revocation_endpoint_auth_method,
+            scope,
+            redirect_uri,
+            token,
+            token_placement,
+            update_token,
+            leeway,
+            **kwargs,
+        )
+        self._session_maker = kwargs["session_maker"]
+        self._connection_id: ULID | None = kwargs.get("connection_id")
+        self._token_crypt: _TokenCrypt = kwargs["token_crypt"]
+
+    async def ensure_active_token(self, token):  # type: ignore
+        try:
+            return await super().ensure_active_token(token)
+        except OAuthError as err:
+            # This error comes from refreshing the access token. Each
+            # oauth provider may present a different error code -
+            # event thought the oauth spec
+            # (https://www.rfc-editor.org/rfc/rfc6749#section-5.2) has
+            # a list of what to return. For example, while tests with
+            # GitLab gives errors exactly copied from the spec
+            # ("invalid_grant"), GitHub presents a "bad_refresh_token"
+            # error code. After all, we can never know. From the
+            # implementation of AsyncOAuth2Client this error is always
+            # only from trying to obtain a new access token.
+            #
+            # Here we try to detect a stale read. If that is the case,
+            # we can hack the new token into this client and proceed
+            # to execute the request. This works only, because we are
+            # called right before the request is send and how
+            # AsyncOAuthClient is implemented 😇
+            logger.info(f"OAuth error while refreshing the token: {err}.")
+            if not self._connection_id:
+                logger.warning("No connection id set to check for an recently updated token!")
+            else:
+                logger.info(f"Looking up current connection {self._connection_id} for recent updates.")
+                async with self._session_maker() as session:
+                    result = await session.scalars(
+                        sa.select(schemas.OAuth2ConnectionORM).where(
+                            schemas.OAuth2ConnectionORM.id == self._connection_id
+                        )
+                    )
+                    conn = result.one_or_none()
+                if conn is None or conn.token is None:
+                    logger.debug(f"No valid connection found for id: {self._connection_id}")
+                    raise
+                else:
+                    now = time.time()
+                    expires_at: float | None = self.token.get("expires_at")  # type: ignore
+                    # if the connection has been updated after current expiry date
+                    newer_than_expiry = expires_at and expires_at < conn.updated_at.timestamp()
+                    # if it has been updated recently (a fallback when no expiry date exists)
+                    pretty_recent = now - self.leeway < conn.updated_at.timestamp()
+                    if newer_than_expiry or pretty_recent:
+                        logger.info(
+                            f"Retrying with recently updated token ({now - conn.updated_at.timestamp():.1f}s ago)."
+                        )
+                        self.token = self._token_crypt.decrypt_token_set(conn.token, conn.user_id)
+                        self.token["last_retry"] = now
+                    else:
+                        logger.info(
+                            f"The connection token in the database hasn't been updated since {conn.updated_at}. "
+                            "The user needs to run through the oauth flow again to re-connect."
+                        )
+                        raise errors.InvalidTokenError(
+                            message="The refresh token for the connected service has expired or is invalid.",
+                            detail=f"Please reconnect your integration for the service with ID {str(conn.id)} "
+                            "and try again.",
+                        ) from err
 
 
 class DefaultOAuthClient(OAuthHttpClient):
@@ -144,24 +252,21 @@ class DefaultOAuthClient(OAuthHttpClient):
         return account
 
     async def get(
-        self, url: URL | str, *, params: QueryParamTypes | None = None, headers: HeaderTypes | None = None
+        self, url: URL | str, params: QueryParamTypes | None = None, headers: HeaderTypes | None = None
     ) -> Response:
         """Execute a get request."""
-        try:
-            return await self._delegate.get(url, params=params, headers=headers)
-        except OAuthError as err:
-            if err.error == "invalid_grant":
-                ...
-            raise
+        resp: Response = await self._delegate.get(url, params=params, headers=headers)
+        return resp
 
     async def get_token(self) -> models.OAuth2TokenSet:
         """Return the access token."""
         await self._delegate.ensure_active_token(self._delegate.token)
-        ## TODO handle OAuthError
         token_model = models.OAuth2TokenSet.from_dict(self._delegate.token)
         return token_model
 
-    async def get_oauth2_app_installations(self, pagination: PaginationRequest) -> models.AppInstallationList:
+    async def get_oauth2_app_installations(
+        self, pagination: PaginationRequest
+    ) -> OAuthHttpError | models.AppInstallationList:
         """Gets the users app installations if available."""
         # NOTE: App installations are only available from GitHub when using a "GitHub App"
         if (
@@ -171,30 +276,20 @@ class DefaultOAuthClient(OAuthHttpClient):
         ):
             request_url = urljoin(self.adapter.api_url, "user/installations")
             params = dict(page=pagination.page, per_page=pagination.per_page)
-            try:
-                response = await self._delegate.get(request_url, params=params, headers=self.adapter.api_common_headers)
-            except OAuthError as err:
-                logger.warning(f"Error getting installations at {request_url}: {err}")
-                if err.error == "bad_refresh_token":
-                    raise errors.InvalidTokenError(
-                        message="The refresh token for the connected service has expired or is invalid.",
-                        detail=f"Please reconnect your integration for the service with ID {str(self.connection.id)} "
-                        "and try again.",
-                    ) from err
-                raise
+            response = await self.get(request_url, params=params, headers=self.adapter.api_common_headers)
 
             if response.status_code > 200:
                 logger.warning(
                     f"Could not get installations at {request_url}: {response.status_code} - {response.text}"
                 )
-                raise errors.UnauthorizedError(message="Could not get installation information.")
+                return OAuthHttpError.unauthorized
 
             return self.adapter.api_validate_app_installations_response(response)
 
         return models.AppInstallationList(total_count=0, installations=[])
 
 
-class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory):
+class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCrypt):
     """Default variant for creating oauth-http clients."""
 
     def __init__(self, encryption_key: bytes, session_maker: Callable[..., AsyncSession], callback_url: str) -> None:
@@ -224,7 +319,7 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory):
                 return OAuthHttpFactoryError.invalid_connection
 
             client = connection.client
-            token = self._decrypt_token_set(token=connection.token, user_id=user.id)
+            token = self.decrypt_token_set(token=connection.token, user_id=user.id)
 
         adapter = get_provider_adapter(client)
         client_secret = (
@@ -236,7 +331,7 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory):
         code_challenge_method = "S256" if code_verifier else None
 
         retval: OAuthHttpClient = DefaultOAuthClient(
-            AsyncOAuth2Client(
+            _SafeAsyncOAuthClient(
                 client_id=client.client_id,
                 client_secret=client_secret,
                 redirect_uri=callback_url or self._callback_url,
@@ -245,13 +340,16 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory):
                 token_endpoint=adapter.token_endpoint_url,
                 token=token,
                 update_token=self._update_token(connection),
+                session_maker=self._session_maker,
+                connection_id=connection_id,
+                token_crypt=self,
             ),
             connection,
             adapter,
         )
         return retval
 
-    async def create_authorization_url(
+    async def initiate_oauth_flow(
         self, user: APIUser, provider_id: str, callback_url: str | None = None, next_url: str | None = None
     ) -> OAuthHttpFactoryError | str:
         """Create the authorization url to initiate the oauth flow."""
@@ -274,13 +372,15 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory):
             )
             code_verifier = generate_code_verifier() if client.use_pkce else None
             code_challenge_method = "S256" if client.use_pkce else None
-            oauth_client = AsyncOAuth2Client(
+            oauth_client = _SafeAsyncOAuthClient(
                 client_id=client.client_id,
                 client_secret=client_secret,
                 redirect_uri=callback_url or self._callback_url,
                 scope=client.scope,
                 code_challenge_method=code_challenge_method,
                 token_endpoint=adapter.token_endpoint_url,
+                session_maker=self._session_maker,
+                token_crypt=self,
             )
             url: str
             state: str
@@ -346,13 +446,16 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory):
             )
             code_verifier = connection.code_verifier
             code_challenge_method = "S256" if code_verifier else None
-            oauth_client = AsyncOAuth2Client(
+            oauth_client = _SafeAsyncOAuthClient(
                 client_id=client.client_id,
                 client_secret=client_secret,
                 scope=client.scope,
-                redirect_uri=callback_url,
+                redirect_uri=callback_url or self._callback_url,
                 code_challenge_method=code_challenge_method,
                 state=connection.state,
+                session_maker=self._session_maker,
+                connection_id=connection.id,
+                token_crypt=self,
             )
             token = await oauth_client.fetch_token(
                 adapter.token_endpoint_url, authorization_response=raw_url, code_verifier=code_verifier
@@ -360,13 +463,13 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory):
 
             logger.info(f"Token for client {client.id} has keys: {', '.join(token.keys())}")
 
-            connection.token = self._encrypt_token_set(token=token, user_id=connection.user_id)
+            connection.token = self.encrypt_token_set(token=token, user_id=connection.user_id)
             connection.state = None
             connection.status = models.ConnectionStatus.connected
             connection.next_url = None
 
         retval: OAuthHttpClient = DefaultOAuthClient(
-            AsyncOAuth2Client(
+            _SafeAsyncOAuthClient(
                 client_id=client.client_id,
                 client_secret=client_secret,
                 redirect_uri=callback_url or self._callback_url,
@@ -375,6 +478,9 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory):
                 token_endpoint=adapter.token_endpoint_url,
                 token=token,
                 update_token=self._update_token(connection),
+                session_maker=self._session_maker,
+                connection_id=connection.id,
+                token_crypt=self
             ),
             connection,
             adapter,
@@ -390,14 +496,14 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory):
             async with self._session_maker() as session, session.begin():
                 session.add(connection)
                 await session.refresh(connection)
-                connection.token = self._encrypt_token_set(token=token, user_id=connection.user_id)
+                connection.token = self.encrypt_token_set(token=token, user_id=connection.user_id)
                 await session.flush()
                 await session.refresh(connection)
                 logger.info("Token refreshed!")
 
         return _update_fn
 
-    def _encrypt_token_set(self, token: dict[str, Any], user_id: str) -> models.OAuth2TokenSet:
+    def encrypt_token_set(self, token: dict[str, Any], user_id: str) -> models.OAuth2TokenSet:
         """Encrypts sensitive fields of token set before persisting at rest."""
         result = models.OAuth2TokenSet.from_dict(token)
         if result.access_token:
@@ -410,8 +516,8 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory):
             ).decode("ascii")
         return result
 
-    def _decrypt_token_set(self, token: dict[str, Any], user_id: str) -> models.OAuth2TokenSet:
-        """Encrypts sensitive fields of token set before persisting at rest."""
+    def decrypt_token_set(self, token: dict[str, Any], user_id: str) -> models.OAuth2TokenSet:
+        """Decrypts sensitive fields of token set."""
         result = models.OAuth2TokenSet.from_dict(token)
         if result.access_token:
             result["access_token"] = crypt.decrypt_string(self._encryption_key, user_id, b64decode(result.access_token))

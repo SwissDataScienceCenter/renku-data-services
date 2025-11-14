@@ -6,13 +6,14 @@ import os
 import socketserver
 import threading
 import urllib
+from typing import Any
 
 from renku_data_services.app_config import logging
-from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.base_models.core import AuthenticatedAPIUser
 from renku_data_services.connected_services.models import (
     OAuth2Client,
     OAuth2Connection,
+    OAuth2TokenSet,
     ProviderKind,
     UnsavedOAuth2Client,
 )
@@ -35,10 +36,28 @@ user = AuthenticatedAPIUser(
     access_token="abc",
 )
 # create a github app and put client_id+secret as env vars
-github_client_id = os.environ.get("GITHUB_CLIENT_ID", "abc")
-github_client_secret = os.environ.get("GITHUB_CLIENT_SECRET", "***")
-provider_id = "github1"
+config = {
+    "gitlab": {
+        "id": "gitlab-1",
+        "client_id": os.environ.get("GITLAB_CLIENT_ID"),
+        "client_secret": os.environ.get("GITLAB_CLIENT_SECRET"),
+        "scope": "api read_api read_user",
+        "url": "https://gitlab.ethz.ch",
+        "kind": ProviderKind.gitlab,
+    },
+    "github": {
+        "id": "github-1",
+        "client_id": os.environ.get("GITHUB_CLIENT_ID"),
+        "client_secret": os.environ.get("GITHUB_CLIENT_SECRET"),
+        "scope": "api read",
+        "url": "https://github.com",
+        "kind": ProviderKind.github,
+    },
+    "provider": "gitlab",
+}
 
+test_provider = config[config["provider"]]
+provider_id: str = test_provider["id"]
 
 ### ---------------------------------------------------------------------
 
@@ -63,17 +82,21 @@ async def create_oauth_client() -> OAuth2Client:
     try:
         provider = await cc_repo.get_oauth2_client(provider_id, user)
     except errors.MissingResourceError:
+        if not test_provider["client_id"]:  # type:ignore
+            raise Exception("Needs a client id as env var!") from None
+        if not test_provider["client_secret"]:  # type:ignore
+            raise Exception("Needs a client secret as env var!") from None
         provider = await cc_repo.insert_oauth2_client(
             user,
             UnsavedOAuth2Client(
                 id=provider_id,
                 app_slug="myapp",
-                client_id=github_client_id,
-                client_secret=github_client_secret,
-                display_name="github",
-                scope="api read",
-                url="https://github.com",
-                kind=ProviderKind.github,
+                client_id=test_provider["client_id"],  # type:ignore
+                client_secret=test_provider["client_secret"],  # type:ignore
+                display_name=provider_id,  # type:ignore
+                scope=test_provider["scope"],  # type:ignore
+                url=test_provider["url"],  # type:ignore
+                kind=test_provider["kind"],  # type:ignore
                 use_pkce=False,
             ),
         )
@@ -135,7 +158,7 @@ async def create_connection2() -> OAuthHttpClient:
     connections = await cc_repo.get_oauth2_connections(user)
     connections = [c for c in connections if c.provider_id == provider_id]
     if connections == []:
-        url = await factory.create_authorization_url(user, provider_id)
+        url = await factory.initiate_oauth_flow(user, provider_id)
         print(f"visit this url:\n{url}")
         (state, path) = wait_for_oauth_callback(9000, url)
 
@@ -148,9 +171,10 @@ async def create_connection2() -> OAuthHttpClient:
             print("Connected.")
             client = await factory.for_user_connection(user, connections[0].id)
             if isinstance(client, OAuthHttpFactoryError):
-                raise Exception(f"Error obtaining code: {client}")
+                raise Exception(f"Error getting client for user: {client}")
             return client
         else:
+            logger.info(f"Connection {connections[0].id} exists, but is not in connected state")
             await cc_repo.delete_oauth2_connection(user, connections[0].id)
             return await create_connection2()
 
@@ -164,26 +188,55 @@ async def make_http_client(conn: OAuth2Connection) -> OAuthHttpClient:
     return client
 
 
+def set_refresh_token(token: dict[str, Any], plain_refresh_token: str) -> OAuth2TokenSet:
+    token["refresh_token"] = plain_refresh_token
+    token["expires_at"] = 1  # must be >0 because python treas 0 as False and skips checks then
+    token["expires_in"] = 1
+    return factory.encrypt_token_set(token, user.id)
+
+
+def set_token_expired(token: dict[str, Any]) -> OAuth2TokenSet:
+    token["expires_at"] = 1  # must be >0 because python treas 0 as False and skips checks then
+    token["expires_in"] = 1
+    return factory.encrypt_token_set(token, user.id)
+
+
+async def store_token(token: OAuth2TokenSet, client: OAuthHttpClient) -> None:
+    conn = client.connection
+    async with deps.config.db.async_session_maker() as session, session.begin():
+        session.add(conn)
+        conn.token = token
+        await session.flush()
+
+
 async def prepare_test() -> OAuthHttpClient:
     await create_user()
     await create_oauth_client()
     return await create_connection2()
 
 
-#    return await make_http_client(conn)
+async def replay_stale_read() -> None:
+    # start with no connection row, this test taints it
+    client = await prepare_test()
+    token = await client.get_token()
+    await store_token(set_token_expired(token), client)
+
+    client = await create_connection2()
+    client2 = await create_connection2()
+
+    print("Try to refresh with two clients")
+
+    result = await client.get_token()
+    print(result)  # this works
+    result = await client2.get_token()
+    print(result)  # this crashes
 
 
 async def async_main() -> None:
-    client = await prepare_test()
-
-    account = await client.get_connected_account()
-    print("---------------------------------------------------------")
-    print(f"Account:\n {account}")
-    print(f"Authorize Url:\n {await factory.create_authorization_url(user, provider_id)}")
-    token = await client.get_token()
-    print(f"Token:\n {token}")
-    apps = await client.get_oauth2_app_installations(PaginationRequest(page=1, per_page=10))
-    print(apps)
+    # client = await create_connection2()
+    # token = await client.get_token()
+    # print(token)
+    await replay_stale_read()
 
 
 if __name__ == "__main__":
