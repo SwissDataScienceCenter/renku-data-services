@@ -227,7 +227,7 @@ class DependencyManager:
         connected_services_repo = ConnectedServicesRepository(
             session_maker=config.db.async_session_maker,
             encryption_key=config.secrets.encryption_key,
-            async_oauth2_client_class=cls.async_oauth2_client_class,
+            oauth_client_factory=oauth_http_client_factory,
         )
 
         if config.dummy_stores:
@@ -357,6 +357,7 @@ class DependencyManager:
         git_repositories_repo = GitRepositoriesRepository(
             session_maker=config.db.async_session_maker,
             connected_services_repo=connected_services_repo,
+            oauth_client_factory=oauth_http_client_factory,
             internal_gitlab_url=config.gitlab_url,
             enable_internal_gitlab=config.enable_internal_gitlab,
         )
