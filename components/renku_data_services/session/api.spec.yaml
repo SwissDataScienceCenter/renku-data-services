@@ -648,6 +648,15 @@ components:
       minLength: 1
       maxLength: 99
       example: My Renku Session :)
+    BuildPlatforms:
+      description: The target runtime platforms of a session environment.
+      type: array
+      items:
+        $ref: "#/components/schemas/BuildPlatform"
+    BuildPlatform:
+      description: A runtime platform, e.g. "linux/amd64".
+      type: string
+      enum: ["linux/amd64", "linux/arm64"]
     BuilderVariant:
       description: Type of virtual environment manager when building custom environments.
       type: string
@@ -728,6 +737,8 @@ components:
       properties:
         repository:
           $ref: "#/components/schemas/Repository"
+        platforms:
+          $ref: "#/components/schemas/BuildPlatforms"
         builder_variant:
           $ref: "#/components/schemas/BuilderVariant"
         frontend_variant:
@@ -755,6 +766,8 @@ components:
       properties:
         repository:
           $ref: "#/components/schemas/Repository"
+        platforms:
+          $ref: "#/components/schemas/BuildPlatforms"
         builder_variant:
           $ref: "#/components/schemas/BuilderVariant"
         frontend_variant:

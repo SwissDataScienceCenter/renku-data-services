@@ -8,8 +8,20 @@ from pydantic import ValidationError as PydanticValidationError
 
 from renku_data_services.app_config import logging
 from renku_data_services.session import crs as session_crs
+from renku_data_services.session import models
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class BuildPlatformOverrides:
+    """Configuration overrides for a given target platform."""
+
+    builder_image: str | None = None
+    run_image: str | None = None
+    strategy_name: str | None = None
+    node_selector: dict[str, str] | None = None
+    tolerations: list[session_crs.Toleration] | None = None
 
 
 @dataclass
@@ -21,6 +33,7 @@ class BuildsConfig:
     build_builder_image: str | None = None
     build_run_image: str | None = None
     build_strategy_name: str | None = None
+    build_platform_overrides: dict[str, BuildPlatformOverrides] | None = None
     push_secret_name: str | None = None
     buildrun_retention_after_failed: timedelta | None = None
     buildrun_retention_after_succeeded: timedelta | None = None
@@ -75,12 +88,38 @@ class BuildsConfig:
             except PydanticValidationError:
                 logger.error("Could not validate BUILD_NODE_TOLERATIONS. Will not use tolerations for image builds.")
 
+        build_platform_overrides: dict[str, BuildPlatformOverrides] | None = None
+        build_platform_overrides_str = os.environ.get("BUILD_PLATFORM_OVERRIDES")
+        if build_platform_overrides_str:
+            try:
+                parsed = session_crs.BuildPlatformOverridesDict.model_validate_json(build_platform_overrides_str).root
+                if parsed:
+                    for platform, data in parsed.items():
+                        if platform not in models.Platform:
+                            logger.error(f"Ignoring unknown platform {platform}.")
+                            continue
+                        if build_platform_overrides is None:
+                            build_platform_overrides = dict()
+                        build_platform_overrides[platform] = BuildPlatformOverrides(
+                            builder_image=data.builderImage,
+                            run_image=data.runImage,
+                            strategy_name=data.strategyName,
+                            node_selector=data.nodeSelector,
+                            tolerations=data.tolerations,
+                        )
+            except PydanticValidationError:
+                logger.error(
+                    "Could not validate BUILD_PLATFORM_OVERRIDES. "
+                    "Will not use platform-specific overrides for image builds."
+                )
+
         return cls(
             enabled=enabled or False,
             build_output_image_prefix=build_output_image_prefix or None,
             build_builder_image=build_builder_image,
             build_run_image=build_run_image,
             build_strategy_name=build_strategy_name or None,
+            build_platform_overrides=build_platform_overrides,
             push_secret_name=push_secret_name or None,
             buildrun_retention_after_failed=buildrun_retention_after_failed,
             buildrun_retention_after_succeeded=buildrun_retention_after_succeeded,

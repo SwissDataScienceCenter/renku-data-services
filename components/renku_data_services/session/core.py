@@ -64,8 +64,11 @@ def validate_unsaved_build_parameters(
             )
         )
 
+    platforms = __validate_build_parameters_platforms(environment.platforms)
+
     return models.UnsavedBuildParameters(
         repository=environment.repository,
+        platforms=platforms,
         builder_variant=environment.builder_variant,
         frontend_variant=environment.frontend_variant,
         repository_revision=environment.repository_revision if environment.repository_revision else None,
@@ -90,8 +93,13 @@ def validate_build_parameters_patch(environment: apispec.BuildParametersPatch) -
             )
         )
 
+    platforms: list[models.Platform] | None = None
+    if environment.platforms is not None:
+        platforms = __validate_build_parameters_platforms(environment.platforms)
+
     return models.BuildParametersPatch(
         repository=environment.repository,
+        platforms=platforms,
         builder_variant=environment.builder_variant,
         frontend_variant=environment.frontend_variant,
         repository_revision=environment.repository_revision,
@@ -344,3 +352,25 @@ def validate_build_patch(patch: apispec.BuildPatch) -> models.BuildPatch:
     """Validate the update to a session launcher."""
     status = models.BuildStatus(patch.status.value) if patch.status else None
     return models.BuildPatch(status=status)
+
+
+def __validate_build_parameters_platforms(platforms: list[apispec.BuildPlatform] | None) -> list[models.Platform]:
+    """Validate the platforms field for build parameters."""
+    platforms_str_list: list[str] = [models.Platform.linux_amd64]
+    if platforms:
+        platforms_str_list = [item.value for item in platforms]
+    platforms_str_list = sorted(set(platforms_str_list))
+    if len(platforms_str_list) != 1:
+        raise errors.ValidationError(
+            message=f"Invalid value for the field 'platforms': {platforms}: "
+            "only one platform at a time is supported at the moment."
+        )
+    for platform in platforms_str_list:
+        if platform not in models.Platform:
+            raise errors.ValidationError(
+                message=(
+                    f"Invalid value for the field 'platforms': {platforms}: "
+                    f"Valid values are {[e.value for e in models.Platform]}"
+                )
+            )
+    return [models.Platform(item) for item in platforms_str_list]
