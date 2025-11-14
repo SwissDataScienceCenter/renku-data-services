@@ -121,10 +121,21 @@ class KeycloakAuthenticator(Authenticator):
             exp = parsed.get("exp")
             id = parsed.get("sub")
             email = parsed.get("email")
-            if id is None or email is None:
+
+            if email is None:
+                client_id = parsed.get("azp") or parsed.get("clientId") or parsed.get("client_id")
+                if client_id:
+                    email = f"service-account-{client_id}@renku.local"
+                else:
+                    raise errors.UnauthorizedError(
+                        message="Your credentials are invalid or expired, please log in again."
+                    ) from None
+
+            if id is None:
                 raise errors.UnauthorizedError(
                     message="Your credentials are invalid or expired, please log in again."
                 ) from None
+
             user = base_models.AuthenticatedAPIUser(
                 is_admin=is_admin,
                 id=id,
