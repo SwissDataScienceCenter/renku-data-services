@@ -84,9 +84,11 @@ paths:
         - alerts
   /alerts/webhook/alertmanager:
     post:
-      summary: Receive Prometheus Alertmanager webhooks. Requires admin permissions.
+      summary: Receive Prometheus Alertmanager webhooks. Requires OAuth2 client credentials authentication with the alertmanager-webhook role.
       description: |
         This endpoint receives webhooks from Prometheus Alertmanager and creates or resolves alerts accordingly. "firing" alerts will create new alerts, while "resolved" alerts will mark existing alerts as resolved. The payload must contain the necessary information to identify the user and session.
+
+        **Authentication**: This endpoint requires OAuth2 client credentials flow authentication. The OAuth2 client must be configured in Keycloak with the "alertmanager-webhook" realm role (or the role specified in the ALERTMANAGER_WEBHOOK_ROLE environment variable). Alertmanager should be configured to obtain an access token from Keycloak's token endpoint and include it in the Authorization header as a Bearer token.
       requestBody:
         required: true
         content:
@@ -111,7 +113,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
-          description: Unauthorized
+          description: Unauthorized - Missing or invalid Bearer token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden - Token is valid but does not have the required role
           content:
             application/json:
               schema:

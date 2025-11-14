@@ -116,7 +116,8 @@ class KeycloakAuthenticator(Authenticator):
         with suppress(errors.UnauthorizedError, jwt.InvalidTokenError):
             token = str(header_value).removeprefix("Bearer ").removeprefix("bearer ")
             parsed = self._validate(token)
-            is_admin = self.admin_role in parsed.get("realm_access", {}).get("roles", [])
+            roles = parsed.get("realm_access", {}).get("roles", [])
+            is_admin = self.admin_role in roles
             exp = parsed.get("exp")
             id = parsed.get("sub")
             email = parsed.get("email")
@@ -134,6 +135,7 @@ class KeycloakAuthenticator(Authenticator):
                 email=email,
                 refresh_token=str(refresh_token) if refresh_token else None,
                 access_token_expires_at=datetime.fromtimestamp(exp) if exp is not None else None,
+                roles=roles,
             )
         if user is not None:
             return user

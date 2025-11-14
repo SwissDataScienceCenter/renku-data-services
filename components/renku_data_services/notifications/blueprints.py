@@ -12,6 +12,7 @@ import renku_data_services.errors as errors
 from renku_data_services.base_api.auth import (
     authenticate,
     only_admins,
+    require_role,
 )
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models.validation import validated_json
@@ -30,6 +31,7 @@ class NotificationsBP(CustomBlueprint):
 
     notifications_repo: NotificationsRepository
     authenticator: base_models.Authenticator
+    alertmanager_webhook_role: str = "alertmanager-webhook"
 
     def post(self) -> BlueprintFactoryResponse:
         """Create a new alert."""
@@ -74,7 +76,7 @@ class NotificationsBP(CustomBlueprint):
         """Process Alertmanager webhook."""
 
         @authenticate(self.authenticator)
-        @only_admins
+        @require_role(self.alertmanager_webhook_role)
         @validate(json=apispec.AlertmanagerWebhook)
         async def _post_webhook_alertmanager(
             _: Request, user: base_models.APIUser, body: apispec.AlertmanagerWebhook
