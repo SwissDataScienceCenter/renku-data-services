@@ -142,10 +142,10 @@ class ImageRepoDockerAPI:
 
     async def image_exists(self, image: Image) -> bool:
         """Check the docker repo API if the image exists."""
-        status_code, _ = await self.image_check(image)
-        return status_code == 200
+        response = await self.image_check(image)
+        return response.status_code == 200
 
-    async def image_check(self, image: Image, include_manifest: bool = False) -> tuple[int, httpx.Response]:
+    async def image_check(self, image: Image, include_manifest: bool = False) -> httpx.Response:
         """Check the image at the registry."""
         token = await self._get_docker_token(image)
         image_digest_url = f"{self.scheme}://{image.hostname}/v2/{image.name}/manifests/{image.tag}"
@@ -167,7 +167,7 @@ class ImageRepoDockerAPI:
 
         res = await self.client.request(method, image_digest_url, headers=headers)
         logger.debug(f"Checked image access: {image_digest_url}: {res.status_code}")
-        return res.status_code, res
+        return res
 
     async def get_image_config_from_digest(self, image: Image, config_digest: str) -> httpx.Response:
         """Query the docker API to get the configuration of an image from the config digest."""

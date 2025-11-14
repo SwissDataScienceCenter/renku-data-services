@@ -111,7 +111,8 @@ class ImageCheckRepository:
             reg_api = reg_api.with_oauth2_token(gitlab_user.access_token)
 
         try:
-            status_code, response = await reg_api.image_check(image, include_manifest=True)
+            response = await reg_api.image_check(image, include_manifest=True)
+            status_code = response.status_code
         except httpx.HTTPError as e:
             logger.info(f"Error connecting {reg_api.scheme}://{reg_api.hostname}: {e}")
             status_code = 0
@@ -127,7 +128,6 @@ class ImageCheckRepository:
         platforms = None
         if status_code == 200 and response is not None:
             platforms = await get_image_platforms(manifest_response=response, image=image, reg_api=reg_api)
-        logger.info(f"Platforms: {platforms}")
 
         return CheckResult(
             accessible=status_code == 200,
