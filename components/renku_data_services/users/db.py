@@ -18,7 +18,7 @@ from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz, AuthzOperation, ResourceType
 from renku_data_services.base_api.auth import APIUser, only_authenticated
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
-from renku_data_services.base_models.metrics import MetricsService
+from renku_data_services.base_models.metrics import MetricsService, UserIdentity
 from renku_data_services.base_models.nel import Nel
 from renku_data_services.errors import errors
 from renku_data_services.namespace.db import GroupRepository
@@ -321,7 +321,7 @@ class UsersSync:
         # Send the new user's identity for metrics
         result = new_user.dump()
         user_identity = await self.metrics.identify_user(user=result, existing_identity_hash=None, metadata={})
-        if user_identity:
+        if isinstance(user_identity, UserIdentity):
             new_user.metrics_identity_hash = user_identity.hash()
             await session.flush()
 
@@ -356,7 +356,7 @@ class UsersSync:
         user_identity = await self.metrics.identify_user(
             user=result, existing_identity_hash=existing_user.metrics_identity_hash, metadata={}
         )
-        if user_identity:
+        if isinstance(user_identity, UserIdentity):
             existing_user.metrics_identity_hash = user_identity.hash()
             await session.flush()
 
@@ -378,11 +378,6 @@ class UsersSync:
                 logger.info(f"Inserting or updating user {db_user} -> {kc_user}")
                 update = await self.update_or_insert_user(user=kc_user)
                 db_user = update.new
-
-            # # TODO: do not send identify if already done
-            # user_identity = await self.metrics.identify_user(user=db_user, metadata={})
-            # if user_identity:
-            #     db
 
         # NOTE: If asyncio.gather is used here you quickly exhaust all DB connections
         # or timeout on waiting for available connections
