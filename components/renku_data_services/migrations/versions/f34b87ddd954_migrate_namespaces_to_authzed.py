@@ -8,9 +8,11 @@ Create Date: 2024-05-22 07:56:17.839732
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.orm import Session
+from sqlalchemy import MetaData
+from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, Session, mapped_column
+from ulid import ULID
 
-from renku_data_services.namespace.orm import GroupORM
+from renku_data_services.utils.sqlalchemy import ULIDType
 
 # revision identifiers, used by Alembic.
 revision = "f34b87ddd954"
@@ -19,10 +21,24 @@ branch_labels = None
 depends_on = None
 
 
+class BaseORM(MappedAsDataclass, DeclarativeBase):
+    """Base class for all ORM classes."""
+
+    metadata = MetaData(schema="common")
+
+
+class FrozenGroupORM(BaseORM):
+    """A Renku group."""
+
+    __tablename__ = "groups"
+
+    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
+
+
 def upgrade() -> None:
     with Session(bind=op.get_bind()) as session, session.begin():
         # Delete all groups
-        groups = session.scalars(sa.select(GroupORM)).all()
+        groups = session.scalars(sa.select(FrozenGroupORM)).all()
         for group in groups:
             session.delete(group)
 

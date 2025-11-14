@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import JSON, Boolean, DateTime, Identity, Integer, LargeBinary, MetaData, String, true
 from sqlalchemy.dialects.postgresql import JSONB
@@ -31,11 +31,14 @@ class UserORM(BaseORM):
     __tablename__ = "users"
     keycloak_id: Mapped[str] = mapped_column(String(36), unique=True, index=True)
     namespace: Mapped[NamespaceORM] = relationship(repr=False, back_populates="user", lazy="selectin")
-    first_name: Mapped[Optional[str]] = mapped_column(String(256), default=None)
-    last_name: Mapped[Optional[str]] = mapped_column(String(256), default=None)
-    email: Mapped[Optional[str]] = mapped_column(String(320), default=None, index=True)
-    secret_key: Mapped[Optional[bytes]] = mapped_column(LargeBinary(), default=None, repr=False)
+    first_name: Mapped[str | None] = mapped_column(String(256), default=None)
+    last_name: Mapped[str | None] = mapped_column(String(256), default=None)
+    email: Mapped[str | None] = mapped_column(String(320), default=None, index=True)
+    secret_key: Mapped[bytes | None] = mapped_column(LargeBinary(), default=None, repr=False)
     id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, init=False)
+
+    metrics_identity_hash: Mapped[str | None] = mapped_column(String(), default=None, init=False)
+    """Hash of the identity sent for metrics."""
 
     def dump(self) -> UserInfo:
         """Create a user object from the ORM object."""

@@ -1,6 +1,8 @@
 """Protocol for metrics service."""
 
+from dataclasses import dataclass
 from enum import StrEnum
+from hashlib import sha1
 from typing import Protocol
 
 from renku_data_services.base_models.core import APIUser
@@ -31,11 +33,50 @@ class MetricsEvent(StrEnum):
 type MetricsMetadata = dict[str, str | int | bool]
 
 
+@dataclass(eq=True, frozen=True, kw_only=True)
+class UserIdentity:
+    """Represents a user's identity."""
+
+    user_id: str
+    email: str | None
+    first_name: str | None
+    last_name: str | None
+    username: str | None
+
+    def hash(self) -> str:
+        """Returns a hash of the identity."""
+        digest = sha1(usedforsecurity=False)
+        digest.update(f"user_id={self.user_id}".encode())
+        digest.update(f"email={self.email}".encode())
+        digest.update(f"first_name={self.first_name}".encode())
+        digest.update(f"last_name={self.last_name}".encode())
+        digest.update(f"username={self.username}".encode())
+        return digest.hexdigest()
+
+    def to_dict(self) -> dict[str, str]:
+        """Returns a dictionary representation of the identity."""
+        data = dict(user_id=self.user_id)
+        if self.email:
+            data["email"] = self.email
+        if self.first_name:
+            data["first_name"] = self.first_name
+        if self.last_name:
+            data["last_name"] = self.last_name
+        if self.username:
+            data["username"] = self.username
+        return data
+
+
 class MetricsService(Protocol):
     """Protocol for sending product metrics."""
 
-    async def identify_user(self, user: UserInfo, metadata: MetricsMetadata) -> None:
-        """Send a user's identity to metrics."""
+    async def identify_user(
+        self, user: UserInfo, existing_identity_hash: str | None, metadata: MetricsMetadata
+    ) -> UserIdentity | None:
+        """Send a user's identity to metrics.
+
+        Returns an instance of UserIdentity if the the event has actually been saved and None otherwise.
+        """
         ...
 
     async def session_started(self, user: APIUser, metadata: MetricsMetadata) -> None:

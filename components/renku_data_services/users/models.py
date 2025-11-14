@@ -13,6 +13,7 @@ from typing import Any, NamedTuple
 from pydantic import BaseModel, Field
 
 from renku_data_services.app_config import logging
+from renku_data_services.base_models import errors
 from renku_data_services.namespace.models import UserNamespace
 
 logger = logging.getLogger(__name__)
@@ -262,6 +263,18 @@ class UserInfo(UnsavedUserInfo):
     """A tuple used to convey information about a user and their namespace."""
 
     namespace: UserNamespace
+
+    def requires_update(self, current_user_info: UnsavedUserInfo) -> bool:
+        """Returns true if the data self does not match the current_user_info."""
+        if self.id != current_user_info.id:
+            raise errors.ValidationError(message="Cannot check updates on two different users.")
+        self_as_unsaved = UnsavedUserInfo(
+            id=self.id,
+            first_name=self.first_name,
+            last_name=self.last_name,
+            email=self.email,
+        )
+        return self_as_unsaved != current_user_info
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
