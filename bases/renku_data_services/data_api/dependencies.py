@@ -387,6 +387,7 @@ class DependencyManager:
         )
         notifications_repo = NotificationsRepository(
             session_maker=config.db.async_session_maker,
+            alertmanager_webhook_role=config.alertmanager_webhook_role,
         )
         return cls(
             config,

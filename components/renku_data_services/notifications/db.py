@@ -18,14 +18,16 @@ class NotificationsRepository:
     def __init__(
         self,
         session_maker: Callable[..., AsyncSession],
+        alertmanager_webhook_role: str = "alertmanager-webhook",
     ):
         self.session_maker = session_maker
+        self.alertmanager_webhook_role = alertmanager_webhook_role
 
     async def create_alert(self, user: base_models.APIUser, alert: models.UnsavedAlert) -> models.Alert:
         """Insert a new alert into the database."""
         if user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
-        if not user.is_admin:
+        if not user.is_admin and self.alertmanager_webhook_role not in user.roles:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session:
@@ -81,7 +83,7 @@ class NotificationsRepository:
         """Update an existing alert in the database."""
         if user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
-        if not user.is_admin:
+        if not user.is_admin and self.alertmanager_webhook_role not in user.roles:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session, session.begin():
