@@ -279,14 +279,13 @@ class UsersSync:
             orm = res.scalar_one_or_none()
             return orm.dump() if orm else None
 
-    # TODO: here
     @with_db_transaction
     @Authz.authz_change(AuthzOperation.update_or_insert, ResourceType.user)
     @update_search_document
     async def update_or_insert_user(
         self, user: UnsavedUserInfo, *, session: AsyncSession | None = None
     ) -> UserInfoUpdate:
-        """Update a user entry or insert it if it does not exist."""
+        """Update a user or insert it if it does not exist."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
         res = await session.execute(select(UserORM).where(UserORM.keycloak_id == user.id))
