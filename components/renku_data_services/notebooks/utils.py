@@ -141,7 +141,7 @@ def node_affinity_patch_from_resource_class(
     if affinity.nodeAffinity:
         patch.nodeAffinity = NodeAffinityPatch(
             preferredDuringSchedulingIgnoredDuringExecution=(
-                affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution or RESET
+                affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution or []
             ),
             requiredDuringSchedulingIgnoredDuringExecution=(
                 affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution or RESET
@@ -150,19 +150,19 @@ def node_affinity_patch_from_resource_class(
     if affinity.podAffinity:
         patch.podAffinity = PodAffinityPatch(
             preferredDuringSchedulingIgnoredDuringExecution=(
-                affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution or RESET
+                affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution or []
             ),
             requiredDuringSchedulingIgnoredDuringExecution=(
-                affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution or RESET
+                affinity.podAffinity.requiredDuringSchedulingIgnoredDuringExecution or []
             ),
         )
     if affinity.podAntiAffinity:
         patch.podAntiAffinity = PodAntiAffinityPatch(
             preferredDuringSchedulingIgnoredDuringExecution=(
-                affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution or RESET
+                affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution or []
             ),
             requiredDuringSchedulingIgnoredDuringExecution=(
-                affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution or RESET
+                affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution or []
             ),
         )
     return patch

@@ -428,27 +428,27 @@ class NodeAffinityPatch(BaseCRD):
     """Patch for the node affinity of a session."""
 
     preferredDuringSchedulingIgnoredDuringExecution: (
-        Sequence[PreferredDuringSchedulingIgnoredDuringExecutionItem] | None | ResetType
+        Sequence[PreferredDuringSchedulingIgnoredDuringExecutionItem] | None
     ) = None
     requiredDuringSchedulingIgnoredDuringExecution: (
-        RequiredDuringSchedulingIgnoredDuringExecution | None | ResetType
+        RequiredDuringSchedulingIgnoredDuringExecution | ResetType | None
     ) = None
 
 
 class PodAffinityPatch(BaseCRD):
     """Patch for the pod affinity of a session."""
 
-    preferredDuringSchedulingIgnoredDuringExecution: Sequence[PreferredPodAffinityItem] | None | ResetType = None
+    preferredDuringSchedulingIgnoredDuringExecution: Sequence[PreferredPodAffinityItem] | None = None
     requiredDuringSchedulingIgnoredDuringExecution: (
-        Sequence[RequiredDuringSchedulingIgnoredDuringExecutionItem] | None | ResetType
+        Sequence[RequiredDuringSchedulingIgnoredDuringExecutionItem] | None
     ) = None
 
 
 class PodAntiAffinityPatch(BaseCRD):
     """Patch for the pod anti affinity of a session."""
 
-    preferredDuringSchedulingIgnoredDuringExecution: Sequence[PreferredPodAntiAffinityItem] | None | ResetType = None
-    requiredDuringSchedulingIgnoredDuringExecution: Sequence[RequiredPodAntiAffinityItem] | None | ResetType = None
+    preferredDuringSchedulingIgnoredDuringExecution: Sequence[PreferredPodAntiAffinityItem] | None = None
+    requiredDuringSchedulingIgnoredDuringExecution: Sequence[RequiredPodAntiAffinityItem] | None = None
 
 
 class AffinityPatch(BaseCRD):
