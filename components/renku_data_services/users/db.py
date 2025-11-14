@@ -298,9 +298,7 @@ class UsersSync:
                 patch=UserPatch.from_unsaved_user_info(user),
             )
         else:
-            update = await self._insert_user(session=session, user=user)
-            await self.metrics.identify_user(user=update.new, metadata={})
-            return update
+            return await self._insert_user(session=session, user=user)
 
     async def _insert_user(self, session: AsyncSession, user: UnsavedUserInfo) -> UserInfoUpdate:
         """Insert a user."""
@@ -319,7 +317,15 @@ class UsersSync:
         new_user.namespace.user = new_user
         session.add(new_user)
         await session.flush()
-        return UserInfoUpdate(None, new_user.dump())
+
+        # Send the new user's identity for metrics
+        result = new_user.dump()
+        user_identity = await self.metrics.identify_user(user=result, existing_identity_hash=None, metadata={})
+        if user_identity:
+            new_user.metrics_identity_hash = user_identity.hash()
+            await session.flush()
+
+        return UserInfoUpdate(None, result)
 
     async def _update_user(
         self, session: AsyncSession, user_id: str, existing_user: UserORM | None, patch: UserPatch
@@ -344,6 +350,16 @@ class UsersSync:
             raise errors.ProgrammingError(
                 message=f"Cannot find a user namespace for user {user_id} when updating the user."
             )
+
+        # Send the updated user's identity for metrics
+        result = existing_user.dump()
+        user_identity = await self.metrics.identify_user(
+            user=result, existing_identity_hash=existing_user.metrics_identity_hash, metadata={}
+        )
+        if user_identity:
+            existing_user.metrics_identity_hash = user_identity.hash()
+            await session.flush()
+
         return UserInfoUpdate(old_user, existing_user.dump())
 
     async def users_sync(self, kc_api: IKeycloakAPI) -> None:
@@ -355,15 +371,18 @@ class UsersSync:
         kc_users = kc_api.get_users()
 
         async def _do_update(raw_kc_user: dict[str, Any]) -> None:
-            kc_user = UserInfo.from_kc_user_payload(raw_kc_user)
+            kc_user = UnsavedUserInfo.from_kc_user_payload(raw_kc_user)
             logger.info(f"Checking user with Keycloak ID {kc_user.id}")
             db_user = await self._get_user(kc_user.id)
-            if db_user != kc_user:
+            if db_user is None or db_user.requires_update(current_user_info=kc_user):
                 logger.info(f"Inserting or updating user {db_user} -> {kc_user}")
                 update = await self.update_or_insert_user(user=kc_user)
                 db_user = update.new
-            if db_user is not None:
-                await self.metrics.identify_user(user=db_user, metadata={})
+
+            # # TODO: do not send identify if already done
+            # user_identity = await self.metrics.identify_user(user=db_user, metadata={})
+            # if user_identity:
+            #     db
 
         # NOTE: If asyncio.gather is used here you quickly exhaust all DB connections
         # or timeout on waiting for available connections
