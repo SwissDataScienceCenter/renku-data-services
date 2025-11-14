@@ -36,9 +36,7 @@ async def test_create_client_invalid_connection(app_manager_instance: Dependency
     run_migrations_for_app("common")
     deps = app_manager_instance
     (user, _) = await _make_user(deps)
-    factory = DefaultOAuthHttpClientFactory(
-        deps.config.secrets.encryption_key, deps.config.db.async_session_maker, "http://localhost"
-    )
+    factory = DefaultOAuthHttpClientFactory(deps.config.secrets.encryption_key, deps.config.db.async_session_maker)
 
     (_, connOrm) = await _setup_connection(app_manager_instance, ConnectionStatus.pending)
 
@@ -50,9 +48,7 @@ async def test_create_client_no_connection(app_manager_instance: DependencyManag
     run_migrations_for_app("common")
     deps = app_manager_instance
     (user, _) = await _make_user(deps)
-    factory = DefaultOAuthHttpClientFactory(
-        deps.config.secrets.encryption_key, deps.config.db.async_session_maker, "http://localhost"
-    )
+    factory = DefaultOAuthHttpClientFactory(deps.config.secrets.encryption_key, deps.config.db.async_session_maker)
 
     result = await factory.for_user_connection(user, ULID())
     assert result == OAuthHttpFactoryError.invalid_connection
