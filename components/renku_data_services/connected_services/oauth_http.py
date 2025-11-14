@@ -50,8 +50,8 @@ class OAuthHttpFactoryError(StrEnum):
 class OAuthHttpError(StrEnum):
     """Errors possible when using the client."""
 
-    invalid_token = "invalid_token"
-    unauthorized = "unauthorized"
+    invalid_token = "invalid_token"  # nosec: B105
+    unauthorized = "unauthorized"  # nosec: B105
 
 
 class OAuthHttpClient(Protocol):
@@ -68,16 +68,12 @@ class OAuthHttpClient(Protocol):
         """Execute a get request."""
         ...
 
-    # async def post() -> Response: ...
-
-    # async def get_token() -> dict[str, Any]: ...
-
     async def get_connected_account(self) -> OAuthHttpError | models.ConnectedAccount:
         """Return the connected account."""
         ...
 
     async def get_token(self) -> models.OAuth2TokenSet:
-        """Return the access token."""
+        """Return the access token. This may involve refreshing the token and updating it."""
         ...
 
     async def get_oauth2_app_installations(
@@ -90,14 +86,16 @@ class OAuthHttpClient(Protocol):
 class OAuthHttpClientFactory(Protocol):
     """Ways to create http-oauth clients."""
 
-    async def for_user_connection(
-        self, user: APIUser, connection_id: ULID, callback_url: str | None = None
-    ) -> OAuthHttpFactoryError | OAuthHttpClient:
+    async def for_user_connection(self, user: APIUser, connection_id: ULID) -> OAuthHttpFactoryError | OAuthHttpClient:
         """Create an oauth-http client for a given valid user and connection."""
         ...
 
+    async def for_user_connection_raise(self, user: APIUser, connection_id: ULID) -> OAuthHttpClient:
+        """Same as `for_user_connection` but throws on error."""
+        ...
+
     async def initiate_oauth_flow(
-        self, user: APIUser, provider_id: str, callback_url: str | None = None, next_url: str | None = None
+        self, user: APIUser, provider_id: str, callback_url: str, next_url: str | None = None
     ) -> OAuthHttpFactoryError | str:
         """Create the authorization url to initiate the oauth flow.
 
@@ -105,9 +103,7 @@ class OAuthHttpClientFactory(Protocol):
         """
         ...
 
-    async def fetch_token(
-        self, state: str, raw_url: str, callback_url: str | None = None
-    ) -> OAuthHttpFactoryError | OAuthHttpClient:
+    async def fetch_token(self, state: str, raw_url: str, callback_url: str) -> OAuthHttpFactoryError | OAuthHttpClient:
         """Finishes the flow by trying to obtain a token given the response url from the authorization challenge."""
         ...
 
@@ -125,7 +121,7 @@ class _TokenCrypt(Protocol):
 
 
 class _SafeAsyncOAuthClient(AsyncOAuth2Client):  # type: ignore
-    def __init__(  # type: ignore
+    def __init__(  # type: ignore # nosec: B105
         self,
         client_id=None,
         client_secret=None,
@@ -203,7 +199,6 @@ class _SafeAsyncOAuthClient(AsyncOAuth2Client):  # type: ignore
                             f"Retrying with recently updated token ({now - conn.updated_at.timestamp():.1f}s ago)."
                         )
                         self.token = self._token_crypt.decrypt_token_set(conn.token, conn.user_id)
-                        self.token["last_retry"] = now
                     else:
                         logger.info(
                             f"The connection token in the database hasn't been updated since {conn.updated_at}. "
@@ -292,14 +287,21 @@ class DefaultOAuthClient(OAuthHttpClient):
 class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCrypt):
     """Default variant for creating oauth-http clients."""
 
-    def __init__(self, encryption_key: bytes, session_maker: Callable[..., AsyncSession], callback_url: str) -> None:
+    def __init__(self, encryption_key: bytes, session_maker: Callable[..., AsyncSession]) -> None:
         self._encryption_key = encryption_key
         self._session_maker = session_maker
-        self._callback_url = callback_url
 
-    async def for_user_connection(
-        self, user: APIUser, connection_id: ULID, callback_url: str | None = None
-    ) -> OAuthHttpFactoryError | OAuthHttpClient:
+    async def for_user_connection_raise(self, user: APIUser, connection_id: ULID) -> OAuthHttpClient:
+        """Same as `for_user_connection` but throws on error."""
+        client = await self.for_user_connection(user, connection_id)
+        match client:
+            case OAuthHttpFactoryError() as err:
+                logger.info(f"Error getting oauth client for user={user.id} conn={connection_id}: {err}")
+                raise errors.ForbiddenError(message="You don't have the required permissions to perform this operation")
+            case _:
+                return client
+
+    async def for_user_connection(self, user: APIUser, connection_id: ULID) -> OAuthHttpFactoryError | OAuthHttpClient:
         """Create an oauth-http client for the given user and connection."""
         if not user.is_authenticated or user.id is None:
             return OAuthHttpFactoryError.invalid_user
@@ -334,7 +336,6 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCrypt):
             _SafeAsyncOAuthClient(
                 client_id=client.client_id,
                 client_secret=client_secret,
-                redirect_uri=callback_url or self._callback_url,
                 scope=client.scope,
                 code_challenge_method=code_challenge_method,
                 token_endpoint=adapter.token_endpoint_url,
@@ -350,7 +351,7 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCrypt):
         return retval
 
     async def initiate_oauth_flow(
-        self, user: APIUser, provider_id: str, callback_url: str | None = None, next_url: str | None = None
+        self, user: APIUser, provider_id: str, callback_url: str, next_url: str | None = None
     ) -> OAuthHttpFactoryError | str:
         """Create the authorization url to initiate the oauth flow."""
         if not user.is_authenticated or user.id is None:
@@ -375,7 +376,7 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCrypt):
             oauth_client = _SafeAsyncOAuthClient(
                 client_id=client.client_id,
                 client_secret=client_secret,
-                redirect_uri=callback_url or self._callback_url,
+                redirect_uri=callback_url,
                 scope=client.scope,
                 code_challenge_method=code_challenge_method,
                 token_endpoint=adapter.token_endpoint_url,
@@ -417,9 +418,7 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCrypt):
 
         return url
 
-    async def fetch_token(
-        self, state: str, raw_url: str, callback_url: str | None = None
-    ) -> OAuthHttpFactoryError | OAuthHttpClient:
+    async def fetch_token(self, state: str, raw_url: str, callback_url: str) -> OAuthHttpFactoryError | OAuthHttpClient:
         """Finishes the flow by trying to obtain a token given the response url from the authorization challenge."""
         if not state:
             logger.info("fetch_token called without a state")
@@ -450,7 +449,7 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCrypt):
                 client_id=client.client_id,
                 client_secret=client_secret,
                 scope=client.scope,
-                redirect_uri=callback_url or self._callback_url,
+                redirect_uri=callback_url,
                 code_challenge_method=code_challenge_method,
                 state=connection.state,
                 session_maker=self._session_maker,
@@ -472,7 +471,7 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCrypt):
             _SafeAsyncOAuthClient(
                 client_id=client.client_id,
                 client_secret=client_secret,
-                redirect_uri=callback_url or self._callback_url,
+                redirect_uri=callback_url,
                 scope=client.scope,
                 code_challenge_method=code_challenge_method,
                 token_endpoint=adapter.token_endpoint_url,
@@ -480,7 +479,7 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCrypt):
                 update_token=self._update_token(connection),
                 session_maker=self._session_maker,
                 connection_id=connection.id,
-                token_crypt=self
+                token_crypt=self,
             ),
             connection,
             adapter,

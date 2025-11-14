@@ -7,6 +7,7 @@ import socketserver
 import threading
 import urllib
 from typing import Any
+from urllib.parse import urlparse
 
 from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import AuthenticatedAPIUser
@@ -54,6 +55,7 @@ config = {
         "kind": ProviderKind.github,
     },
     "provider": "gitlab",
+    "callback_url": "http://localhost:9000",
 }
 
 test_provider = config[config["provider"]]
@@ -63,9 +65,7 @@ provider_id: str = test_provider["id"]
 
 deps = DependencyManager.from_env()
 logger = logging.getLogger(__file__)
-factory = DefaultOAuthHttpClientFactory(
-    deps.config.secrets.encryption_key, deps.config.db.async_session_maker, "http://localhost:9000"
-)
+factory = DefaultOAuthHttpClientFactory(deps.config.secrets.encryption_key, deps.config.db.async_session_maker)
 
 
 async def create_user() -> UserInfo:
@@ -134,14 +134,15 @@ def wait_for_oauth_callback(port: int, url: str) -> (str, str):
 
 
 async def create_connection() -> OAuth2Connection:
-    callback_url = "http://localhost:9000"
+    callback_url: str = config["callback_url"]
+    port = urlparse(callback_url).port or 9000
     cc_repo = deps.connected_services_repo
     connections = await cc_repo.get_oauth2_connections(user)
     connections = [c for c in connections if c.provider_id == provider_id]
     if connections == []:
         url = await cc_repo.authorize_client(user, provider_id, callback_url)
         print(f"visit this url:\n{url}")
-        (state, path) = wait_for_oauth_callback(9000, url)
+        (state, path) = wait_for_oauth_callback(port, url)
         await cc_repo.authorize_callback(state, path, callback_url)
         return await create_connection()
     else:
@@ -154,15 +155,17 @@ async def create_connection() -> OAuth2Connection:
 
 
 async def create_connection2() -> OAuthHttpClient:
+    callback_url: str = config["callback_url"]
+    port = urlparse(callback_url).port or 9000
     cc_repo = deps.connected_services_repo
     connections = await cc_repo.get_oauth2_connections(user)
     connections = [c for c in connections if c.provider_id == provider_id]
     if connections == []:
-        url = await factory.initiate_oauth_flow(user, provider_id)
+        url = await factory.initiate_oauth_flow(user, provider_id, callback_url)
         print(f"visit this url:\n{url}")
-        (state, path) = wait_for_oauth_callback(9000, url)
+        (state, path) = wait_for_oauth_callback(port, url)
 
-        client = await factory.fetch_token(state, path)
+        client = await factory.fetch_token(state, path, callback_url)
         if isinstance(client, OAuthHttpFactoryError):
             raise Exception(f"Error in fetch_token code: {client}")
         return client
@@ -180,7 +183,7 @@ async def create_connection2() -> OAuthHttpClient:
 
 
 async def make_http_client(conn: OAuth2Connection) -> OAuthHttpClient:
-    client_or_error = await factory.for_user_connection(user, conn.id)
+    client_or_error = await factory.for_user_connection(user, conn.id, config["callback_url"])
     if isinstance(client_or_error, OAuthHttpFactoryError):
         raise Exception(f"Client not created: {client_or_error}")
 
@@ -226,9 +229,9 @@ async def replay_stale_read() -> None:
 
     print("Try to refresh with two clients")
 
-    result = await client.get_token()
+    result = await client.get_connected_account()
     print(result)  # this works
-    result = await client2.get_token()
+    result = await client2.get_connected_account()
     print(result)  # this crashes
 
 

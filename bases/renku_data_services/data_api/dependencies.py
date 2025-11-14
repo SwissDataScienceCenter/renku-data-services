@@ -25,6 +25,7 @@ from renku_data_services.authn.gitlab import EmptyGitlabAuthenticator, GitlabAut
 from renku_data_services.authn.keycloak import KcUserStore, KeycloakAuthenticator
 from renku_data_services.authz.authz import Authz
 from renku_data_services.connected_services.db import ConnectedServicesRepository
+from renku_data_services.connected_services.oauth_http import DefaultOAuthHttpClientFactory, OAuthHttpClientFactory
 from renku_data_services.crc import models as crc_models
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository, UserRepository
 from renku_data_services.crc.server_options import (
@@ -143,6 +144,7 @@ class DependencyManager:
     shipwright_client: ShipwrightClient | None
     url_redirect_repo: UrlRedirectRepository
     git_provider_helper: GitProviderHelperProto
+    oauth_http_client_factory: OAuthHttpClientFactory
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
@@ -217,6 +219,10 @@ class DependencyManager:
         config = Config.from_env()
         kc_api: IKeycloakAPI
         cluster_repo = ClusterRepository(session_maker=config.db.async_session_maker)
+
+        oauth_http_client_factory = DefaultOAuthHttpClientFactory(
+            config.secrets.encryption_key, config.db.async_session_maker
+        )
 
         connected_services_repo = ConnectedServicesRepository(
             session_maker=config.db.async_session_maker,
@@ -417,4 +423,5 @@ class DependencyManager:
             low_level_user_secrets_repo=low_level_user_secrets_repo,
             url_redirect_repo=url_redirect_repo,
             git_provider_helper=git_provider_helper,
+            oauth_http_client_factory=oauth_http_client_factory,
         )
