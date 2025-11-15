@@ -23,6 +23,7 @@ from renku_data_services.app_config import logging
 from renku_data_services.base_models import RESET, AnonymousAPIUser, APIUser, AuthenticatedAPIUser, ResetType
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.connected_services.db import ConnectedServicesRepository
+from renku_data_services.connected_services.models import ProviderKind
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
 from renku_data_services.crc.models import (
     ClusterSettings,
@@ -594,10 +595,8 @@ async def __requires_image_pull_secret(nb_config: NotebooksConfig, image: str, i
     return False
 
 
-def __format_image_pull_secret(secret_name: str, access_token: str, registry_domain: str) -> ExtraSecret:
-    registry_secret = {
-        "auths": {registry_domain: {"auth": base64.b64encode(f"oauth2:{access_token}".encode()).decode()}}
-    }
+def __format_image_pull_secret(secret_name: str, token: str, registry_domain: str) -> ExtraSecret:
+    registry_secret = {"auths": {registry_domain: {"auth": token}}}
     registry_secret = json.dumps(registry_secret)
     registry_secret = base64.b64encode(registry_secret.encode()).decode()
     return ExtraSecret(
@@ -622,10 +621,14 @@ async def __get_connected_services_image_pull_secret(
     if not image_check_result.image_provider:
         return None
 
+    registry_url = image_check_result.image_provider.registry_url
+    if image_check_result.image_provider.provider.kind == ProviderKind.dockerhub:
+        registry_url = "https://index.docker.io/v1/"
+
     return __format_image_pull_secret(
         secret_name=secret_name,
-        access_token=image_check_result.token,
-        registry_domain=image_check_result.image_provider.registry_url,
+        token=image_check_result.token,
+        registry_domain=registry_url,
     )
 
 

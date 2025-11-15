@@ -14,6 +14,7 @@ For the latter case, try to find out as much as possible:
 
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass, field
 from typing import final
 
@@ -140,10 +141,13 @@ async def check_image(
             logger.info(f"Error getting connected account: {e}")
             unauth_error = e
 
+    token = f"{reg_api.username}:{reg_api.oauth2_token}"
+    token = base64.b64encode(token.encode()).decode()
+
     return CheckResult(
         accessible=result == 200,
         response_code=result,
         image_provider=image_provider,
-        token=reg_api.oauth2_token,
+        token=token,
         error=unauth_error,
     )

@@ -40,6 +40,7 @@ class ImageRepoDockerAPI:
 
     hostname: str
     oauth2_token: Optional[str] = field(default=None, repr=False)
+    username: str = "oauth2"
 
     # NOTE: We need to follow redirects so that we can authenticate with the image repositories properly.
     # NOTE: If we do not use default_factory to create the client here requests will fail because it can happen
@@ -74,9 +75,11 @@ class ImageRepoDockerAPI:
             return None
         headers = {"Accept": "application/json"}
         if self.oauth2_token:
-            creds = base64.b64encode(f"oauth2:{self.oauth2_token}".encode()).decode()
+            logger.debug(f"Use credentials for user: {self.username}")
+            creds = base64.b64encode(f"{self.username}:{self.oauth2_token}".encode()).decode()
             headers["Authorization"] = f"Basic {creds}"
         token_req = await self.client.get(realm, params=params, headers=headers)
+        logger.debug(f"Docker token response for {self.username}: {token_req.status_code}")
         return str(token_req.json().get("token"))
 
     async def get_image_manifest(
@@ -192,9 +195,17 @@ class ImageRepoDockerAPI:
             workdir = "/"
         return PurePosixPath(workdir)
 
-    def with_oauth2_token(self, oauth2_token: str) -> ImageRepoDockerAPI:
+    def with_oauth2_token(self, oauth2_token: str, user: str | None = None) -> ImageRepoDockerAPI:
         """Return a docker API instance with the token as authentication."""
-        return ImageRepoDockerAPI(hostname=self.hostname, scheme=self.scheme, oauth2_token=oauth2_token)
+        return ImageRepoDockerAPI(
+            hostname=self.hostname, scheme=self.scheme, oauth2_token=oauth2_token, username=user or self.username
+        )
+
+    def with_user_name(self, user: str) -> ImageRepoDockerAPI:
+        """Return a docker api instance with the given user set."""
+        return ImageRepoDockerAPI(
+            hostname=self.hostname, scheme=self.scheme, oauth2_token=self.oauth2_token, username=user
+        )
 
     def maybe_with_oauth2_token(self, token_hostname: str | None, oauth2_token: str | None) -> ImageRepoDockerAPI:
         """Return a docker API instance with the token as authentication.
