@@ -37,9 +37,6 @@ class UserORM(BaseORM):
     secret_key: Mapped[bytes | None] = mapped_column(LargeBinary(), default=None, repr=False)
     id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, init=False)
 
-    # metrics_identity_hash: Mapped[str | None] = mapped_column(String(), default=None, init=False)
-    # """Hash of the identity sent for metrics."""
-
     def dump(self) -> UserInfo:
         """Create a user object from the ORM object."""
         return UserInfo(
