@@ -31,6 +31,7 @@ from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.notebooks.api.classes.data_service import GitProviderHelper
+from renku_data_services.notebooks.image_check import ImageCheckRepository
 from renku_data_services.platform.db import PlatformRepository, UrlRedirectRepository
 from renku_data_services.project.db import (
     ProjectMemberRepository,
@@ -298,6 +299,9 @@ class TestDependencyManager(DependencyManager):
             data_connector_repo=data_connector_repo,
         )
         cluster_repo = ClusterRepository(session_maker=config.db.async_session_maker)
+        image_check_repo = ImageCheckRepository(
+            nb_config=config.nb_config, connected_services_repo=connected_services_repo
+        )
         metrics_repo = MetricsRepository(session_maker=config.db.async_session_maker)
         git_provider_helper = GitProviderHelper(connected_services_repo, "", "", "", config.enable_internal_gitlab)
         return cls(
@@ -329,6 +333,7 @@ class TestDependencyManager(DependencyManager):
             data_connector_repo=data_connector_repo,
             data_connector_secret_repo=data_connector_secret_repo,
             cluster_repo=cluster_repo,
+            image_check_repo=image_check_repo,
             metrics_repo=metrics_repo,
             metrics=metrics_mock,
             shipwright_client=None,
