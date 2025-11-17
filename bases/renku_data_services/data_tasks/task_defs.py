@@ -59,15 +59,17 @@ async def send_metrics_to_posthog(dm: DependencyManager) -> None:
             async for metric in metrics:
                 try:
                     if metric.event == MetricsEvent.identify_user.value:
-                        posthog.identify(
-                            distinct_id=metric.anonymous_user_id,
-                            timestamp=metric.timestamp,
-                            properties=metric.metadata_ or {},
-                            # This is sent to avoid duplicate events if multiple instances of data service are running.
-                            # Posthog deduplicates events with the same timestamp, distinct_id, event, and uuid fields:
-                            # https://github.com/PostHog/posthog/issues/17211#issuecomment-1723136534
-                            uuid=metric.id.to_uuid4(),
-                        )
+                        pass
+                        # TODO: Fix in a followup to prevent sending too many requests to Posthog
+                        # posthog.identify(
+                        #     distinct_id=metric.anonymous_user_id,
+                        #     timestamp=metric.timestamp,
+                        #     properties=metric.metadata_ or {},
+                        #    # This is sent to avoid duplicate events if multiple instances of data service are running.
+                        #    # Posthog deduplicates events with the same timestamp, distinct_id, event, and uuid fields:
+                        #     # https://github.com/PostHog/posthog/issues/17211#issuecomment-1723136534
+                        #     uuid=metric.id.to_uuid4(),
+                        # )
                     else:
                         posthog.capture(
                             distinct_id=metric.anonymous_user_id,
