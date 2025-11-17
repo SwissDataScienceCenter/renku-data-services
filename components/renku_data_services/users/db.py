@@ -321,6 +321,7 @@ class UsersSync:
         # Send the new user's identity for metrics
         result = new_user.dump()
         user_identity = await self.metrics.identify_user(user=result, existing_identity_hash=None, metadata={})
+        # NOTE: We check againt the UserIdentity class because of magic mocks in tests
         if isinstance(user_identity, UserIdentity):
             await session.refresh(new_user)
             user_metrics_res = await session.scalars(select(UserMetricsORM).where(UserMetricsORM.id == new_user.id))
@@ -365,6 +366,7 @@ class UsersSync:
         user_identity = await self.metrics.identify_user(
             user=result, existing_identity_hash=metrics_identity_hash, metadata={}
         )
+        # NOTE: We check againt the UserIdentity class because of magic mocks in tests
         if isinstance(user_identity, UserIdentity):
             if user_metrics_orm is None:
                 user_metrics_orm = UserMetricsORM(id=existing_user.id)
