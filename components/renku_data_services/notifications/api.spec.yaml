@@ -170,6 +170,9 @@ components:
         externalURL:
           type: string
           description: The external URL of the Alertmanager
+        truncatedAlerts:
+          type: integer
+          description: The number of alerts that have been truncated
         alerts:
           type: array
           description: The list of alerts
@@ -210,6 +213,9 @@ components:
         generatorURL:
           type: string
           description: The URL of the generator that created the alert
+        fingerprint:
+          type: string
+          description: A unique fingerprint identifying this alert
     AlertsGetQuery:
       description: Query parameters for getting alerts
       type: object
