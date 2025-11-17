@@ -1,7 +1,7 @@
 """add platforms field to build_parameters
 
 Revision ID: df2c0e65612a
-Revises: d437be68a4fb
+Revises: 42049656cdb8
 Create Date: 2025-11-03 08:59:27.001063
 
 """
@@ -13,7 +13,7 @@ from renku_data_services.utils.sqlalchemy import ULIDType
 
 # revision identifiers, used by Alembic.
 revision = "df2c0e65612a"
-down_revision = "d437be68a4fb"
+down_revision = "42049656cdb8"
 branch_labels = None
 depends_on = None
 
