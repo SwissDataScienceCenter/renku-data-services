@@ -1294,7 +1294,9 @@ components:
           $ref: "#/components/schemas/HibernationThreshold"
         cluster_id:
           $ref: "#/components/schemas/Ulid"
-      required: ["classes", "name", "public", "default"]
+        platform:
+          $ref: "#/components/schemas/ContainerRuntimePlatform"
+      required: ["classes", "name", "public", "default", "platform"]
       example:
         quota:
           cpu: 50
@@ -1342,6 +1344,8 @@ components:
           $ref: "#/components/schemas/HibernationThreshold"
         cluster_id:
           $ref: "#/components/schemas/Ulid"
+        platform:
+          $ref: "#/components/schemas/ContainerRuntimePlatform"
       example:
         quota:
           cpu: 50
@@ -1374,6 +1378,8 @@ components:
           $ref: "#/components/schemas/HibernationThreshold"
         cluster_id:
           $ref: "#/components/schemas/Ulid"
+        platform:
+          $ref: "#/components/schemas/ContainerRuntimePlatform"
       required: ["classes", "name", "public", "default"]
       example:
         quota:
@@ -1429,7 +1435,9 @@ components:
             id:
               $ref: "#/components/schemas/Ulid"
           required: ["id"]
-      required: ["classes", "name", "id", "public", "default"]
+        platform:
+          $ref: "#/components/schemas/ContainerRuntimePlatform"
+      required: ["classes", "name", "id", "public", "default", "platform"]
       example:
         quota:
           cpu: 50
@@ -1481,7 +1489,9 @@ components:
           $ref: "#/components/schemas/HibernationThreshold"
         cluster_id:
           $ref: "#/components/schemas/Ulid"
-      required: ["classes", "name", "id", "public", "default"]
+        platform:
+          $ref: "#/components/schemas/ContainerRuntimePlatform"
+      required: ["classes", "name", "id", "public", "default", "platform"]
       example:
         quota:
           cpu: 50
@@ -1871,6 +1881,32 @@ components:
       uniqueItems: true
       default: []
       minItems: 0
+    ContainerRuntimePlatform:
+      type: object
+      description: |
+        A runtime platform, e.g. "linux/amd64" or "linux/arm64/v8".
+      properties:
+        architecture:
+          type: string
+          description: The platform architecture, e.g. "amd64".
+          example: amd64
+        os:
+          type: string
+          description: The platform's operating system, e.g. "linux".
+          example: linux
+        os.version:
+          type: string
+        os.features:
+          type: array
+          items:
+            type: string
+        variant:
+          type: string
+          description: The platform's variant, e.g. "v2".
+          example: v2
+      required:
+        - architecture
+        - os
     ErrorResponse:
       type: object
       properties:
