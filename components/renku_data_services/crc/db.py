@@ -423,6 +423,10 @@ class ResourcePoolRepository(_Base):
                 rp.hibernation_threshold = None
             elif isinstance(update.hibernation_threshold, int):
                 rp.hibernation_threshold = update.hibernation_threshold
+            if update.platform is RESET:
+                rp.platform = None
+            elif update.platform is not None:
+                rp.platform = update.platform
 
             if update.cluster_id is RESET:
                 rp.cluster_id = None

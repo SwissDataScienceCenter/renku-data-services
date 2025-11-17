@@ -350,7 +350,8 @@ class ResourcePoolPatch:
     public: bool | None = None
     remote: RemoteConfigurationPatch | None = None
     cluster_id: ClusterId | ResetType | None = None
-    platform: RuntimePlatform | ResetType | None = None
+    platform: RuntimePlatform | ResetType | None
+    # platform: RuntimePlatform | ResetType | None = None
 
 
 class RemoteConfigurationKind(StrEnum):

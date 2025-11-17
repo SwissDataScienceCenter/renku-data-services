@@ -1347,6 +1347,8 @@ async def test_resource_pool_patch_platform(
 
     # Put to reset the resource pool
     put = deepcopy(resource_pool_payload)
+    put["quota"] = rp["quota"]
+    put["classes"] = rp["classes"]
     if "platform" in put:
         del put["platform"]
 

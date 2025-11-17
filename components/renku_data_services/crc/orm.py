@@ -8,6 +8,7 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     Column,
+    Enum,
     Identity,
     Integer,
     MetaData,
@@ -263,6 +264,11 @@ class ResourcePoolORM(BaseORM):
     )
     cluster: Mapped[Optional[ClusterORM]] = relationship(viewonly=True, default=None, lazy="selectin", init=False)
 
+    # NOTE: we reuse the "build_platform" enum type here
+    platform: Mapped[models.RuntimePlatform | None] = mapped_column(
+        Enum(models.RuntimePlatform, name="build_platform"), default=None, server_default=None, nullable=True
+    )
+
     @classmethod
     def from_unsaved_model(
         cls,
@@ -292,6 +298,7 @@ class ResourcePoolORM(BaseORM):
             remote_provider_id=remote_provider_id,
             remote_json=remote_json,
             cluster_id=cluster.id if cluster else None,
+            platform=new_resource_pool.platform,
         )
 
     def dump(
@@ -314,7 +321,6 @@ class ResourcePoolORM(BaseORM):
             )
         cluster = None if self.cluster is None else self.cluster.dump()
         remote = self._dump_remote()
-        platform = DEFAULT_RUNTIME_PLATFORM
         return models.ResourcePool(
             id=self.id,
             name=self.name,
@@ -326,7 +332,7 @@ class ResourcePoolORM(BaseORM):
             default=self.default,
             remote=remote,
             cluster=cluster,
-            platform=platform,
+            platform=self.platform or DEFAULT_RUNTIME_PLATFORM,
         )
 
     def _dump_remote(self) -> models.RemoteConfigurationFirecrest | None:
