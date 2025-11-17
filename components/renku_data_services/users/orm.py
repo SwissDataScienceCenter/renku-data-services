@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, Boolean, DateTime, Identity, Integer, LargeBinary, MetaData, String, true
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Identity, Integer, LargeBinary, MetaData, String, true
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 
@@ -37,8 +37,8 @@ class UserORM(BaseORM):
     secret_key: Mapped[bytes | None] = mapped_column(LargeBinary(), default=None, repr=False)
     id: Mapped[int] = mapped_column(Integer, Identity(always=True), primary_key=True, init=False)
 
-    metrics_identity_hash: Mapped[str | None] = mapped_column(String(), default=None, init=False)
-    """Hash of the identity sent for metrics."""
+    # metrics_identity_hash: Mapped[str | None] = mapped_column(String(), default=None, init=False)
+    # """Hash of the identity sent for metrics."""
 
     def dump(self) -> UserInfo:
         """Create a user object from the ORM object."""
@@ -60,6 +60,16 @@ class UserORM(BaseORM):
             email=user.email,
             namespace=NamespaceORM.load_user(user.namespace),
         )
+
+
+class UserMetricsORM(BaseORM):
+    """Users metrics data."""
+
+    __tablename__ = "user_metrics"
+    id: Mapped[int] = mapped_column(ForeignKey(UserORM.id), primary_key=True)
+
+    metrics_identity_hash: Mapped[str | None] = mapped_column(String(), default=None, init=False)
+    """Hash of the identity sent for metrics."""
 
 
 class LastKeycloakEventTimestamp(BaseORM):

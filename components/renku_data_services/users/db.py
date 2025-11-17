@@ -38,7 +38,7 @@ from renku_data_services.users.models import (
     UserPatch,
     UserPreferences,
 )
-from renku_data_services.users.orm import LastKeycloakEventTimestamp, UserORM, UserPreferencesORM
+from renku_data_services.users.orm import LastKeycloakEventTimestamp, UserMetricsORM, UserORM, UserPreferencesORM
 from renku_data_services.utils.core import with_db_transaction
 from renku_data_services.utils.cryptography import (
     decrypt_string,
@@ -322,7 +322,13 @@ class UsersSync:
         result = new_user.dump()
         user_identity = await self.metrics.identify_user(user=result, existing_identity_hash=None, metadata={})
         if isinstance(user_identity, UserIdentity):
-            new_user.metrics_identity_hash = user_identity.hash()
+            await session.refresh(new_user)
+            user_metrics_res = await session.scalars(select(UserMetricsORM).where(UserMetricsORM.id == new_user.id))
+            user_metrics_orm = user_metrics_res.one_or_none()
+            if user_metrics_orm is None:
+                user_metrics_orm = UserMetricsORM(id=new_user.id)
+                session.add(user_metrics_orm)
+            user_metrics_orm.metrics_identity_hash = user_identity.hash()
             await session.flush()
 
         return UserInfoUpdate(None, result)
@@ -353,11 +359,17 @@ class UsersSync:
 
         # Send the updated user's identity for metrics
         result = existing_user.dump()
+        user_metrics_res = await session.scalars(select(UserMetricsORM).where(UserMetricsORM.id == existing_user.id))
+        user_metrics_orm = user_metrics_res.one_or_none()
+        metrics_identity_hash = user_metrics_orm.metrics_identity_hash if user_metrics_orm is not None else None
         user_identity = await self.metrics.identify_user(
-            user=result, existing_identity_hash=existing_user.metrics_identity_hash, metadata={}
+            user=result, existing_identity_hash=metrics_identity_hash, metadata={}
         )
         if isinstance(user_identity, UserIdentity):
-            existing_user.metrics_identity_hash = user_identity.hash()
+            if user_metrics_orm is None:
+                user_metrics_orm = UserMetricsORM(id=existing_user.id)
+                session.add(user_metrics_orm)
+            user_metrics_orm.metrics_identity_hash = user_identity.hash()
             await session.flush()
 
         return UserInfoUpdate(old_user, existing_user.dump())
