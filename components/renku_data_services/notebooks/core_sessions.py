@@ -5,7 +5,7 @@ import json
 import os
 import random
 import string
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from datetime import timedelta
 from pathlib import PurePosixPath
 from typing import Protocol, TypeVar, cast
@@ -19,7 +19,7 @@ from ulid import ULID
 from yaml import safe_dump
 
 from renku_data_services.app_config import logging
-from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser
+from renku_data_services.base_models import RESET, AnonymousAPIUser, APIUser, AuthenticatedAPIUser, ResetType
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
 from renku_data_services.crc.models import (
@@ -52,6 +52,7 @@ from renku_data_services.notebooks.crs import (
     Authentication,
     AuthenticationType,
     Culling,
+    CullingPatch,
     DataSource,
     ExtraContainer,
     ExtraVolume,
@@ -67,6 +68,7 @@ from renku_data_services.notebooks.crs import (
     Requests,
     RequestsStr,
     Resources,
+    ResourcesPatch,
     SecretAsVolume,
     SecretAsVolumeItem,
     Session,
@@ -90,6 +92,7 @@ from renku_data_services.notebooks.util.kubernetes_ import (
 )
 from renku_data_services.notebooks.utils import (
     node_affinity_from_resource_class,
+    node_affinity_patch_from_resource_class,
     tolerations_from_resource_class,
 )
 from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
@@ -461,6 +464,21 @@ async def request_session_secret_creation(
             )
 
 
+def resources_patch_from_resource_class(resource_class: ResourceClass) -> ResourcesPatch:
+    """Convert the resource class to a k8s resources spec."""
+    gpu_name = GpuKind.NVIDIA.value + "/gpu"
+    resources = resources_from_resource_class(resource_class)
+    requests: Mapping[str, Requests | RequestsStr | ResetType] | ResetType | None = None
+    limits: Mapping[str, Limits | LimitsStr | ResetType] | ResetType | None = None
+    defaul_requests = {"memory": RESET, "cpu": RESET, gpu_name: RESET}
+    default_limits = {"memory": RESET, "cpu": RESET, gpu_name: RESET}
+    if resources.requests is not None:
+        requests = RESET if len(resources.requests.keys()) == 0 else {**defaul_requests, **resources.requests}
+    if resources.limits is not None:
+        limits = RESET if len(resources.limits.keys()) == 0 else {**default_limits, **resources.limits}
+    return ResourcesPatch(requests=requests, limits=limits)
+
+
 def resources_from_resource_class(resource_class: ResourceClass) -> Resources:
     """Convert the resource class to a k8s resources spec."""
     requests: dict[str, Requests | RequestsStr] = {
@@ -508,22 +526,51 @@ def get_culling(
     user: AuthenticatedAPIUser | AnonymousAPIUser, resource_pool: ResourcePool, nb_config: NotebooksConfig
 ) -> Culling:
     """Create the culling specification for an AmaltheaSession."""
-    idle_threshold_seconds = resource_pool.idle_threshold or nb_config.sessions.culling.registered.idle_seconds
-    if user.is_anonymous:
-        # NOTE: Anonymous sessions should not be hibernated at all, but there is no such option in Amalthea
-        # So in this case we set a very low hibernation threshold so the session is deleted quickly after
-        # it is hibernated.
-        hibernation_threshold_seconds = 1
-    else:
-        hibernation_threshold_seconds = (
-            resource_pool.hibernation_threshold or nb_config.sessions.culling.registered.hibernated_seconds
-        )
+    hibernation_threshold: timedelta | None = None
+    # NOTE: A value of zero on the resource_pool hibernation threshold
+    # is interpreted by Amalthea as "never automatically delete after hibernation"
+    match (user.is_anonymous, resource_pool.hibernation_threshold):
+        case True, _:
+            # NOTE: Anonymous sessions should not be hibernated at all, but there is no such option in Amalthea
+            # So in this case we set a very low hibernation threshold so the session is deleted quickly after
+            # it is hibernated.
+            hibernation_threshold = timedelta(seconds=1)
+        case False, int():
+            hibernation_threshold = timedelta(seconds=resource_pool.hibernation_threshold)
+        case False, None:
+            hibernation_threshold = timedelta(seconds=nb_config.sessions.culling.registered.hibernated_seconds)
+
+    idle_duration: timedelta | None = None
+    # NOTE: A value of zero on the resource_pool idle threshold
+    # is interpreted by Amalthea as "never automatically hibernate for idleness"
+    match (user.is_anonymous, resource_pool.idle_threshold):
+        case True, None:
+            idle_duration = timedelta(seconds=nb_config.sessions.culling.anonymous.idle_seconds)
+        case _, int():
+            idle_duration = timedelta(seconds=resource_pool.idle_threshold)
+        case False, None:
+            idle_duration = timedelta(seconds=nb_config.sessions.culling.registered.idle_seconds)
+
     return Culling(
         maxAge=timedelta(seconds=nb_config.sessions.culling.registered.max_age_seconds),
         maxFailedDuration=timedelta(seconds=nb_config.sessions.culling.registered.failed_seconds),
-        maxHibernatedDuration=timedelta(seconds=hibernation_threshold_seconds),
-        maxIdleDuration=timedelta(seconds=idle_threshold_seconds),
+        maxHibernatedDuration=hibernation_threshold,
+        maxIdleDuration=idle_duration,
         maxStartingDuration=timedelta(seconds=nb_config.sessions.culling.registered.pending_seconds),
+    )
+
+
+def get_culling_patch(
+    user: AuthenticatedAPIUser | AnonymousAPIUser, resource_pool: ResourcePool, nb_config: NotebooksConfig
+) -> CullingPatch:
+    """Get the patch for the culling durations of a session."""
+    culling = get_culling(user, resource_pool, nb_config)
+    return CullingPatch(
+        maxAge=culling.maxAge or RESET,
+        maxFailedDuration=culling.maxFailedDuration or RESET,
+        maxHibernatedDuration=culling.maxHibernatedDuration or RESET,
+        maxIdleDuration=culling.maxIdleDuration or RESET,
+        maxStartingDuration=culling.maxStartingDuration or RESET,
     )
 
 
@@ -939,7 +986,7 @@ async def start_session(
     )
     secrets_to_create = session_extras.secrets or []
     for s in secrets_to_create:
-        await nb_config.k8s_v2_client.create_secret(K8sSecret.from_v1_secret(s.secret, cluster))
+        await nb_config.k8s_v2_client.create_or_patch_secret(K8sSecret.from_v1_secret(s.secret, cluster))
     try:
         session = await nb_config.k8s_v2_client.create_session(session, user)
     except Exception as err:
@@ -1034,24 +1081,28 @@ async def patch_session(
             raise errors.MissingResourceError(
                 message=f"The resource class you requested with ID {body.resource_class_id} does not exist"
             )
-        # TODO: reject session classes which change the cluster
         if not patch.metadata:
             patch.metadata = AmaltheaSessionV1Alpha1MetadataPatch()
-        # Patch the resource class ID in the annotations
+        # Patch the resource pool and class ID in the annotations
+        patch.metadata.annotations = {"renku.io/resource_pool_id": str(rp.id)}
         patch.metadata.annotations = {"renku.io/resource_class_id": str(body.resource_class_id)}
         if not patch.spec.session:
             patch.spec.session = AmaltheaSessionV1Alpha1SpecSessionPatch()
-        patch.spec.session.resources = resources_from_resource_class(rc)
+        patch.spec.session.resources = resources_patch_from_resource_class(rc)
         # Tolerations
         tolerations = tolerations_from_resource_class(rc, nb_config.sessions.tolerations_model)
         patch.spec.tolerations = tolerations
         # Affinities
-        patch.spec.affinity = node_affinity_from_resource_class(rc, nb_config.sessions.affinity_model)
+        patch.spec.affinity = node_affinity_patch_from_resource_class(rc, nb_config.sessions.affinity_model)
         # Priority class (if a quota is being used)
-        patch.spec.priorityClassName = rc.quota
-        patch.spec.culling = get_culling(user, rp, nb_config)
+        if rc.quota is None:
+            patch.spec.priorityClassName = RESET
+        patch.spec.culling = get_culling_patch(user, rp, nb_config)
+        # Service account name
         if rp.cluster is not None:
-            patch.spec.service_account_name = rp.cluster.service_account_name
+            patch.spec.service_account_name = (
+                rp.cluster.service_account_name if rp.cluster.service_account_name is not None else RESET
+            )
 
     # If the session is being hibernated we do not need to patch anything else that is
     # not specifically called for in the request body, we can refresh things when the user resumes.
@@ -1123,8 +1174,10 @@ async def patch_session(
         internal_gitlab_user=internal_gitlab_user,
     )
     if image_pull_secret:
-        session_extras.concat(SessionExtraResources(secrets=[image_pull_secret]))
+        session_extras = session_extras.concat(SessionExtraResources(secrets=[image_pull_secret]))
         patch.spec.imagePullSecrets = [ImagePullSecret(name=image_pull_secret.name, adopt=image_pull_secret.adopt)]
+    else:
+        patch.spec.imagePullSecrets = RESET
 
     # Construct session patch
     patch.spec.extraContainers = _make_patch_spec_list(
@@ -1144,7 +1197,7 @@ async def patch_session(
 
     secrets_to_create = session_extras.secrets or []
     for s in secrets_to_create:
-        await nb_config.k8s_v2_client.create_secret(K8sSecret.from_v1_secret(s.secret, cluster))
+        await nb_config.k8s_v2_client.create_or_patch_secret(K8sSecret.from_v1_secret(s.secret, cluster))
 
     patch_serialized = patch.to_rfc7386()
     if len(patch_serialized) == 0:

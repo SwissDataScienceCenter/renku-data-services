@@ -413,20 +413,20 @@ class ResourcePoolRepository(_Base):
                 rp.public = update.public
             if update.default is not None:
                 rp.default = update.default
-            if update.idle_threshold == 0:
+            if update.idle_threshold == 0 or update.idle_threshold is RESET:
                 # Using "0" removes the value
                 rp.idle_threshold = None
-            elif update.idle_threshold is not None:
+            elif isinstance(update.idle_threshold, int):
                 rp.idle_threshold = update.idle_threshold
-            if update.hibernation_threshold == 0:
+            if update.hibernation_threshold == 0 or update.hibernation_threshold is RESET:
                 # Using "0" removes the value
                 rp.hibernation_threshold = None
-            elif update.hibernation_threshold is not None:
+            elif isinstance(update.hibernation_threshold, int):
                 rp.hibernation_threshold = update.hibernation_threshold
 
             if update.cluster_id is RESET:
                 rp.cluster_id = None
-            elif isinstance(update.cluster_id, ULID):
+            elif update.cluster_id is not None:
                 cluster = await self.__cluster_repo.select(update.cluster_id)
                 rp.cluster_id = cluster.id
 
@@ -471,7 +471,7 @@ class ResourcePoolRepository(_Base):
             if update.remote is RESET:
                 rp.remote_provider_id = None
                 rp.remote_json = None
-            elif isinstance(update.remote, models.RemoteConfigurationFirecrestPatch):
+            elif update.remote is not None:
                 rp.remote_provider_id = (
                     update.remote.provider_id if update.remote.provider_id is not None else rp.remote_provider_id
                 )

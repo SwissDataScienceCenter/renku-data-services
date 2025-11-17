@@ -7,8 +7,9 @@ import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, StrEnum
-from typing import ClassVar, Never, NewType, Optional, Protocol, Self, TypeVar, overload
+from typing import Any, ClassVar, Never, Optional, Protocol, Self, TypeVar, overload
 
+from pydantic_core import core_schema
 from sanic import Request
 
 from renku_data_services.errors import errors
@@ -400,13 +401,43 @@ class Authenticator(Protocol[AnyAPIUser]):
         ...
 
 
-ResetType = NewType("ResetType", object)
-"""This type represents that a value that may be None should be reset back to None or null.
-This type should have only one instance, defined in the same file as this type.
-"""
+class ResetType(Enum):
+    """This type represents that a value that may be None should be reset back to None.
 
-RESET: ResetType = ResetType(object())
-"""The single instance of the ResetType, can be compared to similar to None, i.e. `if value is RESET`"""
+    This type has a single instance, 'RESET', defined in the same file as this type.
+
+    Discussion about implementation: There is a in-progress PEP which once accepted would
+    make it simpler to define 'ResetType' and 'RESET'. Until that change is adopted,
+    using an enum with a single value comes with clear type-checking advantages.
+
+    See:
+    * PEP 661 - Sentinel Values: https://peps.python.org/pep-0661/
+    * Discussion about PEP 661: https://discuss.python.org/t/pep-661-sentinel-values/9126
+    """
+
+    Reset = None
+
+    def __repr__(self) -> str:
+        return "RESET"
+
+    def __str__(self) -> str:
+        return "RESET"
+
+    @classmethod
+    def __get_pydantic_core_schema__(cls, *args: Any, **kwargs: Any) -> core_schema.AfterValidatorFunctionSchema:
+        """This enables pydantic to serialize this as None/null."""
+        return core_schema.no_info_after_validator_function(
+            cls,
+            core_schema.int_schema(),
+            serialization=core_schema.plain_serializer_function_ser_schema(
+                lambda _: None,
+                when_used="always",
+            ),
+        )
+
+
+RESET = ResetType.Reset
+"""The single instance of the ResetType, can be compared to similar to None, i.e. `if value is RESET`."""
 
 
 class ResourceType(StrEnum):

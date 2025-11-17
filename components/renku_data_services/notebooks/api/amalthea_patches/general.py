@@ -59,14 +59,17 @@ def session_affinity(server: UserServer) -> list[dict[str, Any]]:
                 ],
             }
         ]
-    default_preferred_selector_terms: list[dict[str, Any]] = server.config.sessions.affinity.get(
-        "nodeAffinity", {}
-    ).get("preferredDuringSchedulingIgnoredDuringExecution", [])
-    default_required_selector_terms: list[dict[str, Any]] = (
-        server.config.sessions.affinity.get("nodeAffinity", {})
-        .get("requiredDuringSchedulingIgnoredDuringExecution", {})
-        .get("nodeSelectorTerms", [])
-    )
+    default_preferred_selector_terms: list[dict[str, Any]] = []
+    default_required_selector_terms: list[dict[str, Any]] = []
+    if server.config.sessions.affinity:
+        default_preferred_selector_terms = server.config.sessions.affinity.get("nodeAffinity", {}).get(
+            "preferredDuringSchedulingIgnoredDuringExecution", []
+        )
+        default_required_selector_terms = (
+            server.config.sessions.affinity.get("nodeAffinity", {})
+            .get("requiredDuringSchedulingIgnoredDuringExecution", {})
+            .get("nodeSelectorTerms", [])
+        )
     preferred_match_expressions: list[dict[str, str]] = []
     required_match_expressions: list[dict[str, str]] = []
     for affinity in server.server_options.node_affinities:
