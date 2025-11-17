@@ -1132,6 +1132,9 @@ async def _resource_pools_request(
             if "id" not in c:
                 c["id"] = rp["classes"][i]["id"]
 
+        if "platform" not in input_payload:
+            input_payload["platform"] = "linux/amd64"
+
         check_payload = deepcopy(input_payload)
 
         if "id" not in check_payload:

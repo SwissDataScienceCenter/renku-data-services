@@ -283,6 +283,13 @@ class SavedClusterSettings(ClusterSettings):
     id: ClusterId
 
 
+class RuntimePlatform(StrEnum):
+    """Represents a runtime platform."""
+
+    linux_amd64 = "linux/amd64"
+    linux_arm64 = "linux/arm64"
+
+
 @dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedResourcePool:
     """Model for a resource pool yet to be saved."""
@@ -296,6 +303,7 @@ class UnsavedResourcePool:
     public: bool = False
     remote: RemoteConfigurationFirecrest | None = None
     cluster_id: ClusterId | None = None
+    platform: RuntimePlatform | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -312,6 +320,7 @@ class ResourcePool:
     public: bool = False
     remote: RemoteConfigurationFirecrest | None = None
     cluster: SavedClusterSettings | None = None
+    platform: RuntimePlatform
 
     def get_resource_class(self, resource_class_id: int) -> ResourceClass | None:
         """Find a specific resource class in the resource pool by the resource class id."""
@@ -341,6 +350,7 @@ class ResourcePoolPatch:
     public: bool | None = None
     remote: RemoteConfigurationPatch | None = None
     cluster_id: ClusterId | ResetType | None = None
+    platform: RuntimePlatform | ResetType | None = None
 
 
 class RemoteConfigurationKind(StrEnum):

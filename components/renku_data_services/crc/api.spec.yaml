@@ -1295,8 +1295,8 @@ components:
         cluster_id:
           $ref: "#/components/schemas/Ulid"
         platform:
-          $ref: "#/components/schemas/ContainerRuntimePlatform"
-      required: ["classes", "name", "public", "default", "platform"]
+          $ref: "#/components/schemas/RuntimePlatform"
+      required: ["classes", "name", "public", "default"]
       example:
         quota:
           cpu: 50
@@ -1345,7 +1345,7 @@ components:
         cluster_id:
           $ref: "#/components/schemas/Ulid"
         platform:
-          $ref: "#/components/schemas/ContainerRuntimePlatform"
+          $ref: "#/components/schemas/RuntimePlatform"
       example:
         quota:
           cpu: 50
@@ -1379,7 +1379,7 @@ components:
         cluster_id:
           $ref: "#/components/schemas/Ulid"
         platform:
-          $ref: "#/components/schemas/ContainerRuntimePlatform"
+          $ref: "#/components/schemas/RuntimePlatform"
       required: ["classes", "name", "public", "default"]
       example:
         quota:
@@ -1436,7 +1436,7 @@ components:
               $ref: "#/components/schemas/Ulid"
           required: ["id"]
         platform:
-          $ref: "#/components/schemas/ContainerRuntimePlatform"
+          $ref: "#/components/schemas/RuntimePlatform"
       required: ["classes", "name", "id", "public", "default", "platform"]
       example:
         quota:
@@ -1490,7 +1490,7 @@ components:
         cluster_id:
           $ref: "#/components/schemas/Ulid"
         platform:
-          $ref: "#/components/schemas/ContainerRuntimePlatform"
+          $ref: "#/components/schemas/RuntimePlatform"
       required: ["classes", "name", "id", "public", "default", "platform"]
       example:
         quota:
@@ -1881,32 +1881,11 @@ components:
       uniqueItems: true
       default: []
       minItems: 0
-    ContainerRuntimePlatform:
-      type: object
+    RuntimePlatform:
+      type: string
       description: |
-        A runtime platform, e.g. "linux/amd64" or "linux/arm64/v8".
-      properties:
-        architecture:
-          type: string
-          description: The platform architecture, e.g. "amd64".
-          example: amd64
-        os:
-          type: string
-          description: The platform's operating system, e.g. "linux".
-          example: linux
-        os.version:
-          type: string
-        os.features:
-          type: array
-          items:
-            type: string
-        variant:
-          type: string
-          description: The platform's variant, e.g. "v2".
-          example: v2
-      required:
-        - architecture
-        - os
+        A runtime platform, e.g. "linux/amd64" or "linux/arm64".
+      enum: ["linux/amd64", "linux/arm64"]
     ErrorResponse:
       type: object
       properties:

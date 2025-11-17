@@ -23,6 +23,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services.app_config import logging
 from renku_data_services.connected_services import orm as cs_schemas
 from renku_data_services.crc import models
+from renku_data_services.crc.constants import DEFAULT_RUNTIME_PLATFORM
 from renku_data_services.crc.models import ClusterSettings, SavedClusterSettings, SessionProtocol
 from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import ClusterId
@@ -313,6 +314,7 @@ class ResourcePoolORM(BaseORM):
             )
         cluster = None if self.cluster is None else self.cluster.dump()
         remote = self._dump_remote()
+        platform = DEFAULT_RUNTIME_PLATFORM
         return models.ResourcePool(
             id=self.id,
             name=self.name,
@@ -324,6 +326,7 @@ class ResourcePoolORM(BaseORM):
             default=self.default,
             remote=remote,
             cluster=cluster,
+            platform=platform,
         )
 
     def _dump_remote(self) -> models.RemoteConfigurationFirecrest | None:
