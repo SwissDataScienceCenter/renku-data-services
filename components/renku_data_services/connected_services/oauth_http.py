@@ -9,7 +9,7 @@ from urllib.parse import urljoin
 
 import sqlalchemy as sa
 import sqlalchemy.orm as sao
-from authlib.integrations.base_client import InvalidTokenError, OAuthError
+from authlib.integrations.base_client import OAuthError
 from authlib.integrations.httpx_client.oauth2_client import AsyncOAuth2Client
 from httpx import URL, Response
 from httpx._types import HeaderTypes, QueryParamTypes
@@ -20,6 +20,7 @@ import renku_data_services.connected_services.orm as schemas
 from renku_data_services.app_config import logging
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.connected_services import models
+from renku_data_services.connected_services.models import OAuth2Client, OAuth2Connection
 from renku_data_services.connected_services.orm import OAuth2ConnectionORM
 from renku_data_services.connected_services.provider_adapters import (
     GitHubAdapter,
@@ -32,7 +33,6 @@ from renku_data_services.connected_services.utils import (
     get_github_provider_type,
 )
 from renku_data_services.errors import errors
-from renku_data_services.repositories.models import OAuth2ClientORM
 from renku_data_services.users.db import APIUser
 from renku_data_services.utils import cryptography as crypt
 
@@ -51,7 +51,7 @@ class OAuthHttpFactoryError(StrEnum):
 class OAuthHttpError(StrEnum):
     """Errors possible when using the client."""
 
-    invalid_token = "invalid_token"  # nosec: B105
+    oauth_error = "oauth_error"  # nosec: B105
     unauthorized = "unauthorized"  # nosec: B105
 
 
@@ -59,7 +59,12 @@ class OAuthHttpClient(Protocol):
     """Http client injecting authorization tokens."""
 
     @property
-    def connection(self) -> OAuth2ConnectionORM:
+    def client(self) -> OAuth2Client:
+        """Return the associated client."""
+        ...
+
+    @property
+    def connection(self) -> OAuth2Connection:
         """Return the associated connection."""
         ...
 
@@ -109,7 +114,7 @@ class OAuthHttpClientFactory(Protocol):
         ...
 
 
-class _TokenCheck(Protocol):
+class _TokenCrypt(Protocol):
     """Can encrypt/decrypt sensitive fields of the token set."""
 
     def encrypt_token_set(self, token: dict[str, Any], user_id: str) -> models.OAuth2TokenSet:
@@ -120,6 +125,8 @@ class _TokenCheck(Protocol):
         """Decrypts sensitive fields of token set."""
         ...
 
+
+class _TokenCheck(Protocol):
     async def find_recently_updated_token(
         self, connection_id: ULID, current_token: dict[str, Any], leeway: int
     ) -> models.OAuth2TokenSet | None:
@@ -199,13 +206,21 @@ class _SafeAsyncOAuthClient(AsyncOAuth2Client):  # type: ignore  # nosec: B107
 class DefaultOAuthClient(OAuthHttpClient):
     """The default oauth-http client."""
 
-    def __init__(self, delegate: AsyncOAuth2Client, connection: OAuth2ConnectionORM, adapter: ProviderAdapter) -> None:
+    def __init__(
+        self, delegate: AsyncOAuth2Client, client: OAuth2Client, connection: OAuth2Connection, adapter: ProviderAdapter
+    ) -> None:
         self._delegate = delegate
         self.adapter = adapter
+        self._client = client
         self._connection = connection
 
     @property
-    def connection(self) -> OAuth2ConnectionORM:
+    def client(self) -> OAuth2Client:
+        """Return the associated connection."""
+        return self._client
+
+    @property
+    def connection(self) -> OAuth2Connection:
         """Return the associated connection."""
         return self._connection
 
@@ -217,9 +232,9 @@ class DefaultOAuthClient(OAuthHttpClient):
                 response = await self._delegate.post(request_url, headers=self.adapter.api_common_headers)
             else:
                 response = await self.get(request_url, headers=self.adapter.api_common_headers)
-        except InvalidTokenError as e:
-            logger.info(f"Invalid token for connection={self.connection.id}: {e}", exc_info=e)
-            return OAuthHttpError.invalid_token
+        except OAuthError as e:
+            logger.info(f"Invalid token for connection={self._connection.id}: {e}", exc_info=e)
+            return OAuthHttpError.oauth_error
 
         if response.status_code > 200:
             logger.info(
@@ -250,8 +265,8 @@ class DefaultOAuthClient(OAuthHttpClient):
         """Gets the users app installations if available."""
         # NOTE: App installations are only available from GitHub when using a "GitHub App"
         if (
-            self.connection.client.kind == models.ProviderKind.github
-            and get_github_provider_type(self.connection.client) == GitHubProviderType.standard_app
+            self.client.kind == models.ProviderKind.github
+            and get_github_provider_type(self.client) == GitHubProviderType.standard_app
             and isinstance(self.adapter, GitHubAdapter)
         ):
             request_url = urljoin(self.adapter.api_url, "user/installations")
@@ -269,7 +284,7 @@ class DefaultOAuthClient(OAuthHttpClient):
         return models.AppInstallationList(total_count=0, installations=[])
 
 
-class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck):
+class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck, _TokenCrypt):
     """Default variant for creating oauth-http clients."""
 
     def __init__(self, encryption_key: bytes, session_maker: Callable[..., AsyncSession]) -> None:
@@ -278,7 +293,7 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck):
 
     def create_client(
         self,
-        client: OAuth2ClientORM,
+        client: OAuth2Client,
         client_secret: str | None,
         adapter: ProviderAdapter,
         connection: OAuth2ConnectionORM | ULID,
@@ -310,6 +325,12 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck):
             state=conn_orm.state if conn_orm else None,
             token_check=self,
         )
+
+    def create_http_client(
+        self, delegate: AsyncOAuth2Client, connection: OAuth2ConnectionORM, adapter: ProviderAdapter
+    ) -> OAuthHttpClient:
+        """Creates an instance of the default oauth http client."""
+        return DefaultOAuthClient(delegate, connection.client.dump(), connection.dump(), adapter)
 
     async def for_user_connection_raise(self, user: APIUser, connection_id: ULID) -> OAuthHttpClient:
         """Same as `for_user_connection` but throws on error."""
@@ -350,9 +371,9 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck):
             else None
         )
 
-        retval: OAuthHttpClient = DefaultOAuthClient(
+        retval: OAuthHttpClient = self.create_http_client(
             self.create_client(
-                client=client,
+                client=client.dump(),
                 client_secret=client_secret,
                 adapter=adapter,
                 connection=connection,
@@ -387,7 +408,7 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck):
             )
             code_verifier = generate_code_verifier() if client.use_pkce else None
             oauth_client = self.create_client(
-                client=client,
+                client=client.dump(),
                 client_secret=client_secret,
                 redirect_uri=callback_url,
                 adapter=adapter,
@@ -456,7 +477,7 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck):
             )
             code_verifier = connection.code_verifier
             oauth_client = self.create_client(
-                client=client,
+                client=client.dump(),
                 client_secret=client_secret,
                 redirect_uri=callback_url,
                 connection=connection,
@@ -476,9 +497,9 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck):
             connection.next_url = None
 
         connection.next_url = next_url
-        retval: OAuthHttpClient = DefaultOAuthClient(
+        retval: OAuthHttpClient = self.create_http_client(
             self.create_client(
-                client=client,
+                client=client.dump(),
                 client_secret=client_secret,
                 redirect_uri=callback_url,
                 adapter=adapter,

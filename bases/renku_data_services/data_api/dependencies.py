@@ -354,7 +354,6 @@ class DependencyManager:
         )
         git_repositories_repo = GitRepositoriesRepository(
             session_maker=config.db.async_session_maker,
-            connected_services_repo=connected_services_repo,
             oauth_client_factory=oauth_http_client_factory,
             internal_gitlab_url=config.gitlab_url,
             enable_internal_gitlab=config.enable_internal_gitlab,
