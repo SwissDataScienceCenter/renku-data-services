@@ -108,7 +108,7 @@ class OAuthHttpClientFactory(Protocol):
         ...
 
 
-class _TokenCrypt(Protocol):
+class _TokenCheck(Protocol):
     """Can encrypt/decrypt sensitive fields of the token set."""
 
     def encrypt_token_set(self, token: dict[str, Any], user_id: str) -> models.OAuth2TokenSet:
@@ -117,6 +117,12 @@ class _TokenCrypt(Protocol):
 
     def decrypt_token_set(self, token: dict[str, Any], user_id: str) -> models.OAuth2TokenSet:
         """Decrypts sensitive fields of token set."""
+        ...
+
+    async def find_recently_updated_token(
+        self, connection_id: ULID, current_token: dict[str, Any], leeway: int
+    ) -> models.OAuth2TokenSet | None:
+        """Check the database for a recently updated token and return it."""
         ...
 
 
@@ -148,9 +154,8 @@ class _SafeAsyncOAuthClient(AsyncOAuth2Client):  # type: ignore  # nosec: B107
             leeway,
             **kwargs,
         )
-        self._session_maker = kwargs["session_maker"]
         self._connection_id: ULID | None = kwargs.get("connection_id")
-        self._token_crypt: _TokenCrypt = kwargs["token_crypt"]
+        self._token_check: _TokenCheck = kwargs["token_check"]
 
     async def ensure_active_token(self, token):  # type: ignore
         try:
@@ -176,39 +181,18 @@ class _SafeAsyncOAuthClient(AsyncOAuth2Client):  # type: ignore  # nosec: B107
             if not self._connection_id:
                 logger.warning("No connection id set to check for an recently updated token!")
             else:
-                logger.info(f"Looking up current connection {self._connection_id} for recent updates.")
-                async with self._session_maker() as session:
-                    result = await session.scalars(
-                        sa.select(schemas.OAuth2ConnectionORM).where(
-                            schemas.OAuth2ConnectionORM.id == self._connection_id
-                        )
-                    )
-                    conn = result.one_or_none()
-                if conn is None or conn.token is None:
-                    logger.debug(f"No valid connection found for id: {self._connection_id}")
-                    raise
+                current_token: models.OAuth2TokenSet = self.token  # type:ignore
+                updated_token = await self._token_check.find_recently_updated_token(
+                    self._connection_id, current_token, self.leeway
+                )
+                if updated_token is None:
+                    raise errors.InvalidTokenError(
+                        message="The refresh token for the connected service has expired or is invalid.",
+                        detail=f"Please reconnect your integration for the service with ID {str(self._connection_id)} "
+                        "and try again.",
+                    ) from err
                 else:
-                    now = time.time()
-                    expires_at: float | None = self.token.get("expires_at")  # type: ignore
-                    # if the connection has been updated after current expiry date
-                    newer_than_expiry = expires_at and expires_at < conn.updated_at.timestamp()
-                    # if it has been updated recently (a fallback when no expiry date exists)
-                    pretty_recent = now - self.leeway < conn.updated_at.timestamp()
-                    if newer_than_expiry or pretty_recent:
-                        logger.info(
-                            f"Retrying with recently updated token ({now - conn.updated_at.timestamp():.1f}s ago)."
-                        )
-                        self.token = self._token_crypt.decrypt_token_set(conn.token, conn.user_id)
-                    else:
-                        logger.info(
-                            f"The connection token in the database hasn't been updated since {conn.updated_at}. "
-                            "The user needs to run through the oauth flow again to re-connect."
-                        )
-                        raise errors.InvalidTokenError(
-                            message="The refresh token for the connected service has expired or is invalid.",
-                            detail=f"Please reconnect your integration for the service with ID {str(conn.id)} "
-                            "and try again.",
-                        ) from err
+                    self.token = updated_token
 
 
 class DefaultOAuthClient(OAuthHttpClient):
@@ -284,7 +268,7 @@ class DefaultOAuthClient(OAuthHttpClient):
         return models.AppInstallationList(total_count=0, installations=[])
 
 
-class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCrypt):
+class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck):
     """Default variant for creating oauth-http clients."""
 
     def __init__(self, encryption_key: bytes, session_maker: Callable[..., AsyncSession]) -> None:
@@ -341,9 +325,8 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCrypt):
                 token_endpoint=adapter.token_endpoint_url,
                 token=token,
                 update_token=self._update_token(connection),
-                session_maker=self._session_maker,
                 connection_id=connection_id,
-                token_crypt=self,
+                token_check=self,
             ),
             connection,
             adapter,
@@ -380,8 +363,7 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCrypt):
                 scope=client.scope,
                 code_challenge_method=code_challenge_method,
                 token_endpoint=adapter.token_endpoint_url,
-                session_maker=self._session_maker,
-                token_crypt=self,
+                token_check=self,
             )
             url: str
             state: str
@@ -452,9 +434,8 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCrypt):
                 redirect_uri=callback_url,
                 code_challenge_method=code_challenge_method,
                 state=connection.state,
-                session_maker=self._session_maker,
                 connection_id=connection.id,
-                token_crypt=self,
+                token_check=self,
             )
             token = await oauth_client.fetch_token(
                 adapter.token_endpoint_url, authorization_response=raw_url, code_verifier=code_verifier
@@ -479,9 +460,8 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCrypt):
                 token_endpoint=adapter.token_endpoint_url,
                 token=token,
                 update_token=self._update_token(connection),
-                session_maker=self._session_maker,
                 connection_id=connection.id,
-                token_crypt=self,
+                token_check=self,
             ),
             connection,
             adapter,
@@ -503,6 +483,36 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCrypt):
                 logger.info("Token refreshed!")
 
         return _update_fn
+
+    async def find_recently_updated_token(
+        self, connection_id: ULID, current_token: dict[str, Any], leeway: int
+    ) -> models.OAuth2TokenSet | None:
+        """Check the database for a recently updated token and return it."""
+        logger.info(f"Looking up current connection {connection_id} for recent updates.")
+        async with self._session_maker() as session:
+            result = await session.scalars(
+                sa.select(schemas.OAuth2ConnectionORM).where(schemas.OAuth2ConnectionORM.id == connection_id)
+            )
+            conn = result.one_or_none()
+            if conn is None or conn.token is None:
+                logger.info(f"No valid connection found for id: {connection_id}")
+                return None
+            else:
+                now = time.time()
+                expires_at: int | None = current_token.get("expires_at")
+                # if the connection has been updated after current expiry date
+                newer_than_expiry = expires_at and expires_at < conn.updated_at.timestamp()
+                # if it has been updated recently (a fallback when no expiry date exists)
+                pretty_recent = now - leeway < conn.updated_at.timestamp()
+                if newer_than_expiry or pretty_recent:
+                    logger.info(f"Returning recently updated token ({now - conn.updated_at.timestamp():.1f}s ago).")
+                    return self.decrypt_token_set(conn.token, conn.user_id)
+                else:
+                    logger.info(
+                        f"The connection token in the database hasn't been updated since {conn.updated_at}. "
+                        "The user needs to run through the oauth flow again to re-connect."
+                    )
+                    return None
 
     def encrypt_token_set(self, token: dict[str, Any], user_id: str) -> models.OAuth2TokenSet:
         """Encrypts sensitive fields of token set before persisting at rest."""
