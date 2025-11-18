@@ -10,6 +10,7 @@ from ulid import ULID
 from renku_data_services import base_models, errors
 from renku_data_services.notifications import models
 from renku_data_services.notifications import orm as schemas
+from renku_data_services.users.orm import UserORM
 
 
 class NotificationsRepository:
@@ -28,12 +29,17 @@ class NotificationsRepository:
         if not user.is_admin:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
-        async with self.session_maker() as session:
+        async with self.session_maker() as session, session.begin():
+            user_exists = await session.scalar(
+                select(UserORM.keycloak_id).where(UserORM.keycloak_id == alert.user_id)
+            )
+            if user_exists is None:
+                raise errors.ValidationError(message=f"User with ID '{alert.user_id}' does not exist.")
+
             query = (
                 select(schemas.AlertORM)
                 .where(schemas.AlertORM.user_id == alert.user_id)
-                .where(schemas.AlertORM.title == alert.title)
-                .where(schemas.AlertORM.message == alert.message)
+                .where(schemas.AlertORM.event_type == alert.event_type)
                 .where(schemas.AlertORM.session_name == alert.session_name)
                 .where(schemas.AlertORM.resolved_at.is_(None))
             )
@@ -43,10 +49,10 @@ class NotificationsRepository:
             if existing_alert is not None:
                 raise errors.ConflictError(message="An identical unresolved alert already exists.")
 
-        async with self.session_maker() as session, session.begin():
             alert_orm = schemas.AlertORM(
                 title=alert.title,
                 message=alert.message,
+                event_type=alert.event_type,
                 user_id=alert.user_id,
                 session_name=alert.session_name,
             )

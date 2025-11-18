@@ -1,13 +1,13 @@
 """SQLAlchemy schemas for the notifications database."""
 
 from datetime import datetime
-from typing import Optional
 
-from sqlalchemy import DateTime, MetaData, String, func
+from sqlalchemy import DateTime, ForeignKey, MetaData, String, func, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 from ulid import ULID
 
 from renku_data_services.notifications import models
+from renku_data_services.users.orm import UserORM
 from renku_data_services.utils.sqlalchemy import ULIDType
 
 metadata_obj = MetaData(schema="notifications")
@@ -24,7 +24,9 @@ class AlertORM(BaseORM):
 
     __tablename__ = "alerts"
 
-    id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default=lambda: str(ULID()), init=False)
+    id: Mapped[ULID] = mapped_column(
+        "id", ULIDType, primary_key=True, server_default=text("generate_ulid()"), init=False
+    )
     """ID of the alert."""
 
     title: Mapped[str] = mapped_column("title", String(), nullable=False)
@@ -33,10 +35,15 @@ class AlertORM(BaseORM):
     message: Mapped[str] = mapped_column("message", String(), nullable=False)
     """Message of the alert."""
 
-    user_id: Mapped[str] = mapped_column("user_id", String(), nullable=False)
+    event_type: Mapped[str] = mapped_column("event_type", String(), nullable=False, index=True)
+    """Type of the event that triggered the alert (e.g. 'session_oom', 'session_memory_limit')."""
+
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey(UserORM.keycloak_id, ondelete="CASCADE"), nullable=False, index=True
+    )
     """ID of the user the alert is for."""
 
-    session_name: Mapped[Optional[str]] = mapped_column("session_name", String(), default=None)
+    session_name: Mapped[str | None] = mapped_column("session_name", String(), default=None)
     """Name of the session the alert is for, if any."""
 
     creation_date: Mapped[datetime] = mapped_column(
@@ -44,7 +51,7 @@ class AlertORM(BaseORM):
     )
     """Creation date and time."""
 
-    resolved_at: Mapped[Optional[datetime]] = mapped_column(
+    resolved_at: Mapped[datetime | None] = mapped_column(
         "resolved_at", DateTime(timezone=True), default=None, nullable=True
     )
     """Date and time when the alert was resolved, if applicable."""
@@ -55,6 +62,7 @@ class AlertORM(BaseORM):
             id=self.id,
             title=self.title,
             message=self.message,
+            event_type=self.event_type,
             user_id=self.user_id,
             session_name=self.session_name,
             creation_date=self.creation_date,
