@@ -12,13 +12,13 @@ from renku_data_services.connected_services.dummy_async_oauth2_client import Dum
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.migrations.core import run_migrations_for_app
+from test.bases.renku_data_services.data_api.utils import create_dummy_oauth_client
 from test.utils import SanicReusableASGITestClient
 
 
 @pytest_asyncio.fixture(scope="session")
 async def oauth2_test_client_setup(app_manager: DependencyManager) -> SanicASGITestClient:
-    app_manager.async_oauth2_client_class = DummyAsyncOAuth2Client
-    app_manager.connected_services_repo.async_oauth2_client_class = DummyAsyncOAuth2Client
+    app_manager.oauth_http_client_factory.create_client = create_dummy_oauth_client
     app = Sanic(app_manager.app_name)
     app = register_all_handlers(app, app_manager)
     async with SanicReusableASGITestClient(app) as client:

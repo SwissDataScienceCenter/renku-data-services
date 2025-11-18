@@ -7,7 +7,6 @@ from enum import StrEnum
 from typing import Any, Protocol
 from urllib.parse import urljoin
 
-from renku_data_services.repositories.models import OAuth2ClientORM
 import sqlalchemy as sa
 import sqlalchemy.orm as sao
 from authlib.integrations.base_client import InvalidTokenError, OAuthError
@@ -33,6 +32,7 @@ from renku_data_services.connected_services.utils import (
     get_github_provider_type,
 )
 from renku_data_services.errors import errors
+from renku_data_services.repositories.models import OAuth2ClientORM
 from renku_data_services.users.db import APIUser
 from renku_data_services.utils import cryptography as crypt
 
@@ -387,7 +387,12 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck):
             )
             code_verifier = generate_code_verifier() if client.use_pkce else None
             oauth_client = self.create_client(
-                client=client, client_secret=client_secret, redirect_uri=callback_url, adapter=adapter
+                client=client,
+                client_secret=client_secret,
+                redirect_uri=callback_url,
+                adapter=adapter,
+                token=None,
+                connection=ULID(),
             )
             url: str
             state: str
@@ -450,7 +455,6 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck):
                 else None
             )
             code_verifier = connection.code_verifier
-            code_challenge_method = "S256" if code_verifier else None
             oauth_client = self.create_client(
                 client=client,
                 client_secret=client_secret,

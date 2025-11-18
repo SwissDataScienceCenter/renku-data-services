@@ -8,7 +8,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from authlib.integrations.httpx_client import AsyncOAuth2Client
 from yaml import safe_load
 
 import renku_data_services.base_models as base_models
@@ -150,7 +149,6 @@ class DependencyManager:
     app_name: str = "renku_data_services"
     default_resource_pool_file: str | None = None
     default_resource_pool: crc_models.UnsavedResourcePool = default_resource_pool
-    async_oauth2_client_class: type[AsyncOAuth2Client] = AsyncOAuth2Client
 
     @staticmethod
     @functools.cache
