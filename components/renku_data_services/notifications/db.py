@@ -30,9 +30,7 @@ class NotificationsRepository:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session, session.begin():
-            user_exists = await session.scalar(
-                select(UserORM.keycloak_id).where(UserORM.keycloak_id == alert.user_id)
-            )
+            user_exists = await session.scalar(select(UserORM.keycloak_id).where(UserORM.keycloak_id == alert.user_id))
             if user_exists is None:
                 raise errors.ValidationError(message=f"User with ID '{alert.user_id}' does not exist.")
 

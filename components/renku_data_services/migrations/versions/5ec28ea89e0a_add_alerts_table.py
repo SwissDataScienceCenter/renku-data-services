@@ -34,8 +34,12 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         schema="notifications",
     )
-    op.create_index(op.f("ix_notifications_alerts_event_type"), "alerts", ["event_type"], unique=False, schema="notifications")
-    op.create_index(op.f("ix_notifications_alerts_user_id"), "alerts", ["user_id"], unique=False, schema="notifications")
+    op.create_index(
+        op.f("ix_notifications_alerts_event_type"), "alerts", ["event_type"], unique=False, schema="notifications"
+    )
+    op.create_index(
+        op.f("ix_notifications_alerts_user_id"), "alerts", ["user_id"], unique=False, schema="notifications"
+    )
     # ### end Alembic commands ###
 
 
