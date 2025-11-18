@@ -199,7 +199,11 @@ class OAuth2ConnectionsBP(CustomBlueprint):
         async def _get_account(_: Request, user: base_models.APIUser, connection_id: ULID) -> JSONResponse:
             client = await self.oauth_client_factory.for_user_connection_raise(user, connection_id)
             account = await client.get_connected_account()
-            return validated_json(apispec.ConnectedAccount, account)
+            match account:
+                case OAuthHttpError() as err:
+                    raise errors.InvalidTokenError(message=f"OAuth error getting the connected accoun: {err}")
+                case account:
+                    return validated_json(apispec.ConnectedAccount, account)
 
         return "/oauth2/connections/<connection_id:ulid>/account", ["GET"], _get_account
 

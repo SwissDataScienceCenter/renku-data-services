@@ -239,7 +239,7 @@ class DefaultOAuthClient(OAuthHttpClient):
         if response.status_code > 200:
             logger.info(
                 f"Error response {response.status_code} from user-info endpoint "
-                "for connection={self.connection.id}: {response.text}"
+                f"for connection={self.connection.id}: {response.text}"
             )
             return OAuthHttpError.unauthorized
 
