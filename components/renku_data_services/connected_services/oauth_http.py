@@ -33,6 +33,7 @@ from renku_data_services.connected_services.utils import (
     get_github_provider_type,
 )
 from renku_data_services.errors import errors
+from renku_data_services.repositories.models import OAuth2ClientORM
 from renku_data_services.users.db import APIUser
 from renku_data_services.utils import cryptography as crypt
 
@@ -137,8 +138,8 @@ class _TokenCheck(Protocol):
 class _SafeAsyncOAuthClient(AsyncOAuth2Client):  # type: ignore  # nosec: B107
     def __init__(  # type: ignore # nosec: B105, B107
         self,
-        client_id=None,
-        client_secret=None,
+        client_id: str,
+        client_secret: str | None = None,
         token_endpoint_auth_method=None,
         revocation_endpoint_auth_method=None,
         scope=None,
@@ -293,7 +294,7 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck, _TokenC
 
     def create_client(
         self,
-        client: OAuth2Client,
+        client: OAuth2ClientORM,
         client_secret: str | None,
         adapter: ProviderAdapter,
         connection: OAuth2ConnectionORM | ULID,
@@ -373,7 +374,7 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck, _TokenC
 
         retval: OAuthHttpClient = self.create_http_client(
             self.create_client(
-                client=client.dump(),
+                client=client,
                 client_secret=client_secret,
                 adapter=adapter,
                 connection=connection,
@@ -408,7 +409,7 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck, _TokenC
             )
             code_verifier = generate_code_verifier() if client.use_pkce else None
             oauth_client = self.create_client(
-                client=client.dump(),
+                client=client,
                 client_secret=client_secret,
                 redirect_uri=callback_url,
                 adapter=adapter,
@@ -477,7 +478,7 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck, _TokenC
             )
             code_verifier = connection.code_verifier
             oauth_client = self.create_client(
-                client=client.dump(),
+                client=client,
                 client_secret=client_secret,
                 redirect_uri=callback_url,
                 connection=connection,
@@ -499,7 +500,7 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck, _TokenC
         connection.next_url = next_url
         retval: OAuthHttpClient = self.create_http_client(
             self.create_client(
-                client=client.dump(),
+                client=client,
                 client_secret=client_secret,
                 redirect_uri=callback_url,
                 adapter=adapter,
