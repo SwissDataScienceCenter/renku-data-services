@@ -7,6 +7,7 @@ from enum import StrEnum
 from typing import Any, Protocol
 from urllib.parse import urljoin
 
+from renku_data_services.repositories.models import OAuth2ClientORM
 import sqlalchemy as sa
 import sqlalchemy.orm as sao
 from authlib.integrations.base_client import InvalidTokenError, OAuthError
@@ -275,6 +276,41 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck):
         self._encryption_key = encryption_key
         self._session_maker = session_maker
 
+    def create_client(
+        self,
+        client: OAuth2ClientORM,
+        client_secret: str | None,
+        adapter: ProviderAdapter,
+        connection: OAuth2ConnectionORM | ULID,
+        token: models.OAuth2TokenSet | None,
+        redirect_uri: str | None,
+    ) -> AsyncOAuth2Client:
+        """Create the underlying AsyncOAuthClient."""
+        conn_orm: OAuth2ConnectionORM | None
+        conn_id: ULID
+        match connection:
+            case ULID() as id:
+                conn_id = id
+                conn_orm = None
+            case OAuth2ConnectionORM() as c:
+                conn_id = c.id
+                conn_orm = c
+        code_verifier = conn_orm.code_verifier if conn_orm else None
+        code_challenge_method = "S256" if client.use_pkce or code_verifier else None
+        return _SafeAsyncOAuthClient(
+            client_id=client.client_id,
+            client_secret=client_secret,
+            scope=client.scope,
+            token_endpoint=adapter.token_endpoint_url,
+            code_challenge_method=code_challenge_method,
+            update_token=self._update_token(conn_orm) if conn_orm else None,
+            token=token,
+            redirect_uri=redirect_uri,
+            connection_id=conn_id,
+            state=conn_orm.state if conn_orm else None,
+            token_check=self,
+        )
+
     async def for_user_connection_raise(self, user: APIUser, connection_id: ULID) -> OAuthHttpClient:
         """Same as `for_user_connection` but throws on error."""
         client = await self.for_user_connection(user, connection_id)
@@ -313,20 +349,15 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck):
             if client.client_secret
             else None
         )
-        code_verifier = connection.code_verifier
-        code_challenge_method = "S256" if code_verifier else None
 
         retval: OAuthHttpClient = DefaultOAuthClient(
-            _SafeAsyncOAuthClient(
-                client_id=client.client_id,
+            self.create_client(
+                client=client,
                 client_secret=client_secret,
-                scope=client.scope,
-                code_challenge_method=code_challenge_method,
-                token_endpoint=adapter.token_endpoint_url,
+                adapter=adapter,
+                connection=connection,
                 token=token,
-                update_token=self._update_token(connection),
-                connection_id=connection_id,
-                token_check=self,
+                redirect_uri=None,
             ),
             connection,
             adapter,
@@ -355,15 +386,8 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck):
                 else None
             )
             code_verifier = generate_code_verifier() if client.use_pkce else None
-            code_challenge_method = "S256" if client.use_pkce else None
-            oauth_client = _SafeAsyncOAuthClient(
-                client_id=client.client_id,
-                client_secret=client_secret,
-                redirect_uri=callback_url,
-                scope=client.scope,
-                code_challenge_method=code_challenge_method,
-                token_endpoint=adapter.token_endpoint_url,
-                token_check=self,
+            oauth_client = self.create_client(
+                client=client, client_secret=client_secret, redirect_uri=callback_url, adapter=adapter
             )
             url: str
             state: str
@@ -427,15 +451,13 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck):
             )
             code_verifier = connection.code_verifier
             code_challenge_method = "S256" if code_verifier else None
-            oauth_client = _SafeAsyncOAuthClient(
-                client_id=client.client_id,
+            oauth_client = self.create_client(
+                client=client,
                 client_secret=client_secret,
-                scope=client.scope,
                 redirect_uri=callback_url,
-                code_challenge_method=code_challenge_method,
-                state=connection.state,
-                connection_id=connection.id,
-                token_check=self,
+                connection=connection,
+                adapter=adapter,
+                token=None,
             )
             token = await oauth_client.fetch_token(
                 adapter.token_endpoint_url, authorization_response=raw_url, code_verifier=code_verifier
@@ -451,17 +473,13 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck):
 
         connection.next_url = next_url
         retval: OAuthHttpClient = DefaultOAuthClient(
-            _SafeAsyncOAuthClient(
-                client_id=client.client_id,
+            self.create_client(
+                client=client,
                 client_secret=client_secret,
                 redirect_uri=callback_url,
-                scope=client.scope,
-                code_challenge_method=code_challenge_method,
-                token_endpoint=adapter.token_endpoint_url,
+                adapter=adapter,
                 token=token,
-                update_token=self._update_token(connection),
-                connection_id=connection.id,
-                token_check=self,
+                connection=connection,
             ),
             connection,
             adapter,
