@@ -214,11 +214,16 @@ async def prepare_test() -> OAuthHttpClient:
 
 
 async def replay_stale_read() -> None:
-    # start with no connection row, this test taints it
     client = await prepare_test()
+    result = client.get_connected_account()
+    if isinstance(result, OAuthHttpError):
+        print(f"Error: {result}")
+        raise Exception("first try already invalid, must reconnect")
+
     token = await client.get_token()
     await store_token(set_token_expired(token), client)
 
+    # create two now clients that both have the same expired token in memory
     client = await create_connection()
     client2 = await create_connection()
 
@@ -226,25 +231,17 @@ async def replay_stale_read() -> None:
 
     result = await client.get_connected_account()
     print(result)  # this works
+    if isinstance(result, OAuthHttpError):
+        raise Exception(f"Error: {result}")
+
     result = await client2.get_connected_account()
-    print(result)  # this crashes
+    print(result)  # this refresh doesn't work, because it has already been used
+    if isinstance(result, OAuthHttpError):
+        raise Exception(f"Error: {result}")
 
 
 async def async_main() -> None:
-    client = await prepare_test()
-    account = await client.get_connected_account()
-    if isinstance(account, OAuthHttpError):
-        print(f"Error: {account}")
-        raise Exception("first try invalid")
-
-    print(account)
-    token = await client.get_token()
-    await store_token(set_token_expired(token), client)
-    print("Get account with token expired")
-    client = await create_connection()
-    account = await client.get_connected_account()
-    print(account)
-    # await replay_stale_read()
+    await replay_stale_read()
 
 
 if __name__ == "__main__":

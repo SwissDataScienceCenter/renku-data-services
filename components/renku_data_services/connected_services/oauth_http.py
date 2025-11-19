@@ -12,9 +12,8 @@ from urllib.parse import urljoin
 
 import sqlalchemy as sa
 import sqlalchemy.orm as sao
-from authlib.integrations.base_client import OAuthError
+from authlib.integrations.base_client import InvalidTokenError, OAuthError
 from authlib.integrations.httpx_client.oauth2_client import AsyncOAuth2Client
-from authlib.oauth2.rfc6750 import InvalidTokenError
 from httpx import URL, Response
 from httpx._types import HeaderTypes, QueryParamTypes
 from sqlalchemy.ext.asyncio.session import AsyncSession
@@ -197,30 +196,33 @@ class _SafeAsyncOAuthClient(AsyncOAuth2Client):  # type: ignore  # nosec: B107
     def _connection_lock(self) -> ConnectionLock:
         return self._token_check.get_lock(self._connection_id)
 
+    async def _do_refresh_token(self, token: dict[str, Any]) -> None:
+        async with self._connection_lock().with_locked() as conn:
+            logger.info(f"Refresh access token for connection {conn.id}")
+            refresh_token = token.get("refresh_token")
+            url = self.metadata.get("token_endpoint")
+            if refresh_token and url:
+                new_token = await self.refresh_token(url, refresh_token=refresh_token)
+                logger.info(f"Updating token in database for connection {conn.id}")
+                conn.token = self._token_check.encrypt_token_set(new_token, conn.user_id)
+            elif self.metadata.get("grant_type") == "client_credentials":
+                # access_token = token["access_token"]
+                new_token = await self.fetch_token(url, grant_type="client_credentials")
+                logger.info(f"Updating token in database for connection {conn.id}")
+                conn.token = self._token_check.encrypt_token_set(new_token, conn.user_id)
+            else:
+                raise InvalidTokenError()
+
     async def ensure_active_token(self, token):  # type: ignore
         try:
             # re-implementing super.ensure_token() to have more
-            # control about updating the database the lock used in the
-            # super-class is an instance variable, thus it is not
+            # control about updating the database. the lock used in
+            # the super-class is an instance variable, thus it is not
             # locking across different instances. Here we use the db
             # as a central lock, also guarding against other pods
             # trying the same.
-            async with self._connection_lock().with_locked() as conn:
-                if self.token.is_expired(leeway=self.leeway):  # type:ignore
-                    logger.info(f"Refresh access token for connection {conn.id}")
-                    refresh_token = token.get("refresh_token")
-                    url = self.metadata.get("token_endpoint")
-                    if refresh_token and url:
-                        new_token = await self.refresh_token(url, refresh_token=refresh_token)
-                        logger.info(f"Updating token in database for connection {conn.id}")
-                        conn.token = self._token_check.encrypt_token_set(new_token, conn.user_id)
-                    elif self.metadata.get("grant_type") == "client_credentials":
-                        # access_token = token["access_token"]
-                        new_token = await self.fetch_token(url, grant_type="client_credentials")
-                        logger.info(f"Updating token in database for connection {conn.id}")
-                        conn.token = self._token_check.encrypt_token_set(new_token, conn.user_id)
-                    else:
-                        raise InvalidTokenError()
+            if self.token and self.token.is_expired(leeway=self.leeway):  # type:ignore
+                await self._do_refresh_token(token)
         except OAuthError as err:
             logger.info(f"OAuth error while refreshing the token: {err}.")
             if not self._connection_id:
