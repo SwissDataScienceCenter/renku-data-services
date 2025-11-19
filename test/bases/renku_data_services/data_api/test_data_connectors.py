@@ -1670,7 +1670,6 @@ async def test_get_data_connector_permissions_cascading_from_group(
     )
     if role == "owner":
         expected_permissions["write"] = True
-    if role == "owner":
         expected_permissions["delete"] = True
         expected_permissions["change_membership"] = True
 
