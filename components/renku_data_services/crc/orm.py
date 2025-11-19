@@ -8,6 +8,7 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     Column,
+    Enum,
     Identity,
     Integer,
     MetaData,
@@ -23,6 +24,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services.app_config import logging
 from renku_data_services.connected_services import orm as cs_schemas
 from renku_data_services.crc import models
+from renku_data_services.crc.constants import DEFAULT_RUNTIME_PLATFORM
 from renku_data_services.crc.models import ClusterSettings, SavedClusterSettings, SessionProtocol
 from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import ClusterId
@@ -262,6 +264,11 @@ class ResourcePoolORM(BaseORM):
     )
     cluster: Mapped[Optional[ClusterORM]] = relationship(viewonly=True, default=None, lazy="selectin", init=False)
 
+    # NOTE: we reuse the "build_platform" enum type here
+    platform: Mapped[models.RuntimePlatform | None] = mapped_column(
+        Enum(models.RuntimePlatform, name="build_platform"), default=None, server_default=None, nullable=True
+    )
+
     @classmethod
     def from_unsaved_model(
         cls,
@@ -291,6 +298,7 @@ class ResourcePoolORM(BaseORM):
             remote_provider_id=remote_provider_id,
             remote_json=remote_json,
             cluster_id=cluster.id if cluster else None,
+            platform=new_resource_pool.platform,
         )
 
     def dump(
@@ -324,6 +332,7 @@ class ResourcePoolORM(BaseORM):
             default=self.default,
             remote=remote,
             cluster=cluster,
+            platform=self.platform or DEFAULT_RUNTIME_PLATFORM,
         )
 
     def _dump_remote(self) -> models.RemoteConfigurationFirecrest | None:

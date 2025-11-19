@@ -157,6 +157,32 @@ async def test_resource_pool_creation_with_remote(
         }
 
 
+@pytest.mark.parametrize(
+    "payload,expected_status_code",
+    resource_pool_payload,
+)
+@pytest.mark.asyncio
+async def test_resource_pool_creation_with_platform(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    payload: dict[str, Any],
+    expected_status_code: int,
+) -> None:
+    if "cluster_id" in payload:
+        payload["cluster_id"] = None
+    payload["default"] = False
+    payload["public"] = False
+    payload["platform"] = "linux/arm64"
+
+    _, res = await create_rp(payload, sanic_client)
+    assert res.status_code == expected_status_code, res.text
+
+    if res.status_code >= 200 and res.status_code < 400:
+        assert res.json is not None
+        rp = res.json
+        assert rp.get("platform") == "linux/arm64"
+
+
 @pytest.mark.asyncio
 async def test_resource_pool_quotas(
     sanic_client: SanicASGITestClient, valid_resource_pool_payload: dict[str, Any]
@@ -1132,6 +1158,9 @@ async def _resource_pools_request(
             if "id" not in c:
                 c["id"] = rp["classes"][i]["id"]
 
+        if "platform" not in input_payload:
+            input_payload["platform"] = "linux/amd64"
+
         check_payload = deepcopy(input_payload)
 
         if "id" not in check_payload:
@@ -1289,6 +1318,45 @@ async def test_resource_pool_patch_remote(
     assert res.json is not None
     rp = res.json
     assert "remote" not in rp
+
+
+@pytest.mark.asyncio
+async def test_resource_pool_patch_platform(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    # First, create a resource pool with the default runtime platform
+    payload = deepcopy(resource_pool_payload)
+    if "cluster_id" in payload:
+        payload["cluster_id"] = None
+
+    _, res = await create_rp(payload, sanic_client)
+    assert res.status_code == 201, res.text
+    rp_id = res.json["id"]
+    rp = res.json
+    assert rp.get("platform") == "linux/amd64"
+
+    # Patch with a different runtime platform
+    patch = {"platform": "linux/arm64"}
+
+    _, res = await sanic_client.patch(f"/api/data/resource_pools/{rp_id}", headers=admin_headers, json=patch)
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    rp = res.json
+    assert rp.get("platform") == "linux/arm64"
+
+    # Put to reset the resource pool
+    put = deepcopy(resource_pool_payload)
+    put["quota"] = rp["quota"]
+    put["classes"] = rp["classes"]
+    if "platform" in put:
+        del put["platform"]
+
+    _, res = await sanic_client.put(f"/api/data/resource_pools/{rp_id}", headers=admin_headers, json=put)
+    assert res.status_code == 200, res.text
+    assert res.json is not None
+    rp = res.json
+    assert rp.get("platform") == "linux/amd64"
 
 
 @pytest.mark.asyncio
