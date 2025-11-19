@@ -1,8 +1,11 @@
 """Module wrapping an oauth library."""
 
+from __future__ import annotations
+
 import time
 from base64 import b64decode, b64encode
-from collections.abc import Callable, Coroutine
+from collections.abc import AsyncGenerator, Callable
+from contextlib import asynccontextmanager
 from enum import StrEnum
 from typing import Any, Protocol
 from urllib.parse import urljoin
@@ -11,6 +14,7 @@ import sqlalchemy as sa
 import sqlalchemy.orm as sao
 from authlib.integrations.base_client import OAuthError
 from authlib.integrations.httpx_client.oauth2_client import AsyncOAuth2Client
+from authlib.oauth2.rfc6750 import InvalidTokenError
 from httpx import URL, Response
 from httpx._types import HeaderTypes, QueryParamTypes
 from sqlalchemy.ext.asyncio.session import AsyncSession
@@ -127,11 +131,36 @@ class _TokenCrypt(Protocol):
         ...
 
 
-class _TokenCheck(Protocol):
+class ConnectionLock:
+    """Lock updating a token."""
+
+    def __init__(self, session_maker: Callable[..., AsyncSession], id: ULID) -> None:
+        self._session_maker = session_maker
+        self._id = id
+
+    @asynccontextmanager
+    async def with_locked(self) -> AsyncGenerator[OAuth2ConnectionORM]:
+        """Lock the connection for update."""
+        async with self._session_maker() as session, session.begin():
+            result = await session.scalars(
+                sa.select(schemas.OAuth2ConnectionORM)
+                .where(schemas.OAuth2ConnectionORM.id == self._id)
+                .with_for_update()
+            )
+            conn = result.one()
+            yield conn
+            await session.flush()
+
+
+class _TokenCheck(_TokenCrypt, Protocol):
     async def find_recently_updated_token(
         self, connection_id: ULID, current_token: dict[str, Any], leeway: int
     ) -> models.OAuth2TokenSet | None:
         """Check the database for a recently updated token and return it."""
+        ...
+
+    def get_lock(self, id: ULID) -> ConnectionLock:
+        """Return a lock scoped by a connection id."""
         ...
 
 
@@ -146,7 +175,6 @@ class _SafeAsyncOAuthClient(AsyncOAuth2Client):  # type: ignore  # nosec: B107
         redirect_uri=None,
         token=None,
         token_placement="header",  # nosec: B107
-        update_token=None,
         leeway=60,
         **kwargs,
     ):
@@ -159,33 +187,41 @@ class _SafeAsyncOAuthClient(AsyncOAuth2Client):  # type: ignore  # nosec: B107
             redirect_uri,
             token,
             token_placement,
-            update_token,
+            None,
             leeway,
             **kwargs,
         )
-        self._connection_id: ULID | None = kwargs.get("connection_id")
+        self._connection_id: ULID = kwargs["connection_id"]
         self._token_check: _TokenCheck = kwargs["token_check"]
+
+    def _connection_lock(self) -> ConnectionLock:
+        return self._token_check.get_lock(self._connection_id)
 
     async def ensure_active_token(self, token):  # type: ignore
         try:
-            return await super().ensure_active_token(token)
+            # re-implementing super.ensure_token() to have more
+            # control about updating the database the lock used in the
+            # super-class is an instance variable, thus it is not
+            # locking across different instances. Here we use the db
+            # as a central lock, also guarding against other pods
+            # trying the same.
+            async with self._connection_lock().with_locked() as conn:
+                if self.token.is_expired(leeway=self.leeway):  # type:ignore
+                    logger.info(f"Refresh access token for connection {conn.id}")
+                    refresh_token = token.get("refresh_token")
+                    url = self.metadata.get("token_endpoint")
+                    if refresh_token and url:
+                        new_token = await self.refresh_token(url, refresh_token=refresh_token)
+                        logger.info(f"Updating token in database for connection {conn.id}")
+                        conn.token = self._token_check.encrypt_token_set(new_token, conn.user_id)
+                    elif self.metadata.get("grant_type") == "client_credentials":
+                        # access_token = token["access_token"]
+                        new_token = await self.fetch_token(url, grant_type="client_credentials")
+                        logger.info(f"Updating token in database for connection {conn.id}")
+                        conn.token = self._token_check.encrypt_token_set(new_token, conn.user_id)
+                    else:
+                        raise InvalidTokenError()
         except OAuthError as err:
-            # This error comes from refreshing the access token. Each
-            # oauth provider may present a different error code -
-            # event thought the oauth spec
-            # (https://www.rfc-editor.org/rfc/rfc6749#section-5.2) has
-            # a list of what to return. For example, while tests with
-            # GitLab gives errors exactly copied from the spec
-            # ("invalid_grant"), GitHub presents a "bad_refresh_token"
-            # error code. After all, we can never know. From the
-            # implementation of AsyncOAuth2Client this error is always
-            # only from trying to obtain a new access token.
-            #
-            # Here we try to detect a stale read. If that is the case,
-            # we can hack the new token into this client and proceed
-            # to execute the request. This works only, because we are
-            # called right before the request is send and how
-            # AsyncOAuthClient is implemented 😇
             logger.info(f"OAuth error while refreshing the token: {err}.")
             if not self._connection_id:
                 logger.warning("No connection id set to check for an recently updated token!")
@@ -313,19 +349,19 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck, _TokenC
                 conn_orm = c
         code_verifier = conn_orm.code_verifier if conn_orm else None
         code_challenge_method = "S256" if client.use_pkce or code_verifier else None
-        return _SafeAsyncOAuthClient(
+        oauth_client = _SafeAsyncOAuthClient(
             client_id=client.client_id,
             client_secret=client_secret,
             scope=client.scope,
             token_endpoint=adapter.token_endpoint_url,
             code_challenge_method=code_challenge_method,
-            update_token=self._update_token(conn_orm) if conn_orm else None,
             token=token,
             redirect_uri=redirect_uri,
             connection_id=conn_id,
             state=conn_orm.state if conn_orm else None,
             token_check=self,
         )
+        return oauth_client
 
     def create_http_client(
         self, delegate: AsyncOAuth2Client, connection: OAuth2ConnectionORM, adapter: ProviderAdapter
@@ -512,32 +548,13 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck, _TokenC
         )
         return retval
 
-    def _update_token(
-        self, connection: OAuth2ConnectionORM
-    ) -> Callable[[dict[str, Any], str | None], Coroutine[Any, Any, None]]:
-        async def _update_fn(token: dict[str, Any], refresh_token: str | None = None) -> None:
-            if refresh_token is None:
-                return
-            async with self._session_maker() as session, session.begin():
-                session.add(connection)
-                await session.refresh(connection)
-                connection.token = self.encrypt_token_set(token=token, user_id=connection.user_id)
-                await session.flush()
-                await session.refresh(connection)
-                logger.info("Token refreshed!")
-
-        return _update_fn
-
     async def find_recently_updated_token(
         self, connection_id: ULID, current_token: dict[str, Any], leeway: int
     ) -> models.OAuth2TokenSet | None:
         """Check the database for a recently updated token and return it."""
         logger.info(f"Looking up current connection {connection_id} for recent updates.")
         async with self._session_maker() as session:
-            result = await session.scalars(
-                sa.select(schemas.OAuth2ConnectionORM).where(schemas.OAuth2ConnectionORM.id == connection_id)
-            )
-            conn = result.one_or_none()
+            conn = await session.get(schemas.OAuth2ConnectionORM, connection_id)
             if conn is None or conn.token is None:
                 logger.info(f"No valid connection found for id: {connection_id}")
                 return None
@@ -557,6 +574,10 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck, _TokenC
                         "The user needs to run through the oauth flow again to re-connect."
                     )
                     return None
+
+    def get_lock(self, id: ULID) -> ConnectionLock:
+        """Return a lock scoped by a connection id."""
+        return ConnectionLock(self._session_maker, id)
 
     def encrypt_token_set(self, token: dict[str, Any], user_id: str) -> models.OAuth2TokenSet:
         """Encrypts sensitive fields of token set before persisting at rest."""

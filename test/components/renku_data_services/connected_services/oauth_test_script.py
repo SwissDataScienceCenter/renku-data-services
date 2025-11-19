@@ -21,8 +21,10 @@ from renku_data_services.connected_services.models import (
 from renku_data_services.connected_services.oauth_http import (
     DefaultOAuthHttpClientFactory,
     OAuthHttpClient,
+    OAuthHttpError,
     OAuthHttpFactoryError,
 )
+from renku_data_services.connected_services.orm import OAuth2ConnectionORM
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.errors import errors
 from renku_data_services.users.db import UserInfo
@@ -54,7 +56,7 @@ config = {
         "url": "https://github.com",
         "kind": ProviderKind.github,
     },
-    "provider": "gitlab",
+    "provider": "github",
     "callback_url": "http://localhost:9000",
 }
 
@@ -133,28 +135,28 @@ def wait_for_oauth_callback(port: int, url: str) -> (str, str):
     return (state[0], path)
 
 
-async def create_connection() -> OAuth2Connection:
-    callback_url: str = config["callback_url"]
-    port = urlparse(callback_url).port or 9000
-    cc_repo = deps.connected_services_repo
-    connections = await cc_repo.get_oauth2_connections(user)
-    connections = [c for c in connections if c.provider_id == provider_id]
-    if connections == []:
-        url = await cc_repo.authorize_client(user, provider_id, callback_url)
-        print(f"visit this url:\n{url}")
-        (state, path) = wait_for_oauth_callback(port, url)
-        await cc_repo.authorize_callback(state, path, callback_url)
-        return await create_connection()
-    else:
-        if connections[0].is_connected:
-            print("Connected.")
-            return connections[0]
-        else:
-            await cc_repo.delete_oauth2_connection(user, connections[0].id)
-            return await create_connection()
+# async def create_connection() -> OAuth2Connection:
+#     callback_url: str = config["callback_url"]
+#     port = urlparse(callback_url).port or 9000
+#     cc_repo = deps.connected_services_repo
+#     connections = await cc_repo.get_oauth2_connections(user)
+#     connections = [c for c in connections if c.provider_id == provider_id]
+#     if connections == []:
+#         url = await cc_repo.authorize_client(user, provider_id, callback_url)
+#         print(f"visit this url:\n{url}")
+#         (state, path) = wait_for_oauth_callback(port, url)
+#         await cc_repo.authorize_callback(state, path, callback_url)
+#         return await create_connection()
+#     else:
+#         if connections[0].is_connected:
+#             print("Connected.")
+#             return connections[0]
+#         else:
+#             await cc_repo.delete_oauth2_connection(user, connections[0].id)
+#             return await create_connection()
 
 
-async def create_connection2() -> OAuthHttpClient:
+async def create_connection() -> OAuthHttpClient:
     callback_url: str = config["callback_url"]
     port = urlparse(callback_url).port or 9000
     cc_repo = deps.connected_services_repo
@@ -179,7 +181,7 @@ async def create_connection2() -> OAuthHttpClient:
         else:
             logger.info(f"Connection {connections[0].id} exists, but is not in connected state")
             await cc_repo.delete_oauth2_connection(user, connections[0].id)
-            return await create_connection2()
+            return await create_connection()
 
 
 async def make_http_client(conn: OAuth2Connection) -> OAuthHttpClient:
@@ -191,13 +193,6 @@ async def make_http_client(conn: OAuth2Connection) -> OAuthHttpClient:
     return client
 
 
-def set_refresh_token(token: dict[str, Any], plain_refresh_token: str) -> OAuth2TokenSet:
-    token["refresh_token"] = plain_refresh_token
-    token["expires_at"] = 1  # must be >0 because python treas 0 as False and skips checks then
-    token["expires_in"] = 1
-    return factory.encrypt_token_set(token, user.id)
-
-
 def set_token_expired(token: dict[str, Any]) -> OAuth2TokenSet:
     token["expires_at"] = 1  # must be >0 because python treas 0 as False and skips checks then
     token["expires_in"] = 1
@@ -205,9 +200,9 @@ def set_token_expired(token: dict[str, Any]) -> OAuth2TokenSet:
 
 
 async def store_token(token: OAuth2TokenSet, client: OAuthHttpClient) -> None:
-    conn = client.connection
+    conn_id = client.connection.id
     async with deps.config.db.async_session_maker() as session, session.begin():
-        session.add(conn)
+        conn = await session.get_one(OAuth2ConnectionORM, conn_id)
         conn.token = token
         await session.flush()
 
@@ -215,7 +210,7 @@ async def store_token(token: OAuth2TokenSet, client: OAuthHttpClient) -> None:
 async def prepare_test() -> OAuthHttpClient:
     await create_user()
     await create_oauth_client()
-    return await create_connection2()
+    return await create_connection()
 
 
 async def replay_stale_read() -> None:
@@ -224,8 +219,8 @@ async def replay_stale_read() -> None:
     token = await client.get_token()
     await store_token(set_token_expired(token), client)
 
-    client = await create_connection2()
-    client2 = await create_connection2()
+    client = await create_connection()
+    client2 = await create_connection()
 
     print("Try to refresh with two clients")
 
@@ -236,10 +231,20 @@ async def replay_stale_read() -> None:
 
 
 async def async_main() -> None:
-    # client = await create_connection2()
-    # token = await client.get_token()
-    # print(token)
-    await replay_stale_read()
+    client = await prepare_test()
+    account = await client.get_connected_account()
+    if isinstance(account, OAuthHttpError):
+        print(f"Error: {account}")
+        raise Exception("first try invalid")
+
+    print(account)
+    token = await client.get_token()
+    await store_token(set_token_expired(token), client)
+    print("Get account with token expired")
+    client = await create_connection()
+    account = await client.get_connected_account()
+    print(account)
+    # await replay_stale_read()
 
 
 if __name__ == "__main__":
