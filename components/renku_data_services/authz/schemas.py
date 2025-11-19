@@ -733,7 +733,7 @@ definition project {
     permission delete = owner + project_platform->is_admin + project_namespace->delete
     permission non_public_read = owner + editor + viewer + project_namespace->read_children - public_viewer
     permission exclusive_owner = owner + project_namespace->exclusive_owner
-    permission exclusive_editor = editor + project_namespace->exclusive_owner
+    permission exclusive_editor = editor
     permission exclusive_member = owner + editor + viewer + project_namespace->exclusive_member
     permission direct_member = owner + editor + viewer
 }
@@ -752,7 +752,7 @@ definition data_connector {
     permission delete = owner + data_connector_platform->is_admin + data_connector_namespace->delete
     permission non_public_read = owner + editor + viewer + data_connector_namespace->read_children - public_viewer
     permission exclusive_owner = owner + data_connector_namespace->exclusive_owner
-    permission exclusive_editor = editor + data_connector_namespace->exclusive_owner
+    permission exclusive_editor = editor
     permission exclusive_member = owner + editor + viewer + data_connector_namespace->exclusive_member
     permission direct_member = owner + editor + viewer
 }"""
