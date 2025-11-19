@@ -24,7 +24,7 @@ def upgrade() -> None:
     client = config.authz_client()
     responses = v8.upgrade(client)
     logger.info(
-        f"Finished upgrading the Authz schema to version 7 in Alembic revision {revision}, response: {responses}"
+        f"Finished upgrading the Authz schema to version 8 in Alembic revision {revision}, response: {responses}"
     )
 
 
@@ -33,5 +33,5 @@ def downgrade() -> None:
     client = config.authz_client()
     responses = v8.downgrade(client)
     logger.info(
-        f"Finished downgrading the Authz schema from version 7 in Alembic revision {revision}, response: {responses}"
+        f"Finished downgrading the Authz schema from version 8 in Alembic revision {revision}, response: {responses}"
     )
