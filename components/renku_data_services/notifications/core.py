@@ -44,9 +44,14 @@ def transform_alert_to_unsaved_alert(alert: apispec.AlertmanagerAlert) -> models
     if not message:
         raise errors.ValidationError(message="Alert is missing 'message' annotation.")
 
+    event_type = labels.get("alertname")
+    if not event_type:
+        raise errors.ValidationError(message="Alert is missing 'alertname' label.")
+
     return models.UnsavedAlert(
         title=title,
         message=message,
+        event_type=event_type,
         user_id=user_id,
         session_name=session_name,
     )
