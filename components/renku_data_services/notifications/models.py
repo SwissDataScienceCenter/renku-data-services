@@ -12,6 +12,7 @@ class Alert:
 
     id: ULID
     user_id: str
+    event_type: str
     session_name: str | None = None
     title: str
     message: str
@@ -24,6 +25,7 @@ class UnsavedAlert:
     """An alert that has not been persisted yet."""
 
     user_id: str
+    event_type: str
     session_name: str | None = None
     title: str
     message: str

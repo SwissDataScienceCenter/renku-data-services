@@ -247,6 +247,8 @@ components:
           $ref: "#/components/schemas/AlertTitle"
         message:
           $ref: "#/components/schemas/AlertMessage"
+        event_type:
+          $ref: "#/components/schemas/AlertEventType"
         user_id:
           $ref: "#/components/schemas/UserId"
         session_name:
@@ -264,16 +266,20 @@ components:
         - id
         - title
         - message
+        - event_type
         - user_id
         - creation_date
     AlertPost:
       description: Data required to create an alert.
       type: object
+      additionalProperties: false
       properties:
         title:
           $ref: "#/components/schemas/AlertTitle"
         message:
           $ref: "#/components/schemas/AlertMessage"
+        event_type:
+          $ref: "#/components/schemas/AlertEventType"
         user_id:
           $ref: "#/components/schemas/UserId"
         session_name:
@@ -281,6 +287,7 @@ components:
       required:
         - title
         - message
+        - event_type
         - user_id
     AlertTitle:
       type: string
@@ -288,6 +295,10 @@ components:
     AlertMessage:
       type: string
       description: The message body of the alert.
+    AlertEventType:
+      type: string
+      description: The type of event that triggered the alert.
+      example: session_high_memory
     SessionName:
       description: Renku session name
       type: string
