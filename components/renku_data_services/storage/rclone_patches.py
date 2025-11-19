@@ -1,9 +1,11 @@
 """Patches to apply to phe rclone storage schema."""
 
+from collections.abc import Callable
 from copy import deepcopy
-from typing import Any, Final
+from typing import Any, Final, cast
 
 from renku_data_services import errors
+from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER, SCICAT_V1_PROVIDER
 
 BANNED_STORAGE: Final[set[str]] = {
     "alias",
@@ -321,6 +323,28 @@ def __patch_schema_add_openbis_type(spec: list[dict[str, Any]]) -> None:
     )
 
 
+def __add_custom_doi_s3_provider(name: str, description: str, prefix: str) -> Callable[[list[dict[str, Any]]], None]:
+    """This is used to add envidata and scicat as providers.
+
+    However this is not a real provider in Rclone. The data service has to intercept the request
+    and convert this provider to the proper S3 configuration where the data can be found.
+    """
+
+    def __patch(spec: list[dict[str, Any]]) -> None:
+        doi_original = find_storage(spec, "doi")
+        doi_new = deepcopy(doi_original)
+        doi_new["Description"] = description
+        doi_new["Name"] = name
+        doi_new["Prefix"] = prefix
+        doi_new_options = cast(list[dict[str, Any]], doi_new.get("Options", []))
+        provider_ind = next((i for i, opt in enumerate(doi_new_options) if opt.get("Name") == "provider"), None)
+        if provider_ind is not None:
+            doi_new_options.pop(provider_ind)
+        spec.append(doi_new)
+
+    return __patch
+
+
 def apply_patches(spec: list[dict[str, Any]]) -> None:
     """Apply patches to RClone schema."""
     patches = [
@@ -331,6 +355,8 @@ def apply_patches(spec: list[dict[str, Any]]) -> None:
         __patch_schema_remove_oauth_propeties,
         __patch_polybox_storage,
         __patch_switchdrive_storage,
+        __add_custom_doi_s3_provider("Envidat", "Envidat data provider", ENVIDAT_V1_PROVIDER),
+        __add_custom_doi_s3_provider("SciCat", "SciCat data provider", SCICAT_V1_PROVIDER),
         __patch_schema_remove_banned_sftp_options,
         __patch_schema_add_openbis_type,
     ]
