@@ -374,15 +374,8 @@ class _HTMLToText(HTMLParser):
 async def convert_envidat_v1_data_connector_to_s3(
     payload: apispec.CloudStorageCorePost,
 ) -> apispec.CloudStorageCorePost:
-    """Converts a doi-like configuration for Envidat to S3.
-
-    If the paylaod that is passed in is not of the expected type nothing is changed
-    and the same payload that was passed in is returned.
-    """
+    """Converts a doi-like configuration for Envidat to S3."""
     config = payload.configuration
-    if config.get("type") != ENVIDAT_V1_PROVIDER:
-        return payload
-
     doi = config.get("doi")
     if not isinstance(doi, str):
         raise errors.ValidationError()
@@ -402,7 +395,7 @@ async def convert_envidat_v1_data_connector_to_s3(
         res = await clnt.get(envidat_url, params=query_params, headers=headers)
         if res.status_code != 200:
             raise errors.ProgrammingError()
-    dataset = SchemaOrgDataset.model_validate_strings(res.text)
+    dataset = SchemaOrgDataset.model_validate_json(res.text)
     s3_config = schema_org.get_rclone_config(
         dataset,
         schema_org.DatasetProvider.envidat,

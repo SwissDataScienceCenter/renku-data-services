@@ -25,7 +25,7 @@ class S3Config:
     @property
     def path(self) -> str:
         """Return the path including the bucket name and the prefix."""
-        return f"{self.bucket}/{self.prefix}"
+        return f"{self.bucket}{self.prefix}"
 
 
 def get_rclone_config(dataset: SchemaOrgDataset, provider: DatasetProvider) -> S3Config:
@@ -62,7 +62,7 @@ def __get_rclone_s3_config_envidat(dataset: SchemaOrgDataset) -> S3Config:
             message="The envidat s3 url is expected to have a host name with at least two parts."
         )
     s3_host = ".".join(host_split[1:])
-    bucket = host_split[0]
+    bucket = host_split[0].strip("/")
     prefix = "/" + prefix.strip("/")
     return S3Config(
         {
@@ -70,6 +70,6 @@ def __get_rclone_s3_config_envidat(dataset: SchemaOrgDataset) -> S3Config:
             "provider": "Other",
             "endpoint": f"{url_parsed.scheme}://{s3_host}",
         },
-        bucket.strip("/"),
+        bucket,
         prefix,
     )
