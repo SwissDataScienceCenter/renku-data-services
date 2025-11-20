@@ -15,9 +15,11 @@ from renku_data_services.base_models.core import (
     NamespacePath,
     ProjectPath,
 )
-from renku_data_services.data_connectors import apispec, models, schema_org_dataset
+from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors.constants import ALLOWED_GLOBAL_DATA_CONNECTOR_PROVIDERS
-from renku_data_services.data_connectors.doi.metadata import get_dataset_metadata
+from renku_data_services.data_connectors.doi import schema_org
+from renku_data_services.data_connectors.doi.metadata import create_envidat_metadata_url, get_dataset_metadata
+from renku_data_services.data_connectors.doi.models import DOI, SchemaOrgDataset
 from renku_data_services.storage import models as storage_models
 from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER
 from renku_data_services.storage.rclone import RCloneValidator
@@ -129,29 +131,37 @@ async def prevalidate_unsaved_global_data_connector(
     if not storage.readonly:
         raise errors.ValidationError(message="Global data connectors must be read-only")
 
-    match storage.storage_type:
-        case "doi":
-            rclone_metadata = await validator.get_doi_metadata(configuration=storage.configuration)
+    rclone_metadata = await validator.get_doi_metadata(configuration=storage.configuration)
+    if rclone_metadata:
+        doi_uri = f"doi:{rclone_metadata.doi}"
 
-            doi_uri = f"doi:{rclone_metadata.doi}"
-            slug = base_models.Slug.from_name(doi_uri).value
-
-            # Override provider in storage config
-            storage.configuration["provider"] = rclone_metadata.provider
-        case x if x == ENVIDAT_V1_PROVIDER:
-            if not isinstance(body.storage, apispec.CloudStorageCorePost):
-                raise errors.ValidationError()
-            doi = body.storage.configuration.get("doi")
-            if not doi:
-                raise errors.ValidationError()
-            doi_uri = f"doi:{doi}"
-            slug = base_models.Slug.from_name(doi_uri).value
-        case x:
+        # Override provider in storage config
+        storage.configuration["provider"] = rclone_metadata.provider
+        doi = DOI(rclone_metadata.doi)
+    else:
+        # The storage is not supported by rclone
+        if not isinstance(body.storage, apispec.CloudStorageCorePost):
             raise errors.ValidationError(
-                message=f"Only {ALLOWED_GLOBAL_DATA_CONNECTOR_PROVIDERS} storage type is allowed "
-                "for global data connectors"
+                message="When the data connector is not supported by rclone we cannot parse a storage URL."
             )
+        # Try to see if we have a different type not directly supported by rclone - from envidat for example
+        doi_str = body.storage.configuration.get("doi")
+        if not isinstance(doi_str, str):
+            raise errors.ValidationError(message="A doi could not be found in the storage configuration.")
+        doi = DOI(doi_str)
+        host = await doi.resolve_host()
+        if not host:
+            raise errors.ValidationError(message=f"The provided doi {doi} cannot be resolved.")
+        doi_uri = f"doi:{doi}"
+        if host not in ["envidat.ch", "www.envidat.ch"]:
+            raise errors.ValidationError(
+                message="The doi for the global data connector resolved to an unsupported host"
+            )
+        # Set the storage type and re-validate
+        body.storage.storage_type = ENVIDAT_V1_PROVIDER
+        storage = await validate_unsaved_storage(body.storage, validator=validator)
 
+    slug = base_models.Slug.from_name(doi_uri).value
     return models.UnsavedGlobalDataConnector(
         name=doi_uri,
         slug=slug,
@@ -160,6 +170,7 @@ async def prevalidate_unsaved_global_data_connector(
         storage=storage,
         description=None,
         keywords=[],
+        doi=doi,
     )
 
 
@@ -181,7 +192,12 @@ async def validate_unsaved_global_data_connector(
     # Fetch DOI metadata
     if data_connector.storage.storage_type == "doi":
         rclone_metadata = await validator.get_doi_metadata(configuration=data_connector.storage.configuration)
-        metadata = await get_dataset_metadata(rclone_metadata=rclone_metadata)
+        if not rclone_metadata:
+            raise errors.ValidationError()
+        metadata = await get_dataset_metadata(data_connector.storage.storage_type, rclone_metadata.metadata_url)
+    elif data_connector.storage.storage_type == ENVIDAT_V1_PROVIDER:
+        metadata_url = create_envidat_metadata_url(data_connector.doi)
+        metadata = await get_dataset_metadata(data_connector.storage.storage_type, metadata_url)
     else:
         metadata = None
 
@@ -228,6 +244,7 @@ async def validate_unsaved_global_data_connector(
         storage=storage,
         description=description or None,
         keywords=keywords,
+        doi=data_connector.doi,
     )
 
 
@@ -371,8 +388,7 @@ async def convert_envidat_v1_data_connector_to_s3(
         raise errors.ValidationError()
     if len(doi) == 0:
         raise errors.ValidationError()
-    doi = doi.removeprefix("https://")
-    doi = doi.removeprefix("http://")
+    doi = DOI(doi)
 
     new_config = payload.model_copy(deep=True)
     new_config.configuration = {}
@@ -386,12 +402,45 @@ async def convert_envidat_v1_data_connector_to_s3(
         res = await clnt.get(envidat_url, params=query_params, headers=headers)
         if res.status_code != 200:
             raise errors.ProgrammingError()
-    dataset = schema_org_dataset.Dataset.model_validate_strings(res.text)
-    s3_config = schema_org_dataset.get_rclone_config(
+    dataset = SchemaOrgDataset.model_validate_strings(res.text)
+    s3_config = schema_org.get_rclone_config(
         dataset,
-        schema_org_dataset.DatasetProvider.envidat,
+        schema_org.DatasetProvider.envidat,
     )
     new_config.configuration = dict(s3_config.rclone_config)
     new_config.source_path = s3_config.path
     new_config.storage_type = "s3"
     return new_config
+
+
+# async def get_metadata(
+#     configuration: storage_models.RCloneConfig | dict[str, Any], validator: RCloneValidator
+# ) -> RCloneDOIMetadata | None:
+#     """Get metadata for the dataset."""
+#     if isinstance(configuration, storage_models.RCloneConfig):
+#         return await validator.get_doi_metadata(configuration)
+#     doi = configuration.get("doi")
+#     if not doi:
+#         return None
+#     parsed_doi = urlparse(doi)
+#     if parsed_doi.scheme.decode() not in ["http", "https"]:
+#         doi = urlunparse(parsed_doi._replace(scheme=b"https")).decode()
+#     clnt = httpx.AsyncClient(follow_redirects=True)
+#     async with clnt:
+#         res = await clnt.get(doi)
+#     if res.status_code != 200:
+#         return None
+#     match res.url.host:
+#         case "www.envidat.ch":
+#
+#
+# async def get_envidat_metadata(doi: DOI) -> dict | None:
+#     """Get metadata about the envidat dataset, the doi should not be a url."""
+#     clnt = httpx.AsyncClient()
+#     url = "https://envidat.ch/converters-api/internal-dataset/convert/jsonld"
+#     params = {"query": doi}
+#     async with clnt:
+#         res = clnt.get(url, params=params)
+#     if res.status_code != 200:
+#         return None
+#

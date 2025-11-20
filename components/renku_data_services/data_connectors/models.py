@@ -14,6 +14,7 @@ from renku_data_services.base_models.core import (
     NamespacePath,
     ProjectPath,
 )
+from renku_data_services.data_connectors.doi.models import DOI
 from renku_data_services.namespace.models import GroupNamespace, ProjectNamespace, UserNamespace
 from renku_data_services.utils.etag import compute_etag_from_fields
 
@@ -97,6 +98,7 @@ class UnsavedGlobalDataConnector(BaseDataConnector):
     """Global data connector model."""
 
     namespace: None = None
+    doi: DOI
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
