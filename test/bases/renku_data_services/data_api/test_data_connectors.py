@@ -9,9 +9,10 @@ from sanic_testing.testing import SanicASGITestClient
 from renku_data_services.authz.models import Visibility
 from renku_data_services.base_models.core import NamespacePath, ProjectPath
 from renku_data_services.data_connectors import core
+from renku_data_services.data_connectors.apispec import CloudStorageCorePost, GlobalDataConnectorPost
 from renku_data_services.data_connectors.doi.models import DOIMetadata
 from renku_data_services.namespace.models import NamespaceKind
-from renku_data_services.storage.rclone import RCloneDOIMetadata
+from renku_data_services.storage.rclone import RCloneDOIMetadata, RCloneValidator
 from renku_data_services.users.models import UserInfo
 from renku_data_services.utils.core import get_openbis_session_token_for_anonymous_user
 from test.bases.renku_data_services.data_api.utils import merge_headers
@@ -2477,3 +2478,27 @@ def _mock_get_dataset_metadata(metadata: DOIMetadata, sanic_client: SanicASGITes
         "_get_dataset_metadata_dataverse",
         _mock_get_dataset_metadata(_orig_get_dataset_metadata_dataverse),
     )
+
+
+async def test_validate_envidat_data_connector() -> None:
+    body = GlobalDataConnectorPost(
+        storage=CloudStorageCorePost(
+            storage_type="doi",
+            configuration={"type": "doi", "doi": "10.16904/12"},
+            source_path="/",
+            target_path="/",
+            readonly=True,
+        )
+    )
+    validator = RCloneValidator()
+    res = await core.prevalidate_unsaved_global_data_connector(body, validator)
+    config = res.data_connector.storage.configuration
+    assert config["type"] == "s3"
+    assert config["provider"] == "Other"
+    assert config["endpoint"].find("zhdk.cloud.switch.ch") >= 0
+    assert res.data_connector.storage.source_path == "/envidat-doi/10.16904_12"
+    res = await core.validate_unsaved_global_data_connector(res, validator)
+    assert res.description is not None
+    assert len(res.description) > 0
+    assert res.keywords is not None
+    assert len(res.keywords) > 0

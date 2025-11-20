@@ -370,7 +370,7 @@ class DataConnectorRepository:
     async def insert_global_data_connector(
         self,
         user: base_models.APIUser,
-        data_connector: models.UnsavedGlobalDataConnector,
+        prevalidated_dc: models.PrevalidatedGlobalDataConnector,
         validator: RCloneValidator | None,
         *,
         session: AsyncSession | None = None,
@@ -381,6 +381,7 @@ class DataConnectorRepository:
         if user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
+        data_connector = prevalidated_dc.data_connector
         slug = data_connector.slug or base_models.Slug.from_name(data_connector.name).value
 
         existing_global_dc_stmt = select(schemas.DataConnectorORM).where(schemas.DataConnectorORM.global_slug == slug)
@@ -401,7 +402,7 @@ class DataConnectorRepository:
             if validator is None:
                 raise RuntimeError("Could not validate global data connector")
             data_connector = await validate_unsaved_global_data_connector(
-                data_connector=data_connector, validator=validator
+                prevalidated_dc=prevalidated_dc, validator=validator
             )
 
         dc = await self._insert_data_connector(user=user, data_connector=data_connector, session=session)

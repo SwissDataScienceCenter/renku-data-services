@@ -4,25 +4,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from urllib.parse import parse_qs, urlparse
 
-from pydantic import BaseModel, ConfigDict, Field
-
+from renku_data_services.data_connectors.doi.models import SchemaOrgDataset
 from renku_data_services.errors import errors
-
-
-class Distribution(BaseModel):
-    """The distribution field of a schema.org dataset."""
-
-    model_config = ConfigDict(extra="ignore")
-    type: str
-    contentUrl: str
-    name: str
-
-
-class Dataset(BaseModel):
-    """A very limited and partial spec of a schema.org Dataset used by Scicat and Envidat."""
-
-    model_config = ConfigDict(extra="ignore")
-    distribution: list[Distribution] = Field(default_factory=list)
 
 
 class DatasetProvider(StrEnum):
@@ -42,10 +25,10 @@ class S3Config:
     @property
     def path(self) -> str:
         """Return the path including the bucket name and the prefix."""
-        return f"{self.bucket}/{self.prefix}"
+        return f"/{self.bucket}{self.prefix}"
 
 
-def get_rclone_config(dataset: Dataset, provider: DatasetProvider) -> S3Config:
+def get_rclone_config(dataset: SchemaOrgDataset, provider: DatasetProvider) -> S3Config:
     """Parse the dataset into an rclone configuration."""
     match provider:
         case DatasetProvider.envidat:
@@ -55,10 +38,10 @@ def get_rclone_config(dataset: Dataset, provider: DatasetProvider) -> S3Config:
             raise errors.ValidationError(message=f"Got an unknown dataset provider {x}")
 
 
-def __get_rclone_s3_config_envidat(dataset: Dataset) -> S3Config:
+def __get_rclone_s3_config_envidat(dataset: SchemaOrgDataset) -> S3Config:
     """Get the S3 rclone configuration and source path from a dataset returned by envidat."""
     # NOTE: The folks from Envidat assure us that the first entity in the list is the one we want
-    url = dataset.distribution[0].contentUrl
+    url = dataset.distribution[0].content_url
     # NOTE: The folks from Envidat assure us that the URL has the following format
     # http://<bucket-name>.<s3 domain>/?prefix=<path to files>
     url_parsed = urlparse(url)
@@ -79,7 +62,7 @@ def __get_rclone_s3_config_envidat(dataset: Dataset) -> S3Config:
             message="The envidat s3 url is expected to have a host name with at least two parts."
         )
     s3_host = ".".join(host_split[1:])
-    bucket = host_split[0]
+    bucket = host_split[0].strip("/")
     prefix = "/" + prefix.strip("/")
     return S3Config(
         {
@@ -87,6 +70,6 @@ def __get_rclone_s3_config_envidat(dataset: Dataset) -> S3Config:
             "provider": "Other",
             "endpoint": f"{url_parsed.scheme}://{s3_host}",
         },
-        bucket.strip("/"),
+        bucket,
         prefix,
     )

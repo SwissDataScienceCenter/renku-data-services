@@ -124,7 +124,7 @@ class DataConnectorsBP(CustomBlueprint):
         ) -> JSONResponse:
             data_connector = await prevalidate_unsaved_global_data_connector(body, validator=validator)
             result, inserted = await self.data_connector_repo.insert_global_data_connector(
-                user=user, data_connector=data_connector, validator=validator
+                user=user, prevalidated_dc=data_connector, validator=validator
             )
             return validated_json(
                 apispec.DataConnector,

@@ -16,12 +16,14 @@ from renku_data_services.base_models.core import (
     NamespacePath,
     ProjectPath,
 )
-from renku_data_services.data_connectors import apispec, models, schema_org_dataset
+from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors.constants import ALLOWED_GLOBAL_DATA_CONNECTOR_PROVIDERS
-from renku_data_services.data_connectors.doi.metadata import get_dataset_metadata
+from renku_data_services.data_connectors.doi import schema_org
+from renku_data_services.data_connectors.doi.metadata import create_envidat_metadata_url, get_dataset_metadata
+from renku_data_services.data_connectors.doi.models import DOI, SchemaOrgDataset
 from renku_data_services.storage import models as storage_models
 from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER
-from renku_data_services.storage.rclone import RCloneValidator
+from renku_data_services.storage.rclone import RCloneDOIMetadata, RCloneValidator
 from renku_data_services.utils.core import get_openbis_pat
 
 
@@ -46,34 +48,20 @@ def dump_storage_with_sensitive_fields(
     return body
 
 
-async def validate_unsaved_storage(
-    storage: apispec.CloudStorageCorePost | apispec.CloudStorageUrlV2, validator: RCloneValidator
+def validate_unsaved_storage_url(
+    storage: apispec.CloudStorageUrlV2, validator: RCloneValidator
 ) -> models.CloudStorageCore:
-    """Validate the storage configuration of an unsaved data connector."""
-
-    configuration: dict[str, Any]
-    source_path: str
-
-    if isinstance(storage, apispec.CloudStorageUrlV2):
-        cloud_storage = storage_models.UnsavedCloudStorage.from_url(
-            project_id="FAKEPROJECTID",
-            name="fake-storage-name",
-            storage_url=storage.storage_url,
-            target_path=storage.target_path,
-            readonly=storage.readonly,
-        )
-        configuration = cloud_storage.configuration.config
-        source_path = cloud_storage.source_path
-    elif storage.storage_type == ENVIDAT_V1_PROVIDER:
-        converted_storage = await convert_envidat_v1_data_connector_to_s3(storage)
-        configuration = converted_storage.configuration
-        source_path = converted_storage.source_path
-    else:
-        configuration = storage.configuration
-        source_path = storage.source_path
-
+    """Validate the unsaved storage when its configuration is specificed as a URL."""
+    cloud_storage = storage_models.UnsavedCloudStorage.from_url(
+        project_id="FAKEPROJECTID",
+        name="fake-storage-name",
+        storage_url=storage.storage_url,
+        target_path=storage.target_path,
+        readonly=storage.readonly,
+    )
+    configuration = cloud_storage.configuration.config
+    source_path = cloud_storage.source_path
     validator.validate(configuration)
-
     return models.CloudStorageCore(
         storage_type=configuration["type"],
         configuration=configuration,
@@ -83,13 +71,77 @@ async def validate_unsaved_storage(
     )
 
 
+def validate_unsaved_storage_generic(
+    storage: apispec.CloudStorageCorePost, validator: RCloneValidator
+) -> models.CloudStorageCore:
+    """Validate the unsaved storage when its configuration is specificed as a URL."""
+    configuration = storage.configuration
+    validator.validate(configuration)
+    storage_type = configuration.get("type")
+    if not isinstance(storage_type, str):
+        raise errors.ValidationError()
+    return models.CloudStorageCore(
+        storage_type=storage_type,
+        configuration=configuration,
+        source_path=storage.source_path,
+        target_path=storage.target_path,
+        readonly=storage.readonly,
+    )
+
+
+async def validate_unsaved_storage_doi(
+    storage: apispec.CloudStorageCorePost, validator: RCloneValidator
+) -> tuple[models.CloudStorageCore, DOI]:
+    """Validate the storage configuration of an unsaved data connector."""
+
+    configuration: dict[str, Any]
+    source_path: str
+
+    doi_str = storage.configuration.get("doi")
+    if not isinstance(doi_str, str):
+        raise errors.ValidationError(message="Cannot find the doi in the storage configuration")
+
+    doi = DOI(doi_str)
+    doi_host = await doi.resolve_host()
+
+    match doi_host:
+        case "envidat.ch" | "www.envidat.ch":
+            converted_storage = await convert_envidat_v1_data_connector_to_s3(storage)
+            configuration = converted_storage.configuration
+            source_path = converted_storage.source_path or "/"
+            storage_type = ENVIDAT_V1_PROVIDER
+        case _:
+            # Most likely supported by rclone doi provider, you have to call validator.get_doi_metadata to confirm
+            configuration = storage.configuration
+            source_path = storage.source_path or "/"
+            storage_type = storage.storage_type or "doi"
+
+    validator.validate(configuration)
+
+    return models.CloudStorageCore(
+        storage_type=storage_type,
+        configuration=configuration,
+        source_path=source_path,
+        target_path=storage.target_path,
+        readonly=storage.readonly,
+    ), doi
+
+
 async def validate_unsaved_data_connector(
     body: apispec.DataConnectorPost, validator: RCloneValidator
 ) -> models.UnsavedDataConnector:
     """Validate an unsaved data connector."""
 
     keywords = [kw.root for kw in body.keywords] if body.keywords is not None else []
-    storage = await validate_unsaved_storage(body.storage, validator=validator)
+    match body.storage:
+        case apispec.CloudStorageCorePost() if body.storage.storage_type != "doi":
+            storage = validate_unsaved_storage_generic(body.storage, validator=validator)
+        case apispec.CloudStorageCorePost() if body.storage.storage_type == "doi":
+            storage, _ = await validate_unsaved_storage_doi(body.storage, validator=validator)
+        case apispec.CloudStorageUrlV2():
+            storage = validate_unsaved_storage_url(body.storage, validator=validator)
+        case _:
+            raise errors.ValidationError(message="The data connector provided has an unknown payload format.")
 
     if body.namespace is None:
         raise NotImplementedError("Missing namespace not supported")
@@ -119,61 +171,55 @@ async def validate_unsaved_data_connector(
 
 async def prevalidate_unsaved_global_data_connector(
     body: apispec.GlobalDataConnectorPost, validator: RCloneValidator
-) -> models.UnsavedGlobalDataConnector:
+) -> models.PrevalidatedGlobalDataConnector:
     """Pre-validate an unsaved data connector."""
-
-    storage = await validate_unsaved_storage(body.storage, validator=validator)
     # TODO: allow admins to create global data connectors, e.g. s3://giab
+    if isinstance(body.storage, apispec.CloudStorageUrlV2):
+        raise errors.ValidationError(message="Global data connectors cannot be configured via a URL.")
+    storage, doi = await validate_unsaved_storage_doi(body.storage, validator=validator)
     if storage.storage_type not in ALLOWED_GLOBAL_DATA_CONNECTOR_PROVIDERS:
-        raise errors.ValidationError(
-            message=f"Only {ALLOWED_GLOBAL_DATA_CONNECTOR_PROVIDERS} storage type is allowed for global data connectors"
-        )
+        raise errors.ValidationError(message="Only doi storage type is allowed for global data connectors")
     if not storage.readonly:
         raise errors.ValidationError(message="Global data connectors must be read-only")
 
-    match storage.storage_type:
-        case "doi":
-            rclone_metadata = await validator.get_doi_metadata(configuration=storage.configuration)
+    rclone_metadata: RCloneDOIMetadata | None = None
+    doi_uri = f"doi:{doi}"
+    if storage.storage_type == "doi":
+        # This means that the storage is most likely supported by Rclone, by calling the get_doi_metadata we confirm
+        rclone_metadata = await validator.get_doi_metadata(configuration=storage.configuration)
+        if not rclone_metadata:
+            raise errors.ValidationError(message="The provided DOI is not supported.")
+        # Override provider in storage config
+        storage.configuration["provider"] = rclone_metadata.provider
 
-            doi_uri = f"doi:{rclone_metadata.doi}"
-            slug = base_models.Slug.from_name(doi_uri).value
-
-            # Override provider in storage config
-            storage.configuration["provider"] = rclone_metadata.provider
-        case x if x == ENVIDAT_V1_PROVIDER:
-            if not isinstance(body.storage, apispec.CloudStorageCorePost):
-                raise errors.ValidationError()
-            doi = body.storage.configuration.get("doi")
-            if not doi:
-                raise errors.ValidationError()
-            doi_uri = f"doi:{doi}"
-            slug = base_models.Slug.from_name(doi_uri).value
-        case x:
-            raise errors.ValidationError(
-                message=f"Only {ALLOWED_GLOBAL_DATA_CONNECTOR_PROVIDERS} storage type is allowed "
-                "for global data connectors"
-            )
-
-    return models.UnsavedGlobalDataConnector(
-        name=doi_uri,
-        slug=slug,
-        visibility=Visibility.PUBLIC,
-        created_by="",
-        storage=storage,
-        description=None,
-        keywords=[],
+    slug = base_models.Slug.from_name(doi_uri).value
+    return models.PrevalidatedGlobalDataConnector(
+        data_connector=models.UnsavedGlobalDataConnector(
+            name=doi_uri,
+            slug=slug,
+            visibility=Visibility.PUBLIC,
+            created_by="",
+            storage=storage,
+            description=None,
+            keywords=[],
+        ),
+        doi=doi,
+        rclone_metadata=rclone_metadata,
     )
 
 
 async def validate_unsaved_global_data_connector(
-    data_connector: models.UnsavedGlobalDataConnector,
+    prevalidated_dc: models.PrevalidatedGlobalDataConnector,
     validator: RCloneValidator,
 ) -> models.UnsavedGlobalDataConnector:
-    """Validate an unsaved data connector."""
+    """Validate the data connector."""
+    data_connector = prevalidated_dc.data_connector
+    doi = prevalidated_dc.doi
+    rclone_metadata = prevalidated_dc.rclone_metadata
 
     # Check that we can list the files in the DOI
     connection_result = await validator.test_connection(
-        configuration=data_connector.storage.configuration, source_path="/"
+        configuration=data_connector.storage.configuration, source_path=data_connector.storage.source_path or "/"
     )
     if not connection_result.success:
         raise errors.ValidationError(
@@ -181,9 +227,11 @@ async def validate_unsaved_global_data_connector(
         )
 
     # Fetch DOI metadata
-    if data_connector.storage.storage_type == "doi":
-        rclone_metadata = await validator.get_doi_metadata(configuration=data_connector.storage.configuration)
-        metadata = await get_dataset_metadata(rclone_metadata=rclone_metadata)
+    if rclone_metadata:
+        metadata = await get_dataset_metadata(rclone_metadata.provider, rclone_metadata.metadata_url)
+    elif data_connector.storage.storage_type == ENVIDAT_V1_PROVIDER:
+        metadata_url = create_envidat_metadata_url(doi)
+        metadata = await get_dataset_metadata(ENVIDAT_V1_PROVIDER, metadata_url)
     else:
         metadata = None
 
@@ -209,15 +257,18 @@ async def validate_unsaved_global_data_connector(
 
     # Assign user-friendly target_path if possible
     target_path = data_connector.slug
-    with contextlib.suppress(errors.ValidationError):
-        name_slug = base_models.Slug.from_name(name).value
-        target_path = base_models.Slug.from_name(f"{name_slug[:30]}-{target_path}").value
+    if metadata:
+        # If there is no metdata, the slug is derived from the name, and the name is the doi
+        # So without metadata if we extend the target_path it just repeats the slug twice
+        with contextlib.suppress(errors.ValidationError):
+            name_slug = base_models.Slug.from_name(name).value
+            target_path = base_models.Slug.from_name(f"{name_slug[:30]}-{target_path}").value
 
     # Override source_path and target_path
     storage = models.CloudStorageCore(
         storage_type=data_connector.storage.storage_type,
         configuration=data_connector.storage.configuration,
-        source_path="/",
+        source_path=data_connector.storage.source_path,
         target_path=target_path,
         readonly=data_connector.storage.readonly,
     )
@@ -410,22 +461,14 @@ def transform_secrets_for_front_end(
 async def convert_envidat_v1_data_connector_to_s3(
     payload: apispec.CloudStorageCorePost,
 ) -> apispec.CloudStorageCorePost:
-    """Converts a doi-like configuration for Envidat to S3.
-
-    If the paylaod that is passed in is not of the expected type nothing is changed
-    and the same payload that was passed in is returned.
-    """
+    """Converts a doi-like configuration for Envidat to S3."""
     config = payload.configuration
-    if config.get("type") != ENVIDAT_V1_PROVIDER:
-        return payload
-
     doi = config.get("doi")
     if not isinstance(doi, str):
         raise errors.ValidationError()
     if len(doi) == 0:
         raise errors.ValidationError()
-    doi = doi.removeprefix("https://")
-    doi = doi.removeprefix("http://")
+    doi = DOI(doi)
 
     new_config = payload.model_copy(deep=True)
     new_config.configuration = {}
@@ -434,15 +477,15 @@ async def convert_envidat_v1_data_connector_to_s3(
     query_params = {"query": doi}
     headers = {"accept": "application/json"}
 
-    clnt = httpx.AsyncClient(follow_redirects=True)
+    clnt = httpx.AsyncClient(follow_redirects=True, timeout=5)
     async with clnt:
         res = await clnt.get(envidat_url, params=query_params, headers=headers)
         if res.status_code != 200:
             raise errors.ProgrammingError()
-    dataset = schema_org_dataset.Dataset.model_validate_strings(res.text)
-    s3_config = schema_org_dataset.get_rclone_config(
+    dataset = SchemaOrgDataset.model_validate_json(res.text)
+    s3_config = schema_org.get_rclone_config(
         dataset,
-        schema_org_dataset.DatasetProvider.envidat,
+        schema_org.DatasetProvider.envidat,
     )
     new_config.configuration = dict(s3_config.rclone_config)
     new_config.source_path = s3_config.path
