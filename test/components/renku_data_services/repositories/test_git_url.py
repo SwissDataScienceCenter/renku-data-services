@@ -11,13 +11,16 @@ bad_urls = [
     "http://",
     "localhost/repo",
     "ftp://test.com",
-    "http://github.com",
     "http://localhost:3000/my/repo",
     "http://127.0.0.1:3000/my/repo",
     "http://127.0.0.1/my/repo",
     "http://localhost/my/repo",
 ]
-good_urls = ["https://github.com/SwissDataScienceCenter/renku", "http://random/the/repo.git"]
+good_urls = [
+    "https://github.com/SwissDataScienceCenter/renku",
+    "http://random/the/repo.git",
+    "http://github.com",
+]
 
 
 def test_bad_urls() -> None:

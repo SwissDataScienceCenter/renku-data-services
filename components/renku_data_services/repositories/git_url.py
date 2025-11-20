@@ -51,10 +51,6 @@ class GitUrl:
         if url.netloc.startswith("127.0.0.1:") or url.netloc == "127.0.0.1":
             return GitUrlError.invalid_git_url
 
-        # An url without a path is not referring to a repository
-        if url.path == "":
-            return GitUrlError.no_url_path
-
         # fix trailing slashes
         while url.path.endswith("/"):
             url = url._replace(path=url.path[:-1])
