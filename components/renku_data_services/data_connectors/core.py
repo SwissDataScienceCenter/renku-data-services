@@ -182,7 +182,7 @@ async def validate_unsaved_global_data_connector(
 
     # Check that we can list the files in the DOI
     connection_result = await validator.test_connection(
-        configuration=data_connector.storage.configuration, source_path="/"
+        configuration=data_connector.storage.configuration, source_path=data_connector.storage.source_path or "/"
     )
     if not connection_result.success:
         raise errors.ValidationError(
@@ -231,7 +231,7 @@ async def validate_unsaved_global_data_connector(
     storage = models.CloudStorageCore(
         storage_type=data_connector.storage.storage_type,
         configuration=data_connector.storage.configuration,
-        source_path="/",
+        source_path=data_connector.storage.source_path,
         target_path=target_path,
         readonly=data_connector.storage.readonly,
     )
