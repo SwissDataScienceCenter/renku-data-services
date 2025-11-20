@@ -1,7 +1,7 @@
 """feat: add metrics_identity_hash to users.
 
 Revision ID: 21fd67938150
-Revises: 42049656cdb8
+Revises: 5ea973da6921
 Create Date: 2025-11-17 09:53:19.359423
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "21fd67938150"
-down_revision = "42049656cdb8"
+down_revision = "5ea973da6921"
 branch_labels = None
 depends_on = None
 
