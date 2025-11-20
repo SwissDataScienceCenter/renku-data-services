@@ -1,7 +1,7 @@
 """Implementation of staging metrics service."""
 
 from renku_data_services.base_models.core import APIUser, AuthenticatedAPIUser
-from renku_data_services.base_models.metrics import MetricsEvent, MetricsMetadata, MetricsService
+from renku_data_services.base_models.metrics import MetricsEvent, MetricsMetadata, MetricsService, UserIdentity
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.metrics.utils import anonymize_user_id
 from renku_data_services.users.models import UserInfo
@@ -18,27 +18,38 @@ class StagingMetricsService(MetricsService):
         self.enabled = enabled
         self._metrics_repo = metrics_repo
 
-    async def _store_event(self, event: MetricsEvent, user: APIUser, metadata: MetricsMetadata | None = None) -> None:
+    async def _store_event(self, event: MetricsEvent, user: APIUser, metadata: MetricsMetadata | None = None) -> bool:
         """Store a metrics event in the staging table."""
         if not self.enabled:
-            return
+            return False
 
         anonymous_user_id = anonymize_user_id(user)
         await self._metrics_repo.store_event(event=event.value, anonymous_user_id=anonymous_user_id, metadata=metadata)
+        return True
 
-    async def identify_user(self, user: UserInfo, metadata: MetricsMetadata) -> None:
-        """Send a user's identity to metrics."""
+    async def identify_user(
+        self, user: UserInfo, existing_identity_hash: str | None, metadata: MetricsMetadata
+    ) -> UserIdentity | None:
+        """Send a user's identity to metrics.
+
+        Returns an instance of UserIdentity if the the event has actually been saved and None otherwise.
+        """
+
+        # Create the result identity
+        user_identity = UserIdentity(
+            user_id=user.id,
+            email=user.email,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            username=user.namespace.latest_slug,
+        )
+
+        # Check if the identity is already known
+        if user_identity.hash() == existing_identity_hash:
+            return None
 
         # We populate 'metadata' with the user's details.
-        metadata["user_id"] = metadata.get("user_id") or user.id
-        if user.email:
-            metadata["email"] = metadata.get("email") or user.email
-        if user.first_name:
-            metadata["first_name"] = metadata.get("first_name") or user.first_name
-        if user.last_name:
-            metadata["last_name"] = metadata.get("last_name") or user.last_name
-        if user.namespace.latest_slug:
-            metadata["username"] = metadata.get("username") or user.namespace.latest_slug
+        metadata.update(user_identity.to_dict())
 
         # NOTE: Only the 'id' field is used when we call `_store_event()`.
         api_user = AuthenticatedAPIUser(
@@ -49,7 +60,8 @@ class StagingMetricsService(MetricsService):
             last_name=user.last_name,
             is_admin=False,
         )
-        await self._store_event(MetricsEvent.identify_user, api_user, metadata)
+        saved = await self._store_event(MetricsEvent.identify_user, api_user, metadata)
+        return user_identity if saved else None
 
     async def session_started(self, user: APIUser, metadata: MetricsMetadata) -> None:
         """Store session started event in staging table."""
