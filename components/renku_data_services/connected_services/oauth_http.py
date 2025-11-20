@@ -144,7 +144,7 @@ class ConnectionLock:
             result = await session.scalars(
                 sa.select(schemas.OAuth2ConnectionORM)
                 .where(schemas.OAuth2ConnectionORM.id == self._id)
-                .with_for_update()
+                .with_for_update(key_share=True)
             )
             conn = result.one()
             yield conn
