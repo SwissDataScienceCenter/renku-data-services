@@ -16,7 +16,9 @@ from renku_data_services.namespace.models import Group
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.models import Project
 from renku_data_services.search.db import SearchUpdatesRepo
+from renku_data_services.solr import entity_schema
 from renku_data_services.solr.solr_client import DefaultSolrClient, SolrClientConfig
+from renku_data_services.solr.solr_migrate import SchemaMigrator
 from renku_data_services.users.db import UserRepo
 from renku_data_services.users.models import UserInfo
 
@@ -92,6 +94,7 @@ class SearchReprovision:
             if c % 50 == 0:
                 logger.info(f"Inserted {c}. entities into staging table...")
 
+        migrator = SchemaMigrator(self._solr_config)
         counter = 0
         try:
             logger.info(f"Starting reprovisioning with ID {reprovisioning.id}")
@@ -99,6 +102,8 @@ class SearchReprovision:
             await self._search_updates_repo.clear_all()
             async with DefaultSolrClient(self._solr_config) as client:
                 await client.delete("_type:*")
+
+            await migrator.migrate(entity_schema.all_migrations)
 
             all_users = self._user_repo.get_all_users(requested_by=admin)
             counter = await self.__update_entities(all_users, "user", started, counter, log_counter)
