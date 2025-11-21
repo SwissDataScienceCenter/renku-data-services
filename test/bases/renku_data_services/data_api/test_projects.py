@@ -1181,7 +1181,7 @@ async def test_project_copy_basics(
         "Project 2",
         description="Template project",
         keywords=["tag 1", "tag 2"],
-        repositories=["http://repository-1.ch", "http://repository-2.ch"],
+        repositories=["http://repository-1.ch/repo1", "http://repository-2.ch/repo2"],
         visibility="public",
         documentation="test documentation",
     )
@@ -1231,7 +1231,7 @@ async def test_project_copy_basics(
     assert copy_project["description"] == "Template project"
     assert copy_project["visibility"] == "public"
     assert copy_project["keywords"] == ["tag 1", "tag 2"]
-    assert copy_project["repositories"] == ["http://repository-1.ch", "http://repository-2.ch"]
+    assert copy_project["repositories"] == ["http://repository-1.ch/repo1", "http://repository-2.ch/repo2"]
 
 
 @pytest.mark.asyncio
@@ -1819,7 +1819,7 @@ async def test_migrate_v1_project(
             "slug": "new-project-slug",
             "namespace": regular_user.namespace.path.serialize(),
             "description": "Old project for migration",
-            "repositories": ["http://old-repository.com"],
+            "repositories": ["http://old-repository.com/repo"],
             "visibility": "private",
             "keywords": ["old", "project"],
         },
@@ -1843,7 +1843,7 @@ async def test_migrate_v1_project(
     assert migrated_project["description"] == "Old project for migration"
     assert migrated_project["visibility"] == "private"
     assert migrated_project["keywords"] == ["old", "project"]
-    assert migrated_project["repositories"] == ["http://old-repository.com"]
+    assert migrated_project["repositories"] == ["http://old-repository.com/repo"]
 
     migrated_project_id = migrated_project["id"]
     _, response = await sanic_client.get(f"/api/data/projects/{migrated_project_id}", headers=user_headers)
@@ -1856,7 +1856,7 @@ async def test_migrate_v1_project(
     assert migrated_project["description"] == "Old project for migration"
     assert migrated_project["visibility"] == "private"
     assert migrated_project["keywords"] == ["old", "project"]
-    assert migrated_project["repositories"] == ["http://old-repository.com"]
+    assert migrated_project["repositories"] == ["http://old-repository.com/repo"]
 
     _, response = await sanic_client.get(f"/api/data/renku_v1_projects/{v1_id}/migrations", headers=user_headers)
     assert response.status_code == 200, response.text
@@ -1868,7 +1868,7 @@ async def test_migrate_v1_project(
     assert migrated_project["description"] == "Old project for migration"
     assert migrated_project["visibility"] == "private"
     assert migrated_project["keywords"] == ["old", "project"]
-    assert migrated_project["repositories"] == ["http://old-repository.com"]
+    assert migrated_project["repositories"] == ["http://old-repository.com/repo"]
     project_id = migrated_project["id"]
 
     _, response = await sanic_client.get(f"/api/data/projects/{project_id}/migration_info", headers=user_headers)

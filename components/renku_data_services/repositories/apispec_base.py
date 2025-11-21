@@ -15,13 +15,13 @@ class BaseAPISpec(BaseModel):
         # this rust crate does not support lookahead regex syntax but we need it in this component
         regex_engine = "python-re"
 
-    @field_validator("connection_id", mode="before", check_fields=False)
+    @field_validator("id", mode="before", check_fields=False)
     @classmethod
-    def serialize_connection_id(cls, connection_id: str | ULID | None) -> str | None:
+    def serialize_connection_id(cls, id: str | ULID | None) -> str | None:
         """Custom serializer that can handle ULIDs."""
-        if connection_id is None:
+        if id is None:
             return None
-        return str(connection_id)
+        return str(id)
 
 
 class RepositoryParams(BaseAPISpec):

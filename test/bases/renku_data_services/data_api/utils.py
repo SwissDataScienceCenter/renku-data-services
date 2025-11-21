@@ -5,14 +5,49 @@ from contextlib import AbstractContextManager
 from typing import Any
 
 import yaml
+from authlib.integrations.httpx_client.oauth2_client import AsyncOAuth2Client
 from kubernetes import client as k8s_client
 from kubernetes import config as k8s_config
 from kubernetes import watch
 from sanic import Request
 from sanic_testing.testing import SanicASGITestClient, TestingResponse
+from ulid import ULID
 
 from renku_data_services.base_models import APIUser
+from renku_data_services.connected_services.dummy_async_oauth2_client import DummyAsyncOAuth2Client
+from renku_data_services.connected_services.models import OAuth2TokenSet
+from renku_data_services.connected_services.orm import OAuth2ClientORM, OAuth2ConnectionORM
+from renku_data_services.connected_services.provider_adapters import ProviderAdapter
 from renku_data_services.users.models import UserInfo
+
+
+def create_dummy_oauth_client(
+    client: OAuth2ClientORM,
+    client_secret: str | None,
+    adapter: ProviderAdapter,
+    connection: OAuth2ConnectionORM | ULID,
+    token: OAuth2TokenSet | None,
+    redirect_uri: str | None,
+) -> AsyncOAuth2Client:
+    conn_orm: OAuth2ConnectionORM | None
+    match connection:
+        case ULID():
+            conn_orm = None
+        case OAuth2ConnectionORM() as c:
+            conn_orm = c
+    code_verifier = conn_orm.code_verifier if conn_orm else None
+    code_challenge_method = "S256" if client.use_pkce or code_verifier else None
+
+    return DummyAsyncOAuth2Client(
+        client_id=client.id,
+        scope=client.scope,
+        client_secret=client_secret,
+        token_endpoint=adapter.token_endpoint_url,
+        code_challenge_method=code_challenge_method,
+        redirect_uri=redirect_uri,
+        token=token,
+        state=conn_orm.state if conn_orm else None,
+    )
 
 
 async def create_rp(payload: dict[str, Any], test_client: SanicASGITestClient) -> tuple[Request, TestingResponse]:

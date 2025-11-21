@@ -13,6 +13,7 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser, Authenticator
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.connected_services.models import ConnectionStatus
+from renku_data_services.connected_services.oauth_http import OAuthHttpClientFactory
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
@@ -200,6 +201,7 @@ class NotebooksNewBP(CustomBlueprint):
     data_connector_repo: DataConnectorRepository
     data_connector_secret_repo: DataConnectorSecretRepository
     git_provider_helper: GitProviderHelperProto
+    oauth_client_factory: OAuthHttpClientFactory
     image_check_repo: ImageCheckRepository
     project_repo: ProjectRepository
     project_session_secret_repo: ProjectSessionSecretRepository
