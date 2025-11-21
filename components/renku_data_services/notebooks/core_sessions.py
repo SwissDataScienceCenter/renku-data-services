@@ -527,24 +527,36 @@ def get_culling(
     user: AuthenticatedAPIUser | AnonymousAPIUser, resource_pool: ResourcePool, nb_config: NotebooksConfig
 ) -> Culling:
     """Create the culling specification for an AmaltheaSession."""
-    if user.is_anonymous:
-        # NOTE: Anonymous sessions should not be hibernated at all, but there is no such option in Amalthea
-        # So in this case we set a very low hibernation threshold so the session is deleted quickly after
-        # it is hibernated.
-        hibernation_threshold: timedelta | None = timedelta(seconds=1)
-    else:
-        hibernation_threshold = (
-            timedelta(seconds=resource_pool.hibernation_threshold)
-            if resource_pool.hibernation_threshold is not None
-            else None
-        )
+    hibernation_threshold: timedelta | None = None
+    # NOTE: A value of zero on the resource_pool hibernation threshold
+    # is interpreted by Amalthea as "never automatically delete after hibernation"
+    match (user.is_anonymous, resource_pool.hibernation_threshold):
+        case True, _:
+            # NOTE: Anonymous sessions should not be hibernated at all, but there is no such option in Amalthea
+            # So in this case we set a very low hibernation threshold so the session is deleted quickly after
+            # it is hibernated.
+            hibernation_threshold = timedelta(seconds=1)
+        case False, int():
+            hibernation_threshold = timedelta(seconds=resource_pool.hibernation_threshold)
+        case False, None:
+            hibernation_threshold = timedelta(seconds=nb_config.sessions.culling.registered.hibernated_seconds)
+
+    idle_duration: timedelta | None = None
+    # NOTE: A value of zero on the resource_pool idle threshold
+    # is interpreted by Amalthea as "never automatically hibernate for idleness"
+    match (user.is_anonymous, resource_pool.idle_threshold):
+        case True, None:
+            idle_duration = timedelta(seconds=nb_config.sessions.culling.anonymous.idle_seconds)
+        case _, int():
+            idle_duration = timedelta(seconds=resource_pool.idle_threshold)
+        case False, None:
+            idle_duration = timedelta(seconds=nb_config.sessions.culling.registered.idle_seconds)
+
     return Culling(
         maxAge=timedelta(seconds=nb_config.sessions.culling.registered.max_age_seconds),
         maxFailedDuration=timedelta(seconds=nb_config.sessions.culling.registered.failed_seconds),
         maxHibernatedDuration=hibernation_threshold,
-        maxIdleDuration=timedelta(seconds=resource_pool.idle_threshold)
-        if resource_pool.idle_threshold is not None
-        else None,
+        maxIdleDuration=idle_duration,
         maxStartingDuration=timedelta(seconds=nb_config.sessions.culling.registered.pending_seconds),
     )
 
@@ -975,7 +987,7 @@ async def start_session(
     )
     secrets_to_create = session_extras.secrets or []
     for s in secrets_to_create:
-        await nb_config.k8s_v2_client.create_secret(K8sSecret.from_v1_secret(s.secret, cluster))
+        await nb_config.k8s_v2_client.create_or_patch_secret(K8sSecret.from_v1_secret(s.secret, cluster))
     try:
         session = await nb_config.k8s_v2_client.create_session(session, user)
     except Exception as err:
@@ -1163,7 +1175,7 @@ async def patch_session(
         internal_gitlab_user=internal_gitlab_user,
     )
     if image_pull_secret:
-        session_extras.concat(SessionExtraResources(secrets=[image_pull_secret]))
+        session_extras = session_extras.concat(SessionExtraResources(secrets=[image_pull_secret]))
         patch.spec.imagePullSecrets = [ImagePullSecret(name=image_pull_secret.name, adopt=image_pull_secret.adopt)]
     else:
         patch.spec.imagePullSecrets = RESET
@@ -1186,7 +1198,7 @@ async def patch_session(
 
     secrets_to_create = session_extras.secrets or []
     for s in secrets_to_create:
-        await nb_config.k8s_v2_client.create_secret(K8sSecret.from_v1_secret(s.secret, cluster))
+        await nb_config.k8s_v2_client.create_or_patch_secret(K8sSecret.from_v1_secret(s.secret, cluster))
 
     patch_serialized = patch.to_rfc7386()
     if len(patch_serialized) == 0:
