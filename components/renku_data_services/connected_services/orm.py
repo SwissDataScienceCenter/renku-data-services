@@ -109,4 +109,6 @@ class OAuth2ConnectionORM(BaseORM):
 
     def dump(self) -> models.OAuth2Connection:
         """Create an OAuth2 connection model from the OAuth2ConnectionORM."""
-        return models.OAuth2Connection(id=self.id, provider_id=self.client_id, status=self.status)
+        return models.OAuth2Connection(
+            id=self.id, provider_id=self.client_id, status=self.status, next_url=self.next_url
+        )

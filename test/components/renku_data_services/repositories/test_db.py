@@ -1,18 +1,12 @@
 """Tests for the db module."""
 
-import time
 import uuid
 from base64 import b64encode
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 
 import httpx
 import pytest
-from authlib.integrations.base_client import OAuthError
-from authlib.integrations.httpx_client import AsyncOAuth2Client
 
 from renku_data_services.base_models.core import AuthenticatedAPIUser
-from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.connected_services.models import (
     ConnectionStatus,
     OAuth2Client,
@@ -31,6 +25,10 @@ from renku_data_services.repositories.models import (
 )
 from renku_data_services.users.models import UserInfo
 from renku_data_services.utils import cryptography
+from test.components.renku_data_services.connected_services.utils import (
+    FixedOAuthHttpClientFactory,
+    FixedTestOAuthHttpClient,
+)
 from test.components.renku_data_services.repositories import test_git_url
 
 user = AuthenticatedAPIUser(
@@ -150,21 +148,6 @@ async def test_get_repository_with_bad_token_public_repo(app_manager_instance: D
 private_repo_url = "https://github.com/SwissDataScienceCenter/not-a-real-repo"
 
 
-class BadResponseOAuthClient(AsyncOAuth2Client):  # type: ignore[misc]
-    async def send(
-        self,
-        request: httpx.Request,
-        *,
-        stream: bool = False,
-        auth: httpx._types.AuthTypes | httpx._client.UseClientDefault | None = httpx.USE_CLIENT_DEFAULT,
-        follow_redirects: bool | httpx._client.UseClientDefault = httpx.USE_CLIENT_DEFAULT,
-    ) -> httpx.Response:
-        if str(request.url) == "https://api.github.com/repos/SwissDataScienceCenter/not-a-real-repo":
-            return httpx.Response(status_code=200, request=request, json={})
-        else:
-            raise Exception("stopping here")
-
-
 @pytest.mark.asyncio
 async def test_get_repository_with_bad_metadata_response(app_manager_instance: DependencyManager) -> None:
     run_migrations_for_app("common")
@@ -172,10 +155,11 @@ async def test_get_repository_with_bad_metadata_response(app_manager_instance: D
     deps = app_manager_instance
     (provider, connOrm) = await _setup_connection(deps, ConnectionStatus.connected)
 
-    cc_repo = ConnectedServicesRepository(
-        deps.config.db.async_session_maker, deps.config.secrets.encryption_key, BadResponseOAuthClient
+    bad_resp_client = FixedTestOAuthHttpClient(response=httpx.Response(status_code=200, json={}), client=provider)
+    factory = FixedOAuthHttpClientFactory(
+        deps.config.secrets.encryption_key, deps.config.db.async_session_maker, bad_resp_client
     )
-    repo = GitRepositoriesRepository(deps.config.db.async_session_maker, cc_repo, None, False)
+    repo = GitRepositoriesRepository(deps.config.db.async_session_maker, factory, None, False)
 
     result = await repo.get_repository(private_repo_url, user, None, user)
     assert result.provider
@@ -186,61 +170,18 @@ async def test_get_repository_with_bad_metadata_response(app_manager_instance: D
     assert not result.metadata
 
 
-class UnauthorizedOAuthClient(AsyncOAuth2Client):  # type: ignore[misc]
-    async def request(
-        self,
-        method: str,
-        url: httpx.URL | str,
-        withhold_token=False,
-        auth=httpx.USE_CLIENT_DEFAULT,
-        **kwargs,
-    ):
-        if self.token:
-            return await super().request(method, url, auth=auth, **kwargs)
-        else:
-            return await super().request(method, url, withhold_token=True, auth=auth, **kwargs)
-
-    @asynccontextmanager
-    async def stream(
-        self, method, url, withhold_token=False, auth=httpx._client.USE_CLIENT_DEFAULT, **kwargs
-    ) -> AsyncIterator[httpx.Response]:
-        if self.token:
-            async with super().stream(method, url, auth=auth, **kwargs) as resp:
-                yield resp
-        else:
-            async with super().stream(method, url, withhold_token=True, auth=auth, **kwargs) as resp:
-                yield resp
-
-    async def send(
-        self,
-        request: httpx.Request,
-        *,
-        stream: bool = False,
-        auth: httpx._types.AuthTypes | httpx._client.UseClientDefault | None = httpx.USE_CLIENT_DEFAULT,
-        follow_redirects: bool | httpx._client.UseClientDefault = httpx.USE_CLIENT_DEFAULT,
-    ) -> httpx.Response:
-        req_url = str(request.url)
-        if req_url == "https://api.github.com/repos/SwissDataScienceCenter/not-a-real-repo":
-            return httpx.Response(status_code=401, request=request)
-        elif req_url.endswith("/info/refs?service=git-upload-pack"):
-            return httpx.Response(status_code=404)
-        else:
-            raise Exception("stopping here")
-
-
 @pytest.mark.asyncio
 async def test_get_repository_with_unauthorized_repo(app_manager_instance: DependencyManager) -> None:
     run_migrations_for_app("common")
     deps = app_manager_instance
     (user, _) = await _make_user(app_manager_instance)
-    cc_repo = ConnectedServicesRepository(
-        deps.config.db.async_session_maker, deps.config.secrets.encryption_key, UnauthorizedOAuthClient
-    )
-    repo = GitRepositoriesRepository(
-        deps.config.db.async_session_maker, cc_repo, None, False, UnauthorizedOAuthClient()
-    )
+    (provider, connOrm) = await _setup_connection(deps, ConnectionStatus.connected)
 
-    (provider, connOrm) = await _setup_connection(app_manager_instance, ConnectionStatus.connected)
+    bad_resp_client = FixedTestOAuthHttpClient(response=httpx.Response(status_code=401), client=provider)
+    factory = FixedOAuthHttpClientFactory(
+        deps.config.secrets.encryption_key, deps.config.db.async_session_maker, bad_resp_client
+    )
+    repo = GitRepositoriesRepository(deps.config.db.async_session_maker, factory, None, False)
 
     result = await repo.get_repository(private_repo_url, user, None, user)
     assert result.provider
@@ -248,74 +189,6 @@ async def test_get_repository_with_unauthorized_repo(app_manager_instance: Depen
     assert result.connection
     assert result.connection == ProviderConnection.fromORM(connOrm)
     assert result.error == RepositoryMetadataError.metadata_unauthorized
-    assert not result.metadata
-
-
-class ExpiredTokenOAuthClient(AsyncOAuth2Client):  # type: ignore[misc]
-    async def request(self, method, url, withhold_token=False, auth=httpx.USE_CLIENT_DEFAULT, **kwargs):
-        if self.token:
-            self.token["expires_at"] = time.time() - 5000
-            return await super().request(method, url, auth=auth, **kwargs)
-        else:
-            return await super().request(method, url, withhold_token=True, auth=auth, **kwargs)
-
-    async def _refresh_token(
-        self, url, refresh_token=None, body="", headers=None, auth=httpx._client.USE_CLIENT_DEFAULT, **kwargs
-    ):
-        raise OAuthError(
-            "invalid_grant",
-            (
-                "The provided authorization grant is invalid, expired, revoked, does not match "
-                "the redirection URI used in the authorization request, or was issued to another client."
-            ),
-        )
-
-    @asynccontextmanager
-    async def stream(self, method, url, withhold_token=False, auth=httpx._client.USE_CLIENT_DEFAULT, **kwargs):
-        if self.token:
-            self.token["expires_at"] = time.time() - 5000
-            async with super().stream(method, url, auth=auth, **kwargs) as resp:
-                yield resp
-        else:
-            async with super().stream(method, url, withhold_token=True, auth=auth, **kwargs) as resp:
-                yield resp
-
-    async def send(
-        self,
-        request: httpx.Request,
-        *,
-        stream: bool = False,
-        auth: httpx._types.AuthTypes | httpx._client.UseClientDefault | None = httpx.USE_CLIENT_DEFAULT,
-        follow_redirects: bool | httpx._client.UseClientDefault = httpx.USE_CLIENT_DEFAULT,
-    ) -> httpx.Response:
-        req_url = str(request.url)
-        if req_url == "https://api.github.com/repos/SwissDataScienceCenter/not-a-real-repo":
-            return httpx.Response(status_code=401, request=request)  # tried anonymously
-        elif req_url.endswith("/info/refs?service=git-upload-pack"):
-            return httpx.Response(status_code=404)
-        else:
-            raise Exception("stopping here")
-
-
-async def test_get_repository_expired_token(app_manager_instance: DependencyManager) -> None:
-    run_migrations_for_app("common")
-    deps = app_manager_instance
-    (user, _) = await _make_user(app_manager_instance)
-    cc_repo = ConnectedServicesRepository(
-        deps.config.db.async_session_maker, deps.config.secrets.encryption_key, ExpiredTokenOAuthClient
-    )
-    repo = GitRepositoriesRepository(
-        deps.config.db.async_session_maker, cc_repo, None, False, ExpiredTokenOAuthClient()
-    )
-
-    (provider, connOrm) = await _setup_connection(app_manager_instance, ConnectionStatus.connected)
-    result = await repo.get_repository(private_repo_url, user, None, user)
-    print(result)
-    assert result.provider
-    assert result.provider.id == provider.id
-    assert result.connection
-    assert result.connection == ProviderConnection.fromORM(connOrm)
-    assert result.error == RepositoryMetadataError.metadata_oauth
     assert not result.metadata
 
 

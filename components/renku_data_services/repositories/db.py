@@ -16,8 +16,8 @@ import renku_data_services.base_models as base_models
 from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.connected_services import orm as connected_services_schemas
-from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.connected_services.models import ConnectionStatus
+from renku_data_services.connected_services.oauth_http import OAuthHttpClientFactory
 from renku_data_services.connected_services.utils import GitHubProviderType, get_github_provider_type
 from renku_data_services.repositories import models
 from renku_data_services.repositories.git_url import GitUrl, GitUrlError
@@ -36,13 +36,13 @@ class GitRepositoriesRepository:
     def __init__(
         self,
         session_maker: Callable[..., AsyncSession],
-        connected_services_repo: ConnectedServicesRepository,
+        oauth_client_factory: OAuthHttpClientFactory,
         internal_gitlab_url: str | None,
         enable_internal_gitlab: bool,
         httpClient: HttpClient | None = None,
     ):
         self.session_maker = session_maker
-        self.connected_services_repo = connected_services_repo
+        self.oauth_client_factory = oauth_client_factory
         self.internal_gitlab_url = internal_gitlab_url
         self.enable_internal_gitlab = enable_internal_gitlab
         self.httpClient = httpClient if httpClient else HttpClient(timeout=5)
@@ -165,7 +165,7 @@ class GitRepositoriesRepository:
     ) -> models.RepositoryMetadata | models.RepositoryMetadataError | Literal["304"]:
         """Get the metadata about a repository without using credentials."""
         logger.debug(f"Get repository anonymousliy: {repository_url}")
-        adapter = get_provider_adapter(client)
+        adapter = get_provider_adapter(client.dump())
         request_url = adapter.get_repository_api_url(repository_url.render())
         headers = adapter.api_common_headers or dict()
         if etag:
@@ -182,23 +182,19 @@ class GitRepositoriesRepository:
     ) -> models.RepositoryMetadata | Literal["304"] | models.RepositoryMetadataError:
         """Get the metadata about a repository using an OAuth2 connection."""
         logger.debug(f"Get repository with oauth2 '{connection_id}': {repository_url}")
-        async with self.connected_services_repo.get_async_oauth2_client(connection_id=connection_id, user=user) as (
-            oauth2_client,
-            connection,
-            _,
-        ):
-            adapter = get_provider_adapter(connection.client)
-            request_url = adapter.get_repository_api_url(repository_url.render())
-            headers = adapter.api_common_headers or dict()
-            if etag:
-                headers["If-None-Match"] = etag
-            try:
-                response = await oauth2_client.get(request_url, headers=headers)
-            except OAuthError as err:
-                logger.warning(f"OAuth error accessing repository metadata: {err}", exc_info=err)
-                return models.RepositoryMetadataError.metadata_oauth
+        oauth_client = await self.oauth_client_factory.for_user_connection_raise(user, connection_id)
+        adapter = get_provider_adapter(oauth_client.client)
+        request_url = adapter.get_repository_api_url(repository_url.render())
+        headers = adapter.api_common_headers or dict()
+        if etag:
+            headers["If-None-Match"] = etag
+        try:
+            response = await oauth_client.get(request_url, headers=headers)
+        except OAuthError as err:
+            logger.warning(f"OAuth error accessing repository metadata: {err}", exc_info=err)
+            return models.RepositoryMetadataError.metadata_oauth
 
-            return self._convert_metadata_response(adapter, response)
+        return self._convert_metadata_response(adapter, response)
 
     async def _get_repository_authenticated_or_anonym(
         self,
