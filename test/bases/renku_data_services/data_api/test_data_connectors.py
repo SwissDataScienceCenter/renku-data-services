@@ -2452,8 +2452,6 @@ async def test_validate_envidat_data_connector() -> None:
     assert config["provider"] == "Other"
     assert config["endpoint"].find("zhdk.cloud.switch.ch") >= 0
     assert res.converted_storage.source_path == "envidat-doi/10.16904_12"
-    breakpoint()
     res = await core.validate_unsaved_global_data_connector(res, validator)
     assert len(res.description) > 0
     assert len(res.keywords) > 0
-    breakpoint()

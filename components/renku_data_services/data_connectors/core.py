@@ -16,6 +16,7 @@ from renku_data_services.base_models.core import (
     ProjectPath,
 )
 from renku_data_services.data_connectors import apispec, models
+from renku_data_services.data_connectors.constants import ALLOWED_GLOBAL_DATA_CONNECTOR_PROVIDERS
 from renku_data_services.data_connectors.doi import schema_org
 from renku_data_services.data_connectors.doi.metadata import create_envidat_metadata_url, get_dataset_metadata
 from renku_data_services.data_connectors.doi.models import DOI, SchemaOrgDataset
@@ -94,11 +95,6 @@ async def validate_unsaved_storage_doi(
     configuration: dict[str, Any]
     source_path: str
 
-    if storage.storage_type != "doi":
-        raise errors.ProgrammingError(
-            message="Only doi-type storage can be validated by the validate_unsaved_storage_doi function."
-        )
-
     doi_str = storage.configuration.get("doi")
     if not isinstance(doi_str, str):
         raise errors.ValidationError(message="Cannot find the doi in the storage configuration")
@@ -116,7 +112,7 @@ async def validate_unsaved_storage_doi(
             # Most likely supported by rclone doi provider, you have to call validator.get_doi_metadata to confirm
             configuration = storage.configuration
             source_path = storage.source_path
-            storage_type = storage.storage_type
+            storage_type = storage.storage_type or "doi"
 
     validator.validate(configuration)
 
@@ -176,9 +172,11 @@ async def prevalidate_unsaved_global_data_connector(
 ) -> models.PrevalidatedGlobalDataConnector:
     """Pre-validate an unsaved data connector."""
     # TODO: allow admins to create global data connectors, e.g. s3://giab
-    if isinstance(body.storage, apispec.CloudStorageUrlV2) or body.storage.storage_type != "doi":
-        raise errors.ValidationError(message="Only doi storage type is allowed for global data connectors")
+    if isinstance(body.storage, apispec.CloudStorageUrlV2):
+        raise errors.ValidationError(message="Global data connectors cannot be configured via a URL.")
     storage, doi = await validate_unsaved_storage_doi(body.storage, validator=validator)
+    if storage.storage_type not in ALLOWED_GLOBAL_DATA_CONNECTOR_PROVIDERS:
+        raise errors.ValidationError(message="Only doi storage type is allowed for global data connectors")
     if not storage.readonly:
         raise errors.ValidationError(message="Global data connectors must be read-only")
 
