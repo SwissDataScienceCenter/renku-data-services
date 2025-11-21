@@ -304,7 +304,9 @@ class TestDependencyManager(DependencyManager):
         )
         cluster_repo = ClusterRepository(session_maker=config.db.async_session_maker)
         image_check_repo = ImageCheckRepository(
-            nb_config=config.nb_config, connected_services_repo=connected_services_repo
+            nb_config=config.nb_config,
+            connected_services_repo=connected_services_repo,
+            oauth_client_factory=oauth_client_factory,
         )
         metrics_repo = MetricsRepository(session_maker=config.db.async_session_maker)
         git_provider_helper = GitProviderHelper(connected_services_repo, "", "", "", config.enable_internal_gitlab)
