@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import unquote
+from urllib.parse import unquote, urlparse, urlunparse
 
 from sanic import HTTPResponse, Request, empty, json, redirect
 from sanic.response import JSONResponse
@@ -146,10 +146,10 @@ class OAuth2ClientsBP(CustomBlueprint):
         callback_url = request.url_for(f"{self.name}.{self.authorize_callback.__name__}")
         # TODO: configure the server to trust the reverse proxy so that the request scheme is always "https".
         # TODO: see also https://github.com/SwissDataScienceCenter/renku-data-services/pull/225
-        # https_callback_url = urlunparse(urlparse(callback_url)._replace(scheme="https"))
-        # if https_callback_url != callback_url:
-        #     logger.warning("Forcing the callback URL to use https. Trusted proxies configuration may be incorrect.")
-        return callback_url
+        https_callback_url = urlunparse(urlparse(callback_url)._replace(scheme="https"))
+        if https_callback_url != callback_url:
+            logger.warning("Forcing the callback URL to use https. Trusted proxies configuration may be incorrect.")
+        return https_callback_url
 
 
 @dataclass(kw_only=True)
