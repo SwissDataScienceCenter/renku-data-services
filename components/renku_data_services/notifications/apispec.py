@@ -5,10 +5,34 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Optional
+from enum import Enum
+from typing import Dict, List, Optional
 
 from pydantic import ConfigDict, Field, RootModel
 from renku_data_services.notifications.apispec_base import BaseAPISpec
+
+
+class Status(Enum):
+    firing = "firing"
+    resolved = "resolved"
+
+
+class AlertmanagerAlert(BaseAPISpec):
+    status: Status = Field(..., description="The status of the alert")
+    labels: Dict[str, str] = Field(..., description="Labels associated with the alert")
+    annotations: Dict[str, str] = Field(
+        ..., description="Annotations associated with the alert"
+    )
+    startsAt: datetime = Field(..., description="The time when the alert started")
+    endsAt: Optional[datetime] = Field(
+        None, description="The time when the alert ended"
+    )
+    generatorURL: Optional[str] = Field(
+        None, description="The URL of the generator that created the alert"
+    )
+    fingerprint: Optional[str] = Field(
+        None, description="A unique fingerprint identifying this alert"
+    )
 
 
 class AlertPatch(BaseAPISpec):
@@ -33,6 +57,33 @@ class Error(BaseAPISpec):
 
 class ErrorResponse(BaseAPISpec):
     error: Error
+
+
+class AlertsWebhookAlertmanagerPostResponse(BaseAPISpec):
+    message: Optional[str] = Field(None, examples=["Webhook processed successfully"])
+
+
+class AlertmanagerWebhook(BaseAPISpec):
+    version: str = Field(..., description="Alertmanager version")
+    groupKey: str = Field(..., description="Unique key for the group of alerts")
+    status: Status = Field(..., description="The status of the alerts in this webhook")
+    receiver: Optional[str] = Field(
+        None, description="The name of the receiver that got the alert"
+    )
+    groupLabels: Optional[Dict[str, str]] = Field(
+        None, description="Labels that are common to all alerts in the group"
+    )
+    commonLabels: Optional[Dict[str, str]] = Field(
+        None, description="Labels that are common to all alerts"
+    )
+    commonAnnotations: Optional[Dict[str, str]] = None
+    externalURL: Optional[str] = Field(
+        None, description="The external URL of the Alertmanager"
+    )
+    truncatedAlerts: Optional[int] = Field(
+        None, description="The number of alerts that have been truncated"
+    )
+    alerts: List[AlertmanagerAlert] = Field(..., description="The list of alerts")
 
 
 class AlertsGetQuery(BaseAPISpec):

@@ -264,6 +264,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         url_prefix=url_prefix,
         notifications_repo=dm.notifications_repo,
         authenticator=dm.authenticator,
+        alertmanager_webhook_role=dm.config.alertmanager_webhook_role,
     )
     app.blueprint(
         [

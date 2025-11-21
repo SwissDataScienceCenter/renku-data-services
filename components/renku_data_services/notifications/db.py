@@ -19,14 +19,16 @@ class NotificationsRepository:
     def __init__(
         self,
         session_maker: Callable[..., AsyncSession],
+        alertmanager_webhook_role: str = "alertmanager-webhook",
     ):
         self.session_maker = session_maker
+        self.alertmanager_webhook_role = alertmanager_webhook_role
 
     async def create_alert(self, user: base_models.APIUser, alert: models.UnsavedAlert) -> models.Alert:
         """Insert a new alert into the database."""
         if user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
-        if not user.is_admin:
+        if not user.is_admin and self.alertmanager_webhook_role not in user.roles:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session, session.begin():
@@ -85,7 +87,7 @@ class NotificationsRepository:
         """Update an existing alert in the database."""
         if user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
-        if not user.is_admin:
+        if not user.is_admin and self.alertmanager_webhook_role not in user.roles:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session, session.begin():
@@ -100,3 +102,56 @@ class NotificationsRepository:
     def __update_alert(self, alert: schemas.AlertORM, update: models.AlertPatch) -> None:
         if update.resolved is True:
             alert.resolved_at = datetime.now(UTC)
+
+    async def get_alerts_by_properties(
+        self,
+        user: base_models.APIUser,
+        alert_id: ULID | None,
+        user_id: str | None,
+        title: str | None,
+        message: str | None,
+        session_name: str | None,
+        created_at: datetime | None,
+        resolved_at: datetime | None,
+    ) -> list[models.Alert]:
+        """Get alerts by their properties."""
+        if user.id is None:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+
+        async with self.session_maker() as session:
+            query = select(schemas.AlertORM)
+
+            if alert_id is not None:
+                query = query.where(schemas.AlertORM.id == alert_id)
+
+            if created_at is not None:
+                query = query.where(schemas.AlertORM.creation_date == created_at)
+
+            if title is None:
+                query = query.where(schemas.AlertORM.title.is_(None))
+            else:
+                query = query.where(schemas.AlertORM.title == title)
+
+            if message is None:
+                query = query.where(schemas.AlertORM.message.is_(None))
+            else:
+                query = query.where(schemas.AlertORM.message == message)
+
+            if resolved_at is None:
+                query = query.where(schemas.AlertORM.resolved_at.is_(None))
+            else:
+                query = query.where(schemas.AlertORM.resolved_at == resolved_at)
+
+            if session_name is None:
+                query = query.where(schemas.AlertORM.session_name.is_(None))
+            else:
+                query = query.where(schemas.AlertORM.session_name == session_name)
+
+            if user_id is None:
+                query = query.where(schemas.AlertORM.user_id.is_(None))
+            else:
+                query = query.where(schemas.AlertORM.user_id == user_id)
+
+            res = await session.scalars(query)
+            alert_list = res.all()
+            return [alert.dump() for alert in alert_list]
