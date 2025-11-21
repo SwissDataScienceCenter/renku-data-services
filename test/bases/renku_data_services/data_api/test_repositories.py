@@ -5,6 +5,7 @@ from urllib.parse import parse_qs, quote, quote_plus, urlparse
 
 import pytest
 import pytest_asyncio
+from renku_data_services.repositories.models import GitUrlError
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 
@@ -97,7 +98,7 @@ async def test_get_repository_without_connection(
     await create_oauth2_provider("provider_1")
     repository_url = "https://example.org/username/my_repo.git"
 
-    _, res = await oauth2_test_client.get(f"/api/data/repositories/{quote_plus(repository_url)}", headers=user_headers)
+    _, res = await oauth2_test_client.get(f"/api/data/repositories?url={quote_plus(repository_url)}", headers=user_headers)
 
     assert res.status_code == 200, res.text
     assert res.json is not None
@@ -111,7 +112,7 @@ async def test_get_one_repository(oauth2_test_client: SanicASGITestClient, user_
     connection = await create_oauth2_connection("provider_1")
     repository_url = "https://example.org/username/my_repo.git"
 
-    _, res = await oauth2_test_client.get(f"/api/data/repositories/{quote_plus(repository_url)}", headers=user_headers)
+    _, res = await oauth2_test_client.get(f"/api/data/repositories?url={quote_plus(repository_url)}", headers=user_headers)
 
     assert res.status_code == 200, res.text
     assert res.json is not None
@@ -132,7 +133,7 @@ async def test_get_one_repository_not_found(
     connection = await create_oauth2_connection("provider_1")
     repository_url = "https://example.org/username/another_repo.git"
 
-    _, res = await oauth2_test_client.get(f"/api/data/repositories/{quote_plus(repository_url)}", headers=user_headers)
+    _, res = await oauth2_test_client.get(f"/api/data/repositories?url={quote_plus(repository_url)}", headers=user_headers)
 
     assert res.status_code == 200, res.text
     assert res.json is not None
@@ -144,15 +145,17 @@ async def test_get_one_repository_not_found(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "repository_url,status_code",
+    "repository_url,error_code",
     [
-        ("https://github.com/SwissDataScienceCenter/renku.git", 200),
-        ("https://example.org/does-not-exist.git", 404),
-        ("http://foobar", 404),
+        ("https://github.com/SwissDataScienceCenter/renku.git", None),
+        ("https://example.org/does-not-exist.git", GitUrlError.no_git_repo),
+        ("http://foobar", GitUrlError.no_git_repo),
     ],
 )
-async def test_get_one_repository_probe(sanic_client: SanicASGITestClient, repository_url, status_code):
+async def test_get_one_repository_probe(sanic_client: SanicASGITestClient, repository_url, error_code):
     repository_url_param = quote_plus(repository_url)
-    _, response = await sanic_client.get(f"/api/data/repositories/{repository_url_param}/probe")
+    _, response = await sanic_client.get(f"/api/data/repositories?url={repository_url_param}")
 
-    assert response.status_code == status_code, response.text
+    resp_error = response.json.get("error_code")
+
+    assert resp_error == error_code, response.text
