@@ -1,0 +1,21 @@
+"""Business logic for notifications."""
+
+from renku_data_services.notifications import apispec, models
+
+
+def validate_unsaved_alert(alert: apispec.AlertPost) -> models.UnsavedAlert:
+    """Validate the creation of a new alert."""
+    return models.UnsavedAlert(
+        title=alert.title,
+        message=alert.message,
+        event_type=alert.event_type,
+        user_id=alert.user_id,
+        session_name=alert.session_name,
+    )
+
+
+def validate_alert_patch(patch: apispec.AlertPatch) -> models.AlertPatch:
+    """Validate the patch for an update."""
+    return models.AlertPatch(
+        resolved=patch.resolved,
+    )

@@ -1,0 +1,215 @@
+openapi: 3.0.2
+info:
+  title: Renku Data Services API
+  description: |
+    A service that allows alerts to be sent to users.
+  version: v1
+servers:
+  - url: /api/data
+paths:
+  /alerts:
+    post:
+      summary: Send an alert to a user. Requires admin permissions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AlertPost"
+      responses:
+        "201":
+          description: Alert successfully created
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Alert"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - alerts
+    get:
+      summary: Retrieve all active alerts for the authenticated user.
+      parameters:
+        - in: query
+          description: query parameters
+          name: params
+          style: form
+          explode: true
+          schema:
+            $ref: "#/components/schemas/AlertsGetQuery"
+      responses:
+        "200":
+          description: A list of active alerts for the authenticated user.
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/AlertList"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - alerts
+  /alerts/{alert_id}:
+    patch:
+      summary: Resolve an alert. Requires admin permissions.
+      description: Mark an alert as resolved. The alert remains in the database but is no longer active.
+      parameters:
+        - in: path
+          name: alert_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/Ulid"
+          description: The ID of the alert to resolve.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AlertPatch"
+      responses:
+        "200":
+          description: Alert successfully updated
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Alert"
+        "404":
+          description: Alert not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - alerts
+components:
+  schemas:
+    AlertsGetQuery:
+      description: Query parameters for getting alerts
+      type: object
+      additionalProperties: false
+      properties:
+        session_name:
+          $ref: "#/components/schemas/SessionName"
+    AlertPatch:
+      description: Data to update an alert.
+      type: object
+      additionalProperties: false
+      properties:
+        resolved:
+          type: boolean
+          description: Set to true to mark the alert as resolved. The resolved_at timestamp will be set automatically.
+    Ulid:
+      description: ULID identifier
+      type: string
+      minLength: 26
+      maxLength: 26
+      pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$" # This is case-insensitive
+    Alert:
+      description: An alert sent or displayed to a user.
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        title:
+          $ref: "#/components/schemas/AlertTitle"
+        message:
+          $ref: "#/components/schemas/AlertMessage"
+        event_type:
+          $ref: "#/components/schemas/AlertEventType"
+        user_id:
+          $ref: "#/components/schemas/UserId"
+        session_name:
+          $ref: "#/components/schemas/SessionName"
+        creation_date:
+          type: string
+          format: date-time
+          description: The date and time when the alert was created.
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: The date and time when the alert was resolved, or null if it is still active.
+      required:
+        - id
+        - title
+        - message
+        - event_type
+        - user_id
+        - creation_date
+    AlertPost:
+      description: Data required to create an alert.
+      type: object
+      additionalProperties: false
+      properties:
+        title:
+          $ref: "#/components/schemas/AlertTitle"
+        message:
+          $ref: "#/components/schemas/AlertMessage"
+        event_type:
+          $ref: "#/components/schemas/AlertEventType"
+        user_id:
+          $ref: "#/components/schemas/UserId"
+        session_name:
+          $ref: "#/components/schemas/SessionName"
+      required:
+        - title
+        - message
+        - event_type
+        - user_id
+    AlertTitle:
+      type: string
+      description: The title of the alert.
+    AlertMessage:
+      type: string
+      description: The message body of the alert.
+    AlertEventType:
+      type: string
+      description: The type of event that triggered the alert.
+      example: session_high_memory
+    SessionName:
+      description: Renku session name
+      type: string
+      minLength: 1
+      maxLength: 99
+      example: My Renku Session :)
+    UserId:
+      type: string
+      description: Keycloak user ID
+      example: f74a228b-1790-4276-af5f-25c2424e9b0c
+      pattern: "^[A-Za-z0-9]{1}[A-Za-z0-9-]+$"
+    AlertList:
+      type: array
+      description: A list of alerts.
+      items:
+        $ref: "#/components/schemas/Alert"
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: integer
+              minimum: 0
+              exclusiveMinimum: true
+              example: 1404
+            detail:
+              type: string
+              example: A more detailed optional message showing what the problem was
+            message:
+              type: string
+              example: Something went wrong - please try again later
+          required:
+            - code
+            - message
+      required:
+        - error
+
+  responses:
+    Error:
+      description: The schema for all 4xx and 5xx responses
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
