@@ -211,7 +211,6 @@ class _SafeAsyncOAuthClient(AsyncOAuth2Client):  # type: ignore  # nosec: B107
                 logger.info(f"Updating token in database for connection {conn.id}")
                 conn.token = self._token_check.encrypt_token_set(new_token, conn.user_id)
             elif self.metadata.get("grant_type") == "client_credentials":
-                # access_token = token["access_token"]
                 new_token = await self.fetch_token(url, grant_type="client_credentials")
                 logger.info(f"Updating token in database for connection {conn.id}")
                 conn.token = self._token_check.encrypt_token_set(new_token, conn.user_id)
