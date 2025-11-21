@@ -134,6 +134,7 @@ class OAuth2ClientsBP(CustomBlueprint):
             match client:
                 case OAuthHttpFactoryError() as err:
                     logger.info(f"Error obtaining token to finish authorizing: {err}")
+                    # TODO: redirect to a error page (that needs to be created)
                     raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
                 case _:
                     next_url = client.connection.next_url
