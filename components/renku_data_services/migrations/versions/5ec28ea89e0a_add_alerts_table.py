@@ -1,7 +1,7 @@
 """add alerts table
 
 Revision ID: 5ec28ea89e0a
-Revises: d437be68a4fb
+Revises: 42049656cdb8
 Create Date: 2025-11-05 13:41:25.972261
 
 """
