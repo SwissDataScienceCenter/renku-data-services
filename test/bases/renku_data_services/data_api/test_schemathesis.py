@@ -122,6 +122,7 @@ async def test_api_schemathesis(
         checks = tuple(c for c in checks if c.__name__ != "negative_data_rejection")
 
     if req_kwargs.get("url") == "/api/data/repositories" and res.status_code == 200:
+        # schemathesis constructs invalid negative cases affecting the /repositories endpoint
         checks = tuple(c for c in checks if c.__name__ != "negative_data_rejection")
 
     case.validate_response(res, checks=checks)
