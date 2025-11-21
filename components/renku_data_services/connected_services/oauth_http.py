@@ -167,6 +167,8 @@ class _SafeAsyncOAuthClient(AsyncOAuth2Client):  # type: ignore  # nosec: B107
     def __init__(  # type: ignore # nosec: B105, B107
         self,
         client_id: str,
+        connection_id: ULID,
+        token_check: _TokenCheck,
         client_secret: str | None = None,
         token_endpoint_auth_method=None,
         revocation_endpoint_auth_method=None,
@@ -190,8 +192,11 @@ class _SafeAsyncOAuthClient(AsyncOAuth2Client):  # type: ignore  # nosec: B107
             leeway,
             **kwargs,
         )
-        self._connection_id: ULID = kwargs["connection_id"]
-        self._token_check: _TokenCheck = kwargs["token_check"]
+        if "update_token" in kwargs:
+            raise errors.ValidationError(message="Cannot use update_token function with _SafeAsyncOAuthClient")
+
+        self._connection_id: ULID = connection_id
+        self._token_check: _TokenCheck = token_check
 
     def _connection_lock(self) -> ConnectionLock:
         return self._token_check.get_lock(self._connection_id)
@@ -500,6 +505,7 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck, _TokenC
                 sa.select(schemas.OAuth2ConnectionORM)
                 .where(schemas.OAuth2ConnectionORM.state == state)
                 .options(sao.selectinload(schemas.OAuth2ConnectionORM.client))
+                .with_for_update(key_share=True)
             )
             connection = result.one_or_none()
 
