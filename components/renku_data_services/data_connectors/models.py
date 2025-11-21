@@ -16,6 +16,7 @@ from renku_data_services.base_models.core import (
 )
 from renku_data_services.data_connectors.doi.models import DOI
 from renku_data_services.namespace.models import GroupNamespace, ProjectNamespace, UserNamespace
+from renku_data_services.storage.rclone import RCloneDOIMetadata
 from renku_data_services.utils.etag import compute_etag_from_fields
 
 if TYPE_CHECKING:
@@ -98,7 +99,15 @@ class UnsavedGlobalDataConnector(BaseDataConnector):
     """Global data connector model."""
 
     namespace: None = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class PrevalidatedGlobalDataConnector:
+    """Global data connector model that is unsaved but has been pre-validated."""
+
+    data_connector: UnsavedGlobalDataConnector
     doi: DOI
+    rclone_metadata: RCloneDOIMetadata | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
