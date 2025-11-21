@@ -5,7 +5,6 @@ from urllib.parse import parse_qs, quote, quote_plus, urlparse
 
 import pytest
 import pytest_asyncio
-from renku_data_services.repositories.models import GitUrlError
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 
@@ -13,6 +12,7 @@ from renku_data_services.connected_services.dummy_async_oauth2_client import Dum
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.migrations.core import run_migrations_for_app
+from renku_data_services.repositories.models import GitUrlError
 from test.bases.renku_data_services.data_api.utils import create_dummy_oauth_client
 from test.utils import SanicReusableASGITestClient
 
@@ -98,7 +98,9 @@ async def test_get_repository_without_connection(
     await create_oauth2_provider("provider_1")
     repository_url = "https://example.org/username/my_repo.git"
 
-    _, res = await oauth2_test_client.get(f"/api/data/repositories?url={quote_plus(repository_url)}", headers=user_headers)
+    _, res = await oauth2_test_client.get(
+        f"/api/data/repositories?url={quote_plus(repository_url)}", headers=user_headers
+    )
 
     assert res.status_code == 200, res.text
     assert res.json is not None
@@ -112,7 +114,9 @@ async def test_get_one_repository(oauth2_test_client: SanicASGITestClient, user_
     connection = await create_oauth2_connection("provider_1")
     repository_url = "https://example.org/username/my_repo.git"
 
-    _, res = await oauth2_test_client.get(f"/api/data/repositories?url={quote_plus(repository_url)}", headers=user_headers)
+    _, res = await oauth2_test_client.get(
+        f"/api/data/repositories?url={quote_plus(repository_url)}", headers=user_headers
+    )
 
     assert res.status_code == 200, res.text
     assert res.json is not None
@@ -133,7 +137,9 @@ async def test_get_one_repository_not_found(
     connection = await create_oauth2_connection("provider_1")
     repository_url = "https://example.org/username/another_repo.git"
 
-    _, res = await oauth2_test_client.get(f"/api/data/repositories?url={quote_plus(repository_url)}", headers=user_headers)
+    _, res = await oauth2_test_client.get(
+        f"/api/data/repositories?url={quote_plus(repository_url)}", headers=user_headers
+    )
 
     assert res.status_code == 200, res.text
     assert res.json is not None
