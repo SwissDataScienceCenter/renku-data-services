@@ -106,12 +106,12 @@ async def validate_unsaved_storage_doi(
         case "envidat.ch" | "www.envidat.ch":
             converted_storage = await convert_envidat_v1_data_connector_to_s3(storage)
             configuration = converted_storage.configuration
-            source_path = converted_storage.source_path
+            source_path = converted_storage.source_path or "/"
             storage_type = ENVIDAT_V1_PROVIDER
         case _:
             # Most likely supported by rclone doi provider, you have to call validator.get_doi_metadata to confirm
             configuration = storage.configuration
-            source_path = storage.source_path
+            source_path = storage.source_path or "/"
             storage_type = storage.storage_type or "doi"
 
     validator.validate(configuration)
@@ -226,10 +226,10 @@ async def validate_unsaved_global_data_connector(
 
     # Fetch DOI metadata
     if rclone_metadata:
-        metadata = await get_dataset_metadata(data_connector.storage.storage_type, rclone_metadata.metadata_url)
+        metadata = await get_dataset_metadata(rclone_metadata.provider, rclone_metadata.metadata_url)
     elif data_connector.storage.storage_type == ENVIDAT_V1_PROVIDER:
         metadata_url = create_envidat_metadata_url(doi)
-        metadata = await get_dataset_metadata(data_connector.storage.storage_type, metadata_url)
+        metadata = await get_dataset_metadata(ENVIDAT_V1_PROVIDER, metadata_url)
     else:
         metadata = None
 
@@ -255,9 +255,12 @@ async def validate_unsaved_global_data_connector(
 
     # Assign user-friendly target_path if possible
     target_path = data_connector.slug
-    with contextlib.suppress(errors.ValidationError):
-        name_slug = base_models.Slug.from_name(name).value
-        target_path = base_models.Slug.from_name(f"{name_slug[:30]}-{target_path}").value
+    if metadata:
+        # If there is no metdata, the slug is derived from the name, and the name is the doi
+        # So without metadata if we extend the target_path it just repeats the slug twice
+        with contextlib.suppress(errors.ValidationError):
+            name_slug = base_models.Slug.from_name(name).value
+            target_path = base_models.Slug.from_name(f"{name_slug[:30]}-{target_path}").value
 
     # Override source_path and target_path
     storage = models.CloudStorageCore(

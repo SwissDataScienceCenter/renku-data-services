@@ -47,9 +47,12 @@ class DOI(str):
 
     async def resolve_host(self) -> str | None:
         """Resolves the DOI and returns the hostname of the url where the redirect leads."""
-        clnt = httpx.AsyncClient(follow_redirects=True)
+        clnt = httpx.AsyncClient(timeout=5, follow_redirects=True)
         async with clnt:
-            res = await clnt.get(self.url)
+            try:
+                res = await clnt.get(self.url)
+            except httpx.HTTPError:
+                return None
         if res.status_code != 200:
             return None
         return res.url.host
@@ -138,4 +141,4 @@ class SchemaOrgDataset(BaseModel):
     @property
     def keywords(self) -> list[str]:
         """Split the single keywords string into a list."""
-        return self.raw_keywords.split()
+        return [i.strip() for i in self.raw_keywords.split(",")]

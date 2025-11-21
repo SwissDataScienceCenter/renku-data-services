@@ -2446,12 +2446,13 @@ async def test_validate_envidat_data_connector() -> None:
     )
     validator = RCloneValidator()
     res = await core.prevalidate_unsaved_global_data_connector(body, validator)
-    assert res.converted_storage is not None
-    config = res.converted_storage.configuration
+    config = res.data_connector.storage.configuration
     assert config["type"] == "s3"
     assert config["provider"] == "Other"
     assert config["endpoint"].find("zhdk.cloud.switch.ch") >= 0
-    assert res.converted_storage.source_path == "envidat-doi/10.16904_12"
+    assert res.data_connector.storage.source_path == "/envidat-doi/10.16904_12"
     res = await core.validate_unsaved_global_data_connector(res, validator)
+    assert res.description is not None
     assert len(res.description) > 0
+    assert res.keywords is not None
     assert len(res.keywords) > 0

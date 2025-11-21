@@ -25,7 +25,7 @@ class S3Config:
     @property
     def path(self) -> str:
         """Return the path including the bucket name and the prefix."""
-        return f"{self.bucket}{self.prefix}"
+        return f"/{self.bucket}{self.prefix}"
 
 
 def get_rclone_config(dataset: SchemaOrgDataset, provider: DatasetProvider) -> S3Config:
