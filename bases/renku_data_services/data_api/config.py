@@ -40,6 +40,7 @@ class Config:
     gitlab_url: str | None
     log_cfg: LoggingConfig
     version: str
+    alertmanager_webhook_role: str
 
     @classmethod
     def from_env(cls, db: DBConfig | None = None) -> Self:
@@ -82,4 +83,5 @@ class Config:
             server_options=ServerOptionsConfig.from_env(),
             gitlab_url=gitlab_url,
             log_cfg=LoggingConfig.from_env(),
+            alertmanager_webhook_role=os.environ.get("ALERTMANAGER_WEBHOOK_ROLE", "alertmanager-webhook"),
         )
