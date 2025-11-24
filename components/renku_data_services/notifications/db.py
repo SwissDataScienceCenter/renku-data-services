@@ -162,7 +162,10 @@ class NotificationsRepository:
     async def create_or_update_alert(
         self, user: base_models.APIUser, alert: models.UnsavedAlert
     ) -> models.Alert | None:
-        """Create a new alert or update an existing unresolved alert with the same properties."""
+        """Create a new alert or update an existing unresolved alert with the same properties.
+
+        Returns None if the target user doesn't exist in the database.
+        """
 
         if user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
@@ -173,7 +176,7 @@ class NotificationsRepository:
             user_exists = await session.scalar(select(UserORM.keycloak_id).where(UserORM.keycloak_id == alert.user_id))
             if user_exists is None:
                 logger.warning("User with ID '%s' does not exist, skipping alert creation.", alert.user_id)
-                return
+                return None
 
             query = (
                 select(schemas.AlertORM)
@@ -182,7 +185,7 @@ class NotificationsRepository:
                 .where(schemas.AlertORM.resolved_at.is_(None))
             )
 
-            if alert.session_name != None:
+            if alert.session_name is not None:
                 query = query.where(schemas.AlertORM.session_name == alert.session_name)
 
             res = await session.scalars(query)

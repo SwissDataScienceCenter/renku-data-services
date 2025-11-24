@@ -2,7 +2,6 @@
 
 import logging
 
-from renku_data_services import errors
 from renku_data_services.notifications import apispec, models
 
 logger = logging.getLogger(__name__)
