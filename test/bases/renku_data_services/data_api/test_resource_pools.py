@@ -66,6 +66,7 @@ async def test_resource_pool_creation(
     payload: dict[str, Any],
     expected_status_code: int,
 ) -> None:
+    payload = deepcopy(payload)
     if "cluster_id" in payload:
         payload["cluster_id"] = None
 
@@ -83,6 +84,7 @@ async def test_resource_pool_creation_with_cluster_ids(
     payload: dict[str, Any],
     expected_status_code: int,
 ) -> None:
+    payload = deepcopy(payload)
     if "cluster_id" in payload:
         _, res = await sanic_client.post(
             "/api/data/clusters",
@@ -132,6 +134,7 @@ async def test_resource_pool_creation_with_remote(
     _, res = await sanic_client.post("/api/data/oauth2/providers", headers=admin_headers, json=provider_payload)
     assert res.status_code == 201, res.text
 
+    payload = deepcopy(payload)
     if "cluster_id" in payload:
         payload["cluster_id"] = None
     payload["default"] = False
@@ -168,6 +171,7 @@ async def test_resource_pool_creation_with_platform(
     payload: dict[str, Any],
     expected_status_code: int,
 ) -> None:
+    payload = deepcopy(payload)
     if "cluster_id" in payload:
         payload["cluster_id"] = None
     payload["default"] = False
@@ -1096,7 +1100,7 @@ async def test_delete_all_tolerations(
     assert res.json == []
 
 
-resource_pool_payload = {
+resource_pool_payload_2 = {
     "name": "test-name",
     "classes": [
         {
@@ -1138,7 +1142,7 @@ async def _resource_pools_request(
     input_payload = deepcopy(payload)
     check_payload = None
     if resource_pool_id is None:
-        tmp = deepcopy(resource_pool_payload)
+        tmp = deepcopy(resource_pool_payload_2)
         if "cluster_id" in input_payload and input_payload["cluster_id"] == "replace-me":
             _, res = await sanic_client.post("/api/data/clusters/", headers=admin_headers, json=cluster_payload)
             assert res.status_code == 201, res.text
@@ -1185,14 +1189,14 @@ put_patch_common_test_inputs = [
     (422, True, -1, None),
     (401, False, 0, None),
     (422, True, 0, None),
-    (401, False, -1, resource_pool_payload),
-    (422, True, -1, resource_pool_payload),
-    (401, False, 0, resource_pool_payload),
-    (422, True, 0, resource_pool_payload),
-    (401, False, 100, resource_pool_payload),
-    (422, True, 100, resource_pool_payload),
-    (401, False, None, resource_pool_payload),
-    (200, True, None, resource_pool_payload),
+    (401, False, -1, resource_pool_payload_2),
+    (422, True, -1, resource_pool_payload_2),
+    (401, False, 0, resource_pool_payload_2),
+    (422, True, 0, resource_pool_payload_2),
+    (401, False, 100, resource_pool_payload_2),
+    (422, True, 100, resource_pool_payload_2),
+    (401, False, None, resource_pool_payload_2),
+    (200, True, None, resource_pool_payload_2),
 ]
 
 
@@ -1248,7 +1252,7 @@ async def test_resource_pools_delete(
     base_url = "/api/data/resource_pools"
 
     if resource_pool_id is None:
-        _, res = await sanic_client.post(base_url, headers=admin_headers, json=resource_pool_payload)
+        _, res = await sanic_client.post(base_url, headers=admin_headers, json=resource_pool_payload_2)
         assert res.status_code == 201, res.text
         resource_pool_id = res.json["id"]
 
@@ -1279,7 +1283,7 @@ async def test_resource_pool_patch_remote(
     assert res.status_code == 201, res.text
 
     # First, create a non-remote resource pool
-    payload = deepcopy(resource_pool_payload)
+    payload = deepcopy(resource_pool_payload_2)
     if "cluster_id" in payload:
         payload["cluster_id"] = None
 
@@ -1326,7 +1330,7 @@ async def test_resource_pool_patch_platform(
     admin_headers: dict[str, str],
 ) -> None:
     # First, create a resource pool with the default runtime platform
-    payload = deepcopy(resource_pool_payload)
+    payload = deepcopy(resource_pool_payload_2)
     if "cluster_id" in payload:
         payload["cluster_id"] = None
 
@@ -1346,7 +1350,7 @@ async def test_resource_pool_patch_platform(
     assert rp.get("platform") == "linux/arm64"
 
     # Put to reset the resource pool
-    put = deepcopy(resource_pool_payload)
+    put = deepcopy(resource_pool_payload_2)
     put["quota"] = rp["quota"]
     put["classes"] = rp["classes"]
     if "platform" in put:
@@ -1365,7 +1369,7 @@ async def test_resource_pool_empty_patch_noop(
     admin_headers: dict[str, str],
 ) -> None:
     # First, create a resource pool
-    payload = deepcopy(resource_pool_payload)
+    payload = deepcopy(resource_pool_payload_2)
     if "cluster_id" in payload:
         payload["cluster_id"] = None
     payload["public"] = True
@@ -1391,7 +1395,7 @@ async def test_resource_class_empty_patch_noop(
     admin_headers: dict[str, str],
 ) -> None:
     # First, create a resource pool
-    payload = deepcopy(resource_pool_payload)
+    payload = deepcopy(resource_pool_payload_2)
     if "cluster_id" in payload:
         payload["cluster_id"] = None
     payload["public"] = True
