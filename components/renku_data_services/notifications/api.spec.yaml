@@ -82,7 +82,7 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - alerts
-  /alerts/webhook/alertmanager:
+  /webhooks/alertmanager:
     post:
       summary: Receive Prometheus Alertmanager webhooks. Requires OAuth2 client credentials authentication with the alertmanager-webhook role.
       description: |
@@ -97,7 +97,7 @@ paths:
               $ref: "#/components/schemas/AlertmanagerWebhook"
       responses:
         "200":
-          description: Webhook processed successfully
+          description: Webhook processed successfully. Returns 200 for all requests except authentication and validation errors, even if individual alerts fail to process. Failed alerts are logged but do not affect the response.
           content:
             application/json:
               schema:
@@ -106,12 +106,6 @@ paths:
                   message:
                     type: string
                     example: Webhook processed successfully
-        "400":
-          description: Invalid webhook payload
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Unauthorized - Missing or invalid Bearer token
           content:
@@ -124,8 +118,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        default:
-          $ref: "#/components/responses/Error"
+        "422":
+          description: Unprocessable Content - Request body does not match the expected schema
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
       tags:
         - alerts
 components:

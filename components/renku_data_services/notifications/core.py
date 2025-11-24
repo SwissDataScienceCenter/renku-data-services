@@ -1,7 +1,11 @@
 """Business logic for notifications."""
 
+import logging
+
 from renku_data_services import errors
 from renku_data_services.notifications import apispec, models
+
+logger = logging.getLogger(__name__)
 
 
 def validate_unsaved_alert(alert: apispec.AlertPost) -> models.UnsavedAlert:
@@ -22,15 +26,15 @@ def validate_alert_patch(patch: apispec.AlertPatch) -> models.AlertPatch:
     )
 
 
-def transform_alert_to_unsaved_alert(alert: apispec.AlertmanagerAlert) -> models.UnsavedAlert:
+def transform_alert_to_unsaved_alert(alert: apispec.AlertmanagerAlert) -> models.UnsavedAlert | None:
     """Transform a single Alertmanager alert to an UnsavedAlert."""
-
     labels = alert.labels
     annotations = alert.annotations
 
     user_id = labels.get("safe_username")
     if not user_id:
-        raise errors.ValidationError(message="Alert is missing 'safe_username' label.")
+        logger.warning("Alert is missing 'safe_username' label, skipping: %s", alert)
+        return None
 
     session_name = labels.get("statefulset")
     if not session_name:
@@ -38,15 +42,18 @@ def transform_alert_to_unsaved_alert(alert: apispec.AlertmanagerAlert) -> models
 
     title = annotations.get("title")
     if not title:
-        raise errors.ValidationError(message="Alert is missing 'title' annotation.")
+        logger.warning("Alert is missing 'title' annotation, skipping: %s", alert)
+        return None
 
     message = annotations.get("description")
     if not message:
-        raise errors.ValidationError(message="Alert is missing 'message' annotation.")
+        logger.warning("Alert is missing 'description' annotation, skipping: %s", alert)
+        return None
 
     event_type = labels.get("alertname")
     if not event_type:
-        raise errors.ValidationError(message="Alert is missing 'alertname' label.")
+        logger.warning("Alert is missing 'alertname' label, skipping: %s", alert)
+        return None
 
     return models.UnsavedAlert(
         title=title,
@@ -67,6 +74,9 @@ def transform_alertmanager_webhook(
 
     for alert in webhook.alerts:
         unsaved_alert = transform_alert_to_unsaved_alert(alert)
+
+        if unsaved_alert is None:
+            continue
 
         if alert.status == apispec.Status.firing:
             firing_alerts.append(unsaved_alert)

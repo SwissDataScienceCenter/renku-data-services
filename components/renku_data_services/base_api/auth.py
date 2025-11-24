@@ -179,7 +179,7 @@ def require_role(
                 raise errors.UnauthorizedError(
                     message="Please provide valid access credentials in the Authorization header."
                 )
-            if role not in user.roles:
+            if role not in user.roles and not user.is_admin:
                 raise errors.ForbiddenError(message=f"You do not have the required role '{role}' for this operation.")
 
             # the user is authenticated and has the required role
