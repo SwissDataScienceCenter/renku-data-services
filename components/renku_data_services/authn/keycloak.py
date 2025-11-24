@@ -123,7 +123,7 @@ class KeycloakAuthenticator(Authenticator):
             email = parsed.get("email")
 
             if email is None:
-                client_id = parsed.get("client_id")
+                client_id = parsed.get("azp")
                 if client_id:
                     email = f"service-account-{client_id}@renku.local"
                 else:
