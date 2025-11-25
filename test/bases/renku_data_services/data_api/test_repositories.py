@@ -99,7 +99,7 @@ async def test_get_repository_without_connection(
     repository_url = "https://example.org/username/my_repo.git"
 
     _, res = await oauth2_test_client.get(
-        f"/api/data/repositories?url={quote_plus(repository_url)}", headers=user_headers
+        f"/api/data/repository?url={quote_plus(repository_url)}", headers=user_headers
     )
 
     assert res.status_code == 200, res.text
@@ -115,7 +115,7 @@ async def test_get_one_repository(oauth2_test_client: SanicASGITestClient, user_
     repository_url = "https://example.org/username/my_repo.git"
 
     _, res = await oauth2_test_client.get(
-        f"/api/data/repositories?url={quote_plus(repository_url)}", headers=user_headers
+        f"/api/data/repository?url={quote_plus(repository_url)}", headers=user_headers
     )
 
     assert res.status_code == 200, res.text
@@ -138,7 +138,7 @@ async def test_get_one_repository_not_found(
     repository_url = "https://example.org/username/another_repo.git"
 
     _, res = await oauth2_test_client.get(
-        f"/api/data/repositories?url={quote_plus(repository_url)}", headers=user_headers
+        f"/api/data/repository?url={quote_plus(repository_url)}", headers=user_headers
     )
 
     assert res.status_code == 200, res.text
@@ -160,7 +160,7 @@ async def test_get_one_repository_not_found(
 )
 async def test_get_one_repository_probe(sanic_client: SanicASGITestClient, repository_url, error_code):
     repository_url_param = quote_plus(repository_url)
-    _, response = await sanic_client.get(f"/api/data/repositories?url={repository_url_param}")
+    _, response = await sanic_client.get(f"/api/data/repository?url={repository_url_param}")
 
     resp_error = response.json.get("error_code")
 

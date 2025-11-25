@@ -51,7 +51,7 @@ class RepositoriesBP(CustomBlueprint):
             body = self._make_result(result)
             return validated_json(apispec.RepositoryProviderData, body, headers=headers)
 
-        return "/repositories", ["GET"], _get_one_repository
+        return "/repository", ["GET"], _get_one_repository
 
     def _make_result(self, r: models.RepositoryDataResult) -> apispec.RepositoryProviderData:
         status = apispec.Status.unknown

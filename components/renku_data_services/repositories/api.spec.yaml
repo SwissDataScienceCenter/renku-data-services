@@ -8,7 +8,7 @@ info:
 servers:
   - url: /api/data
 paths:
-  /repositories:
+  /repository:
     get:
       summary: Get the metadata available about a repository
       description: |
