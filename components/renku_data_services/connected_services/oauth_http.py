@@ -217,7 +217,7 @@ class _SafeAsyncOAuthClient(AsyncOAuth2Client):  # type: ignore[misc]
             else:
                 raise InvalidTokenError()
 
-    async def ensure_active_token(self, token):  # type: ignore
+    async def ensure_active_token(self, token: dict[str, Any]) -> None:
         try:
             # re-implementing super.ensure_token() to have more
             # control about updating the database. the lock used in
@@ -232,9 +232,10 @@ class _SafeAsyncOAuthClient(AsyncOAuth2Client):  # type: ignore[misc]
             if not self._connection_id:
                 logger.warning("No connection id set to check for an recently updated token!")
             else:
-                current_token: models.OAuth2TokenSet = self.token  # type:ignore
                 updated_token = await self._token_check.find_recently_updated_token(
-                    self._connection_id, current_token, self.leeway
+                    self._connection_id,
+                    self.token,  # type:ignore[has-type]
+                    self.leeway,
                 )
                 if updated_token is None:
                     raise errors.InvalidTokenError(
@@ -244,6 +245,7 @@ class _SafeAsyncOAuthClient(AsyncOAuth2Client):  # type: ignore[misc]
                     ) from err
                 else:
                     self.token = updated_token
+
 
 
 class DefaultOAuthClient(OAuthHttpClient):
