@@ -105,7 +105,7 @@ async def test_get_repository_without_connection(
     assert res.status_code == 200, res.text
     assert res.json is not None
     result = res.json
-    assert result["provider"]["id"] == "provider_1"
+    assert result.get("provider", {}).get("id") == "provider_1"
     assert "connection_id" not in result
 
 
@@ -121,8 +121,8 @@ async def test_get_one_repository(oauth2_test_client: SanicASGITestClient, user_
     assert res.status_code == 200, res.text
     assert res.json is not None
     result = res.json
-    assert result["connection"]["id"] == connection["id"]
-    assert result["provider"]["id"] == "provider_1"
+    assert result.get("connection", {}).get("id") == connection["id"]
+    assert result.get("provider", {}).get("id") == "provider_1"
     assert result.get("metadata") is not None
     repository_metadata = result["metadata"]
     assert repository_metadata.get("git_url") == repository_url

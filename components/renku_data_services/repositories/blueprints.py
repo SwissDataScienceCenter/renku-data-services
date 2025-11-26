@@ -37,7 +37,7 @@ class RepositoriesBP(CustomBlueprint):
             query_args: dict[str, str] = req.get_args() or {}
             repository_url = query_args.get("url")
             if repository_url is None:
-                return HTTPResponse(status=404)
+                return HTTPResponse(status=422)
 
             result = await self.git_repositories_repo.get_repository(
                 repository_url=repository_url,

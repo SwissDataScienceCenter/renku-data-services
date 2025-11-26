@@ -48,7 +48,7 @@ class GitUrl:
         # Don't allow localhost
         if url.netloc.startswith("localhost:") or url.netloc == "localhost":
             return GitUrlError.invalid_git_url
-        if url.netloc.startswith("127.0.0.1:") or url.netloc == "127.0.0.1":
+        if url.netloc.startswith("127.") or url.netloc.startswith("::1"):
             return GitUrlError.invalid_git_url
 
         # fix trailing slashes

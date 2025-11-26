@@ -23,7 +23,7 @@ import renku_data_services.connected_services.orm as schemas
 from renku_data_services.app_config import logging
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.connected_services import models
-from renku_data_services.connected_services.models import OAuth2Client, OAuth2Connection
+from renku_data_services.connected_services.models import OAuth2Client, OAuth2Connection, OAuth2TokenSet
 from renku_data_services.connected_services.orm import OAuth2ConnectionORM
 from renku_data_services.connected_services.provider_adapters import (
     GitHubAdapter,
@@ -55,8 +55,8 @@ class OAuthHttpFactoryError(StrEnum):
 class OAuthHttpError(StrEnum):
     """Errors possible when using the client."""
 
-    oauth_error = "oauth_error"  # nosec: B105
-    unauthorized = "unauthorized"  # nosec: B105
+    oauth_error = "oauth_error"
+    unauthorized = "unauthorized"
 
 
 class OAuthHttpClient(Protocol):
@@ -163,22 +163,22 @@ class _TokenCheck(_TokenCrypt, Protocol):
         ...
 
 
-class _SafeAsyncOAuthClient(AsyncOAuth2Client):  # type: ignore  # nosec: B107
-    def __init__(  # type: ignore # nosec: B105, B107
+class _SafeAsyncOAuthClient(AsyncOAuth2Client):  # type: ignore[misc]
+    def __init__(
         self,
         client_id: str,
         connection_id: ULID,
         token_check: _TokenCheck,
         client_secret: str | None = None,
-        token_endpoint_auth_method=None,
-        revocation_endpoint_auth_method=None,
-        scope=None,
-        redirect_uri=None,
-        token=None,
-        token_placement="header",  # nosec: B107
-        leeway=60,
-        **kwargs,
-    ):
+        token_endpoint_auth_method: str | None = None,
+        revocation_endpoint_auth_method: str | None = None,
+        scope: str | None = None,
+        redirect_uri: str | None = None,
+        token: OAuth2TokenSet | None = None,
+        token_placement: str = "header",  # nosec: B107
+        leeway: int = 60,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(
             client_id,
             client_secret,
@@ -225,7 +225,7 @@ class _SafeAsyncOAuthClient(AsyncOAuth2Client):  # type: ignore  # nosec: B107
             # locking across different instances. Here we use the db
             # as a central lock, also guarding against other pods
             # trying the same.
-            if self.token and self.token.is_expired(leeway=self.leeway):  # type:ignore
+            if self.token and self.token.is_expired(leeway=self.leeway):  # type:ignore[has-type]
                 await self._do_refresh_token(token)
         except OAuthError as err:
             logger.info(f"OAuth error while refreshing the token: {err}.")

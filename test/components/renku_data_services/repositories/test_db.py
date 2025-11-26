@@ -46,7 +46,7 @@ async def test_get_repository_bad_url(app_manager_instance: DependencyManager) -
     run_migrations_for_app("common")
     repo = app_manager_instance.git_repositories_repo
 
-    for url in test_git_url.bad_urls:
+    for url in test_git_url.invalid_urls:
         result = await repo.get_repository(url, user, None, user)
         assert result.error is not None
         print(result)

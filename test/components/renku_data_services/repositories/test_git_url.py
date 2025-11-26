@@ -5,7 +5,7 @@ from httpx import AsyncClient
 
 from renku_data_services.repositories.git_url import GitUrl, GitUrlError
 
-bad_urls = [
+invalid_urls = [
     "",
     "abc",
     "http://",
@@ -16,7 +16,7 @@ bad_urls = [
     "http://127.0.0.1/my/repo",
     "http://localhost/my/repo",
 ]
-good_urls = [
+valid_urls = [
     "https://github.com/SwissDataScienceCenter/renku",
     "http://random/the/repo.git",
     "http://github.com",
@@ -24,13 +24,13 @@ good_urls = [
 
 
 def test_bad_urls() -> None:
-    for url in bad_urls:
+    for url in invalid_urls:
         result = GitUrl.parse(url)
         assert isinstance(result, GitUrlError)
 
 
 def test_good_urls() -> None:
-    for url in good_urls:
+    for url in valid_urls:
         result = GitUrl.parse(url)
         assert isinstance(result, GitUrl)
 
