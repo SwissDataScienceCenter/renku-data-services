@@ -1,5 +1,7 @@
 """Base models for API specifications."""
 
+from typing import Any
+
 from pydantic import BaseModel, Field, HttpUrl, field_validator
 from ulid import ULID
 
@@ -15,13 +17,13 @@ class BaseAPISpec(BaseModel):
         # this rust crate does not support lookahead regex syntax but we need it in this component
         regex_engine = "python-re"
 
-    @field_validator("connection_id", mode="before", check_fields=False)
+    @field_validator("*", mode="before", check_fields=False)
     @classmethod
-    def serialize_connection_id(cls, connection_id: str | ULID | None) -> str | None:
+    def serialize_connection_id(cls, value: Any) -> Any:
         """Custom serializer that can handle ULIDs."""
-        if connection_id is None:
-            return None
-        return str(connection_id)
+        if isinstance(value, ULID):
+            return str(value)
+        return value
 
 
 class RepositoryParams(BaseAPISpec):

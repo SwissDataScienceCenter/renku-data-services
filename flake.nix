@@ -154,6 +154,7 @@
         rclone-sdsc
         azure-cli
         kind
+        redocly
         (writeShellScriptBin "pyfix" ''
           poetry run ruff check --fix
           poetry run ruff format

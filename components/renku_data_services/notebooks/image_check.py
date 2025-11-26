@@ -24,6 +24,11 @@ from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.connected_services.models import ImageProvider, OAuth2Client, OAuth2Connection
+from renku_data_services.connected_services.oauth_http import (
+    OAuthHttpClientFactory,
+    OAuthHttpError,
+    OAuthHttpFactoryError,
+)
 from renku_data_services.errors import errors
 from renku_data_services.notebooks.api.classes.image import Image, ImageRepoDockerAPI
 from renku_data_services.notebooks.config import NotebooksConfig
@@ -83,9 +88,15 @@ class CheckResult:
 class ImageCheckRepository:
     """Repository for checking session images with rich responses."""
 
-    def __init__(self, nb_config: NotebooksConfig, connected_services_repo: ConnectedServicesRepository) -> None:
+    def __init__(
+        self,
+        nb_config: NotebooksConfig,
+        connected_services_repo: ConnectedServicesRepository,
+        oauth_client_factory: OAuthHttpClientFactory,
+    ) -> None:
         self.nb_config = nb_config
         self.connected_services_repo = connected_services_repo
+        self.oauth_client_factory = oauth_client_factory
 
     async def check_image(self, user: APIUser, gitlab_user: APIUser | None, image: Image) -> CheckResult:
         """Check access to the given image and provide image and access details."""
@@ -120,7 +131,16 @@ class ImageCheckRepository:
 
         if status_code != 200 and connection is not None:
             try:
-                await self.connected_services_repo.get_oauth2_connected_account(connection.id, user)
+                client = await self.oauth_client_factory.for_user_connection(user, connection.id)
+                match client:
+                    case OAuthHttpFactoryError() as err:
+                        logger.info(f"Unable to obtain oauth client: {err}")
+                        unauth_error = errors.UnauthorizedError(message=f"Unable to obtain oauth client: {err}")
+                    case _:
+                        account = await client.get_connected_account()
+                        if isinstance(account, OAuthHttpError):
+                            logger.info(f"Error getting connected account: {account}")
+                            unauth_error = errors.UnauthorizedError(message=f"Error getting oauth account: {account}")
             except errors.UnauthorizedError as e:
                 logger.info(f"Error getting connected account: {e}")
                 unauth_error = e
