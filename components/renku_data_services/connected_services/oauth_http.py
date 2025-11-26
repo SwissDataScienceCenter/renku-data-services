@@ -247,7 +247,6 @@ class _SafeAsyncOAuthClient(AsyncOAuth2Client):  # type: ignore[misc]
                     self.token = updated_token
 
 
-
 class DefaultOAuthClient(OAuthHttpClient):
     """The default oauth-http client."""
 
