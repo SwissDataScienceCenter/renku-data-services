@@ -28,7 +28,7 @@ jobs:
       image_repository: ${{ steps.docker_image.outputs.image_repository }}
       image_tag: ${{ steps.docker_image.outputs.image_tag }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Docker image metadata
@@ -74,7 +74,7 @@ jobs:
     needs:
       - build-devcontainer
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - uses: actions/cache/restore@v4
@@ -101,7 +101,7 @@ jobs:
       - build-devcontainer
       - style-checks
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - uses: actions/cache/restore@v4
@@ -151,7 +151,7 @@ jobs:
       - build-devcontainer
       - style-checks
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - uses: actions/cache/restore@v4
@@ -239,7 +239,7 @@ jobs:
             name: data-tasks
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - name: Docker meta ${{ matrix.service }}
         id: meta
         uses: docker/metadata-action@v5
