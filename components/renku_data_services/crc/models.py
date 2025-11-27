@@ -303,7 +303,7 @@ class UnsavedResourcePool:
     public: bool = False
     remote: RemoteConfigurationFirecrest | None = None
     cluster_id: ClusterId | None = None
-    platform: RuntimePlatform | None = None
+    platform: RuntimePlatform
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -350,7 +350,7 @@ class ResourcePoolPatch:
     public: bool | None = None
     remote: RemoteConfigurationPatch | None = None
     cluster_id: ClusterId | ResetType | None = None
-    platform: RuntimePlatform | ResetType | None = None
+    platform: RuntimePlatform | None = None
 
 
 class RemoteConfigurationKind(StrEnum):

@@ -4,17 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from sqlalchemy import (
-    JSON,
-    BigInteger,
-    Column,
-    Enum,
-    Identity,
-    Integer,
-    MetaData,
-    String,
-    Table,
-)
+from sqlalchemy import JSON, BigInteger, Column, Enum, Identity, Integer, MetaData, String, Table, literal
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
@@ -24,7 +14,6 @@ import renku_data_services.base_models as base_models
 from renku_data_services.app_config import logging
 from renku_data_services.connected_services import orm as cs_schemas
 from renku_data_services.crc import models
-from renku_data_services.crc.constants import DEFAULT_RUNTIME_PLATFORM
 from renku_data_services.crc.models import ClusterSettings, SavedClusterSettings, SessionProtocol
 from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import ClusterId
@@ -265,8 +254,8 @@ class ResourcePoolORM(BaseORM):
     cluster: Mapped[Optional[ClusterORM]] = relationship(viewonly=True, default=None, lazy="selectin", init=False)
 
     # NOTE: we reuse the "build_platform" enum type here
-    platform: Mapped[models.RuntimePlatform | None] = mapped_column(
-        Enum(models.RuntimePlatform, name="build_platform"), default=None, server_default=None, nullable=True
+    platform: Mapped[models.RuntimePlatform] = mapped_column(
+        Enum(models.RuntimePlatform, name="build_platform"), default=None, server_default=literal("linux_amd64")
     )
 
     @classmethod
@@ -332,7 +321,7 @@ class ResourcePoolORM(BaseORM):
             default=self.default,
             remote=remote,
             cluster=cluster,
-            platform=self.platform or DEFAULT_RUNTIME_PLATFORM,
+            platform=self.platform,
         )
 
     def _dump_remote(self) -> models.RemoteConfigurationFirecrest | None:

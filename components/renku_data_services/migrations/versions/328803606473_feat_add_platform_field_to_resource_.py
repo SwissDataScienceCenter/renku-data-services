@@ -19,7 +19,12 @@ depends_on = None
 def upgrade() -> None:
     op.add_column(
         "resource_pools",
-        sa.Column("platform", sa.Enum("linux_amd64", "linux_arm64", name="build_platform"), nullable=True),
+        sa.Column(
+            "platform",
+            sa.Enum("linux_amd64", "linux_arm64", name="build_platform"),
+            server_default=sa.literal("linux_amd64"),
+            nullable=False,
+        ),
         schema="resource_pools",
     )
 
