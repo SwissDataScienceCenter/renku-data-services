@@ -150,6 +150,19 @@ async def test_get_one_repository_not_found(
 
 
 @pytest.mark.asyncio
+async def test_get_one_repository_no_url(
+    oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_connection
+):
+    _, res = await oauth2_test_client.get("/api/data/repository?url=", headers=user_headers)
+
+    assert res.status_code == 422, res.text
+    assert res.json is not None
+    result = res.json
+    assert result.get("error", {}).get("message") == "A repository url is required"
+    assert result.get("error", {}).get("code") == 1422
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "repository_url,error_code",
     [
