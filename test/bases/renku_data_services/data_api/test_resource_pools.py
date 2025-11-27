@@ -1353,8 +1353,7 @@ async def test_resource_pool_patch_platform(
     put = deepcopy(resource_pool_payload_2)
     put["quota"] = rp["quota"]
     put["classes"] = rp["classes"]
-    if "platform" in put:
-        del put["platform"]
+    put["platform"] = "linux/amd64"
 
     _, res = await sanic_client.put(f"/api/data/resource_pools/{rp_id}", headers=admin_headers, json=put)
     assert res.status_code == 200, res.text
