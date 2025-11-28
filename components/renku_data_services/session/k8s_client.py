@@ -213,6 +213,11 @@ class ShipwrightClient:
         k8s_build = await self.get_build_run(name=buildrun_name, user_id=user_id)
 
         if k8s_build is None:
+            # Report this condition to Sentry: we expected to find a buildrun object but found none
+            try:
+                raise errors.ProgrammingError(message=f"Build run {buildrun_name} not found.")
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
             return models.ShipwrightBuildStatusUpdate(
                 update=models.ShipwrightBuildStatusUpdateContent(status=models.BuildStatus.failed)
             )
