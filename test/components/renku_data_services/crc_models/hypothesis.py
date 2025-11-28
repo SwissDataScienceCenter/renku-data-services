@@ -6,6 +6,7 @@ from hypothesis import strategies as st
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.crc import models
+from renku_data_services.crc.constants import DEFAULT_RUNTIME_PLATFORM
 
 
 def make_cpu_float(data: dict[str, Union[float, int]]) -> dict[str, int | float]:
@@ -99,6 +100,7 @@ def rp_strat(draw):
             public=public,
             idle_threshold=idle_threshold,
             hibernation_threshold=hibernation_threshold,
+            platform=DEFAULT_RUNTIME_PLATFORM,
         )
     except errors.ValidationError:
         assume(False)
