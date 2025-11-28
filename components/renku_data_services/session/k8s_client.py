@@ -4,6 +4,7 @@ from collections.abc import AsyncIterable
 from typing import TYPE_CHECKING
 
 import httpx
+import sentry_sdk
 from kr8s import NotFoundError, ServerError
 from kr8s.asyncio.objects import APIObject, Pod
 
@@ -274,6 +275,13 @@ class ShipwrightClient:
                 )
             )
         else:
+            # Report the failed buildrun to Sentry
+            try:
+                raise errors.ProgrammingError(message=f"Build run {buildrun_name} detected as failed.")
+            except Exception as e:
+                scope = sentry_sdk.get_current_scope()
+                scope.set_context(key="build_run", value=k8s_build.model_dump(mode="json"))
+                scope.capture_exception(e)
             return models.ShipwrightBuildStatusUpdate(
                 update=models.ShipwrightBuildStatusUpdateContent(
                     status=models.BuildStatus.failed,
