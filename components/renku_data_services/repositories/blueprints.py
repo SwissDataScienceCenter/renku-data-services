@@ -10,6 +10,7 @@ from renku_data_services.base_api.auth import authenticate_2
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.etag import extract_if_none_match
 from renku_data_services.base_models.validation import validated_json
+from renku_data_services.errors.errors import ValidationError
 from renku_data_services.repositories import apispec, models
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.repositories.git_url import GitUrlError
@@ -37,7 +38,7 @@ class RepositoriesBP(CustomBlueprint):
             query_args: dict[str, str] = req.get_args() or {}
             repository_url = query_args.get("url")
             if repository_url is None:
-                return HTTPResponse(status=422)
+                raise ValidationError(message="A repository url is required")
 
             result = await self.git_repositories_repo.get_repository(
                 repository_url=repository_url,
