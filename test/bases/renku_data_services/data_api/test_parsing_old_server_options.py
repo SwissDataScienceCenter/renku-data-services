@@ -3,6 +3,7 @@ from io import StringIO
 from yaml import safe_load
 
 from renku_data_services.crc import models
+from renku_data_services.crc.constants import DEFAULT_RUNTIME_PLATFORM
 from renku_data_services.crc.server_options import (
     ServerOptions,
     ServerOptionsDefaults,
@@ -80,6 +81,7 @@ expected_rp = models.UnsavedResourcePool(
     ],
     default=True,
     public=True,
+    platform=DEFAULT_RUNTIME_PLATFORM,
 )
 
 

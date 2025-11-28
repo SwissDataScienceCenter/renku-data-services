@@ -488,6 +488,7 @@ async def test_post_session_launcher_with_environment_build(
     assert environment.get("environment_kind") == "CUSTOM"
     assert environment.get("build_parameters") == {
         "repository": "https://github.com/some/repo",
+        "platforms": ["linux/amd64"],
         "builder_variant": "python",
         "frontend_variant": "vscodium",
     }
@@ -530,6 +531,7 @@ async def test_post_session_launcher_with_advanced_environment_build(
     assert environment.get("environment_kind") == "CUSTOM"
     assert environment.get("build_parameters") == {
         "repository": "https://github.com/some/repo",
+        "platforms": ["linux/amd64"],
         "builder_variant": "python",
         "frontend_variant": "vscodium",
         "repository_revision": "some-branch",
@@ -789,6 +791,7 @@ async def test_patch_session_launcher_environment(
     assert environment.get("environment_kind") == "CUSTOM"
     assert environment.get("build_parameters") == {
         "repository": "https://github.com/some/repo",
+        "platforms": ["linux/amd64"],
         "builder_variant": "python",
         "frontend_variant": "vscodium",
     }
@@ -857,6 +860,7 @@ async def test_patch_session_launcher_environment_with_build_parameters(
     assert environment.get("environment_kind") == "CUSTOM"
     assert environment.get("build_parameters") == {
         "repository": "https://github.com/some/repo",
+        "platforms": ["linux/amd64"],
         "builder_variant": "python",
         "frontend_variant": "vscodium",
     }
@@ -890,6 +894,7 @@ async def test_patch_session_launcher_environment_with_build_parameters(
     assert environment.get("environment_kind") == "CUSTOM"
     assert environment.get("build_parameters") == {
         "repository": "new_repo",
+        "platforms": ["linux/amd64"],
         "builder_variant": "python",
         "frontend_variant": "vscodium",
     }
@@ -1155,6 +1160,7 @@ async def test_patch_session_launcher_with_advanced_environment_build(
     assert environment.get("environment_kind") == "CUSTOM"
     assert environment.get("build_parameters") == {
         "repository": "https://github.com/some/repo",
+        "platforms": ["linux/amd64"],
         "builder_variant": "python",
         "frontend_variant": "vscodium",
     }
@@ -1162,7 +1168,13 @@ async def test_patch_session_launcher_with_advanced_environment_build(
     assert environment.get("container_image") == "image:unknown-at-the-moment"
 
     patch_payload = {
-        "environment": {"build_parameters": {"context_dir": "some/path", "repository_revision": "some-branch"}}
+        "environment": {
+            "build_parameters": {
+                "context_dir": "some/path",
+                "repository_revision": "some-branch",
+                "platforms": ["linux/arm64"],
+            }
+        }
     }
     _, res = await sanic_client.patch(
         f"/api/data/session_launchers/{launcher_id}", headers=user_headers, json=patch_payload
@@ -1179,6 +1191,7 @@ async def test_patch_session_launcher_with_advanced_environment_build(
     assert environment.get("environment_kind") == "CUSTOM"
     assert environment.get("build_parameters") == {
         "repository": "https://github.com/some/repo",
+        "platforms": ["linux/arm64"],
         "builder_variant": "python",
         "frontend_variant": "vscodium",
         "context_dir": "some/path",
@@ -1210,6 +1223,7 @@ async def test_patch_session_launcher_with_advanced_environment_build(
     assert environment.get("environment_kind") == "CUSTOM"
     assert environment.get("build_parameters") == {
         "repository": "https://github.com/some/repo",
+        "platforms": ["linux/arm64"],
         "builder_variant": "python",
         "frontend_variant": "vscodium",
         "repository_revision": "some-branch",
@@ -1219,7 +1233,12 @@ async def test_patch_session_launcher_with_advanced_environment_build(
 
     patch_payload = {
         "environment": {
-            "build_parameters": {"frontend_variant": "jupyterlab", "context_dir": "", "repository_revision": ""}
+            "build_parameters": {
+                "frontend_variant": "jupyterlab",
+                "context_dir": "",
+                "repository_revision": "",
+                "platforms": [],
+            }
         }
     }
     _, res = await sanic_client.patch(
@@ -1237,6 +1256,7 @@ async def test_patch_session_launcher_with_advanced_environment_build(
     assert environment.get("environment_kind") == "CUSTOM"
     assert environment.get("build_parameters") == {
         "repository": "https://github.com/some/repo",
+        "platforms": ["linux/amd64"],
         "builder_variant": "python",
         "frontend_variant": "jupyterlab",
     }
