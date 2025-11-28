@@ -5,7 +5,6 @@ from copy import deepcopy
 from typing import Any, Final, cast
 
 from renku_data_services import errors
-from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER, SCICAT_V1_PROVIDER
 
 BANNED_STORAGE: Final[set[str]] = {
     "alias",
@@ -355,8 +354,9 @@ def apply_patches(spec: list[dict[str, Any]]) -> None:
         __patch_schema_remove_oauth_propeties,
         __patch_polybox_storage,
         __patch_switchdrive_storage,
-        __add_custom_doi_s3_provider("Envidat", "Envidat data provider", "doi"),
-        __add_custom_doi_s3_provider("SciCat", "SciCat data provider", "doi"),
+        # __add_custom_doi_s3_provider("Envidat", "Envidat data provider", ENVIDAT_V1_PROVIDER),
+        # TODO: Enable Scicat when it is ready in production
+        # __add_custom_doi_s3_provider("SciCat", "SciCat data provider", SCICAT_V1_PROVIDER),
         __patch_schema_remove_banned_sftp_options,
         __patch_schema_add_openbis_type,
     ]

@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from renku_data_services import errors
 from renku_data_services.app_config import logging
+from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER
 from renku_data_services.storage.rclone_patches import BANNED_SFTP_OPTIONS, BANNED_STORAGE, apply_patches
 
 logger = logging.getLogger(__name__)
@@ -94,6 +95,7 @@ class RCloneValidator:
         # Obscure configuration and transform if needed
         obscured_config = await self.obscure_config(self.get_real_configuration(configuration))
         transformed_config = self.inject_default_values(self.transform_polybox_switchdriver_config(obscured_config))
+        transformed_config = self.transform_envidat_config(transformed_config)
 
         with tempfile.NamedTemporaryFile(mode="w+", delete=False, encoding="utf-8") as f:
             config = "\n".join(f"{k}={v}" for k, v in transformed_config.items())
@@ -252,6 +254,17 @@ class RCloneValidator:
         # Extract the user from the public link
         configuration["user"] = public_link.split("/")[-1]
 
+        return configuration
+
+    @staticmethod
+    def transform_envidat_config(configuration: RCloneConfig | dict[str, Any]) -> RCloneConfig | dict[str, Any]:
+        """Used to convert the configuration for Envidat into a real configuration."""
+        storage_type = configuration.get("type")
+        if storage_type is None:
+            return configuration
+        if storage_type != ENVIDAT_V1_PROVIDER:
+            return configuration
+        configuration["type"] = "doi"
         return configuration
 
 
