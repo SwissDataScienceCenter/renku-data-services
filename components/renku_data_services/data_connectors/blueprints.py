@@ -503,6 +503,9 @@ class DataConnectorsBP(CustomBlueprint):
                 description=data_connector.description,
                 etag=data_connector.etag,
                 keywords=data_connector.keywords or [],
+                doi=data_connector.doi,
+                publisher_name=data_connector.publisher_name,
+                publisher_url=data_connector.publisher_url,
             )
         return dict(
             id=str(data_connector.id),

@@ -87,6 +87,9 @@ class GlobalDataConnector(BaseDataConnector):
     id: ULID
     namespace: Final[None] = field(default=None, init=False)
     updated_at: datetime
+    publisher_name: str | None = None
+    publisher_url: str | None = None
+    doi: DOI | None = None
 
     @property
     def etag(self) -> str:
@@ -99,6 +102,9 @@ class UnsavedGlobalDataConnector(BaseDataConnector):
     """Global data connector model."""
 
     namespace: None = None
+    publisher_name: str | None = None
+    publisher_url: str | None = None
+    doi: DOI | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -106,7 +112,6 @@ class PrevalidatedGlobalDataConnector:
     """Global data connector model that is unsaved but has been pre-validated."""
 
     data_connector: UnsavedGlobalDataConnector
-    doi: DOI
     rclone_metadata: RCloneDOIMetadata | None = None
 
 

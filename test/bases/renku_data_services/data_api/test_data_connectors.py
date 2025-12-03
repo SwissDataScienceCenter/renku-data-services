@@ -2497,8 +2497,31 @@ async def test_validate_envidat_data_connector() -> None:
     assert config["provider"] == "Other"
     assert config["endpoint"].find("zhdk.cloud.switch.ch") >= 0
     assert res.data_connector.storage.source_path == "/envidat-doi/10.16904_12"
+    assert res.data_connector.doi is not None
+    assert res.data_connector.publisher_url is not None
+    assert res.data_connector.publisher_name is not None
     res = await core.validate_unsaved_global_data_connector(res, validator)
     assert res.description is not None
     assert len(res.description) > 0
     assert res.keywords is not None
     assert len(res.keywords) > 0
+    assert res.doi is not None
+    assert res.publisher_url is not None
+    assert res.publisher_name is not None
+
+
+async def test_add_envidat_data_connector(sanic_client: SanicASGITestClient, user_headers) -> None:
+    payload = {
+        "storage": {
+            "configuration": {"type": "doi", "doi": "10.16904/envidat.716"},
+            "source_path": "/",
+            "target_path": "/",
+            "readonly": True,
+        }
+    }
+    _, res = await sanic_client.post("/api/data/data_connectors/global", json=payload, headers=user_headers)
+    assert res.status_code == 201
+    assert res.json.get("doi") is not None
+    assert res.json.get("publisher_name") is not None
+    assert res.json.get("publisher_name").lower() == "envidat"
+    assert res.json.get("publisher_url") is not None

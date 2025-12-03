@@ -1,14 +1,18 @@
 """Models for DOIs."""
 
+from __future__ import annotations
+
 import re
 from dataclasses import dataclass
 from typing import Any, Self
 from urllib.parse import urlparse
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from renku_data_services.errors import errors
+
+_clnt = httpx.AsyncClient(timeout=5, follow_redirects=True)
 
 
 class DOI(str):
@@ -45,17 +49,35 @@ class DOI(str):
         """Return a proper URL from the doi."""
         return f"https://doi.org/{self}"
 
+    @property
+    def prefix(self) -> str:
+        """The prefix of the doi, i.e. if the doi is 10.7910/DVN/XLX9F8, then the prefix is 10.7910."""
+        return self.split("/")[0]
+
     async def resolve_host(self) -> str | None:
         """Resolves the DOI and returns the hostname of the url where the redirect leads."""
-        clnt = httpx.AsyncClient(timeout=5, follow_redirects=True)
-        async with clnt:
-            try:
-                res = await clnt.get(self.url)
-            except httpx.HTTPError:
-                return None
+        try:
+            res = await _clnt.get(self.url)
+        except httpx.HTTPError:
+            return None
         if res.status_code != 200:
             return None
         return res.url.host
+
+    async def metadata(self) -> SchemaOrgDataset | None:
+        """Get information about the publisher of the DOI."""
+        try:
+            res = await _clnt.get(self.url, headers={"Accept": "application/vnd.schemaorg.ld+json"})
+        except httpx.HTTPError:
+            return None
+        if res.status_code != 200:
+            return None
+        try:
+            output = SchemaOrgDataset.model_validate_json(res.text)
+        except ValidationError:
+            return None
+        else:
+            return output
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -130,15 +152,37 @@ class SchemaOrgDistribution(BaseModel):
 
 
 class SchemaOrgDataset(BaseModel):
-    """A very limited and partial spec of a schema.org Dataset used by Scicat and Envidat."""
+    """A very limited and partial spec of a schema.org Dataset used by Scicat, Envidat, doi.org."""
 
     model_config = ConfigDict(extra="ignore")
     distribution: list[SchemaOrgDistribution] = Field(default_factory=list)
     name: str = Field()
     description: str | None = None
     raw_keywords: str = Field(alias="keywords", default="")
+    publisher: SchemaOrgPublisher | None = None
 
     @property
     def keywords(self) -> list[str]:
         """Split the single keywords string into a list."""
         return [i.strip() for i in self.raw_keywords.split(",")]
+
+
+class SchemaOrgPublisher(BaseModel):
+    """The schema.org publisher field in a dataset."""
+
+    model_config = ConfigDict(extra="ignore")
+    id: str | None = Field(alias="@id", default=None)
+    type: str | None = Field(alias="@type", default=None)
+    name: str
+
+    @property
+    def url(self) -> str | None:
+        """Try to see if the id is a URL, and if so return it."""
+        if self.id is None:
+            return None
+        parsed = urlparse(self.id)
+        if not parsed.scheme or not parsed.netloc:
+            return None
+        if parsed.scheme not in ["http", "https"]:
+            return None
+        return self.id.rstrip("/")

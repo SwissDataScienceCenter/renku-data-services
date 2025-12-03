@@ -193,6 +193,7 @@ async def prevalidate_unsaved_global_data_connector(
         storage.configuration["provider"] = rclone_metadata.provider
 
     slug = base_models.Slug.from_name(doi_uri).value
+    doi_metadata = await doi.metadata()
     return models.PrevalidatedGlobalDataConnector(
         data_connector=models.UnsavedGlobalDataConnector(
             name=doi_uri,
@@ -202,8 +203,14 @@ async def prevalidate_unsaved_global_data_connector(
             storage=storage,
             description=None,
             keywords=[],
+            doi=doi,
+            publisher_url=None
+            if doi_metadata is None or doi_metadata.publisher is None
+            else doi_metadata.publisher.url,
+            publisher_name=None
+            if doi_metadata is None or doi_metadata.publisher is None
+            else doi_metadata.publisher.name,
         ),
-        doi=doi,
         rclone_metadata=rclone_metadata,
     )
 
@@ -214,8 +221,11 @@ async def validate_unsaved_global_data_connector(
 ) -> models.UnsavedGlobalDataConnector:
     """Validate the data connector."""
     data_connector = prevalidated_dc.data_connector
-    doi = prevalidated_dc.doi
+    doi = prevalidated_dc.data_connector.doi
     rclone_metadata = prevalidated_dc.rclone_metadata
+
+    if not doi:
+        raise errors.ValidationError(message="Global data connectors require a DOI.")
 
     # Check that we can list the files in the DOI
     connection_result = await validator.test_connection(
@@ -281,6 +291,9 @@ async def validate_unsaved_global_data_connector(
         storage=storage,
         description=description or None,
         keywords=keywords,
+        doi=data_connector.doi,
+        publisher_name=data_connector.publisher_name,
+        publisher_url=data_connector.publisher_url,
     )
 
 
