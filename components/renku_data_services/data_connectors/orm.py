@@ -13,6 +13,7 @@ from renku_data_services.authz import models as authz_models
 from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
 from renku_data_services.data_connectors import models
 from renku_data_services.data_connectors.apispec import Visibility
+from renku_data_services.data_connectors.doi.models import DOI
 from renku_data_services.project.orm import ProjectORM
 from renku_data_services.secrets.orm import SecretORM
 from renku_data_services.users.orm import UserORM
@@ -97,6 +98,9 @@ class DataConnectorORM(BaseORM):
         init=False,
         viewonly=True,
     )
+    doi: Mapped[str | None] = mapped_column(default=None, server_default=None, index=True, nullable=True)
+    publisher_name: Mapped[str | None] = mapped_column(default=None, server_default=None, index=True, nullable=True)
+    publisher_url: Mapped[str | None] = mapped_column(default=None, server_default=None, index=True, nullable=True)
 
     def dump(self) -> models.DataConnector | models.GlobalDataConnector:
         """Create a data connector model from the DataConnectorORM."""
@@ -112,6 +116,9 @@ class DataConnectorORM(BaseORM):
                 storage=self._dump_storage(),
                 description=self.description,
                 keywords=self.keywords,
+                publisher_name=self.publisher_name,
+                publisher_url=self.publisher_url,
+                doi=DOI(self.doi) if self.doi is not None else None,
             )
 
         elif self.slug is None:
