@@ -17,7 +17,7 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.notifications import apispec
 from renku_data_services.notifications.core import (
-    transform_alertmanager_webhook,
+    alertmanager_webhook_to_unsaved_alerts,
     validate_alert_patch,
     validate_unsaved_alert,
 )
@@ -80,7 +80,7 @@ class NotificationsBP(CustomBlueprint):
         async def _post_webhook_alertmanager(
             _: Request, user: base_models.APIUser, body: apispec.AlertmanagerWebhook
         ) -> JSONResponse:
-            firing_alerts, resolved_alerts = transform_alertmanager_webhook(body)
+            firing_alerts, resolved_alerts = alertmanager_webhook_to_unsaved_alerts(body)
             await self.notifications_repo.process_alertmanager_webhook(
                 user=user, firing_alerts=firing_alerts, resolved_alerts=resolved_alerts
             )

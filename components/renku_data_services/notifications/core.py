@@ -63,7 +63,7 @@ def transform_alert_to_unsaved_alert(alert: apispec.AlertmanagerAlert) -> models
     )
 
 
-def transform_alertmanager_webhook(
+def alertmanager_webhook_to_unsaved_alerts(
     webhook: apispec.AlertmanagerWebhook,
 ) -> tuple[list[models.UnsavedAlert], list[models.UnsavedAlert]]:
     """Transform Alertmanager webhook payload to a tuple of firing and resolved UnsavedAlerts."""
