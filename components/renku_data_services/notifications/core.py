@@ -37,7 +37,8 @@ def transform_alert_to_unsaved_alert(alert: apispec.AlertmanagerAlert) -> models
 
     session_name = labels.get("statefulset")
     if not session_name:
-        session_name = None
+        # We discard alerts without a session for now
+        return None
 
     title = annotations.get("title")
     if not title:
