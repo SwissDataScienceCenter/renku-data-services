@@ -14,7 +14,9 @@ from renku_data_services.base_models.core import (
     NamespacePath,
     ProjectPath,
 )
+from renku_data_services.data_connectors.doi.models import DOI
 from renku_data_services.namespace.models import GroupNamespace, ProjectNamespace, UserNamespace
+from renku_data_services.storage.rclone import RCloneDOIMetadata
 from renku_data_services.utils.etag import compute_etag_from_fields
 
 if TYPE_CHECKING:
@@ -85,6 +87,9 @@ class GlobalDataConnector(BaseDataConnector):
     id: ULID
     namespace: Final[None] = field(default=None, init=False)
     updated_at: datetime
+    publisher_name: str | None = None
+    publisher_url: str | None = None
+    doi: DOI | None = None
 
     @property
     def etag(self) -> str:
@@ -97,6 +102,17 @@ class UnsavedGlobalDataConnector(BaseDataConnector):
     """Global data connector model."""
 
     namespace: None = None
+    publisher_name: str | None = None
+    publisher_url: str | None = None
+    doi: DOI | None = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class PrevalidatedGlobalDataConnector:
+    """Global data connector model that is unsaved but has been pre-validated."""
+
+    data_connector: UnsavedGlobalDataConnector
+    rclone_metadata: RCloneDOIMetadata | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
