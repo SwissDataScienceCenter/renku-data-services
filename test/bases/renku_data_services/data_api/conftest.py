@@ -625,6 +625,39 @@ async def create_data_connector_model(
 
 
 @pytest_asyncio.fixture
+def create_openbis_data_connector(sanic_client: SanicASGITestClient, regular_user: UserInfo, user_headers):
+    async def create_openbis_data_connector_helper(
+        name: str, session_token: str, user: UserInfo | None = None, headers: dict[str, str] | None = None, **payload
+    ) -> Any:
+        user = user or regular_user
+        headers = headers or user_headers
+        dc_payload = {
+            "name": name,
+            "description": "An openBIS data connector",
+            "visibility": "private",
+            "namespace": user.namespace.path.serialize(),
+            "storage": {
+                "configuration": {
+                    "type": "openbis",
+                    "host": "openbis-eln-lims.ethz.ch",  # Public openBIS demo instance.
+                    "session_token": session_token,
+                },
+                "source_path": "/",
+                "target_path": "my/target",
+            },
+            "keywords": ["keyword 1", "keyword.2", "keyword-3", "KEYWORD_4"],
+        }
+        dc_payload.update(payload)
+
+        _, response = await sanic_client.post("/api/data/data_connectors", headers=headers, json=dc_payload)
+
+        assert response.status_code == 201, response.text
+        return response.json
+
+    return create_openbis_data_connector_helper
+
+
+@pytest_asyncio.fixture
 async def create_data_connector_and_link_project(
     regular_user, user_headers, admin_user, admin_headers, create_data_connector, link_data_connector
 ):

@@ -261,6 +261,66 @@ def __patch_schema_remove_banned_sftp_options(spec: list[dict[str, Any]]) -> Non
     sftp["Options"] = options
 
 
+def __patch_schema_add_openbis_type(spec: list[dict[str, Any]]) -> None:
+    """Adds a fake type to help with setting up openBIS storage."""
+    spec.append(
+        {
+            "Name": "openbis",
+            "Description": "openBIS",
+            "Prefix": "openbis",
+            "Options": [
+                {
+                    "Name": "host",
+                    "Help": 'openBIS host to connect to.\n\nE.g. "openbis-eln-lims.ethz.ch".',
+                    "Provider": "",
+                    "Default": "",
+                    "Value": None,
+                    "Examples": [
+                        {
+                            "Value": "openbis-eln-lims.ethz.ch",
+                            "Help": "Public openBIS demo instance",
+                            "Provider": "",
+                        },
+                    ],
+                    "ShortOpt": "",
+                    "Hide": 0,
+                    "Required": True,
+                    "IsPassword": False,
+                    "NoPrefix": False,
+                    "Advanced": False,
+                    "Exclusive": False,
+                    "Sensitive": False,
+                    "DefaultStr": "",
+                    "ValueStr": "",
+                    "Type": "string",
+                },
+                {
+                    "Name": "session_token",
+                    "Help": "openBIS session token",
+                    "Provider": "",
+                    "Default": "",
+                    "Value": None,
+                    "ShortOpt": "",
+                    "Hide": 0,
+                    "Required": True,
+                    "IsPassword": True,
+                    "NoPrefix": False,
+                    "Advanced": False,
+                    "Exclusive": False,
+                    "Sensitive": True,
+                    "DefaultStr": "",
+                    "ValueStr": "",
+                    "Type": "string",
+                },
+            ],
+            "CommandHelp": None,
+            "Aliases": None,
+            "Hide": False,
+            "MetadataInfo": None,
+        }
+    )
+
+
 def apply_patches(spec: list[dict[str, Any]]) -> None:
     """Apply patches to RClone schema."""
     patches = [
@@ -272,6 +332,7 @@ def apply_patches(spec: list[dict[str, Any]]) -> None:
         __patch_polybox_storage,
         __patch_switchdrive_storage,
         __patch_schema_remove_banned_sftp_options,
+        __patch_schema_add_openbis_type,
     ]
 
     for patch in patches:

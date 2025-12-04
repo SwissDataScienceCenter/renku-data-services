@@ -18347,5 +18347,49 @@
       ]),
       'prefix': 'switchDrive',
     }),
+    dict({
+      'description': 'openBIS',
+      'name': 'openbis',
+      'options': list([
+        dict({
+          'advanced': False,
+          'default': '',
+          'default_str': '',
+          'examples': list([
+            dict({
+              'help': 'Public openBIS demo instance',
+              'provider': '',
+              'value': 'openbis-eln-lims.ethz.ch',
+            }),
+          ]),
+          'exclusive': False,
+          'help': '''
+            openBIS host to connect to.
+            
+            E.g. "openbis-eln-lims.ethz.ch".
+          ''',
+          'ispassword': False,
+          'name': 'host',
+          'provider': '',
+          'required': True,
+          'sensitive': False,
+          'type': 'string',
+        }),
+        dict({
+          'advanced': False,
+          'default': '',
+          'default_str': '',
+          'exclusive': False,
+          'help': 'openBIS session token',
+          'ispassword': True,
+          'name': 'session_token',
+          'provider': '',
+          'required': True,
+          'sensitive': True,
+          'type': 'string',
+        }),
+      ]),
+      'prefix': 'openbis',
+    }),
   ])
 # ---
