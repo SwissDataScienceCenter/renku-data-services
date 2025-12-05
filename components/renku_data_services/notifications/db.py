@@ -225,7 +225,6 @@ class NotificationsRepository:
                 matching_alerts = await self.get_alerts_by_properties(
                     user=user,
                     alert_id=None,
-                    user_id=alert.user_id,
                     session_name=alert.session_name,
                     title=alert.title,
                     message=alert.message,

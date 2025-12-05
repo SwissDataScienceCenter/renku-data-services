@@ -55,8 +55,8 @@ from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.notebooks.api.classes.data_service import DummyGitProviderHelper, GitProviderHelper
 from renku_data_services.notebooks.config import GitProviderHelperProto, get_clusters
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
-from renku_data_services.notifications.db import NotificationsRepository
 from renku_data_services.notebooks.image_check import ImageCheckRepository
+from renku_data_services.notifications.db import NotificationsRepository
 from renku_data_services.platform.db import PlatformRepository, UrlRedirectRepository
 from renku_data_services.project.db import (
     ProjectMemberRepository,
