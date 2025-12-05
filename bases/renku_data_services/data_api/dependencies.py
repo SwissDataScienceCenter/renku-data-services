@@ -8,7 +8,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from authlib.integrations.httpx_client import AsyncOAuth2Client
 from yaml import safe_load
 
 import renku_data_services.base_models as base_models
@@ -26,6 +25,7 @@ from renku_data_services.authn.gitlab import EmptyGitlabAuthenticator, GitlabAut
 from renku_data_services.authn.keycloak import KcUserStore, KeycloakAuthenticator
 from renku_data_services.authz.authz import Authz
 from renku_data_services.connected_services.db import ConnectedServicesRepository
+from renku_data_services.connected_services.oauth_http import DefaultOAuthHttpClientFactory, OAuthHttpClientFactory
 from renku_data_services.crc import models as crc_models
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository, UserRepository
 from renku_data_services.crc.server_options import (
@@ -56,6 +56,7 @@ from renku_data_services.notebooks.api.classes.data_service import DummyGitProvi
 from renku_data_services.notebooks.config import GitProviderHelperProto, get_clusters
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
 from renku_data_services.notifications.db import NotificationsRepository
+from renku_data_services.notebooks.image_check import ImageCheckRepository
 from renku_data_services.platform.db import PlatformRepository, UrlRedirectRepository
 from renku_data_services.project.db import (
     ProjectMemberRepository,
@@ -140,18 +141,19 @@ class DependencyManager:
     data_connector_repo: DataConnectorRepository
     data_connector_secret_repo: DataConnectorSecretRepository
     cluster_repo: ClusterRepository
+    image_check_repo: ImageCheckRepository
     metrics_repo: MetricsRepository
     metrics: StagingMetricsService
     shipwright_client: ShipwrightClient | None
     url_redirect_repo: UrlRedirectRepository
     git_provider_helper: GitProviderHelperProto
     notifications_repo: NotificationsRepository
+    oauth_http_client_factory: OAuthHttpClientFactory
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
     default_resource_pool_file: str | None = None
     default_resource_pool: crc_models.UnsavedResourcePool = default_resource_pool
-    async_oauth2_client_class: type[AsyncOAuth2Client] = AsyncOAuth2Client
 
     @staticmethod
     @functools.cache
@@ -222,10 +224,14 @@ class DependencyManager:
         kc_api: IKeycloakAPI
         cluster_repo = ClusterRepository(session_maker=config.db.async_session_maker)
 
+        oauth_http_client_factory = DefaultOAuthHttpClientFactory(
+            config.secrets.encryption_key, config.db.async_session_maker
+        )
+
         connected_services_repo = ConnectedServicesRepository(
             session_maker=config.db.async_session_maker,
             encryption_key=config.secrets.encryption_key,
-            async_oauth2_client_class=cls.async_oauth2_client_class,
+            oauth_client_factory=oauth_http_client_factory,
         )
 
         if config.dummy_stores:
@@ -354,7 +360,7 @@ class DependencyManager:
         )
         git_repositories_repo = GitRepositoriesRepository(
             session_maker=config.db.async_session_maker,
-            connected_services_repo=connected_services_repo,
+            oauth_client_factory=oauth_http_client_factory,
             internal_gitlab_url=config.gitlab_url,
             enable_internal_gitlab=config.enable_internal_gitlab,
         )
@@ -375,6 +381,11 @@ class DependencyManager:
             user_repo=kc_user_repo,
             secret_service_public_key=config.secrets.public_key,
             authz=authz,
+        )
+        image_check_repo = ImageCheckRepository(
+            nb_config=config.nb_config,
+            connected_services_repo=connected_services_repo,
+            oauth_client_factory=oauth_http_client_factory,
         )
         search_reprovisioning = SearchReprovision(
             search_updates_repo=search_updates_repo,
@@ -418,6 +429,7 @@ class DependencyManager:
             data_connector_repo=data_connector_repo,
             data_connector_secret_repo=data_connector_secret_repo,
             cluster_repo=cluster_repo,
+            image_check_repo=image_check_repo,
             metrics_repo=metrics_repo,
             metrics=metrics,
             shipwright_client=shipwright_client,
@@ -426,4 +438,5 @@ class DependencyManager:
             url_redirect_repo=url_redirect_repo,
             git_provider_helper=git_provider_helper,
             notifications_repo=notifications_repo,
+            oauth_http_client_factory=oauth_http_client_factory,
         )

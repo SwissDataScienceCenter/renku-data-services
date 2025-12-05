@@ -51,7 +51,7 @@ jobs:
       id-token: write
     if: github.event.action != 'closed' && needs.check-deploy.outputs.deploy == 'true'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: SwissDataScienceCenter/renku
           sparse-checkout: |

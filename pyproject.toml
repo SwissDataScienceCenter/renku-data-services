@@ -127,6 +127,9 @@ exclude = [
   "components/renku_data_services/notebooks/cr_amalthea_session.py",
   "components/renku_data_services/notebooks/cr_jupyter_server.py",
   "components/renku_data_services/session/cr_shipwright_buildrun.py",
+  "components/renku_data_services/notebooks/oci/image_config.py",
+  "components/renku_data_services/notebooks/oci/image_index.py",
+  "components/renku_data_services/notebooks/oci/image_manifest.py",
 ]
 
 [tool.ruff.format]

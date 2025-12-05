@@ -12,15 +12,15 @@ from renku_data_services.base_api.auth import authenticate, authenticate_2
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser, Authenticator
 from renku_data_services.base_models.metrics import MetricsService
-from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.connected_services.models import ConnectionStatus
+from renku_data_services.connected_services.oauth_http import OAuthHttpClientFactory
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
     DataConnectorSecretRepository,
 )
 from renku_data_services.errors import errors
-from renku_data_services.notebooks import apispec, core, image_check
+from renku_data_services.notebooks import apispec, core
 from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.schemas.config_server_options import ServerOptionsEndpointResponse
 from renku_data_services.notebooks.api.schemas.logs import ServerLogs
@@ -31,6 +31,7 @@ from renku_data_services.notebooks.core_sessions import (
     validate_session_post_request,
 )
 from renku_data_services.notebooks.errors.intermittent import AnonymousUserPatchError
+from renku_data_services.notebooks.image_check import ImageCheckRepository
 from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage.db import StorageRepository
@@ -196,18 +197,19 @@ class NotebooksNewBP(CustomBlueprint):
     authenticator: base_models.Authenticator
     internal_gitlab_authenticator: base_models.Authenticator
     nb_config: NotebooksConfig
-    project_repo: ProjectRepository
-    project_session_secret_repo: ProjectSessionSecretRepository
-    session_repo: SessionRepository
-    rp_repo: ResourcePoolRepository
-    storage_repo: StorageRepository
-    user_repo: UserRepo
+    cluster_repo: ClusterRepository
     data_connector_repo: DataConnectorRepository
     data_connector_secret_repo: DataConnectorSecretRepository
-    metrics: MetricsService
-    cluster_repo: ClusterRepository
-    connected_svcs_repo: ConnectedServicesRepository
     git_provider_helper: GitProviderHelperProto
+    oauth_client_factory: OAuthHttpClientFactory
+    image_check_repo: ImageCheckRepository
+    project_repo: ProjectRepository
+    project_session_secret_repo: ProjectSessionSecretRepository
+    rp_repo: ResourcePoolRepository
+    session_repo: SessionRepository
+    storage_repo: StorageRepository
+    user_repo: UserRepo
+    metrics: MetricsService
 
     def start(self) -> BlueprintFactoryResponse:
         """Start a session with the new operator."""
@@ -236,7 +238,7 @@ class NotebooksNewBP(CustomBlueprint):
                 session_repo=self.session_repo,
                 user_repo=self.user_repo,
                 metrics=self.metrics,
-                connected_svcs_repo=self.connected_svcs_repo,
+                image_check_repo=self.image_check_repo,
             )
             status = 201 if created else 200
             return json(session.as_apispec().model_dump(exclude_none=True, mode="json"), status)
@@ -303,7 +305,7 @@ class NotebooksNewBP(CustomBlueprint):
                 rp_repo=self.rp_repo,
                 session_repo=self.session_repo,
                 metrics=self.metrics,
-                connected_svcs_repo=self.connected_svcs_repo,
+                image_check_repo=self.image_check_repo,
             )
             return json(new_session.as_apispec().model_dump(exclude_none=True, mode="json"))
 
@@ -337,11 +339,10 @@ class NotebooksNewBP(CustomBlueprint):
             query: apispec.SessionsImagesGetParametersQuery,
         ) -> JSONResponse:
             image = Image.from_path(query.image_url)
-            result = await image_check.check_image(
-                image,
-                user,
-                self.connected_svcs_repo,
-                image_check.InternalGitLabConfig(internal_gitlab_user, self.nb_config),
+            result = await self.image_check_repo.check_image(
+                user=user,
+                gitlab_user=internal_gitlab_user,
+                image=image,
             )
             logger.info(f"Checked image {query.image_url}: {result}")
             conn = None
@@ -366,7 +367,13 @@ class NotebooksNewBP(CustomBlueprint):
                     id=result.client.id, name=result.client.display_name, url=result.client.url
                 )
 
-            resp = apispec.ImageCheckResponse(accessible=result.accessible, connection=conn, provider=provider)
+            platforms = None
+            if result.platforms:
+                platforms = [apispec.ImagePlatform.model_validate(p) for p in result.platforms]
+
+            resp = apispec.ImageCheckResponse(
+                accessible=result.accessible, platforms=platforms, connection=conn, provider=provider
+            )
 
             return json(resp.model_dump(exclude_none=True, mode="json"))
 

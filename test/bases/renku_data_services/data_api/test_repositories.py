@@ -12,13 +12,14 @@ from renku_data_services.connected_services.dummy_async_oauth2_client import Dum
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.migrations.core import run_migrations_for_app
+from renku_data_services.repositories.models import GitUrlError
+from test.bases.renku_data_services.data_api.utils import create_dummy_oauth_client
 from test.utils import SanicReusableASGITestClient
 
 
 @pytest_asyncio.fixture(scope="session")
 async def oauth2_test_client_setup(app_manager: DependencyManager) -> SanicASGITestClient:
-    app_manager.async_oauth2_client_class = DummyAsyncOAuth2Client
-    app_manager.connected_services_repo.async_oauth2_client_class = DummyAsyncOAuth2Client
+    app_manager.oauth_http_client_factory.create_client = create_dummy_oauth_client
     app = Sanic(app_manager.app_name)
     app = register_all_handlers(app, app_manager)
     async with SanicReusableASGITestClient(app) as client:
@@ -97,12 +98,14 @@ async def test_get_repository_without_connection(
     await create_oauth2_provider("provider_1")
     repository_url = "https://example.org/username/my_repo.git"
 
-    _, res = await oauth2_test_client.get(f"/api/data/repositories/{quote_plus(repository_url)}", headers=user_headers)
+    _, res = await oauth2_test_client.get(
+        f"/api/data/repository?url={quote_plus(repository_url)}", headers=user_headers
+    )
 
     assert res.status_code == 200, res.text
     assert res.json is not None
     result = res.json
-    assert result.get("provider_id") == "provider_1"
+    assert result.get("provider", {}).get("id") == "provider_1"
     assert "connection_id" not in result
 
 
@@ -111,20 +114,20 @@ async def test_get_one_repository(oauth2_test_client: SanicASGITestClient, user_
     connection = await create_oauth2_connection("provider_1")
     repository_url = "https://example.org/username/my_repo.git"
 
-    _, res = await oauth2_test_client.get(f"/api/data/repositories/{quote_plus(repository_url)}", headers=user_headers)
+    _, res = await oauth2_test_client.get(
+        f"/api/data/repository?url={quote_plus(repository_url)}", headers=user_headers
+    )
 
     assert res.status_code == 200, res.text
     assert res.json is not None
     result = res.json
-    assert result.get("connection_id") == connection["id"]
-    assert result.get("provider_id") == "provider_1"
-    assert result.get("repository_metadata") is not None
-    repository_metadata = result["repository_metadata"]
-    assert repository_metadata.get("git_http_url") == repository_url
-    assert repository_metadata.get("permissions") is not None
-    permissions = repository_metadata["permissions"]
-    assert permissions.get("pull")
-    assert not permissions.get("push")
+    assert result.get("connection", {}).get("id") == connection["id"]
+    assert result.get("provider", {}).get("id") == "provider_1"
+    assert result.get("metadata") is not None
+    repository_metadata = result["metadata"]
+    assert repository_metadata.get("git_url") == repository_url
+    assert repository_metadata.get("pull_permission")
+    assert not repository_metadata.get("push_permission")
 
 
 @pytest.mark.asyncio
@@ -134,27 +137,44 @@ async def test_get_one_repository_not_found(
     connection = await create_oauth2_connection("provider_1")
     repository_url = "https://example.org/username/another_repo.git"
 
-    _, res = await oauth2_test_client.get(f"/api/data/repositories/{quote_plus(repository_url)}", headers=user_headers)
+    _, res = await oauth2_test_client.get(
+        f"/api/data/repository?url={quote_plus(repository_url)}", headers=user_headers
+    )
 
     assert res.status_code == 200, res.text
     assert res.json is not None
     result = res.json
-    assert result.get("connection_id") == connection["id"]
-    assert result.get("provider_id") == "provider_1"
-    assert result.get("repository_metadata") is None
+    assert result["connection"]["id"] == connection["id"]
+    assert result["provider"]["id"] == "provider_1"
+    assert result.get("metadata") is None
+
+
+@pytest.mark.asyncio
+async def test_get_one_repository_no_url(
+    oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_connection
+):
+    _, res = await oauth2_test_client.get("/api/data/repository?url=", headers=user_headers)
+
+    assert res.status_code == 422, res.text
+    assert res.json is not None
+    result = res.json
+    assert result.get("error", {}).get("message") == "A repository url is required"
+    assert result.get("error", {}).get("code") == 1422
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "repository_url,status_code",
+    "repository_url,error_code",
     [
-        ("https://github.com/SwissDataScienceCenter/renku.git", 200),
-        ("https://example.org/does-not-exist.git", 404),
-        ("http://foobar", 404),
+        ("https://github.com/SwissDataScienceCenter/renku.git", None),
+        ("https://example.org/does-not-exist.git", GitUrlError.no_git_repo),
+        ("http://foobar", GitUrlError.no_git_repo),
     ],
 )
-async def test_get_one_repository_probe(sanic_client: SanicASGITestClient, repository_url, status_code):
+async def test_get_one_repository_probe(sanic_client: SanicASGITestClient, repository_url, error_code):
     repository_url_param = quote_plus(repository_url)
-    _, response = await sanic_client.get(f"/api/data/repositories/{repository_url_param}/probe")
+    _, response = await sanic_client.get(f"/api/data/repository?url={repository_url_param}")
 
-    assert response.status_code == status_code, response.text
+    resp_error = response.json.get("error_code")
+
+    assert resp_error == error_code, response.text

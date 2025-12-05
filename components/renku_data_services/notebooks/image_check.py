@@ -24,9 +24,16 @@ from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.connected_services.models import ImageProvider, OAuth2Client, OAuth2Connection
+from renku_data_services.connected_services.oauth_http import (
+    OAuthHttpClientFactory,
+    OAuthHttpError,
+    OAuthHttpFactoryError,
+)
 from renku_data_services.errors import errors
 from renku_data_services.notebooks.api.classes.image import Image, ImageRepoDockerAPI
 from renku_data_services.notebooks.config import NotebooksConfig
+from renku_data_services.notebooks.oci.models import Platform
+from renku_data_services.notebooks.oci.utils import get_image_platforms
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +44,7 @@ class CheckResult:
     """Result of checking access to an image."""
 
     accessible: bool
+    platforms: list[Platform] | None
     response_code: int
     image_provider: ImageProvider | None = None
     token: str | None = field(default=None, repr=False)
@@ -77,73 +85,75 @@ class CheckResult:
         return self.image_provider.connected_user.user
 
 
-@dataclass
-class InternalGitLabConfig:
-    """Required for internal gitlab, which will be shut down soon."""
+class ImageCheckRepository:
+    """Repository for checking session images with rich responses."""
 
-    gitlab_user: APIUser
-    nb_config: NotebooksConfig
+    def __init__(
+        self,
+        nb_config: NotebooksConfig,
+        connected_services_repo: ConnectedServicesRepository,
+        oauth_client_factory: OAuthHttpClientFactory,
+    ) -> None:
+        self.nb_config = nb_config
+        self.connected_services_repo = connected_services_repo
+        self.oauth_client_factory = oauth_client_factory
 
+    async def check_image(self, user: APIUser, gitlab_user: APIUser | None, image: Image) -> CheckResult:
+        """Check access to the given image and provide image and access details."""
+        reg_api: ImageRepoDockerAPI = image.repo_api()  # public images
+        unauth_error: errors.UnauthorizedError | None = None
+        image_provider = await self.connected_services_repo.get_provider_for_image(user, image)
+        connected_user = image_provider.connected_user if image_provider is not None else None
+        connection = connected_user.connection if connected_user is not None else None
+        if image_provider is not None:
+            try:
+                reg_api = await self.connected_services_repo.get_image_repo_client(image_provider)
+            except errors.UnauthorizedError as e:
+                logger.info(f"Error getting image repo client for image {image}: {e}")
+                unauth_error = e
+            except OAuthError as e:
+                logger.info(f"Error getting image repo client for image {image}: {e}")
+                unauth_error = errors.UnauthorizedError(
+                    message=f"OAuth error when getting repo client for image: {image}"
+                )
+                unauth_error.__cause__ = e
+        elif gitlab_user and gitlab_user.access_token and image.hostname == self.nb_config.git.registry:
+            logger.debug(f"Using internal gitlab at {self.nb_config.git.registry}")
+            reg_api = reg_api.with_oauth2_token(gitlab_user.access_token)
 
-async def check_image_path(
-    image_path: str,
-    user: APIUser,
-    connected_services: ConnectedServicesRepository,
-    internal_gitlab_config: InternalGitLabConfig | None,
-) -> CheckResult:
-    """Check access to the given image."""
-    image = Image.from_path(image_path)
-    return await check_image(image, user, connected_services, internal_gitlab_config)
-
-
-async def check_image(
-    image: Image,
-    user: APIUser,
-    connected_services: ConnectedServicesRepository,
-    intern_gl_cfg: InternalGitLabConfig | None,
-) -> CheckResult:
-    """Check access to the given image."""
-
-    reg_api: ImageRepoDockerAPI = image.repo_api()  # public images
-    unauth_error: errors.UnauthorizedError | None = None
-    image_provider = await connected_services.get_provider_for_image(user, image)
-    connected_user = image_provider.connected_user if image_provider is not None else None
-    connection = connected_user.connection if connected_user is not None else None
-    if image_provider is not None:
         try:
-            reg_api = await connected_services.get_image_repo_client(image_provider)
-        except errors.UnauthorizedError as e:
-            logger.info(f"Error getting image repo client for image {image}: {e}")
-            unauth_error = e
-        except OAuthError as e:
-            logger.info(f"Error getting image repo client for image {image}: {e}")
-            unauth_error = errors.UnauthorizedError(message=f"OAuth error when getting repo client for image: {image}")
-            unauth_error.__cause__ = e
-    elif (
-        intern_gl_cfg
-        and image.hostname == intern_gl_cfg.nb_config.git.registry
-        and intern_gl_cfg.gitlab_user.access_token
-    ):
-        logger.debug(f"Using internal gitlab at {intern_gl_cfg.nb_config.git.registry}")
-        reg_api = reg_api.with_oauth2_token(intern_gl_cfg.gitlab_user.access_token)
+            response = await reg_api.image_check(image, include_manifest=True)
+            status_code = response.status_code
+        except httpx.HTTPError as e:
+            logger.info(f"Error connecting {reg_api.scheme}://{reg_api.hostname}: {e}")
+            status_code = 0
+            response = None
 
-    try:
-        result = await reg_api.image_check(image)
-    except httpx.HTTPError as e:
-        logger.info(f"Error connecting {reg_api.scheme}://{reg_api.hostname}: {e}")
-        result = 0
+        if status_code != 200 and connection is not None:
+            try:
+                client = await self.oauth_client_factory.for_user_connection(user, connection.id)
+                match client:
+                    case OAuthHttpFactoryError() as err:
+                        logger.info(f"Unable to obtain oauth client: {err}")
+                        unauth_error = errors.UnauthorizedError(message=f"Unable to obtain oauth client: {err}")
+                    case _:
+                        account = await client.get_connected_account()
+                        if isinstance(account, OAuthHttpError):
+                            logger.info(f"Error getting connected account: {account}")
+                            unauth_error = errors.UnauthorizedError(message=f"Error getting oauth account: {account}")
+            except errors.UnauthorizedError as e:
+                logger.info(f"Error getting connected account: {e}")
+                unauth_error = e
 
-    if result != 200 and connection is not None:
-        try:
-            await connected_services.get_oauth2_connected_account(connection.id, user)
-        except errors.UnauthorizedError as e:
-            logger.info(f"Error getting connected account: {e}")
-            unauth_error = e
+        platforms = None
+        if status_code == 200 and response is not None:
+            platforms = await get_image_platforms(manifest_response=response, image=image, reg_api=reg_api)
 
-    return CheckResult(
-        accessible=result == 200,
-        response_code=result,
-        image_provider=image_provider,
-        token=reg_api.oauth2_token,
-        error=unauth_error,
-    )
+        return CheckResult(
+            accessible=status_code == 200,
+            platforms=platforms,
+            response_code=status_code,
+            image_provider=image_provider,
+            token=reg_api.oauth2_token,
+            error=unauth_error,
+        )

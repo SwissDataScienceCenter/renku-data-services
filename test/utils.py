@@ -18,6 +18,7 @@ from renku_data_services.authz.authz import Authz
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.connected_services.db import ConnectedServicesRepository
+from renku_data_services.connected_services.oauth_http import DefaultOAuthHttpClientFactory
 from renku_data_services.crc import models as rp_models
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository, UserRepository
 from renku_data_services.data_api.config import Config
@@ -32,6 +33,7 @@ from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.notebooks.api.classes.data_service import GitProviderHelper
 from renku_data_services.notifications.db import NotificationsRepository
+from renku_data_services.notebooks.image_check import ImageCheckRepository
 from renku_data_services.platform.db import PlatformRepository, UrlRedirectRepository
 from renku_data_services.project.db import (
     ProjectMemberRepository,
@@ -190,6 +192,9 @@ class TestDependencyManager(DependencyManager):
 
         authz = NonCachingAuthz(config.authz_config)
         search_updates_repo = SearchUpdatesRepo(session_maker=config.db.async_session_maker)
+        oauth_client_factory = DefaultOAuthHttpClientFactory(
+            config.secrets.encryption_key, config.db.async_session_maker
+        )
         metrics_mock = MagicMock(spec=MetricsService)
         group_repo = GroupRepository(
             session_maker=config.db.async_session_maker,
@@ -263,13 +268,13 @@ class TestDependencyManager(DependencyManager):
         connected_services_repo = ConnectedServicesRepository(
             session_maker=config.db.async_session_maker,
             encryption_key=config.secrets.encryption_key,
-            async_oauth2_client_class=cls.async_oauth2_client_class,
+            oauth_client_factory=oauth_client_factory,
         )
         git_repositories_repo = GitRepositoriesRepository(
             session_maker=config.db.async_session_maker,
-            connected_services_repo=connected_services_repo,
             internal_gitlab_url=config.gitlab_url,
             enable_internal_gitlab=config.enable_internal_gitlab,
+            oauth_client_factory=oauth_client_factory,
         )
         platform_repo = PlatformRepository(
             session_maker=config.db.async_session_maker,
@@ -299,6 +304,11 @@ class TestDependencyManager(DependencyManager):
             data_connector_repo=data_connector_repo,
         )
         cluster_repo = ClusterRepository(session_maker=config.db.async_session_maker)
+        image_check_repo = ImageCheckRepository(
+            nb_config=config.nb_config,
+            connected_services_repo=connected_services_repo,
+            oauth_client_factory=oauth_client_factory,
+        )
         metrics_repo = MetricsRepository(session_maker=config.db.async_session_maker)
         notifications_repo = NotificationsRepository(session_maker=config.db.async_session_maker)
         git_provider_helper = GitProviderHelper(connected_services_repo, "", "", "", config.enable_internal_gitlab)
@@ -331,6 +341,7 @@ class TestDependencyManager(DependencyManager):
             data_connector_repo=data_connector_repo,
             data_connector_secret_repo=data_connector_secret_repo,
             cluster_repo=cluster_repo,
+            image_check_repo=image_check_repo,
             metrics_repo=metrics_repo,
             metrics=metrics_mock,
             shipwright_client=None,
@@ -339,6 +350,7 @@ class TestDependencyManager(DependencyManager):
             url_redirect_repo=url_redirect_repo,
             git_provider_helper=git_provider_helper,
             notifications_repo=notifications_repo,
+            oauth_http_client_factory=oauth_client_factory,
         )
 
     def __post_init__(self) -> None:
