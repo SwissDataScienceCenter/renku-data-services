@@ -82,8 +82,138 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - alerts
+  /webhooks/alertmanager:
+    post:
+      summary: Receive Prometheus Alertmanager webhooks. Requires OAuth2 client credentials authentication with the alertmanager-webhook role.
+      description: |
+        This endpoint receives webhooks from Prometheus Alertmanager and creates or resolves alerts accordingly. "firing" alerts will create new alerts, while "resolved" alerts will mark existing alerts as resolved. The payload must contain the necessary information to identify the user and session.
+
+        **Authentication**: This endpoint requires OAuth2 client credentials flow authentication. The OAuth2 client must be configured in Keycloak with the "alertmanager-webhook" realm role (or the role specified in the ALERTMANAGER_WEBHOOK_ROLE environment variable). Alertmanager should be configured to obtain an access token from Keycloak's token endpoint and include it in the Authorization header as a Bearer token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AlertmanagerWebhook"
+      responses:
+        "200":
+          description: Webhook processed successfully. Returns 200 for all requests except authentication and validation errors, even if individual alerts fail to process. Failed alerts are logged but do not affect the response.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Webhook processed successfully
+        "401":
+          description: Unauthorized - Missing or invalid Bearer token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden - Token is valid but does not have the required role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Unprocessable Content - Request body does not match the expected schema
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      tags:
+        - alerts
 components:
   schemas:
+    AlertmanagerWebhook:
+      type: object
+      required:
+        - version
+        - groupKey
+        - status
+        - alerts
+      properties:
+        version:
+          type: string
+          description: Alertmanager version
+        groupKey:
+          type: string
+          description: Unique key for the group of alerts
+        status:
+          type: string
+          enum:
+            - firing
+            - resolved
+          description: The status of the alerts in this webhook
+        receiver:
+          type: string
+          description: The name of the receiver that got the alert
+        groupLabels:
+          type: object
+          description: Labels that are common to all alerts in the group
+          additionalProperties:
+            type: string
+        commonLabels:
+          type: object
+          additionalProperties:
+            type: string
+          description: Labels that are common to all alerts
+        commonAnnotations:
+          type: object
+          additionalProperties:
+            type: string
+        externalURL:
+          type: string
+          description: The external URL of the Alertmanager
+        truncatedAlerts:
+          type: integer
+          description: The number of alerts that have been truncated
+        alerts:
+          type: array
+          description: The list of alerts
+          items:
+            $ref: "#/components/schemas/AlertmanagerAlert"
+    AlertmanagerAlert:
+      type: object
+      required:
+        - status
+        - labels
+        - annotations
+        - startsAt
+      properties:
+        status:
+          type: string
+          enum:
+            - firing
+            - resolved
+          description: The status of the alert
+        labels:
+          type: object
+          description: Labels associated with the alert
+          additionalProperties:
+            type: string
+        annotations:
+          type: object
+          description: Annotations associated with the alert
+          additionalProperties:
+            type: string
+        startsAt:
+          type: string
+          format: date-time
+          description: The time when the alert started
+        endsAt:
+          type: string
+          format: date-time
+          description: The time when the alert ended
+        generatorURL:
+          type: string
+          description: The URL of the generator that created the alert
+        fingerprint:
+          type: string
+          description: A unique fingerprint identifying this alert
     AlertsGetQuery:
       description: Query parameters for getting alerts
       type: object

@@ -156,3 +156,36 @@ def only_authenticated(f: Callable[_P, Coroutine[Any, Any, _T]]) -> Callable[_P,
         return response
 
     return decorated_function
+
+
+def require_role(
+    role: str,
+) -> Callable[
+    [Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]]],
+    Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]],
+]:
+    """Decorator for a Sanic handler that errors out if the user does not have the specified role.
+
+    Args:
+        role: The role name to check for (e.g., "alertmanager-webhook")
+    """
+
+    def decorator(
+        f: Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]],
+    ) -> Callable[Concatenate[Request, APIUser, _P], Coroutine[Any, Any, _T]]:
+        @wraps(f)
+        async def decorated_function(request: Request, user: APIUser, *args: _P.args, **kwargs: _P.kwargs) -> _T:
+            if user is None or user.access_token is None:
+                raise errors.UnauthorizedError(
+                    message="Please provide valid access credentials in the Authorization header."
+                )
+            if role not in user.roles and not user.is_admin:
+                raise errors.ForbiddenError(message=f"You do not have the required role '{role}' for this operation.")
+
+            # the user is authenticated and has the required role
+            response = await f(request, user, *args, **kwargs)
+            return response
+
+        return decorated_function
+
+    return decorator
