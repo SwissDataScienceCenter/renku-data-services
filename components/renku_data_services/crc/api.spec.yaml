@@ -1294,6 +1294,8 @@ components:
           $ref: "#/components/schemas/HibernationThreshold"
         cluster_id:
           $ref: "#/components/schemas/Ulid"
+        platform:
+          $ref: "#/components/schemas/RuntimePlatform"
       required: ["classes", "name", "public", "default"]
       example:
         quota:
@@ -1342,6 +1344,8 @@ components:
           $ref: "#/components/schemas/HibernationThreshold"
         cluster_id:
           $ref: "#/components/schemas/Ulid"
+        platform:
+          $ref: "#/components/schemas/RuntimePlatform"
       example:
         quota:
           cpu: 50
@@ -1374,7 +1378,9 @@ components:
           $ref: "#/components/schemas/HibernationThreshold"
         cluster_id:
           $ref: "#/components/schemas/Ulid"
-      required: ["classes", "name", "public", "default"]
+        platform:
+          $ref: "#/components/schemas/RuntimePlatform"
+      required: ["classes", "name", "public", "default", "platform"]
       example:
         quota:
           cpu: 50
@@ -1429,7 +1435,9 @@ components:
             id:
               $ref: "#/components/schemas/Ulid"
           required: ["id"]
-      required: ["classes", "name", "id", "public", "default"]
+        platform:
+          $ref: "#/components/schemas/RuntimePlatform"
+      required: ["classes", "name", "id", "public", "default", "platform"]
       example:
         quota:
           cpu: 50
@@ -1481,7 +1489,9 @@ components:
           $ref: "#/components/schemas/HibernationThreshold"
         cluster_id:
           $ref: "#/components/schemas/Ulid"
-      required: ["classes", "name", "id", "public", "default"]
+        platform:
+          $ref: "#/components/schemas/RuntimePlatform"
+      required: ["classes", "name", "id", "public", "default", "platform"]
       example:
         quota:
           cpu: 50
@@ -1871,6 +1881,11 @@ components:
       uniqueItems: true
       default: []
       minItems: 0
+    RuntimePlatform:
+      type: string
+      description: |
+        A runtime platform, e.g. "linux/amd64" or "linux/arm64".
+      enum: ["linux/amd64", "linux/arm64"]
     ErrorResponse:
       type: object
       properties:

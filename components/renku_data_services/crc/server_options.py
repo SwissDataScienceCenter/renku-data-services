@@ -11,6 +11,7 @@ from typing import Any, Union
 from pydantic import BaseModel, ByteSize, Field, validator
 
 from renku_data_services.crc import models
+from renku_data_services.crc.constants import DEFAULT_RUNTIME_PLATFORM
 
 
 def _check_greater_than_zero(cls: Any, v: int | float) -> int | float:
@@ -152,4 +153,5 @@ def generate_default_resource_pool(
         default=True,
         public=True,
         name="default",
+        platform=DEFAULT_RUNTIME_PLATFORM,
     )
