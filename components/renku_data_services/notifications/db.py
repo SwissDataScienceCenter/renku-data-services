@@ -110,7 +110,6 @@ class NotificationsRepository:
         self,
         user: base_models.APIUser,
         alert_id: ULID | None,
-        user_id: str | None,
         title: str | None,
         message: str | None,
         session_name: str | None,
@@ -149,11 +148,6 @@ class NotificationsRepository:
                 query = query.where(schemas.AlertORM.session_name.is_(None))
             else:
                 query = query.where(schemas.AlertORM.session_name == session_name)
-
-            if user_id is None:
-                query = query.where(schemas.AlertORM.user_id.is_(None))
-            else:
-                query = query.where(schemas.AlertORM.user_id == user_id)
 
             res = await session.scalars(query)
             alert_list = res.all()
