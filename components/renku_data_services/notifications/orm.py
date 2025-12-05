@@ -51,8 +51,8 @@ class AlertORM(BaseORM):
     )
     """Creation date and time."""
 
-    resolved_at: Mapped[datetime | None] = mapped_column(
-        "resolved_at", DateTime(timezone=True), default=None, nullable=True
+    resolved_date: Mapped[datetime | None] = mapped_column(
+        "resolved_date", DateTime(timezone=True), default=None, nullable=True
     )
     """Date and time when the alert was resolved, if applicable."""
 
@@ -66,5 +66,5 @@ class AlertORM(BaseORM):
             user_id=self.user_id,
             session_name=self.session_name,
             creation_date=self.creation_date,
-            resolved_at=self.resolved_at,
+            resolved_date=self.resolved_date,
         )

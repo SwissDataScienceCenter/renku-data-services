@@ -29,7 +29,7 @@ def upgrade() -> None:
         sa.Column("user_id", sa.String(), nullable=False),
         sa.Column("session_name", sa.String(), nullable=True),
         sa.Column("creation_date", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("resolved_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("resolved_date", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(["user_id"], ["users.users.keycloak_id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         schema="notifications",

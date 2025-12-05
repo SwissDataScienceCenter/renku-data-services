@@ -17,7 +17,7 @@ class Alert:
     title: str
     message: str
     creation_date: datetime
-    resolved_at: datetime | None = None
+    resolved_date: datetime | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

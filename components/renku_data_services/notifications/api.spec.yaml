@@ -228,7 +228,7 @@ components:
       properties:
         resolved:
           type: boolean
-          description: Set to true to mark the alert as resolved. The resolved_at timestamp will be set automatically.
+          description: Set to true to mark the alert as resolved. The resolved_date timestamp will be set automatically.
     Ulid:
       description: ULID identifier
       type: string
@@ -255,7 +255,7 @@ components:
           type: string
           format: date-time
           description: The date and time when the alert was created.
-        resolved_at:
+        resolved_date:
           type: string
           format: date-time
           nullable: true

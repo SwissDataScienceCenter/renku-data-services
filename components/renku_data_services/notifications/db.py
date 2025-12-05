@@ -44,7 +44,7 @@ class NotificationsRepository:
                 .where(schemas.AlertORM.user_id == alert.user_id)
                 .where(schemas.AlertORM.event_type == alert.event_type)
                 .where(schemas.AlertORM.session_name == alert.session_name)
-                .where(schemas.AlertORM.resolved_at.is_(None))
+                .where(schemas.AlertORM.resolved_date.is_(None))
             )
 
             res = await session.scalars(query)
@@ -75,7 +75,7 @@ class NotificationsRepository:
             query = (
                 select(schemas.AlertORM)
                 .where(schemas.AlertORM.user_id == user.id)
-                .where(schemas.AlertORM.resolved_at.is_(None))
+                .where(schemas.AlertORM.resolved_date.is_(None))
             )
 
             if session_name is not None:
@@ -104,7 +104,7 @@ class NotificationsRepository:
 
     def __update_alert(self, alert: schemas.AlertORM, update: models.AlertPatch) -> None:
         if update.resolved is True:
-            alert.resolved_at = datetime.now(UTC)
+            alert.resolved_date = datetime.now(UTC)
 
     async def get_alerts_by_properties(
         self,
@@ -115,7 +115,7 @@ class NotificationsRepository:
         message: str | None,
         session_name: str | None,
         created_at: datetime | None,
-        resolved_at: datetime | None,
+        resolved_date: datetime | None,
     ) -> list[models.Alert]:
         """Get alerts by their properties."""
         if user.id is None:
@@ -140,10 +140,10 @@ class NotificationsRepository:
             else:
                 query = query.where(schemas.AlertORM.message == message)
 
-            if resolved_at is None:
-                query = query.where(schemas.AlertORM.resolved_at.is_(None))
+            if resolved_date is None:
+                query = query.where(schemas.AlertORM.resolved_date.is_(None))
             else:
-                query = query.where(schemas.AlertORM.resolved_at == resolved_at)
+                query = query.where(schemas.AlertORM.resolved_date == resolved_date)
 
             if session_name is None:
                 query = query.where(schemas.AlertORM.session_name.is_(None))
@@ -182,7 +182,7 @@ class NotificationsRepository:
                 select(schemas.AlertORM)
                 .where(schemas.AlertORM.user_id == alert.user_id)
                 .where(schemas.AlertORM.event_type == alert.event_type)
-                .where(schemas.AlertORM.resolved_at.is_(None))
+                .where(schemas.AlertORM.resolved_date.is_(None))
             )
 
             if alert.session_name is not None:
@@ -236,7 +236,7 @@ class NotificationsRepository:
                     title=alert.title,
                     message=alert.message,
                     created_at=None,
-                    resolved_at=None,
+                    resolved_date=None,
                 )
 
                 for matching_alert in matching_alerts:

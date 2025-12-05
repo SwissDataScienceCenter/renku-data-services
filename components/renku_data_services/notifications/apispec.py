@@ -41,7 +41,7 @@ class AlertPatch(BaseAPISpec):
     )
     resolved: Optional[bool] = Field(
         None,
-        description="Set to true to mark the alert as resolved. The resolved_at timestamp will be set automatically.",
+        description="Set to true to mark the alert as resolved. The resolved_date timestamp will be set automatically.",
     )
 
 
@@ -130,7 +130,7 @@ class Alert(BaseAPISpec):
     creation_date: datetime = Field(
         ..., description="The date and time when the alert was created."
     )
-    resolved_at: Optional[datetime] = Field(
+    resolved_date: Optional[datetime] = Field(
         None,
         description="The date and time when the alert was resolved, or null if it is still active.",
     )
