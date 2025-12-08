@@ -70,6 +70,9 @@
     'build_parameters': dict({
       'builder_variant': 'python',
       'frontend_variant': 'vscodium',
+      'platforms': list([
+        'linux/amd64',
+      ]),
       'repository': 'https://github.com/some/repo',
     }),
     'container_image': 'image:unknown-at-the-moment',
@@ -91,6 +94,9 @@
   dict({
     'builder_variant': 'python',
     'frontend_variant': 'vscodium',
+    'platforms': list([
+      'linux/amd64',
+    ]),
     'repository': 'https://github.com/some/repo',
   })
 # ---

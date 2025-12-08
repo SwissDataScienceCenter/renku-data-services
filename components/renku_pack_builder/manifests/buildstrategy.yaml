@@ -2,7 +2,7 @@
 apiVersion: shipwright.io/v1beta1
 kind: BuildStrategy
 metadata:
-  name: renku-buildpacks-v2
+  name: renku-buildpacks-v3
 spec:
   parameters:
     - name: platform-api-version
@@ -87,4 +87,4 @@ spec:
       emptyDir: {}
   securityContext:
     runAsUser: 1001
-    runAsGroup: 1000
+    runAsGroup: 1001

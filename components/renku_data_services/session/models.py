@@ -14,7 +14,7 @@ from renku_data_services.base_models.core import ResetType
 from renku_data_services.session import crs
 
 if TYPE_CHECKING:
-    from renku_data_services.session import apispec
+    from renku_data_services.session import apispec, config
 
 from .constants import ENV_VARIABLE_NAME_MATCHER, ENV_VARIABLE_REGEX
 
@@ -40,6 +40,13 @@ class EnvironmentImageSource(StrEnum):
     build = "build"
 
 
+class Platform(StrEnum):
+    """The runtime platform."""
+
+    linux_amd64 = "linux/amd64"
+    linux_arm64 = "linux/arm64"
+
+
 class BuilderVariant(StrEnum):
     """The type of environment builder."""
 
@@ -59,6 +66,7 @@ class UnsavedBuildParameters:
     """The parameters of a build."""
 
     repository: str
+    platforms: list[Platform]
     builder_variant: str
     frontend_variant: str
     repository_revision: str | None = None
@@ -130,6 +138,7 @@ class BuildParametersPatch:
     """Patch for parameters of a build."""
 
     repository: str | None = None
+    platforms: list[Platform] | None = None
     builder_variant: str | None = None
     frontend_variant: str | None = None
     repository_revision: str | None = None
@@ -313,9 +322,33 @@ class ShipwrightBuildRunParams:
     labels: dict[str, str] | None = None
     annotations: dict[str, str] | None = None
     frontend: str = FrontendVariant.vscodium.value
-    build_image: str | None = None
+    builder_image: str | None = None
     git_repository_revision: str | None = None
     context_dir: str | None = None
+
+    def with_overrides(self, overrides: "config.BuildPlatformOverrides | None") -> "ShipwrightBuildRunParams":
+        """Returns a copy of the BuildRun parameters with overrides applied."""
+        if overrides is None:
+            return self
+        return ShipwrightBuildRunParams(
+            name=self.name,
+            git_repository=self.git_repository,
+            run_image=overrides.run_image or self.run_image,
+            output_image=self.output_image,
+            build_strategy_name=overrides.strategy_name or self.build_strategy_name,
+            push_secret_name=self.push_secret_name,
+            retention_after_failed=self.retention_after_failed,
+            retention_after_succeeded=self.retention_after_succeeded,
+            build_timeout=self.build_timeout,
+            node_selector=overrides.node_selector or self.node_selector,
+            tolerations=overrides.tolerations or self.tolerations,
+            labels=self.labels,
+            annotations=self.annotations,
+            frontend=self.frontend,
+            builder_image=overrides.builder_image or self.builder_image,
+            git_repository_revision=self.git_repository_revision,
+            context_dir=self.context_dir,
+        )
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

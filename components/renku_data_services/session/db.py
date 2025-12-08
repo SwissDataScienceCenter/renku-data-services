@@ -138,7 +138,11 @@ class SessionRepository:
         if environment.environment_image_source == models.EnvironmentImageSource.build:
             if not environment.build_parameters:
                 raise errors.ProgrammingError(message="Environment has no build parameters.")
+            platforms = [
+                schemas.BuildPlatformORM(platform=platform) for platform in environment.build_parameters.platforms
+            ]
             new_build_parameters = schemas.BuildParametersORM(
+                platforms=platforms,
                 builder_variant=environment.build_parameters.builder_variant,
                 frontend_variant=environment.build_parameters.frontend_variant,
                 repository=environment.build_parameters.repository,
@@ -164,7 +168,11 @@ class SessionRepository:
             raise errors.UnauthorizedError(
                 message="You have to be authenticated to insert an environment in the DB.", quiet=True
             )
+        platforms = [
+            schemas.BuildPlatformORM(platform=platform) for platform in new_build_parameters_environment.platforms
+        ]
         build_parameters_orm = schemas.BuildParametersORM(
+            platforms=platforms,
             builder_variant=new_build_parameters_environment.builder_variant,
             frontend_variant=new_build_parameters_environment.frontend_variant,
             repository=new_build_parameters_environment.repository,
@@ -265,6 +273,10 @@ class SessionRepository:
 
         if build_parameters.repository is not None:
             environment.build_parameters.repository = build_parameters.repository
+        if build_parameters.platforms is not None:
+            environment.build_parameters.platforms = [
+                schemas.BuildPlatformORM(platform=platform) for platform in build_parameters.platforms
+            ]
         if build_parameters.builder_variant is not None:
             environment.build_parameters.builder_variant = build_parameters.builder_variant
         if build_parameters.frontend_variant is not None:
@@ -418,7 +430,9 @@ class SessionRepository:
                 )
                 session.add(environment_orm)
             elif isinstance(launcher.environment, models.UnsavedBuildParameters):
+                platforms = [schemas.BuildPlatformORM(platform=platform) for platform in launcher.environment.platforms]
                 build_parameters_orm = schemas.BuildParametersORM(
+                    platforms=platforms,
                     builder_variant=launcher.environment.builder_variant,
                     frontend_variant=launcher.environment.frontend_variant,
                     repository=launcher.environment.repository,
@@ -432,7 +446,9 @@ class SessionRepository:
                     created_by_id=user.id,
                     description=f"Generated environment for {launcher.name}",
                     container_image="image:unknown-at-the-moment",  # TODO: This should come from the build
-                    default_url=constants.DEFAULT_URLS.get(launcher.environment.frontend_variant, "/"),
+                    default_url=constants.BUILD_URL_PATH_MAP.get(
+                        launcher.environment.frontend_variant, constants.BUILD_DEFAULT_URL_PATH
+                    ),
                     port=constants.BUILD_PORT,  # TODO: This should come from the build
                     working_directory=constants.BUILD_WORKING_DIRECTORY,  # TODO: This should come from the build
                     mount_directory=constants.BUILD_MOUNT_DIRECTORY,  # TODO: This should come from the build
@@ -716,7 +732,11 @@ class SessionRepository:
                 await session.flush()
             case models.UnsavedBuildParameters() as new_custom_built_environment, models.EnvironmentKind.CUSTOM:
                 # Custom environment with image is replaced by a custom environment with build
+                platforms = [
+                    schemas.BuildPlatformORM(platform=platform) for platform in new_custom_built_environment.platforms
+                ]
                 build_parameters_orm = schemas.BuildParametersORM(
+                    platforms=platforms,
                     builder_variant=new_custom_built_environment.builder_variant,
                     frontend_variant=new_custom_built_environment.frontend_variant,
                     repository=new_custom_built_environment.repository,
@@ -881,6 +901,15 @@ class SessionRepository:
                     raise errors.ConflictError(
                         message=f"Session environment with id '{build.environment_id}' already has a build in progress."
                     )
+
+            # We check that we build for a single target platform
+            if len(build_parameters.platforms) > 1:
+                raise errors.CannotStartBuildError(
+                    message=(
+                        f"Building images can target only one platform at a time. "
+                        f"Current value: {build_parameters.platforms}"
+                    )
+                )
 
             build_orm = schemas.BuildORM(
                 environment_id=build.environment_id,
@@ -1050,6 +1079,9 @@ class SessionRepository:
         git_repository_revision = build_parameters.repository_revision
         context_dir = build_parameters.context_dir
 
+        builder_image = self.builds_config.build_builder_image or constants.BUILD_DEFAULT_BUILDER_IMAGE
+        run_image = self.builds_config.build_run_image or constants.BUILD_DEFAULT_RUN_IMAGE
+
         output_image_prefix = (
             self.builds_config.build_output_image_prefix or constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
         )
@@ -1060,6 +1092,9 @@ class SessionRepository:
         # TODO: define the build strategy from `build_parameters`
         build_strategy_name = self.builds_config.build_strategy_name or constants.BUILD_DEFAULT_BUILD_STRATEGY_NAME
         push_secret_name = self.builds_config.push_secret_name or constants.BUILD_DEFAULT_PUSH_SECRET_NAME
+
+        node_selector = self.builds_config.node_selector
+        tolerations = self.builds_config.tolerations
 
         retention_after_failed = (
             self.builds_config.buildrun_retention_after_failed or constants.BUILD_RUN_DEFAULT_RETENTION_AFTER_FAILED
@@ -1081,25 +1116,35 @@ class SessionRepository:
             annotations["renku.io/launcher_id"] = str(launcher.id)
             annotations["renku.io/project_id"] = str(launcher.project_id)
 
-        return models.ShipwrightBuildRunParams(
+        params = models.ShipwrightBuildRunParams(
             name=build.k8s_name,
             git_repository=git_repository,
-            build_image=constants.BUILD_BUILDER_IMAGE,
-            run_image=constants.BUILD_RUN_IMAGE,
+            builder_image=builder_image,
+            run_image=run_image,
             output_image=output_image,
             build_strategy_name=build_strategy_name,
             push_secret_name=push_secret_name,
             retention_after_failed=retention_after_failed,
             retention_after_succeeded=retention_after_succeeded,
             build_timeout=build_timeout,
-            node_selector=self.builds_config.node_selector,
-            tolerations=self.builds_config.tolerations,
+            node_selector=node_selector,
+            tolerations=tolerations,
             labels=labels,
             annotations=annotations,
             frontend=build_parameters.frontend_variant,
             git_repository_revision=git_repository_revision,
             context_dir=context_dir,
         )
+
+        platform = models.Platform.linux_amd64
+        if build_parameters.platforms:
+            platform = build_parameters.platforms[0]
+        overrides = None
+        if self.builds_config.build_platform_overrides:
+            overrides = self.builds_config.build_platform_overrides.get(platform.value)
+        params = params.with_overrides(overrides=overrides)
+
+        return params
 
     async def _get_environment_authorization(
         self, session: AsyncSession, user: base_models.APIUser, environment: schemas.EnvironmentORM, scope: Scope
