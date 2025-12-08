@@ -63,3 +63,25 @@ class Tolerations(RootModel[list[Toleration] | None]):
     """A list of k8s tolerations."""
 
     root: list[Toleration] | None = None
+
+
+class BuildPlatformOverrides(BaseModel):
+    """Configuration overrides for a given target platform.
+
+    Used to validate the builds configuration.
+    """
+
+    builderImage: str | None = None
+    runImage: str | None = None
+    strategyName: str | None = None
+    nodeSelector: dict[str, str] | None = None
+    tolerations: list[Toleration] | None = None
+
+
+class BuildPlatformOverridesDict(RootModel[dict[str, BuildPlatformOverrides] | None]):
+    """A map of target platforms to configuration overrides.
+
+    Used to validate the builds configuration.
+    """
+
+    root: dict[str, BuildPlatformOverrides] | None = None

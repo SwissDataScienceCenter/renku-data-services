@@ -179,6 +179,7 @@ def validate_resource_pool(body: apispec.ResourcePool) -> models.UnsavedResource
         raise errors.ValidationError(message="One default class is required in each resource pool.")
 
     remote = validate_remote(body=body.remote) if body.remote else None
+    platform = __validate_runtime_platform(body=body.platform)
 
     return models.UnsavedResourcePool(
         name=body.name,
@@ -190,6 +191,7 @@ def validate_resource_pool(body: apispec.ResourcePool) -> models.UnsavedResource
         public=body.public,
         remote=remote,
         cluster_id=ULID.from_str(body.cluster_id) if body.cluster_id else None,
+        platform=platform,
     )
 
 
@@ -200,6 +202,7 @@ def validate_resource_pool_patch(body: apispec.ResourcePoolPatch) -> models.Reso
     )
     quota = validate_quota_put_patch(body=body.quota) if body.quota else None
     remote = validate_remote_patch(body=body.remote) if body.remote else None
+    platform = __validate_runtime_platform(body=body.platform) if body.platform else None
     return models.ResourcePoolPatch(
         name=body.name,
         classes=classes,
@@ -210,6 +213,7 @@ def validate_resource_pool_patch(body: apispec.ResourcePoolPatch) -> models.Reso
         public=body.public,
         remote=remote,
         cluster_id=ULID.from_str(body.cluster_id) if body.cluster_id else None,
+        platform=platform,
     )
 
 
@@ -221,6 +225,7 @@ def validate_resource_pool_put(body: apispec.ResourcePoolPut) -> models.Resource
     )
     quota = validate_quota_put_patch(body=body.quota) if body.quota else RESET
     remote = validate_remote_put(body=body.remote)
+    platform = __validate_runtime_platform(body=body.platform) if body.platform else RESET
     return models.ResourcePoolPatch(
         name=body.name,
         classes=classes,
@@ -231,6 +236,7 @@ def validate_resource_pool_put(body: apispec.ResourcePoolPut) -> models.Resource
         public=body.public,
         remote=remote,
         cluster_id=ULID.from_str(body.cluster_id) if body.cluster_id else RESET,
+        platform=platform,
     )
 
 
@@ -460,3 +466,18 @@ def validate_firecrest_api_url(url: str) -> None:
             message=f"The scheme for the firecrest api url {url} is not valid, expected one of {accepted_schemes}",
             quiet=True,
         )
+
+
+def __validate_runtime_platform(body: apispec.RuntimePlatform | None) -> models.RuntimePlatform:
+    """Validate the platform field for resource pools."""
+    platform_str: str = models.RuntimePlatform.linux_amd64
+    if body:
+        platform_str = body.value
+    if platform_str not in models.RuntimePlatform:
+        raise errors.ValidationError(
+            message=(
+                f"Invalid value for the field 'platform': {body}: "
+                f"Valid values are {[e.value for e in models.RuntimePlatform]}"
+            )
+        )
+    return models.RuntimePlatform(platform_str)

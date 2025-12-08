@@ -27,6 +27,7 @@ from renku_data_services.authz.authz import Authz
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.connected_services.oauth_http import DefaultOAuthHttpClientFactory, OAuthHttpClientFactory
 from renku_data_services.crc import models as crc_models
+from renku_data_services.crc.constants import DEFAULT_RUNTIME_PLATFORM
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository, UserRepository
 from renku_data_services.crc.server_options import (
     ServerOptions,
@@ -103,6 +104,7 @@ default_resource_pool = crc_models.UnsavedResourcePool(
     quota=None,
     public=True,
     default=True,
+    platform=DEFAULT_RUNTIME_PLATFORM,
 )
 
 

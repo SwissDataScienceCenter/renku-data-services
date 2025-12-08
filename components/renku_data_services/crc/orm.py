@@ -4,16 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from sqlalchemy import (
-    JSON,
-    BigInteger,
-    Column,
-    Identity,
-    Integer,
-    MetaData,
-    String,
-    Table,
-)
+from sqlalchemy import JSON, BigInteger, Column, Enum, Identity, Integer, MetaData, String, Table, literal
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
@@ -262,6 +253,11 @@ class ResourcePoolORM(BaseORM):
     )
     cluster: Mapped[Optional[ClusterORM]] = relationship(viewonly=True, default=None, lazy="selectin", init=False)
 
+    # NOTE: we reuse the "build_platform" enum type here
+    platform: Mapped[models.RuntimePlatform] = mapped_column(
+        Enum(models.RuntimePlatform, name="build_platform"), default=None, server_default=literal("linux_amd64")
+    )
+
     @classmethod
     def from_unsaved_model(
         cls,
@@ -291,6 +287,7 @@ class ResourcePoolORM(BaseORM):
             remote_provider_id=remote_provider_id,
             remote_json=remote_json,
             cluster_id=cluster.id if cluster else None,
+            platform=new_resource_pool.platform,
         )
 
     def dump(
@@ -324,6 +321,7 @@ class ResourcePoolORM(BaseORM):
             default=self.default,
             remote=remote,
             cluster=cluster,
+            platform=self.platform,
         )
 
     def _dump_remote(self) -> models.RemoteConfigurationFirecrest | None:
