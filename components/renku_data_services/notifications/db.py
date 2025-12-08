@@ -108,8 +108,9 @@ class NotificationsRepository:
 
     async def get_alerts_by_properties(
         self,
-        user: base_models.APIUser,
+        requested_by: base_models.APIUser,
         alert_id: ULID | None,
+        user_id: str,
         title: str | None,
         message: str | None,
         session_name: str | None,
@@ -117,11 +118,18 @@ class NotificationsRepository:
         resolved_date: datetime | None,
     ) -> list[models.Alert]:
         """Get alerts by their properties."""
-        if user.id is None:
+        if requested_by.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
+        if (
+            user_id != requested_by.id
+            and not requested_by.is_admin
+            and self.alertmanager_webhook_role not in requested_by.roles
+        ):
+            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+
         async with self.session_maker() as session:
-            query = select(schemas.AlertORM)
+            query = select(schemas.AlertORM).where(schemas.AlertORM.user_id == user_id)
 
             if alert_id is not None:
                 query = query.where(schemas.AlertORM.id == alert_id)
@@ -223,8 +231,9 @@ class NotificationsRepository:
         for alert in resolved_alerts:
             try:
                 matching_alerts = await self.get_alerts_by_properties(
-                    user=user,
+                    requested_by=user,
                     alert_id=None,
+                    user_id=alert.user_id,
                     session_name=alert.session_name,
                     title=alert.title,
                     message=alert.message,
