@@ -1,7 +1,7 @@
 """add alerts table
 
 Revision ID: 5ec28ea89e0a
-Revises: 42049656cdb8
+Revises: 328803606473
 Create Date: 2025-11-05 13:41:25.972261
 
 """
@@ -13,7 +13,7 @@ from renku_data_services.utils.sqlalchemy import ULIDType
 
 # revision identifiers, used by Alembic.
 revision = "5ec28ea89e0a"
-down_revision = "42049656cdb8"
+down_revision = "328803606473"
 branch_labels = None
 depends_on = None
 
