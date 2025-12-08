@@ -33,6 +33,7 @@ class APIUser:
     email: str | None = None
     access_token_expires_at: datetime | None = None
     is_admin: bool = False
+    roles: list[str] = field(default_factory=list)
 
     @property
     def is_authenticated(self) -> bool:

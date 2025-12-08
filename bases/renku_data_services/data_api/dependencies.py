@@ -14,6 +14,7 @@ import renku_data_services.base_models as base_models
 import renku_data_services.connected_services
 import renku_data_services.crc
 import renku_data_services.data_connectors
+import renku_data_services.notifications
 import renku_data_services.platform
 import renku_data_services.repositories
 import renku_data_services.search
@@ -56,6 +57,7 @@ from renku_data_services.notebooks.api.classes.data_service import DummyGitProvi
 from renku_data_services.notebooks.config import GitProviderHelperProto, get_clusters
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
 from renku_data_services.notebooks.image_check import ImageCheckRepository
+from renku_data_services.notifications.db import NotificationsRepository
 from renku_data_services.platform.db import PlatformRepository, UrlRedirectRepository
 from renku_data_services.project.db import (
     ProjectMemberRepository,
@@ -147,6 +149,7 @@ class DependencyManager:
     shipwright_client: ShipwrightClient | None
     url_redirect_repo: UrlRedirectRepository
     git_provider_helper: GitProviderHelperProto
+    notifications_repo: NotificationsRepository
     oauth_http_client_factory: OAuthHttpClientFactory
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
@@ -175,6 +178,7 @@ class DependencyManager:
             renku_data_services.platform.__file__,
             renku_data_services.data_connectors.__file__,
             renku_data_services.search.__file__,
+            renku_data_services.notifications.__file__,
         ]
 
         api_specs = []
@@ -394,6 +398,10 @@ class DependencyManager:
             project_repo=project_repo,
             data_connector_repo=data_connector_repo,
         )
+        notifications_repo = NotificationsRepository(
+            session_maker=config.db.async_session_maker,
+            alertmanager_webhook_role=config.alertmanager_webhook_role,
+        )
         return cls(
             config,
             authenticator=authenticator,
@@ -431,5 +439,6 @@ class DependencyManager:
             low_level_user_secrets_repo=low_level_user_secrets_repo,
             url_redirect_repo=url_redirect_repo,
             git_provider_helper=git_provider_helper,
+            notifications_repo=notifications_repo,
             oauth_http_client_factory=oauth_http_client_factory,
         )

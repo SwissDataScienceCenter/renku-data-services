@@ -33,6 +33,7 @@ from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.notebooks.api.classes.data_service import GitProviderHelper
 from renku_data_services.notebooks.image_check import ImageCheckRepository
+from renku_data_services.notifications.db import NotificationsRepository
 from renku_data_services.platform.db import PlatformRepository, UrlRedirectRepository
 from renku_data_services.project.db import (
     ProjectMemberRepository,
@@ -309,6 +310,7 @@ class TestDependencyManager(DependencyManager):
             oauth_client_factory=oauth_client_factory,
         )
         metrics_repo = MetricsRepository(session_maker=config.db.async_session_maker)
+        notifications_repo = NotificationsRepository(session_maker=config.db.async_session_maker)
         git_provider_helper = GitProviderHelper(connected_services_repo, "", "", "", config.enable_internal_gitlab)
         return cls(
             config=config,
@@ -347,6 +349,7 @@ class TestDependencyManager(DependencyManager):
             low_level_user_secrets_repo=low_level_user_secrets_repo,
             url_redirect_repo=url_redirect_repo,
             git_provider_helper=git_provider_helper,
+            notifications_repo=notifications_repo,
             oauth_http_client_factory=oauth_client_factory,
         )
 
