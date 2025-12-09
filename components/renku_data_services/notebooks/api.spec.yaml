@@ -945,6 +945,9 @@ components:
           - running
           - hibernated
           type: string
+        lastInteraction:
+          type: string
+          format: date-time
     SessionStatus:
       properties:
         message:
