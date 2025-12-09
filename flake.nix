@@ -155,6 +155,7 @@
         azure-cli
         kind
         redocly
+        yq-go
         (writeShellScriptBin "pyfix" ''
           poetry run ruff check --fix
           poetry run ruff format
@@ -258,6 +259,27 @@
             AUTHZ_DB_HOST = "localhost";
             SOLR_URL = "http://localhost:18983";
             SOLR_CORE = "renku-search-dev";
+          });
+
+        vm-eikek = pkgs.mkShell (devSettings
+          // {
+            buildInputs =
+              commonPackages
+              ++ (builtins.attrValues devshell-tools.legacyPackages.${system}.vm-scripts);
+
+            DEV_VM = "rdsdev-vm";
+            VM_SSH_PORT = "10022";
+
+            DB_HOST = "localhost";
+            DB_PORT = "15432";
+            PGHOST = "localhost";
+            PGPORT = "15432";
+            AUTHZ_DB_HOST = "localhost";
+            SOLR_URL = "http://localhost:18983";
+            SOLR_CORE = "renku-search-dev";
+
+            AMALTHEA_SESSIONS_VERSION = "refs/heads/eikek/feat-prove-active-session";
+            AMALTHEA_JS_VERSION = "refs/heads/eikek/feat-prove-active-session";
           });
 
         cnt = let
