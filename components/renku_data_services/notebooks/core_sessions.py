@@ -1,13 +1,12 @@
 """A selection of core functions for AmaltheaSessions."""
 
 import base64
-from datetime import datetime
 import json
 import os
 import random
 import string
 from collections.abc import AsyncIterator, Mapping, Sequence
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import PurePosixPath
 from typing import Protocol, TypeVar, cast
 from urllib.parse import urljoin, urlparse
@@ -575,7 +574,7 @@ def get_culling_patch(
         maxHibernatedDuration=culling.maxHibernatedDuration or RESET,
         maxIdleDuration=culling.maxIdleDuration or RESET,
         maxStartingDuration=culling.maxStartingDuration or RESET,
-        lastInteraction=lastInteraction or RESET
+        lastInteraction=lastInteraction or RESET,
     )
 
 

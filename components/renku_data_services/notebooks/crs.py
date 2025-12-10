@@ -339,21 +339,6 @@ class AmaltheaSessionV1Alpha1(_ASModel):
         will_delete_at: datetime | None = None
         match self.status, self.spec.culling:
             case (
-                Status(idle=True, idleSince=idle_since),
-                Culling(maxIdleDuration=max_idle),
-            ) if idle_since and max_idle:
-                will_hibernate_at = idle_since + max_idle
-            case (
-                Status(state=State.Failed, failingSince=failing_since),
-                Culling(maxFailedDuration=max_failed),
-            ) if failing_since and max_failed:
-                will_hibernate_at = failing_since + max_failed
-            case (
-                Status(state=State.NotReady),
-                Culling(maxAge=max_age),
-            ) if max_age and self.metadata.creationTimestamp:
-                will_hibernate_at = self.metadata.creationTimestamp + max_age
-            case (
                 Status(state=State.Hibernated, hibernatedSince=hibernated_since),
                 Culling(maxHibernatedDuration=max_hibernated),
             ) if hibernated_since and max_hibernated:
