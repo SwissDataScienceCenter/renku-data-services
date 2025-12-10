@@ -110,7 +110,9 @@ class FieldTypeClasses:
     type_float = FieldTypeClass("FloatPointField")
     type_double = FieldTypeClass("DoublePointField")
     type_text = FieldTypeClass("TextField")
+    """TextField gets tokenized in Solr by default in our deployment."""
     type_str = FieldTypeClass("StrField")
+    """StrField does not get tokenized in Solr by default in our deployment."""
     type_uuid = FieldTypeClass("UUIDField")
     type_rank = FieldTypeClass("RankField")
     type_date_point = FieldTypeClass("DatePointField")

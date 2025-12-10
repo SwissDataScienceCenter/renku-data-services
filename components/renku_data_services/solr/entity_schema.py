@@ -50,6 +50,10 @@ class Fields:
     creator_details: Final[FieldName] = FieldName("creatorDetails")
     namespace_details: Final[FieldName] = FieldName("namespaceDetails")
 
+    # data connector fields
+    doi: Final[FieldName] = FieldName("doi")
+    publisher_name: Final[FieldName] = FieldName("publisherName")
+
 
 class Analyzers:
     """A collection of analyzers."""
@@ -154,5 +158,15 @@ all_migrations: Final[list[SchemaMigration]] = [
             AddCommand(Field.of(Fields.is_namespace, FieldTypes.boolean)),
         ],
         requires_reindex=True,
+    ),
+    SchemaMigration(
+        version=13,
+        commands=[
+            AddCommand(Field.of(Fields.doi, FieldTypes.string)),
+            AddCommand(CopyFieldRule(source=Fields.doi, dest=Fields.content_all)),
+            AddCommand(Field.of(Fields.publisher_name, FieldTypes.string)),
+            AddCommand(CopyFieldRule(source=Fields.publisher_name, dest=Fields.content_all)),
+        ],
+        requires_reindex=False,
     ),
 ]

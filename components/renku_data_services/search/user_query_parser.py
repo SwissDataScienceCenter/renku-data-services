@@ -28,6 +28,7 @@ from renku_data_services.search.user_query import (
     CreatedByIs,
     DateTimeCalc,
     DirectMemberIs,
+    DoiIs,
     Field,
     Helper,
     IdIs,
@@ -40,6 +41,7 @@ from renku_data_services.search.user_query import (
     PartialDate,
     PartialDateTime,
     PartialTime,
+    PublisherNameIs,
     RelativeDate,
     RoleIs,
     SlugIs,
@@ -115,6 +117,10 @@ def _make_field_term(args: tuple[str, Nel[str]]) -> Parser:
             return success(NamespaceIs(values))
         case Field.created_by:
             return success(CreatedByIs(values))
+        case Field.doi:
+            return success(DoiIs(values))
+        case Field.publisher_name:
+            return success(PublisherNameIs(values))
         case _:
             return fail(f"Invalid field name: {field}")
 
