@@ -1,6 +1,7 @@
 """A selection of core functions for AmaltheaSessions."""
 
 import base64
+from datetime import datetime
 import json
 import os
 import random
@@ -561,7 +562,10 @@ def get_culling(
 
 
 def get_culling_patch(
-    user: AuthenticatedAPIUser | AnonymousAPIUser, resource_pool: ResourcePool, nb_config: NotebooksConfig
+    user: AuthenticatedAPIUser | AnonymousAPIUser,
+    resource_pool: ResourcePool,
+    nb_config: NotebooksConfig,
+    lastInteraction: datetime | None,
 ) -> CullingPatch:
     """Get the patch for the culling durations of a session."""
     culling = get_culling(user, resource_pool, nb_config)
@@ -571,6 +575,7 @@ def get_culling_patch(
         maxHibernatedDuration=culling.maxHibernatedDuration or RESET,
         maxIdleDuration=culling.maxIdleDuration or RESET,
         maxStartingDuration=culling.maxStartingDuration or RESET,
+        lastInteraction=lastInteraction or RESET
     )
 
 
@@ -1097,7 +1102,7 @@ async def patch_session(
         # Priority class (if a quota is being used)
         if rc.quota is None:
             patch.spec.priorityClassName = RESET
-        patch.spec.culling = get_culling_patch(user, rp, nb_config)
+        patch.spec.culling = get_culling_patch(user, rp, nb_config, body.lastInteraction)
         # Service account name
         if rp.cluster is not None:
             patch.spec.service_account_name = (
