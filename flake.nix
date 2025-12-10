@@ -46,6 +46,7 @@
             {
               virtualisation.memorySize = 2048;
               networking.hostName = "rdsdev";
+              port-forward.openapi-docs = 8099;
             }
             services
           ];

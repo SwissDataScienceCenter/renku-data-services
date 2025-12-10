@@ -179,7 +179,10 @@ class CullingDurationParsingMixin(BaseCRD):
     @classmethod
     def __deserialize_duration(cls, val: Any, handler: Any) -> Any:
         if isinstance(val, str):
-            return safe_parse_duration(val)
+            try:
+                return safe_parse_duration(val)
+            except Exception:
+                return handler(val)
         return handler(val)
 
 
@@ -333,7 +336,6 @@ class AmaltheaSessionV1Alpha1(_ASModel):
         else:
             state = apispec.State3.starting
 
-        will_hibernate_at: datetime | None = None
         will_delete_at: datetime | None = None
         match self.status, self.spec.culling:
             case (
@@ -372,7 +374,7 @@ class AmaltheaSessionV1Alpha1(_ASModel):
                 state=state,
                 ready_containers=ready_containers,
                 total_containers=total_containers,
-                will_hibernate_at=will_hibernate_at,
+                will_hibernate_at=self.status.willHibernateAt,
                 will_delete_at=will_delete_at,
                 message=self.status.error,
             ),
@@ -467,6 +469,7 @@ class CullingPatch(CullingDurationParsingMixin):
     maxHibernatedDuration: timedelta | ResetType | None = None
     maxIdleDuration: timedelta | ResetType | None = None
     maxStartingDuration: timedelta | ResetType | None = None
+    lastInteraction: datetime | ResetType | None = None
 
 
 class AmaltheaSessionV1Alpha1SpecPatch(BaseCRD):
