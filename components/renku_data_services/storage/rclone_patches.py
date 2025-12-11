@@ -70,7 +70,7 @@ def __patch_schema_sensitive(spec: list[dict[str, Any]]) -> None:
             for option in storage["Options"]:
                 if option["Name"] == "account":
                     option["Sensitive"] = False
-        if storage["Prefix"] == "sftp":
+        if storage["Prefix"] == "sftp" or storage["Prefix"] == "ftp":
             for option in storage["Options"]:
                 if option["Name"] == "host":
                     option["Sensitive"] = False
