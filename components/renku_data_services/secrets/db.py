@@ -249,7 +249,7 @@ class UserSecretsRepo:
                     secret_service_public_key=self.secret_service_public_key,
                     secret_value=patch.secret_value,
                 )
-                secret.update(encrypted_value=encrypted_value, encrypted_key=encrypted_key)
+                secret.update(encrypted_value=encrypted_value, encrypted_key=encrypted_key, expiration_timestamp=None)
             if patch.expiration_timestamp is not None:
                 secret.expiration_timestamp = patch.expiration_timestamp
 

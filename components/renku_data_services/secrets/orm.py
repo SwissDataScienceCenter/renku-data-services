@@ -49,7 +49,7 @@ class SecretORM(BaseORM):
     encrypted_key: Mapped[bytes] = mapped_column(LargeBinary())
     kind: Mapped[models.SecretKind]
     expiration_timestamp: Mapped[Optional[datetime]] = mapped_column(
-        "expiration_timestamp", DateTime(timezone=True), default=None, nullable=True
+        "expiration_timestamp", DateTime(timezone=True), default=None, nullable=True, index=True
     )
     modification_date: Mapped[datetime] = mapped_column(
         "modification_date",
@@ -85,9 +85,7 @@ class SecretORM(BaseORM):
             data_connector_ids=[item.data_connector_id for item in self.data_connector_secrets],
         )
 
-    def update(
-        self, encrypted_value: bytes, encrypted_key: bytes, expiration_timestamp: datetime | None = None
-    ) -> None:
+    def update(self, encrypted_value: bytes, encrypted_key: bytes, expiration_timestamp: datetime | None) -> None:
         """Update an existing secret."""
         self.encrypted_value = encrypted_value
         self.encrypted_key = encrypted_key
