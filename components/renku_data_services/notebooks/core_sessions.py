@@ -6,7 +6,7 @@ import os
 import random
 import string
 from collections.abc import AsyncIterator, Mapping, Sequence
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import PurePosixPath
 from typing import Protocol, TypeVar, cast
 from urllib.parse import urljoin, urlparse
@@ -571,9 +571,11 @@ def get_culling_patch(
     lastInteractionDT: datetime | None = None
     match lastInteraction:
         case apispec.CurrentTime():
-            lastInteractionDT = datetime.now()
+            lastInteractionDT = datetime.now(UTC).replace(microsecond=0)
         case datetime() as dt:
-            lastInteractionDT = min(dt, datetime.now())
+            if not dt.tzinfo:
+                dt = dt.replace(tzinfo=UTC)
+            lastInteractionDT = min(dt, datetime.now(UTC)).replace(microsecond=0)
 
     return CullingPatch(
         maxAge=culling.maxAge or RESET,
