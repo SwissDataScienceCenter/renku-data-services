@@ -175,7 +175,9 @@ class CullingDurationParsingMixin(BaseCRD):
             return None
         return nxt(val)
 
-    @field_validator("*", mode="wrap")
+    @field_validator(
+        "maxAge", "maxFailedDuration", "maxHibernatedDuration", "maxIdleDuration", "maxStartingDuration", mode="wrap"
+    )
     @classmethod
     def __deserialize_duration(cls, val: Any, handler: Any) -> Any:
         if isinstance(val, str):

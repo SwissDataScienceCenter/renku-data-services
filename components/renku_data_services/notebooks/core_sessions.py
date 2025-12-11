@@ -564,11 +564,17 @@ def get_culling_patch(
     user: AuthenticatedAPIUser | AnonymousAPIUser,
     resource_pool: ResourcePool,
     nb_config: NotebooksConfig,
-    lastInteraction: datetime | None,
+    lastInteraction: datetime | apispec.CurrentTime | None,
 ) -> CullingPatch:
     """Get the patch for the culling durations of a session."""
     culling = get_culling(user, resource_pool, nb_config)
-    lastInteractionDT = min(lastInteraction, datetime.now()) if lastInteraction else None
+    lastInteractionDT: datetime | None = None
+    match lastInteraction:
+        case apispec.CurrentTime():
+            lastInteractionDT = datetime.now()
+        case datetime() as dt:
+            lastInteractionDT = min(dt, datetime.now())
+
     return CullingPatch(
         maxAge=culling.maxAge or RESET,
         maxFailedDuration=culling.maxFailedDuration or RESET,

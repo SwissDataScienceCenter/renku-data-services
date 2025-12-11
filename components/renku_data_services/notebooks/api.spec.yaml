@@ -946,8 +946,13 @@ components:
           - hibernated
           type: string
         lastInteraction:
-          type: string
-          format: date-time
+          oneOf:
+            - type: string
+              format: date-time
+            - "$ref": "#/components/schemas/CurrentTime"
+    CurrentTime:
+      type: string
+      enum: [ "now" ]
     SessionStatus:
       properties:
         message:
