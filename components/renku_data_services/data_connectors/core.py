@@ -3,6 +3,7 @@
 import contextlib
 import re
 from dataclasses import asdict
+from datetime import datetime
 from html.parser import HTMLParser
 from typing import Any
 
@@ -18,6 +19,7 @@ from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors.doi.metadata import get_dataset_metadata
 from renku_data_services.storage import models as storage_models
 from renku_data_services.storage.rclone import RCloneValidator
+from renku_data_services.utils.core import get_openbis_pat
 
 
 def dump_storage_with_sensitive_fields(
@@ -325,3 +327,54 @@ class _HTMLToText(HTMLParser):
 
     def handle_data(self, data: str) -> None:
         self._text += data
+
+
+async def openbis_transform_session_token_to_pat(
+    unsaved_secrets: list[models.DataConnectorSecretUpdate], openbis_host: str
+) -> tuple[list[models.DataConnectorSecretUpdate], datetime]:
+    """Transforms a openBIS session to a openBIS personal access token (PAT)."""
+
+    if len(unsaved_secrets) == 1 and unsaved_secrets[0].name == "session_token":
+        if unsaved_secrets[0].value is not None:
+            try:
+                openbis_pat = await get_openbis_pat(openbis_host, unsaved_secrets[0].value)
+                return (
+                    [models.DataConnectorSecretUpdate(name="pass", value=openbis_pat[0])],
+                    openbis_pat[1],
+                )
+            except Exception as e:
+                raise errors.ProgrammingError(message=str(e)) from e
+        raise errors.ValidationError(message="The openBIS session token must be a string value.")
+
+    raise errors.ValidationError(message="The openBIS storage has only one secret: session_token")
+
+
+async def transform_secrets_for_back_end(
+    unsaved_secrets: list[models.DataConnectorSecretUpdate], storage: models.CloudStorageCore
+) -> tuple[list[models.DataConnectorSecretUpdate], datetime | None]:
+    """Transforms the structure of secrets so that the back end can handle them."""
+    expiration_timestamp = None
+    if storage.storage_type == "openbis":
+        (
+            unsaved_secrets,
+            expiration_timestamp,
+        ) = await openbis_transform_session_token_to_pat(unsaved_secrets, storage.configuration["host"])
+    return unsaved_secrets, expiration_timestamp
+
+
+def transform_secrets_for_front_end(
+    secrets: list[models.DataConnectorSecret], storage: models.CloudStorageCore
+) -> list[models.DataConnectorSecret]:
+    """Transforms the structure of secrets so that the front end can handle them."""
+
+    if storage.storage_type == "openbis":
+        for i, secret in enumerate(secrets):
+            if secret.name == "pass":
+                secrets[i] = models.DataConnectorSecret(
+                    name="session_token",
+                    user_id=secret.user_id,
+                    data_connector_id=secret.data_connector_id,
+                    secret_id=secret.secret_id,
+                )
+                break
+    return secrets

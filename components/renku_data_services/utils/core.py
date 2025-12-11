@@ -6,6 +6,7 @@ import ssl
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 from typing import Any, Concatenate, ParamSpec, Protocol, TypeVar, cast
+from zoneinfo import ZoneInfo
 
 import httpx
 from deepmerge import Merger
@@ -86,28 +87,40 @@ def _get_url(host: str) -> str:
     return f"https://{host}/openbis/openbis/rmi-application-server-v3.json"
 
 
-async def get_openbis_session_token(
-    host: str,
-    username: str = "AnonymousUser",
-    password: str | None = None,
-    timeout: int = 12,
-) -> str:
-    """Requests an openBIS session token with the user's login credentials."""
-    if username == "AnonymousUser" and password is None:
-        login = {"method": "loginAsAnonymousUser", "params": [], "id": "1", "jsonrpc": "2.0"}
-    else:
-        assert password
-        login = {"method": "login", "params": [username, password], "id": "2", "jsonrpc": "2.0"}
-
+async def _get_openbis_session_token(host: str, login: dict[str, Any], timeout: int) -> str:
     async with httpx.AsyncClient(verify=get_ssl_context(), timeout=5) as client:
         response = await client.post(_get_url(host), json=login, timeout=timeout)
         if response.status_code == 200:
             json: dict[str, str] = response.json()
-            if "result" in json:
+            if "result" in json and json["result"] is not None:
                 return json["result"]
-            raise Exception("No session token was returned. Username and password may be incorrect.")
+            # No session token was returned. Username and password may be incorrect.
+            raise errors.GeneralBadRequest()
 
-        raise Exception("An openBIS session token related request failed.")
+        # An openBIS session token related request failed.
+        raise errors.BaseError()
+
+
+async def get_openbis_session_token_for_anonymous_user(
+    host: str,
+    timeout: int = 12,
+) -> str:
+    """Requests an openBIS session token for the anonymous user."""
+    return await _get_openbis_session_token(
+        host, {"method": "loginAsAnonymousUser", "params": [], "id": "1", "jsonrpc": "2.0"}, timeout
+    )
+
+
+async def get_openbis_session_token(
+    host: str,
+    username: str,
+    password: str,
+    timeout: int = 12,
+) -> str:
+    """Requests an openBIS session token with the user's login credentials."""
+    return await _get_openbis_session_token(
+        host, {"method": "login", "params": [username, password], "id": "2", "jsonrpc": "2.0"}, timeout
+    )
 
 
 async def get_openbis_pat(
@@ -129,7 +142,7 @@ async def get_openbis_pat(
                 personal_access_tokens_max_validity_period = int(
                     json1["result"]["personal-access-tokens-max-validity-period"]
                 )
-                valid_from = datetime.now()
+                valid_from = datetime.now(ZoneInfo("Europe/Berlin"))
                 valid_to = valid_from + timedelta(seconds=personal_access_tokens_max_validity_period)
                 validity_in_days = (valid_to - valid_from).days
                 if validity_in_days >= minimum_validity_in_days:
@@ -152,9 +165,9 @@ async def get_openbis_pat(
                         json2: dict[str, list[dict[str, str]]] = response.json()
                         return json2["result"][0]["permId"], valid_to
                 else:
-                    raise Exception(
-                        "The maximum allowed validity period of a personal access token is less than "
-                        f"{minimum_validity_in_days} days."
-                    )
+                    # The maximum allowed validity period of a personal access token is less than
+                    # "minimum_validity_in_days" days.
+                    raise errors.GeneralBadRequest()
 
-        raise Exception("An openBIS personal access token related request failed.")
+        # An openBIS personal access token related request failed.
+        raise errors.BaseError()

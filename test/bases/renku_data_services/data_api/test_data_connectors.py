@@ -13,7 +13,7 @@ from renku_data_services.data_connectors.doi.models import DOIMetadata
 from renku_data_services.namespace.models import NamespaceKind
 from renku_data_services.storage.rclone import RCloneDOIMetadata
 from renku_data_services.users.models import UserInfo
-from renku_data_services.utils.core import get_openbis_session_token
+from renku_data_services.utils.core import get_openbis_session_token_for_anonymous_user
 from test.bases.renku_data_services.data_api.utils import merge_headers
 
 if TYPE_CHECKING:
@@ -1636,12 +1636,11 @@ async def test_delete_data_connector_secrets(
     assert response.json == [], response.json
 
 
-@pytest.mark.myskip(1 == 1, reason="Depends on a remote openBIS host which may not always be available.")
+@pytest.mark.external_service_skip(1 == 1, reason="Depends on a remote openBIS host which may not always be available.")
 @pytest.mark.asyncio
 async def test_create_openbis_data_connector(sanic_client, create_openbis_data_connector, user_headers) -> None:
-    openbis_session_token = await get_openbis_session_token(
+    openbis_session_token = await get_openbis_session_token_for_anonymous_user(
         host="openbis-eln-lims.ethz.ch",  # Public openBIS demo instance.
-        username="AnonymousUser",
     )
     data_connector = await create_openbis_data_connector(
         "openBIS data connector 1", session_token=openbis_session_token
@@ -1668,7 +1667,7 @@ async def test_create_openbis_data_connector(sanic_client, create_openbis_data_c
     check_response(response)
 
 
-@pytest.mark.myskip(1 == 1, reason="Depends on a remote openBIS host which may not always be available.")
+@pytest.mark.external_service_skip(1 == 1, reason="Depends on a remote openBIS host which may not always be available.")
 @pytest.mark.asyncio
 async def test_create_openbis_data_connector_with_invalid_session_token(
     sanic_client, create_openbis_data_connector, user_headers
@@ -1684,7 +1683,7 @@ async def test_create_openbis_data_connector_with_invalid_session_token(
         f"/api/data/data_connectors/{data_connector_id}/secrets", headers=user_headers, json=payload
     )
     assert response.status_code == 500, response.json
-    assert response.json["error"]["message"] == "An openBIS personal access token related request failed."
+    assert response.json["error"]["message"] == "BaseError: An unexpected error occurred"
 
 
 @pytest.mark.asyncio

@@ -600,7 +600,7 @@ async def test_storage_validate_connection(storage_test_client) -> None:
     assert res.status_code == 204
 
 
-@pytest.mark.myskip(1 == 1, reason="Depends on a remote openBIS host which may not always be available.")
+@pytest.mark.external_service_skip(1 == 1, reason="Depends on a remote openBIS host which may not always be available.")
 @pytest.mark.asyncio
 async def test_openbis_storage_validate_connection(storage_test_client) -> None:
     openbis_session_token = await get_openbis_session_token(

@@ -4,6 +4,7 @@ import time
 from base64 import b64decode
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -120,9 +121,9 @@ async def test_get_one_secret(sanic_client: SanicASGITestClient, user_headers, c
 
 @pytest.mark.asyncio
 async def test_get_one_secret_not_expired(sanic_client: SanicASGITestClient, user_headers, create_secret) -> None:
-    expiration_timestamp = (datetime.now() + timedelta(seconds=(120 + 15))).isoformat()
+    expiration_timestamp = (datetime.now(ZoneInfo("Europe/Berlin")) + timedelta(seconds=(120 + 15))).isoformat()
     secret_1 = await create_secret("secret-1", "value-1", expiration_timestamp=expiration_timestamp)
-    secret_2 = await create_secret("secret-2", "value-2", expiration_timestamp="2029-12-31")
+    secret_2 = await create_secret("secret-2", "value-2", expiration_timestamp="2029-12-31T23:59:59+01:00")
 
     _, response = await sanic_client.get(f"/api/data/user/secrets/{secret_1["id"]}", headers=user_headers)
     assert response.status_code == 200, response.text
@@ -158,10 +159,10 @@ async def test_get_all_secrets(sanic_client: SanicASGITestClient, user_headers, 
 
 @pytest.mark.asyncio
 async def test_get_all_secrets_not_expired(sanic_client: SanicASGITestClient, user_headers, create_secret) -> None:
-    expiration_timestamp = (datetime.now() + timedelta(seconds=10)).isoformat()
+    expiration_timestamp = (datetime.now(ZoneInfo("Europe/Berlin")) + timedelta(seconds=10)).isoformat()
     await create_secret("secret-1", "value-1", expiration_timestamp=expiration_timestamp)
     await create_secret("secret-2", "value-2")
-    await create_secret("secret-3", "value-3", expiration_timestamp="2029-12-31")
+    await create_secret("secret-3", "value-3", expiration_timestamp="2029-12-31T23:59:59+01:00")
 
     time.sleep(15)
 
@@ -169,7 +170,7 @@ async def test_get_all_secrets_not_expired(sanic_client: SanicASGITestClient, us
     assert response.status_code == 200, response.text
     assert response.json is not None
     assert {s["name"] for s in response.json} == {"secret-2", "secret-3"}
-    assert {s["expiration_timestamp"] for s in response.json if s["name"] == "secret-3"} == {"2029-12-31T00:00:00Z"}
+    assert {s["expiration_timestamp"] for s in response.json if s["name"] == "secret-3"} == {"2029-12-31T22:59:59Z"}
 
 
 @pytest.mark.asyncio
