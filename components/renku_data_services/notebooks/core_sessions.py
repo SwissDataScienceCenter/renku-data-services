@@ -568,13 +568,14 @@ def get_culling_patch(
 ) -> CullingPatch:
     """Get the patch for the culling durations of a session."""
     culling = get_culling(user, resource_pool, nb_config)
+    lastInteractionDT = min(lastInteraction, datetime.now()) if lastInteraction else None
     return CullingPatch(
         maxAge=culling.maxAge or RESET,
         maxFailedDuration=culling.maxFailedDuration or RESET,
         maxHibernatedDuration=culling.maxHibernatedDuration or RESET,
         maxIdleDuration=culling.maxIdleDuration or RESET,
         maxStartingDuration=culling.maxStartingDuration or RESET,
-        lastInteraction=lastInteraction or RESET,
+        lastInteraction=lastInteractionDT or RESET,
     )
 
 
