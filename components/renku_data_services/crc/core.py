@@ -314,8 +314,10 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
     hibernation_warining_period = validate_hibernation_warning_period(
         hibernation_threshold, update.hibernation_warning_period
     )
-    if hibernation_warining_period is RESET:
+    if hibernation_warining_period is None:
         hibernation_warining_period = existing.hibernation_warning_period
+    elif hibernation_warining_period is RESET:
+        hibernation_warining_period = None
 
     default = update.default if update.default is not None else existing.default
     public = update.public if update.public is not None else existing.public
