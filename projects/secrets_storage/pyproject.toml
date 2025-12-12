@@ -60,7 +60,7 @@ kubernetes-asyncio = "^32.0.0"
 python-ulid = "^3.0.0"
 python-gitlab = "^5.6.0"
 psycopg = { version = "^3.2.3", extras = ["binary"] }
-urllib3 = "^2.3.0"
+urllib3 = "^2.6.0"
 deepmerge = "^2.0"
 authlib = "^1.5.0"
 undictify = "^0.11.3"
