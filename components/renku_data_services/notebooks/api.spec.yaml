@@ -911,6 +911,10 @@ components:
           format: date-time
           nullable: true
           type: string
+        lastInteraction:
+          type: string
+          format: date-time
+          nullable: true
         status:
           "$ref": "#/components/schemas/SessionStatus"
         url:
