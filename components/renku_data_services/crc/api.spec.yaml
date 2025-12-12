@@ -1292,6 +1292,8 @@ components:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
           $ref: "#/components/schemas/HibernationThreshold"
+        hibernation_warning_period:
+          $ref: "#/components/schemas/HibernationWarningPeriod"
         cluster_id:
           $ref: "#/components/schemas/Ulid"
         platform:
@@ -1342,6 +1344,8 @@ components:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
           $ref: "#/components/schemas/HibernationThreshold"
+        hibernation_warning_period:
+          $ref: "#/components/schemas/HibernationWarningPeriod"
         cluster_id:
           $ref: "#/components/schemas/Ulid"
         platform:
@@ -1376,6 +1380,8 @@ components:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
           $ref: "#/components/schemas/HibernationThreshold"
+        hibernation_warning_period:
+          $ref: "#/components/schemas/HibernationWarningPeriod"
         cluster_id:
           $ref: "#/components/schemas/Ulid"
         platform:
@@ -1429,6 +1435,8 @@ components:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
           $ref: "#/components/schemas/HibernationThreshold"
+        hibernation_warning_period:
+          $ref: "#/components/schemas/HibernationWarningPeriod"
         cluster:
           type: object
           properties:
@@ -1487,6 +1495,8 @@ components:
           $ref: "#/components/schemas/IdleThreshold"
         hibernation_threshold:
           $ref: "#/components/schemas/HibernationThreshold"
+        hibernation_warning_period:
+          $ref: "#/components/schemas/HibernationWarningPeriod"
         cluster_id:
           $ref: "#/components/schemas/Ulid"
         platform:
@@ -1808,6 +1818,16 @@ components:
     HibernationThreshold:
       type: integer
       description: A threshold in seconds after which a session gets culled/deleted (0 means no threshold)
+      minimum: 0
+      maximum: 2147483647
+    HibernationWarningPeriod:
+      type: integer
+      description: |
+        A duration in seconds, lower than `HibernationThreshold`,
+        which indicates when to let the user know about a session that
+        is going to be expired. If `0` is specified, some default
+        value will be chosen. If no `HibernationThreshold` is defined,
+        this value is ignored.
       minimum: 0
       maximum: 2147483647
     K8sLabelList:

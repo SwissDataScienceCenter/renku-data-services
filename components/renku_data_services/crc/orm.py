@@ -235,6 +235,7 @@ class ResourcePoolORM(BaseORM):
     )
     idle_threshold: Mapped[Optional[int]] = mapped_column(default=None)
     hibernation_threshold: Mapped[Optional[int]] = mapped_column(default=None)
+    hibernation_warning_period: Mapped[Optional[int]] = mapped_column(default=None)
     default: Mapped[bool] = mapped_column(default=False, index=True)
     public: Mapped[bool] = mapped_column(default=False, index=True)
     remote_provider_id: Mapped[str | None] = mapped_column(
@@ -282,6 +283,7 @@ class ResourcePoolORM(BaseORM):
             classes=classes,
             idle_threshold=new_resource_pool.idle_threshold,
             hibernation_threshold=new_resource_pool.hibernation_threshold,
+            hibernation_warning_period=new_resource_pool.hibernation_warning_period,
             public=new_resource_pool.public,
             default=new_resource_pool.default,
             remote_provider_id=remote_provider_id,
@@ -317,6 +319,7 @@ class ResourcePoolORM(BaseORM):
             classes=[resource_class.dump(matching_criteria=class_match_criteria) for resource_class in classes],
             idle_threshold=self.idle_threshold,
             hibernation_threshold=self.hibernation_threshold,
+            hibernation_warning_period=self.hibernation_warning_period,
             public=self.public,
             default=self.default,
             remote=remote,
