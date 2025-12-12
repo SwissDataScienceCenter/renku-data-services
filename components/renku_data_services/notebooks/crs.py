@@ -363,6 +363,7 @@ class AmaltheaSessionV1Alpha1(_ASModel):
                 else None,
             ),
             started=self.metadata.creationTimestamp,
+            lastInteraction=self.spec.culling.lastInteraction if self.spec.culling else None,
             status=apispec.SessionStatus(
                 state=state,
                 ready_containers=ready_containers,
