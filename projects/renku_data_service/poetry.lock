@@ -1592,18 +1592,6 @@ docs = ["autodocsumm (==0.2.14)", "furo (==2024.8.6)", "sphinx (==8.1.3)", "sphi
 tests = ["pytest", "simplejson"]
 
 [[package]]
-name = "monotonic"
-version = "1.6"
-description = "An implementation of time.monotonic() for Python 2 & < 3.3"
-optional = false
-python-versions = "*"
-groups = ["main"]
-files = [
-    {file = "monotonic-1.6-py2.py3-none-any.whl", hash = "sha256:68687e19a14f11f26d140dd5c86f3dba4bf5df58003000ed467e0e2a69bca96c"},
-    {file = "monotonic-1.6.tar.gz", hash = "sha256:3a55207bcfed53ddd5c5bae174524062935efed17792e9de2ad0205ce9ad63f7"},
-]
-
-[[package]]
 name = "multidict"
 version = "6.4.3"
 description = "multidict implementation"
@@ -1801,29 +1789,28 @@ type = ["mypy (>=1.14.1)"]
 
 [[package]]
 name = "posthog"
-version = "3.25.0"
+version = "7.0.1"
 description = "Integrate PostHog into any python application."
 optional = false
-python-versions = "*"
+python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "posthog-3.25.0-py2.py3-none-any.whl", hash = "sha256:85db78c13d1ecb11aed06fad53759c4e8fb3633442c2f3d0336bc0ce8a585d30"},
-    {file = "posthog-3.25.0.tar.gz", hash = "sha256:9168f3e7a0a5571b6b1065c41b3c171fbc68bfe72c3ac0bfd6e3d2fcdb7df2ca"},
+    {file = "posthog-7.0.1-py3-none-any.whl", hash = "sha256:efe212d8d88a9ba80a20c588eab4baf4b1a5e90e40b551160a5603bb21e96904"},
+    {file = "posthog-7.0.1.tar.gz", hash = "sha256:21150562c2630a599c1d7eac94bc5c64eb6f6acbf3ff52ccf1e57345706db05a"},
 ]
 
 [package.dependencies]
 backoff = ">=1.10.0"
 distro = ">=1.5.0"
-monotonic = ">=1.5"
-python-dateutil = ">2.1"
+python-dateutil = ">=2.2"
 requests = ">=2.7,<3.0"
 six = ">=1.5"
+typing-extensions = ">=4.2.0"
 
 [package.extras]
-dev = ["black", "django-stubs", "flake8", "flake8-print", "isort", "lxml", "mypy", "mypy-baseline", "pre-commit", "pydantic", "types-mock", "types-python-dateutil", "types-requests", "types-setuptools", "types-six"]
+dev = ["django-stubs", "lxml", "mypy", "mypy-baseline", "packaging", "pre-commit", "pydantic", "ruff", "setuptools", "tomli", "tomli_w", "twine", "types-mock", "types-python-dateutil", "types-requests", "types-setuptools", "types-six", "wheel"]
 langchain = ["langchain (>=0.2.0)"]
-sentry = ["django", "sentry-sdk"]
-test = ["anthropic", "coverage", "django", "flake8", "freezegun (==1.5.1)", "langchain-anthropic (>=0.2.0)", "langchain-community (>=0.2.0)", "langchain-openai (>=0.2.0)", "langgraph", "mock (>=2.0.0)", "openai", "parameterized (>=0.8.1)", "pydantic", "pylint", "pytest", "pytest-asyncio", "pytest-timeout"]
+test = ["anthropic (>=0.72)", "coverage", "django", "freezegun (==1.5.1)", "google-genai", "langchain-anthropic (>=1.0)", "langchain-community (>=0.4)", "langchain-core (>=1.0)", "langchain-openai (>=1.0)", "langgraph (>=1.0)", "mock (>=2.0.0)", "openai (>=2.0)", "parameterized (>=0.8.1)", "pydantic", "pytest", "pytest-asyncio", "pytest-timeout"]
 
 [[package]]
 name = "prometheus-client"
@@ -3323,4 +3310,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.13"
-content-hash = "8b0e7b2ac2ccc195ad579ad09502d47ba20cb622c47c067b2998c80d3951a1b7"
+content-hash = "ff92c9dceaef1edbce3e0970a08fdd4cf015e3cada90325a583cc9b32ec8e2ac"
