@@ -46,6 +46,10 @@ class Tokenizers:
     icu: Tokenizer = Tokenizer(name="icu")
     openNlp: Tokenizer = Tokenizer(name="openNlp")
 
+    # The keyword tokenizer treats the entire field as a single token
+    # See https://solr.apache.org/guide/solr/latest/indexing-guide/tokenizers.html#keyword-tokenizer
+    keyword: Tokenizer = Tokenizer(name="keyword")
+
 
 @final
 class Filter(BaseModel):
@@ -155,6 +159,10 @@ class FieldType(SchemaModel, frozen=True):
     def with_index_analyzer(self, a: Analyzer) -> Self:
         """Return a copy with index analyzers set to the given one."""
         return self.model_copy(update={"indexAnalyzer": a})
+
+    def make_stored(self) -> Self:
+        """Make the field "stored" so that original value of the field is stored and can be retrieved."""
+        return self.model_copy(update={"stored": True})
 
     @classmethod
     def id(cls, name: TypeName) -> FieldType:

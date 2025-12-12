@@ -56,7 +56,7 @@ class RCloneValidator:
         provider.validate_config(configuration, keep_sensitive=keep_sensitive)
 
     def validate_sensitive_data(
-        self, configuration: Union["RCloneConfig", dict[str, Any]], sensitive_data: dict[str, str]
+        self, configuration: Union[RCloneConfig, dict[str, Any]], sensitive_data: dict[str, str]
     ) -> None:
         """Validates whether the provided sensitive data is marked as sensitive in the rclone schema."""
         sensitive_options = self.get_provider(configuration).sensitive_options
@@ -68,7 +68,7 @@ class RCloneValidator:
                 continue
             raise errors.ValidationError(message=f"The '{key}' property is not marked as sensitive.")
 
-    def get_real_configuration(self, configuration: Union["RCloneConfig", dict[str, Any]]) -> dict[str, Any]:
+    def get_real_configuration(self, configuration: Union[RCloneConfig, dict[str, Any]]) -> dict[str, Any]:
         """Converts a Renku rclone configuration to a real rclone config."""
         real_config = dict(configuration)
 
