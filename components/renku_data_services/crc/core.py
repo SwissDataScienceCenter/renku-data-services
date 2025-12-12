@@ -59,19 +59,11 @@ def validate_resource_class(body: apispec.ResourceClass) -> models.UnsavedResour
 
 @overload
 def validate_resource_class_patch_or_put(
-    body: apispec.ResourceClassPatch, method: Literal["PATCH"]
+    body: apispec.ResourceClassPatch | apispec.ResourceClass, method: Literal["PATCH", "PUT"]
 ) -> models.ResourceClassPatch: ...
 @overload
 def validate_resource_class_patch_or_put(
-    body: apispec.ResourceClassPatchWithId, method: Literal["PATCH"]
-) -> models.ResourceClassPatchWithId: ...
-@overload
-def validate_resource_class_patch_or_put(
-    body: apispec.ResourceClass, method: Literal["PUT"]
-) -> models.ResourceClassPatch: ...
-@overload
-def validate_resource_class_patch_or_put(
-    body: apispec.ResourceClassWithId, method: Literal["PUT"]
+    body: apispec.ResourceClassPatchWithId | apispec.ResourceClassWithId, method: Literal["PATCH", "PUT"]
 ) -> models.ResourceClassPatchWithId: ...
 def validate_resource_class_patch_or_put(
     body: apispec.ResourceClassPatch
@@ -139,7 +131,7 @@ def validate_resource_class_update(
         raise errors.ValidationError(message="The default storage cannot be larger than the max allowable storage.")
 
 
-def validate_resource_pool(body: apispec.ResourcePool) -> models.UnsavedResourcePool:
+def validate_resource_pool_post(body: apispec.ResourcePool) -> models.UnsavedResourcePool:
     """Validate a resource pool object."""
     if len(body.name) > 40:
         # TODO: Should this be added to the API spec instead?
@@ -163,6 +155,11 @@ def validate_resource_pool(body: apispec.ResourcePool) -> models.UnsavedResource
     hibernation_threshold = body.hibernation_threshold
     if hibernation_threshold == 0:
         hibernation_threshold = None
+    hibernation_warning_period = validate_hibernation_warning_period(
+        hibernation_threshold, body.hibernation_warning_period
+    )
+    if hibernation_warning_period is RESET:
+        hibernation_warning_period = None
 
     quota = validate_quota(body=body.quota) if body.quota else None
     classes = [validate_resource_class(body=new_cls) for new_cls in body.classes]
@@ -187,6 +184,7 @@ def validate_resource_pool(body: apispec.ResourcePool) -> models.UnsavedResource
         quota=quota,
         idle_threshold=idle_threshold,
         hibernation_threshold=hibernation_threshold,
+        hibernation_warning_period=hibernation_warning_period,
         default=body.default,
         public=body.public,
         remote=remote,
@@ -195,20 +193,34 @@ def validate_resource_pool(body: apispec.ResourcePool) -> models.UnsavedResource
     )
 
 
-def validate_resource_pool_patch(body: apispec.ResourcePoolPatch) -> models.ResourcePoolPatch:
+def validate_resource_pool_put_or_patch(
+    method: Literal["PATCH"] | Literal["PUT"], body: apispec.ResourcePoolPatch | apispec.ResourcePoolPut
+) -> models.ResourcePoolPatch:
     """Validate the patch to a resource pool."""
     classes = (
-        [validate_resource_class_patch_or_put(body=rc, method="PATCH") for rc in body.classes] if body.classes else None
+        [validate_resource_class_patch_or_put(body=rc, method=method) for rc in body.classes] if body.classes else None
     )
     quota = validate_quota_put_patch(body=body.quota) if body.quota else None
-    remote = validate_remote_patch(body=body.remote) if body.remote else None
+    remote = None
+    match body.remote:
+        case apispec.RemoteConfigurationPatchReset() as r:
+            remote = validate_remote_patch(body=r)
+        case apispec.RemoteConfigurationFirecrestPatch() as r:
+            remote = validate_remote_patch(body=r)
+        case apispec.RemoteConfigurationFirecrest() as r:
+            remote = validate_remote_put(r)
+
     platform = __validate_runtime_platform(body=body.platform) if body.platform else None
+    hibernation_warning_period = validate_hibernation_warning_period(
+        body.hibernation_threshold, body.hibernation_warning_period
+    )
     return models.ResourcePoolPatch(
         name=body.name,
         classes=classes,
         quota=quota,
         idle_threshold=RESET if body.idle_threshold == 0 else body.idle_threshold,
         hibernation_threshold=RESET if body.hibernation_threshold == 0 else body.hibernation_threshold,
+        hibernation_warning_period=hibernation_warning_period,
         default=body.default,
         public=body.public,
         remote=remote,
@@ -217,27 +229,31 @@ def validate_resource_pool_patch(body: apispec.ResourcePoolPatch) -> models.Reso
     )
 
 
-def validate_resource_pool_put(body: apispec.ResourcePoolPut) -> models.ResourcePoolPatch:
-    """Validate the put request for a resource pool."""
-    # NOTE: the current behavior is to do a PATCH-style update on nested classes for "PUT resource pool"
-    classes = (
-        [validate_resource_class_patch_or_put(body=rc, method="PUT") for rc in body.classes] if body.classes else None
-    )
-    quota = validate_quota_put_patch(body=body.quota) if body.quota else RESET
-    remote = validate_remote_put(body=body.remote)
-    platform = __validate_runtime_platform(body=body.platform) if body.platform else RESET
-    return models.ResourcePoolPatch(
-        name=body.name,
-        classes=classes,
-        quota=quota,
-        idle_threshold=body.idle_threshold,
-        hibernation_threshold=body.hibernation_threshold,
-        default=body.default,
-        public=body.public,
-        remote=remote,
-        cluster_id=ULID.from_str(body.cluster_id) if body.cluster_id else RESET,
-        platform=platform,
-    )
+def validate_hibernation_warning_period(
+    hibernation_threshold: int | ResetType | None, hibernation_warning_period: int | ResetType | None
+) -> int | ResetType | None:
+    """Validate hibernation_warning_period."""
+    if hibernation_threshold is None:
+        # cannot validate here without the existing data
+        return hibernation_warning_period
+    elif hibernation_warning_period is None:
+        return None
+    elif (
+        hibernation_warning_period == 0
+        or hibernation_threshold == 0
+        or hibernation_threshold is RESET
+        or hibernation_warning_period is RESET
+    ):
+        return RESET
+    else:
+        if hibernation_warning_period >= hibernation_threshold:
+            raise errors.ValidationError(
+                message=(
+                    f"The hibernation_warning_period {hibernation_warning_period} must be "
+                    f"lower than the hibernation_threshold ({hibernation_threshold})"
+                )
+            )
+    return hibernation_warning_period
 
 
 def validate_resource_pool_update(existing: models.ResourcePool, update: models.ResourcePoolPatch) -> None:
@@ -295,6 +311,12 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
     hibernation_threshold = (
         update.hibernation_threshold if update.hibernation_threshold is not None else existing.hibernation_threshold
     )
+    hibernation_warining_period = validate_hibernation_warning_period(
+        hibernation_threshold, update.hibernation_warning_period
+    )
+    if hibernation_warining_period is RESET:
+        hibernation_warining_period = existing.hibernation_warning_period
+
     default = update.default if update.default is not None else existing.default
     public = update.public if update.public is not None else existing.public
     remote: models.RemoteConfigurationFirecrest | ResetType = existing.remote if existing.remote else RESET

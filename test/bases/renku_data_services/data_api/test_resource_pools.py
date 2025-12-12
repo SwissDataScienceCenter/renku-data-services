@@ -29,6 +29,7 @@ resource_pool_payload = [
             "public": True,
             "idle_threshold": 86400,
             "hibernation_threshold": 99999,
+            "hibernation_warning_period": 888,
             "cluster_id": "change_me",
         },
         201,
@@ -196,6 +197,7 @@ async def test_resource_pool_quotas(
 
     assert res.json.get("idle_threshold") == 86400
     assert res.json.get("hibernation_threshold") == 99999
+    assert res.json.get("hibernation_warning_period") == 888
 
 
 @pytest.mark.asyncio
@@ -1120,6 +1122,7 @@ resource_pool_payload_2 = {
     "public": True,
     "idle_threshold": 86400,
     "hibernation_threshold": 99999,
+    "hibernation_warning_period": 888,
 }
 
 cluster_payload = {
