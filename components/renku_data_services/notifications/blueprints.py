@@ -14,6 +14,7 @@ from renku_data_services.base_api.auth import (
     require_role,
 )
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.notifications import apispec
 from renku_data_services.notifications.core import (
@@ -49,7 +50,7 @@ class NotificationsBP(CustomBlueprint):
         """Get all alerts for the authenticated user, optionally filtered by session name."""
 
         @authenticate(self.authenticator)
-        @validate(query=apispec.AlertsGetQuery)
+        @validate_query(query=apispec.AlertsGetQuery)
         async def _get_all(_: Request, user: base_models.APIUser, query: apispec.AlertsGetQuery) -> JSONResponse:
             alerts = await self.notifications_repo.get_alerts_for_user(user=user, session_name=query.session_name)
             return validated_json(apispec.AlertList, alerts)
