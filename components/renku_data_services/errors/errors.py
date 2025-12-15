@@ -186,6 +186,14 @@ class RequestCancelledError(ProgrammingError):
     )
 
 
+@dataclass
+class ThirdPartyAPIError(ProgrammingError):
+    """Raised when a response from a third party API is not what we expected."""
+
+    code: int = 1514
+    message: str = "An external API or service that Renku depends on is not available or is not behaving as expected."
+
+
 def missing_or_unauthorized(resource_type: str | StrEnum, id: str | int | ULID) -> MissingResourceError:
     """Generate a missing resource error with an ambiguous message."""
     return MissingResourceError(

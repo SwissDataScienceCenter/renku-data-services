@@ -1640,7 +1640,7 @@ async def test_delete_data_connector_secrets(
 @pytest.mark.asyncio
 async def test_create_openbis_data_connector(sanic_client, create_openbis_data_connector, user_headers) -> None:
     openbis_session_token = await get_openbis_session_token_for_anonymous_user(
-        host="openbis-eln-lims.ethz.ch",  # Public openBIS demo instance.
+        openbis_host="openbis-eln-lims.ethz.ch",  # Public openBIS demo instance.
     )
     data_connector = await create_openbis_data_connector(
         "openBIS data connector 1", session_token=openbis_session_token

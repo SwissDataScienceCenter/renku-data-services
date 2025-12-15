@@ -604,7 +604,7 @@ async def test_storage_validate_connection(storage_test_client) -> None:
 @pytest.mark.asyncio
 async def test_openbis_storage_validate_connection(storage_test_client) -> None:
     openbis_session_token = await get_openbis_session_token(
-        host="openbis-eln-lims.ethz.ch",  # Public openBIS demo instance.
+        openbis_host="openbis-eln-lims.ethz.ch",  # Public openBIS demo instance.
         username="observer",
         password="1234",
     )
