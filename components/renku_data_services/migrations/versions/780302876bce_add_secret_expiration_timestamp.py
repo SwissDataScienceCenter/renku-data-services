@@ -1,7 +1,7 @@
 """add secret expiration timestamp
 
 Revision ID: 780302876bce
-Revises: 21fd67938150
+Revises: 5ec28ea89e0a
 Create Date: 2025-12-10 09:12:40.827447
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "780302876bce"
-down_revision = "21fd67938150"
+down_revision = "5ec28ea89e0a"
 branch_labels = None
 depends_on = None
 
