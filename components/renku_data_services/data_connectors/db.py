@@ -4,11 +4,11 @@ import random
 import string
 from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import suppress
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
-from sqlalchemy import ColumnExpressionArgument, Select, delete, func, select
+from sqlalchemy import ColumnExpressionArgument, Select, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 from ulid import ULID
@@ -876,6 +876,13 @@ class DataConnectorSecretRepository:
         async with self.session_maker() as session:
             stmt = (
                 select(schemas.DataConnectorSecretORM)
+                .join(schemas.DataConnectorSecretORM.secret)
+                .where(
+                    or_(
+                        schemas.SecretORM.expiration_timestamp.is_(None),
+                        schemas.SecretORM.expiration_timestamp > datetime.now(UTC) + timedelta(seconds=120),
+                    )
+                )
                 .where(schemas.DataConnectorSecretORM.user_id == user.id)
                 .where(schemas.DataConnectorSecretORM.data_connector_id == data_connector_id)
                 .where(schemas.DataConnectorSecretORM.secret_id == secrets_schemas.SecretORM.id)
