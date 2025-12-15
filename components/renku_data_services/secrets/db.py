@@ -24,6 +24,19 @@ from renku_data_services.secrets.orm import SecretORM
 from renku_data_services.users.db import UserRepo
 
 
+def _get_stmt(requested_by: APIUser) -> Select[tuple[SecretORM]]:
+    return (
+        select(SecretORM)
+        .where(SecretORM.user_id == requested_by.id)
+        .where(
+            or_(
+                SecretORM.expiration_timestamp.is_(None),
+                SecretORM.expiration_timestamp > datetime.now(UTC) + timedelta(seconds=120),
+            )
+        )
+    )
+
+
 class LowLevelUserSecretsRepo:
     """An adapter for accessing user secrets without encryption handling."""
 
@@ -38,7 +51,7 @@ class LowLevelUserSecretsRepo:
         """Get a specific user secrets from the database."""
         secret_ids_str = map(str, secret_ids)
         async with self.session_maker() as session:
-            stmt = select(SecretORM).where(SecretORM.user_id == requested_by.id).where(SecretORM.id.in_(secret_ids_str))
+            stmt = _get_stmt(requested_by).where(SecretORM.id.in_(secret_ids_str))
             res = await session.execute(stmt)
             orms = res.scalars()
             return [orm.dump() for orm in orms]
@@ -147,23 +160,11 @@ class UserSecretsRepo:
         self.user_repo = user_repo
         self.secret_service_public_key = secret_service_public_key
 
-    def _get_stmt(self, requested_by: APIUser) -> Select[tuple[SecretORM]]:
-        return (
-            select(SecretORM)
-            .where(SecretORM.user_id == requested_by.id)
-            .where(
-                or_(
-                    SecretORM.expiration_timestamp.is_(None),
-                    SecretORM.expiration_timestamp > datetime.now(UTC) + timedelta(seconds=120),
-                )
-            )
-        )
-
     @only_authenticated
     async def get_user_secrets(self, requested_by: APIUser, kind: SecretKind) -> list[Secret]:
         """Get all user's secrets from the database."""
         async with self.session_maker() as session:
-            stmt = self._get_stmt(requested_by).where(SecretORM.kind == kind)
+            stmt = _get_stmt(requested_by).where(SecretORM.kind == kind)
             res = await session.execute(stmt)
             orm = res.scalars().all()
             return [o.dump() for o in orm]
@@ -172,7 +173,7 @@ class UserSecretsRepo:
     async def get_secret_by_id(self, requested_by: APIUser, secret_id: ULID) -> Secret:
         """Get a specific user secret from the database."""
         async with self.session_maker() as session:
-            stmt = self._get_stmt(requested_by).where(SecretORM.id == secret_id)
+            stmt = _get_stmt(requested_by).where(SecretORM.id == secret_id)
             res = await session.execute(stmt)
             orm = res.scalar_one_or_none()
             if not orm:
@@ -225,7 +226,7 @@ class UserSecretsRepo:
         """Update a secret."""
 
         async with self.session_maker() as session, session.begin():
-            result = await session.execute(self._get_stmt(requested_by).where(SecretORM.id == secret_id))
+            result = await session.execute(_get_stmt(requested_by).where(SecretORM.id == secret_id))
             secret = result.scalar_one_or_none()
             if secret is None:
                 raise errors.MissingResourceError(message=f"The secret with id '{secret_id}' cannot be found")
@@ -260,7 +261,7 @@ class UserSecretsRepo:
         """Delete a secret."""
 
         async with self.session_maker() as session, session.begin():
-            result = await session.execute(self._get_stmt(requested_by).where(SecretORM.id == secret_id))
+            result = await session.execute(_get_stmt(requested_by).where(SecretORM.id == secret_id))
             secret = result.scalar_one_or_none()
             if secret is None:
                 return None
