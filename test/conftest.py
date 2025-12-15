@@ -475,3 +475,17 @@ async def solr_search(solr_config, app_manager):
     assert result.migrations_run == len(entity_schema.all_migrations)
 
     return solr_config
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_setup(item):
+    mark = item.get_closest_marker(name="external_service_skip")
+    if mark:
+        condition = next(iter(mark.args), True)
+        reason = mark.kwargs.get("reason")
+        item.add_marker(
+            pytest.mark.skipif(
+                not os.getenv("PYTEST_FORCE_RUN_EXTERNAL_SERVICE_SKIP", False) and condition, reason=reason
+            ),
+            append=False,
+        )

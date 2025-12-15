@@ -4,10 +4,11 @@ import random
 import string
 from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import suppress
+from datetime import UTC, datetime, timedelta
 from typing import TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
-from sqlalchemy import ColumnExpressionArgument, Select, delete, func, select
+from sqlalchemy import ColumnExpressionArgument, Select, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 from ulid import ULID
@@ -875,6 +876,13 @@ class DataConnectorSecretRepository:
         async with self.session_maker() as session:
             stmt = (
                 select(schemas.DataConnectorSecretORM)
+                .join(schemas.DataConnectorSecretORM.secret)
+                .where(
+                    or_(
+                        schemas.SecretORM.expiration_timestamp.is_(None),
+                        schemas.SecretORM.expiration_timestamp > datetime.now(UTC) + timedelta(seconds=120),
+                    )
+                )
                 .where(schemas.DataConnectorSecretORM.user_id == user.id)
                 .where(schemas.DataConnectorSecretORM.data_connector_id == data_connector_id)
                 .where(schemas.DataConnectorSecretORM.secret_id == secrets_schemas.SecretORM.id)
@@ -886,7 +894,11 @@ class DataConnectorSecretRepository:
             return [secret.dump() for secret in secrets]
 
     async def patch_data_connector_secrets(
-        self, user: base_models.APIUser, data_connector_id: ULID, secrets: list[models.DataConnectorSecretUpdate]
+        self,
+        user: base_models.APIUser,
+        data_connector_id: ULID,
+        secrets: list[models.DataConnectorSecretUpdate],
+        expiration_timestamp: datetime | None,
     ) -> list[models.DataConnectorSecret]:
         """Create, update or remove data connector secrets."""
         if user.id is None:
@@ -935,7 +947,9 @@ class DataConnectorSecretRepository:
 
                 if data_connector_secret_orm := existing_secrets_as_dict.get(name):
                     data_connector_secret_orm.secret.update(
-                        encrypted_value=encrypted_value, encrypted_key=encrypted_key
+                        encrypted_value=encrypted_value,
+                        encrypted_key=encrypted_key,
+                        expiration_timestamp=expiration_timestamp,
                     )
                 else:
                     secret_name = f"{data_connector.name[:45]} - {name[:45]}"
@@ -949,6 +963,7 @@ class DataConnectorSecretRepository:
                         encrypted_value=encrypted_value,
                         encrypted_key=encrypted_key,
                         kind=SecretKind.storage,
+                        expiration_timestamp=expiration_timestamp,
                     )
                     data_connector_secret_orm = schemas.DataConnectorSecretORM(
                         name=name,

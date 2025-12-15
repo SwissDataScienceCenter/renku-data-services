@@ -8,7 +8,7 @@ from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
 from ulid import ULID
 
-from renku_data_services import base_models
+from renku_data_services import base_models, errors
 from renku_data_services.base_api.auth import (
     authenticate,
     only_authenticated,
@@ -30,6 +30,8 @@ from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors.core import (
     dump_storage_with_sensitive_fields,
     prevalidate_unsaved_global_data_connector,
+    transform_secrets_for_back_end,
+    transform_secrets_for_front_end,
     validate_data_connector_patch,
     validate_data_connector_secrets_patch,
     validate_unsaved_data_connector,
@@ -38,7 +40,6 @@ from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
     DataConnectorSecretRepository,
 )
-from renku_data_services.errors import errors
 from renku_data_services.storage.rclone import RCloneValidator
 
 
@@ -418,8 +419,15 @@ class DataConnectorsBP(CustomBlueprint):
             secrets = await self.data_connector_secret_repo.get_data_connector_secrets(
                 user=user, data_connector_id=data_connector_id
             )
+            data_connector = await self.data_connector_repo.get_data_connector(
+                user=user, data_connector_id=data_connector_id
+            )
             return validated_json(
-                apispec.DataConnectorSecretsList, [self._dump_data_connector_secret(secret) for secret in secrets]
+                apispec.DataConnectorSecretsList,
+                [
+                    self._dump_data_connector_secret(secret)
+                    for secret in transform_secrets_for_front_end(secrets, data_connector.storage)
+                ],
             )
 
         return "/data_connectors/<data_connector_id:ulid>/secrets", ["GET"], _get_secrets
@@ -435,13 +443,37 @@ class DataConnectorsBP(CustomBlueprint):
             user: base_models.APIUser,
             data_connector_id: ULID,
             body: apispec.DataConnectorSecretPatchList,
+            validator: RCloneValidator,
         ) -> JSONResponse:
             unsaved_secrets = validate_data_connector_secrets_patch(put=body)
+            data_connector = await self.data_connector_repo.get_data_connector(
+                user=user, data_connector_id=data_connector_id
+            )
+            storage = data_connector.storage
+            provider = validator.providers[storage.storage_type]
+            sensitive_lookup = [o.name for o in provider.options if o.sensitive]
+            for secret in unsaved_secrets:
+                if secret.name in sensitive_lookup:
+                    continue
+                raise errors.ValidationError(
+                    message=f"The '{secret.name}' property is not marked sensitive and can not be saved in the secret "
+                    f"storage."
+                )
+
+            unsaved_secrets, expiration_timestamp = await transform_secrets_for_back_end(unsaved_secrets, storage)
+
             secrets = await self.data_connector_secret_repo.patch_data_connector_secrets(
-                user=user, data_connector_id=data_connector_id, secrets=unsaved_secrets
+                user=user,
+                data_connector_id=data_connector_id,
+                secrets=unsaved_secrets,
+                expiration_timestamp=expiration_timestamp,
             )
             return validated_json(
-                apispec.DataConnectorSecretsList, [self._dump_data_connector_secret(secret) for secret in secrets]
+                apispec.DataConnectorSecretsList,
+                [
+                    self._dump_data_connector_secret(secret)
+                    for secret in transform_secrets_for_front_end(secrets, storage)
+                ],
             )
 
         return "/data_connectors/<data_connector_id:ulid>/secrets", ["PATCH"], _patch_secrets

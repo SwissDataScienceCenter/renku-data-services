@@ -48,6 +48,9 @@ class SecretORM(BaseORM):
     encrypted_value: Mapped[bytes] = mapped_column(LargeBinary())
     encrypted_key: Mapped[bytes] = mapped_column(LargeBinary())
     kind: Mapped[models.SecretKind]
+    expiration_timestamp: Mapped[Optional[datetime]] = mapped_column(
+        "expiration_timestamp", DateTime(timezone=True), default=None, nullable=True, index=True
+    )
     modification_date: Mapped[datetime] = mapped_column(
         "modification_date",
         DateTime(timezone=True),
@@ -72,17 +75,19 @@ class SecretORM(BaseORM):
         return models.Secret(
             id=self.id,
             name=self.name,
-            default_filename=self.default_filename,
             encrypted_value=self.encrypted_value,
             encrypted_key=self.encrypted_key,
             kind=self.kind,
+            expiration_timestamp=self.expiration_timestamp,
             modification_date=self.modification_date,
+            default_filename=self.default_filename,
             session_secret_slot_ids=[item.secret_slot_id for item in self.session_secrets],
             data_connector_ids=[item.data_connector_id for item in self.data_connector_secrets],
         )
 
-    def update(self, encrypted_value: bytes, encrypted_key: bytes) -> None:
+    def update(self, encrypted_value: bytes, encrypted_key: bytes, expiration_timestamp: datetime | None) -> None:
         """Update an existing secret."""
         self.encrypted_value = encrypted_value
         self.encrypted_key = encrypted_key
+        self.expiration_timestamp = expiration_timestamp
         self.modification_date = datetime.now(UTC)

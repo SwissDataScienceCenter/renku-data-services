@@ -208,6 +208,12 @@ class SecretWithId(BaseAPISpec):
         max_length=99,
         min_length=1,
     )
+    kind: SecretKind
+    expiration_timestamp: Optional[datetime] = Field(
+        None,
+        description="The date and time the secret is not valid anymore (this is in any timezone)",
+        example="2030-11-01T17:32:28UTC+01:00",
+    )
     default_filename: str = Field(
         ...,
         description="Filename to give to this secret when mounted in Renku 1.0 sessions\n",
@@ -237,6 +243,18 @@ class SecretPost(BaseAPISpec):
         max_length=99,
         min_length=1,
     )
+    value: str = Field(
+        ...,
+        description="Secret value that can be any text",
+        max_length=5000,
+        min_length=1,
+    )
+    kind: SecretKind = SecretKind.general
+    expiration_timestamp: Optional[datetime] = Field(
+        None,
+        description="The date and time the secret is not valid anymore (this is in any timezone)",
+        example="2030-11-01T17:32:28UTC+01:00",
+    )
     default_filename: Optional[str] = Field(
         None,
         description="Filename to give to this secret when mounted in Renku 1.0 sessions\n",
@@ -245,13 +263,6 @@ class SecretPost(BaseAPISpec):
         min_length=1,
         pattern="^[a-zA-Z0-9_\\-.]*$",
     )
-    value: str = Field(
-        ...,
-        description="Secret value that can be any text",
-        max_length=5000,
-        min_length=1,
-    )
-    kind: SecretKind = SecretKind.general
 
 
 class SecretPatch(BaseAPISpec):
@@ -265,6 +276,17 @@ class SecretPatch(BaseAPISpec):
         max_length=99,
         min_length=1,
     )
+    value: Optional[str] = Field(
+        None,
+        description="Secret value that can be any text",
+        max_length=5000,
+        min_length=1,
+    )
+    expiration_timestamp: Optional[datetime] = Field(
+        None,
+        description="The date and time the secret is not valid anymore (this is in any timezone)",
+        example="2030-11-01T17:32:28UTC+01:00",
+    )
     default_filename: Optional[str] = Field(
         None,
         description="Filename to give to this secret when mounted in Renku 1.0 sessions\n",
@@ -272,12 +294,6 @@ class SecretPatch(BaseAPISpec):
         max_length=99,
         min_length=1,
         pattern="^[a-zA-Z0-9_\\-.]*$",
-    )
-    value: Optional[str] = Field(
-        None,
-        description="Secret value that can be any text",
-        max_length=5000,
-        min_length=1,
     )
 
 

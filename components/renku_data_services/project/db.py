@@ -6,7 +6,7 @@ import functools
 import random
 import string
 from collections.abc import AsyncGenerator, Awaitable, Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Concatenate, ParamSpec, TypeVar
 
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -775,6 +775,13 @@ class ProjectSessionSecretRepository:
         async with self.session_maker() as session:
             result = await session.scalars(
                 select(schemas.SessionSecretORM)
+                .join(schemas.SessionSecretORM.secret)
+                .where(
+                    or_(
+                        schemas.SecretORM.expiration_timestamp.is_(None),
+                        schemas.SecretORM.expiration_timestamp > datetime.now(UTC) + timedelta(seconds=120),
+                    )
+                )
                 .where(schemas.SessionSecretORM.user_id == user.id)
                 .where(schemas.SessionSecretORM.secret_slot_id == schemas.SessionSecretSlotORM.id)
                 .where(schemas.SessionSecretSlotORM.project_id == project_id)
@@ -860,7 +867,7 @@ class ProjectSessionSecretRepository:
                 )
                 if session_launcher_secret_orm := existing_secrets_as_dict.get(slot_id):
                     session_launcher_secret_orm.secret.update(
-                        encrypted_value=encrypted_value, encrypted_key=encrypted_key
+                        encrypted_value=encrypted_value, encrypted_key=encrypted_key, expiration_timestamp=None
                     )
                 else:
                     name = secret_slot.name

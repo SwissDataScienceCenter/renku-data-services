@@ -13,6 +13,7 @@ from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.storage.rclone_patches import BANNED_SFTP_OPTIONS, BANNED_STORAGE, OAUTH_PROVIDERS
+from renku_data_services.utils.core import get_openbis_session_token
 from test.utils import SanicReusableASGITestClient
 
 _valid_storage: dict[str, Any] = {
@@ -590,11 +591,44 @@ async def test_storage_validate_connection(storage_test_client) -> None:
     _, res = await storage_test_client.post("/api/data/storage_schema/test_connection", data=json.dumps(body))
     assert res.status_code == 422
 
-    body = {"configuration": {"type": "s3", "provider": "AWS"}, "source_path": "doesntexistatall/"}
+    body = {"configuration": {"type": "s3", "provider": "AWS"}, "source_path": "does_not_exist_at_all/"}
     _, res = await storage_test_client.post("/api/data/storage_schema/test_connection", data=json.dumps(body))
     assert res.status_code == 422
 
     body = {"configuration": {"type": "s3", "provider": "AWS"}, "source_path": "giab/"}
+    _, res = await storage_test_client.post("/api/data/storage_schema/test_connection", data=json.dumps(body))
+    assert res.status_code == 204
+
+
+@pytest.mark.external_service_skip(1 == 1, reason="Depends on a remote openBIS host which may not always be available.")
+@pytest.mark.asyncio
+async def test_openbis_storage_validate_connection(storage_test_client) -> None:
+    openbis_session_token = await get_openbis_session_token(
+        host="openbis-eln-lims.ethz.ch",  # Public openBIS demo instance.
+        username="observer",
+        password="1234",
+    )
+    storage_test_client, _ = storage_test_client
+
+    body = {
+        "configuration": {
+            "type": "openbis",
+            "host": "openbis-eln-lims.ethz.ch",
+            "session_token": openbis_session_token,
+        },
+        "source_path": "does_not_exist_at_all/",
+    }
+    _, res = await storage_test_client.post("/api/data/storage_schema/test_connection", data=json.dumps(body))
+    assert res.status_code == 422
+
+    body = {
+        "configuration": {
+            "type": "openbis",
+            "host": "openbis-eln-lims.ethz.ch",
+            "session_token": openbis_session_token,
+        },
+        "source_path": "/",
+    }
     _, res = await storage_test_client.post("/api/data/storage_schema/test_connection", data=json.dumps(body))
     assert res.status_code == 204
 

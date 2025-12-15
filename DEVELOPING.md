@@ -119,6 +119,8 @@ function if you prefer to keep your favorite shell.
 You can run style checks using `make style_checks`.
 To run the test suite, use `make tests` (you likely need to run in the devcontainer for this to work, as it needs
 some surrounding services to run).
+* Run a specific test e.g.: `poetry run pytest -v test/bases/renku_data_services/data_api/test_data_connectors.py::test_create_openbis_data_connector`
+* Also run tests marked with `@pytest.mark.external_service_skip`: `PYTEST_FORCE_RUN_EXTERNAL_SERVICE_SKIP=1 make tests`
 
 We use [Syrupy](https://github.com/syrupy-project/syrupy) for snapshotting data in tests.
 
