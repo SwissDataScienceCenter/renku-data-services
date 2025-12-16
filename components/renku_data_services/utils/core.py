@@ -149,8 +149,8 @@ async def get_openbis_pat(
         response = await client.post(url, json=get_server_information, timeout=timeout)
         if response.status_code != 200:
             logger.error(
-                f"Received a non-200 response, {response.status_code} from OpenBIS for performing 'getServerInformation'. "
-                f"Reponse content: {response.text}"
+                f"Received a non-200 response, {response.status_code} from OpenBIS "
+                f"for performing 'getServerInformation'. Reponse content: {response.text}"
             )
             raise errors.ThirdPartyAPIError(
                 detail="OpenBIS responded with a non-200 status code when performing 'getServerInformation'."
