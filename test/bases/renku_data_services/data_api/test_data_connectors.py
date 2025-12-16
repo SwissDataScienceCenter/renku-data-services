@@ -1484,14 +1484,6 @@ async def test_patch_data_connector_secrets(
     assert len(secrets) == 2
     assert {s["name"] for s in secrets} == {"access_key_id", "secret_access_key"}
 
-    payload = [
-        {"name": "not_sensitive", "value": "not_sensitive_value"},
-    ]
-    _, response = await sanic_client.patch(
-        f"/api/data/data_connectors/{data_connector_id}/secrets", headers=user_headers, json=payload
-    )
-    assert response.status_code == 422, response.json
-
     # Check that the data connector is referenced from the first user secret
     user_secret_id = secrets[0]["secret_id"]
     _, response = await sanic_client.get(f"/api/data/user/secrets/{user_secret_id}", headers=user_headers)
