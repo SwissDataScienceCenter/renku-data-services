@@ -443,22 +443,12 @@ class DataConnectorsBP(CustomBlueprint):
             user: base_models.APIUser,
             data_connector_id: ULID,
             body: apispec.DataConnectorSecretPatchList,
-            validator: RCloneValidator,
         ) -> JSONResponse:
             unsaved_secrets = validate_data_connector_secrets_patch(put=body)
             data_connector = await self.data_connector_repo.get_data_connector(
                 user=user, data_connector_id=data_connector_id
             )
             storage = data_connector.storage
-            provider = validator.providers[storage.storage_type]
-            sensitive_lookup = [o.name for o in provider.options if o.sensitive]
-            for secret in unsaved_secrets:
-                if secret.name in sensitive_lookup:
-                    continue
-                raise errors.ValidationError(
-                    message=f"The '{secret.name}' property is not marked sensitive and can not be saved in the secret "
-                    f"storage."
-                )
 
             unsaved_secrets, expiration_timestamp = await transform_secrets_for_back_end(unsaved_secrets, storage)
 
