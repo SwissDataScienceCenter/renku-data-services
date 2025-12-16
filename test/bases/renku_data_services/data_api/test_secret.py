@@ -239,7 +239,7 @@ async def test_get_update_a_secret(sanic_client: SanicASGITestClient, user_heade
     _, response = await sanic_client.patch(
         f"/api/data/user/secrets/{secret["id"]}",
         headers=user_headers,
-        json={"value": "newest-value", "expiration_timestamp": "2029-12-31"},
+        json={"value": "newest-value", "expiration_timestamp": "2029-12-31T00:00:00Z"},
     )
     assert response.status_code == 200, response.text
 

@@ -14,6 +14,9 @@ from deepmerge import Merger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services import errors
+from renku_data_services.app_config import logging
+
+logger = logging.getLogger(__name__)
 
 
 @functools.lru_cache(1)
@@ -145,12 +148,20 @@ async def get_openbis_pat(
         get_server_information = {"method": "getServerInformation", "params": [session_id], "id": "2", "jsonrpc": "2.0"}
         response = await client.post(url, json=get_server_information, timeout=timeout)
         if response.status_code != 200:
+            logger.error(
+                f"Received a non-200 response, {response.status_code} from OpenBIS for performing 'getServerInformation'. "
+                f"Reponse content: {response.text}"
+            )
             raise errors.ThirdPartyAPIError(
                 detail="OpenBIS responded with a non-200 status code when performing 'getServerInformation'."
             )
         try:
             json1: dict[str, dict[str, str]] = response.json()
         except JSONDecodeError as err:
+            logger.error(
+                f"Could not parse OpenBIS response for performing 'getServerInformation' into JSON. "
+                f"Response content: {response.text}"
+            )
             raise errors.ThirdPartyAPIError(
                 detail="Could not parse OpenBIS response about server information into JSON."
             ) from err
@@ -159,6 +170,11 @@ async def get_openbis_pat(
                 detail=f"The response from OpenBIS for 'getServerInformation' contained errors: {json1['error']}."
             )
         if json1.get("result", {}).get("personal-access-tokens-max-validity-period") is None:
+            logger.error(
+                f"The response from OpenBIS for 'getServerInformation' did not contain the expected "
+                "token validity period fields. "
+                f"Response content: {response.text}"
+            )
             raise errors.ThirdPartyAPIError(
                 detail="The response from OpenBIS for 'getServerInformation' "
                 "did not contain the expected token validity period."
@@ -188,12 +204,20 @@ async def get_openbis_pat(
         }
         response = await client.post(url, json=create_personal_access_tokens, timeout=timeout)
         if response.status_code != 200:
+            logger.error(
+                "OpenBIS responded with a non-200 status code when creating a personal access token. "
+                f"Status code: {response.status_code}, response content: {response.text}"
+            )
             raise errors.ThirdPartyAPIError(
-                detail="OpenBIS responded with a non-200 status code when performing creating a personal access token."
+                detail="OpenBIS responded with a non-200 status code when creating a personal access token."
             )
         try:
             json2: dict[str, list[dict[str, str]]] = response.json()
         except JSONDecodeError as err:
+            logger.error(
+                "Could not parse OpenBIS response for creating a personal access token into JSON."
+                f"Response content: {response.text}"
+            )
             raise errors.ThirdPartyAPIError(
                 detail="Could not parse OpenBIS response for creating personal access token into JSON."
             ) from err
@@ -202,5 +226,13 @@ async def get_openbis_pat(
             or len(json2["result"]) == 0
             or json2["result"][0].get("permId") is None
         ):
-            raise errors.ThirdPartyAPIError()
+            logger.error(
+                "The response from OpenBIS did not have the required 'result[0].permId' field in the response "
+                "from creating a personal access token. "
+                f"Response content: {response.text}"
+            )
+            raise errors.ThirdPartyAPIError(
+                detail="The response from OpenBIS did not have the required 'result[0].permId' field in the response "
+                "from creating a personal access token."
+            )
         return json2["result"][0]["permId"], valid_to
