@@ -562,12 +562,11 @@ def get_culling(
 
 def get_culling_patch(
     user: AuthenticatedAPIUser | AnonymousAPIUser,
-    resource_pool: ResourcePool,
+    resource_pool: ResourcePool | None,
     nb_config: NotebooksConfig,
     lastInteraction: datetime | apispec.CurrentTime | None,
 ) -> CullingPatch:
     """Get the patch for the culling durations of a session."""
-    culling = get_culling(user, resource_pool, nb_config)
     lastInteractionDT: datetime | None = None
     match lastInteraction:
         case apispec.CurrentTime():
@@ -579,14 +578,20 @@ def get_culling_patch(
                 raise ValidationError(message=f"The timestamp is in the future: {dt}")
             lastInteractionDT = min(dt, datetime.now(UTC)).replace(microsecond=0)
 
-    return CullingPatch(
-        maxAge=culling.maxAge or RESET,
-        maxFailedDuration=culling.maxFailedDuration or RESET,
-        maxHibernatedDuration=culling.maxHibernatedDuration or RESET,
-        maxIdleDuration=culling.maxIdleDuration or RESET,
-        maxStartingDuration=culling.maxStartingDuration or RESET,
-        lastInteraction=lastInteractionDT or RESET,
-    )
+    match resource_pool:
+        case None:
+            # only update lastInteraction
+            return CullingPatch(lastInteraction=lastInteractionDT or RESET)
+        case rp:
+            culling = get_culling(user, rp, nb_config) if resource_pool else Culling()
+            return CullingPatch(
+                maxAge=culling.maxAge or RESET,
+                maxFailedDuration=culling.maxFailedDuration or RESET,
+                maxHibernatedDuration=culling.maxHibernatedDuration or RESET,
+                maxIdleDuration=culling.maxIdleDuration or RESET,
+                maxStartingDuration=culling.maxStartingDuration or RESET,
+                lastInteraction=lastInteractionDT or RESET,
+            )
 
 
 async def __requires_image_pull_secret(nb_config: NotebooksConfig, image: str, internal_gitlab_user: APIUser) -> bool:
@@ -1080,6 +1085,7 @@ async def patch_session(
         patch.spec.hibernated = False
         await metrics.user_requested_session_resume(user, metadata={"session_id": session_id})
 
+    rp: ResourcePool | None = None
     # Resource class
     if body.resource_class_id is not None:
         new_cluster = await nb_config.k8s_v2_client.cluster_by_class_id(body.resource_class_id, user)
@@ -1112,12 +1118,13 @@ async def patch_session(
         # Priority class (if a quota is being used)
         if rc.quota is None:
             patch.spec.priorityClassName = RESET
-        patch.spec.culling = get_culling_patch(user, rp, nb_config, body.lastInteraction)
         # Service account name
         if rp.cluster is not None:
             patch.spec.service_account_name = (
                 rp.cluster.service_account_name if rp.cluster.service_account_name is not None else RESET
             )
+
+    patch.spec.culling = get_culling_patch(user, rp, nb_config, body.lastInteraction)
 
     # If the session is being hibernated we do not need to patch anything else that is
     # not specifically called for in the request body, we can refresh things when the user resumes.
