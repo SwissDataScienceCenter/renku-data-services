@@ -1,7 +1,7 @@
 """add doi and publisher info for global data connectors
 
 Revision ID: bd97866a6253
-Revises: 42049656cdb8
+Revises: 780302876bce
 Create Date: 2025-12-03 09:38:17.534403
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "bd97866a6253"
-down_revision = "42049656cdb8"
+down_revision = "780302876bce"
 branch_labels = None
 depends_on = None
 
