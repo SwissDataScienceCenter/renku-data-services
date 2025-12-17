@@ -1825,7 +1825,7 @@ components:
       description: |
         A duration in seconds, lower than `HibernationThreshold`,
         which indicates when to let the user know about a session that
-        is going to be expired. If `0` is specified, some default
+        is going to be hibernated. If `0` is specified, some default
         value will be chosen. If no `HibernationThreshold` is defined,
         this value is ignored.
       minimum: 0

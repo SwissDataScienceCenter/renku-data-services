@@ -33,7 +33,7 @@ from renku_data_services.data_connectors.db import (
     DataConnectorSecretRepository,
 )
 from renku_data_services.data_connectors.models import DataConnectorSecret, DataConnectorWithSecrets
-from renku_data_services.errors import errors
+from renku_data_services.errors import ValidationError, errors
 from renku_data_services.k8s.models import K8sSecret, sanitizer
 from renku_data_services.notebooks import apispec, core
 from renku_data_services.notebooks.api.amalthea_patches import git_proxy, init_containers
@@ -574,7 +574,9 @@ def get_culling_patch(
             lastInteractionDT = datetime.now(UTC).replace(microsecond=0)
         case datetime() as dt:
             if not dt.tzinfo:
-                dt = dt.replace(tzinfo=UTC)
+                raise ValidationError(message=f"The timestamp has no timezone information: {dt}")
+            if datetime.now(UTC) < dt:
+                raise ValidationError(message=f"The timestamp is in the future: {dt}")
             lastInteractionDT = min(dt, datetime.now(UTC)).replace(microsecond=0)
 
     return CullingPatch(
