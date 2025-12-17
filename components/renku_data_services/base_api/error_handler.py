@@ -69,7 +69,7 @@ class CustomErrorHandler(ErrorHandler):
         super().__init__(base)
 
     @classmethod
-    def _get_formatted_exception(cls, exception: Exception) -> errors.BaseError | None:
+    def _get_formatted_exception(cls, request: Request, exception: Exception) -> errors.BaseError | None:
         formatted_exception: errors.BaseError | None = None
         match exception:
             case errors.BaseError():
@@ -142,7 +142,7 @@ class CustomErrorHandler(ErrorHandler):
                 req_uri = "<unknown-uri>"
                 req_method = "<unknown-method>"
                 if exception.request:
-                    req_uri = exception.request.url
+                    req_uri = str(exception.request.url)
                     req_method = exception.request.method
 
                 formatted_exception = errors.BaseError(
@@ -153,7 +153,7 @@ class CustomErrorHandler(ErrorHandler):
 
     def default(self, request: Request, exception: Exception) -> HTTPResponse:
         """Overrides the default error handler."""
-        formatted_exception = self._get_formatted_exception(exception) or errors.BaseError()
+        formatted_exception = self._get_formatted_exception(request, exception) or errors.BaseError()
 
         self.log(request, formatted_exception)
         if formatted_exception.status_code == 500 and "PYTEST_CURRENT_TEST" in os.environ:
