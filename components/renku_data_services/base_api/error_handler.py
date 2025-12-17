@@ -141,7 +141,7 @@ class CustomErrorHandler(ErrorHandler):
             case httpx.RequestError():
                 req_uri = "<unknown-uri>"
                 req_method = "<unknown-method>"
-                if exception.request:
+                if exception._request:
                     req_uri = str(exception.request.url)
                     req_method = exception.request.method
 

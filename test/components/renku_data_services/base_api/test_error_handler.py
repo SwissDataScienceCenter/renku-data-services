@@ -44,6 +44,7 @@ def test_match_exception() -> None:
         httpx.UnsupportedProtocol("ftp"),
     ]
 
+    req = httpx.Request("GET", "")
     for exc in expect_to_match:
-        result = CustomErrorHandler._get_formatted_exception(exc)
+        result = CustomErrorHandler._get_formatted_exception(req, exc)
         assert result is not None
