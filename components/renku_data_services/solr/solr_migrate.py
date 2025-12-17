@@ -33,8 +33,6 @@ from renku_data_services.solr.solr_schema import (
 
 logger = logging.getLogger(__name__)
 
-logger = logging.Logger(__name__)
-
 
 def _is_applied(schema: CoreSchema, cmd: SchemaCommand) -> bool:
     """Check whether a schema command is already applied to the given schema."""
