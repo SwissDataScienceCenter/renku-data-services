@@ -2480,7 +2480,40 @@ def _mock_get_dataset_metadata(metadata: DOIMetadata, sanic_client: SanicASGITes
     )
 
 
-async def test_validate_envidat_data_connector() -> None:
+def _mock_get_envidat_metadata(metadata: DOIMetadata, sanic_client: SanicASGITestClient, monkeypatch: "MonkeyPatch"):
+    """Mock the _get_envidat_metadata method."""
+
+    # The Evnidat API may be unresponsive, so we mock its response
+    from renku_data_services.data_connectors.doi import metadata as metadata_mod
+
+    _orig_get_envidat_metadata = metadata_mod._get_envidat_metadata
+
+    def _mock_get_envidat_metadata(original_fn):
+        async def _mock(*args, **kwargs) -> DOIMetadata | None:
+            fetched_metadata = await original_fn(*args, **kwargs)
+            if fetched_metadata is not None:
+                assert fetched_metadata == metadata
+                return fetched_metadata
+
+            warnings.warn("Could not retrieve DOI metadata, returning saved one", stacklevel=2)
+            return metadata
+
+        return _mock
+
+    monkeypatch.setattr(metadata_mod, "_get_envidat_metadata", _mock_get_envidat_metadata(_orig_get_envidat_metadata))
+    monkeypatch.setattr(
+        metadata_mod,
+        "_get_envidat_metadata",
+        _mock_get_envidat_metadata(_orig_get_envidat_metadata),
+    )
+
+
+async def test_validate_envidat_data_connector(
+    envidat_metadata: DOIMetadata,
+    sanic_client: SanicASGITestClient,
+    monkeypatch: "MonkeyPatch",
+) -> None:
+    _mock_get_envidat_metadata(envidat_metadata, sanic_client, monkeypatch)
     body = GlobalDataConnectorPost(
         storage=CloudStorageCorePost(
             storage_type="doi",
@@ -2510,10 +2543,16 @@ async def test_validate_envidat_data_connector() -> None:
     assert res.publisher_name is not None
 
 
-async def test_add_envidat_data_connector(sanic_client: SanicASGITestClient, user_headers) -> None:
+async def test_add_envidat_data_connector(
+    sanic_client: SanicASGITestClient,
+    user_headers: dict[str, str],
+    envidat_metadata: DOIMetadata,
+    monkeypatch: "MonkeyPatch",
+) -> None:
+    _mock_get_envidat_metadata(envidat_metadata, sanic_client, monkeypatch)
     payload = {
         "storage": {
-            "configuration": {"type": "doi", "doi": "10.16904/envidat.716"},
+            "configuration": {"type": "doi", "doi": "10.16904/12"},
             "source_path": "/",
             "target_path": "/",
             "readonly": True,

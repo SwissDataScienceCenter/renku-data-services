@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import PurePosixPath
 from urllib.parse import parse_qs, urlparse
 
 from renku_data_services.data_connectors.doi.models import SchemaOrgDataset
@@ -25,7 +26,8 @@ class S3Config:
     @property
     def path(self) -> str:
         """Return the path including the bucket name and the prefix."""
-        return f"/{self.bucket}{self.prefix}"
+        # NOTE: PurePosixPath("/test") / "/subfolder" == /subfolder, so we still have to strip /
+        return (PurePosixPath("/") / PurePosixPath(self.bucket) / self.prefix.lstrip("/")).as_posix()
 
 
 def get_rclone_config(dataset: SchemaOrgDataset, provider: DatasetProvider) -> S3Config:

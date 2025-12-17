@@ -478,9 +478,19 @@ async def convert_envidat_v1_data_connector_to_s3(
     config = payload.configuration
     doi = config.get("doi")
     if not isinstance(doi, str):
-        raise errors.ValidationError()
+        if doi is None:
+            raise errors.ValidationError(
+                message="Cannot get configuration for Envidat data connector because "
+                "the doi is missing from the payload."
+            )
+        raise errors.ValidationError(
+            message=f"Cannot get configuration for Envidat data connector because the doi '{doi}' "
+            "in the payload is not a string."
+        )
     if len(doi) == 0:
-        raise errors.ValidationError()
+        raise errors.ValidationError(
+            message="Cannot get configuration for Envidat data connector because the doi is a string with zero length."
+        )
     doi = DOI(doi)
 
     new_config = payload.model_copy(deep=True)
@@ -494,7 +504,11 @@ async def convert_envidat_v1_data_connector_to_s3(
     async with clnt:
         res = await clnt.get(envidat_url, params=query_params, headers=headers)
         if res.status_code != 200:
-            raise errors.ProgrammingError()
+            raise errors.ValidationError(
+                message="Cannot get configuration for Envidat data connector because Envidat responded "
+                f"with an unexpected {res.status_code} status code at {res.url}.",
+                detail=f"Response from envidat: {res.text}",
+            )
     dataset = SchemaOrgDataset.model_validate_json(res.text)
     s3_config = schema_org.get_rclone_config(
         dataset,

@@ -1,6 +1,6 @@
-from renku_data_services.data_connectors.doi.models import SchemaOrgDataset
+from typing import Final
 
-envidat_sample_response = """
+envidat_sample_response: Final[str] = """
 {
     "@context": "http://schema.org",
     "@type": "https://schema.org/Dataset",
@@ -180,7 +180,3 @@ envidat_sample_response = """
     "license": "https://opendefinition.org/licenses/odc-odbl"
 }
 """  # noqa: E501
-
-
-def test_envidat_metadata_parsing() -> None:
-    SchemaOrgDataset.model_validate_json(envidat_sample_response)
