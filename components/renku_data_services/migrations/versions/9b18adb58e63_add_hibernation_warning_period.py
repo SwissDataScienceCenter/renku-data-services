@@ -20,6 +20,13 @@ def upgrade() -> None:
     op.add_column(
         "resource_pools", sa.Column("hibernation_warning_period", sa.Integer(), nullable=True), schema="resource_pools"
     )
+    op.execute("""
+    update "resource_pools"."resource_pools"
+    set hibernation_warning_period = case
+      when hibernation_threshold > 900 then 900
+      else (hibernation_threshold * 0.5)::integer
+    end
+    where resource_pools.hibernation_threshold is not null""")
 
 
 def downgrade() -> None:
