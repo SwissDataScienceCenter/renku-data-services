@@ -75,7 +75,6 @@ aiofiles = "^24.1.0"
 # Detected incompatible Protobuf Gencode/Runtime versions when loading authzed/api/v1/core.proto: gencode 5.28.2 runtime 5.27.3.
 protobuf = "^5.29.3"
 cryptography = "^44.0.1"
-kubernetes-asyncio = "^32.0.0"
 marshmallow = "^3.26.1"
 escapism = "^1.0.1"
 kr8s = "^0.20.7"
@@ -85,8 +84,6 @@ toml = "^0.10.2"
 parsy = "^2.1"
 sanic-ext = "^24.12.0"
 markdown-code-runner = "^2.2.0"
-
-[tool.poetry.group.dev.dependencies]
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

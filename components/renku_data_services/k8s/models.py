@@ -10,7 +10,7 @@ from box import Box
 from kr8s._api import Api
 from kr8s.asyncio.objects import APIObject
 from kr8s.objects import Secret
-from kubernetes_asyncio.client import V1Secret
+from kubernetes.client import V1Secret
 
 from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import DUMMY_TASK_RUN_USER_ID, ClusterId
