@@ -85,7 +85,7 @@ class K8sObject(K8sObjectMeta):
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}(name={self.name}, namespace={self.namespace}, cluster={self.cluster}, "
-            f"gvk={self.gvk}, manifest={self.manifest}, user_id={self.user_id})"
+            f"gvk={self.gvk}, user_id={self.user_id})"
         )
 
     def to_api_object(self, api: Api) -> APIObject:
