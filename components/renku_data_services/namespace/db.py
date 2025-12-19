@@ -60,7 +60,7 @@ async def _check_namespace_permissions(
 async def _upsert_old_entity_slug(session: AsyncSession, old_entity_slug: schemas.EntitySlugORM) -> None:
     """This function checks if an old entity slug exists and if so then it updates it.
 
-    If the old entity slug does not exists then it inserts one.
+    If the old entity slug does not exist then it inserts one.
     This is needed so that when a slug is renamed then the old slug still points to the new
     and current entity.
     """
@@ -233,7 +233,7 @@ class GroupRepository:
     @update_search_document
     async def update_group(
         self, user: base_models.APIUser, slug: Slug, patch: models.GroupPatch, *, session: AsyncSession | None = None
-    ) -> models.Group:
+    ) -> models.Group | models.GroupUpdate:
         """Update a group in the DB."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
@@ -250,6 +250,9 @@ class GroupRepository:
                 message=f"Group with slug '{slug.value}' does not exist or you do not have access to it."
             )
 
+        old_group = group.dump()
+        slug_changed = False
+
         new_slug_str = patch.slug.lower() if patch.slug is not None else None
         if new_slug_str is not None and new_slug_str != group.namespace.slug:
             # Only update if the slug has changed.
@@ -262,12 +265,17 @@ class GroupRepository:
                 )
             session.add(schemas.NamespaceOldORM(slug=group.namespace.slug, latest_slug_id=group.namespace.id))
             group.namespace.slug = new_slug_str
+            slug_changed = True
         if patch.name is not None:
             group.name = patch.name
         if patch.description is not None:
             group.description = patch.description if patch.description else None
 
-        return group.dump()
+        new_group = group.dump()
+
+        if slug_changed:
+            return models.GroupUpdate(old=old_group, new=new_group)
+        return new_group
 
     @with_db_transaction
     async def update_group_members(

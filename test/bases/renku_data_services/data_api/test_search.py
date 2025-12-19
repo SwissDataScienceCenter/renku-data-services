@@ -180,7 +180,7 @@ async def test_inherited_member_search(
 
     await search_reprovision(app_manager_instance)
 
-    ## Searching as 'regular_user' returns all entities, since this is the user implicitely used to create everything
+    ## Searching as 'regular_user' returns all entities, since this is the user implicitly used to create everything
     result = await search_query(
         sanic_client_with_solr, f"inherited_member:@{regular_user.namespace.path.first}", regular_user
     )
@@ -192,15 +192,15 @@ async def test_inherited_member_search(
     result = await search_query(sanic_client_with_solr, f"inherited_member:@{mads.namespace.path.first}", regular_user)
     assert_search_result(result, [p3, p4, gr_lidl], check_order=False)
 
-    ## searching as mads, shows own enities
+    ## searching as mads, shows own entities
     result = await search_query(sanic_client_with_solr, f"inherited_member:@{mads.namespace.path.first}", mads)
     assert_search_result(result, [p3, p4, gr_lidl], check_order=False)
 
-    ## searching as wout, shows own enities
+    ## searching as wout, shows own entities
     result = await search_query(sanic_client_with_solr, f"inherited_member:@{wout.namespace.path.first}", wout)
     assert_search_result(result, [p1, p2, gr_visma], check_order=False)
 
-    ## mads inspecting wouts, shows only public entities from wout
+    ## mads inspecting wout, shows only public entities from wout
     result = await search_query(sanic_client_with_solr, f"inherited_member:@{wout.namespace.path.first}", mads)
     assert_search_result(result, [p2, gr_visma], check_order=False)
 
@@ -336,3 +336,57 @@ def assert_search_result(
 
     for r, e in zip(items, expected, strict=True):
         assert r == e, f"Unexpected element (result={r}, expected={e}) in {items} vs {expected}"
+
+
+# TODO: figure out how to run search tests fully parallel
+@pytest.mark.xdist_group("search")
+@pytest.mark.asyncio
+async def test_group_slug_change_updates_project_search(
+    app_manager_instance,
+    create_data_connector_model,
+    create_group_model,
+    create_project_model,
+    regular_user,
+    sanic_client_with_solr,
+    search_push_updates,
+    search_query,
+    search_reprovision,
+    user_headers,
+) -> None:
+    """Test that changing a group's slug updates the search index for resources in that group."""
+    slug = "test-group"
+    group = await create_group_model(sanic_client_with_solr, "Test Group", user=regular_user, slug=slug)
+    project = await create_project_model(
+        sanic_client_with_solr, "Project", user=regular_user, visibility="public", namespace=group.slug
+    )
+    data_connector = await create_data_connector_model("Data Connector", visibility="public", namespace=group.slug)
+    await search_reprovision(app_manager_instance)
+
+    # Resources are found in the old namespace
+    resources = await search_query(
+        sanic_client_with_solr, f"namespace:{group.slug} type:dataconnector,project", user=regular_user
+    )
+    assert_search_result(resources, [data_connector, project])
+
+    new_slug = "renamed-test-group"
+
+    _, response = await sanic_client_with_solr.patch(
+        f"/api/data/groups/{group.slug}", headers=user_headers, json={"slug": new_slug}
+    )
+    assert response.status_code == 200, response.text
+    assert response.json["slug"] == new_slug
+
+    # Only push the update messages to Solr (not a full reprovision)
+    await search_push_updates(clear_index=False)
+
+    # Verify resources' namespace are updated
+    resources = await search_query(
+        sanic_client_with_solr, f"namespace:{new_slug} type:dataconnector,project", user=regular_user
+    )
+    assert_search_result(resources, [data_connector, project])
+
+    # Verify resources aren't found in the old namespace anymore
+    resources = await search_query(
+        sanic_client_with_solr, f"namespace:{slug} type:dataconnector,project", user=regular_user
+    )
+    assert_search_result(resources, [])
