@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from base64 import b64encode
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Final, Self, cast
@@ -235,12 +236,22 @@ class K8sSecret(K8sObject):
             type=self.manifest.get("type"),
         )
 
+    def __b64encode_values(stringData: dict[str, Any]) -> dict[str, Any]:
+        new_data = {}
+        for k, v in stringData:
+            new_data[k] = b64encode(v)
+        return new_data
+
     def to_patch(self) -> list[dict[str, Any]]:
         """Create a rfc6902 patch that would take an existing secret and patch it to this state."""
-        if self.manifest.get("stringData"):
-            raise NotImplementedError("Patching a secret with stringData field is not implemented.")
+        stringData = self.manifest.get("stringData")
+        if stringData and self.manifest.get("data"):
+            raise NotImplementedError("Patching a secret with both stringData and data is not supported.")
+
+        data = self.__b64encode_values(stringData) if stringData else self.manifest.data
+
         patch = [
-            {"op": "replace", "path": "/data", "value": self.manifest.data},
+            {"op": "replace", "path": "/data", "value": data},
             {"op": "replace", "path": "/type", "value": self.manifest.get("type", "Opaque")},
         ]
         if "metadata" not in self.manifest:
