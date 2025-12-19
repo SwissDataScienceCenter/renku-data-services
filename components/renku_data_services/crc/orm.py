@@ -16,7 +16,7 @@ from renku_data_services.connected_services import orm as cs_schemas
 from renku_data_services.crc import models
 from renku_data_services.crc.models import ClusterSettings, SavedClusterSettings, SessionProtocol
 from renku_data_services.errors import errors
-from renku_data_services.k8s.constants import ClusterId
+from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.utils.sqlalchemy import ULIDType
 
 logger = logging.getLogger(__name__)
@@ -331,6 +331,12 @@ class ResourcePoolORM(BaseORM):
         return models.RemoteConfigurationFirecrest.from_dict(
             {**self.remote_json, "provider_id": self.remote_provider_id}
         )
+
+    def get_cluster_id(self) -> ClusterId:
+        """Get the ID of the cluster the resource pool refers to."""
+        if self.cluster_id is None:
+            return DEFAULT_K8S_CLUSTER
+        return ClusterId(self.cluster_id)
 
 
 class TolerationORM(BaseORM):

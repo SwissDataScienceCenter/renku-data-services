@@ -9,7 +9,7 @@ from typing import Any, Optional, Protocol, Self
 
 from renku_data_services import errors
 from renku_data_services.base_models import ResetType
-from renku_data_services.k8s.constants import ClusterId
+from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.notebooks.cr_amalthea_session import TlsSecret
 
 
@@ -335,6 +335,12 @@ class ResourcePool:
             if rc.default:
                 return rc
         return None
+
+    def get_cluster_id(self) -> ClusterId:
+        """Get the ID of the cluster the resource pool refers to."""
+        if self.cluster is None:
+            return DEFAULT_K8S_CLUSTER
+        return self.cluster.id
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

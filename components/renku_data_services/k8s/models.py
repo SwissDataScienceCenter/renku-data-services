@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any, Final, Self, cast
 
 import kubernetes
@@ -31,15 +32,38 @@ class K8sObjectMeta:
         namespaced: bool = True,
     ) -> None:
         self.name = name
-        self.namespace = namespace
+        self.__namespace = namespace
         self.cluster = cluster
         self.gvk = gvk
         self.user_id = user_id
 
         self.namespaced = namespaced
 
+        if not self.namespaced and self.namespace is not None:
+            raise errors.ValidationError(
+                message="Trying to create an invalid k8s object which is cluster-scoped but it has a defined namespace."
+            )
+        if self.namespaced and self.namespace is None:
+            raise errors.ValidationError(
+                message="Trying to create an invalid k8s object which is namespaced "
+                "but it does not have a defined namespace."
+            )
+
+    @property
+    def namespace(self) -> str | None:
+        """The namespace of the k8s object."""
+        if not self.__namespace:
+            return None
+        return self.__namespace
+
     def with_manifest(self, manifest: dict[str, Any]) -> K8sObject:
         """Convert to a full k8s object."""
+        if not self.namespaced:
+            raise NotImplementedError("K8sObjectMeta.with_manifest only supports namespaced objects.")
+        if not self.namespace:
+            raise errors.ValidationError(
+                message=f"Namespaced k8s objects have to have a defined namespace, got {self.namespace}"
+            )
         return K8sObject(
             name=self.name,
             namespace=self.namespace,
@@ -67,7 +91,7 @@ class K8sObjectMeta:
 
 
 class K8sObject(K8sObjectMeta):
-    """Represents an object in k8s."""
+    """Represents a namespaced object in k8s."""
 
     def __init__(
         self,
@@ -77,10 +101,14 @@ class K8sObject(K8sObjectMeta):
         gvk: GVK,
         manifest: Box,
         user_id: str | None = None,
-        namespaced: bool = True,
     ) -> None:
-        super().__init__(name, namespace, cluster, gvk, user_id, namespaced)
+        super().__init__(name, namespace, cluster, gvk, user_id, True)
         self.manifest = manifest
+
+    @property
+    def namespace(self) -> str:
+        """The namespace of the k8s object."""
+        return self.__namespace
 
     def __repr__(self) -> str:
         return (
@@ -106,6 +134,27 @@ class K8sObject(K8sObjectMeta):
         return _APIObj(resource=self.manifest, namespace=self.namespace, api=api)
 
 
+class ClusterScopedK8sObject(K8sObject):
+    """Represents a cluster-scoped K8s object."""
+
+    def __init__(
+        self,
+        name: str,
+        cluster: ClusterId,
+        gvk: GVK,
+        manifest: Box,
+    ) -> None:
+        super().__init__(
+            name=name,
+            namespace="",
+            cluster=cluster,
+            gvk=gvk,
+            user_id=None,
+            manifest=manifest,
+        )
+        self.namespaced = False
+
+
 class K8sSecret(K8sObject):
     """Represents a secret in k8s."""
 
@@ -117,9 +166,15 @@ class K8sSecret(K8sObject):
         gvk: GVK,
         manifest: Box,
         user_id: str | None = None,
-        namespaced: bool = True,
     ) -> None:
-        super().__init__(name, namespace, cluster, gvk, manifest, user_id, namespaced)
+        super().__init__(
+            name=name,
+            namespace=namespace,
+            cluster=cluster,
+            gvk=gvk,
+            manifest=manifest,
+            user_id=user_id,
+        )
 
     def __repr__(self) -> str:
         # We hide the manifest to prevent leaking secrets
@@ -316,3 +371,10 @@ class APIObjectInCluster:
             obj=obj.to_api_object(api),
             cluster=obj.cluster,
         )
+
+
+class DeletePropagationPolicy(StrEnum):
+    """Propagation policy when deleting objects in K8s."""
+
+    foreground = "Foreground"
+    background = "Background"
