@@ -97,7 +97,8 @@ class GroupsBP(CustomBlueprint):
         ) -> JSONResponse:
             group_patch = validate_group_patch(body)
             res = await self.group_repo.update_group(user=user, slug=slug, patch=group_patch)
-            return validated_json(apispec.GroupResponse, res)
+            group = res.new if isinstance(res, models.GroupUpdate) else res
+            return validated_json(apispec.GroupResponse, group)
 
         return "/groups/<slug:renku_slug>", ["PATCH"], _patch
 

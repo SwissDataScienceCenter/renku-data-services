@@ -4,6 +4,7 @@ import functools
 from collections.abc import Awaitable, Callable
 from typing import Concatenate, ParamSpec, Protocol, TypeVar, cast
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.app_config import logging
@@ -13,9 +14,12 @@ from renku_data_services.data_connectors.models import (
     DeletedDataConnector,
     GlobalDataConnector,
 )
+from renku_data_services.data_connectors.orm import DataConnectorORM
 from renku_data_services.errors import errors
-from renku_data_services.namespace.models import DeletedGroup, Group
+from renku_data_services.namespace.models import DeletedGroup, Group, GroupUpdate
+from renku_data_services.namespace.orm import EntitySlugORM, NamespaceORM
 from renku_data_services.project.models import DeletedProject, Project, ProjectUpdate
+from renku_data_services.project.orm import ProjectORM
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.models import DeleteDoc
 from renku_data_services.users.models import DeletedUser, UserInfo, UserInfoUpdate
@@ -80,6 +84,34 @@ def update_search_document(
 
             case Group() as g:
                 await self.search_updates_repo.upsert(g)
+
+            case GroupUpdate() as g:
+                await self.search_updates_repo.upsert(g.new)
+
+                if g.old.slug != g.new.slug:
+                    namespaces = await session.execute(select(NamespaceORM).where(NamespaceORM.group_id == g.new.id))
+                    namespace = namespaces.scalar_one_or_none()
+
+                    if namespace:
+                        projects = await session.execute(
+                            select(ProjectORM)
+                            .join(EntitySlugORM, EntitySlugORM.project_id == ProjectORM.id)
+                            .where(EntitySlugORM.namespace_id == namespace.id)
+                            .where(EntitySlugORM.project_id.is_not(None))
+                        )
+                        for project in projects.scalars().all():
+                            if project:
+                                await self.search_updates_repo.upsert(project.dump())
+
+                        data_connectors = await session.execute(
+                            select(DataConnectorORM)
+                            .join(EntitySlugORM, EntitySlugORM.data_connector_id == DataConnectorORM.id)
+                            .where(EntitySlugORM.namespace_id == namespace.id)
+                            .where(EntitySlugORM.data_connector_id.is_not(None))
+                        )
+                        for data_connector in data_connectors.scalars().all():
+                            if data_connector:
+                                await self.search_updates_repo.upsert(data_connector.dump())
 
             case DeletedGroup() as g:
                 record = DeleteDoc.group(g.id)
