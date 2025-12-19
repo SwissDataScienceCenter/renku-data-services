@@ -14,6 +14,7 @@ import sqlalchemy as sa
 import sqlalchemy.orm as sao
 from authlib.integrations.base_client import InvalidTokenError, OAuthError
 from authlib.integrations.httpx_client.oauth2_client import AsyncOAuth2Client
+from cryptography.fernet import InvalidToken
 from httpx import URL, Response
 from httpx._types import HeaderTypes, QueryParamTypes
 from sqlalchemy.ext.asyncio.session import AsyncSession
@@ -35,7 +36,7 @@ from renku_data_services.connected_services.utils import (
     generate_code_verifier,
     get_github_provider_type,
 )
-from renku_data_services.errors import errors
+from renku_data_services.errors import SecretDecryptionError, errors
 from renku_data_services.repositories.models import OAuth2ClientORM
 from renku_data_services.users.db import APIUser
 from renku_data_services.utils import cryptography as crypt
@@ -406,7 +407,12 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck, _TokenC
                 return OAuthHttpFactoryError.invalid_connection
 
             client = connection.client
-            token = self.decrypt_token_set(token=connection.token, user_id=user.id)
+            try:
+                token = self.decrypt_token_set(token=connection.token, user_id=user.id)
+            except InvalidToken as e:
+                raise SecretDecryptionError(
+                    message="Decrypting the token failed. Please reconnect to the provider, obtaining a new token."
+                ) from e
 
         adapter = get_provider_adapter(client)
         client_secret = (
