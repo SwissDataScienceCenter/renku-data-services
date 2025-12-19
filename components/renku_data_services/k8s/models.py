@@ -25,35 +25,28 @@ class K8sObjectMeta:
     def __init__(
         self,
         name: str,
-        namespace: str,
+        namespace: str | None,
         cluster: ClusterId,
         gvk: GVK,
         user_id: str | None = None,
-        namespaced: bool = True,
     ) -> None:
         self.name = name
-        self.__namespace = namespace
+        if namespace is not None and len(namespace) == 0:
+            self.__namespace = None
+        else:
+            self.__namespace = namespace
         self.cluster = cluster
         self.gvk = gvk
         self.user_id = user_id
 
-        self.namespaced = namespaced
-
-        if not self.namespaced and self.namespace is not None:
-            raise errors.ValidationError(
-                message="Trying to create an invalid k8s object which is cluster-scoped but it has a defined namespace."
-            )
-        if self.namespaced and self.namespace is None:
-            raise errors.ValidationError(
-                message="Trying to create an invalid k8s object which is namespaced "
-                "but it does not have a defined namespace."
-            )
+    @property
+    def namespaced(self) -> bool:
+        """Whether the resource is namespaced (true) or cluster-scoped (false)."""
+        return self.namespace is not None
 
     @property
     def namespace(self) -> str | None:
         """The namespace of the k8s object."""
-        if not self.__namespace:
-            return None
         return self.__namespace
 
     def with_manifest(self, manifest: dict[str, Any]) -> K8sObject:
@@ -90,6 +83,23 @@ class K8sObjectMeta:
         )
 
 
+def _convert_to_api_object(api: Api, obj: K8sObject | ClusterScopedK8sObject) -> APIObject:
+    """Convert a regular k8s object to an api object for kr8s."""
+    _singular = obj.gvk.kind.lower()
+    _plural = f"{_singular}s"
+    _endpoint = _plural
+
+    class _APIObj(APIObject):
+        kind = obj.gvk.kind
+        version = obj.gvk.group_version
+        singular = _singular
+        plural = _plural
+        endpoint = _endpoint
+        namespaced = obj.namespaced
+
+    return _APIObj(resource=obj.manifest, namespace=obj.namespace, api=api)
+
+
 class K8sObject(K8sObjectMeta):
     """Represents a namespaced object in k8s."""
 
@@ -102,13 +112,11 @@ class K8sObject(K8sObjectMeta):
         manifest: Box,
         user_id: str | None = None,
     ) -> None:
-        super().__init__(name, namespace, cluster, gvk, user_id, True)
+        if len(namespace) == 0:
+            raise errors.ValidationError(message="Cannot have a namespaced K8s object with a namespace set to ''")
+        super().__init__(name, namespace, cluster, gvk, user_id)
         self.manifest = manifest
-
-    @property
-    def namespace(self) -> str:
-        """The namespace of the k8s object."""
-        return self.__namespace
+        self.__obj_namespace = namespace
 
     def __repr__(self) -> str:
         return (
@@ -118,23 +126,15 @@ class K8sObject(K8sObjectMeta):
 
     def to_api_object(self, api: Api) -> APIObject:
         """Convert a regular k8s object to an api object for kr8s."""
+        return _convert_to_api_object(api, self)
 
-        _singular = self.gvk.kind.lower()
-        _plural = f"{_singular}s"
-        _endpoint = _plural
-
-        class _APIObj(APIObject):
-            kind = self.gvk.kind
-            version = self.gvk.group_version
-            singular = _singular
-            plural = _plural
-            endpoint = _endpoint
-            namespaced = self.namespaced
-
-        return _APIObj(resource=self.manifest, namespace=self.namespace, api=api)
+    @property
+    def namespace(self) -> str:
+        """The namespace of the k8s object."""
+        return self.__obj_namespace
 
 
-class ClusterScopedK8sObject(K8sObject):
+class ClusterScopedK8sObject(K8sObjectMeta):
     """Represents a cluster-scoped K8s object."""
 
     def __init__(
@@ -146,13 +146,16 @@ class ClusterScopedK8sObject(K8sObject):
     ) -> None:
         super().__init__(
             name=name,
-            namespace="",
+            namespace=None,
             cluster=cluster,
             gvk=gvk,
             user_id=None,
-            manifest=manifest,
         )
-        self.namespaced = False
+        self.manifest = manifest
+
+    def to_api_object(self, api: Api) -> APIObject:
+        """Convert a regular k8s object to an api object for kr8s."""
+        return _convert_to_api_object(api, self)
 
 
 class K8sSecret(K8sObject):
