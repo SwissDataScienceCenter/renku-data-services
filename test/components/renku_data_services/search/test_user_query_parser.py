@@ -15,6 +15,7 @@ from renku_data_services.search.user_query import (
     CreatedByIs,
     DateTimeCalc,
     DirectMemberIs,
+    DoiIs,
     IdIs,
     InheritedMemberIs,
     KeywordIs,
@@ -25,6 +26,7 @@ from renku_data_services.search.user_query import (
     PartialDate,
     PartialDateTime,
     PartialTime,
+    PublisherNameIs,
     RelativeDate,
     RoleIs,
     SlugIs,
@@ -197,6 +199,8 @@ def test_field_term() -> None:
     assert pp.field_term.parse("direct_member:123-456") == DirectMemberIs(Nel(UserId("123-456")))
     assert pp.field_term.parse("inherited_member:@john") == InheritedMemberIs(Nel(Username.from_name("john")))
     assert pp.field_term.parse("inherited_member:123-456") == InheritedMemberIs(Nel(UserId("123-456")))
+    assert pp.field_term.parse("doi:10.16904/envidat.714") == DoiIs(Nel("10.16904/envidat.714"))
+    assert pp.field_term.parse("publisher_name:EnviDat") == PublisherNameIs(Nel("EnviDat"))
 
 
 def test_free_text() -> None:
