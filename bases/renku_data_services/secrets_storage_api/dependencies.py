@@ -48,7 +48,7 @@ class DependencyManager:
 
         if config.dummy_stores:
             authenticator = DummyAuthenticator()
-            secret_client = DummyCoreClient({}, {})
+            secret_client = DummyCoreClient()
         else:
             assert config.keycloak is not None
             authenticator = KeycloakAuthenticator.new(config.keycloak)
