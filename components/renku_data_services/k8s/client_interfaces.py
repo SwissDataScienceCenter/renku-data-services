@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterable
 from typing import Any, Protocol
 
-from kubernetes_asyncio.client import V1DeleteOptions, V1PriorityClass, V1ResourceQuota
+from kubernetes.client import V1PriorityClass, V1ResourceQuota
 
 from renku_data_services.k8s.models import K8sObject, K8sObjectFilter, K8sObjectMeta, K8sSecret
 
