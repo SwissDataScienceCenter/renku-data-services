@@ -237,7 +237,8 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
                 gvk=self.__session_gvk,
                 user_id=api_user.id,
                 manifest=Box(manifest.model_dump(exclude_none=True, mode="json")),
-            )
+            ),
+            refresh=True,
         )
 
         # NOTE: We wait for the cache to sync with the newly created server

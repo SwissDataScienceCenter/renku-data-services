@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextlib
 from collections.abc import AsyncIterable
 from copy import deepcopy
-from typing import Any
+from typing import Any, overload
 
 import kr8s
 from box import Box
@@ -129,9 +129,8 @@ class K8sSchedulingClient(PriorityClassClient):
     def _meta(self, name: str, cluster_id: ClusterId) -> K8sObjectMeta:
         return K8sObjectMeta(
             name=name,
-            namespace="",
+            namespace=None,
             gvk=self.__pc_gvk,
-            namespaced=False,
             cluster=cluster_id,
         )
 
@@ -283,7 +282,13 @@ class K8sClusterClient(K8sClient):
     async def __get_api_object(self, meta: K8sObjectFilter) -> APIObjectInCluster | None:
         return await anext(aiter(self.__list(meta)), None)
 
-    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject:
+    @overload
+    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject: ...
+    @overload
+    async def create(self, obj: ClusterScopedK8sObject, refresh: bool) -> ClusterScopedK8sObject: ...
+    async def create(
+        self, obj: K8sObject | ClusterScopedK8sObject, refresh: bool
+    ) -> K8sObject | ClusterScopedK8sObject:
         """Create the k8s object."""
 
         api_obj = obj.to_api_object(self.__cluster.api)
@@ -346,9 +351,17 @@ class K8sCachedClusterClient(K8sClusterClient):
         self.__cache = cache
         self.__kinds_to_cache = set(kinds_to_cache)
 
-    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject:
+    @overload
+    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject: ...
+    @overload
+    async def create(self, obj: ClusterScopedK8sObject, refresh: bool) -> ClusterScopedK8sObject: ...
+    async def create(
+        self, obj: K8sObject | ClusterScopedK8sObject, refresh: bool
+    ) -> K8sObject | ClusterScopedK8sObject:
         """Create the k8s object."""
         if obj.gvk in self.__kinds_to_cache:
+            if isinstance(obj, ClusterScopedK8sObject):
+                raise NotImplementedError("Caching of cluster scoped K8s resources is not supported")
             await self.__cache.upsert(obj)
         try:
             obj = await super().create(obj, refresh)
@@ -431,7 +444,13 @@ class K8sClusterClientsPool(K8sClient):
         client = await self.__get_client_or_die(cluster_id)
         return client.get_cluster()
 
-    async def create(self, obj: K8sObject, refresh: bool = True) -> K8sObject:
+    @overload
+    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject: ...
+    @overload
+    async def create(self, obj: ClusterScopedK8sObject, refresh: bool) -> ClusterScopedK8sObject: ...
+    async def create(
+        self, obj: K8sObject | ClusterScopedK8sObject, refresh: bool
+    ) -> K8sObject | ClusterScopedK8sObject:
         """Create the k8s object."""
         client = await self.__get_client_or_die(obj.cluster)
         return await client.create(obj, refresh)
