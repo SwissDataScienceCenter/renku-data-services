@@ -267,12 +267,16 @@ async def validate_unsaved_global_data_connector(
 
     # Assign user-friendly target_path if possible
     target_path = data_connector.slug
-    if metadata:
-        # If there is no metdata, the slug is derived from the name, and the name is the doi
-        # So without metadata if we extend the target_path it just repeats the slug twice
+    target_path_extension: str | None = None
+    with contextlib.suppress(errors.ValidationError):
+        target_path_extension = base_models.Slug.from_name(name).value
+    # If we were not able to get metadata about the dataset earlier,
+    # the slug and the name are essentially both the same and equal to the doi.
+    # And if we extend the target_path in this case it just repeats the slug twice.
+    # That is why we do the check below to avoid this case and avoid the ugly target path.
+    if target_path_extension and target_path != target_path_extension:
         with contextlib.suppress(errors.ValidationError):
-            name_slug = base_models.Slug.from_name(name).value
-            target_path = base_models.Slug.from_name(f"{name_slug[:30]}-{target_path}").value
+            target_path = base_models.Slug.from_name(f"{target_path_extension[:30]}-{target_path}").value
 
     # Override source_path and target_path
     storage = models.CloudStorageCore(
@@ -496,13 +500,12 @@ async def convert_envidat_v1_data_connector_to_s3(
     new_config = payload.model_copy(deep=True)
     new_config.configuration = {}
 
-    envidat_url = "https://envidat.ch/converters-api/internal-dataset/convert/jsonld"
-    query_params = {"query": doi}
+    envidat_url = create_envidat_metadata_url(doi)
     headers = {"accept": "application/json"}
 
     clnt = httpx.AsyncClient(follow_redirects=True, timeout=5)
     async with clnt:
-        res = await clnt.get(envidat_url, params=query_params, headers=headers)
+        res = await clnt.get(envidat_url, headers=headers)
         if res.status_code != 200:
             raise errors.ValidationError(
                 message="Cannot get configuration for Envidat data connector because Envidat responded "

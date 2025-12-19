@@ -866,12 +866,12 @@ class Segments:
 
     @classmethod
     def doi_is(cls, doi: str, *args: str) -> Segment:
-        """Return slug-is query segment."""
+        """Return doi-is query segment."""
         return DoiIs(Nel(doi, list(args)))
 
     @classmethod
     def publisher_name_is(cls, publisher_name: str, *args: str) -> Segment:
-        """Return slug-is query segment."""
+        """Return publisher-name-is query segment."""
         return PublisherNameIs(Nel(publisher_name, list(args)))
 
 
