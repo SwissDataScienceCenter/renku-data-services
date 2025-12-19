@@ -217,6 +217,38 @@ silently ignored.
 This content will be replaced by the output of the code block above.
 <!-- OUTPUT:END -->
 
+## DOIs
+
+These are applicable only for data connectors created from DOIs.
+The DOI value provided is not changed at all by the query parser.
+Note that we store all DOI values not as full URLs
+(i.e. `https://www.doi.org/10.16904/envidat.714`) but
+only as the value (i.e. `10.16904/envidat.714`). Future improvements
+will probably remove these limitations and handle full URLs transparently.
+The search will look up this term in a case-insensitive manner.
+
+<!-- CODE:START -->
+<!-- print(f"""``` -->
+<!-- {Segments.doi_is("10.16904/envidat.714").render()} -->
+<!-- ```""") -->
+<!-- CODE:END -->
+<!-- OUTPUT:START -->
+This content will be replaced by the output of the code block above.
+<!-- OUTPUT:END -->
+
+## Publisher names
+
+These are applicable only for data connectors created from DOIs.
+The search will look up this term in a case-insensitive manner.
+
+<!-- CODE:START -->
+<!-- print(f"""``` -->
+<!-- {Segments.publisher_name_is("EnviDat").render()} -->
+<!-- ```""") -->
+<!-- CODE:END -->
+<!-- OUTPUT:START -->
+This content will be replaced by the output of the code block above.
+<!-- OUTPUT:END -->
 
 ## Dates
 

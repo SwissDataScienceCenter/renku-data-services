@@ -18,6 +18,7 @@ from renku_data_services.search.user_query import (
     Created,
     CreatedByIs,
     DirectMemberIs,
+    DoiIs,
     IdIs,
     InheritedMemberIs,
     KeywordIs,
@@ -25,6 +26,7 @@ from renku_data_services.search.user_query import (
     NamespaceIs,
     Order,
     OrderBy,
+    PublisherNameIs,
     RoleIs,
     SlugIs,
     SortableField,
@@ -343,6 +345,14 @@ class _LuceneQueryTransform(UserQueryVisitor[SolrUserQuery]):
     async def visit_slug_is(self, ft: SlugIs) -> None:
         """Process slug-is segment."""
         self.__append(st.field_is_any(Fields.slug, ft.values.map(st.from_str)))
+
+    async def visit_doi_is(self, ft: DoiIs) -> None:
+        """Process doi-is segment."""
+        self.__append(st.field_is_any(Fields.doi, ft.values.map(st.from_str)))
+
+    async def visit_publisher_name_is(self, ft: PublisherNameIs) -> None:
+        """Process publisher_name-is segment."""
+        self.__append(st.field_is_any(Fields.publisher_name, ft.values.map(st.from_str)))
 
     async def visit_visibility_is(self, ft: VisibilityIs) -> None:
         """Process visibility-is segment."""

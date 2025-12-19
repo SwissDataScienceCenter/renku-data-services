@@ -1,5 +1,7 @@
 """Apispec schemas for storage service."""
 
+from __future__ import annotations
+
 import asyncio
 import json
 import tempfile
@@ -11,6 +13,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from renku_data_services import errors
 from renku_data_services.app_config import logging
+from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER
 from renku_data_services.storage.rclone_patches import BANNED_SFTP_OPTIONS, BANNED_STORAGE, apply_patches
 
 logger = logging.getLogger(__name__)
@@ -46,14 +49,14 @@ class RCloneValidator:
                 logger.error("Couldn't load RClone config: %s", provider_config)
                 raise
 
-    def validate(self, configuration: Union["RCloneConfig", dict[str, Any]], keep_sensitive: bool = False) -> None:
+    def validate(self, configuration: Union[RCloneConfig, dict[str, Any]], keep_sensitive: bool = False) -> None:
         """Validates an RClone config."""
         provider = self.get_provider(configuration)
 
         provider.validate_config(configuration, keep_sensitive=keep_sensitive)
 
     def validate_sensitive_data(
-        self, configuration: Union["RCloneConfig", dict[str, Any]], sensitive_data: dict[str, str]
+        self, configuration: Union[RCloneConfig, dict[str, Any]], sensitive_data: dict[str, str]
     ) -> None:
         """Validates whether the provided sensitive data is marked as sensitive in the rclone schema."""
         sensitive_options = self.get_provider(configuration).sensitive_options
@@ -65,7 +68,7 @@ class RCloneValidator:
                 continue
             raise errors.ValidationError(message=f"The '{key}' property is not marked as sensitive.")
 
-    def get_real_configuration(self, configuration: Union["RCloneConfig", dict[str, Any]]) -> dict[str, Any]:
+    def get_real_configuration(self, configuration: Union[RCloneConfig, dict[str, Any]]) -> dict[str, Any]:
         """Converts a Renku rclone configuration to a real rclone config."""
         real_config = dict(configuration)
 
@@ -81,7 +84,7 @@ class RCloneValidator:
         return real_config
 
     async def test_connection(
-        self, configuration: Union["RCloneConfig", dict[str, Any]], source_path: str
+        self, configuration: Union[RCloneConfig, dict[str, Any]], source_path: str
     ) -> ConnectionResult:
         """Tests connecting with an RClone config."""
         try:
@@ -92,6 +95,7 @@ class RCloneValidator:
         # Obscure configuration and transform if needed
         obscured_config = await self.obscure_config(self.get_real_configuration(configuration))
         transformed_config = self.inject_default_values(self.transform_polybox_switchdriver_config(obscured_config))
+        transformed_config = self.transform_envidat_config(transformed_config)
 
         with tempfile.NamedTemporaryFile(mode="w+", delete=False, encoding="utf-8") as f:
             config = "\n".join(f"{k}={v}" for k, v in transformed_config.items())
@@ -121,21 +125,21 @@ class RCloneValidator:
         return ConnectionResult(success=success, error=error.decode())
 
     async def obscure_config(
-        self, configuration: Union["RCloneConfig", dict[str, Any]]
-    ) -> Union["RCloneConfig", dict[str, Any]]:
+        self, configuration: Union[RCloneConfig, dict[str, Any]]
+    ) -> Union[RCloneConfig, dict[str, Any]]:
         """Obscure secrets in rclone config."""
         provider = self.get_provider(configuration)
         result = await provider.obscure_password_options(configuration)
         return result
 
-    def remove_sensitive_options_from_config(self, configuration: Union["RCloneConfig", dict[str, Any]]) -> None:
+    def remove_sensitive_options_from_config(self, configuration: Union[RCloneConfig, dict[str, Any]]) -> None:
         """Remove sensitive fields from a config, e.g. when turning a private storage public."""
 
         provider = self.get_provider(configuration)
 
         provider.remove_sensitive_options_from_config(configuration)
 
-    def get_provider(self, configuration: Union["RCloneConfig", dict[str, Any]]) -> "RCloneProviderSchema":
+    def get_provider(self, configuration: Union[RCloneConfig, dict[str, Any]]) -> RCloneProviderSchema:
         """Get a provider for configuration."""
 
         storage_type = cast(str, configuration.get("type"))
@@ -158,13 +162,13 @@ class RCloneValidator:
         return [provider.model_dump(exclude_none=True, by_alias=True) for provider in self.providers.values()]
 
     def get_private_fields(
-        self, configuration: Union["RCloneConfig", dict[str, Any]]
-    ) -> Generator["RCloneOption", None, None]:
+        self, configuration: Union[RCloneConfig, dict[str, Any]]
+    ) -> Generator[RCloneOption, None, None]:
         """Get private field descriptions for storage."""
         provider = self.get_provider(configuration)
         return provider.get_private_fields(configuration)
 
-    async def get_doi_metadata(self, configuration: Union["RCloneConfig", dict[str, Any]]) -> "RCloneDOIMetadata":
+    async def get_doi_metadata(self, configuration: Union[RCloneConfig, dict[str, Any]]) -> RCloneDOIMetadata | None:
         """Returns the metadata of a DOI remote."""
         provider = self.get_provider(configuration)
         if provider.name != "doi":
@@ -192,14 +196,9 @@ class RCloneValidator:
         if success:
             metadata = RCloneDOIMetadata.model_validate_json(stdout.decode().strip())
             return metadata
-        raise errors.ValidationError(
-            message=f"Could not resolve DOI {configuration.get("doi", "<unknown>")} or the hosting platform is not supported",  # noqa E501
-            detail=f"Reason: {stderr.decode().strip()}",
-        )
+        return None
 
-    def inject_default_values(
-        self, config: Union["RCloneConfig", dict[str, Any]]
-    ) -> Union["RCloneConfig", dict[str, Any]]:
+    def inject_default_values(self, config: Union[RCloneConfig, dict[str, Any]]) -> Union[RCloneConfig, dict[str, Any]]:
         """Adds default values for required options that are not provided in the config."""
         provider = self.get_provider(config)
         cfg_provider: str | None = config.get("provider")
@@ -220,8 +219,8 @@ class RCloneValidator:
 
     @staticmethod
     def transform_polybox_switchdriver_config(
-        configuration: Union["RCloneConfig", dict[str, Any]],
-    ) -> Union["RCloneConfig", dict[str, Any]]:
+        configuration: Union[RCloneConfig, dict[str, Any]],
+    ) -> Union[RCloneConfig, dict[str, Any]]:
         """Transform the configuration for public access."""
         storage_type = configuration.get("type")
 
@@ -255,6 +254,17 @@ class RCloneValidator:
         # Extract the user from the public link
         configuration["user"] = public_link.split("/")[-1]
 
+        return configuration
+
+    @staticmethod
+    def transform_envidat_config(configuration: RCloneConfig | dict[str, Any]) -> RCloneConfig | dict[str, Any]:
+        """Used to convert the configuration for Envidat into a real configuration."""
+        storage_type = configuration.get("type")
+        if storage_type is None:
+            return configuration
+        if storage_type != ENVIDAT_V1_PROVIDER:
+            return configuration
+        configuration["type"] = "doi"
         return configuration
 
 
@@ -408,9 +418,7 @@ class RCloneProviderSchema(BaseModel):
             raise errors.ValidationError(message=f"The {name} option is not allowed.")
         return None
 
-    def validate_config(
-        self, configuration: Union["RCloneConfig", dict[str, Any]], keep_sensitive: bool = False
-    ) -> None:
+    def validate_config(self, configuration: Union[RCloneConfig, dict[str, Any]], keep_sensitive: bool = False) -> None:
         """Validate an RClone config."""
         keys = set(configuration.keys()) - {"type"}
         provider: str | None = configuration.get("provider")
@@ -446,15 +454,15 @@ class RCloneProviderSchema(BaseModel):
 
             configuration[key] = option.validate_config(value, provider=provider, keep_sensitive=keep_sensitive)
 
-    def remove_sensitive_options_from_config(self, configuration: Union["RCloneConfig", dict[str, Any]]) -> None:
+    def remove_sensitive_options_from_config(self, configuration: Union[RCloneConfig, dict[str, Any]]) -> None:
         """Remove sensitive options from configuration."""
         for sensitive in self.sensitive_options:
             if sensitive.name in configuration:
                 del configuration[sensitive.name]
 
     async def obscure_password_options(
-        self, configuration: Union["RCloneConfig", dict[str, Any]]
-    ) -> Union["RCloneConfig", dict[str, Any]]:
+        self, configuration: Union[RCloneConfig, dict[str, Any]]
+    ) -> Union[RCloneConfig, dict[str, Any]]:
         """Obscure all password options."""
         for passwd in self.password_options:
             if val := configuration.get(passwd.name):
@@ -475,7 +483,7 @@ class RCloneProviderSchema(BaseModel):
         return configuration
 
     def get_private_fields(
-        self, configuration: Union["RCloneConfig", dict[str, Any]]
+        self, configuration: Union[RCloneConfig, dict[str, Any]]
     ) -> Generator[RCloneOption, None, None]:
         """Get private field descriptions for storage."""
         provider: str | None = configuration.get("provider")

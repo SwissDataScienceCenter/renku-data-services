@@ -9,9 +9,10 @@ from sanic_testing.testing import SanicASGITestClient
 from renku_data_services.authz.models import Visibility
 from renku_data_services.base_models.core import NamespacePath, ProjectPath
 from renku_data_services.data_connectors import core
+from renku_data_services.data_connectors.apispec import CloudStorageCorePost, GlobalDataConnectorPost
 from renku_data_services.data_connectors.doi.models import DOIMetadata
 from renku_data_services.namespace.models import NamespaceKind
-from renku_data_services.storage.rclone import RCloneDOIMetadata
+from renku_data_services.storage.rclone import RCloneDOIMetadata, RCloneValidator
 from renku_data_services.users.models import UserInfo
 from renku_data_services.utils.core import get_openbis_session_token_for_anonymous_user
 from test.bases.renku_data_services.data_api.utils import merge_headers
@@ -2477,3 +2478,89 @@ def _mock_get_dataset_metadata(metadata: DOIMetadata, sanic_client: SanicASGITes
         "_get_dataset_metadata_dataverse",
         _mock_get_dataset_metadata(_orig_get_dataset_metadata_dataverse),
     )
+
+
+def _mock_get_envidat_metadata(metadata: DOIMetadata, sanic_client: SanicASGITestClient, monkeypatch: "MonkeyPatch"):
+    """Mock the _get_envidat_metadata method."""
+
+    # The Evnidat API may be unresponsive, so we mock its response
+    from renku_data_services.data_connectors.doi import metadata as metadata_mod
+
+    _orig_get_envidat_metadata = metadata_mod._get_envidat_metadata
+
+    def _mock_get_envidat_metadata(original_fn):
+        async def _mock(*args, **kwargs) -> DOIMetadata | None:
+            fetched_metadata = await original_fn(*args, **kwargs)
+            if fetched_metadata is not None:
+                assert fetched_metadata == metadata
+                return fetched_metadata
+
+            warnings.warn("Could not retrieve DOI metadata, returning saved one", stacklevel=2)
+            return metadata
+
+        return _mock
+
+    monkeypatch.setattr(metadata_mod, "_get_envidat_metadata", _mock_get_envidat_metadata(_orig_get_envidat_metadata))
+    monkeypatch.setattr(
+        metadata_mod,
+        "_get_envidat_metadata",
+        _mock_get_envidat_metadata(_orig_get_envidat_metadata),
+    )
+
+
+async def test_validate_envidat_data_connector(
+    envidat_metadata: DOIMetadata,
+    sanic_client: SanicASGITestClient,
+    monkeypatch: "MonkeyPatch",
+) -> None:
+    _mock_get_envidat_metadata(envidat_metadata, sanic_client, monkeypatch)
+    body = GlobalDataConnectorPost(
+        storage=CloudStorageCorePost(
+            storage_type="doi",
+            configuration={"type": "doi", "doi": "10.16904/12"},
+            source_path="/",
+            target_path="/",
+            readonly=True,
+        )
+    )
+    validator = RCloneValidator()
+    res = await core.prevalidate_unsaved_global_data_connector(body, validator)
+    config = res.data_connector.storage.configuration
+    assert config["type"] == "s3"
+    assert config["provider"] == "Other"
+    assert config["endpoint"].find("zhdk.cloud.switch.ch") >= 0
+    assert res.data_connector.storage.source_path == "/envidat-doi/10.16904_12"
+    assert res.data_connector.doi is not None
+    assert res.data_connector.publisher_url is not None
+    assert res.data_connector.publisher_name is not None
+    res = await core.validate_unsaved_global_data_connector(res, validator)
+    assert res.description is not None
+    assert len(res.description) > 0
+    assert res.keywords is not None
+    assert len(res.keywords) > 0
+    assert res.doi is not None
+    assert res.publisher_url is not None
+    assert res.publisher_name is not None
+
+
+async def test_add_envidat_data_connector(
+    sanic_client: SanicASGITestClient,
+    user_headers: dict[str, str],
+    envidat_metadata: DOIMetadata,
+    monkeypatch: "MonkeyPatch",
+) -> None:
+    _mock_get_envidat_metadata(envidat_metadata, sanic_client, monkeypatch)
+    payload = {
+        "storage": {
+            "configuration": {"type": "doi", "doi": "10.16904/12"},
+            "source_path": "/",
+            "target_path": "/",
+            "readonly": True,
+        }
+    }
+    _, res = await sanic_client.post("/api/data/data_connectors/global", json=payload, headers=user_headers)
+    assert res.status_code == 201
+    assert res.json.get("doi") is not None
+    assert res.json.get("publisher_name") is not None
+    assert res.json.get("publisher_name").lower() == "envidat"
+    assert res.json.get("publisher_url") is not None

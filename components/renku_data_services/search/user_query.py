@@ -51,6 +51,8 @@ class Field(StrEnum):
     namespace = "namespace"
     direct_member = "direct_member"
     inherited_member = "inherited_member"
+    doi = "doi"
+    publisher_name = "publisher_name"
 
 
 class Comparison(StrEnum):
@@ -632,6 +634,54 @@ class RoleIs(FieldComparison):
 
 
 @dataclass
+class DoiIs(FieldComparison):
+    """Compare the doi against a list of values."""
+
+    values: Nel[str]
+
+    @property
+    def field(self) -> Field:
+        """The field name."""
+        return Field.doi
+
+    @property
+    def cmp(self) -> Comparison:
+        """The comparison operation."""
+        return Comparison.is_equal
+
+    def _render_value(self) -> str:
+        return self.values.mk_string(",", Helper.quote)
+
+    async def accept(self, visitor: SegmentVisitior) -> None:
+        """Apply this to the visitor."""
+        return await visitor.visit_doi_is(self)
+
+
+@dataclass
+class PublisherNameIs(FieldComparison):
+    """Compare the publisher name against a list of values."""
+
+    values: Nel[str]
+
+    @property
+    def field(self) -> Field:
+        """The field name."""
+        return Field.publisher_name
+
+    @property
+    def cmp(self) -> Comparison:
+        """The comparison operation."""
+        return Comparison.is_equal
+
+    def _render_value(self) -> str:
+        return self.values.mk_string(",", Helper.quote)
+
+    async def accept(self, visitor: SegmentVisitior) -> None:
+        """Apply this to the visitor."""
+        return await visitor.visit_publisher_name_is(self)
+
+
+@dataclass
 class Text(SegmentBase):
     """A query part that is not corresponding to a specific field."""
 
@@ -712,6 +762,8 @@ type FieldTerm = (
     | RoleIs
     | InheritedMemberIs
     | DirectMemberIs
+    | DoiIs
+    | PublisherNameIs
 )
 
 
@@ -811,6 +863,16 @@ class Segments:
     def role_is(cls, role: Role, *args: Role) -> Segment:
         """Return role-is query segment."""
         return RoleIs(Nel(role, list(args)))
+
+    @classmethod
+    def doi_is(cls, doi: str, *args: str) -> Segment:
+        """Return doi-is query segment."""
+        return DoiIs(Nel(doi, list(args)))
+
+    @classmethod
+    def publisher_name_is(cls, publisher_name: str, *args: str) -> Segment:
+        """Return publisher-name-is query segment."""
+        return PublisherNameIs(Nel(publisher_name, list(args)))
 
 
 @dataclass
@@ -920,6 +982,16 @@ class SegmentVisitior(ABC):
         """Visit inherited-member-is."""
         ...
 
+    @abstractmethod
+    async def visit_doi_is(self, ft: DoiIs) -> None:
+        """Visit doi-is."""
+        ...
+
+    @abstractmethod
+    async def visit_publisher_name_is(self, ft: PublisherNameIs) -> None:
+        """Visit doi-is."""
+        ...
+
 
 class UserQueryVisitor[T](SegmentVisitior):
     """A visitor to transform user queries."""
@@ -998,6 +1070,16 @@ class UserQueryFieldTermVisitor[T](UserQueryVisitor[T]):
 
     @override
     async def visit_visibility_is(self, ft: VisibilityIs) -> None:
+        """Forwards to `visit_field_term`."""
+        return await self.visit_field_term(ft)
+
+    @override
+    async def visit_doi_is(self, ft: DoiIs) -> None:
+        """Forwards to `visit_field_term`."""
+        return await self.visit_field_term(ft)
+
+    @override
+    async def visit_publisher_name_is(self, ft: PublisherNameIs) -> None:
         """Forwards to `visit_field_term`."""
         return await self.visit_field_term(ft)
 

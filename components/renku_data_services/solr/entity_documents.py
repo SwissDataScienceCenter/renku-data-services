@@ -237,6 +237,8 @@ class DataConnector(EntityDoc, frozen=True):
     isNamespace: Annotated[Literal[False], BeforeValidator(lambda e: False)] = False
     namespaceDetails: ResponseBody | None = None
     creatorDetails: ResponseBody | None = None
+    publisherName: str | None = None
+    doi: str | None = None
 
     @property
     def entity_type(self) -> EntityType:
@@ -287,7 +289,7 @@ class DataConnector(EntityDoc, frozen=True):
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> DataConnector:
-        """Create a Project from a dictionary."""
+        """Create a data connector from a dictionary."""
         return DataConnector.model_validate(d)
 
 

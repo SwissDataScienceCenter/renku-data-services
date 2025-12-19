@@ -29,12 +29,14 @@ import renku_data_services.base_models as base_models
 from renku_data_services.app_config import logging
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.data_api.dependencies import DependencyManager
+from renku_data_services.data_connectors.doi.models import DOIMetadata, SchemaOrgDataset
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.secrets_storage_api.dependencies import DependencyManager as SecretsDependencyManager
 from renku_data_services.solr import entity_schema
 from renku_data_services.solr.solr_client import SolrClientConfig
 from renku_data_services.solr.solr_migrate import SchemaMigrator
 from renku_data_services.users import models as user_preferences_models
+from test.constants import envidat_sample_response
 from test.utils import TestDependencyManager
 
 
@@ -489,3 +491,9 @@ def pytest_runtest_setup(item):
             ),
             append=False,
         )
+
+
+@pytest.fixture()
+def envidat_metadata() -> DOIMetadata:
+    md = SchemaOrgDataset.model_validate_json(envidat_sample_response)
+    return DOIMetadata(name=md.name, description=md.description or "", keywords=md.keywords)

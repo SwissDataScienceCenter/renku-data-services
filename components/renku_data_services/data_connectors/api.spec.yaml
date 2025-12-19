@@ -475,6 +475,14 @@ components:
           $ref: "#/components/schemas/ETag"
         keywords:
           $ref: "#/components/schemas/KeywordsList"
+        doi:
+          $ref: "#/components/schemas/DOI"
+        publisher_name:
+          type: string
+          description: The publisher of the dataset.
+        publisher_url:
+          type: string
+          description: The URL for the publisher of the dataset.
       required:
         - id
         - name
@@ -766,7 +774,22 @@ components:
         type:
           type: string
           description: data type of option value. RClone has more options but they map to the ones listed here.
-          enum: ["int", "bool", "string", "stringArray", "Time", "Duration", "MultiEncoder", "SizeSuffix", "SpaceSepList", "CommaSepList", "Tristate", "Encoding", "Bits"]
+          enum:
+            [
+              "int",
+              "bool",
+              "string",
+              "stringArray",
+              "Time",
+              "Duration",
+              "MultiEncoder",
+              "SizeSuffix",
+              "SpaceSepList",
+              "CommaSepList",
+              "Tristate",
+              "Encoding",
+              "Bits",
+            ]
       required:
         - name
         - help
@@ -870,6 +893,10 @@ components:
       type: string
       description: Entity Tag
       example: "9EE498F9D565D0C41E511377425F32F3"
+    DOI:
+      type: string
+      description: "A DOI."
+      example: "10.16904/envidat.33"
     DataConnectorsGetQuery:
       description: Query params for data connectors get request
       allOf:

@@ -100,7 +100,7 @@ class DataConnectorsBP(CustomBlueprint):
         async def _post(
             _: Request, user: base_models.APIUser, body: apispec.DataConnectorPost, validator: RCloneValidator
         ) -> JSONResponse:
-            data_connector = validate_unsaved_data_connector(body, validator=validator)
+            data_connector = await validate_unsaved_data_connector(body, validator=validator)
             result = await self.data_connector_repo.insert_namespaced_data_connector(
                 user=user, data_connector=data_connector
             )
@@ -124,7 +124,7 @@ class DataConnectorsBP(CustomBlueprint):
         ) -> JSONResponse:
             data_connector = await prevalidate_unsaved_global_data_connector(body, validator=validator)
             result, inserted = await self.data_connector_repo.insert_global_data_connector(
-                user=user, data_connector=data_connector, validator=validator
+                user=user, prevalidated_dc=data_connector, validator=validator
             )
             return validated_json(
                 apispec.DataConnector,
@@ -503,6 +503,9 @@ class DataConnectorsBP(CustomBlueprint):
                 description=data_connector.description,
                 etag=data_connector.etag,
                 keywords=data_connector.keywords or [],
+                doi=data_connector.doi,
+                publisher_name=data_connector.publisher_name,
+                publisher_url=data_connector.publisher_url,
             )
         return dict(
             id=str(data_connector.id),

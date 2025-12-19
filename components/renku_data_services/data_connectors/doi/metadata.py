@@ -1,27 +1,27 @@
 """Metadata handling for DOIs."""
 
+from urllib.parse import urlencode
+
 import httpx
 from pydantic import ValidationError as PydanticValidationError
 
 from renku_data_services.data_connectors.doi import models
-from renku_data_services.storage.rclone import RCloneDOIMetadata
+from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER
 
 
-async def get_dataset_metadata(rclone_metadata: RCloneDOIMetadata) -> models.DOIMetadata | None:
+async def get_dataset_metadata(provider: str, metadata_url: str) -> models.DOIMetadata | None:
     """Retrieve DOI metadata."""
-    if rclone_metadata.provider == "invenio" or rclone_metadata.provider == "zenodo":
-        return await _get_dataset_metadata_invenio(rclone_metadata=rclone_metadata)
-    if rclone_metadata.provider == "dataverse":
-        return await _get_dataset_metadata_dataverse(rclone_metadata=rclone_metadata)
+    if provider == "invenio" or provider == "zenodo":
+        return await _get_dataset_metadata_invenio(metadata_url)
+    if provider == "dataverse":
+        return await _get_dataset_metadata_dataverse(metadata_url)
+    if provider == ENVIDAT_V1_PROVIDER:
+        return await _get_envidat_metadata(metadata_url)
     return None
 
 
-async def _get_dataset_metadata_invenio(rclone_metadata: RCloneDOIMetadata) -> models.DOIMetadata | None:
+async def _get_dataset_metadata_invenio(metadata_url: str) -> models.DOIMetadata | None:
     """Retrieve DOI metadata from the InvenioRDM API."""
-    metadata_url = rclone_metadata.metadata_url
-    if not metadata_url:
-        return None
-
     async with httpx.AsyncClient(timeout=5) as client:
         try:
             res = await client.get(url=metadata_url, follow_redirects=True, headers=[("accept", "application/json")])
@@ -43,11 +43,8 @@ async def _get_dataset_metadata_invenio(rclone_metadata: RCloneDOIMetadata) -> m
     return models.DOIMetadata(name=name, description=description, keywords=keywords)
 
 
-async def _get_dataset_metadata_dataverse(rclone_metadata: RCloneDOIMetadata) -> models.DOIMetadata | None:
+async def _get_dataset_metadata_dataverse(metadata_url: str) -> models.DOIMetadata | None:
     """Retrieve DOI metadata from the Dataverse API."""
-    metadata_url = rclone_metadata.metadata_url
-    if not metadata_url:
-        return None
 
     async with httpx.AsyncClient(timeout=5) as client:
         try:
@@ -118,3 +115,30 @@ async def _get_dataset_metadata_dataverse(rclone_metadata: RCloneDOIMetadata) ->
                     except PydanticValidationError:
                         pass
     return models.DOIMetadata(name=name, description=description, keywords=keywords)
+
+
+def create_envidat_metadata_url(doi: models.DOI) -> str:
+    """Create the metadata url for envidat from a DOI."""
+    url = "https://envidat.ch/converters-api/internal-dataset/convert/jsonld"
+    params = urlencode({"query": doi})
+    return f"{url}?{params}"
+
+
+async def _get_envidat_metadata(metadata_url: str) -> models.DOIMetadata | None:
+    """Get metadata about the envidat dataset."""
+    clnt = httpx.AsyncClient(follow_redirects=True, timeout=5)
+    headers = {"accept": "application/json"}
+    async with clnt:
+        try:
+            res = await clnt.get(metadata_url, headers=headers)
+        except httpx.HTTPError:
+            return None
+    if res.status_code != 200:
+        return None
+    try:
+        parsed_metadata = models.SchemaOrgDataset.model_validate_json(res.text)
+    except PydanticValidationError:
+        return None
+    return models.DOIMetadata(
+        name=parsed_metadata.name, description=parsed_metadata.description or "", keywords=parsed_metadata.keywords
+    )

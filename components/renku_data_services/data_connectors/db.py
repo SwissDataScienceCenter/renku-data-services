@@ -30,6 +30,7 @@ from renku_data_services.base_models.core import (
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors import orm as schemas
 from renku_data_services.data_connectors.core import validate_unsaved_global_data_connector
+from renku_data_services.data_connectors.doi.models import DOI
 from renku_data_services.namespace import orm as ns_schemas
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.namespace.models import ProjectNamespace
@@ -292,6 +293,9 @@ class DataConnectorRepository:
 
         slug = data_connector.slug or base_models.Slug.from_name(data_connector.name).value
 
+        doi: DOI | None = None
+        publisher_url: str | None = None
+        publisher_name: str | None = None
         if ns is not None and isinstance(data_connector, models.UnsavedDataConnector):
             existing_slug_stmt = (
                 select(ns_schemas.EntitySlugORM)
@@ -313,6 +317,9 @@ class DataConnectorRepository:
             existing_global_dc = await session.scalar(existing_global_dc_stmt)
             if existing_global_dc is not None:
                 raise errors.ConflictError(message=f"An entity with the slug '{data_connector.slug}' already exists.")
+            doi = data_connector.doi
+            publisher_name = data_connector.publisher_name
+            publisher_url = data_connector.publisher_url
 
         visibility_orm = (
             apispec.Visibility(data_connector.visibility)
@@ -331,6 +338,9 @@ class DataConnectorRepository:
             description=data_connector.description,
             keywords=data_connector.keywords,
             global_slug=slug if isinstance(data_connector, models.UnsavedGlobalDataConnector) else None,
+            doi=doi,
+            publisher_url=publisher_url,
+            publisher_name=publisher_name,
         )
         if ns is not None:
             data_connector_slug = ns_schemas.EntitySlugORM.create_data_connector_slug(
@@ -370,7 +380,7 @@ class DataConnectorRepository:
     async def insert_global_data_connector(
         self,
         user: base_models.APIUser,
-        data_connector: models.UnsavedGlobalDataConnector,
+        prevalidated_dc: models.PrevalidatedGlobalDataConnector,
         validator: RCloneValidator | None,
         *,
         session: AsyncSession | None = None,
@@ -381,6 +391,7 @@ class DataConnectorRepository:
         if user.id is None:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
 
+        data_connector = prevalidated_dc.data_connector
         slug = data_connector.slug or base_models.Slug.from_name(data_connector.name).value
 
         existing_global_dc_stmt = select(schemas.DataConnectorORM).where(schemas.DataConnectorORM.global_slug == slug)
@@ -401,7 +412,7 @@ class DataConnectorRepository:
             if validator is None:
                 raise RuntimeError("Could not validate global data connector")
             data_connector = await validate_unsaved_global_data_connector(
-                data_connector=data_connector, validator=validator
+                prevalidated_dc=prevalidated_dc, validator=validator
             )
 
         dc = await self._insert_data_connector(user=user, data_connector=data_connector, session=session)

@@ -80,6 +80,8 @@ def _dataconnector_to_entity_doc(dc: DataConnector | GlobalDataConnector) -> Dat
         description=dc.description,
         keywords=dc.keywords if dc.keywords is not None else [],
         version=DocVersions.off(),
+        doi=dc.doi if hasattr(dc, "doi") else None,
+        publisherName=dc.publisher_name if hasattr(dc, "publisher_name") else None,
     )
 
 

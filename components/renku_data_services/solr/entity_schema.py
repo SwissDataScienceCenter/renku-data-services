@@ -11,6 +11,7 @@ from renku_data_services.solr.solr_schema import (
     FieldName,
     FieldType,
     Filters,
+    ReplaceCommand,
     SchemaCommand,
     Tokenizers,
     TypeName,
@@ -50,6 +51,10 @@ class Fields:
     creator_details: Final[FieldName] = FieldName("creatorDetails")
     namespace_details: Final[FieldName] = FieldName("namespaceDetails")
 
+    # data connector fields
+    doi: Final[FieldName] = FieldName("doi")
+    publisher_name: Final[FieldName] = FieldName("publisherName")
+
 
 class Analyzers:
     """A collection of analyzers."""
@@ -75,6 +80,11 @@ class Analyzers:
         ],
     )
 
+    keyword_case_insensitive: Final[Analyzer] = Analyzer(
+        tokenizer=Tokenizers.keyword,
+        filters=[Filters.lowercase],
+    )
+
 
 class FieldTypes:
     """A collection of field types."""
@@ -94,6 +104,12 @@ class FieldTypes:
         .make_multi_valued()
     )
     date_time: Final[FieldType] = FieldType.date_time_point(TypeName("SearchDateTime"))
+
+    keyword: Final[FieldType] = (
+        FieldType.text(TypeName("Keyword")).make_stored().with_analyzer(Analyzers.keyword_case_insensitive)
+    )
+    """keyword is a field type that is not changed at all by the tokenizer, and is stored unchanged
+    but is searched in case-insensitive manner. Note, analyzers cannot be added to StrField, so we use TextField."""
 
 
 initial_entity_schema: Final[list[SchemaCommand]] = [
@@ -152,6 +168,24 @@ all_migrations: Final[list[SchemaMigration]] = [
             AddCommand(Field.of(Fields.path, FieldTypes.id)),
             AddCommand(Field.of(Fields.namespace_path, FieldTypes.id)),
             AddCommand(Field.of(Fields.is_namespace, FieldTypes.boolean)),
+        ],
+        requires_reindex=True,
+    ),
+    SchemaMigration(
+        version=13,
+        commands=[
+            AddCommand(FieldTypes.keyword),
+            AddCommand(Field.of(Fields.doi, FieldTypes.keyword)),
+            AddCommand(CopyFieldRule(source=Fields.doi, dest=Fields.content_all)),
+            AddCommand(Field.of(Fields.publisher_name, FieldTypes.keyword)),
+            AddCommand(CopyFieldRule(source=Fields.publisher_name, dest=Fields.content_all)),
+        ],
+        requires_reindex=False,
+    ),
+    SchemaMigration(
+        version=14,
+        commands=[
+            ReplaceCommand(Field.of(Fields.keywords, FieldTypes.keyword).make_multi_valued()),
         ],
         requires_reindex=True,
     ),
