@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterable
-from typing import Any, Protocol
+from typing import Any, Protocol, overload
 
 from kubernetes.client import V1PriorityClass, V1ResourceQuota
 
 from renku_data_services.k8s.constants import ClusterId
 from renku_data_services.k8s.models import (
+    ClusterScopedK8sObject,
     DeletePropagationPolicy,
     K8sObject,
     K8sObjectFilter,
@@ -85,7 +86,13 @@ class PriorityClassClient(Protocol):
 class K8sClient(Protocol):
     """Methods to manipulate resources on a Kubernetes cluster."""
 
-    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject:
+    @overload
+    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject: ...
+    @overload
+    async def create(self, obj: ClusterScopedK8sObject, refresh: bool) -> ClusterScopedK8sObject: ...
+    async def create(
+        self, obj: K8sObject | ClusterScopedK8sObject, refresh: bool
+    ) -> K8sObject | ClusterScopedK8sObject:
         """Create the k8s object."""
         ...
 
