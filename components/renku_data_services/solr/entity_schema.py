@@ -7,8 +7,8 @@ from renku_data_services.solr.solr_schema import (
     AddCommand,
     Analyzer,
     CopyFieldRule,
-    DeleteFieldCommand,
     DeleteCopyFieldCommand,
+    DeleteFieldCommand,
     Field,
     FieldName,
     FieldType,
@@ -194,7 +194,10 @@ all_migrations: Final[list[SchemaMigration]] = [
     SchemaMigration(
         version=15,
         commands=[
+            # NOTE: The keywords field cannot be deleted if the copy field it is used in is not deleted first
             DeleteCopyFieldCommand(source=Fields.keywords, dest=Fields.content_all),
+            # NOTE: ReplaceCommand does not always work when the field type changes,
+            # it is not the equivalent of delete + add.
             DeleteFieldCommand(Fields.keywords),
             AddCommand(Field.of(Fields.keywords, FieldTypes.keyword).make_multi_valued()),
             AddCommand(CopyFieldRule(source=Fields.keywords, dest=Fields.content_all)),
