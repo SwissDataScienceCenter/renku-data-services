@@ -19,14 +19,18 @@ from test.components.renku_data_services.crc_models.hypothesis import (
     rc_update_reqs_dict,
     rp_strat,
 )
-from test.utils import create_rp, remove_id_from_user, sort_rp_classes
+from test.utils import KindCluster, create_rp, remove_id_from_user, sort_rp_classes
 
 
 @given(rp=rp_strat())
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_resource_pool_insert_get(
-    rp: models.UnsavedResourcePool, app_manager_instance: DependencyManager, admin_user: base_models.APIUser
+    rp: models.UnsavedResourcePool,
+    app_manager_instance: DependencyManager,
+    admin_user: base_models.APIUser,
+    cluster: KindCluster,
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp = None
@@ -43,11 +47,13 @@ async def test_resource_pool_insert_get(
 @given(rp=rp_strat(), new_name=a_name)
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_resource_pool_update_name(
     rp: models.UnsavedResourcePool,
     app_manager_instance: DependencyManager,
     new_name: str,
     admin_user: base_models.APIUser,
+    cluster: KindCluster,
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp = None
@@ -73,8 +79,12 @@ async def test_resource_pool_update_name(
 @given(rp=rp_strat())
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_resource_pool_update_quota(
-    rp: models.UnsavedResourcePool, app_manager_instance: DependencyManager, admin_user: base_models.APIUser
+    rp: models.UnsavedResourcePool,
+    app_manager_instance: DependencyManager,
+    admin_user: base_models.APIUser,
+    cluster: KindCluster,
 ) -> None:
     run_migrations_for_app("common")
     pool_repo = app_manager_instance.rp_repo
@@ -104,8 +114,13 @@ async def test_resource_pool_update_quota(
 @given(rp=rp_strat(), data=st.data())
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_resource_pool_update_classes(
-    rp: models.UnsavedResourcePool, app_manager_instance: DependencyManager, data, admin_user: base_models.APIUser
+    rp: models.UnsavedResourcePool,
+    app_manager_instance: DependencyManager,
+    data,
+    admin_user: base_models.APIUser,
+    cluster: KindCluster,
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp = None
@@ -160,8 +175,12 @@ async def test_resource_pool_update_classes(
 @given(rp=rp_strat())
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_get_classes(
-    rp: models.UnsavedResourcePool, app_manager_instance: DependencyManager, admin_user: base_models.APIUser
+    rp: models.UnsavedResourcePool,
+    app_manager_instance: DependencyManager,
+    admin_user: base_models.APIUser,
+    cluster: KindCluster,
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp = None
@@ -181,8 +200,12 @@ async def test_get_classes(
 @given(rp=rp_strat())
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_get_class_by_id(
-    rp: models.UnsavedResourcePool, app_manager_instance: DependencyManager, admin_user: base_models.APIUser
+    rp: models.UnsavedResourcePool,
+    app_manager_instance: DependencyManager,
+    admin_user: base_models.APIUser,
+    cluster: KindCluster,
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp = None
@@ -205,8 +228,12 @@ async def test_get_class_by_id(
 @given(rp=rp_strat())
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_get_class_by_name(
-    rp: models.UnsavedResourcePool, app_manager_instance: DependencyManager, admin_user: base_models.APIUser
+    rp: models.UnsavedResourcePool,
+    app_manager_instance: DependencyManager,
+    admin_user: base_models.APIUser,
+    cluster: KindCluster,
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp = None
@@ -229,8 +256,12 @@ async def test_get_class_by_name(
 @given(rp=rp_strat())
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_resource_pool_delete(
-    rp: models.UnsavedResourcePool, app_manager_instance: DependencyManager, admin_user: base_models.APIUser
+    rp: models.UnsavedResourcePool,
+    app_manager_instance: DependencyManager,
+    admin_user: base_models.APIUser,
+    cluster: KindCluster,
 ) -> None:
     run_migrations_for_app("common")
     pool_repo = app_manager_instance.rp_repo
@@ -247,11 +278,13 @@ async def test_resource_pool_delete(
 @given(rc=rc_non_default_strat(), rp=rp_strat())
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_resource_class_create(
     rc: models.UnsavedResourceClass,
     rp: models.UnsavedResourcePool,
     app_manager_instance: DependencyManager,
     admin_user: base_models.APIUser,
+    cluster: KindCluster,
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp = None
@@ -270,9 +303,9 @@ async def test_resource_class_create(
         assert len(retrieved_rps) == 1
         retrieved_rp = retrieved_rps[0]
         assert len(retrieved_rp.classes) >= 1
-        assert (
-            sum([i == inserted_class for i in retrieved_rp.classes]) == 1
-        ), f"class {inserted_class} should be in {retrieved_rp.classes}"
+        assert sum([i == inserted_class for i in retrieved_rp.classes]) == 1, (
+            f"class {inserted_class} should be in {retrieved_rp.classes}"
+        )
     except (ValidationError, errors.ValidationError):
         pass
     finally:
@@ -283,8 +316,12 @@ async def test_resource_class_create(
 @given(rp=rp_strat())
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_resource_class_delete(
-    rp: models.UnsavedResourcePool, app_manager_instance: DependencyManager, admin_user: base_models.APIUser
+    rp: models.UnsavedResourcePool,
+    app_manager_instance: DependencyManager,
+    admin_user: base_models.APIUser,
+    cluster: KindCluster,
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp = None
@@ -304,9 +341,9 @@ async def test_resource_class_delete(
         retrieved_rps = await pool_repo.get_resource_pools(id=inserted_rp.id, api_user=admin_user)
         assert len(retrieved_rps) == 1
         retrieved_rp = retrieved_rps[0]
-        assert not any(
-            [i == removed_cls for i in retrieved_rp.classes]
-        ), f"class {removed_cls} should not be in {retrieved_rp.classes}"
+        assert not any([i == removed_cls for i in retrieved_rp.classes]), (
+            f"class {removed_cls} should not be in {retrieved_rp.classes}"
+        )
     except (ValidationError, errors.ValidationError):
         pass
     finally:
@@ -317,11 +354,13 @@ async def test_resource_class_delete(
 @given(rp=rp_strat(), rc_update=rc_update_reqs_dict)
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_resource_class_update(
     rp: models.UnsavedResourcePool,
     app_manager_instance: DependencyManager,
     admin_user: base_models.APIUser,
     rc_update: dict,
+    cluster: KindCluster,
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp = None
@@ -346,12 +385,12 @@ async def test_resource_class_update(
         assert len(retrieved_rps) == 1
         retrieved_rp = retrieved_rps[0]
         assert updated_rc.id == rc_to_update.id
-        assert (
-            sum([i == updated_rc for i in retrieved_rp.classes]) == 1
-        ), f"class {updated_rc} should be in {retrieved_rp.classes}"
-        assert not any(
-            [i == rc_to_update for i in retrieved_rp.classes]
-        ), f"class {rc_to_update} should not be in {retrieved_rp.classes}"
+        assert sum([i == updated_rc for i in retrieved_rp.classes]) == 1, (
+            f"class {updated_rc} should be in {retrieved_rp.classes}"
+        )
+        assert not any([i == rc_to_update for i in retrieved_rp.classes]), (
+            f"class {rc_to_update} should not be in {retrieved_rp.classes}"
+        )
     except (ValidationError, errors.ValidationError):
         pass
     finally:
@@ -362,8 +401,12 @@ async def test_resource_class_update(
 @given(rp=rp_strat())
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_lookup_rp_by_name(
-    rp: models.UnsavedResourcePool, app_manager_instance: DependencyManager, admin_user: base_models.APIUser
+    rp: models.UnsavedResourcePool,
+    app_manager_instance: DependencyManager,
+    admin_user: base_models.APIUser,
+    cluster: KindCluster,
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp = None
@@ -384,8 +427,12 @@ async def test_lookup_rp_by_name(
 @given(rc=rc_non_default_strat())
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_insert_class_in_nonexisting_rp(
-    app_manager_instance: DependencyManager, rc: models.ResourceClass, admin_user: base_models.APIUser
+    app_manager_instance: DependencyManager,
+    rc: models.ResourceClass,
+    admin_user: base_models.APIUser,
+    cluster: KindCluster,
 ) -> None:
     run_migrations_for_app("common")
     with pytest.raises(errors.MissingResourceError):
@@ -397,8 +444,12 @@ async def test_insert_class_in_nonexisting_rp(
 @given(new_quota_id=a_uuid_string)
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_update_quota_in_nonexisting_rp(
-    app_manager_instance: DependencyManager, new_quota_id: str, admin_user: base_models.APIUser
+    app_manager_instance: DependencyManager,
+    new_quota_id: str,
+    admin_user: base_models.APIUser,
+    cluster: KindCluster,
 ) -> None:
     run_migrations_for_app("common")
     with pytest.raises(errors.MissingResourceError):
@@ -412,12 +463,14 @@ async def test_update_quota_in_nonexisting_rp(
 @given(public_rp=public_rp_strat, private_rp=private_rp_strat)
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_resource_pools_access_control(
     public_rp: models.UnsavedResourcePool,
     private_rp: models.UnsavedResourcePool,
     admin_user: base_models.APIUser,
     loggedin_user: base_models.APIUser,
     app_manager_instance: DependencyManager,
+    cluster: KindCluster,
 ) -> None:
     run_migrations_for_app("common")
     inserted_public_rp = None
@@ -456,11 +509,13 @@ async def test_resource_pools_access_control(
 @given(rp1=rp_strat(), rp2=rp_strat())
 @settings(max_examples=5, suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_classes_filtering(
     rp1: models.ResourcePool,
     rp2: models.ResourcePool,
     admin_user: base_models.APIUser,
     app_manager_instance: DependencyManager,
+    cluster: KindCluster,
 ) -> None:
     run_migrations_for_app("common")
     inserted_rp1 = None

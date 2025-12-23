@@ -37,7 +37,7 @@ from renku_data_services.solr.solr_client import SolrClientConfig
 from renku_data_services.solr.solr_migrate import SchemaMigrator
 from renku_data_services.users import models as user_preferences_models
 from test.constants import envidat_sample_response
-from test.utils import TestDependencyManager
+from test.utils import KindCluster, TestDependencyManager
 
 
 def __make_logging_config() -> logging.Config:
@@ -497,3 +497,21 @@ def pytest_runtest_setup(item):
 def envidat_metadata() -> DOIMetadata:
     md = SchemaOrgDataset.model_validate_json(envidat_sample_response)
     return DOIMetadata(name=md.name, description=md.description or "", keywords=md.keywords)
+
+
+@pytest.fixture(scope="session")
+def cluster_name():
+    return f"k8s-cluster-{str(ULID()).lower()}"
+
+
+@pytest.fixture(scope="session")
+def kubeconfig_path(monkeysession):
+    kconf = ".kind-kubeconfig.yaml"
+    monkeysession.setenv("KUBECONFIG", kconf)
+    return Path(kconf)
+
+
+@pytest.fixture(scope="session")
+def cluster(cluster_name, kubeconfig_path):
+    with KindCluster(cluster_name, kubeconfig=str(kubeconfig_path)) as cluster:
+        yield cluster

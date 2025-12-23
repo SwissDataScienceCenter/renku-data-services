@@ -73,7 +73,9 @@ class K8sResourceQuotaClient(ResourceQuotaClient):
         async for quota in quotas:
             yield self._convert(quota.manifest)
 
-    async def create_resource_quota(self, namespace: str, body: client.V1ResourceQuota, cluster_id: ClusterId) -> None:
+    async def create_resource_quota(
+        self, namespace: str, body: client.V1ResourceQuota, cluster_id: ClusterId
+    ) -> client.V1ResourceQuota:
         """Create a resource quota."""
         obj = K8sObject(
             name=body.metadata.name,
@@ -82,7 +84,8 @@ class K8sResourceQuotaClient(ResourceQuotaClient):
             manifest=Box(self.__converter.sanitize_for_serialization(body)),
             cluster=cluster_id,
         )
-        await self.__client.create(obj, False)
+        res = await self.__client.create(obj, False)
+        return self._convert(res.manifest)
 
     async def delete_resource_quota(self, name: str, namespace: str, cluster_id: ClusterId) -> None:
         """Delete a resource quota."""
@@ -90,10 +93,11 @@ class K8sResourceQuotaClient(ResourceQuotaClient):
 
     async def patch_resource_quota(
         self, name: str, namespace: str, body: client.V1ResourceQuota, cluster_id: ClusterId
-    ) -> None:
+    ) -> client.V1ResourceQuota:
         """Update a resource quota."""
         patch = self.__converter.sanitize_for_serialization(body)
-        await self.__client.patch(self._meta(name, namespace, cluster_id), patch)
+        res = await self.__client.patch(self._meta(name, namespace, cluster_id), patch)
+        return self._convert(res.manifest)
 
 
 class K8sSecretClient(SecretClient):
@@ -190,7 +194,9 @@ class DummyCoreClient(ResourceQuotaClient, SecretClient):
         """List resource quotas."""
         raise NotImplementedError()
 
-    async def create_resource_quota(self, namespace: str, body: client.V1ResourceQuota, cluster_id: ClusterId) -> None:
+    async def create_resource_quota(
+        self, namespace: str, body: client.V1ResourceQuota, cluster_id: ClusterId
+    ) -> client.V1ResourceQuota:
         """Create a resource quota."""
         raise NotImplementedError()
 
@@ -200,7 +206,7 @@ class DummyCoreClient(ResourceQuotaClient, SecretClient):
 
     async def patch_resource_quota(
         self, name: str, namespace: str, body: client.V1ResourceQuota, cluster_id: ClusterId
-    ) -> None:
+    ) -> client.V1ResourceQuota:
         """Update a resource quota."""
         raise NotImplementedError()
 
@@ -298,7 +304,8 @@ class K8sClusterClient(K8sClient):
         if refresh:
             # if refresh isn't called, status and timestamp will be blank
             await api_obj.refresh()
-
+        if isinstance(obj, ClusterScopedK8sObject):
+            return obj.with_cluster_scoped_manifest(api_obj.to_dict())
         return obj.with_manifest(api_obj.to_dict())
 
     async def patch(self, meta: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:

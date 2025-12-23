@@ -51,8 +51,6 @@ class K8sObjectMeta:
 
     def with_manifest(self, manifest: dict[str, Any]) -> K8sObject:
         """Convert to a full k8s object."""
-        if not self.namespaced:
-            raise NotImplementedError("K8sObjectMeta.with_manifest only supports namespaced objects.")
         if not self.namespace:
             raise errors.ValidationError(
                 message=f"Namespaced k8s objects have to have a defined namespace, got {self.namespace}"
@@ -64,6 +62,19 @@ class K8sObjectMeta:
             gvk=self.gvk,
             manifest=Box(manifest),
             user_id=self.user_id,
+        )
+
+    def with_cluster_scoped_manifest(self, manifest: dict[str, Any]) -> K8sObject:
+        """Convert to a full k8s cluster scoped object."""
+        if self.namespace is not None:
+            raise errors.ValidationError(
+                message=f"Cluster scoped k8s objects do not have a defined namespace, got {self.namespace}"
+            )
+        return ClusterScopedK8sObject(
+            name=self.name,
+            cluster=self.cluster,
+            gvk=self.gvk,
+            manifest=Box(manifest),
         )
 
     def to_filter(self) -> K8sObjectFilter:
@@ -86,7 +97,7 @@ class K8sObjectMeta:
 def _convert_to_api_object(api: Api, obj: K8sObject | ClusterScopedK8sObject) -> APIObject:
     """Convert a regular k8s object to an api object for kr8s."""
     _singular = obj.gvk.kind.lower()
-    _plural = f"{_singular}s"
+    _plural = f"{_singular}s" if _singular[-1] != "s" else f"{_singular}es"
     _endpoint = _plural
 
     class _APIObj(APIObject):
@@ -156,6 +167,11 @@ class ClusterScopedK8sObject(K8sObjectMeta):
     def to_api_object(self, api: Api) -> APIObject:
         """Convert a regular k8s object to an api object for kr8s."""
         return _convert_to_api_object(api, self)
+
+    @property
+    def namespace(self) -> None:
+        """Cluster scoped objects do not have a namespace."""
+        return None
 
 
 class K8sSecret(K8sObject):

@@ -41,8 +41,6 @@ from renku_data_services.data_connectors.db import (
 )
 from renku_data_services.git.gitlab import DummyGitlabAPI, EmptyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.clients import (
-    DummyCoreClient,
-    DummySchedulingClient,
     K8sClusterClientsPool,
     K8sResourceQuotaClient,
     K8sSchedulingClient,
@@ -246,11 +244,13 @@ class DependencyManager:
                 kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
             ),
         )
+        quota_repo = QuotaRepository(
+            K8sResourceQuotaClient(client), K8sSchedulingClient(client), namespace=config.k8s_namespace
+        )
 
         if config.dummy_stores:
             authenticator = DummyAuthenticator()
             gitlab_authenticator = DummyAuthenticator()
-            quota_repo = QuotaRepository(DummyCoreClient(), DummySchedulingClient(), namespace=config.k8s_namespace)
             user_always_exists = os.environ.get("DUMMY_USERSTORE_USER_ALWAYS_EXISTS", "true").lower() == "true"
             user_store = DummyUserStore(user_always_exists=user_always_exists)
             gitlab_client = DummyGitlabAPI()
@@ -262,9 +262,6 @@ class DependencyManager:
             git_provider_helper: GitProviderHelperProto = DummyGitProviderHelper()
         else:
             git_provider_helper = GitProviderHelper.create(connected_services_repo, config.enable_internal_gitlab)
-            quota_repo = QuotaRepository(
-                K8sResourceQuotaClient(client), K8sSchedulingClient(client), namespace=config.k8s_namespace
-            )
             assert config.keycloak is not None
 
             authenticator = KeycloakAuthenticator.new(config.keycloak)

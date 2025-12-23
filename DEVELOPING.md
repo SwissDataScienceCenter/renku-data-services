@@ -93,6 +93,12 @@ $ devcontainer exec --container-id renku-data-services_devcontainer-data_service
 ```
 The devcontainer contains Postgres, SpiceDB, the correct Python environment and other useful development tools.
 
+Note that the docker-in-docker devcontainer feature requires `iptables_nat` kernel module
+on Linux and some distributions (like Fedora) do not have this module enabled by default.
+So if you are getting trouble running docker-in-docker then running `sudo modprobe iptable_nat`
+on the host can resolve the problems. If you want to make the module load on every login
+then you can do the following `echo "iptable_nat" | sudo tee /etc/modules-load.d/iptables-nat.conf`.
+
 ### Developing with nix
 
 When using [nix](https://nixos.org/explore/), a development
