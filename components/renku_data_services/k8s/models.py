@@ -236,10 +236,10 @@ class K8sSecret(K8sObject):
             type=self.manifest.get("type"),
         )
 
-    def __b64encode_values(stringData: dict[str, Any]) -> dict[str, Any]:
-        new_data = {}
-        for k, v in stringData:
-            new_data[k] = b64encode(v)
+    def __b64encode_values(self, stringData: dict[str, Any]) -> dict[str, Any]:
+        new_data: dict[str, str] = {}
+        for k, v in stringData.items():
+            new_data[k] = b64encode(str(v).encode("utf-8")).decode("utf-8")
         return new_data
 
     def to_patch(self) -> list[dict[str, Any]]:
