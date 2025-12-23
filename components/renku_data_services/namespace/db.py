@@ -233,7 +233,7 @@ class GroupRepository:
     @update_search_document
     async def update_group(
         self, user: base_models.APIUser, slug: Slug, patch: models.GroupPatch, *, session: AsyncSession | None = None
-    ) -> models.Group | models.GroupUpdate:
+    ) -> models.GroupUpdate:
         """Update a group in the DB."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
@@ -251,7 +251,6 @@ class GroupRepository:
             )
 
         old_group = group.dump()
-        slug_changed = False
 
         new_slug_str = patch.slug.lower() if patch.slug is not None else None
         if new_slug_str is not None and new_slug_str != group.namespace.slug:
@@ -265,17 +264,12 @@ class GroupRepository:
                 )
             session.add(schemas.NamespaceOldORM(slug=group.namespace.slug, latest_slug_id=group.namespace.id))
             group.namespace.slug = new_slug_str
-            slug_changed = True
         if patch.name is not None:
             group.name = patch.name
         if patch.description is not None:
             group.description = patch.description if patch.description else None
 
-        new_group = group.dump()
-
-        if slug_changed:
-            return models.GroupUpdate(old=old_group, new=new_group)
-        return new_group
+        return models.GroupUpdate(old=old_group, new=group.dump())
 
     @with_db_transaction
     async def update_group_members(

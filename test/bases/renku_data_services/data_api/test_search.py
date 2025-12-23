@@ -377,7 +377,7 @@ async def test_group_slug_change_updates_project_search(
     assert response.json["slug"] == new_slug
 
     # Only push the update messages to Solr (not a full reprovision)
-    await search_push_updates(clear_index=False)
+    await search_push_updates(app_manager_instance, clear_index=False)
 
     # Verify resources' namespace are updated
     resources = await search_query(
