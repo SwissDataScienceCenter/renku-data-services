@@ -14,7 +14,7 @@ from kr8s.asyncio.objects import APIObject
 from kr8s.objects import Secret
 from kubernetes.client import V1Secret
 
-from renku_data_services.errors import errors
+from renku_data_services.errors import ProgrammingError, errors
 from renku_data_services.k8s.constants import DUMMY_TASK_RUN_USER_ID, ClusterId
 
 sanitizer = kubernetes.client.ApiClient().sanitize_for_serialization
@@ -236,22 +236,24 @@ class K8sSecret(K8sObject):
             type=self.manifest.get("type"),
         )
 
-    def __b64encode_values(self, stringData: dict[str, Any]) -> dict[str, Any]:
-        new_data: dict[str, str] = {}
+    def __b64encode_values(self, stringData: dict[str, Any], new_data: dict[str, str]) -> None:
         for k, v in stringData.items():
+            if k in new_data:
+                raise ProgrammingError(
+                    message=f"Patching a secret with both stringData and data and conflicting key {k}."
+                )
             new_data[k] = b64encode(str(v).encode("utf-8")).decode("utf-8")
-        return new_data
 
     def to_patch(self) -> list[dict[str, Any]]:
         """Create a rfc6902 patch that would take an existing secret and patch it to this state."""
+        secretData = self.manifest.data
         stringData = self.manifest.get("stringData")
-        if stringData and self.manifest.get("data"):
-            raise NotImplementedError("Patching a secret with both stringData and data is not supported.")
-
-        data = self.__b64encode_values(stringData) if stringData else self.manifest.data
+        if stringData:
+            secretData = self.manifest.data.copy()
+            self.__b64encode_values(stringData, secretData)
 
         patch = [
-            {"op": "replace", "path": "/data", "value": data},
+            {"op": "replace", "path": "/data", "value": secretData},
             {"op": "replace", "path": "/type", "value": self.manifest.get("type", "Opaque")},
         ]
         if "metadata" not in self.manifest:
