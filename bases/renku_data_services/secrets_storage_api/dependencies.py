@@ -11,7 +11,6 @@ from renku_data_services.authn.keycloak import KeycloakAuthenticator
 from renku_data_services.crc.db import ClusterRepository
 from renku_data_services.k8s.client_interfaces import SecretClient
 from renku_data_services.k8s.clients import (
-    DummyCoreClient,
     K8sClusterClientsPool,
     K8sSecretClient,
 )
@@ -45,24 +44,21 @@ class DependencyManager:
         secret_client: SecretClient
         config = Config.from_env()
         cluster_repo = ClusterRepository(session_maker=config.db.async_session_maker)
+        default_kubeconfig = KubeConfigEnv()
+        client = K8sClusterClientsPool(
+            get_clusters(
+                kube_conf_root_dir=os.environ.get("K8S_CONFIGS_ROOT", "/secrets/kube_configs"),
+                default_kubeconfig=default_kubeconfig,
+                cluster_repo=cluster_repo,
+            )
+        )
+        secret_client = K8sSecretClient(client)
 
         if config.dummy_stores:
             authenticator = DummyAuthenticator()
-            secret_client = DummyCoreClient()
         else:
             assert config.keycloak is not None
             authenticator = KeycloakAuthenticator.new(config.keycloak)
-            default_kubeconfig = KubeConfigEnv()
-
-            secret_client = K8sSecretClient(
-                K8sClusterClientsPool(
-                    get_clusters(
-                        kube_conf_root_dir=os.environ.get("K8S_CONFIGS_ROOT", "/secrets/kube_configs"),
-                        default_kubeconfig=default_kubeconfig,
-                        cluster_repo=cluster_repo,
-                    )
-                )
-            )
 
         return cls(
             config=config,

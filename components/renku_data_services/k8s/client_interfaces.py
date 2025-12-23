@@ -31,7 +31,9 @@ class ResourceQuotaClient(Protocol):
         """Get a resource quota."""
         ...
 
-    async def create_resource_quota(self, namespace: str, body: V1ResourceQuota, cluster_id: ClusterId) -> None:
+    async def create_resource_quota(
+        self, namespace: str, body: V1ResourceQuota, cluster_id: ClusterId
+    ) -> V1ResourceQuota:
         """Create a resource quota."""
         ...
 
@@ -41,7 +43,7 @@ class ResourceQuotaClient(Protocol):
 
     async def patch_resource_quota(
         self, name: str, namespace: str, body: V1ResourceQuota, cluster_id: ClusterId
-    ) -> None:
+    ) -> V1ResourceQuota:
         """Update a resource quota."""
         ...
 

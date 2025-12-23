@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import typing
 from collections.abc import Callable
+from contextlib import AbstractContextManager
 from dataclasses import asdict, dataclass
 from typing import Any, Self
 from unittest.mock import MagicMock
@@ -26,12 +28,18 @@ from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_connectors.db import DataConnectorRepository, DataConnectorSecretRepository
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.git.gitlab import DummyGitlabAPI
-from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient
-from renku_data_services.k8s.db import QuotaRepository
+from renku_data_services.k8s.clients import (
+    K8sClusterClientsPool,
+    K8sResourceQuotaClient,
+    K8sSchedulingClient,
+)
+from renku_data_services.k8s.config import KubeConfigEnv, get_clusters
+from renku_data_services.k8s.db import K8sDbCache, QuotaRepository
 from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.notebooks.api.classes.data_service import GitProviderHelper
+from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
 from renku_data_services.notebooks.image_check import ImageCheckRepository
 from renku_data_services.notifications.db import NotificationsRepository
 from renku_data_services.platform.db import PlatformRepository, UrlRedirectRepository
@@ -45,6 +53,7 @@ from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsRepo
+from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.storage import models as storage_models
 from renku_data_services.storage.db import StorageRepository
@@ -182,9 +191,24 @@ class TestDependencyManager(DependencyManager):
         config.authz_config = AuthzConfigStack.from_env()
         kc_api: IKeycloakAPI
 
+        default_kubeconfig = KubeConfigEnv()
+        cluster_repo = ClusterRepository(session_maker=config.db.async_session_maker)
+        k8s_db_cache = K8sDbCache(config.db.async_session_maker)
+        client = K8sClusterClientsPool(
+            get_clusters(
+                kube_conf_root_dir=config.k8s_config_root,
+                default_kubeconfig=default_kubeconfig,
+                cluster_repo=cluster_repo,
+                cache=k8s_db_cache,
+                kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
+            ),
+        )
+        quota_repo = QuotaRepository(
+            K8sResourceQuotaClient(client), K8sSchedulingClient(client), namespace=k8s_namespace
+        )
+
         authenticator = DummyAuthenticator()
         gitlab_authenticator = DummyAuthenticator()
-        quota_repo = QuotaRepository(DummyCoreClient({}, {}), DummySchedulingClient({}), namespace=k8s_namespace)
         user_always_exists = os.environ.get("DUMMY_USERSTORE_USER_ALWAYS_EXISTS", "true").lower() == "true"
         user_store = DummyUserStore(user_always_exists=user_always_exists)
         gitlab_client = DummyGitlabAPI()
@@ -303,7 +327,6 @@ class TestDependencyManager(DependencyManager):
             project_repo=project_repo,
             data_connector_repo=data_connector_repo,
         )
-        cluster_repo = ClusterRepository(session_maker=config.db.async_session_maker)
         image_check_repo = ImageCheckRepository(
             nb_config=config.nb_config,
             connected_services_repo=connected_services_repo,
@@ -493,3 +516,61 @@ async def create_user_preferences(
     assert project_slug in user_preferences.pinned_projects.project_slugs
 
     return user_preferences
+
+
+class KindCluster(AbstractContextManager):
+    """Context manager that will create and tear down a k3s cluster"""
+
+    def __init__(
+        self,
+        cluster_name: str,
+        kubeconfig=".kind-kubeconfig.yaml",
+        extra_images: list[str] | None = None,
+    ):
+        self.cluster_name = cluster_name
+        if extra_images is None:
+            extra_images = []
+        self.extra_images = extra_images
+        self.kubeconfig = kubeconfig
+        self.env = os.environ.copy()
+        self.env["KUBECONFIG"] = self.kubeconfig
+
+    def __enter__(self):
+        """create kind cluster"""
+
+        create_cluster = [
+            "kind",
+            "create",
+            "cluster",
+            "--name",
+            self.cluster_name,
+            "--kubeconfig",
+            self.kubeconfig,
+        ]
+
+        try:
+            subprocess.run(create_cluster, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=self.env, check=True)
+        except subprocess.SubprocessError as err:
+            if err.output is not None:
+                print(err.output.decode())
+            else:
+                print(err)
+            raise
+
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """delete kind cluster"""
+
+        self._delete_cluster()
+        return False
+
+    def _delete_cluster(self):
+        """delete kind cluster"""
+
+        delete_cluster = ["kind", "delete", "cluster", "--name", self.cluster_name, "--kubeconfig", self.kubeconfig]
+        subprocess.run(delete_cluster, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=self.env, check=True)
+
+    def config_yaml(self):
+        with open(self.kubeconfig) as f:
+            return f.read()

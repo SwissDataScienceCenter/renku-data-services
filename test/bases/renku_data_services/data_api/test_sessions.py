@@ -13,6 +13,7 @@ from renku_data_services.crc.apispec import ResourcePool
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.session.models import EnvVar
 from renku_data_services.users.models import UserInfo
+from test.utils import KindCluster
 
 
 @pytest.fixture
@@ -23,6 +24,7 @@ def launch_session(
     app_manager: DependencyManager,
     request: FixtureRequest,
     event_loop: AbstractEventLoop,
+    cluster: KindCluster,
 ):
     async def launch_session_helper(
         payload: dict, headers: dict = None, user: UserInfo = regular_user
@@ -414,7 +416,7 @@ def test_env_variable_validation():
 
 @pytest.mark.asyncio
 async def test_post_session_launcher(
-    sanic_client, admin_headers, create_project, create_resource_pool, app_manager
+    sanic_client, admin_headers, create_project, create_resource_pool, app_manager, cluster: KindCluster
 ) -> None:
     project = await create_project("Some project")
 
@@ -1271,6 +1273,7 @@ def anonymous_user_headers() -> dict[str, str]:
 
 @pytest.mark.asyncio
 @pytest.mark.skip(reason="Setup for testing sessions is not done yet.")  # TODO: enable in followup PR
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_starting_session_anonymous(
     sanic_client: SanicASGITestClient,
     create_project,

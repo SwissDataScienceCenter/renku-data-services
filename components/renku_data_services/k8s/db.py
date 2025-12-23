@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterable, Callable
 from dataclasses import dataclass, field
+from os import wait
 from uuid import uuid4
 
 import sqlalchemy
@@ -125,7 +126,7 @@ class QuotaRepository:
         for igpu_kind in models.GpuKind:
             key = f"requests.{igpu_kind}/gpu"
             if key in manifest.spec.hard:
-                gpu = int(manifest.spec.hard.get(key))
+                gpu = int(parse_quantity(manifest.spec.hard.get(key)))
                 gpu_kind = igpu_kind
                 break
         memory_raw = manifest.spec.hard.get("requests.memory")
@@ -224,8 +225,8 @@ class QuotaRepository:
                 uid=pc.metadata.uid,
             )
         ]
-        await self.rq_client.create_resource_quota(self.namespace, quota_manifest, cluster_id)
-        return quota
+        res = await self.rq_client.create_resource_quota(self.namespace, quota_manifest, cluster_id)
+        return self._quota_from_manifest(res)
 
     async def delete_quota(self, name: str, cluster_id: ClusterId) -> None:
         """Delete a resource quota and priority class."""
@@ -237,7 +238,7 @@ class QuotaRepository:
     async def update_quota(self, quota: models.Quota, cluster_id: ClusterId) -> models.Quota:
         """Update a specific resource quota."""
         quota_manifest = self._quota_to_manifest(quota)
-        await self.rq_client.patch_resource_quota(
+        patched_quota = await self.rq_client.patch_resource_quota(
             name=quota.id, namespace=self.namespace, body=quota_manifest, cluster_id=cluster_id
         )
-        return quota
+        return self._quota_from_manifest(patched_quota)
