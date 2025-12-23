@@ -246,7 +246,7 @@ class K8sSecret(K8sObject):
 
     def to_patch(self) -> list[dict[str, Any]]:
         """Create a rfc6902 patch that would take an existing secret and patch it to this state."""
-        secretData = self.manifest.data
+        secretData = self.manifest.get("data") or {}
         stringData = self.manifest.get("stringData")
         if stringData:
             secretData = self.manifest.data.copy()
