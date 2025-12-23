@@ -315,7 +315,12 @@ class AddCommand(SchemaCommand):
 @dataclass
 @final
 class ReplaceCommand(SchemaCommand):
-    """Replace a field, field type or dynamic field."""
+    """Replace a field, field type or dynamic field.
+
+    Use this with care if you are changing the field type.
+    We have seen issues when we use this command to change the field type
+    that do not occur if you call 'delete' and then 'add' rather than just 'replace'.
+    """
 
     value: FieldType | Field | DynamicFieldRule
 
