@@ -249,7 +249,7 @@ class K8sSecret(K8sObject):
         secretData = self.manifest.get("data") or {}
         stringData = self.manifest.get("stringData")
         if stringData:
-            secretData = self.manifest.data.copy()
+            secretData = secretData.copy()
             self.__b64encode_values(stringData, secretData)
 
         patch = [
