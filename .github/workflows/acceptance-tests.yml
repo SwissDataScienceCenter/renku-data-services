@@ -1,4 +1,3 @@
-
 name: Acceptance tests
 
 permissions:
@@ -34,11 +33,11 @@ jobs:
       amalthea: ${{ steps.deploy-comment.outputs.amalthea }}
       amalthea-sessions: ${{ steps.deploy-comment.outputs.amalthea-sessions }}
       test-enabled: ${{ steps.deploy-comment.outputs.test-enabled == 'true' }}
-      test-legacy-enabled: ${{ steps.deploy-comment.outputs.test-legacy-enabled == 'true' }}
+      test-slow-enabled: ${{ steps.deploy-comment.outputs.test-slow-enabled == 'true' }}
       extra-values: ${{ steps.deploy-comment.outputs.extra-values }}
     steps:
       - id: deploy-comment
-        uses: SwissDataScienceCenter/renku-actions/check-pr-description@v1.19.1
+        uses: SwissDataScienceCenter/renku-actions/check-pr-description@v1.20.0
         with:
           pr_ref: ${{ github.event.number }}
 
@@ -99,7 +98,7 @@ jobs:
           echo "KUBECONFIG=${{ github.workspace }}/renkubot-kube.config" >> "$GITHUB_ENV"
 
       - name: Build and deploy
-        uses: SwissDataScienceCenter/renku-actions/deploy-renku@v1.19.1
+        uses: SwissDataScienceCenter/renku-actions/deploy-renku@v1.20.0
         env:
           DOCKER_PASSWORD: ${{ secrets.RENKU_DOCKER_PASSWORD }}
           DOCKER_USERNAME: ${{ secrets.RENKU_DOCKER_USERNAME }}
@@ -122,29 +121,24 @@ jobs:
           amalthea_sessions: "${{ needs.check-deploy.outputs.amalthea-sessions }}"
           extra_values: "${{ needs.check-deploy.outputs.extra-values }}"
 
-  legacy-cypress-acceptance-tests:
-    name: Legacy Cypress tests
+  cypress-acceptance-tests-slow:
+    name: Cypress slow tests
     runs-on: ubuntu-24.04
     needs: [check-deploy, deploy-pr]
+    if: github.event.action != 'closed' && needs.check-deploy.outputs.deploy == 'true' && needs.check-deploy.outputs.test-slow-enabled == 'true'
     strategy:
       fail-fast: false
       matrix:
         tests:
-          - publicProject
-          - privateProject
-          - updateProjects
-          - testDatasets
-          - useSession
-          - checkWorkflows
-          - rstudioSession
+          - sessions
+          - sessionSecrets
     steps:
       - name: Extract Renku repository reference
         run: echo "RENKU_REFERENCE=`echo '${{ needs.check-deploy.outputs.renku }}' | cut -d'@' -f2`" >> $GITHUB_ENV
-      - uses: SwissDataScienceCenter/renku-actions/test-renku-cypress@v1.19.1
-        if: github.event.action != 'closed' && needs.check-deploy.outputs.deploy == 'true' && needs.check-deploy.outputs.test-legacy-enabled == 'true'
-
+      - uses: SwissDataScienceCenter/renku-actions/test-renku-cypress@v1.20.0
+        if: github.event.action != 'closed' && needs.check-deploy.outputs.deploy == 'true' && needs.check-deploy.outputs.test-slow-enabled == 'true'
         with:
-          e2e-folder: cypress/e2e/v2/
+          e2e-folder: cypress/e2e/slow/
           e2e-target: ${{ matrix.tests }}
           kubernetes-cluster-fqdn: dev.renku.ch
           renku-reference: ${{ env.RENKU_REFERENCE }}
@@ -161,16 +155,18 @@ jobs:
       matrix:
         tests:
           - anonymousNavigation
-          - dashboardV2
-          - groupBasics
-          - projectBasics
-          - projectResources
-          - searchEntities
-          - sessionBasics
+          - codeRepositories
+          - dashboard
+          - dataConnectors
+          - groups
+          - projects
+          - search
+          - sessionLaunchers
+          - sessions
     steps:
       - name: Extract Renku repository reference
         run: echo "RENKU_REFERENCE=`echo '${{ needs.check-deploy.outputs.renku }}' | cut -d'@' -f2`" >> $GITHUB_ENV
-      - uses: SwissDataScienceCenter/renku-actions/test-renku-cypress@v1.19.1
+      - uses: SwissDataScienceCenter/renku-actions/test-renku-cypress@v1.20.0
         if: github.event.action != 'closed' && needs.check-deploy.outputs.deploy == 'true' && needs.check-deploy.outputs.test-enabled == 'true'
         with:
           e2e-folder: cypress/e2e/v2/
@@ -230,7 +226,7 @@ jobs:
 
       # Cleanup for both standard and Azure deployments
       - name: renku teardown
-        uses: SwissDataScienceCenter/renku-actions/cleanup-renku-ci-deployments@v1.19.1
+        uses: SwissDataScienceCenter/renku-actions/cleanup-renku-ci-deployments@v1.20.0
         env:
           HELM_RELEASE_REGEX: "^renku-ci-ds-${{ github.event.number }}$"
           GITLAB_TOKEN: ${{ secrets.DEV_GITLAB_TOKEN }}
