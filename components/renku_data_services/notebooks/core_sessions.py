@@ -1006,10 +1006,13 @@ async def start_session(
     )
     secrets_to_create = session_extras.secrets or []
     for s in secrets_to_create:
+        logger.debug(f"Creating {len(secrets_to_create)} session secrets")
         await nb_config.k8s_v2_client.create_or_patch_secret(K8sSecret.from_v1_secret(s.secret, cluster))
     try:
+        logger.debug(f"Starting session ${session.metadata.uid} for user {user.id}")
         session = await nb_config.k8s_v2_client.create_session(session, user)
     except Exception as err:
+        logger.debug(f"Removing {len(secrets_to_create)} secrets due to failing session start")
         for s in secrets_to_create:
             await nb_config.k8s_v2_client.delete_secret(K8sSecret.from_v1_secret(s.secret, cluster))
         raise errors.ProgrammingError(message="Could not start the amalthea session") from err
