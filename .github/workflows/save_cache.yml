@@ -34,7 +34,7 @@ jobs:
           skipContainerUserIdUpdate: false
           imageName: ${{ env.DEVCONTAINER_IMAGE_CACHE }}
           cacheFrom: ${{ env.DEVCONTAINER_IMAGE_CACHE }}
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@v5
         name: Create cache
         with:
           path: ${{ env.CACHE_PATH }}
