@@ -20,9 +20,8 @@ from renku_data_services.crc.core import (
     validate_quota_put_patch,
     validate_resource_class,
     validate_resource_class_patch_or_put,
-    validate_resource_pool,
-    validate_resource_pool_patch,
-    validate_resource_pool_put,
+    validate_resource_pool_post,
+    validate_resource_pool_put_or_patch,
 )
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository, UserRepository
 from renku_data_services.users.db import UserRepo as KcUserRepo
@@ -58,7 +57,7 @@ class ResourcePoolsBP(CustomBlueprint):
         @only_admins
         @validate(json=apispec.ResourcePool)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.ResourcePool) -> HTTPResponse:
-            new_resource_pool = validate_resource_pool(body=body)
+            new_resource_pool = validate_resource_pool_post(body=body)
             res = await self.rp_repo.insert_resource_pool(api_user=user, new_resource_pool=new_resource_pool)
             return validated_json(apispec.ResourcePoolWithId, res, status=201)
 
@@ -106,7 +105,7 @@ class ResourcePoolsBP(CustomBlueprint):
         async def _put(
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.ResourcePoolPut
         ) -> HTTPResponse:
-            put = validate_resource_pool_put(body=body)
+            put = validate_resource_pool_put_or_patch(body=body, method="PUT")
             rp = await self.rp_repo.update_resource_pool(api_user=user, resource_pool_id=resource_pool_id, update=put)
             return validated_json(apispec.ResourcePoolWithId, rp)
 
@@ -122,7 +121,7 @@ class ResourcePoolsBP(CustomBlueprint):
         async def _patch(
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.ResourcePoolPatch
         ) -> HTTPResponse:
-            patch = validate_resource_pool_patch(body=body)
+            patch = validate_resource_pool_put_or_patch(body=body, method="PATCH")
             rp = await self.rp_repo.update_resource_pool(api_user=user, resource_pool_id=resource_pool_id, update=patch)
             return validated_json(apispec.ResourcePoolWithId, rp)
 
