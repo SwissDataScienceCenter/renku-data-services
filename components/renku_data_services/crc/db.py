@@ -26,6 +26,7 @@ from renku_data_services.crc import orm as schemas
 from renku_data_services.crc.core import validate_resource_class_update, validate_resource_pool_update
 from renku_data_services.crc.models import ClusterPatch, ClusterSettings, SavedClusterSettings, SessionProtocol
 from renku_data_services.crc.orm import ClusterORM
+from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
 from renku_data_services.k8s.db import QuotaRepository
 from renku_data_services.users.db import UserRepo
 
@@ -169,7 +170,7 @@ class ResourcePoolRepository(_Base):
                 session.add(orm)
 
     async def get_resource_pools(
-        self, api_user: base_models.APIUser, id: Optional[int] = None, name: Optional[str] = None
+        self, api_user: base_models.APIUser, id: int | None = None, name: Optional[str] = None
     ) -> list[models.ResourcePool]:
         """Get resource pools from database."""
         async with self.session_maker() as session:
@@ -188,7 +189,7 @@ class ResourcePoolRepository(_Base):
             orms = res.scalars().all()
             output: list[models.ResourcePool] = []
             for rp in orms:
-                quota = self.quotas_repo.get_quota(rp.quota) if rp.quota else None
+                quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id()) if rp.quota else None
                 output.append(rp.dump(quota))
             return output
 
@@ -211,7 +212,7 @@ class ResourcePoolRepository(_Base):
                 raise errors.MissingResourceError(
                     message=f"Could not find the resource pool where a class with ID {resource_class_id} exists."
                 )
-            quota = self.quotas_repo.get_quota(orm.quota) if orm.quota else None
+            quota = await self.quotas_repo.get_quota(orm.quota, orm.get_cluster_id()) if orm.quota else None
             return orm.dump(quota)
 
     async def get_default_resource_pool(self) -> models.ResourcePool:
@@ -227,7 +228,7 @@ class ResourcePoolRepository(_Base):
                 raise errors.ProgrammingError(
                     message="Could not find the default resource pool, but this has to exist."
                 )
-            quota = self.quotas_repo.get_quota(res.quota) if res.quota else None
+            quota = await self.quotas_repo.get_quota(res.quota, res.get_cluster_id()) if res.quota else None
             return res.dump(quota)
 
     async def get_default_resource_class(self) -> models.ResourceClass:
@@ -277,10 +278,11 @@ class ResourcePoolRepository(_Base):
             # NOTE: The line below ensures that the right users can access the right resources, do not remove.
             stmt = _resource_pool_access_control(api_user, stmt)
             res = await session.execute(stmt)
-            return [
-                i.dump(quota=self.quotas_repo.get_quota(i.quota), class_match_criteria=criteria)
-                for i in res.scalars().all()
-            ]
+            output: list[models.ResourcePool] = []
+            for rp in res.scalars().all():
+                quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id())
+                output.append(rp.dump(quota, criteria))
+            return output
 
     @_only_admins
     async def insert_resource_pool(
@@ -293,8 +295,9 @@ class ResourcePoolRepository(_Base):
             cluster = await self.__cluster_repo.select(cluster_id=new_resource_pool.cluster_id)
 
         quota = None
+        cluster_id = DEFAULT_K8S_CLUSTER if cluster is None else cluster.id
         if new_resource_pool.quota is not None:
-            quota = self.quotas_repo.create_quota(new_quota=new_resource_pool.quota)
+            quota = await self.quotas_repo.create_quota(new_quota=new_resource_pool.quota, cluster_id=cluster_id)
 
         async with self.session_maker() as session, session.begin():
             resource_pool = schemas.ResourcePoolORM.from_unsaved_model(
@@ -377,7 +380,7 @@ class ResourcePoolRepository(_Base):
                     raise errors.ValidationError(
                         message="There can only be one default resource class per resource pool."
                     )
-                quota = self.quotas_repo.get_quota(rp.quota) if rp.quota else None
+                quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id()) if rp.quota else None
                 if quota and not quota.is_resource_class_compatible(new_resource_class):
                     raise errors.ValidationError(
                         message="The resource class {resource_class} is not compatible with the quota {quota}."
@@ -403,7 +406,7 @@ class ResourcePoolRepository(_Base):
             rp = res.one_or_none()
             if rp is None:
                 raise errors.MissingResourceError(message=f"Resource pool with id {resource_pool_id} cannot be found")
-            quota = self.quotas_repo.get_quota(rp.quota) if rp.quota else None
+            quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id()) if rp.quota else None
 
             validate_resource_pool_update(existing=rp.dump(quota=quota), update=update)
 
@@ -426,15 +429,15 @@ class ResourcePoolRepository(_Base):
             if update.platform is not None:
                 rp.platform = update.platform
 
-            if update.cluster_id is RESET:
-                rp.cluster_id = None
-            elif update.cluster_id is not None:
-                cluster = await self.__cluster_repo.select(update.cluster_id)
-                rp.cluster_id = cluster.id
+            if update.cluster_id is not None:
+                raise errors.ValidationError(
+                    message="Changing the cluster of an existing resource pool is not supported."
+                )
 
+            cluster_id = rp.get_cluster_id()
             if update.quota is RESET and rp.quota:
                 # Remove the existing quota
-                self.quotas_repo.delete_quota(name=rp.quota)
+                await self.quotas_repo.delete_quota(name=rp.quota, cluster_id=cluster_id)
             elif isinstance(update.quota, models.QuotaPatch) and rp.quota is None:
                 # Create a new quota, the `update.quota` object has already been validated
                 assert update.quota.cpu is not None
@@ -445,7 +448,7 @@ class ResourcePoolRepository(_Base):
                     memory=update.quota.memory,
                     gpu=update.quota.gpu,
                 )
-                quota = self.quotas_repo.create_quota(new_quota=new_quota)
+                quota = await self.quotas_repo.create_quota(new_quota=new_quota, cluster_id=cluster_id)
                 rp.quota = quota.id
             elif isinstance(update.quota, models.QuotaPatch):
                 assert rp.quota is not None
@@ -458,7 +461,7 @@ class ResourcePoolRepository(_Base):
                     gpu_kind=update.quota.gpu_kind if update.quota.gpu_kind is not None else quota.gpu_kind,
                     id=quota.id,
                 )
-                quota = self.quotas_repo.update_quota(quota=updated_quota)
+                quota = await self.quotas_repo.update_quota(quota=updated_quota, cluster_id=cluster_id)
                 rp.quota = quota.id
 
             new_classes_coroutines = []
@@ -499,7 +502,7 @@ class ResourcePoolRepository(_Base):
                     raise errors.ValidationError(message="The default resource pool cannot be deleted.")
                 await session.delete(rp)
                 if rp.quota:
-                    self.quotas_repo.delete_quota(rp.quota)
+                    await self.quotas_repo.delete_quota(rp.quota, rp.get_cluster_id())
             return None
 
     @_only_admins
@@ -612,7 +615,11 @@ class ResourcePoolRepository(_Base):
             await session.refresh(cls)
 
             cls_model = cls.dump()
-            quota = self.quotas_repo.get_quota(cls_model.quota) if cls_model.quota else None
+            quota = (
+                await self.quotas_repo.get_quota(cls_model.quota, cls.resource_pool.get_cluster_id())
+                if cls_model.quota
+                else None
+            )
             if quota and not quota.is_resource_class_compatible(cls_model):
                 raise errors.ValidationError(
                     message=f"The resource class {cls_model} is not compatible with the quota {quota}"
@@ -722,7 +729,7 @@ class ResourcePoolRepository(_Base):
                     message=f"The quota {new_quota} is not compatible with the resource class {rc}."
                 )
 
-        return self.quotas_repo.update_quota(quota=new_quota)
+        return await self.quotas_repo.update_quota(quota=new_quota, cluster_id=rp.get_cluster_id())
 
 
 @dataclass
@@ -824,7 +831,7 @@ class UserRepository(_Base):
             rps: Sequence[schemas.ResourcePoolORM] = res.scalars().all()
             output: list[models.ResourcePool] = []
             for rp in rps:
-                quota = self.quotas_repo.get_quota(rp.quota) if rp.quota else None
+                quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id()) if rp.quota else None
                 output.append(rp.dump(quota))
             return output
 
@@ -878,7 +885,7 @@ class UserRepository(_Base):
                 user.resource_pools = list(rps_to_add)
             output: list[models.ResourcePool] = []
             for rp in rps_to_add:
-                quota = self.quotas_repo.get_quota(rp.quota) if rp.quota else None
+                quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id()) if rp.quota else None
                 output.append(rp.dump(quota))
             return output
 

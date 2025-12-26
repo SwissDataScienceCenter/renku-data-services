@@ -104,7 +104,8 @@ class ShipwrightClient:
                 cluster=self.cluster_id(),
                 gvk=BUILD_RUN_GVK,
                 user_id=user_id,
-            ).with_manifest(manifest=manifest.model_dump(exclude_none=True, mode="json"))
+            ).with_manifest(manifest=manifest.model_dump(exclude_none=True, mode="json")),
+            refresh=False,
         )
         build_resource = await retry_with_exponential_backoff_async(lambda x: x is None)(self.get_build_run)(
             build_run_name, user_id
