@@ -4,7 +4,6 @@ import json
 from collections.abc import AsyncGenerator, Callable
 from copy import deepcopy
 from datetime import timedelta
-from pathlib import Path
 from typing import Any, Protocol
 
 import pytest

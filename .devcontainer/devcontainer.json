@@ -10,9 +10,7 @@
 		"ghcr.io/devcontainers-extra/features/bash-command:1": {
 			"command": "poetry self add poetry-polylith-plugin"
 		},
-		"ghcr.io/devcontainers/features/docker-in-docker:2": {
-      "disableIp6tables": true
-    },
+		"ghcr.io/devcontainers/features/docker-in-docker:2": {},
 		"ghcr.io/devcontainers-extra/features/gh-release:1": {
 			"repo": "authzed/zed",
 			"binaryNames": "zed"

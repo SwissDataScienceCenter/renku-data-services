@@ -195,7 +195,7 @@ class TestDependencyManager(DependencyManager):
         cluster_repo = ClusterRepository(session_maker=config.db.async_session_maker)
         k8s_db_cache = K8sDbCache(config.db.async_session_maker)
         client = K8sClusterClientsPool(
-            get_clusters(
+            lambda: get_clusters(
                 kube_conf_root_dir=config.k8s_config_root,
                 default_kubeconfig=default_kubeconfig,
                 cluster_repo=cluster_repo,

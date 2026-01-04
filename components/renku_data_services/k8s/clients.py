@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import contextlib
-from collections.abc import AsyncIterable
+import os
+from collections.abc import AsyncIterable, Callable
 from copy import deepcopy
 from typing import Any, overload
 
@@ -426,14 +427,14 @@ class K8sCachedClusterClient(K8sClusterClient):
 class K8sClusterClientsPool(K8sClient):
     """A wrapper around a pool of kr8s k8s clients."""
 
-    def __init__(self, clusters: AsyncIterable[K8sClusterClient]) -> None:
+    def __init__(self, clusters: Callable[[], AsyncIterable[K8sClusterClient]]) -> None:
         self.__clusters = clusters
         self.__clients: dict[ClusterId, K8sClusterClient] = {}
 
     async def __init_clients_if_needed(self) -> None:
-        if len(self.__clients) > 0:
+        if len(self.__clients) > 0 and os.environ.get("ALWAYS_READ_CLUSTERS") is None:
             return
-        async for cluster in self.__clusters:
+        async for cluster in self.__clusters():
             self.__clients[cluster.get_cluster().id] = cluster
 
     async def __get_client_or_die(self, cluster_id: ClusterId) -> K8sClusterClient:

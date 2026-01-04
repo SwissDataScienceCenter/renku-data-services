@@ -415,6 +415,7 @@ def test_env_variable_validation():
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_post_session_launcher(
     sanic_client, admin_headers, create_project, create_resource_pool, app_manager, cluster: KindCluster
 ) -> None:

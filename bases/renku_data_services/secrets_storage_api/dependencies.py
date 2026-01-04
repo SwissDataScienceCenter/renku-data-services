@@ -46,7 +46,7 @@ class DependencyManager:
         cluster_repo = ClusterRepository(session_maker=config.db.async_session_maker)
         default_kubeconfig = KubeConfigEnv()
         client = K8sClusterClientsPool(
-            get_clusters(
+            lambda: get_clusters(
                 kube_conf_root_dir=os.environ.get("K8S_CONFIGS_ROOT", "/secrets/kube_configs"),
                 default_kubeconfig=default_kubeconfig,
                 cluster_repo=cluster_repo,

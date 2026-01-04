@@ -303,9 +303,9 @@ async def test_resource_class_create(
         assert len(retrieved_rps) == 1
         retrieved_rp = retrieved_rps[0]
         assert len(retrieved_rp.classes) >= 1
-        assert sum([i == inserted_class for i in retrieved_rp.classes]) == 1, (
-            f"class {inserted_class} should be in {retrieved_rp.classes}"
-        )
+        assert (
+            sum([i == inserted_class for i in retrieved_rp.classes]) == 1
+        ), f"class {inserted_class} should be in {retrieved_rp.classes}"
     except (ValidationError, errors.ValidationError):
         pass
     finally:
@@ -341,9 +341,9 @@ async def test_resource_class_delete(
         retrieved_rps = await pool_repo.get_resource_pools(id=inserted_rp.id, api_user=admin_user)
         assert len(retrieved_rps) == 1
         retrieved_rp = retrieved_rps[0]
-        assert not any([i == removed_cls for i in retrieved_rp.classes]), (
-            f"class {removed_cls} should not be in {retrieved_rp.classes}"
-        )
+        assert not any(
+            [i == removed_cls for i in retrieved_rp.classes]
+        ), f"class {removed_cls} should not be in {retrieved_rp.classes}"
     except (ValidationError, errors.ValidationError):
         pass
     finally:
@@ -385,12 +385,13 @@ async def test_resource_class_update(
         assert len(retrieved_rps) == 1
         retrieved_rp = retrieved_rps[0]
         assert updated_rc.id == rc_to_update.id
-        assert sum([i == updated_rc for i in retrieved_rp.classes]) == 1, (
-            f"class {updated_rc} should be in {retrieved_rp.classes}"
-        )
-        assert not any([i == rc_to_update for i in retrieved_rp.classes]), (
-            f"class {rc_to_update} should not be in {retrieved_rp.classes}"
-        )
+        assert (
+            sum([i == updated_rc for i in retrieved_rp.classes]) == 1
+        ), f"class {updated_rc} should be in {retrieved_rp.classes}"
+        assert not any(
+            [i == rc_to_update for i in retrieved_rp.classes]
+        ), f"class {rc_to_update} should not be in {retrieved_rp.classes}"
+
     except (ValidationError, errors.ValidationError):
         pass
     finally:
