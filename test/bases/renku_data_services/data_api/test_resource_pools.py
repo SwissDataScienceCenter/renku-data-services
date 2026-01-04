@@ -1,5 +1,6 @@
 import json
 from copy import deepcopy
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -88,14 +89,17 @@ async def test_resource_pool_creation_with_cluster_ids(
     payload: dict[str, Any],
     expected_status_code: int,
     cluster: KindCluster,
+    kubeconfig_path: Path,
+    monkeypatch,
 ) -> None:
     payload = deepcopy(payload)
+    monkeypatch.setenv("ALWAYS_READ_CLUSTERS", "true")
     if "cluster_id" in payload:
         _, res = await sanic_client.post(
             "/api/data/clusters",
             json={
                 "name": "test-name",
-                "config_name": "test-class-name.yaml",
+                "config_name": kubeconfig_path.name,
                 "session_protocol": "http",
                 "session_host": "localhost",
                 "session_port": 8080,
@@ -105,10 +109,11 @@ async def test_resource_pool_creation_with_cluster_ids(
             },
             headers={"Authorization": 'Bearer {"is_admin": true}'},
         )
+        assert res.status_code == 201, res.text
         payload["cluster_id"] = res.json["id"]
 
     _, res = await create_rp(payload, sanic_client)
-    assert res.status_code == expected_status_code
+    assert res.status_code == expected_status_code, res.text
 
     if "cluster_id" in payload:
         assert "cluster" in res.json

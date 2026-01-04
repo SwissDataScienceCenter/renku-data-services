@@ -21,6 +21,7 @@ from ulid import ULID
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.base_models import RESET
+from renku_data_services.base_models.core import ResetType
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
 from renku_data_services.crc.core import validate_resource_class_update, validate_resource_pool_update
@@ -429,10 +430,16 @@ class ResourcePoolRepository(_Base):
             if update.platform is not None:
                 rp.platform = update.platform
 
-            if update.cluster_id is not None:
-                raise errors.ValidationError(
-                    message="Changing the cluster of an existing resource pool is not supported."
-                )
+            match (update.cluster_id, rp.cluster_id):
+                case ResetType.Reset, x if x is not None:
+                    raise errors.ValidationError(
+                        message="Resetting the cluster of an existing resource pool is not supported."
+                    )
+                case ULID(), ULID():
+                    if update.cluster_id != rp.cluster_id:
+                        raise errors.ValidationError(
+                            message="Changing the cluster of an existing resource pool is not supported."
+                        )
 
             cluster_id = rp.get_cluster_id()
             if update.quota is RESET and rp.quota:

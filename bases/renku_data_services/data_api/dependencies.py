@@ -236,7 +236,7 @@ class DependencyManager:
         k8s_db_cache = K8sDbCache(config.db.async_session_maker)
         default_kubeconfig = KubeConfigEnv()
         client = K8sClusterClientsPool(
-            get_clusters(
+            lambda: get_clusters(
                 kube_conf_root_dir=config.k8s_config_root,
                 default_kubeconfig=default_kubeconfig,
                 cluster_repo=cluster_repo,
@@ -284,7 +284,7 @@ class DependencyManager:
                 default_kubeconfig = KubeConfigEnv()
                 shipwright_client = ShipwrightClient(
                     client=K8sClusterClientsPool(
-                        get_clusters(
+                        lambda: get_clusters(
                             kube_conf_root_dir=config.k8s_config_root,
                             default_kubeconfig=default_kubeconfig,
                             cluster_repo=cluster_repo,

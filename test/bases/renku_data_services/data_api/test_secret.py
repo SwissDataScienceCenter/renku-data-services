@@ -12,9 +12,11 @@ from sanic_testing.testing import SanicASGITestClient
 from ulid import ULID
 
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
-from renku_data_services.k8s.models import K8sSecret
+from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
+from renku_data_services.k8s.models import GVK, K8sObjectMeta, K8sSecret
 from renku_data_services.secrets.models import Secret, SecretKind
 from renku_data_services.secrets_storage_api.dependencies import DependencyManager
+from renku_data_services.secrets_storage_api.dependencies import DependencyManager as SecretsDependencyManager
 from renku_data_services.users import apispec
 from renku_data_services.utils.cryptography import (
     decrypt_rsa,
@@ -23,6 +25,7 @@ from renku_data_services.utils.cryptography import (
     encrypt_string,
     generate_random_encryption_key,
 )
+from test.utils import KindCluster
 
 
 @pytest.fixture
@@ -111,7 +114,7 @@ async def test_get_one_secret(sanic_client: SanicASGITestClient, user_headers, c
     secret = await create_secret("secret-2", "value-2")
     await create_secret("secret-3", "value-3")
 
-    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret["id"]}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret['id']}", headers=user_headers)
     assert response.status_code == 200, response.text
     assert response.json is not None
     assert response.json["name"] == secret["name"]
@@ -125,13 +128,13 @@ async def test_get_one_secret_not_expired(sanic_client: SanicASGITestClient, use
     secret_1 = await create_secret("secret-1", "value-1", expiration_timestamp=expiration_timestamp)
     secret_2 = await create_secret("secret-2", "value-2", expiration_timestamp="2029-12-31T23:59:59+01:00")
 
-    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret_1["id"]}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret_1['id']}", headers=user_headers)
     assert response.status_code == 200, response.text
     assert response.json is not None
     assert response.json["name"] == "secret-1"
     assert response.json["id"] == secret_1["id"]
 
-    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret_2["id"]}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret_2['id']}", headers=user_headers)
     assert response.status_code == 200, response.text
     assert response.json is not None
     assert response.json["name"] == "secret-2"
@@ -139,7 +142,7 @@ async def test_get_one_secret_not_expired(sanic_client: SanicASGITestClient, use
 
     time.sleep(20)
 
-    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret_1["id"]}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret_1['id']}", headers=user_headers)
     assert response.status_code == 404
 
 
@@ -203,7 +206,7 @@ async def test_get_delete_a_secret(sanic_client: SanicASGITestClient, user_heade
     secret = await create_secret("secret-2", "value-2")
     await create_secret("secret-3", "value-3")
 
-    _, response = await sanic_client.delete(f"/api/data/user/secrets/{secret["id"]}", headers=user_headers)
+    _, response = await sanic_client.delete(f"/api/data/user/secrets/{secret['id']}", headers=user_headers)
     assert response.status_code == 204, response.text
 
     _, response = await sanic_client.get("/api/data/user/secrets", headers=user_headers)
@@ -219,7 +222,7 @@ async def test_get_update_a_secret(sanic_client: SanicASGITestClient, user_heade
     await create_secret("secret-3", "value-3")
 
     _, response = await sanic_client.patch(
-        f"/api/data/user/secrets/{secret["id"]}", headers=user_headers, json={"name": "secret-2", "value": "new-value"}
+        f"/api/data/user/secrets/{secret['id']}", headers=user_headers, json={"name": "secret-2", "value": "new-value"}
     )
     assert response.status_code == 200, response.text
     assert response.json is not None
@@ -228,7 +231,7 @@ async def test_get_update_a_secret(sanic_client: SanicASGITestClient, user_heade
     assert response.json["expiration_timestamp"] is None
     assert "value" not in response.json
 
-    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret["id"]}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret['id']}", headers=user_headers)
     assert response.status_code == 200, response.text
     assert response.json is not None
     assert response.json["id"] == secret["id"]
@@ -237,13 +240,13 @@ async def test_get_update_a_secret(sanic_client: SanicASGITestClient, user_heade
     assert "value" not in response.json
 
     _, response = await sanic_client.patch(
-        f"/api/data/user/secrets/{secret["id"]}",
+        f"/api/data/user/secrets/{secret['id']}",
         headers=user_headers,
         json={"value": "newest-value", "expiration_timestamp": "2029-12-31T00:00:00Z"},
     )
     assert response.status_code == 200, response.text
 
-    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret["id"]}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret['id']}", headers=user_headers)
     assert response.status_code == 200, response.text
     assert response.json is not None
     assert response.json["id"] == secret["id"]
@@ -260,7 +263,7 @@ async def test_cannot_get_another_user_secret(
     secret = await create_secret("secret-2", "value-2")
     await create_secret("secret-3", "value-3")
 
-    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret["id"]}", headers=admin_headers)
+    _, response = await sanic_client.get(f"/api/data/user/secrets/{secret['id']}", headers=admin_headers)
     assert response.status_code == 404, response.text
     assert "cannot be found" in response.json["error"]["message"]
 
@@ -282,12 +285,14 @@ async def test_anonymous_users_cannot_create_secrets(sanic_client: SanicASGITest
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_secret_encryption_decryption(
     sanic_client: SanicASGITestClient,
     secrets_sanic_client: SanicASGITestClient,
-    secrets_storage_app_manager,
+    secrets_storage_app_manager: SecretsDependencyManager,
     user_headers,
     create_secret,
+    cluster: KindCluster,
 ) -> None:
     """Test adding a secret and decrypting it in the secret service."""
     secret1 = await create_secret("secret-1", "value-1", default_filename="secret-1")
@@ -297,7 +302,7 @@ async def test_secret_encryption_decryption(
 
     payload = {
         "name": "test-secret",
-        "namespace": "test-namespace",
+        "namespace": "default",
         "secret_ids": [secret1_id, secret2_id],
         "owner_references": [
             {
@@ -311,8 +316,12 @@ async def test_secret_encryption_decryption(
 
     _, response = await secrets_sanic_client.post("/api/secrets/kubernetes", headers=user_headers, json=payload)
     assert response.status_code == 201
-    assert "test-secret" in secrets_storage_app_manager.secret_client.secrets
-    k8s_secret: K8sSecret = secrets_storage_app_manager.secret_client.secrets["test-secret"]
+    k8s_secret: K8sSecret = await secrets_storage_app_manager.secret_client.patch_secret(
+        K8sObjectMeta(
+            name="test-secret", namespace="default", cluster=DEFAULT_K8S_CLUSTER, gvk=GVK(kind="Secret", version="v1")
+        ),
+        {"metadata": {"annotations": {"test-annotation": "test"}}},
+    )
     secrets = k8s_secret.manifest.get("data", {})
 
     assert secrets.keys() == {"secret-1", "secret-2"}
@@ -327,12 +336,14 @@ async def test_secret_encryption_decryption(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
 async def test_secret_encryption_decryption_with_key_mapping(
     sanic_client: SanicASGITestClient,
     secrets_sanic_client: SanicASGITestClient,
-    secrets_storage_app_manager,
+    secrets_storage_app_manager: SecretsDependencyManager,
     user_headers,
     create_secret,
+    cluster: KindCluster,
 ) -> None:
     """Test adding a secret and decrypting it in the secret service with mapping for key names."""
     secret1 = await create_secret("secret-1", "value-1")
@@ -344,7 +355,7 @@ async def test_secret_encryption_decryption_with_key_mapping(
 
     payload = {
         "name": "test-secret",
-        "namespace": "test-namespace",
+        "namespace": "default",
         "secret_ids": [secret1_id, secret2_id, secret3_id],
         "owner_references": [
             {
@@ -363,8 +374,12 @@ async def test_secret_encryption_decryption_with_key_mapping(
 
     _, response = await secrets_sanic_client.post("/api/secrets/kubernetes", headers=user_headers, json=payload)
     assert response.status_code == 201
-    assert "test-secret" in secrets_storage_app_manager.secret_client.secrets
-    k8s_secret: K8sSecret = secrets_storage_app_manager.secret_client.secrets["test-secret"]
+    k8s_secret: K8sSecret = await secrets_storage_app_manager.secret_client.patch_secret(
+        K8sObjectMeta(
+            name="test-secret", namespace="default", cluster=DEFAULT_K8S_CLUSTER, gvk=GVK(kind="Secret", version="v1")
+        ),
+        {"metadata": {"annotations": {"test-annotation": "test"}}},
+    )
     secrets = k8s_secret.manifest.get("data", {})
     assert secrets.keys() == {"access_key_id", "secret_access_key", "secret-3-one", "secret-3-two"}
 

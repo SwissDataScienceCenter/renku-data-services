@@ -188,7 +188,7 @@ class NotebooksConfig:
         cluster_rp = ClusterRepository(db_config.async_session_maker)
 
         client = K8sClusterClientsPool(
-            get_clusters(
+            lambda: get_clusters(
                 kube_conf_root_dir=kube_config_root,
                 default_kubeconfig=default_kubeconfig,
                 cluster_repo=cluster_rp,

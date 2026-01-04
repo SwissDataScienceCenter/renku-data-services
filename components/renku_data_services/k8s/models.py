@@ -64,7 +64,7 @@ class K8sObjectMeta:
             user_id=self.user_id,
         )
 
-    def with_cluster_scoped_manifest(self, manifest: dict[str, Any]) -> K8sObject:
+    def with_cluster_scoped_manifest(self, manifest: dict[str, Any]) -> ClusterScopedK8sObject:
         """Convert to a full k8s cluster scoped object."""
         if self.namespace is not None:
             raise errors.ValidationError(

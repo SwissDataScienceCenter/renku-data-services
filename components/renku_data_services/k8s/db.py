@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterable, Callable
 from dataclasses import dataclass, field
-from os import wait
 from uuid import uuid4
 
 import sqlalchemy

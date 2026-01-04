@@ -1,6 +1,7 @@
 import asyncio
 from dataclasses import asdict
 
+import pytest
 import pytest_asyncio
 from box import Box
 from hypothesis import given, settings
@@ -45,6 +46,7 @@ async def quota_repo(cluster):
 
 
 @given(quota=quota_strat)
+@pytest.mark.xdist_group("sessions")
 async def test_get_insert_quota(quota: models.UnsavedQuota, quota_repo: QuotaRepository) -> None:
     created_quota = await quota_repo.create_quota(quota, DEFAULT_K8S_CLUSTER)
     recovered_quota = await quota_repo.get_quota(created_quota.id, DEFAULT_K8S_CLUSTER)
@@ -58,6 +60,7 @@ async def test_get_insert_quota(quota: models.UnsavedQuota, quota_repo: QuotaRep
 
 @settings(deadline=None, max_examples=5)
 @given(quota=quota_strat)
+@pytest.mark.xdist_group("sessions")
 async def test_delete_quota(quota: models.UnsavedQuota, quota_repo: QuotaRepository) -> None:
     created_quota = await quota_repo.create_quota(quota, DEFAULT_K8S_CLUSTER)
     recovered_quota = await quota_repo.get_quota(created_quota.id, DEFAULT_K8S_CLUSTER)
@@ -70,6 +73,7 @@ async def test_delete_quota(quota: models.UnsavedQuota, quota_repo: QuotaReposit
 
 
 @given(old_quota=quota_strat, new_quota=quota_strat)
+@pytest.mark.xdist_group("sessions")
 async def test_update_quota(
     old_quota: models.UnsavedQuota, new_quota: models.UnsavedQuota, quota_repo: QuotaRepository
 ) -> None:
