@@ -37,7 +37,7 @@ from renku_data_services.solr.solr_client import SolrClientConfig
 from renku_data_services.solr.solr_migrate import SchemaMigrator
 from renku_data_services.users import models as user_preferences_models
 from test.constants import envidat_sample_response
-from test.utils import TestDependencyManager
+from test.utils import KindCluster, TestDependencyManager
 
 
 def __make_logging_config() -> logging.Config:
@@ -217,13 +217,14 @@ async def dummy_users():
 
 @pytest_asyncio.fixture(scope="session")
 async def app_manager(
-    authz_setup, monkeysession, worker_id, secrets_key_pair, dummy_users
+    authz_setup, monkeysession, worker_id, secrets_key_pair, dummy_users, kubeconfig_path: Path
 ) -> AsyncGenerator[DependencyManager, None]:
     monkeysession.setenv("DUMMY_STORES", "true")
     monkeysession.setenv("MAX_PINNED_PROJECTS", "5")
     monkeysession.setenv("NB_SERVER_OPTIONS__DEFAULTS_PATH", "server_defaults.json")
     monkeysession.setenv("NB_SERVER_OPTIONS__UI_CHOICES_PATH", "server_options.json")
     monkeysession.setenv("V1_SESSIONS_ENABLED", "true")
+    monkeysession.setenv("K8S_CONFIGS_ROOT", kubeconfig_path.parent.absolute().as_posix())
 
     dm = TestDependencyManager.from_env(dummy_users)
 
@@ -240,7 +241,7 @@ async def app_manager_instance(app_manager, db_instance, authz_instance) -> Asyn
 
 @pytest_asyncio.fixture
 async def secrets_storage_app_manager(
-    db_config: DBConfig, secrets_key_pair, monkeypatch, tmp_path
+    db_config: DBConfig, secrets_key_pair, monkeypatch, tmp_path, kubeconfig_path: Path
 ) -> AsyncGenerator[SecretsDependencyManager, None]:
     encryption_key_path = tmp_path / "encryption-key"
     encryption_key_path.write_bytes(secrets.token_bytes(32))
@@ -249,6 +250,7 @@ async def secrets_storage_app_manager(
     monkeypatch.setenv("DUMMY_STORES", "true")
     monkeypatch.setenv("DB_NAME", db_config.db_name)
     monkeypatch.setenv("MAX_PINNED_PROJECTS", "5")
+    monkeypatch.setenv("K8S_CONFIGS_ROOT", kubeconfig_path.parent.absolute().as_posix())
 
     dm = SecretsDependencyManager.from_env()
     yield dm
@@ -497,3 +499,24 @@ def pytest_runtest_setup(item):
 def envidat_metadata() -> DOIMetadata:
     md = SchemaOrgDataset.model_validate_json(envidat_sample_response)
     return DOIMetadata(name=md.name, description=md.description or "", keywords=md.keywords)
+
+
+@pytest.fixture(scope="session")
+def cluster_name():
+    return f"k8s-cluster-{str(ULID()).lower()}"
+
+
+@pytest.fixture(scope="session")
+def kubeconfig_path(monkeysession):
+    kconf = ".kind-kubeconfig.yaml"
+    monkeysession.setenv("KUBECONFIG", kconf)
+    return Path(kconf)
+
+
+@pytest.fixture(scope="session")
+def cluster(cluster_name, kubeconfig_path: Path, monkeysession):
+    # NOTE: The config_name of the cluster has to match the name of the
+    # kubeconfig file in the K8S_CONFIGS_ROOT folder
+    monkeysession.setenv("K8S_CONFIGS_ROOT", kubeconfig_path.parent.absolute().as_posix())
+    with KindCluster(cluster_name, kubeconfig=str(kubeconfig_path)) as cluster:
+        yield cluster

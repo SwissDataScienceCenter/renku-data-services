@@ -3,33 +3,47 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterable
-from typing import Any, Protocol
+from typing import Any, Protocol, overload
 
-from kubernetes_asyncio.client import V1DeleteOptions, V1PriorityClass, V1ResourceQuota
+from kubernetes.client import V1PriorityClass, V1ResourceQuota
 
-from renku_data_services.k8s.models import K8sObject, K8sObjectFilter, K8sObjectMeta, K8sSecret
+from renku_data_services.k8s.constants import ClusterId
+from renku_data_services.k8s.models import (
+    ClusterScopedK8sObject,
+    DeletePropagationPolicy,
+    K8sObject,
+    K8sObjectFilter,
+    K8sObjectMeta,
+    K8sSecret,
+)
 
 
 class ResourceQuotaClient(Protocol):
     """Methods to manipulate ResourceQuota kubernetes resources."""
 
-    def list_resource_quota(self, namespace: str, label_selector: str) -> list[V1ResourceQuota]:
+    def list_resource_quota(
+        self, namespace: str, label_selector: dict[str, str], cluster_id: ClusterId
+    ) -> AsyncIterable[V1ResourceQuota]:
         """List resource quotas."""
         ...
 
-    def read_resource_quota(self, name: str, namespace: str) -> V1ResourceQuota:
+    async def read_resource_quota(self, name: str, namespace: str, cluster_id: ClusterId) -> V1ResourceQuota:
         """Get a resource quota."""
         ...
 
-    def create_resource_quota(self, namespace: str, body: V1ResourceQuota) -> None:
+    async def create_resource_quota(
+        self, namespace: str, body: V1ResourceQuota, cluster_id: ClusterId
+    ) -> V1ResourceQuota:
         """Create a resource quota."""
         ...
 
-    def delete_resource_quota(self, name: str, namespace: str) -> None:
+    async def delete_resource_quota(self, name: str, namespace: str, cluster_id: ClusterId) -> None:
         """Delete a resource quota."""
         ...
 
-    def patch_resource_quota(self, name: str, namespace: str, body: V1ResourceQuota) -> None:
+    async def patch_resource_quota(
+        self, name: str, namespace: str, body: V1ResourceQuota, cluster_id: ClusterId
+    ) -> V1ResourceQuota:
         """Update a resource quota."""
         ...
 
@@ -53,15 +67,20 @@ class SecretClient(Protocol):
 class PriorityClassClient(Protocol):
     """Methods to manipulate kubernetes Priority Class resources."""
 
-    def create_priority_class(self, body: V1PriorityClass) -> V1PriorityClass:
+    async def create_priority_class(self, body: V1PriorityClass, cluster_id: ClusterId) -> V1PriorityClass:
         """Create a priority class."""
         ...
 
-    def read_priority_class(self, name: str) -> V1PriorityClass | None:
+    async def read_priority_class(self, name: str, cluster_id: ClusterId) -> V1PriorityClass | None:
         """Retrieve a priority class."""
         ...
 
-    def delete_priority_class(self, name: str, body: V1DeleteOptions) -> None:
+    async def delete_priority_class(
+        self,
+        name: str,
+        cluster_id: ClusterId,
+        propagation_policy: DeletePropagationPolicy = DeletePropagationPolicy.foreground,
+    ) -> None:
         """Delete a priority class."""
         ...
 
@@ -69,7 +88,13 @@ class PriorityClassClient(Protocol):
 class K8sClient(Protocol):
     """Methods to manipulate resources on a Kubernetes cluster."""
 
-    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject:
+    @overload
+    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject: ...
+    @overload
+    async def create(self, obj: ClusterScopedK8sObject, refresh: bool) -> ClusterScopedK8sObject: ...
+    async def create(
+        self, obj: K8sObject | ClusterScopedK8sObject, refresh: bool
+    ) -> K8sObject | ClusterScopedK8sObject:
         """Create the k8s object."""
         ...
 
@@ -82,7 +107,9 @@ class K8sClient(Protocol):
         """
         ...
 
-    async def delete(self, meta: K8sObjectMeta) -> None:
+    async def delete(
+        self, meta: K8sObjectMeta, propagation_policy: DeletePropagationPolicy = DeletePropagationPolicy.foreground
+    ) -> None:
         """Delete a k8s object."""
         ...
 

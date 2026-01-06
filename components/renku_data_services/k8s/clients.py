@@ -3,18 +3,14 @@
 from __future__ import annotations
 
 import contextlib
-import multiprocessing.synchronize
-from collections.abc import AsyncIterable
+import os
+from collections.abc import AsyncIterable, Callable
 from copy import deepcopy
-from multiprocessing import Lock
-from multiprocessing.synchronize import Lock as LockType
-from typing import Any
-from uuid import uuid4
+from typing import Any, overload
 
 import kr8s
-from kubernetes import client, config
-from kubernetes.config.config_exception import ConfigException
-from kubernetes.config.incluster_config import SERVICE_CERT_FILENAME, SERVICE_TOKEN_FILENAME, InClusterConfigLoader
+from box import Box
+from kubernetes import client
 
 from renku_data_services.errors import errors
 from renku_data_services.k8s.client_interfaces import K8sClient, PriorityClassClient, ResourceQuotaClient, SecretClient
@@ -24,6 +20,8 @@ from renku_data_services.k8s.models import (
     GVK,
     APIObjectInCluster,
     ClusterConnection,
+    ClusterScopedK8sObject,
+    DeletePropagationPolicy,
     K8sObject,
     K8sObjectFilter,
     K8sObjectMeta,
@@ -31,44 +29,76 @@ from renku_data_services.k8s.models import (
 )
 
 
-class K8sCoreClient(ResourceQuotaClient):
+class K8sResourceQuotaClient(ResourceQuotaClient):
     """Real k8s core API client that exposes the required functions."""
 
-    def __init__(self) -> None:
-        try:
-            InClusterConfigLoader(
-                token_filename=SERVICE_TOKEN_FILENAME,
-                cert_filename=SERVICE_CERT_FILENAME,
-            ).load_and_set()
-        except ConfigException:
-            config.load_config()
-        self.client = client.CoreV1Api()
+    def __init__(self, k8s_client: K8sClient) -> None:
+        self.__client = k8s_client
+        self.__quota_gvk = GVK(kind="ResourceQuota", version="v1")
+        self.__converter = client.ApiClient()
 
-    def read_resource_quota(self, name: str, namespace: str) -> client.V1ResourceQuota:
+    def _meta(self, name: str, namespace: str, cluster_id: ClusterId) -> K8sObjectMeta:
+        return K8sObjectMeta(
+            name=name,
+            namespace=namespace,
+            gvk=self.__quota_gvk,
+            cluster=cluster_id,
+        )
+
+    def _convert(self, data: Box) -> client.V1ResourceQuota:
+        # NOTE: There is unfortunately no other way around this, this is the only thing that will
+        # properly handle snake case - camel case conversions and a bunch of other things.
+        output = self.__converter._ApiClient__deserialize(data.to_dict(), client.V1ResourceQuota)
+        if not isinstance(output, client.V1ResourceQuota):
+            raise errors.ProgrammingError(message="Could not convert the output from kr8s to a ResourceQuota")
+        return output
+
+    async def read_resource_quota(self, name: str, namespace: str, cluster_id: ClusterId) -> client.V1ResourceQuota:
         """Get a resource quota."""
-        return self.client.read_namespaced_resource_quota(name, namespace)
+        res = await self.__client.get(self._meta(name, namespace, cluster_id))
+        if res is None:
+            raise errors.MissingResourceError(message=f"The resource quota {namespace}/{name} cannot be found.")
+        return self._convert(res.manifest)
 
-    def list_resource_quota(self, namespace: str, label_selector: str) -> list[client.V1ResourceQuota]:
+    async def list_resource_quota(
+        self, namespace: str, label_selector: dict[str, str], cluster_id: ClusterId
+    ) -> AsyncIterable[client.V1ResourceQuota]:
         """List resource quotas."""
-        return list(self.client.list_namespaced_resource_quota(namespace, label_selector=label_selector).items())
+        filter = K8sObjectFilter(
+            gvk=self.__quota_gvk,
+            namespace=namespace,
+            label_selector=label_selector,
+            cluster=cluster_id,
+        )
+        quotas = self.__client.list(filter)
+        async for quota in quotas:
+            yield self._convert(quota.manifest)
 
-    def create_resource_quota(self, namespace: str, body: client.V1ResourceQuota) -> None:
+    async def create_resource_quota(
+        self, namespace: str, body: client.V1ResourceQuota, cluster_id: ClusterId
+    ) -> client.V1ResourceQuota:
         """Create a resource quota."""
-        self.client.create_namespaced_resource_quota(namespace, body)
+        obj = K8sObject(
+            name=body.metadata.name,
+            namespace=namespace,
+            gvk=self.__quota_gvk,
+            manifest=Box(self.__converter.sanitize_for_serialization(body)),
+            cluster=cluster_id,
+        )
+        res = await self.__client.create(obj, False)
+        return self._convert(res.manifest)
 
-    def delete_resource_quota(self, name: str, namespace: str) -> None:
+    async def delete_resource_quota(self, name: str, namespace: str, cluster_id: ClusterId) -> None:
         """Delete a resource quota."""
-        try:
-            self.client.delete_namespaced_resource_quota(name, namespace)
-        except client.ApiException as e:
-            if e.status == 404:
-                # If the thing we are trying to delete is not there, we have the desired state so we can just go on.
-                return None
-            raise
+        await self.__client.delete(self._meta(name, namespace, cluster_id))
 
-    def patch_resource_quota(self, name: str, namespace: str, body: client.V1ResourceQuota) -> None:
+    async def patch_resource_quota(
+        self, name: str, namespace: str, body: client.V1ResourceQuota, cluster_id: ClusterId
+    ) -> client.V1ResourceQuota:
         """Update a resource quota."""
-        self.client.patch_namespaced_resource_quota(name, namespace, body)
+        patch = self.__converter.sanitize_for_serialization(body)
+        res = await self.__client.patch(self._meta(name, namespace, cluster_id), patch)
+        return self._convert(res.manifest)
 
 
 class K8sSecretClient(SecretClient):
@@ -96,37 +126,57 @@ class K8sSecretClient(SecretClient):
 class K8sSchedulingClient(PriorityClassClient):
     """Real k8s scheduling API client that exposes the required functions."""
 
-    def __init__(self) -> None:
-        try:
-            InClusterConfigLoader(
-                token_filename=SERVICE_TOKEN_FILENAME,
-                cert_filename=SERVICE_CERT_FILENAME,
-            ).load_and_set()
-        except ConfigException:
-            config.load_config()
-        self.client = client.SchedulingV1Api()
+    def __init__(self, k8s_client: K8sClient) -> None:
+        self.__client = k8s_client
+        self.__pc_gvk = GVK(kind="PriorityClass", version="v1", group="scheduling.k8s.io")
+        self.__converter = client.ApiClient()
 
-    def create_priority_class(self, body: client.V1PriorityClass) -> client.V1PriorityClass:
+    def _meta(self, name: str, cluster_id: ClusterId) -> K8sObjectMeta:
+        return K8sObjectMeta(
+            name=name,
+            namespace=None,
+            gvk=self.__pc_gvk,
+            cluster=cluster_id,
+        )
+
+    def _convert(self, data: Box) -> client.V1PriorityClass:
+        # NOTE: There is unfortunately no other way around this, this is the only thing that will
+        # properly handle snake case - camel case conversions and a bunch of other things.
+        output = self.__converter._ApiClient__deserialize(data.to_dict(), client.V1PriorityClass)
+        if not isinstance(output, client.V1PriorityClass):
+            raise errors.ProgrammingError(message="Could not convert the output from kr8s to a PriorityClass")
+        return output
+
+    async def create_priority_class(
+        self, body: client.V1PriorityClass, cluster_id: ClusterId
+    ) -> client.V1PriorityClass:
         """Create a priority class."""
-        return self.client.create_priority_class(body)
+        obj = ClusterScopedK8sObject(
+            name=body.metadata.name,
+            gvk=self.__pc_gvk,
+            manifest=Box(self.__converter.sanitize_for_serialization(body)),
+            cluster=cluster_id,
+        )
+        output = await self.__client.create(obj, refresh=True)
+        return self._convert(output.manifest)
 
-    def delete_priority_class(self, name: str, body: client.V1DeleteOptions) -> None:
+    async def delete_priority_class(
+        self,
+        name: str,
+        cluster_id: ClusterId,
+        propagation_policy: DeletePropagationPolicy = DeletePropagationPolicy.foreground,
+    ) -> None:
         """Delete a priority class."""
-        try:
-            self.client.delete_priority_class(name, body=body)
-        except client.ApiException as e:
-            if e.status != 404:
-                # NOTE: The priorityclass is an owner of the resource quota so when the priority class is deleted the
-                # resource quota is also deleted. Also, we don't care if the thing we are trying to delete is not there
-                # we have the desired state so we can just go on.
-                raise
+        metadata = self._meta(name, cluster_id)
+        await self.__client.delete(metadata, propagation_policy)
 
-    def read_priority_class(self, name: str) -> client.V1PriorityClass | None:
+    async def read_priority_class(self, name: str, cluster_id: ClusterId) -> client.V1PriorityClass | None:
         """Get a priority class."""
-        pc = None
-        with contextlib.suppress(client.ApiException):
-            pc = self.client.read_priority_class(name)
-        return pc
+        metadata = self._meta(name, cluster_id)
+        output = await self.__client.get(metadata)
+        if not output:
+            return None
+        return self._convert(output.manifest)
 
 
 class DummyCoreClient(ResourceQuotaClient, SecretClient):
@@ -135,74 +185,38 @@ class DummyCoreClient(ResourceQuotaClient, SecretClient):
     Not suitable for production - to be used only for testing and development.
     """
 
-    def __init__(self, quotas: dict[str, client.V1ResourceQuota], secrets: dict[str, K8sSecret]) -> None:
-        self.quotas = quotas
-        self.secrets = secrets
-        self.__lock: LockType | None = None
-
-    @property
-    def _lock(self) -> multiprocessing.synchronize.Lock:
-        # NOTE: If this is a regular attribute and initialized when the class in initialized
-        # then Sanic fails to start properly because it clashes with the multiprocessing Lock
-        # used here. This way Sanic starts without a problem because the Lock is initialized
-        # after Sanic has started.
-        if not self.__lock:
-            self.__lock = Lock()
-        return self.__lock
-
-    def read_resource_quota(self, name: str, namespace: str) -> client.V1ResourceQuota:
+    async def read_resource_quota(self, name: str, namespace: str, cluster_id: ClusterId) -> client.V1ResourceQuota:
         """Get a resource quota."""
-        with self._lock:
-            quota = self.quotas.get(name)
-            if quota is None:
-                raise client.ApiException(status=404)
-            return quota
+        raise NotImplementedError()
 
-    def list_resource_quota(self, namespace: str, label_selector: str) -> list[client.V1ResourceQuota]:
+    def list_resource_quota(
+        self, namespace: str, label_selector: dict[str, str], cluster_id: ClusterId
+    ) -> AsyncIterable[client.V1ResourceQuota]:
         """List resource quotas."""
-        with self._lock:
-            return list(self.quotas.values())
+        raise NotImplementedError()
 
-    def create_resource_quota(self, namespace: str, body: client.V1ResourceQuota) -> None:
+    async def create_resource_quota(
+        self, namespace: str, body: client.V1ResourceQuota, cluster_id: ClusterId
+    ) -> client.V1ResourceQuota:
         """Create a resource quota."""
-        with self._lock:
-            if isinstance(body.metadata, dict):
-                body.metadata = client.V1ObjectMeta(**body.metadata)
-            body.metadata.uid = uuid4()
-            body.api_version = "v1"
-            body.kind = "ResourceQuota"
-            self.quotas[body.metadata.name] = body
+        raise NotImplementedError()
 
-    def delete_resource_quota(self, name: str, namespace: str) -> None:
+    async def delete_resource_quota(self, name: str, namespace: str, cluster_id: ClusterId) -> None:
         """Delete a resource quota."""
-        with self._lock:
-            self.quotas.pop(name, None)
+        raise NotImplementedError()
 
-    def patch_resource_quota(self, name: str, namespace: str, body: client.V1ResourceQuota) -> None:
+    async def patch_resource_quota(
+        self, name: str, namespace: str, body: client.V1ResourceQuota, cluster_id: ClusterId
+    ) -> client.V1ResourceQuota:
         """Update a resource quota."""
-        with self._lock:
-            old_quota = self.quotas.get(name)
-            if old_quota is None:
-                raise client.ApiException(status=404)
-            new_quota = deepcopy(old_quota)
-            if isinstance(body, client.V1ResourceQuota):
-                new_quota.spec = body.spec
-            if isinstance(body, dict):
-                new_quota.spec = client.V1ResourceQuota(**body).spec
-            self.quotas[name] = new_quota
+        raise NotImplementedError()
 
     async def create_secret(self, secret: K8sSecret) -> K8sSecret:
         """Create a secret."""
-        with self._lock:
-            secret.manifest.metadata.uid = uuid4()
-            self.secrets[secret.name] = secret
-            return secret
+        raise NotImplementedError()
 
     async def patch_secret(self, secret: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sSecret:
         """Patch a secret."""
-        # NOTE: This is only needed if the create_namespaced_secret can raise a conflict 409 status code
-        # error when it tries to create a secret that already exists. But the dummy client never raises
-        # this so we don't need to implement it (for now).
         raise NotImplementedError()
 
     async def delete_secret(self, secret: K8sObjectMeta) -> None:
@@ -216,40 +230,24 @@ class DummySchedulingClient(PriorityClassClient):
     Not suitable for production - to be used only for testing and development.
     """
 
-    def __init__(self, pcs: dict[str, client.V1PriorityClass]) -> None:
-        self.pcs = pcs
-        self.__lock: LockType | None = None
-
-    @property
-    def _lock(self) -> multiprocessing.synchronize.Lock:
-        # NOTE: If this is a regular attribute and initialized when the class in initialized
-        # then Sanic fails to start properly because it clashes with the multiprocessing Lock
-        # used here. This way Sanic starts without a problem because the Lock is initialized
-        # after Sanic has started.
-        if not self.__lock:
-            self.__lock = Lock()
-        return self.__lock
-
-    def create_priority_class(self, body: client.V1PriorityClass) -> client.V1PriorityClass:
+    async def create_priority_class(
+        self, body: client.V1PriorityClass, cluster_id: ClusterId
+    ) -> client.V1PriorityClass:
         """Create a priority class."""
-        with self._lock:
-            if isinstance(body.metadata, dict):
-                body.metadata = client.V1ObjectMeta(**body.metadata)
-            body.metadata.uid = uuid4()
-            body.api_version = "v1"
-            body.kind = "PriorityClass"
-            self.pcs[body.metadata.name] = body
-            return body
+        raise NotImplementedError()
 
-    def read_priority_class(self, name: str) -> client.V1PriorityClass | None:
+    async def read_priority_class(self, name: str, cluster_id: ClusterId) -> client.V1PriorityClass | None:
         """Get a priority class."""
-        with self._lock:
-            return self.pcs.get(name, None)
+        raise NotImplementedError()
 
-    def delete_priority_class(self, name: str, body: client.V1DeleteOptions) -> None:
+    async def delete_priority_class(
+        self,
+        name: str,
+        cluster_id: ClusterId,
+        propagation_policy: DeletePropagationPolicy = DeletePropagationPolicy.foreground,
+    ) -> None:
         """Delete a priority class."""
-        with self._lock:
-            self.pcs.pop(name, None)
+        raise NotImplementedError()
 
 
 class K8sClusterClient(K8sClient):
@@ -291,7 +289,13 @@ class K8sClusterClient(K8sClient):
     async def __get_api_object(self, meta: K8sObjectFilter) -> APIObjectInCluster | None:
         return await anext(aiter(self.__list(meta)), None)
 
-    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject:
+    @overload
+    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject: ...
+    @overload
+    async def create(self, obj: ClusterScopedK8sObject, refresh: bool) -> ClusterScopedK8sObject: ...
+    async def create(
+        self, obj: K8sObject | ClusterScopedK8sObject, refresh: bool
+    ) -> K8sObject | ClusterScopedK8sObject:
         """Create the k8s object."""
 
         api_obj = obj.to_api_object(self.__cluster.api)
@@ -301,7 +305,8 @@ class K8sClusterClient(K8sClient):
         if refresh:
             # if refresh isn't called, status and timestamp will be blank
             await api_obj.refresh()
-
+        if isinstance(obj, ClusterScopedK8sObject):
+            return obj.with_cluster_scoped_manifest(api_obj.to_dict())
         return obj.with_manifest(api_obj.to_dict())
 
     async def patch(self, meta: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
@@ -320,13 +325,15 @@ class K8sClusterClient(K8sClient):
 
         return meta.with_manifest(obj.obj.to_dict())
 
-    async def delete(self, meta: K8sObjectMeta) -> None:
+    async def delete(
+        self, meta: K8sObjectMeta, propagation_policy: DeletePropagationPolicy = DeletePropagationPolicy.foreground
+    ) -> None:
         """Delete a k8s object."""
         obj = await self.__get_api_object(meta.to_filter())
         if obj is None:
             return
         with contextlib.suppress(kr8s.NotFoundError):
-            await obj.obj.delete(propagation_policy="Foreground")
+            await obj.obj.delete(propagation_policy=propagation_policy.value)
 
     async def get(self, meta: K8sObjectMeta) -> K8sObject | None:
         """Get a specific k8s object, None is returned if the object does not exist."""
@@ -352,9 +359,17 @@ class K8sCachedClusterClient(K8sClusterClient):
         self.__cache = cache
         self.__kinds_to_cache = set(kinds_to_cache)
 
-    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject:
+    @overload
+    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject: ...
+    @overload
+    async def create(self, obj: ClusterScopedK8sObject, refresh: bool) -> ClusterScopedK8sObject: ...
+    async def create(
+        self, obj: K8sObject | ClusterScopedK8sObject, refresh: bool
+    ) -> K8sObject | ClusterScopedK8sObject:
         """Create the k8s object."""
         if obj.gvk in self.__kinds_to_cache:
+            if isinstance(obj, ClusterScopedK8sObject):
+                raise NotImplementedError("Caching of cluster scoped K8s resources is not supported")
             await self.__cache.upsert(obj)
         try:
             obj = await super().create(obj, refresh)
@@ -372,9 +387,11 @@ class K8sCachedClusterClient(K8sClusterClient):
             await self.__cache.upsert(obj)
         return obj
 
-    async def delete(self, meta: K8sObjectMeta) -> None:
+    async def delete(
+        self, meta: K8sObjectMeta, propagation_policy: DeletePropagationPolicy = DeletePropagationPolicy.foreground
+    ) -> None:
         """Delete a k8s object."""
-        await super().delete(meta)
+        await super().delete(meta, propagation_policy)
         # NOTE: We use foreground deletion in the k8s client.
         # This means that the parent resource is usually not deleted immediately and will
         # wait for its children to be deleted before it is deleted.
@@ -410,14 +427,14 @@ class K8sCachedClusterClient(K8sClusterClient):
 class K8sClusterClientsPool(K8sClient):
     """A wrapper around a pool of kr8s k8s clients."""
 
-    def __init__(self, clusters: AsyncIterable[K8sClusterClient]) -> None:
+    def __init__(self, clusters: Callable[[], AsyncIterable[K8sClusterClient]]) -> None:
         self.__clusters = clusters
         self.__clients: dict[ClusterId, K8sClusterClient] = {}
 
     async def __init_clients_if_needed(self) -> None:
-        if len(self.__clients) > 0:
+        if len(self.__clients) > 0 and os.environ.get("ALWAYS_READ_CLUSTERS") is None:
             return
-        async for cluster in self.__clusters:
+        async for cluster in self.__clusters():
             self.__clients[cluster.get_cluster().id] = cluster
 
     async def __get_client_or_die(self, cluster_id: ClusterId) -> K8sClusterClient:
@@ -435,7 +452,13 @@ class K8sClusterClientsPool(K8sClient):
         client = await self.__get_client_or_die(cluster_id)
         return client.get_cluster()
 
-    async def create(self, obj: K8sObject, refresh: bool = True) -> K8sObject:
+    @overload
+    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject: ...
+    @overload
+    async def create(self, obj: ClusterScopedK8sObject, refresh: bool) -> ClusterScopedK8sObject: ...
+    async def create(
+        self, obj: K8sObject | ClusterScopedK8sObject, refresh: bool
+    ) -> K8sObject | ClusterScopedK8sObject:
         """Create the k8s object."""
         client = await self.__get_client_or_die(obj.cluster)
         return await client.create(obj, refresh)
@@ -445,10 +468,12 @@ class K8sClusterClientsPool(K8sClient):
         client = await self.__get_client_or_die(meta.cluster)
         return await client.patch(meta, patch)
 
-    async def delete(self, meta: K8sObjectMeta) -> None:
+    async def delete(
+        self, meta: K8sObjectMeta, propagation_policy: DeletePropagationPolicy = DeletePropagationPolicy.foreground
+    ) -> None:
         """Delete a k8s object."""
         client = await self.__get_client_or_die(meta.cluster)
-        await client.delete(meta)
+        await client.delete(meta, propagation_policy)
 
     async def get(self, meta: K8sObjectMeta) -> K8sObject | None:
         """Get a specific k8s object, None is returned if the object does not exist."""

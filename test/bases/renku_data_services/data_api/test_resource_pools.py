@@ -1,11 +1,13 @@
 import json
 from copy import deepcopy
+from pathlib import Path
 from typing import Any
 
 import pytest
 from sanic_testing.testing import SanicASGITestClient
 
 from test.bases.renku_data_services.data_api.utils import create_rp
+from test.utils import KindCluster
 
 resource_pool_payload = [
     (
@@ -61,10 +63,12 @@ resource_pool_payload = [
     resource_pool_payload,
 )
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_resource_pool_creation(
     sanic_client: SanicASGITestClient,
     payload: dict[str, Any],
     expected_status_code: int,
+    cluster: KindCluster,
 ) -> None:
     payload = deepcopy(payload)
     if "cluster_id" in payload:
@@ -79,18 +83,23 @@ async def test_resource_pool_creation(
     resource_pool_payload,
 )
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_resource_pool_creation_with_cluster_ids(
     sanic_client: SanicASGITestClient,
     payload: dict[str, Any],
     expected_status_code: int,
+    cluster: KindCluster,
+    kubeconfig_path: Path,
+    monkeypatch,
 ) -> None:
     payload = deepcopy(payload)
+    monkeypatch.setenv("ALWAYS_READ_CLUSTERS", "true")
     if "cluster_id" in payload:
         _, res = await sanic_client.post(
             "/api/data/clusters",
             json={
                 "name": "test-name",
-                "config_name": "test-class-name.yaml",
+                "config_name": kubeconfig_path.name,
                 "session_protocol": "http",
                 "session_host": "localhost",
                 "session_port": 8080,
@@ -100,10 +109,11 @@ async def test_resource_pool_creation_with_cluster_ids(
             },
             headers={"Authorization": 'Bearer {"is_admin": true}'},
         )
+        assert res.status_code == 201, res.text
         payload["cluster_id"] = res.json["id"]
 
     _, res = await create_rp(payload, sanic_client)
-    assert res.status_code == expected_status_code
+    assert res.status_code == expected_status_code, res.text
 
     if "cluster_id" in payload:
         assert "cluster" in res.json
@@ -116,11 +126,13 @@ async def test_resource_pool_creation_with_cluster_ids(
     resource_pool_payload,
 )
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_resource_pool_creation_with_remote(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
     payload: dict[str, Any],
     expected_status_code: int,
+    cluster: KindCluster,
 ) -> None:
     # Create a provider
     provider_payload = {
@@ -165,11 +177,13 @@ async def test_resource_pool_creation_with_remote(
     resource_pool_payload,
 )
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_resource_pool_creation_with_platform(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
     payload: dict[str, Any],
     expected_status_code: int,
+    cluster: KindCluster,
 ) -> None:
     payload = deepcopy(payload)
     if "cluster_id" in payload:
@@ -188,8 +202,11 @@ async def test_resource_pool_creation_with_platform(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_resource_pool_quotas(
-    sanic_client: SanicASGITestClient, valid_resource_pool_payload: dict[str, Any]
+    sanic_client: SanicASGITestClient,
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
 ) -> None:
     _, res = await create_rp(valid_resource_pool_payload, sanic_client)
     assert res.status_code == 201
@@ -199,8 +216,12 @@ async def test_resource_pool_quotas(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_resource_class_filtering(
-    sanic_client: SanicASGITestClient, admin_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
 ) -> None:
     new_classes = [
         {
@@ -268,8 +289,12 @@ async def test_resource_class_filtering(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_resource_class_ordering(
-    sanic_client: SanicASGITestClient, admin_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
 ) -> None:
     new_classes = [
         {
@@ -348,8 +373,12 @@ async def test_resource_class_ordering(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_get_single_pool_quota(
-    sanic_client: SanicASGITestClient, valid_resource_pool_payload: dict[str, Any], admin_headers: dict[str, str]
+    sanic_client: SanicASGITestClient,
+    valid_resource_pool_payload: dict[str, Any],
+    admin_headers: dict[str, str],
+    cluster: KindCluster,
 ) -> None:
     _, res = await create_rp(valid_resource_pool_payload, sanic_client)
     assert res.status_code == 201
@@ -371,8 +400,12 @@ async def test_get_single_pool_quota(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_patch_quota(
-    sanic_client: SanicASGITestClient, valid_resource_pool_payload: dict[str, Any], admin_headers: dict[str, str]
+    sanic_client: SanicASGITestClient,
+    valid_resource_pool_payload: dict[str, Any],
+    admin_headers: dict[str, str],
+    cluster: KindCluster,
 ) -> None:
     _, res = await create_rp(valid_resource_pool_payload, sanic_client)
     assert res.status_code == 201
@@ -384,8 +417,12 @@ async def test_patch_quota(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_put_quota(
-    sanic_client: SanicASGITestClient, valid_resource_pool_payload: dict[str, Any], admin_headers: dict[str, str]
+    sanic_client: SanicASGITestClient,
+    valid_resource_pool_payload: dict[str, Any],
+    admin_headers: dict[str, str],
+    cluster: KindCluster,
 ) -> None:
     _, res = await create_rp(valid_resource_pool_payload, sanic_client)
     assert res.status_code == 201
@@ -402,8 +439,12 @@ async def test_put_quota(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_patch_resource_class(
-    sanic_client: SanicASGITestClient, valid_resource_pool_payload: dict[str, Any], admin_headers: dict[str, str]
+    sanic_client: SanicASGITestClient,
+    valid_resource_pool_payload: dict[str, Any],
+    admin_headers: dict[str, str],
+    cluster: KindCluster,
 ) -> None:
     _, res = await create_rp(valid_resource_pool_payload, sanic_client)
     assert res.status_code == 201
@@ -415,8 +456,12 @@ async def test_patch_resource_class(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_put_resource_class(
-    sanic_client: SanicASGITestClient, valid_resource_pool_payload: dict[str, Any], admin_headers: dict[str, str]
+    sanic_client: SanicASGITestClient,
+    valid_resource_pool_payload: dict[str, Any],
+    admin_headers: dict[str, str],
+    cluster: KindCluster,
 ) -> None:
     _, res = await create_rp(valid_resource_pool_payload, sanic_client)
     assert res.status_code == 201
@@ -434,8 +479,12 @@ async def test_put_resource_class(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_restricted_default_resource_pool_access(
-    sanic_client: SanicASGITestClient, admin_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
 ) -> None:
     valid_resource_pool_payload["default"] = True
     valid_resource_pool_payload["public"] = True
@@ -505,8 +554,12 @@ async def test_restricted_default_resource_pool_access(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_restricted_default_resource_pool_access_changes(
-    sanic_client: SanicASGITestClient, admin_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
 ) -> None:
     valid_resource_pool_payload["default"] = True
     valid_resource_pool_payload["public"] = True
@@ -549,8 +602,12 @@ async def test_restricted_default_resource_pool_access_changes(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_private_resource_pool_access(
-    sanic_client: SanicASGITestClient, admin_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
 ) -> None:
     valid_resource_pool_payload["default"] = False
     valid_resource_pool_payload["public"] = False
@@ -599,8 +656,12 @@ async def test_private_resource_pool_access(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_remove_resource_pool_users(
-    sanic_client: SanicASGITestClient, admin_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
 ) -> None:
     valid_resource_pool_payload["default"] = False
     valid_resource_pool_payload["public"] = False
@@ -670,8 +731,12 @@ async def test_remove_resource_pool_users(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_user_resource_pools(
-    sanic_client: SanicASGITestClient, admin_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
 ) -> None:
     # Create private resource pool
     valid_resource_pool_payload["default"] = False
@@ -737,11 +802,13 @@ async def test_user_resource_pools(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_adding_existing_user_does_not_fail(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
     valid_resource_pool_payload: dict[str, Any],
     member_1_user,
+    cluster: KindCluster,
 ):
     # Create private resource pool
     valid_resource_pool_payload["default"] = False
@@ -783,8 +850,12 @@ async def test_adding_existing_user_does_not_fail(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_patch_tolerations(
-    sanic_client: SanicASGITestClient, admin_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
 ) -> None:
     valid_resource_pool_payload["classes"][0]["tolerations"] = ["toleration1"]
     _, res = await create_rp(valid_resource_pool_payload, sanic_client)
@@ -823,8 +894,12 @@ async def test_patch_tolerations(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_patch_affinities(
-    sanic_client: SanicASGITestClient, admin_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
 ) -> None:
     valid_resource_pool_payload["classes"][0]["node_affinities"] = [{"key": "affinity1"}]
     _, res = await create_rp(valid_resource_pool_payload, sanic_client)
@@ -877,8 +952,12 @@ async def test_patch_affinities(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_remove_all_tolerations_put(
-    sanic_client: SanicASGITestClient, admin_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
 ) -> None:
     valid_resource_pool_payload["classes"][0]["tolerations"] = ["toleration1"]
     _, res = await create_rp(valid_resource_pool_payload, sanic_client)
@@ -909,8 +988,12 @@ async def test_remove_all_tolerations_put(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_remove_all_affinities_put(
-    sanic_client: SanicASGITestClient, admin_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
 ) -> None:
     valid_resource_pool_payload["classes"][0]["node_affinities"] = [{"key": "affinity1"}]
     _, res = await create_rp(valid_resource_pool_payload, sanic_client)
@@ -941,8 +1024,12 @@ async def test_remove_all_affinities_put(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_put_tolerations(
-    sanic_client: SanicASGITestClient, admin_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
 ) -> None:
     valid_resource_pool_payload["classes"][0]["tolerations"] = ["toleration1"]
     _, res = await create_rp(valid_resource_pool_payload, sanic_client)
@@ -973,8 +1060,12 @@ async def test_put_tolerations(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_put_affinities(
-    sanic_client: SanicASGITestClient, admin_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
 ) -> None:
     valid_resource_pool_payload["classes"][0]["node_affinities"] = [{"key": "affinity1"}]
     _, res = await create_rp(valid_resource_pool_payload, sanic_client)
@@ -1011,8 +1102,12 @@ async def test_put_affinities(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_get_all_tolerations(
-    sanic_client: SanicASGITestClient, admin_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
 ) -> None:
     valid_resource_pool_payload["classes"][0]["tolerations"] = ["toleration1"]
     _, res = await create_rp(valid_resource_pool_payload, sanic_client)
@@ -1031,8 +1126,12 @@ async def test_get_all_tolerations(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_get_all_affinities(
-    sanic_client: SanicASGITestClient, admin_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
 ) -> None:
     valid_resource_pool_payload["classes"][0]["node_affinities"] = [{"key": "affinity1"}]
     _, res = await create_rp(valid_resource_pool_payload, sanic_client)
@@ -1051,8 +1150,12 @@ async def test_get_all_affinities(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_delete_all_affinities(
-    sanic_client: SanicASGITestClient, admin_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
 ) -> None:
     valid_resource_pool_payload["classes"][0]["node_affinities"] = [{"key": "affinity1"}]
     _, res = await create_rp(valid_resource_pool_payload, sanic_client)
@@ -1076,8 +1179,12 @@ async def test_delete_all_affinities(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_delete_all_tolerations(
-    sanic_client: SanicASGITestClient, admin_headers: dict[str, str], valid_resource_pool_payload: dict[str, Any]
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
 ) -> None:
     valid_resource_pool_payload["classes"][0]["tolerations"] = ["toleration1"]
     _, res = await create_rp(valid_resource_pool_payload, sanic_client)
@@ -1202,6 +1309,7 @@ put_patch_common_test_inputs = [
 
 @pytest.mark.parametrize("expected_status_code,auth,resource_pool_id,payload", put_patch_common_test_inputs)
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_resource_pools_put(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
@@ -1209,6 +1317,7 @@ async def test_resource_pools_put(
     auth: bool,
     resource_pool_id: int,
     payload: dict | None,
+    cluster: KindCluster,
 ) -> None:
     await _resource_pools_request(
         sanic_client, "PUT", admin_headers, expected_status_code, auth, resource_pool_id, payload
@@ -1217,6 +1326,7 @@ async def test_resource_pools_put(
 
 @pytest.mark.parametrize("expected_status_code,auth,resource_pool_id,payload", put_patch_common_test_inputs)
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_resource_pools_patch(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
@@ -1224,6 +1334,7 @@ async def test_resource_pools_patch(
     auth: bool,
     resource_pool_id: int | None,
     payload: dict | None,
+    cluster: KindCluster,
 ) -> None:
     await _resource_pools_request(
         sanic_client, "PATCH", admin_headers, expected_status_code, auth, resource_pool_id, payload
@@ -1242,12 +1353,14 @@ async def test_resource_pools_patch(
     ],
 )
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_resource_pools_delete(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
     expected_status_code: int,
     auth: bool,
     resource_pool_id: str | None,
+    cluster: KindCluster,
 ) -> None:
     base_url = "/api/data/resource_pools"
 
@@ -1266,9 +1379,11 @@ async def test_resource_pools_delete(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_resource_pool_patch_remote(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
+    cluster: KindCluster,
 ) -> None:
     # Create a provider
     provider_payload = {
@@ -1325,9 +1440,11 @@ async def test_resource_pool_patch_remote(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_resource_pool_patch_platform(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
+    cluster: KindCluster,
 ) -> None:
     # First, create a resource pool with the default runtime platform
     payload = deepcopy(resource_pool_payload_2)
@@ -1363,9 +1480,11 @@ async def test_resource_pool_patch_platform(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_resource_pool_empty_patch_noop(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
+    cluster: KindCluster,
 ) -> None:
     # First, create a resource pool
     payload = deepcopy(resource_pool_payload_2)
@@ -1389,9 +1508,11 @@ async def test_resource_pool_empty_patch_noop(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_resource_class_empty_patch_noop(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
+    cluster: KindCluster,
 ) -> None:
     # First, create a resource pool
     payload = deepcopy(resource_pool_payload_2)

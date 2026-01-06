@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterable, Callable
 from dataclasses import dataclass, field
-from typing import Optional
 from uuid import uuid4
 
 import sqlalchemy
@@ -17,7 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from renku_data_services.crc import models
 from renku_data_services.errors import errors
 from renku_data_services.k8s.client_interfaces import PriorityClassClient, ResourceQuotaClient
-from renku_data_services.k8s.models import K8sObject, K8sObjectFilter, K8sObjectMeta
+from renku_data_services.k8s.constants import ClusterId
+from renku_data_services.k8s.models import DeletePropagationPolicy, K8sObject, K8sObjectFilter, K8sObjectMeta
 from renku_data_services.k8s.orm import K8sObjectORM
 
 
@@ -125,7 +125,7 @@ class QuotaRepository:
         for igpu_kind in models.GpuKind:
             key = f"requests.{igpu_kind}/gpu"
             if key in manifest.spec.hard:
-                gpu = int(manifest.spec.hard.get(key))
+                gpu = int(parse_quantity(manifest.spec.hard.get(key)))
                 gpu_kind = igpu_kind
                 break
         memory_raw = manifest.spec.hard.get("requests.memory")
@@ -161,29 +161,35 @@ class QuotaRepository:
             ),
         )
 
-    def get_quota(self, name: str | None) -> Optional[models.Quota]:
+    async def get_quota(self, name: str | None, cluster_id: ClusterId) -> models.Quota | None:
         """Get a specific quota by name."""
         if not name:
             return None
         try:
-            res_quota = self.rq_client.read_resource_quota(name=name, namespace=self.namespace)
-        except client.ApiException as e:
-            if e.status == 404:
-                return None
-            raise
+            res_quota = await self.rq_client.read_resource_quota(
+                name=name, namespace=self.namespace, cluster_id=cluster_id
+            )
+        except errors.MissingResourceError:
+            return None
         return self._quota_from_manifest(res_quota)
 
-    def get_quotas(self, name: Optional[str] = None) -> list[models.Quota]:
+    async def get_quotas(self, cluster_id: ClusterId, name: str | None = None) -> AsyncIterable[models.Quota]:
         """Get a specific resource quota."""
         if name is not None:
-            quota = self.get_quota(name)
-            return [quota] if quota is not None else []
+            quota = await self.get_quota(name, cluster_id)
+            if not quota:
+                return
+            yield quota
+            return
         quotas = self.rq_client.list_resource_quota(
-            namespace=self.namespace, label_selector=f"{self._label_name}={self._label_value}"
+            namespace=self.namespace,
+            label_selector={self._label_name: self._label_value},
+            cluster_id=cluster_id,
         )
-        return [self._quota_from_manifest(q) for q in quotas]
+        async for q in quotas:
+            yield self._quota_from_manifest(q)
 
-    def create_quota(self, new_quota: models.UnsavedQuota) -> models.Quota:
+    async def create_quota(self, new_quota: models.UnsavedQuota, cluster_id: ClusterId) -> models.Quota:
         """Create a resource quota and priority class."""
         quota_id = str(uuid4())
         quota = models.Quota(
@@ -193,9 +199,9 @@ class QuotaRepository:
         quota_manifest = self._quota_to_manifest(quota)
 
         # Check if we have a priority class with the given name, return it or create one otherwise.
-        pc = self.pc_client.read_priority_class(quota.id)
+        pc = await self.pc_client.read_priority_class(quota.id, cluster_id)
         if pc is None:
-            pc = self.pc_client.create_priority_class(
+            pc = await self.pc_client.create_priority_class(
                 client.V1PriorityClass(
                     global_default=False,
                     value=100,
@@ -203,6 +209,7 @@ class QuotaRepository:
                     description="Renku resource quota priority class",
                     metadata=client.V1ObjectMeta(**metadata),
                 ),
+                cluster_id,
             )
 
         # NOTE: The priority class is cluster-scoped and a namespace-scoped resource cannot be an owner
@@ -217,16 +224,20 @@ class QuotaRepository:
                 uid=pc.metadata.uid,
             )
         ]
-        self.rq_client.create_resource_quota(self.namespace, quota_manifest)
-        return quota
+        res = await self.rq_client.create_resource_quota(self.namespace, quota_manifest, cluster_id)
+        return self._quota_from_manifest(res)
 
-    def delete_quota(self, name: str) -> None:
+    async def delete_quota(self, name: str, cluster_id: ClusterId) -> None:
         """Delete a resource quota and priority class."""
-        self.pc_client.delete_priority_class(name=name, body=client.V1DeleteOptions(propagation_policy="Foreground"))
-        self.rq_client.delete_resource_quota(name=name, namespace=self.namespace)
+        await self.pc_client.delete_priority_class(
+            name=name, cluster_id=cluster_id, propagation_policy=DeletePropagationPolicy.foreground
+        )
+        await self.rq_client.delete_resource_quota(name=name, namespace=self.namespace, cluster_id=cluster_id)
 
-    def update_quota(self, quota: models.Quota) -> models.Quota:
+    async def update_quota(self, quota: models.Quota, cluster_id: ClusterId) -> models.Quota:
         """Update a specific resource quota."""
         quota_manifest = self._quota_to_manifest(quota)
-        self.rq_client.patch_resource_quota(name=quota.id, namespace=self.namespace, body=quota_manifest)
-        return quota
+        patched_quota = await self.rq_client.patch_resource_quota(
+            name=quota.id, namespace=self.namespace, body=quota_manifest, cluster_id=cluster_id
+        )
+        return self._quota_from_manifest(patched_quota)

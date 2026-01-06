@@ -1,7 +1,10 @@
+import asyncio
 from dataclasses import asdict
 
+import pytest
+import pytest_asyncio
 from box import Box
-from hypothesis import given
+from hypothesis import given, settings
 from kr8s.asyncio.objects import StatefulSet
 from kubernetes import client
 from kubernetes.client import (
@@ -16,100 +19,74 @@ from kubernetes.client import (
 )
 
 from renku_data_services.crc import models
-from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient
+from renku_data_services.k8s.clients import (
+    K8sClusterClient,
+    K8sResourceQuotaClient,
+    K8sSchedulingClient,
+)
+from renku_data_services.k8s.config import from_kubeconfig_file
+from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
 from renku_data_services.k8s.db import QuotaRepository
+from renku_data_services.k8s.models import ClusterConnection
 from renku_data_services.notebooks.api.classes.auth import RenkuTokens
 from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClient
 from renku_data_services.notebooks.util.kubernetes_ import find_env_var
 from test.components.renku_data_services.crc_models.hypothesis import quota_strat
 
 
-def test_dummy_core_client() -> None:
-    core_client = DummyCoreClient({}, {})
-    quotas = core_client.list_resource_quota("default", "")
-    assert len(quotas) == 0
-    assert len(core_client.quotas) == 0
-    quota_name = "test"
-    quota = client.V1ResourceQuota(
-        metadata={"name": quota_name}, spec=client.V1ResourceQuotaSpec(hard={"requests.cpu": 1})
-    )
-    core_client.create_resource_quota("default", quota)
-    quotas = core_client.list_resource_quota("default", "")
-    assert len(quotas) == 1
-    assert len(core_client.quotas) == 1
-    core_client.delete_resource_quota(quota_name, "default")
-    quotas = core_client.list_resource_quota("default", "")
-    assert len(quotas) == 0
-    assert len(core_client.quotas) == 0
-
-
-def test_dummy_scheduling_client() -> None:
-    scheduling_client = DummySchedulingClient({})
-    assert len(scheduling_client.pcs) == 0
-    pc_name = "test"
-    pc = client.V1PriorityClass(global_default=False, value=100, metadata=client.V1ObjectMeta(name=pc_name))
-    scheduling_client.create_priority_class(pc)
-    assert len(scheduling_client.pcs) == 1
-    scheduling_client.delete_priority_class(pc_name, body=client.V1DeleteOptions())
-    assert len(scheduling_client.pcs) == 0
+@pytest_asyncio.fixture(scope="session")
+async def quota_repo(cluster):
+    default_kubeconfig = await from_kubeconfig_file(cluster.kubeconfig)
+    default_api = await default_kubeconfig.api()
+    cluster_connection = ClusterConnection(id=DEFAULT_K8S_CLUSTER, namespace=default_api.namespace, api=default_api)
+    clnt = K8sClusterClient(cluster_connection)
+    rc_client = K8sResourceQuotaClient(clnt)
+    pc_client = K8sSchedulingClient(clnt)
+    yield QuotaRepository(rc_client, pc_client, namespace=default_api.namespace)
 
 
 @given(quota=quota_strat)
-def test_get_insert_quota(quota: models.UnsavedQuota) -> None:
-    core_client = DummyCoreClient({}, {})
-    scheduling_client = DummySchedulingClient({})
-    quota_repo = QuotaRepository(core_client, scheduling_client)
-    quotas = quota_repo.get_quotas()
-    assert len(quotas) == 0
-    assert len(scheduling_client.pcs) == 0
-    created_quota = quota_repo.create_quota(quota)
-    quotas = quota_repo.get_quotas()
-    assert len(quotas) == 1
-    inserted_quota = quotas[0]
-    assert len(scheduling_client.pcs) == 1
-    assert scheduling_client.pcs[inserted_quota.id].metadata.name == inserted_quota.id
-    specific_quota_list = quota_repo.get_quotas(created_quota.id)
+@pytest.mark.xdist_group("sessions")
+async def test_get_insert_quota(quota: models.UnsavedQuota, quota_repo: QuotaRepository) -> None:
+    created_quota = await quota_repo.create_quota(quota, DEFAULT_K8S_CLUSTER)
+    recovered_quota = await quota_repo.get_quota(created_quota.id, DEFAULT_K8S_CLUSTER)
+    assert recovered_quota is not None
+    assert created_quota.id == recovered_quota.id
+    specific_quota_list = [q async for q in quota_repo.get_quotas(DEFAULT_K8S_CLUSTER, created_quota.id)]
     assert len(specific_quota_list) == 1
     specific_quota = specific_quota_list[0]
-    assert specific_quota is not None
-    assert specific_quota in quotas
+    assert specific_quota == created_quota
 
 
+@settings(deadline=None, max_examples=5)
 @given(quota=quota_strat)
-def test_delete_quota(quota: models.UnsavedQuota) -> None:
-    core_client = DummyCoreClient({}, {})
-    scheduling_client = DummySchedulingClient({})
-    quota_repo = QuotaRepository(core_client, scheduling_client)
-    quota_repo.create_quota(quota)
-    quotas = quota_repo.get_quotas()
-    assert len(quotas) == 1
-    assert len(scheduling_client.pcs) == 1
-    quota_repo.delete_quota(quotas[0].id)
-    quotas = quota_repo.get_quotas()
-    assert len(quotas) == 0
-    assert len(scheduling_client.pcs) == 0
+@pytest.mark.xdist_group("sessions")
+async def test_delete_quota(quota: models.UnsavedQuota, quota_repo: QuotaRepository) -> None:
+    created_quota = await quota_repo.create_quota(quota, DEFAULT_K8S_CLUSTER)
+    recovered_quota = await quota_repo.get_quota(created_quota.id, DEFAULT_K8S_CLUSTER)
+    assert created_quota == recovered_quota
+    await quota_repo.delete_quota(created_quota.id, DEFAULT_K8S_CLUSTER)
+    # Kind needs some time for the deletion to propagate
+    await asyncio.sleep(10)
+    no_quota = await quota_repo.get_quota(created_quota.id, DEFAULT_K8S_CLUSTER)
+    assert no_quota is None
 
 
 @given(old_quota=quota_strat, new_quota=quota_strat)
-def test_update_quota(old_quota: models.UnsavedQuota, new_quota: models.UnsavedQuota) -> None:
+@pytest.mark.xdist_group("sessions")
+async def test_update_quota(
+    old_quota: models.UnsavedQuota, new_quota: models.UnsavedQuota, quota_repo: QuotaRepository
+) -> None:
     created_quota = None
     try:
-        core_client = DummyCoreClient({}, {})
-        scheduling_client = DummySchedulingClient({})
-        quota_repo = QuotaRepository(core_client, scheduling_client)
-        created_quota = quota_repo.create_quota(old_quota)
-        quotas = quota_repo.get_quotas()
-        assert len(scheduling_client.pcs) == 1
-        assert len(quotas) == 1
+        created_quota = await quota_repo.create_quota(old_quota, DEFAULT_K8S_CLUSTER)
         quota_update = models.Quota(**asdict(new_quota), id=created_quota.id)
-        quota_repo.update_quota(quota_update)
-        quotas = quota_repo.get_quotas()
-        assert len(quotas) == 1
-        assert len(scheduling_client.pcs) == 1
-        assert quotas[0] == quota_update
+        updated_quota = await quota_repo.update_quota(quota_update, DEFAULT_K8S_CLUSTER)
+        retrieved_quota = await quota_repo.get_quota(created_quota.id, DEFAULT_K8S_CLUSTER)
+        assert updated_quota == retrieved_quota
     finally:
         if created_quota is not None:
-            quota_repo.delete_quota(created_quota.id)
+            await quota_repo.delete_quota(created_quota.id, DEFAULT_K8S_CLUSTER)
 
 
 def test_find_env_var() -> None:

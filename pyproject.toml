@@ -66,7 +66,6 @@ authlib = "^1.5.0"
 undictify = "^0.11.3"
 prometheus-sanic = "^3.0.0"
 prometheus_client = "^0.7.1"
-kubernetes-asyncio = "^32.0.0"
 marshmallow = "^3.26.1"
 escapism = "^1.0.1"
 sentry-sdk = { version = "^2.22.0", extras = ["sanic"] }
@@ -262,7 +261,6 @@ module = [
   "grpc.*",
   "grpcutil.*",
   "kubernetes.*",
-  "kubernetes_asyncio.*",
   "prometheus_client.*",
   "prometheus_sanic.*",
   "sanic_testing.*",
@@ -272,7 +270,7 @@ module = [
   "kr8s.*",
   "parsy.*",
   "posthog.*",
-  "markdown_code_runner"
+  "markdown_code_runner",
 ]
 ignore_missing_imports = true
 

@@ -13,10 +13,8 @@ from renku_data_services.crc.models import ClusterSettings, ResourceClass, Sessi
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.errors import errors
 from renku_data_services.k8s.clients import (
-    DummyCoreClient,
-    DummySchedulingClient,
     K8sClusterClientsPool,
-    K8sCoreClient,
+    K8sResourceQuotaClient,
     K8sSchedulingClient,
     K8sSecretClient,
 )
@@ -24,7 +22,6 @@ from renku_data_services.k8s.config import KubeConfig, KubeConfigEnv, get_cluste
 from renku_data_services.k8s.db import K8sDbCache, QuotaRepository
 from renku_data_services.notebooks.api.classes.data_service import (
     CRCValidator,
-    DummyCRCValidator,
 )
 from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClient
 from renku_data_services.notebooks.api.classes.repository import GitProvider
@@ -179,16 +176,10 @@ class NotebooksConfig:
         v1_sessions_enabled = _parse_str_as_bool(os.environ.get("V1_SESSIONS_ENABLED", False))
 
         if dummy_stores:
-            quota_repo = QuotaRepository(DummyCoreClient({}, {}), DummySchedulingClient({}), namespace=k8s_namespace)
-            rp_repo = ResourcePoolRepository(db_config.async_session_maker, quota_repo)
-            crc_validator = DummyCRCValidator()
             sessions_config = _SessionConfig._for_testing()
             git_config = _GitConfig("http://not.specified", "registry.not.specified")
 
         else:
-            quota_repo = QuotaRepository(K8sCoreClient(), K8sSchedulingClient(), namespace=k8s_namespace)
-            rp_repo = ResourcePoolRepository(db_config.async_session_maker, quota_repo)
-            crc_validator = CRCValidator(rp_repo)
             sessions_config = _SessionConfig.from_env()
             git_config = _GitConfig.from_env(enable_internal_gitlab=enable_internal_gitlab)
 
@@ -197,7 +188,7 @@ class NotebooksConfig:
         cluster_rp = ClusterRepository(db_config.async_session_maker)
 
         client = K8sClusterClientsPool(
-            get_clusters(
+            lambda: get_clusters(
                 kube_conf_root_dir=kube_config_root,
                 default_kubeconfig=default_kubeconfig,
                 cluster_repo=cluster_rp,
@@ -207,6 +198,11 @@ class NotebooksConfig:
         )
         secrets_client = K8sSecretClient(client)
 
+        quota_repo = QuotaRepository(
+            K8sResourceQuotaClient(client), K8sSchedulingClient(client), namespace=k8s_namespace
+        )
+        rp_repo = ResourcePoolRepository(db_config.async_session_maker, quota_repo)
+        crc_validator = CRCValidator(rp_repo)
         k8s_client = NotebookK8sClient(
             client=client,
             secrets_client=secrets_client,

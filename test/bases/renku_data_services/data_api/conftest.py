@@ -4,7 +4,6 @@ import json
 from collections.abc import AsyncGenerator, Callable
 from copy import deepcopy
 from datetime import timedelta
-from pathlib import Path
 from typing import Any, Protocol
 
 import pytest
@@ -42,7 +41,10 @@ from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.models import UserInfo
 from renku_data_services.utils.middleware import validate_null_byte
-from test.bases.renku_data_services.data_api.utils import KindCluster, create_api_user_from_user_info, setup_amalthea
+from test.bases.renku_data_services.data_api.utils import (
+    create_api_user_from_user_info,
+    setup_amalthea,
+)
 from test.bases.renku_data_services.data_tasks.test_sync import get_kc_users
 from test.utils import SanicReusableASGITestClient, TestDependencyManager
 
@@ -797,24 +799,6 @@ def __make_headers(user: UserInfo, admin: bool = False) -> dict[str, str]:
         }
     )
     return {"Authorization": f"Bearer {access_token}"}
-
-
-@pytest.fixture(scope="session")
-def cluster_name():
-    return f"k8s-cluster-{str(ULID()).lower()}"
-
-
-@pytest.fixture(scope="session")
-def kubeconfig_path(monkeysession):
-    kconf = ".kind-kubeconfig.yaml"
-    monkeysession.setenv("KUBECONFIG", kconf)
-    return Path(kconf)
-
-
-@pytest.fixture(scope="session")
-def cluster(cluster_name, kubeconfig_path):
-    with KindCluster(cluster_name, kubeconfig=str(kubeconfig_path)) as cluster:
-        yield cluster
 
 
 @pytest.fixture(scope="session")
