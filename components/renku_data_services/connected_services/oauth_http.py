@@ -411,7 +411,7 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck, _TokenC
                 token = self.decrypt_token_set(token=connection.token, user_id=user.id)
             except InvalidToken as e:
                 raise SecretDecryptionError(
-                    message="Decrypting the token failed. Please reconnect to the provider, obtaining a new token."
+                    message="Token decryption failed. Please reconnect to the provider to obtain a new one."
                 ) from e
 
         adapter = get_provider_adapter(client)
