@@ -241,7 +241,7 @@ async def test_patch_session_environment_archived(
     assert res.json.get("is_archived")
 
     # Test that you can't create a launcher with an archived environment
-    project = await create_project("Some project")
+    project = await create_project(sanic_client, "Some project")
     resource_pool_data = valid_resource_pool_payload
     resource_pool_data["public"] = False
 
@@ -321,8 +321,8 @@ async def test_get_all_session_launchers(
     create_session_launcher,
     snapshot,
 ) -> None:
-    project_1 = await create_project("Project 1")
-    project_2 = await create_project("Project 2")
+    project_1 = await create_project(sanic_client, "Project 1")
+    project_2 = await create_project(sanic_client, "Project 2")
 
     await create_session_launcher("Launcher 1", project_id=project_1["id"])
     await create_session_launcher("Launcher 2", project_id=project_2["id"])
@@ -350,7 +350,7 @@ async def test_get_session_launcher(
     create_session_environment,
     create_session_launcher,
 ) -> None:
-    project = await create_project("Some project", visibility="public")
+    project = await create_project(sanic_client, "Some project", visibility="public")
     env = await create_session_environment("Some environment")
     launcher = await create_session_launcher(
         "Some launcher",
@@ -381,8 +381,8 @@ async def test_get_project_launchers(
     create_project,
     create_session_launcher,
 ) -> None:
-    project_1 = await create_project("Project 1")
-    project_2 = await create_project("Project 2")
+    project_1 = await create_project(sanic_client, "Project 1")
+    project_2 = await create_project(sanic_client, "Project 2")
 
     await create_session_launcher("Launcher 1", project_id=project_1["id"])
     await create_session_launcher("Launcher 2", project_id=project_2["id"])
@@ -419,7 +419,7 @@ def test_env_variable_validation():
 async def test_post_session_launcher(
     sanic_client, admin_headers, create_project, create_resource_pool, app_manager, cluster: KindCluster
 ) -> None:
-    project = await create_project("Some project")
+    project = await create_project(sanic_client, "Some project")
 
     resource_pool = await create_resource_pool(admin=True)
 
@@ -464,7 +464,7 @@ async def test_post_session_launcher_with_environment_build(
     create_project,
     create_resource_pool,
 ) -> None:
-    project = await create_project("Some project")
+    project = await create_project(sanic_client, "Some project")
 
     payload = {
         "name": "Launcher 1",
@@ -505,7 +505,7 @@ async def test_post_session_launcher_with_advanced_environment_build(
     user_headers: dict[str, str],
     create_project,
 ) -> None:
-    project = await create_project("Some project")
+    project = await create_project(sanic_client, "Some project")
 
     payload = {
         "name": "Launcher 1",
@@ -555,7 +555,7 @@ async def test_post_session_launcher_unauthorized(
     regular_user,
     create_session_environment,
 ) -> None:
-    project = await create_project("Some project")
+    project = await create_project(sanic_client, "Some project")
     resource_pool_data = valid_resource_pool_payload
     resource_pool_data["public"] = False
 
@@ -582,7 +582,7 @@ async def test_delete_session_launcher(
     create_project,
     create_session_launcher,
 ) -> None:
-    project = await create_project("Some project")
+    project = await create_project(sanic_client, "Some project")
     launcher = await create_session_launcher("Launcher 1", project_id=project["id"])
     launcher_id = launcher["id"]
 
@@ -599,7 +599,7 @@ async def test_patch_session_launcher(
     create_project,
     create_resource_pool,
 ) -> None:
-    project = await create_project("Some project 1")
+    project = await create_project(sanic_client, "Some project 1")
     resource_pool_data = valid_resource_pool_payload
     resource_pool = await create_resource_pool(admin=True, **resource_pool_data)
 
@@ -658,7 +658,7 @@ async def test_patch_session_launcher_environment(
     create_resource_pool,
     create_session_environment,
 ) -> None:
-    project = await create_project("Some project 1")
+    project = await create_project(sanic_client, "Some project 1")
     resource_pool_data = valid_resource_pool_payload
     resource_pool = await create_resource_pool(admin=True, **resource_pool_data)
     global_env = await create_session_environment("Some environment")
@@ -810,7 +810,7 @@ async def test_patch_session_launcher_environment_with_build_parameters(
     create_resource_pool,
     create_session_environment,
 ) -> None:
-    project = await create_project("Some project 1")
+    project = await create_project(sanic_client, "Some project 1")
     resource_pool = await create_resource_pool(admin=True)
     global_env = await create_session_environment("Some environment")
 
@@ -934,7 +934,7 @@ async def test_patch_session_launcher_environment_with_build_parameters(
 async def test_post_session_launcher_environment_with_invalid_build_parameters(
     sanic_client, user_headers, create_project, builder_variant, frontend_variant
 ) -> None:
-    project = await create_project("Project")
+    project = await create_project(sanic_client, "Project")
 
     payload = {
         "name": "Launcher 1",
@@ -958,7 +958,7 @@ async def test_post_session_launcher_environment_with_invalid_build_parameters(
 async def test_patch_session_launcher_environment_with_invalid_build_parameters(
     sanic_client, user_headers, create_project, create_session_launcher, builder_variant, frontend_variant
 ) -> None:
-    project = await create_project("Project")
+    project = await create_project(sanic_client, "Project")
 
     session_launcher = await create_session_launcher(
         name="Launcher",
@@ -998,7 +998,7 @@ async def test_patch_session_launcher_invalid_env_variables(
     create_resource_pool,
     create_session_environment,
 ) -> None:
-    project = await create_project("Some project 1")
+    project = await create_project(sanic_client, "Some project 1")
     resource_pool_data = valid_resource_pool_payload
     resource_pool = await create_resource_pool(admin=True, **resource_pool_data)
 
@@ -1042,7 +1042,7 @@ async def test_patch_session_launcher_reset_fields(
     create_project,
     create_resource_pool,
 ) -> None:
-    project = await create_project("Some project 1")
+    project = await create_project(sanic_client, "Some project 1")
     resource_pool_data = valid_resource_pool_payload
     resource_pool = await create_resource_pool(admin=True, **resource_pool_data)
 
@@ -1090,7 +1090,7 @@ async def test_patch_session_launcher_reset_fields(
 async def test_patch_session_launcher_keeps_unset_values(
     sanic_client, user_headers, create_project, create_resource_pool, create_session_launcher
 ) -> None:
-    project = await create_project("Some project")
+    project = await create_project(sanic_client, "Some project")
     resource_pool = await create_resource_pool(admin=True)
     session_launcher = await create_session_launcher(
         name="Session Launcher",
@@ -1133,7 +1133,7 @@ async def test_patch_session_launcher_with_advanced_environment_build(
     create_project,
     create_resource_pool,
 ) -> None:
-    project = await create_project("Some project")
+    project = await create_project(sanic_client, "Some project")
 
     payload = {
         "name": "Launcher 1",
@@ -1294,6 +1294,7 @@ async def test_starting_session_anonymous(
     )
     assert res.status_code == 201, res.text
     project: dict[str, Any] = await create_project(
+        sanic_client,
         "Some project",
         visibility="public",
         repositories=["https://github.com/SwissDataScienceCenter/renku-data-services"],
@@ -1326,7 +1327,7 @@ async def test_starting_session_anonymous(
 
 @pytest.mark.asyncio
 async def test_rebuild(sanic_client: SanicASGITestClient, user_headers, create_project) -> None:
-    project = await create_project("Some project")
+    project = await create_project(sanic_client, "Some project")
     payload = {
         "name": "Launcher 1",
         "project_id": project["id"],
@@ -1374,7 +1375,7 @@ async def test_rebuild(sanic_client: SanicASGITestClient, user_headers, create_p
 
 @pytest.mark.asyncio
 async def test_get_build(sanic_client: SanicASGITestClient, user_headers, create_project) -> None:
-    project = await create_project("Some project")
+    project = await create_project(sanic_client, "Some project")
     payload = {
         "name": "Launcher 1",
         "project_id": project["id"],
@@ -1415,7 +1416,7 @@ async def test_get_build(sanic_client: SanicASGITestClient, user_headers, create
 
 @pytest.mark.asyncio
 async def test_get_environment_builds(sanic_client: SanicASGITestClient, user_headers, create_project) -> None:
-    project = await create_project("Some project")
+    project = await create_project(sanic_client, "Some project")
     payload = {
         "name": "Launcher 1",
         "project_id": project["id"],
@@ -1467,7 +1468,7 @@ async def test_get_environment_builds(sanic_client: SanicASGITestClient, user_he
 
 @pytest.mark.asyncio
 async def test_patch_build(sanic_client: SanicASGITestClient, user_headers, create_project) -> None:
-    project = await create_project("Some project")
+    project = await create_project(sanic_client, "Some project")
     payload = {
         "name": "Launcher 1",
         "project_id": project["id"],
@@ -1523,7 +1524,7 @@ async def test_patch_build(sanic_client: SanicASGITestClient, user_headers, crea
 async def test_patch_strip_prefix(
     sanic_client: SanicASGITestClient, admin_headers, create_project, create_session_launcher
 ) -> None:
-    project = await create_project("Project 1")
+    project = await create_project(sanic_client, "Project 1")
     launcher = await create_session_launcher("Launcher 1", project_id=project["id"])
     launcher_id = launcher["id"]
     assert "environment" in launcher

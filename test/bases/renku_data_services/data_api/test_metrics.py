@@ -30,7 +30,7 @@ async def sanic_metrics_client(monkeypatch, app_manager, sanic_client) -> AsyncG
 
 @pytest.mark.asyncio
 async def test_metrics_are_stored(sanic_metrics_client, app_manager, create_project, create_session_launcher) -> None:
-    project = await create_project("Project", sanic_client=sanic_metrics_client)
+    project = await create_project(name="Project", sanic_client=sanic_metrics_client)
     await create_session_launcher("Launcher 1", project_id=project["id"])
 
     events = [e async for e in app_manager.metrics_repo.get_unprocessed_metrics()]

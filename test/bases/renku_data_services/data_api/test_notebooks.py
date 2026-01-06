@@ -54,6 +54,7 @@ async def amalthea_session(
     create_resource_pool,
     create_project,
     create_session_launcher,
+    sanic_client,
 ) -> AsyncIterator[AmaltheaSessionV1Alpha1]:
     """Fake server for non pod related tests"""
 
@@ -61,7 +62,7 @@ async def amalthea_session(
     assert "classes" in rp
     assert len(rp["classes"]) >= 2
     rc = rp["classes"][0]
-    proj = await create_project("proj1")
+    proj = await create_project(sanic_client, "proj1")
     env = {
         "environment_kind": "CUSTOM",
         "name": "Test",
@@ -280,7 +281,7 @@ async def test_start_server(
     create_resource_pool,
     app_manager_instance: DependencyManager,
 ):
-    proj = await create_project("proj1")
+    proj = await create_project(sanic_client, "proj1")
     env = {
         "environment_kind": "CUSTOM",
         "name": "Test",
