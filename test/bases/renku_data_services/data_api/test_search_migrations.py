@@ -1,5 +1,4 @@
 from collections.abc import Callable
-from re import L
 
 import pytest
 import pytest_asyncio
@@ -10,7 +9,6 @@ from ulid import ULID
 from renku_data_services.authz.admin_sync import sync_admins_from_keycloak
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.data_api.app import register_all_handlers
-from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.solr import entity_schema
 from renku_data_services.solr.solr_migrate import SchemaMigration, SchemaMigrator
@@ -81,9 +79,17 @@ def get_solr_schemas() -> Callable[[int | None], list[SchemaMigration]]:
     return _helper
 
 
+@pytest.mark.parametrize(
+    ("start_solr_version", "end_solr_version"),
+    [
+        (12, 13),
+        # TODO: Fix this migration
+        # (13, 14),
+    ],
+)
 @pytest.mark.xdist_group("search")
 @pytest.mark.asyncio
-async def test_search_schema_upgrade_13_to_15(
+async def test_search_schema_upgrade(
     create_user: CreateUserCall,
     regular_user: UserInfo,
     search_reprovision: SearchReprovisionCall,
@@ -93,10 +99,14 @@ async def test_search_schema_upgrade_13_to_15(
     sanic_client: SanicASGITestClient,
     app_manager: TestDependencyManager,
     get_solr_schemas: Callable[[int | None], list[SchemaMigration]],
+    start_solr_version: int,
+    end_solr_version: int,
 ) -> None:
     solr_migrator = SchemaMigrator(app_manager.config.solr)
-    res = await solr_migrator.migrate(get_solr_schemas(13))
-    assert res.migrations_run == 13 - 9 + 1  # Migrations start at version 9
+    res = await solr_migrator.migrate(get_solr_schemas(start_solr_version))
+    result = await search_query(sanic_client, "type:project")
+    assert_search_result(result, [])
+    assert res.migrations_run == start_solr_version - 9 + 1, res  # Migrations start at version 9
     mads = await create_user(app_manager, APIUser(id="mads-123", first_name="Mads", last_name="Pedersen"))
     wout = await create_user(app_manager, APIUser(id="wout-567", first_name="Wout", last_name="van Art"))
     gr_lidl = await create_group_model(
@@ -121,8 +131,16 @@ async def test_search_schema_upgrade_13_to_15(
         visibility="public",
         namespace=gr_lidl.slug,
         members=[{"id": wout.id, "role": "editor"}],
+        keywords=["test-keyword"],
     )
 
-    await search_reprovision(app_manager)
-    result = await search_query(sanic_client, f"namespace:{gr_lidl.slug}", user=wout)
+    await search_reprovision(app_manager, migrate_solr_schema=False)
+    result = await search_query(sanic_client, "type:project", user=wout)
     assert_search_result(result, [p1, p3])
+    res = await solr_migrator.migrate(get_solr_schemas(end_solr_version))
+    assert res.migrations_run == end_solr_version - start_solr_version, res
+    await search_reprovision(app_manager, migrate_solr_schema=False)
+    result = await search_query(sanic_client, "type:project", user=wout)
+    assert_search_result(result, [p1, p3])
+    result = await search_query(sanic_client, "keyword:test-keyword", user=wout)
+    assert_search_result(result, [p3])

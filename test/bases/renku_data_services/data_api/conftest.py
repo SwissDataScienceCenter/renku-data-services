@@ -287,15 +287,17 @@ async def sanic_client_with_solr(sanic_client: SanicASGITestClient, app_manager)
 class SearchReprovisionCall(Protocol):
     """The type for the `search_reprovision` fixture."""
 
-    async def __call__(self, app_manager_instance: DependencyManager) -> None: ...
+    async def __call__(self, app_manager_instance: DependencyManager, migrate_solr_schema: bool = True) -> None: ...
 
 
 @pytest_asyncio.fixture
 async def search_reprovision(search_push_updates) -> SearchReprovisionCall:
     admin = InternalServiceAdmin(id=ServiceAdminId.search_reprovision)
 
-    async def search_reprovision_helper(app_manager_instance: DependencyManager) -> None:
-        await app_manager_instance.search_reprovisioning.run_reprovision(admin)
+    async def search_reprovision_helper(
+        app_manager_instance: DependencyManager, migrate_solr_schema: bool = True
+    ) -> None:
+        await app_manager_instance.search_reprovisioning.run_reprovision(admin, migrate_solr_schema)
         await search_push_updates(app_manager_instance, clear_index=False)
 
     return search_reprovision_helper

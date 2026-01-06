@@ -1,5 +1,4 @@
 import pytest
-import sanic
 from sanic_testing.testing import SanicASGITestClient
 
 from renku_data_services.base_models.core import APIUser
