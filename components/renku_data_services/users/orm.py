@@ -63,7 +63,9 @@ class UserMetricsORM(BaseORM):
     """Users metrics data."""
 
     __tablename__ = "user_metrics"
-    id: Mapped[int] = mapped_column(ForeignKey(UserORM.id), primary_key=True)
+    id: Mapped[int] = mapped_column(
+        ForeignKey(UserORM.id, ondelete="CASCADE", name="user_metrics_id_fkey"), primary_key=True
+    )
 
     metrics_identity_hash: Mapped[str | None] = mapped_column(String(), default=None, init=False)
     """Hash of the identity sent for metrics."""
