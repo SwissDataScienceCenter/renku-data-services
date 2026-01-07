@@ -29,6 +29,7 @@ class SessionTasks:
         for env in self._get_default_session_environments():
             try:
                 await self.session_repo.insert_environment(user=requested_by, environment=env)
+                logger.info(f"Added global environment with image {env.container_image}")
             except Exception as err:
                 logger.error(f"Failed to create global environment with image {env.container_image} because {err}")
 
