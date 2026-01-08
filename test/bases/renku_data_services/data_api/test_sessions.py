@@ -78,8 +78,6 @@ async def test_get_all_session_environments(
         "Environment 2",
         "Environment 3",
         "Environment 4",
-        "Python/Jupyter",  # environments added by bootstrap migration
-        "Rstudio",
     }
     assert environments == snapshot(exclude=props("id", "creation_date"))
 
