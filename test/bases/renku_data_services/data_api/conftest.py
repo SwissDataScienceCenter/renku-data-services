@@ -285,23 +285,25 @@ async def sanic_client_with_solr(sanic_client: SanicASGITestClient, app_manager)
 class SearchReprovisionCall(Protocol):
     """The type for the `search_reprovision` fixture."""
 
-    async def __call__(self) -> None: ...
+    async def __call__(self, app_manager_instance: DependencyManager, migrate_solr_schema: bool = True) -> None: ...
 
 
 @pytest_asyncio.fixture
-async def search_reprovision(app_manager_instance: DependencyManager, search_push_updates) -> SearchReprovisionCall:
+async def search_reprovision(search_push_updates) -> SearchReprovisionCall:
     admin = InternalServiceAdmin(id=ServiceAdminId.search_reprovision)
 
-    async def search_reprovision_helper() -> None:
-        await app_manager_instance.search_reprovisioning.run_reprovision(admin)
-        await search_push_updates(clear_index=False)
+    async def search_reprovision_helper(
+        app_manager_instance: DependencyManager, migrate_solr_schema: bool = True
+    ) -> None:
+        await app_manager_instance.search_reprovisioning.run_reprovision(admin, migrate_solr_schema)
+        await search_push_updates(app_manager_instance, clear_index=False)
 
     return search_reprovision_helper
 
 
 @pytest_asyncio.fixture
-async def search_push_updates(app_manager_instance: DependencyManager):
-    async def search_push_updates_helper(clear_index: bool = True) -> None:
+async def search_push_updates():
+    async def search_push_updates_helper(app_manager_instance: DependencyManager, clear_index: bool = True) -> None:
         async with DefaultSolrClient(app_manager_instance.config.solr) as client:
             if clear_index:
                 await client.delete("*:*")
@@ -313,16 +315,22 @@ async def search_push_updates(app_manager_instance: DependencyManager):
 class SearchQueryCall(Protocol):
     """The type for the `search_query` fixture."""
 
-    async def __call__(self, query_str: str, user: UserInfo | None = None) -> SearchResult: ...
+    async def __call__(
+        self, client: SanicASGITestClient, query_str: str, user: UserInfo | None = None
+    ) -> SearchResult: ...
 
 
 @pytest_asyncio.fixture
-async def search_query(sanic_client_with_solr, admin_user: UserInfo) -> SearchQueryCall:
-    async def search_query_helper(query_str: str, user: UserInfo | None = None) -> SearchResult:
+async def search_query(
+    admin_user: UserInfo,
+) -> SearchQueryCall:
+    async def search_query_helper(
+        client: SanicASGITestClient,
+        query_str: str,
+        user: UserInfo | None = None,
+    ) -> SearchResult:
         headers = __make_headers(user, admin=user.id == admin_user.id) if user is not None else {}
-        _, response = await sanic_client_with_solr.get(
-            "/api/data/search/query", params={"q": query_str}, headers=headers or {}
-        )
+        _, response = await client.get("/api/data/search/query", params={"q": query_str}, headers=headers or {})
         assert response.status_code == 200, response.text
         return SearchResult.model_validate(response.json)
 
@@ -330,13 +338,13 @@ async def search_query(sanic_client_with_solr, admin_user: UserInfo) -> SearchQu
 
 
 @pytest_asyncio.fixture
-async def create_project(sanic_client, user_headers, admin_headers, regular_user, admin_user):
+async def create_project(user_headers, admin_headers, regular_user, admin_user):
     async def create_project_helper(
+        sanic_client: SanicASGITestClient,
         name: str,
         admin: bool = False,
         members: list[dict[str, str]] | None = None,
         description: str | None = None,
-        sanic_client=sanic_client,
         **payload,
     ) -> dict[str, Any]:
         if members is None:
@@ -371,6 +379,7 @@ async def create_project(sanic_client, user_headers, admin_headers, regular_user
 class CreateProjectCall(Protocol):
     async def __call__(
         self,
+        sanic_client: SanicASGITestClient,
         name: str,
         user: UserInfo | None = None,
         members: list[dict[str, str]] | None = None,
@@ -379,9 +388,13 @@ class CreateProjectCall(Protocol):
 
 
 @pytest_asyncio.fixture
-async def create_project_model(sanic_client, regular_user: UserInfo, admin_user: UserInfo) -> CreateProjectCall:
+async def create_project_model(regular_user: UserInfo, admin_user: UserInfo) -> CreateProjectCall:
     async def create_project_helper(
-        name: str, user: UserInfo | None = None, members: list[dict[str, str]] | None = None, **payload
+        sanic_client: SanicASGITestClient,
+        name: str,
+        user: UserInfo | None = None,
+        members: list[dict[str, str]] | None = None,
+        **payload,
     ) -> ApiProject:
         if "name" not in payload:
             payload.update({"name": name})
@@ -409,14 +422,13 @@ async def create_project_model(sanic_client, regular_user: UserInfo, admin_user:
 
 
 class CreateUserCall(Protocol):
-    async def __call__(self, user: APIUser) -> UserInfo: ...
+    async def __call__(self, app_manager_instance: TestDependencyManager, user: APIUser) -> UserInfo: ...
 
 
 @pytest_asyncio.fixture
-async def create_user(app_manager_instance: TestDependencyManager) -> CreateUserCall:
-    repo = app_manager_instance.kc_user_repo
-
-    async def create_user_helper(user: APIUser) -> UserInfo:
+async def create_user() -> CreateUserCall:
+    async def create_user_helper(app_manager_instance: TestDependencyManager, user: APIUser) -> UserInfo:
+        repo = app_manager_instance.kc_user_repo
         info = await repo.get_or_create_user(user, user.id or "")
         if info is None:
             raise Exception(f"User {user} could not be created")
@@ -426,8 +438,9 @@ async def create_user(app_manager_instance: TestDependencyManager) -> CreateUser
 
 
 @pytest_asyncio.fixture
-async def create_project_copy(sanic_client, user_headers, headers_from_user):
+async def create_project_copy(user_headers, headers_from_user):
     async def create_project_copy_helper(
+        sanic_client: SanicASGITestClient,
         id: str,
         namespace: str,
         name: str,
@@ -457,9 +470,13 @@ async def create_project_copy(sanic_client, user_headers, headers_from_user):
 
 
 @pytest_asyncio.fixture
-async def create_group(sanic_client, user_headers, admin_headers):
+async def create_group(user_headers, admin_headers):
     async def create_group_helper(
-        name: str, admin: bool = False, members: list[dict[str, str]] = None, **payload
+        sanic_client: SanicASGITestClient,
+        name: str,
+        admin: bool = False,
+        members: list[dict[str, str]] = None,
+        **payload,
     ) -> dict[str, Any]:
         headers = admin_headers if admin else user_headers
         group_payload = {"slug": Slug.from_name(name).value}
@@ -485,14 +502,23 @@ async def create_group(sanic_client, user_headers, admin_headers):
 
 class CreateGroupCall(Protocol):
     async def __call__(
-        self, name: str, user: UserInfo | None = None, members: list[dict[str, str]] | None = None, **payload
+        self,
+        sanic_client: SanicASGITestClient,
+        name: str,
+        user: UserInfo | None = None,
+        members: list[dict[str, str]] | None = None,
+        **payload,
     ) -> ApiGroup: ...
 
 
 @pytest_asyncio.fixture
-async def create_group_model(sanic_client, regular_user: UserInfo, admin_user: UserInfo) -> CreateGroupCall:
+async def create_group_model(regular_user: UserInfo, admin_user: UserInfo) -> CreateGroupCall:
     async def create_group_helper(
-        name: str, user: UserInfo | None = None, members: list[dict[str, str]] | None = None, **payload
+        sanic_client: SanicASGITestClient,
+        name: str,
+        user: UserInfo | None = None,
+        members: list[dict[str, str]] | None = None,
+        **payload,
     ) -> ApiGroup:
         user = user or regular_user
         headers = __make_headers(user, admin=user.id == admin_user.id)

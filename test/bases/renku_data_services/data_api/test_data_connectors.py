@@ -1092,7 +1092,7 @@ async def test_post_data_connector_project_link(
     sanic_client: SanicASGITestClient, create_data_connector, create_project, user_headers
 ) -> None:
     data_connector = await create_data_connector("Data connector 1")
-    project = await create_project("Project A")
+    project = await create_project(sanic_client, "Project A")
 
     data_connector_id = data_connector["id"]
     project_id = project["id"]
@@ -1136,7 +1136,7 @@ async def test_post_data_connector_project_link_already_exists(
     sanic_client: SanicASGITestClient, create_data_connector, create_project, user_headers
 ) -> None:
     data_connector = await create_data_connector("Data connector 1")
-    project = await create_project("Project A")
+    project = await create_project(sanic_client, "Project A")
     data_connector_id = data_connector["id"]
     project_id = project["id"]
     payload = {"project_id": project_id}
@@ -1169,7 +1169,7 @@ async def test_post_data_connector_project_link_unauthorized_if_not_project_edit
     assert response.status_code == 200
     data_connector = await create_data_connector("Data connector 1", namespace="my-group")
     data_connector_id = data_connector["id"]
-    project = await create_project("Project A")
+    project = await create_project(sanic_client, "Project A")
     project_id = project["id"]
     patch = [{"id": member_1_user.id, "role": "viewer"}]
     _, response = await sanic_client.patch(f"/api/data/projects/{project_id}/members", headers=user_headers, json=patch)
@@ -1207,7 +1207,7 @@ async def test_post_data_connector_project_link_succeeds_if_not_data_connector_e
     assert response.status_code == 200
     data_connector = await create_data_connector("Data connector 1", namespace="my-group")
     data_connector_id = data_connector["id"]
-    project = await create_project("Project A")
+    project = await create_project(sanic_client, "Project A")
     project_id = project["id"]
     patch = [{"id": member_1_user.id, "role": "owner"}]
     _, response = await sanic_client.patch(f"/api/data/projects/{project_id}/members", headers=user_headers, json=patch)
@@ -1241,7 +1241,7 @@ async def test_post_data_connector_project_link_public_data_connector(
         "Data connector 1", user=member_1_user, headers=member_1_headers, visibility="public"
     )
     data_connector_id = data_connector["id"]
-    project = await create_project("Project A")
+    project = await create_project(sanic_client, "Project A")
     project_id = project["id"]
 
     # Check that "regular_user" can view the project and data connector
@@ -1277,7 +1277,7 @@ async def test_post_data_connector_project_link_doesnt_extend_read_access(
 ) -> None:
     data_connector = await create_data_connector("Data connector 1")
     data_connector_id = data_connector["id"]
-    project = await create_project("Project A")
+    project = await create_project(sanic_client, "Project A")
     project_id = project["id"]
     patch = [{"id": member_1_user.id, "role": project_role}]
     _, response = await sanic_client.patch(f"/api/data/projects/{project_id}/members", headers=user_headers, json=patch)
@@ -1353,7 +1353,7 @@ async def test_delete_data_connector_project_link(
     sanic_client: SanicASGITestClient, create_data_connector, create_project, user_headers
 ) -> None:
     data_connector = await create_data_connector("Data connector 1")
-    project = await create_project("Project A")
+    project = await create_project(sanic_client, "Project A")
     data_connector_id = data_connector["id"]
     project_id = project["id"]
     payload = {"project_id": project_id}
@@ -1398,7 +1398,7 @@ async def test_delete_data_connector_after_linking(
     sanic_client: SanicASGITestClient, create_data_connector, create_project, user_headers
 ) -> None:
     data_connector = await create_data_connector("Data connector 1")
-    project = await create_project("Project A")
+    project = await create_project(sanic_client, "Project A")
     data_connector_id = data_connector["id"]
     project_id = project["id"]
     payload = {"project_id": project_id}
@@ -1428,7 +1428,7 @@ async def test_delete_project_after_linking(
     sanic_client: SanicASGITestClient, create_data_connector, create_project, user_headers
 ) -> None:
     data_connector = await create_data_connector("Data connector 1")
-    project = await create_project("Project A")
+    project = await create_project(sanic_client, "Project A")
     data_connector_id = data_connector["id"]
     project_id = project["id"]
     payload = {"project_id": project_id}

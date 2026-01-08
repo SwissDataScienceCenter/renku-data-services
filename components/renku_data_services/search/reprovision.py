@@ -46,10 +46,10 @@ class SearchReprovision:
         self._project_repo = project_repo
         self._data_connector_repo = data_connector_repo
 
-    async def run_reprovision(self, admin: APIUser) -> int:
+    async def run_reprovision(self, admin: APIUser, migrate_solr_schema: bool = True) -> int:
         """Start a reprovisioning if not already running."""
         reprovision = await self.acquire_reprovision()
-        return await self.init_reprovision(admin, reprovision)
+        return await self.init_reprovision(admin, reprovision, migrate_solr_schema)
 
     async def acquire_reprovision(self) -> Reprovisioning:
         """Acquire a reprovisioning slot. Throws if already taken."""
@@ -77,7 +77,9 @@ class SearchReprovision:
             for dc in result[0]:
                 yield dc
 
-    async def init_reprovision(self, admin: APIUser, reprovisioning: Reprovisioning) -> int:
+    async def init_reprovision(
+        self, admin: APIUser, reprovisioning: Reprovisioning, migrate_solr_schema: bool = True
+    ) -> int:
         """Initiates reprovisioning by inserting documents into the staging table.
 
         Deletes all renku entities in the solr core. Then it goes
@@ -103,7 +105,8 @@ class SearchReprovision:
             async with DefaultSolrClient(self._solr_config) as client:
                 await client.delete("_type:*")
 
-            await migrator.migrate(entity_schema.all_migrations)
+            if migrate_solr_schema:
+                await migrator.migrate(entity_schema.all_migrations)
 
             all_users = self._user_repo.get_all_users(requested_by=admin)
             counter = await self.__update_entities(all_users, "user", started, counter, log_counter)
