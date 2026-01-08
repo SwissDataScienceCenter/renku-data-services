@@ -410,12 +410,12 @@ async def test_cleanup_with_group_deletion(
     regular_user: UserInfo,
     create_data_connector,
 ) -> None:
-    grp = await create_group("grp1")
+    grp = await create_group(sanic_client, "grp1")
     grp_id = grp.get("id")
     assert grp_id is not None
     grp_slug = grp.get("slug")
     assert grp_slug is not None
-    prj = await create_project(name="prj1", namespace=grp_slug)
+    prj = await create_project(sanic_client, "prj1", namespace=grp_slug)
     prj_id = prj.get("id")
     assert prj_id is not None
     prj_slug = prj.get("slug")
