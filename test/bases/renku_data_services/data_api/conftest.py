@@ -295,21 +295,25 @@ async def search_reprovision(search_push_updates) -> SearchReprovisionCall:
     admin = InternalServiceAdmin(id=ServiceAdminId.search_reprovision)
 
     async def search_reprovision_helper(
-        app_manager_instance: DependencyManager, migrate_solr_schema: bool = True
+        app_manager_instance: DependencyManager, migrate_solr_schema: bool = True, clear_index: bool = False
     ) -> None:
         await app_manager_instance.search_reprovisioning.run_reprovision(admin, migrate_solr_schema)
-        await search_push_updates(app_manager_instance, clear_index=False)
+        await search_push_updates(app_manager_instance, clear_index=clear_index)
 
     return search_reprovision_helper
 
 
 @pytest_asyncio.fixture
 async def search_push_updates():
-    async def search_push_updates_helper(app_manager_instance: DependencyManager, clear_index: bool = True) -> None:
+    async def search_push_updates_helper(app_manager_instance: DependencyManager, clear_index: bool = False) -> None:
         async with DefaultSolrClient(app_manager_instance.config.solr) as client:
             if clear_index:
-                await client.delete("*:*")
-            await search_core.update_solr(app_manager_instance.search_updates_repo, client, 10)
+                res = await client.delete("_type:*")
+                assert res.status_code == 200, res.text
+                res = await client.reload_core()
+                assert res.status_code == 200, res.text
+            res = await search_core.update_solr(app_manager_instance.search_updates_repo, client, 10)
+            assert len(res) == 0, res
 
     return search_push_updates_helper
 

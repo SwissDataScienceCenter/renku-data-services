@@ -104,6 +104,7 @@ class SearchReprovision:
             await self._search_updates_repo.clear_all()
             async with DefaultSolrClient(self._solr_config) as client:
                 await client.delete("_type:*")
+                await client.reload_core()
 
             if migrate_solr_schema:
                 await migrator.migrate(entity_schema.all_migrations)

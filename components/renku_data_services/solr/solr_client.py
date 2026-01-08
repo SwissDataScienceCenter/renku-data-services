@@ -636,6 +636,7 @@ class DefaultSolrClient(SolrClient):
         burl = urlunparse(url_parsed)
         bauth = BasicAuth(username=cfg.user.username, password=cfg.user.password) if cfg.user is not None else None
         self.delegate = AsyncClient(auth=bauth, base_url=burl, timeout=cfg.timeout)
+        self.delegate_no_base_path = AsyncClient(auth=bauth, base_url=cfg.base_url, timeout=cfg.timeout)
 
     def __repr__(self) -> str:
         return f"DefaultSolrClient(delegate={self.delegate}, config={self.config})"
@@ -726,6 +727,18 @@ class DefaultSolrClient(SolrClient):
         resp = await self.delegate.get("/schema")
         cs = CoreSchema.model_validate(resp.json()["schema"])
         return cs
+
+    async def reload_core(self) -> Response:
+        """Reloads the core to make deletions and schema changes effective.
+
+        In many cases Solr will soft delete or it will delete a file but not reload
+        the core and the core in memory still holds an old state. By calling this the
+        core is reloaded in memory.
+        """
+        return await self.delegate_no_base_path.post(
+            f"/v2/cores/{self.config.core}/reload",
+            headers={"Content-Type": "application/json"},
+        )
 
     async def delete(self, query: str) -> Response:
         """Delete all documents that matches `query`."""
