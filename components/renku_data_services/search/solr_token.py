@@ -187,7 +187,7 @@ def public_only() -> SolrToken:
 
 def content_all(text: str) -> SolrToken:
     """Search the content_all field with fuzzy searching each term."""
-    terms: list[SolrToken] = list(map(lambda s: SolrToken(__escape_query(s) + "~"), re.split("\\s+", text)))
+    terms: list[SolrToken] = list(map(lambda s: SolrToken(__escape_query(s)), re.split("\\s+", text)))
     terms_str = "(" + " ".join(terms) + ")"
     return SolrToken(f"{Fields.content_all}:{terms_str}")
 
