@@ -33,7 +33,7 @@ async def create_session_secret_slot(sanic_client: SanicASGITestClient, regular_
 
 @pytest.mark.asyncio
 async def test_post_session_secret_slot(sanic_client: SanicASGITestClient, create_project, user_headers) -> None:
-    project = await create_project("My project")
+    project = await create_project(sanic_client, "My project")
     project_id = project["id"]
 
     payload = {
@@ -56,7 +56,7 @@ async def test_post_session_secret_slot(sanic_client: SanicASGITestClient, creat
 async def test_post_session_secret_slot_with_minimal_payload(
     sanic_client: SanicASGITestClient, create_project, user_headers
 ) -> None:
-    project = await create_project("My project")
+    project = await create_project(sanic_client, "My project")
     project_id = project["id"]
 
     payload = {
@@ -94,7 +94,7 @@ async def test_post_session_secret_slot_with_invalid_project_id(
 async def test_post_session_secret_slot_with_unauthorized_project(
     sanic_client: SanicASGITestClient, create_project, user_headers
 ) -> None:
-    project = await create_project("My project", admin=True)
+    project = await create_project(sanic_client, "My project", admin=True)
     project_id = project["id"]
 
     payload = {
@@ -112,7 +112,7 @@ async def test_post_session_secret_slot_with_unauthorized_project(
 async def test_post_session_secret_slot_with_invalid_filename(
     sanic_client: SanicASGITestClient, create_project, user_headers
 ) -> None:
-    project = await create_project("My project")
+    project = await create_project(sanic_client, "My project")
     project_id = project["id"]
 
     payload = {
@@ -129,7 +129,7 @@ async def test_post_session_secret_slot_with_invalid_filename(
 async def test_post_session_secret_slot_with_conflicting_filename(
     sanic_client: SanicASGITestClient, create_project, user_headers
 ) -> None:
-    project = await create_project("My project")
+    project = await create_project(sanic_client, "My project")
     project_id = project["id"]
     payload = {
         "project_id": project_id,
@@ -152,7 +152,7 @@ async def test_post_session_secret_slot_with_conflicting_filename(
 async def test_get_project_session_secret_slots(
     sanic_client: SanicASGITestClient, create_project, create_session_secret_slot, user_headers
 ) -> None:
-    project = await create_project("My project")
+    project = await create_project(sanic_client, "My project")
     project_id = project["id"]
 
     for i in range(1, 10):
@@ -170,7 +170,7 @@ async def test_get_project_session_secret_slots(
 async def test_get_one_session_secret_slot(
     sanic_client: SanicASGITestClient, create_project, create_session_secret_slot, user_headers
 ) -> None:
-    project = await create_project("My project")
+    project = await create_project(sanic_client, "My project")
     project_id = project["id"]
     secret_slot = await create_session_secret_slot(project_id, "test_secret")
     secret_slot_id = secret_slot["id"]
@@ -200,7 +200,7 @@ async def test_get_one_session_secret_slot_unauthorized(
     unauthorized_headers,
     member_1_headers,
 ) -> None:
-    project = await create_project("My project")
+    project = await create_project(sanic_client, "My project")
     project_id = project["id"]
     secret_slot = await create_session_secret_slot(project_id, "test_secret")
     secret_slot_id = secret_slot["id"]
@@ -215,7 +215,7 @@ async def test_get_one_session_secret_slot_unauthorized(
 async def test_patch_session_secret_slot(
     sanic_client: SanicASGITestClient, create_project, create_session_secret_slot, user_headers
 ) -> None:
-    project = await create_project("My project")
+    project = await create_project(sanic_client, "My project")
     project_id = project["id"]
     secret_slot = await create_session_secret_slot(project_id, "test_secret")
     secret_slot_id = secret_slot["id"]
@@ -246,7 +246,7 @@ async def test_patch_session_secret_slot(
 async def test_patch_session_secret_slot_reserved_fields_are_forbidden(
     sanic_client: SanicASGITestClient, create_project, create_session_secret_slot, user_headers, field
 ) -> None:
-    project = await create_project("My project")
+    project = await create_project(sanic_client, "My project")
     project_id = project["id"]
     secret_slot = await create_session_secret_slot(project_id, "test_secret")
     secret_slot_id = secret_slot["id"]
@@ -274,7 +274,7 @@ async def test_patch_session_secret_slot_reserved_fields_are_forbidden(
 async def test_patch_session_secret_slot_without_if_match_header(
     sanic_client: SanicASGITestClient, create_project, create_session_secret_slot, user_headers
 ) -> None:
-    project = await create_project("My project")
+    project = await create_project(sanic_client, "My project")
     project_id = project["id"]
     secret_slot = await create_session_secret_slot(project_id, "test_secret")
     secret_slot_id = secret_slot["id"]
@@ -301,7 +301,7 @@ async def test_patch_session_secret_slot_without_if_match_header(
 async def test_patch_session_secret_slot_with_invalid_filename(
     sanic_client: SanicASGITestClient, create_project, create_session_secret_slot, user_headers
 ) -> None:
-    project = await create_project("My project")
+    project = await create_project(sanic_client, "My project")
     project_id = project["id"]
     secret_slot = await create_session_secret_slot(project_id, "test_secret")
     secret_slot_id = secret_slot["id"]
@@ -329,7 +329,7 @@ async def test_patch_session_secret_slot_with_invalid_filename(
 async def test_patch_session_secret_slot_with_conflicting_filename(
     sanic_client: SanicASGITestClient, create_project, create_session_secret_slot, user_headers
 ) -> None:
-    project = await create_project("My project")
+    project = await create_project(sanic_client, "My project")
     project_id = project["id"]
     await create_session_secret_slot(project_id, "existing_filename")
     secret_slot = await create_session_secret_slot(project_id, "test_secret")
@@ -357,7 +357,7 @@ async def test_patch_session_secret_slot_with_conflicting_filename(
 async def test_delete_session_secret_slot(
     sanic_client: SanicASGITestClient, create_project, create_session_secret_slot, user_headers
 ) -> None:
-    project = await create_project("My project")
+    project = await create_project(sanic_client, "My project")
     project_id = project["id"]
     await create_session_secret_slot(project_id, "test_secret_1")
     secret_slot = await create_session_secret_slot(project_id, "test_secret_2")
@@ -378,7 +378,7 @@ async def test_delete_session_secret_slot(
 async def test_patch_session_secrets_with_existing_user_secret(
     sanic_client: SanicASGITestClient, create_project, create_session_secret_slot, user_headers
 ) -> None:
-    project = await create_project("My project")
+    project = await create_project(sanic_client, "My project")
     project_id = project["id"]
     secret_slot = await create_session_secret_slot(project_id, "test_secret")
     secret_slot_id = secret_slot["id"]
@@ -425,7 +425,7 @@ async def test_patch_session_secrets_with_existing_user_secret(
 async def test_patch_session_secrets_with_new_secret_value(
     sanic_client: SanicASGITestClient, create_project, create_session_secret_slot, user_headers
 ) -> None:
-    project = await create_project("My project")
+    project = await create_project(sanic_client, "My project")
     project_id = project["id"]
     secret_slot = await create_session_secret_slot(project_id, "test_secret")
     secret_slot_id = secret_slot["id"]
@@ -460,7 +460,7 @@ async def test_patch_session_secrets_with_new_secret_value(
     assert session_secrets[0].get("secret_id") == new_user_secret["id"]
 
     # Check that the secret slot is referenced from the user secret
-    _, response = await sanic_client.get(f"/api/data/user/secrets/{new_user_secret["id"]}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/user/secrets/{new_user_secret['id']}", headers=user_headers)
     assert response.status_code == 200, response.json
     assert response.json is not None
     assert response.json.get("session_secret_slot_ids") is not None
@@ -471,7 +471,7 @@ async def test_patch_session_secrets_with_new_secret_value(
 async def test_patch_session_secrets_update_with_another_user_secret(
     sanic_client: SanicASGITestClient, create_project, create_session_secret_slot, user_headers
 ) -> None:
-    project = await create_project("My project")
+    project = await create_project(sanic_client, "My project")
     project_id = project["id"]
     secret_slot = await create_session_secret_slot(project_id, "test_secret")
     secret_slot_id = secret_slot["id"]
@@ -518,7 +518,7 @@ async def test_patch_session_secrets_update_with_another_user_secret(
 async def test_patch_session_secrets_update_with_a_new_secret_value(
     sanic_client: SanicASGITestClient, create_project, create_session_secret_slot, user_headers
 ) -> None:
-    project = await create_project("My project")
+    project = await create_project(sanic_client, "My project")
     project_id = project["id"]
     secret_slot = await create_session_secret_slot(project_id, "test_secret")
     secret_slot_id = secret_slot["id"]
@@ -563,7 +563,7 @@ async def test_patch_session_secrets_update_with_a_new_secret_value(
 async def test_patch_session_secrets_unlink_secret_with_null(
     sanic_client: SanicASGITestClient, create_project, create_session_secret_slot, user_headers
 ) -> None:
-    project = await create_project("My project")
+    project = await create_project(sanic_client, "My project")
     project_id = project["id"]
     secret_slot = await create_session_secret_slot(project_id, "test_secret")
     secret_slot_id = secret_slot["id"]
@@ -606,7 +606,7 @@ async def test_patch_session_secrets_unlink_secret_with_null(
 async def test_delete_session_secrets(
     sanic_client: SanicASGITestClient, create_project, create_session_secret_slot, user_headers
 ) -> None:
-    project = await create_project("My project")
+    project = await create_project(sanic_client, "My project")
     project_id = project["id"]
     secret_slot = await create_session_secret_slot(project_id, "test_secret")
     secret_slot_id = secret_slot["id"]
