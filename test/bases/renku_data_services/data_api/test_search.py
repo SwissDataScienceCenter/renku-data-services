@@ -292,6 +292,58 @@ async def test_search_by_entity_type(
                 assert item.root.type == field.value
 
 
+# TODO: figure out how to run search tests fully parallel
+@pytest.mark.xdist_group("search")
+@pytest.mark.asyncio
+async def test_search_project_with_dash(
+    create_project_model: CreateProjectCall,
+    regular_user: UserInfo,
+    search_query: SearchQueryCall,
+    search_reprovision: SearchReprovisionCall,
+    sanic_client_with_solr: SanicASGITestClient,
+    app_manager_instance: TestDependencyManager,
+) -> None:
+    p1 = await create_project_model(sanic_client_with_solr, "project-with-dash")
+    await search_reprovision(app_manager_instance)
+
+    result = await search_query(sanic_client_with_solr, "project-with-dash", regular_user)
+    assert_search_result(result, [p1], check_order=False)
+    result = await search_query(sanic_client_with_solr, "project-with-hash", regular_user)
+    assert_search_result(result, [p1], check_order=False)
+
+
+# TODO: figure out how to run search tests fully parallel
+@pytest.mark.xdist_group("search")
+@pytest.mark.asyncio
+async def test_search_domain_and_email(
+    create_project_model: CreateProjectCall,
+    regular_user: UserInfo,
+    search_query: SearchQueryCall,
+    search_reprovision: SearchReprovisionCall,
+    sanic_client_with_solr: SanicASGITestClient,
+    app_manager_instance: TestDependencyManager,
+) -> None:
+    p1 = await create_project_model(
+        sanic_client_with_solr,
+        "bob's project",
+        description="Bob's e-mail address is bob@microsoft.com - keep it safe. Check the homepage at https://bob.me/about!",
+    )
+    await search_reprovision(app_manager_instance)
+
+    result = await search_query(sanic_client_with_solr, "bob@microsoft.com", regular_user)
+    assert_search_result(result, [p1], check_order=False)
+    result = await search_query(sanic_client_with_solr, "https://bob.me/about", regular_user)
+    assert_search_result(result, [p1], check_order=False)
+    result = await search_query(sanic_client_with_solr, "bob.me", regular_user)
+    assert_search_result(result, [p1], check_order=False)
+    result = await search_query(sanic_client_with_solr, "e-mail", regular_user)
+    assert_search_result(result, [p1], check_order=False)
+    result = await search_query(sanic_client_with_solr, "email", regular_user)
+    assert_search_result(result, [p1], check_order=False)
+    result = await search_query(sanic_client_with_solr, "bob's project", regular_user)
+    assert_search_result(result, [p1], check_order=False)
+
+
 def __entity_id(e: SearchEntity) -> str:
     match e.root:
         case SearchProject() as p:
