@@ -80,6 +80,11 @@ class Filters:
     english_minimal_stem = Filter(name="englishMinimalStem")
     classic = Filter(name="classic")
     ngram = Filter(name="nGram")
+    flattenGraph = Filter(name="flattenGraph")
+    word = Filter(
+        name="wordDelimiterGraph",
+        settings={"splitOnCaseChange": "1", "catenateNumbers": "1", "catenateAll": "1", "preserveOriginal": "1"},
+    )
 
     @classmethod
     def edgeNgram(cls, min_gram_size: int = 3, maxGramSize: int = 6, preserve_original: bool = True) -> Filter:

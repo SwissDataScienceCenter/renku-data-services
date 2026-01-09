@@ -176,6 +176,7 @@ def create_app() -> Sanic:
     @app.after_server_start
     async def ready(app: Sanic) -> None:
         """Application ready event handler."""
+        logger.info(f">>>>>> SHOULD RUN RE-INDEX NOW. {getattr(app.ctx, "solr_reindex", False)}")
         if getattr(app.ctx, "solr_reindex", False):
             logger.info("Creating solr reindex task, as required by migrations.")
             app.add_task(solr_reindex(dependency_manager.search_reprovisioning))
