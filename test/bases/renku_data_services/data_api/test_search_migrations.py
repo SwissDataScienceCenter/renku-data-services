@@ -81,10 +81,7 @@ def get_solr_schemas() -> Callable[[int | None], list[SchemaMigration]]:
 
 @pytest.mark.parametrize(
     ("start_solr_version", "end_solr_version"),
-    [
-        (12, 13),
-        (13, 14),
-    ],
+    [(12, 13), (13, 14), (14, 15)],
 )
 @pytest.mark.xdist_group("search")
 @pytest.mark.asyncio
