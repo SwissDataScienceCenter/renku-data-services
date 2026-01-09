@@ -3,6 +3,8 @@
 import argparse
 import asyncio
 import os
+import pathlib
+import tempfile
 from os import environ
 from typing import TYPE_CHECKING, Any
 
@@ -165,8 +167,10 @@ def create_app() -> Sanic:
         await migrator.ensure_core()
         result = await migrator.migrate(entity_schema.all_migrations)
         # starting background tasks can only be done in `main_process_ready`
-        app.ctx.solr_reindex = result.requires_reindex
         logger.info(f"SOLR migration done: {result}")
+        if result.requires_reindex:
+            file = tempfile.gettempdir() + "/solr_reindex"
+            pathlib.Path(file).touch()
 
     @app.before_server_start
     async def setup_rclone_validator(app: Sanic) -> None:
@@ -176,8 +180,10 @@ def create_app() -> Sanic:
     @app.after_server_start
     async def ready(app: Sanic) -> None:
         """Application ready event handler."""
-        logger.info(f">>>>>> SHOULD RUN RE-INDEX NOW. {getattr(app.ctx, "solr_reindex", False)}")
-        if getattr(app.ctx, "solr_reindex", False):
+        file = tempfile.gettempdir() + "/solr_reindex"
+        do_reindex = pathlib.Path(file).exists()
+        if do_reindex:
+            pathlib.Path(file).unlink()
             logger.info("Creating solr reindex task, as required by migrations.")
             app.add_task(solr_reindex(dependency_manager.search_reprovisioning))
 
