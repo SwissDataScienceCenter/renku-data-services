@@ -2,46 +2,6 @@
 # name: test_get_all_session_environments
   list([
     dict({
-      'args': list([
-        '/entrypoint.sh jupyter server --ServerApp.ip=0.0.0.0 --ServerApp.port=8888 --ServerApp.base_url=$RENKU_BASE_URL_PATH --ServerApp.token="" --ServerApp.password="" --ServerApp.allow_remote_access=true --ContentsManager.allow_hidden=true --ServerApp.allow_origin=* --ServerApp.root_dir="/home/jovyan/work"',
-      ]),
-      'command': list([
-        'sh',
-        '-c',
-      ]),
-      'container_image': 'renku/renkulab-py:latest',
-      'default_url': '/lab',
-      'description': 'Standard python environment',
-      'gid': 100,
-      'is_archived': False,
-      'mount_directory': '/home/jovyan/work',
-      'name': 'Python/Jupyter',
-      'port': 8888,
-      'strip_path_prefix': False,
-      'uid': 1000,
-      'working_directory': '/home/jovyan/work',
-    }),
-    dict({
-      'args': list([
-        '/entrypoint.sh jupyter server --ServerApp.ip=0.0.0.0 --ServerApp.port=8888 --ServerApp.base_url=$RENKU_BASE_URL_PATH --ServerApp.token="" --ServerApp.password="" --ServerApp.allow_remote_access=true --ContentsManager.allow_hidden=true --ServerApp.allow_origin=* --ServerApp.root_dir="/home/jovyan/work"',
-      ]),
-      'command': list([
-        'sh',
-        '-c',
-      ]),
-      'container_image': 'renku/renkulab-r:latest',
-      'default_url': '/rstudio',
-      'description': 'Standard R environment',
-      'gid': 100,
-      'is_archived': False,
-      'mount_directory': '/home/jovyan/work',
-      'name': 'Rstudio',
-      'port': 8888,
-      'strip_path_prefix': False,
-      'uid': 1000,
-      'working_directory': '/home/jovyan/work',
-    }),
-    dict({
       'container_image': 'some_image:some_tag',
       'default_url': '/lab',
       'description': 'A session environment.',

@@ -271,22 +271,6 @@ async def test_migration_to_1ef98b967767_and_086eb60b42c8(
 
 
 @pytest.mark.asyncio
-async def test_migration_create_global_envs(
-    app_manager_instance: DependencyManager,
-    sanic_client_no_migrations: SanicASGITestClient,
-    admin_headers: dict,
-    admin_user: UserInfo,
-    tmpdir_factory,
-    monkeysession,
-) -> None:
-    run_migrations_for_app("common", "head")
-    envs = await app_manager_instance.session_repo.get_environments()
-    assert len(envs) == 2
-    assert any(e.name == "Python/Jupyter" for e in envs)
-    assert any(e.name == "Rstudio" for e in envs)
-
-
-@pytest.mark.asyncio
 async def test_migration_to_75c83dd9d619(app_manager_instance: DependencyManager, admin_user: UserInfo) -> None:
     """Tests the migration for copying session environments of copied projects."""
 

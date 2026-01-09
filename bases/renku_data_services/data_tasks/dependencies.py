@@ -9,6 +9,8 @@ from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.search.db import SearchUpdatesRepo
+from renku_data_services.session.db import SessionRepository
+from renku_data_services.session.tasks import SessionTasks
 from renku_data_services.users.db import UserRepo, UsersSync
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
@@ -27,6 +29,7 @@ class DependencyManager:
     authz: Authz
     syncer: UsersSync
     kc_api: IKeycloakAPI
+    session_tasks: SessionTasks
 
     @classmethod
     def from_env(cls, cfg: Config | None = None) -> "DependencyManager":
@@ -56,6 +59,13 @@ class DependencyManager:
             metrics=metrics,
             authz=authz,
         )
+        session_repo = SessionRepository(
+            session_maker=cfg.db.async_session_maker,
+            project_authz=authz,
+            resource_pools=None,  # type: ignore
+            shipwright_client=None,
+            builds_config=None,  # type: ignore
+        )
         syncer = UsersSync(
             cfg.db.async_session_maker,
             group_repo=group_repo,
@@ -63,6 +73,7 @@ class DependencyManager:
             metrics=metrics,
             authz=authz,
         )
+        session_tasks = SessionTasks(session_repo=session_repo)
         kc_api: IKeycloakAPI
         if cfg.dummy_stores:
             dummy_users = [
@@ -88,4 +99,5 @@ class DependencyManager:
             authz=authz,
             syncer=syncer,
             kc_api=kc_api,
+            session_tasks=session_tasks,
         )
