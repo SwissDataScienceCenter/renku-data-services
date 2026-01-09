@@ -60,7 +60,7 @@ async def _check_namespace_permissions(
 async def _upsert_old_entity_slug(session: AsyncSession, old_entity_slug: schemas.EntitySlugORM) -> None:
     """This function checks if an old entity slug exists and if so then it updates it.
 
-    If the old entity slug does not exists then it inserts one.
+    If the old entity slug does not exist then it inserts one.
     This is needed so that when a slug is renamed then the old slug still points to the new
     and current entity.
     """
@@ -233,7 +233,7 @@ class GroupRepository:
     @update_search_document
     async def update_group(
         self, user: base_models.APIUser, slug: Slug, patch: models.GroupPatch, *, session: AsyncSession | None = None
-    ) -> models.Group:
+    ) -> models.GroupUpdate:
         """Update a group in the DB."""
         if not session:
             raise errors.ProgrammingError(message="A database session is required")
@@ -249,6 +249,8 @@ class GroupRepository:
             raise errors.MissingResourceError(
                 message=f"Group with slug '{slug.value}' does not exist or you do not have access to it."
             )
+
+        old_group = group.dump()
 
         new_slug_str = patch.slug.lower() if patch.slug is not None else None
         if new_slug_str is not None and new_slug_str != group.namespace.slug:
@@ -267,7 +269,7 @@ class GroupRepository:
         if patch.description is not None:
             group.description = patch.description if patch.description else None
 
-        return group.dump()
+        return models.GroupUpdate(old=old_group, new=group.dump())
 
     @with_db_transaction
     async def update_group_members(
