@@ -17,7 +17,7 @@ from renku_data_services.project.db import ProjectRepository
 from renku_data_services.project.models import Project
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.solr import entity_schema
-from renku_data_services.solr.solr_client import DefaultSolrClient, SolrClientConfig
+from renku_data_services.solr.solr_client import DefaultSolrAdminClient, DefaultSolrClient, SolrClientConfig
 from renku_data_services.solr.solr_migrate import SchemaMigrator
 from renku_data_services.users.db import UserRepo
 from renku_data_services.users.models import UserInfo
@@ -103,8 +103,21 @@ class SearchReprovision:
             started = datetime.now()
             await self._search_updates_repo.clear_all()
             async with DefaultSolrClient(self._solr_config) as client:
-                await client.delete("_type:*")
-                await client.reload_core()
+                res = await client.delete("_type:*")
+                if res.status_code != 200:
+                    logger.error(
+                        f"Failed to delete all documents in solr during reprovisioning: {res.text}, "
+                        f"status_code: {res.status_code}",
+                        exc_info=False,
+                    )
+                async with DefaultSolrAdminClient(self._solr_config) as admin_client:
+                    res = await admin_client.reload(None)
+                    if res.status_code != 200:
+                        logger.error(
+                            f"Failed to reload solr core during reprovisioning: {res.text}, "
+                            f"status code: {res.status_code}",
+                            exc_info=False,
+                        )
 
             if migrate_solr_schema:
                 await migrator.migrate(entity_schema.all_migrations)
