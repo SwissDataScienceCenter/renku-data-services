@@ -126,8 +126,8 @@ initial_entity_schema: Final[list[SchemaCommand]] = [
     AddCommand(Field.of(Fields.description, FieldTypes.text)),
     AddCommand(Field.of(Fields.created_by, FieldTypes.id)),
     AddCommand(Field.of(Fields.creation_date, FieldTypes.date_time)),
-    # text all
     AddCommand(FieldTypes.text_all),
+    # text all
     AddCommand(Field.of(Fields.content_all, FieldTypes.text_all).make_multi_valued()),
     AddCommand(CopyFieldRule(source=Fields.name, dest=Fields.content_all)),
     AddCommand(CopyFieldRule(source=Fields.description, dest=Fields.content_all)),

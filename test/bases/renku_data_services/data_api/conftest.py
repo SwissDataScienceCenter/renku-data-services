@@ -35,7 +35,7 @@ from renku_data_services.search.apispec import SearchResult
 from renku_data_services.secrets_storage_api.app import register_all_handlers as register_secrets_handlers
 from renku_data_services.secrets_storage_api.dependencies import DependencyManager as SecretsDependencyManager
 from renku_data_services.solr import entity_schema
-from renku_data_services.solr.solr_client import DefaultSolrClient
+from renku_data_services.solr.solr_client import DefaultSolrAdminClient, DefaultSolrClient
 from renku_data_services.solr.solr_migrate import SchemaMigrator
 from renku_data_services.storage.rclone import RCloneValidator
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
@@ -295,21 +295,26 @@ async def search_reprovision(search_push_updates) -> SearchReprovisionCall:
     admin = InternalServiceAdmin(id=ServiceAdminId.search_reprovision)
 
     async def search_reprovision_helper(
-        app_manager_instance: DependencyManager, migrate_solr_schema: bool = True
+        app_manager_instance: DependencyManager, migrate_solr_schema: bool = True, clear_index: bool = False
     ) -> None:
         await app_manager_instance.search_reprovisioning.run_reprovision(admin, migrate_solr_schema)
-        await search_push_updates(app_manager_instance, clear_index=False)
+        await search_push_updates(app_manager_instance, clear_index=clear_index)
 
     return search_reprovision_helper
 
 
 @pytest_asyncio.fixture
 async def search_push_updates():
-    async def search_push_updates_helper(app_manager_instance: DependencyManager, clear_index: bool = True) -> None:
+    async def search_push_updates_helper(app_manager_instance: DependencyManager, clear_index: bool = False) -> None:
         async with DefaultSolrClient(app_manager_instance.config.solr) as client:
             if clear_index:
-                await client.delete("*:*")
-            await search_core.update_solr(app_manager_instance.search_updates_repo, client, 10)
+                res = await client.delete("_type:*")
+                assert res.status_code == 200, res.text
+                async with DefaultSolrAdminClient(app_manager_instance.config.solr) as admin_client:
+                    res = await admin_client.reload(None)
+                    assert res.status_code == 200, res.text
+            responses = await search_core.update_solr(app_manager_instance.search_updates_repo, client, 10)
+            assert len(responses) == 0, responses
 
     return search_push_updates_helper
 

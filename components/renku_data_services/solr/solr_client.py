@@ -626,9 +626,6 @@ class SolrClient(AbstractAsyncContextManager, ABC):
 class DefaultSolrClient(SolrClient):
     """Default implementation of the solr client."""
 
-    delegate: AsyncClient
-    config: SolrClientConfig
-
     def __init__(self, cfg: SolrClientConfig):
         self.config = cfg
         url_parsed = list(urlparse(cfg.base_url))
@@ -758,6 +755,11 @@ class SolrAdminClient(AbstractAsyncContextManager, ABC):
         """Create a core."""
         ...
 
+    @abstractmethod
+    async def reload(self, core_name: str | None) -> Response:
+        """Reload a core."""
+        ...
+
 
 class DefaultSolrAdminClient(SolrAdminClient):
     """A client to the core admin api.
@@ -765,16 +767,10 @@ class DefaultSolrAdminClient(SolrAdminClient):
     Url: https://solr.apache.org/guide/solr/latest/configuration-guide/coreadmin-api.html
     """
 
-    delegate: AsyncClient
-    config: SolrClientConfig
-
     def __init__(self, cfg: SolrClientConfig):
         self.config = cfg
-        url_parsed = list(urlparse(cfg.base_url))
-        url_parsed[2] = urljoin(url_parsed[2], "/api/cores")
-        burl = urlunparse(url_parsed)
         bauth = BasicAuth(username=cfg.user.username, password=cfg.user.password) if cfg.user is not None else None
-        self.delegate = AsyncClient(auth=bauth, base_url=burl, timeout=cfg.timeout)
+        self.delegate = AsyncClient(auth=bauth, base_url=self.config.base_url, timeout=cfg.timeout)
 
     async def __aenter__(self) -> Self:
         await self.delegate.__aenter__()
@@ -788,7 +784,7 @@ class DefaultSolrAdminClient(SolrAdminClient):
     async def core_status(self, core_name: str | None) -> dict[str, Any] | None:
         """Return the status of the connected core or the one given by `core_name`."""
         core = core_name or self.config.core
-        resp = await self.delegate.get(f"/{core}")
+        resp = await self.delegate.get(f"/api/cores/{core}")
         if not resp.is_success:
             raise SolrClientStatusException(self.config, resp)
         else:
@@ -800,8 +796,16 @@ class DefaultSolrAdminClient(SolrAdminClient):
         """Create a core with the given `core_name` or the name provided in the config object."""
         core = core_name or self.config.core
         data = {"create": {"name": core, "configSet": self.config.configset}}
-        resp = await self.delegate.post("", json=data)
+        resp = await self.delegate.post("/api/cores", json=data)
         if not resp.is_success:
             raise SolrClientCreateCoreException(core, resp)
         else:
             return None
+
+    async def reload(self, core_name: str | None) -> Response:
+        """Reload a core with the given `core_name` or the name provided in the config object."""
+        core = core_name or self.config.core
+        return await self.delegate.post(
+            f"/v2/cores/{core}/reload",
+            headers={"Content-Type": "application/json"},
+        )

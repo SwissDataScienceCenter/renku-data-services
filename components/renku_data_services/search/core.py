@@ -41,9 +41,12 @@ from renku_data_services.solr.solr_client import (
 logger = logging.getLogger(__name__)
 
 
-async def update_solr(search_updates_repo: SearchUpdatesRepo, solr_client: SolrClient, batch_size: int) -> None:
+async def update_solr(
+    search_updates_repo: SearchUpdatesRepo, solr_client: SolrClient, batch_size: int
+) -> list[Exception]:
     """Selects entries from the search staging table and updates SOLR."""
     counter = 0
+    output: list[Exception] = []
     while True:
         entries = await search_updates_repo.select_next(batch_size)
         if entries == []:
@@ -69,16 +72,21 @@ async def update_solr(search_updates_repo: SearchUpdatesRepo, solr_client: SolrC
                 await solr_client.delete(DeleteDoc.solr_query())
             except Exception as de:
                 logger.error("Error when removing soft-deleted documents", exc_info=de)
+                output.append(de)
 
         except Exception as e:
+            output.append(e)
             logger.error(f"Error while updating solr with entities {ids}", exc_info=e)
             try:
                 await search_updates_repo.mark_failed(ids)
             except Exception as e2:
+                output.append(e2)
                 logger.error("Error while setting search entities to failed", exc_info=e2)
 
     if counter > 0:
         logger.info(f"Updated {counter} entries in SOLR")
+
+    return output
 
 
 async def _renku_query(
