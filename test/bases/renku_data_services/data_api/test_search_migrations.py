@@ -83,8 +83,7 @@ def get_solr_schemas() -> Callable[[int | None], list[SchemaMigration]]:
     ("start_solr_version", "end_solr_version"),
     [
         (12, 13),
-        # TODO: Fix this migration
-        # (13, 14),
+        (13, 14),
     ],
 )
 @pytest.mark.xdist_group("search")
@@ -139,7 +138,7 @@ async def test_search_schema_upgrade(
     assert_search_result(result, [p1, p3])
     res = await solr_migrator.migrate(get_solr_schemas(end_solr_version))
     assert res.migrations_run == end_solr_version - start_solr_version, res
-    await search_reprovision(app_manager, migrate_solr_schema=False)
+    await search_reprovision(app_manager, migrate_solr_schema=True, clear_index=True)
     result = await search_query(sanic_client, "type:project", user=wout)
     assert_search_result(result, [p1, p3])
     result = await search_query(sanic_client, "keyword:test-keyword", user=wout)
