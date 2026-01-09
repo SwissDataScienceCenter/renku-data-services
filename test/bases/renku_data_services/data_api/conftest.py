@@ -785,6 +785,7 @@ _valid_resource_pool_payload: dict[str, Any] = {
     "public": True,
     "idle_threshold": 86400,
     "hibernation_threshold": 99999,
+    "hibernation_warning_period": 888,
 }
 
 

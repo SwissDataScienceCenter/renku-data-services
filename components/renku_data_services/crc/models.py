@@ -299,6 +299,7 @@ class UnsavedResourcePool:
     quota: UnsavedQuota | None = None
     idle_threshold: int | None = None
     hibernation_threshold: int | None = None
+    hibernation_warning_period: int | None = None
     default: bool = False
     public: bool = False
     remote: RemoteConfigurationFirecrest | None = None
@@ -316,6 +317,7 @@ class ResourcePool:
     id: int
     idle_threshold: int | None = None
     hibernation_threshold: int | None = None
+    hibernation_warning_period: int | None = None
     default: bool = False
     public: bool = False
     remote: RemoteConfigurationFirecrest | None = None
@@ -352,6 +354,7 @@ class ResourcePoolPatch:
     quota: QuotaPatch | ResetType | None = None
     idle_threshold: int | None | ResetType = None
     hibernation_threshold: int | None | ResetType = None
+    hibernation_warning_period: int | None | ResetType = None
     default: bool | None = None
     public: bool | None = None
     remote: RemoteConfigurationPatch | None = None

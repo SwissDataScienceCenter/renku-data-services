@@ -175,11 +175,22 @@ class CullingDurationParsingMixin(BaseCRD):
             return None
         return nxt(val)
 
-    @field_validator("*", mode="wrap")
+    @field_validator(
+        "maxAge",
+        "maxFailedDuration",
+        "maxHibernatedDuration",
+        "maxIdleDuration",
+        "maxStartingDuration",
+        mode="wrap",
+        check_fields=False,
+    )
     @classmethod
     def __deserialize_duration(cls, val: Any, handler: Any) -> Any:
         if isinstance(val, str):
-            return safe_parse_duration(val)
+            try:
+                return safe_parse_duration(val)
+            except Exception:
+                return handler(val)
         return handler(val)
 
 
@@ -333,24 +344,8 @@ class AmaltheaSessionV1Alpha1(_ASModel):
         else:
             state = apispec.State3.starting
 
-        will_hibernate_at: datetime | None = None
         will_delete_at: datetime | None = None
         match self.status, self.spec.culling:
-            case (
-                Status(idle=True, idleSince=idle_since),
-                Culling(maxIdleDuration=max_idle),
-            ) if idle_since and max_idle:
-                will_hibernate_at = idle_since + max_idle
-            case (
-                Status(state=State.Failed, failingSince=failing_since),
-                Culling(maxFailedDuration=max_failed),
-            ) if failing_since and max_failed:
-                will_hibernate_at = failing_since + max_failed
-            case (
-                Status(state=State.NotReady),
-                Culling(maxAge=max_age),
-            ) if max_age and self.metadata.creationTimestamp:
-                will_hibernate_at = self.metadata.creationTimestamp + max_age
             case (
                 Status(state=State.Hibernated, hibernatedSince=hibernated_since),
                 Culling(maxHibernatedDuration=max_hibernated),
@@ -368,11 +363,12 @@ class AmaltheaSessionV1Alpha1(_ASModel):
                 else None,
             ),
             started=self.metadata.creationTimestamp,
+            lastInteraction=self.spec.culling.lastInteraction if self.spec.culling else None,
             status=apispec.SessionStatus(
                 state=state,
                 ready_containers=ready_containers,
                 total_containers=total_containers,
-                will_hibernate_at=will_hibernate_at,
+                will_hibernate_at=self.status.willHibernateAt,
                 will_delete_at=will_delete_at,
                 message=self.status.error,
             ),
@@ -467,6 +463,7 @@ class CullingPatch(CullingDurationParsingMixin):
     maxHibernatedDuration: timedelta | ResetType | None = None
     maxIdleDuration: timedelta | ResetType | None = None
     maxStartingDuration: timedelta | ResetType | None = None
+    lastInteraction: datetime | ResetType | None = None
 
 
 class AmaltheaSessionV1Alpha1SpecPatch(BaseCRD):

@@ -427,6 +427,10 @@ class ResourcePoolRepository(_Base):
                 rp.hibernation_threshold = None
             elif isinstance(update.hibernation_threshold, int):
                 rp.hibernation_threshold = update.hibernation_threshold
+            if update.hibernation_warning_period == 0 or update.hibernation_warning_period is RESET:
+                rp.hibernation_warning_period = None
+            elif isinstance(update.hibernation_warning_period, int):
+                rp.hibernation_warning_period = update.hibernation_warning_period
             if update.platform is not None:
                 rp.platform = update.platform
 
