@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, nullcontext
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,7 +28,21 @@ if TYPE_CHECKING:
     from renku_data_services.session.config import BuildsConfig
 
 
-class SessionRepository:
+class SessionEnvironmentRepositoryProtocol(Protocol):
+    """Protocol for operations on session environments."""
+
+    async def get_environments(self, include_archived: bool = False) -> list[models.Environment]:
+        """Get all global session environments from the database."""
+        ...
+
+    async def insert_environment(
+        self, user: base_models.APIUser, environment: models.UnsavedEnvironment
+    ) -> models.Environment:
+        """Insert a new session environment."""
+        ...
+
+
+class SessionRepository(SessionEnvironmentRepositoryProtocol):
     """Repository for sessions."""
 
     def __init__(
@@ -1160,3 +1174,22 @@ class SessionRepository:
         if launcher:
             authorized = await self.project_authz.has_permission(user, ResourceType.project, launcher.project_id, scope)
         return authorized
+
+    @classmethod
+    def make_session_environment_repo(
+        cls,
+        session_maker: Callable[..., AsyncSession],
+        project_authz: Authz,
+    ) -> SessionEnvironmentRepositoryProtocol:
+        """Create an instance of SessionEnvironmentRepositoryProtocol."""
+        # NOTE: resource_pools, shipwright_client and builds_config are set to None
+        # because the SessionEnvironmentRepositoryProtocol only exposes database
+        # operations for session environments.
+        instance = cls(
+            session_maker,
+            project_authz=project_authz,
+            resource_pools=None,  # type: ignore
+            shipwright_client=None,
+            builds_config=None,  # type: ignore
+        )
+        return instance

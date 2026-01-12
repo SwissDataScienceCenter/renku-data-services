@@ -59,12 +59,9 @@ class DependencyManager:
             metrics=metrics,
             authz=authz,
         )
-        session_repo = SessionRepository(
+        session_environment_repo = SessionRepository.make_session_environment_repo(
             session_maker=cfg.db.async_session_maker,
             project_authz=authz,
-            resource_pools=None,  # type: ignore
-            shipwright_client=None,
-            builds_config=None,  # type: ignore
         )
         syncer = UsersSync(
             cfg.db.async_session_maker,
@@ -73,7 +70,7 @@ class DependencyManager:
             metrics=metrics,
             authz=authz,
         )
-        session_tasks = SessionTasks(session_repo=session_repo)
+        session_tasks = SessionTasks(session_environment_repo=session_environment_repo)
         kc_api: IKeycloakAPI
         if cfg.dummy_stores:
             dummy_users = [
