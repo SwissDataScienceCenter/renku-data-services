@@ -132,5 +132,5 @@ def test_created_by_exists() -> None:
 def test_content_all() -> None:
     assert st.content_all("abc") == "content_all:(abc~)"
     assert st.content_all("a+b+c") == "content_all:(a\\+b\\+c~)"
-    assert st.content_all("ab cd") == "content_all:(ab~ cd~)"
-    assert st.content_all("ab    cd") == "content_all:(ab~ cd~)"
+    assert st.content_all("ab cd") == "content_all:(ab\\ cd~)"
+    assert st.content_all("ab    cd") == "content_all:(ab\\ \\ \\ \\ cd~)"
