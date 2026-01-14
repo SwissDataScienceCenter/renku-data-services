@@ -12,7 +12,7 @@ from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.storage.rclone import RCloneValidator
-from renku_data_services.storage.rclone_patches import BANNED_SFTP_OPTIONS, BANNED_STORAGE, OAUTH_PROVIDERS
+from renku_data_services.storage.rclone_patches import BANNED_OPTIONS, BANNED_STORAGE, OAUTH_PROVIDERS
 from renku_data_services.utils.core import get_openbis_session_token
 from test.utils import SanicReusableASGITestClient
 
@@ -725,7 +725,10 @@ async def test_storage_schema_patches(storage_test_client, snapshot) -> None:
     # check that unsafe SFTP options are removed
     sftp = next((e for e in schema if e["prefix"] == "sftp"), None)
     assert sftp
-    assert all(o["name"] not in BANNED_SFTP_OPTIONS for o in sftp["options"])
+    assert all(o["name"] not in BANNED_OPTIONS["sftp"] for o in sftp["options"])
+    webdav = next((e for e in schema if e["prefix"] == "webdav"), None)
+    assert webdav
+    assert all(o["name"] not in BANNED_OPTIONS["webdav"] for o in webdav["options"])
 
     # snapshot the schema
     assert schema == snapshot

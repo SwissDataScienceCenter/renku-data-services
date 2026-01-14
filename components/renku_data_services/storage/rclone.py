@@ -14,7 +14,11 @@ from pydantic import BaseModel, Field, ValidationError
 from renku_data_services import errors
 from renku_data_services.app_config import logging
 from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER
-from renku_data_services.storage.rclone_patches import BANNED_SFTP_OPTIONS, BANNED_STORAGE, apply_patches
+from renku_data_services.storage.rclone_patches import (
+    BANNED_OPTIONS,
+    BANNED_STORAGE,
+    apply_patches,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -412,9 +416,10 @@ class RCloneProviderSchema(BaseModel):
 
     def check_unsafe_option(self, name: str) -> None:
         """Check that the option is safe."""
-        if self.prefix != "sftp":
+        banned = BANNED_OPTIONS.get(self.prefix.lower(), None)
+        if banned is None:
             return None
-        if name in BANNED_SFTP_OPTIONS:
+        if name in banned:
             raise errors.ValidationError(message=f"The {name} option is not allowed.")
         return None
 
