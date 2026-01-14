@@ -1,7 +1,7 @@
 """fake: add column to users table
 
 Revision ID: 6f4b0cefd73d
-Revises: 4cbb36ac2a5c
+Revises: 9b18adb58e63
 Create Date: 2026-01-13 08:25:50.413195
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "6f4b0cefd73d"
-down_revision = "4cbb36ac2a5c"
+down_revision = "9b18adb58e63"
 branch_labels = None
 depends_on = None
 
