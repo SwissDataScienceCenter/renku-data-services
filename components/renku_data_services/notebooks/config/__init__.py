@@ -258,6 +258,7 @@ class NotebooksConfig:
             session_port=443,
             session_path="/sessions",
             session_ingress_annotations=self.sessions.ingress.annotations,
+            session_ingress_class_name=self.sessions.ingress.class_name,
             session_tls_secret_name=self.sessions.ingress.tls_secret,
             session_storage_class=self.sessions.storage.pvs_storage_class,
             service_account_name=self.local_cluster_session_service_account,

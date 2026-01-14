@@ -212,7 +212,7 @@ class ClusterSettings:
     session_port: int
     session_path: str
     session_ingress_class_name: str | None = None
-    session_ingress_annotations: dict[str, Any]
+    session_ingress_annotations: dict[str, str]
     session_tls_secret_name: str
     session_storage_class: str | None
     service_account_name: str | None = None
