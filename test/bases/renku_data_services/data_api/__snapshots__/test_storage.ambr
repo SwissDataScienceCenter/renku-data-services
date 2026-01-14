@@ -17420,18 +17420,6 @@
           'default': '',
           'default_str': '',
           'exclusive': False,
-          'help': 'Command to run to get a bearer token.',
-          'ispassword': False,
-          'name': 'bearer_token_command',
-          'required': False,
-          'sensitive': False,
-          'type': 'string',
-        }),
-        dict({
-          'advanced': True,
-          'default': '',
-          'default_str': '',
-          'exclusive': False,
           'help': '''
             The encoding for the backend.
             
