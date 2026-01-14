@@ -50,10 +50,10 @@ class K8sWatcher:
     async def __sync(self, client: K8sClusterClient, kind: GVK, raise_exceptions: bool = False) -> None:
         """Upsert K8s objects in the cache and remove deleted objects from the cache."""
 
-        fltr = K8sObjectFilter(gvk=kind, cluster=client.get_cluster().id, namespace=client.get_cluster().namespace)
+        filter = K8sObjectFilter(gvk=kind, cluster=client.get_cluster().id, namespace=client.get_cluster().namespace)
         # Upsert new / updated objects
         objects_in_k8s: dict[str, K8sObject] = {}
-        obj_iter = aiter(client.list(fltr))
+        obj_iter = aiter(client.list(filter))
         while True:
             try:
                 obj = await anext(obj_iter)
@@ -67,7 +67,7 @@ class K8sWatcher:
                 objects_in_k8s[obj.name] = obj
                 await self.__cache.upsert(obj)
 
-        cache_iter = aiter(self.__cache.list(fltr))
+        cache_iter = aiter(self.__cache.list(filter))
         while True:
             try:
                 cache_obj = await anext(cache_iter)
