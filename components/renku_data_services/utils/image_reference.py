@@ -73,7 +73,7 @@ class Domain:
 
 
 @dataclass
-class PackageName:
+class ImageName:
     """A package or image name."""
 
     domain: Domain | None
@@ -83,16 +83,16 @@ class PackageName:
         return f"{self.domain}/{"/".join(self.path)}" if self.domain else "/".join(self.path)
 
     @classmethod
-    def parse(cls, s: str) -> PackageName:
+    def parse(cls, s: str) -> ImageName:
         """Parses a package name."""
-        return cast(PackageName, _PackageReferenceParser.name.parse(s.strip()))
+        return cast(ImageName, _PackageReferenceParser.name.parse(s.strip()))
 
 
 @dataclass
-class PackageReference:
+class ImageReference:
     """A package reference."""
 
-    name: PackageName
+    name: ImageName
     tag: str | None
     digest: Digest | None
 
@@ -102,9 +102,9 @@ class PackageReference:
         return f"{self.name}{tag_suf}{dig_suf}"
 
     @classmethod
-    def parse(cls, s: str) -> PackageReference:
+    def parse(cls, s: str) -> ImageReference:
         """Parses a package reference string."""
-        return cast(PackageReference, _PackageReferenceParser.reference.parse(s.strip()))
+        return cast(ImageReference, _PackageReferenceParser.reference.parse(s.strip()))
 
 
 class _ParserHelper:
@@ -199,8 +199,8 @@ class _PackageReferenceParser:
     host: Parser = p.alt(ipv4, domain_name)
     domain: Parser = p.seq(host, (p.string(":") >> port_number).optional()).map(lambda e: Domain(e[0], e[1]))
 
-    name: Parser = p.seq((domain << p.string("/")).optional(), path).map(lambda e: PackageName(e[0], e[1]))
+    name: Parser = p.seq((domain << p.string("/")).optional(), path).map(lambda e: ImageName(e[0], e[1]))
 
     reference: Parser = p.seq(name, (p.string(":") >> tag).optional(), (p.string("@") >> digest).optional()).map(
-        lambda e: PackageReference(e[0], e[1], e[2])
+        lambda e: ImageReference(e[0], e[1], e[2])
     )

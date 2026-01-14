@@ -1,10 +1,10 @@
 from renku_data_services.base_models.nel import Nel
-from renku_data_services.utils.package_reference import (
+from renku_data_services.utils.image_reference import (
     Digest,
     Domain,
     DomainName,
+    ImageReference,
     Ipv4Address,
-    PackageReference,
 )
 
 
@@ -31,7 +31,7 @@ def test_parse_ipv4():
 
 def test_parse_reference1():
     ref = "docker.io/library/busybox:latest@sha256:7cc4b5aefd1d0cadf8d97d4350462ba51c694ebca145b08d7d41b41acc8db5aa"
-    result = PackageReference.parse(ref)
+    result = ImageReference.parse(ref)
     assert result.name.domain is not None
     assert result.name.domain.host == DomainName(Nel.of("docker", "io"))
     assert result.name.domain.port is None
@@ -45,7 +45,7 @@ def test_parse_reference1():
 
 def test_parse_reference2():
     ref = "docs/dhi-python@sha256:94a00394bc5a8ef503fb59db0a7d0ae9e1110866e8aee8ba40cd864cea69ea1a"
-    result = PackageReference.parse(ref)
+    result = ImageReference.parse(ref)
     assert result.name.domain is not None
     assert result.name.domain.host == DomainName(Nel.of("docs"))
     assert result.name.domain.port is None
@@ -58,7 +58,7 @@ def test_parse_reference2():
 
 
 def test_parse_reference3():
-    result = PackageReference.parse("nginx:latest")
+    result = ImageReference.parse("nginx:latest")
     assert result.name.domain is None
     assert result.name.path == Nel.of("nginx")
     assert result.digest is None
@@ -68,7 +68,7 @@ def test_parse_reference3():
 
 def test_parse_reference4():
     ref = "gcr.io/my-project/myimage:v1.0"
-    result = PackageReference.parse(ref)
+    result = ImageReference.parse(ref)
     assert result.digest is None
     assert result.tag == "v1.0"
     assert result.name.domain is not None
@@ -80,7 +80,7 @@ def test_parse_reference4():
 
 def test_parse_reference5():
     ref = "123456789012.dkr.ecr.us-west-2.amazonaws.com/my-app:latest"
-    result = PackageReference.parse(ref)
+    result = ImageReference.parse(ref)
     assert result.digest is None
     assert result.tag == "latest"
     assert result.name.domain is not None
@@ -92,7 +92,7 @@ def test_parse_reference5():
 
 def test_parse_reference6():
     ref = "myregistry.azurecr.io/myapp:dev"
-    result = PackageReference.parse(ref)
+    result = ImageReference.parse(ref)
     assert result.digest is None
     assert result.tag == "dev"
     assert result.name.domain is not None
