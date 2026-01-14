@@ -15,9 +15,10 @@ class ProviderKind(StrEnum):
 
     gitlab = "gitlab"
     github = "github"
-    drive = "drive"
-    onedrive = "onedrive"
-    dropbox = "dropbox"
+    google = "google"
+    # drive = "drive"
+    # onedrive = "onedrive"
+    # dropbox = "dropbox"
     generic_oidc = "generic_oidc"
 
 
@@ -99,7 +100,7 @@ class ConnectedAccount:
     web_url: str
 
 
-class OAuth2TokenSet(dict):
+class OAuth2TokenSet(dict[str, Any]):
     """OAuth2 token set model."""
 
     @classmethod
