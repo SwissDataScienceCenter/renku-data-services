@@ -50,13 +50,6 @@ BANNED_OPTIONS: Final[dict[str, set[str]]] = {
     },
 }
 
-# BANNED_SFTP_OPTIONS: Final[set[str]] = {
-#     "key_file",  # path to a local file
-#     "pubkey_file",  # path to a local file
-#     "known_hosts_file",  # path to a local file
-#     "ssh",  # arbitrary command to be executed
-# }
-
 
 def find_storage(spec: list[dict[str, Any]], prefix: str) -> dict[str, Any]:
     """Find and return the storage schema from the spec.
