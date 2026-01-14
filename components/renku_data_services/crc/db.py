@@ -16,6 +16,7 @@ from sqlalchemy import NullPool, delete, false, select, true
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select, and_, not_, or_
+from sqlalchemy.exc import IntegrityError
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
@@ -1016,7 +1017,15 @@ class ClusterRepository:
         cluster_orm = ClusterORM.load(cluster)
         async with self.session_maker() as session, session.begin():
             session.add(cluster_orm)
-            await session.flush()
+            try:
+                await session.flush()
+            except IntegrityError as err:
+                if len(err.args) > 0 and "UniqueViolationError" in err.args[0]:
+                    raise errors.ConflictError(
+                        message="Cannot create a cluster because the name or configuration name is already used, "
+                        "please try a different name.",
+                        quiet=True,
+                    ) from err
             await session.refresh(cluster_orm)
 
             return cluster_orm.dump()
