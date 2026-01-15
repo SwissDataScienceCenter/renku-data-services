@@ -355,6 +355,7 @@ class GenericOidcAdapter(ProviderAdapter):
 _adapter_map: dict[models.ProviderKind, type[ProviderAdapter]] = {
     models.ProviderKind.gitlab: GitLabAdapter,
     models.ProviderKind.github: GitHubAdapter,
+    models.ProviderKind.google: GoogleAdapter,
     # models.ProviderKind.drive: GoogleDriveAdapter,
     # models.ProviderKind.onedrive: OneDriveAdapter,
     # models.ProviderKind.dropbox: DropboxAdapter,
