@@ -313,6 +313,7 @@ class GenericOidcAdapter(ProviderAdapter):
         return cls._httpx_client
 
 
+# TODO: test that this map is exhaustive
 _adapter_map: dict[models.ProviderKind, type[ProviderAdapter]] = {
     models.ProviderKind.gitlab: GitLabAdapter,
     models.ProviderKind.github: GitHubAdapter,
@@ -330,5 +331,7 @@ def get_provider_adapter(client: schemas.OAuth2ClientORM) -> ProviderAdapter:
     if not client.url:
         raise errors.ValidationError(message=f"URL not defined for provider {client.id}.")
 
-    adapter_class = _adapter_map[client.kind]
+    adapter_class = _adapter_map.get(client.kind)
+    if adapter_class is None:
+        raise errors.ProgrammingError(message=f"Provider adapter not implemented for kind {client.kind}.")
     return adapter_class(client_url=client.url, oidc_issuer_url=client.oidc_issuer_url)
