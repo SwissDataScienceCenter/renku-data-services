@@ -186,7 +186,7 @@ def public_only() -> SolrToken:
 
 def content_all(text: str) -> SolrToken:
     """Search the content_all field."""
-    terms_str = "(" + __escape_query(text) + "~)"
+    terms_str = "(" + __escape_query(text) + ")"
     return SolrToken(f"{Fields.content_all}:{terms_str}")
 
 
