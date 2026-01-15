@@ -83,7 +83,13 @@ class Filters:
     flattenGraph = Filter(name="flattenGraph")
     word = Filter(
         name="wordDelimiterGraph",
-        settings={"splitOnCaseChange": "1", "catenateNumbers": "1", "catenateAll": "1", "preserveOriginal": "1"},
+        settings={
+            "splitOnCaseChange": "1",
+            "catenateNumbers": "1",
+            "catenateAll": "1",
+            "preserveOriginal": "1",
+            "splitOnNumerics": "0",
+        },
     )
 
     @classmethod

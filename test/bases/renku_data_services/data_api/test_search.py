@@ -239,31 +239,6 @@ async def test_projects(
 # TODO: figure out how to run search tests fully parallel
 @pytest.mark.xdist_group("search")
 @pytest.mark.asyncio
-async def test_distance(
-    search_reprovision: SearchReprovisionCall,
-    create_project_model: CreateProjectCall,
-    search_query: SearchQueryCall,
-    sanic_client_with_solr: SanicASGITestClient,
-    app_manager_instance: TestDependencyManager,
-) -> None:
-    """Search should be lenient to simple typos, distance=2."""
-    p1 = await create_project_model(
-        sanic_client_with_solr, "Project Bike Z", visibility="public", description="a bike with a bike"
-    )
-    await search_reprovision(app_manager_instance)
-
-    result = await search_query(sanic_client_with_solr, "mikin type:project")
-    assert result.items == []
-
-    result = await search_query(sanic_client_with_solr, "mike type:project")
-    assert result.items is not None
-    assert len(result.items) == 1
-    assert __entity_id(result.items[0]) == p1.id
-
-
-# TODO: figure out how to run search tests fully parallel
-@pytest.mark.xdist_group("search")
-@pytest.mark.asyncio
 async def test_search_by_entity_type(
     create_project_model: CreateProjectCall,
     create_group_model: CreateGroupCall,
@@ -303,12 +278,23 @@ async def test_search_project_with_dash(
     sanic_client_with_solr: SanicASGITestClient,
     app_manager_instance: TestDependencyManager,
 ) -> None:
-    p1 = await create_project_model(sanic_client_with_solr, "project-with-dash")
+    p1 = await create_project_model(sanic_client_with_solr, "project-with-dash-a0ie84eb")
     await search_reprovision(app_manager_instance)
 
+    result = await search_query(sanic_client_with_solr, "project-with-dash-a0ie84eb", regular_user)
+    assert_search_result(result, [p1], check_order=False)
     result = await search_query(sanic_client_with_solr, "project-with-dash", regular_user)
     assert_search_result(result, [p1], check_order=False)
-    result = await search_query(sanic_client_with_solr, "project-with-hash", regular_user)
+    result = await search_query(sanic_client_with_solr, "project-with", regular_user)
+    assert_search_result(result, [p1], check_order=False)
+
+    result = await search_query(sanic_client_with_solr, "project", regular_user)
+    assert_search_result(result, [p1], check_order=False)
+    result = await search_query(sanic_client_with_solr, "with", regular_user)
+    assert_search_result(result, [p1], check_order=False)
+    result = await search_query(sanic_client_with_solr, "dash", regular_user)
+    assert_search_result(result, [p1], check_order=False)
+    result = await search_query(sanic_client_with_solr, "a0ie84eb", regular_user)
     assert_search_result(result, [p1], check_order=False)
 
 
