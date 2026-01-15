@@ -304,13 +304,13 @@ async def get_data_sources(
                     logger.info(f"Error getting oauth client for user={user} connection={drive_connection.id}: {err}")
                 case client:
                     token_set = await client.get_token()
-            if not token_set:
+            if not token_set or not token_set.access_token:
                 logger.warning(
                     f"Skipping Google Drive DC {str(dc.data_connector.id)} because the connection is not active."
                 )
                 continue
             logger.warning(f"Adjusting rclone configuration for DC {str(dc.data_connector.id)}.")
-            configuration["drive"] = configuration.get("drive") or "drive"
+            configuration["scope"] = configuration.get("drive") or "drive"
             token_config = {
                 "access_token": token_set.access_token,
                 "token_type": "Bearer",
