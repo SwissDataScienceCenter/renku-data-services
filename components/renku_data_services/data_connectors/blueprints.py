@@ -312,16 +312,20 @@ class DataConnectorsBP(CustomBlueprint):
         """List all links from a given data connector to projects."""
 
         @authenticate(self.authenticator)
+        @paginate
         async def _get_all_project_links(
             _: Request,
             user: base_models.APIUser,
             data_connector_id: ULID,
-        ) -> JSONResponse:
-            links = await self.data_connector_repo.get_links_from(user=user, data_connector_id=data_connector_id)
-            return validated_json(
-                apispec.DataConnectorToProjectLinksList,
-                [self._dump_data_connector_to_project_link(link) for link in links],
+            pagination: PaginationRequest,
+        ) -> tuple[list[dict[str, Any]], int]:
+            links, total_num = await self.data_connector_repo.get_links_from(
+                user=user, data_connector_id=data_connector_id, pagination=pagination
             )
+            return [
+                validate_and_dump(apispec.DataConnectorToProjectLink, self._dump_data_connector_to_project_link(link))
+                for link in links
+            ], total_num
 
         return "/data_connectors/<data_connector_id:ulid>/project_links", ["GET"], _get_all_project_links
 
