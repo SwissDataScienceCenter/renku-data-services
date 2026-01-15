@@ -21,6 +21,11 @@ from yaml import safe_dump
 from renku_data_services.app_config import logging
 from renku_data_services.base_models import RESET, AnonymousAPIUser, APIUser, AuthenticatedAPIUser, ResetType
 from renku_data_services.base_models.metrics import MetricsService
+from renku_data_services.connected_services.db import ConnectedServicesRepository
+from renku_data_services.connected_services.models import OAuth2TokenSet, ProviderKind
+from renku_data_services.connected_services.oauth_http import (
+    OAuthHttpFactoryError,
+)
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
 from renku_data_services.crc.models import (
     ClusterSettings,
@@ -263,6 +268,8 @@ async def get_data_sources(
     work_dir: PurePosixPath,
     data_connectors_overrides: list[SessionDataConnectorOverride],
     user_repo: UserRepo,
+    connected_services_repo: ConnectedServicesRepository,
+    image_check_repo: ImageCheckRepository,
 ) -> SessionExtraResources:
     """Generate cloud storage related resources."""
     data_sources: list[DataSource] = []
@@ -274,9 +281,43 @@ async def get_data_sources(
     logger = logging.getLogger(get_data_sources.__name__)
 
     async for dc in data_connectors_stream:
+        configuration = dc.data_connector.storage.configuration
         if dc.data_connector.storage.configuration["type"] == "drive":
-            logger.warning(f"Skipping drive DC {str(dc.data_connector.id)}.")
-            continue
+            # TODO: move some logic to the repo, see how it is done for images
+            providers = await connected_services_repo.get_oauth2_clients(user=user)
+            drive_provider = next(filter(lambda p: p.kind == ProviderKind.google, providers), None)
+            connections = await connected_services_repo.get_oauth2_connections(user=user)
+            drive_connection = next(
+                filter(lambda c: drive_provider is not None and c.provider_id == drive_provider.id, connections), None
+            )
+            if drive_connection is None:
+                logger.warning(
+                    f"Skipping Google Drive DC {str(dc.data_connector.id)} because no OAuth connection found."
+                )
+                continue
+            token_set: OAuth2TokenSet | None = None
+            client_or_error = await image_check_repo.oauth_client_factory.for_user_connection(
+                user=user, connection_id=drive_connection.id
+            )
+            match client_or_error:
+                case OAuthHttpFactoryError() as err:
+                    logger.info(f"Error getting oauth client for user={user} connection={drive_connection.id}: {err}")
+                case client:
+                    token_set = await client.get_token()
+            if not token_set:
+                logger.warning(
+                    f"Skipping Google Drive DC {str(dc.data_connector.id)} because the connection is not active."
+                )
+                continue
+            logger.warning(f"Adjusting rclone configuration for DC {str(dc.data_connector.id)}.")
+            configuration["drive"] = configuration.get("drive") or "drive"
+            token_config = {
+                "access_token": token_set.access_token,
+                "token_type": "Bearer",
+            }
+            if token_set.expires_at_iso:
+                token_config["expiry"] = token_set.expires_at_iso
+            configuration["token"] = json.dumps(token_config)
         mount_folder = (
             dc.data_connector.storage.target_path
             if PurePosixPath(dc.data_connector.storage.target_path).is_absolute()
@@ -285,7 +326,7 @@ async def get_data_sources(
         dcs[str(dc.data_connector.id)] = RCloneStorage(
             source_path=dc.data_connector.storage.source_path,
             mount_folder=mount_folder,
-            configuration=dc.data_connector.storage.configuration,
+            configuration=configuration,
             readonly=dc.data_connector.storage.readonly,
             name=dc.data_connector.name,
             secrets={str(secret.secret_id): secret.name for secret in dc.secrets},
@@ -828,6 +869,9 @@ async def start_session(
             work_dir=work_dir,
             data_connectors_overrides=launch_request.data_connectors_overrides or [],
             user_repo=user_repo,
+            # TODO: maybe get the dependency explicitly
+            connected_services_repo=image_check_repo.connected_services_repo,
+            image_check_repo=image_check_repo,
         )
     )
 
