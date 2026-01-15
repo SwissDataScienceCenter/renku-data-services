@@ -66,12 +66,11 @@ class GitHubAppInstallationList(BaseModel):
 class GoogleConnectedAccount(BaseModel):
     """OAuth2 connected account model for Google."""
 
-    name: str
     email: str
 
     def to_connected_account(self) -> models.ConnectedAccount:
         """Returns the corresponding ConnectedAccount object."""
-        return models.ConnectedAccount(username=self.name, web_url=f"mailto:{self.email}")
+        return models.ConnectedAccount(username=self.email, web_url="")
 
 
 # class GoogleDriveConnectedAccount(BaseModel):
