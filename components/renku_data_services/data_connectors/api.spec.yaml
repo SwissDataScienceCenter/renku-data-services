@@ -289,6 +289,14 @@ paths:
         description: the ID of the data connector
     get:
       summary: Get all links from a given data connector to projects
+      parameters:
+        - in: query
+          description: query parameters
+          name: params
+          style: form
+          explode: true
+          schema:
+            $ref: "#/components/schemas/PaginationRequest"
       responses:
         "200":
           description: List of data connector to project links
@@ -296,6 +304,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DataConnectorToProjectLinksList"
+          headers:
+            page:
+              description: The index of the current page (starting at 1).
+              required: true
+              schema:
+                type: integer
+            per-page:
+              description: The number of items per page.
+              required: true
+              schema:
+                type: integer
+            total:
+              description: The total number of items.
+              required: true
+              schema:
+                type: integer
+            total-pages:
+              description: The total number of pages.
+              required: true
+              schema:
+                type: integer
         default:
           $ref: "#/components/responses/Error"
       tags:
