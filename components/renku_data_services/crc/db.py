@@ -427,6 +427,10 @@ class ResourcePoolRepository(_Base):
                 rp.hibernation_threshold = None
             elif isinstance(update.hibernation_threshold, int):
                 rp.hibernation_threshold = update.hibernation_threshold
+            if update.hibernation_warning_period == 0 or update.hibernation_warning_period is RESET:
+                rp.hibernation_warning_period = None
+            elif isinstance(update.hibernation_warning_period, int):
+                rp.hibernation_warning_period = update.hibernation_warning_period
             if update.platform is not None:
                 rp.platform = update.platform
 
@@ -1011,6 +1015,19 @@ class ClusterRepository:
 
         cluster_orm = ClusterORM.load(cluster)
         async with self.session_maker() as session, session.begin():
+            res = await session.scalar(select(ClusterORM).where(ClusterORM.name == cluster_orm.name))
+            if res is not None:
+                raise errors.ConflictError(
+                    message="Cannot create a cluster because the name is already used, please try a different name.",
+                    quiet=True,
+                )
+            res = await session.scalar(select(ClusterORM).where(ClusterORM.config_name == cluster_orm.config_name))
+            if res is not None:
+                raise errors.ConflictError(
+                    message="Cannot create a cluster because the config_name is already used, "
+                    "please try a different one.",
+                    quiet=True,
+                )
             session.add(cluster_orm)
             await session.flush()
             await session.refresh(cluster_orm)
