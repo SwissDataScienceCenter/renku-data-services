@@ -270,7 +270,13 @@ async def get_data_sources(
     dcs: dict[str, RCloneStorage] = {}
     dcs_secrets: dict[str, list[DataConnectorSecret]] = {}
     user_secret_key: str | None = None
+
+    logger = logging.getLogger(get_data_sources.__name__)
+
     async for dc in data_connectors_stream:
+        if dc.data_connector.storage.configuration["type"] == "drive":
+            logger.warning(f"Skipping drive DC {str(dc.data_connector.id)}.")
+            continue
         mount_folder = (
             dc.data_connector.storage.target_path
             if PurePosixPath(dc.data_connector.storage.target_path).is_absolute()
