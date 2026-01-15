@@ -101,6 +101,7 @@ class ResourceClass(ResourcesCompareMixin):
     max_storage: int
     gpu: int
     id: int
+    resource_pool_id: int
     default: bool = False
     default_storage: int = 1
     matching: Optional[bool] = None
