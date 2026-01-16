@@ -199,7 +199,7 @@ async def collect_metrics(
         await metrics.session_stopped(user=user, metadata={"session_id": new_obj.meta.name})
         return
     previous_state = previous_obj.manifest.get("status", {}).get("state", None) if previous_obj else None
-    match new_obj.obj.status.get("state"):
+    match new_obj.obj.raw.get("status", {}).get("state"):
         case State.Running.value if previous_state is None or previous_state == State.NotReady.value:
             # session starting
             resource_class_id = int(new_obj.obj.metadata.annotations.get("renku.io/resource_class_id"))
