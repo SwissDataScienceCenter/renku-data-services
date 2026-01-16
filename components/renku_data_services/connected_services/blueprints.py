@@ -17,7 +17,7 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
-from renku_data_services.connected_services import apispec
+from renku_data_services.connected_services import apispec, apispec_extras
 from renku_data_services.connected_services.apispec_base import AuthorizeParams, CallbackParams
 from renku_data_services.connected_services.core import validate_oauth2_client_patch, validate_unsaved_oauth2_client
 from renku_data_services.connected_services.db import ConnectedServicesRepository
@@ -249,12 +249,15 @@ class OAuth2ConnectionsBP(CustomBlueprint):
     def post_token_endpoint(self) -> BlueprintFactoryResponse:
         """OAuth 2.0 token endpoint to support applications running in sessions."""
 
-        # TODO: handle this `post_token_endpoint: request body = client_id=AAA&client_secret=BBB&grant_type=refresh_token&refresh_token=hello-world` # noqa E501
-        async def _post_token_endpoint(request: Request, connection_id: ULID) -> JSONResponse:
+        @validate(form=apispec_extras.PostTokenRequest)
+        async def _post_token_endpoint(
+            request: Request, body: apispec_extras.PostTokenRequest, connection_id: ULID
+        ) -> JSONResponse:
             logger.warning(f"post_token_endpoint: connection_id = {str(connection_id)}")
             logger.warning(f"post_token_endpoint: request headers = {list(request.headers.keys())}")
             logger.warning(f"post_token_endpoint: request content-type = {request.headers.get("content-type")}")
             logger.warning(f"post_token_endpoint: request body = {request.body.decode("utf-8")}")
+            logger.warning(f"post_token_endpoint: request body = {body}")
             raise NotImplementedError("TODO: post_token_endpoint()")
 
         return "/oauth2/connections/<connection_id:ulid>/token_endpoint", ["POST"], _post_token_endpoint
