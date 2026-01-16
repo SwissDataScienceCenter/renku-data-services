@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from renku_data_services.k8s.client_interfaces import K8sClient
 from yaml import safe_load
 
 import renku_data_services.base_models as base_models
@@ -118,6 +119,7 @@ class DependencyManager:
 
     config: Config
 
+    k8s_client: K8sClient
     user_store: base_models.UserStore
     authenticator: base_models.Authenticator
     gitlab_authenticator: base_models.Authenticator
@@ -419,6 +421,7 @@ class DependencyManager:
         )
         return cls(
             config,
+            k8s_client=client,
             authenticator=authenticator,
             gitlab_authenticator=gitlab_authenticator,
             gitlab_client=gitlab_client,
