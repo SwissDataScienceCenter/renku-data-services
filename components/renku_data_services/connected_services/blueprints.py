@@ -293,7 +293,7 @@ class OAuth2ConnectionsBP(CustomBlueprint):
 
                 raise NotImplementedError("TODO: post_token_endpoint()")
 
-            res = await _inner(request=request, connection_id=connection_id)  # type: ignore
+            res = await _inner(request, connection_id=connection_id)  # type: ignore
             return res
 
         return "/oauth2/connections/<connection_id:ulid>/token_endpoint", ["POST"], _post_token_endpoint
