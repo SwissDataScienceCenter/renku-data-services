@@ -121,8 +121,6 @@ class K8sWatcher:
                         await self.__handler(cluster.with_api_object(obj), event_type)
             except ValueError:
                 pass
-            except Exception as e:
-                logger.error(f"watch loop failed for {kind} in cluster {cluster_id}", exc_info=e)
             except (httpx.ReadError, httpcore.ReadError):
                 # This can happen occasionally - most likely means that the k8s cluster stopped the connection
                 logger.warning(
@@ -130,6 +128,8 @@ class K8sWatcher:
                     f"watch for cluster {cluster_id} and kind {kind}."
                 )
                 continue
+            except Exception as e:
+                logger.error(f"watch loop failed for {kind} in cluster {cluster_id}", exc_info=e)
 
             # Add a sleep to prevent retrying in a loop the same action instantly.
             await asyncio.sleep(10)
