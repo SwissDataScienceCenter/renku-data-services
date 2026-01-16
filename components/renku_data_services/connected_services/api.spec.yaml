@@ -428,9 +428,10 @@ components:
       enum:
         - "gitlab"
         - "github"
-        - "drive"
-        - "onedrive"
-        - "dropbox"
+        - "google"
+        # - "drive"
+        # - "onedrive"
+        # - "dropbox"
         - "generic_oidc"
       example: "gitlab"
     ApplicationSlug:

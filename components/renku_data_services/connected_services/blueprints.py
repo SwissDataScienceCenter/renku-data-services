@@ -1,7 +1,9 @@
 """Connected services blueprint."""
 
+import math
 from dataclasses import dataclass
-from typing import Any
+from datetime import UTC, datetime
+from typing import Any, cast
 from urllib.parse import unquote, urlparse, urlunparse
 
 from sanic import HTTPResponse, Request, empty, json, redirect
@@ -17,7 +19,7 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
-from renku_data_services.connected_services import apispec
+from renku_data_services.connected_services import apispec, apispec_extras
 from renku_data_services.connected_services.apispec_base import AuthorizeParams, CallbackParams
 from renku_data_services.connected_services.core import validate_oauth2_client_patch, validate_unsaved_oauth2_client
 from renku_data_services.connected_services.db import ConnectedServicesRepository
@@ -202,7 +204,7 @@ class OAuth2ConnectionsBP(CustomBlueprint):
             account = await client.get_connected_account()
             match account:
                 case OAuthHttpError() as err:
-                    raise errors.InvalidTokenError(message=f"OAuth error getting the connected accoun: {err}")
+                    raise errors.InvalidTokenError(message=f"OAuth error getting the connected account: {err}")
                 case account:
                     return validated_json(apispec.ConnectedAccount, account)
 
@@ -245,3 +247,76 @@ class OAuth2ConnectionsBP(CustomBlueprint):
                     return body, installations_list.total_count
 
         return "/oauth2/connections/<connection_id:ulid>/installations", ["GET"], _get_installations
+
+    def post_token_endpoint(self) -> BlueprintFactoryResponse:
+        """OAuth 2.0 token endpoint to support applications running in sessions."""
+
+        # @validate(form=apispec_extras.PostTokenRequest)
+        # async def _post_token_endpoint(
+        #     request: Request, body: apispec_extras.PostTokenRequest, connection_id: ULID
+        # ) -> JSONResponse:
+        async def _post_token_endpoint(request: Request, connection_id: ULID) -> JSONResponse:
+            logger.warning(f"post_token_endpoint: connection_id = {str(connection_id)}")
+            logger.warning(f"post_token_endpoint: request headers = {list(request.headers.keys())}")
+            logger.warning(f"post_token_endpoint: request content-type = {request.headers.get("content-type")}")
+            logger.warning(f"post_token_endpoint: request body = {request.body!r}")
+
+            @validate(form=apispec_extras.PostTokenRequest)
+            async def _inner(
+                request: Request, body: apispec_extras.PostTokenRequest, connection_id: ULID
+            ) -> JSONResponse:
+                logger.warning(f"post_token_endpoint: request body grant_type = {body.grant_type.value}")
+                logger.warning(f"post_token_endpoint: request body refresh_token = {body.refresh_token}")
+
+                renku_tokens = apispec_extras.RenkuTokens.decode(body.refresh_token)
+                logger.warning(f"post_token_endpoint: renku_tokens = {renku_tokens}")
+                request.headers[self.authenticator.token_field] = renku_tokens.access_token
+
+                user: base_models.APIUser | None = None
+                try:
+                    _user = cast(
+                        base_models.APIUser,
+                        await self.authenticator.authenticate(
+                            access_token=renku_tokens.access_token or "", request=request
+                        ),
+                    )
+                    if _user.is_authenticated and _user.access_token:
+                        user = _user
+                except Exception as err:
+                    logger.error(f"Got authenticate error: {err.__class__}.")
+                    raise
+
+                logger.warning(f"post_token_endpoint: user = {user}")
+
+                if user is not None and user.is_authenticated:
+                    client = await self.oauth_client_factory.for_user_connection_raise(user, connection_id)
+                    oauth_token = await client.get_token()
+                    access_token = oauth_token.access_token
+                    if access_token is None:
+                        raise errors.ProgrammingError(message="Unexpected error: access token not present.")
+                    result: dict[str, str | int] = {
+                        "access_token": access_token,
+                        "token_type": str(oauth_token.get("token_type")) or "Bearer",
+                        "refresh_token": renku_tokens.encode(),
+                    }
+                    if oauth_token.get("scope"):
+                        result["scope"] = oauth_token["scope"]
+                    if oauth_token.expires_at:
+                        exp = datetime.fromtimestamp(oauth_token.expires_at, UTC)
+                        expires_in = exp - datetime.now(UTC)
+                        result["expires_in"] = math.ceil(expires_in.total_seconds())
+                    return validated_json(apispec_extras.PostTokenResponse, result)
+
+                # TODO:
+                # 1. Decode the refresh_token value -> RenkuTokens
+                # 2. Validate the access_token -> if valid, send back the new OAuth 2.0 access token
+                #    and the new encoded refresh_token
+                # 3. If access_token is expired, use the renku refresh_token -> if new tokens are valid,
+                #    send back the new OAuth 2.0 access token and the new encoded refresh_token
+
+                raise NotImplementedError("TODO: post_token_endpoint()")
+
+            res = await _inner(request, connection_id=connection_id)  # type: ignore
+            return res
+
+        return "/oauth2/connections/<connection_id:ulid>/token_endpoint", ["POST"], _post_token_endpoint
