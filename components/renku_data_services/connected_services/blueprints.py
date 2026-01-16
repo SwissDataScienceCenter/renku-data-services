@@ -245,3 +245,13 @@ class OAuth2ConnectionsBP(CustomBlueprint):
                     return body, installations_list.total_count
 
         return "/oauth2/connections/<connection_id:ulid>/installations", ["GET"], _get_installations
+
+    def post_token_endpoint(self) -> BlueprintFactoryResponse:
+        """OAuth 2.0 token endpoint to support applications running in sessions."""
+
+        async def _post_token_endpoint(request: Request, connection_id: ULID) -> JSONResponse:
+            logger.warning(f"post_token_endpoint: connection_id = {str(connection_id)}")
+            logger.warning(f"post_token_endpoint: request body = {request.body.decode("utf-8")}")
+            raise NotImplementedError("TODO: post_token_endpoint()")
+
+        return "/oauth2/connections/<connection_id:ulid>/token_endpoint", ["POST"], _post_token_endpoint
