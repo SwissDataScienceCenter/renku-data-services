@@ -27,6 +27,19 @@ class PostTokenRequest(BaseAPISpec):
     refresh_token: str
 
 
+class PostTokenResponse(BaseAPISpec):
+    """Response for a refresh token request."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    access_token: str
+    token_type: str
+    expires_in: int
+    refresh_token: str
+    scope: str | None
+
+
 class RenkuTokens(BaseAPISpec):
     """Represents a set of authentication tokens used in Renku."""
 

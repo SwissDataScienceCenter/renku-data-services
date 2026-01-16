@@ -1,6 +1,8 @@
 """Connected services blueprint."""
 
+import math
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, cast
 from urllib.parse import unquote, urlparse, urlunparse
 
@@ -270,19 +272,38 @@ class OAuth2ConnectionsBP(CustomBlueprint):
                 logger.warning(f"post_token_endpoint: renku_tokens = {renku_tokens}")
                 request.headers[self.authenticator.token_field] = renku_tokens.access_token
 
-                access_token: str | None = None
+                user: base_models.APIUser | None = None
                 try:
-                    user = await self.authenticator.authenticate(
+                    _user = await self.authenticator.authenticate(
                         access_token=renku_tokens.access_token or "", request=request
                     )
-                    user = cast(base_models.APIUser, user)
-                    if user.is_authenticated and user.access_token:
-                        access_token = user.access_token
+                    _user = cast(base_models.APIUser, user)
+                    if _user.is_authenticated and _user.access_token:
+                        user = _user
                 except Exception as err:
                     logger.error(f"Got authenticate error: {err.__class__}.")
                     raise
 
-                logger.warning(f"post_token_endpoint: access_token = {access_token}")
+                logger.warning(f"post_token_endpoint: user = {user}")
+
+                if user is not None and user.is_authenticated:
+                    client = await self.oauth_client_factory.for_user_connection_raise(user, connection_id)
+                    oauth_token = await client.get_token()
+                    access_token = oauth_token.access_token
+                    if access_token is None:
+                        raise errors.ProgrammingError(message="Unexpected error: access token not present.")
+                    result: dict[str, str | int] = {
+                        "access_token": access_token,
+                        "token_type": str(oauth_token.get("token_type")) or "Bearer",
+                        "refresh_token": renku_tokens.encode(),
+                    }
+                    if oauth_token.get("scope"):
+                        result["scope"] = oauth_token["scope"]
+                    if oauth_token.expires_at:
+                        exp = datetime.fromtimestamp(oauth_token.expires_at, UTC)
+                        expires_in = exp - datetime.now(UTC)
+                        result["expires_in"] = math.ceil(expires_in.total_seconds())
+                    return validated_json(apispec_extras.PostTokenResponse, result)
 
                 # TODO:
                 # 1. Decode the refresh_token value -> RenkuTokens
