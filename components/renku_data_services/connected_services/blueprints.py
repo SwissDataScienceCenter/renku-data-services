@@ -249,39 +249,51 @@ class OAuth2ConnectionsBP(CustomBlueprint):
     def post_token_endpoint(self) -> BlueprintFactoryResponse:
         """OAuth 2.0 token endpoint to support applications running in sessions."""
 
-        @validate(form=apispec_extras.PostTokenRequest)
-        async def _post_token_endpoint(
-            request: Request, body: apispec_extras.PostTokenRequest, connection_id: ULID
-        ) -> JSONResponse:
+        # @validate(form=apispec_extras.PostTokenRequest)
+        # async def _post_token_endpoint(
+        #     request: Request, body: apispec_extras.PostTokenRequest, connection_id: ULID
+        # ) -> JSONResponse:
+        async def _post_token_endpoint(request: Request, connection_id: ULID) -> JSONResponse:
             logger.warning(f"post_token_endpoint: connection_id = {str(connection_id)}")
-            logger.warning(f"post_token_endpoint: request body grant_type = {body.grant_type.value}")
-            logger.warning(f"post_token_endpoint: request body refresh_token = {body.refresh_token}")
+            logger.warning(f"post_token_endpoint: request headers = {list(request.headers.keys())}")
+            logger.warning(f"post_token_endpoint: request content-type = {request.headers.get("content-type")}")
+            logger.warning(f"post_token_endpoint: request body = {request.body!r}")
 
-            renku_tokens = apispec_extras.RenkuTokens.decode(body.refresh_token)
-            logger.warning(f"post_token_endpoint: renku_tokens = {renku_tokens}")
-            request.headers[self.authenticator.token_field] = renku_tokens.access_token
+            @validate(form=apispec_extras.PostTokenRequest)
+            async def _inner(
+                request: Request, body: apispec_extras.PostTokenRequest, connection_id: ULID
+            ) -> JSONResponse:
+                logger.warning(f"post_token_endpoint: request body grant_type = {body.grant_type.value}")
+                logger.warning(f"post_token_endpoint: request body refresh_token = {body.refresh_token}")
 
-            access_token: str | None = None
-            try:
-                user = await self.authenticator.authenticate(
-                    access_token=renku_tokens.access_token or "", request=request
-                )
-                user = cast(base_models.APIUser, user)
-                if user.is_authenticated and user.access_token:
-                    access_token = user.access_token
-            except Exception as err:
-                logger.error(f"Got authenticate error: {err.__class__}.")
-                raise
+                renku_tokens = apispec_extras.RenkuTokens.decode(body.refresh_token)
+                logger.warning(f"post_token_endpoint: renku_tokens = {renku_tokens}")
+                request.headers[self.authenticator.token_field] = renku_tokens.access_token
 
-            logger.warning(f"post_token_endpoint: access_token = {access_token}")
+                access_token: str | None = None
+                try:
+                    user = await self.authenticator.authenticate(
+                        access_token=renku_tokens.access_token or "", request=request
+                    )
+                    user = cast(base_models.APIUser, user)
+                    if user.is_authenticated and user.access_token:
+                        access_token = user.access_token
+                except Exception as err:
+                    logger.error(f"Got authenticate error: {err.__class__}.")
+                    raise
 
-            # TODO:
-            # 1. Decode the refresh_token value -> RenkuTokens
-            # 2. Validate the access_token -> if valid, send back the new OAuth 2.0 access token
-            #    and the new encoded refresh_token
-            # 3. If access_token is expired, use the renku refresh_token -> if new tokens are valid,
-            #    send back the new OAuth 2.0 access token and the new encoded refresh_token
+                logger.warning(f"post_token_endpoint: access_token = {access_token}")
 
-            raise NotImplementedError("TODO: post_token_endpoint()")
+                # TODO:
+                # 1. Decode the refresh_token value -> RenkuTokens
+                # 2. Validate the access_token -> if valid, send back the new OAuth 2.0 access token
+                #    and the new encoded refresh_token
+                # 3. If access_token is expired, use the renku refresh_token -> if new tokens are valid,
+                #    send back the new OAuth 2.0 access token and the new encoded refresh_token
+
+                raise NotImplementedError("TODO: post_token_endpoint()")
+
+            res = await _inner(request=request, connection_id=connection_id)  # type: ignore
+            return res
 
         return "/oauth2/connections/<connection_id:ulid>/token_endpoint", ["POST"], _post_token_endpoint
