@@ -1,7 +1,7 @@
 """Connected services blueprint."""
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 from urllib.parse import unquote, urlparse, urlunparse
 
 from sanic import HTTPResponse, Request, empty, json, redirect
@@ -255,7 +255,25 @@ class OAuth2ConnectionsBP(CustomBlueprint):
         ) -> JSONResponse:
             logger.warning(f"post_token_endpoint: connection_id = {str(connection_id)}")
             logger.warning(f"post_token_endpoint: request body grant_type = {body.grant_type.value}")
-            logger.warning(f"post_token_endpoint: request body refresh_token = {len(body.refresh_token)}")
+            logger.warning(f"post_token_endpoint: request body refresh_token = {body.refresh_token}")
+
+            renku_tokens = apispec_extras.RenkuTokens.decode(body.refresh_token)
+            logger.warning(f"post_token_endpoint: renku_tokens = {renku_tokens}")
+            request.headers[self.authenticator.token_field] = renku_tokens.access_token
+
+            access_token: str | None = None
+            try:
+                user = await self.authenticator.authenticate(
+                    access_token=renku_tokens.access_token or "", request=request
+                )
+                user = cast(base_models.APIUser, user)
+                if user.is_authenticated and user.access_token:
+                    access_token = user.access_token
+            except Exception as err:
+                logger.error(f"Got authenticate error: {err.__class__}.")
+                raise
+
+            logger.warning(f"post_token_endpoint: access_token = {access_token}")
 
             # TODO:
             # 1. Decode the refresh_token value -> RenkuTokens
