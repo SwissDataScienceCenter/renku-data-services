@@ -19,9 +19,7 @@ class PostTokenRequest(BaseAPISpec):
     """Body for a refresh token request."""
 
     model_config = ConfigDict(
-        extra="forbid",
+        extra="allow",
     )
-    client_id: str
-    client_secret: str
     grant_type: PostTokenGrantType
     refresh_token: str

@@ -254,10 +254,16 @@ class OAuth2ConnectionsBP(CustomBlueprint):
             request: Request, body: apispec_extras.PostTokenRequest, connection_id: ULID
         ) -> JSONResponse:
             logger.warning(f"post_token_endpoint: connection_id = {str(connection_id)}")
-            logger.warning(f"post_token_endpoint: request headers = {list(request.headers.keys())}")
-            logger.warning(f"post_token_endpoint: request content-type = {request.headers.get("content-type")}")
-            logger.warning(f"post_token_endpoint: request body = {request.body.decode("utf-8")}")
-            logger.warning(f"post_token_endpoint: request body = {body}")
+            logger.warning(f"post_token_endpoint: request body grant_type = {body.grant_type.value}")
+            logger.warning(f"post_token_endpoint: request body refresh_token = {len(body.refresh_token)}")
+
+            # TODO:
+            # 1. Decode the refresh_token value -> RenkuTokens
+            # 2. Validate the access_token -> if valid, send back the new OAuth 2.0 access token
+            #    and the new encoded refresh_token
+            # 3. If access_token is expired, use the renku refresh_token -> if new tokens are valid,
+            #    send back the new OAuth 2.0 access token and the new encoded refresh_token
+
             raise NotImplementedError("TODO: post_token_endpoint()")
 
         return "/oauth2/connections/<connection_id:ulid>/token_endpoint", ["POST"], _post_token_endpoint
