@@ -35,6 +35,8 @@ class RenkuTokens(BaseAPISpec):
     )
     access_token: str
     refresh_token: str
+    client_id: str | None
+    client_secret: str | None
 
     def encode(self) -> str:
         """Encode the Renku tokens as a single URL-safe string."""
