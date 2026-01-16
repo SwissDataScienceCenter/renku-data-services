@@ -192,6 +192,7 @@ class TestDependencyManager(DependencyManager):
         kc_api: IKeycloakAPI
 
         default_kubeconfig = KubeConfigEnv()
+        print(default_kubeconfig._kubeconfig)
         cluster_repo = ClusterRepository(session_maker=config.db.async_session_maker)
         k8s_db_cache = K8sDbCache(config.db.async_session_maker)
         client = K8sClusterClientsPool(
@@ -337,6 +338,7 @@ class TestDependencyManager(DependencyManager):
         git_provider_helper = GitProviderHelper(connected_services_repo, "", "", "", config.enable_internal_gitlab)
         return cls(
             config=config,
+            k8s_client=client,
             authenticator=authenticator,
             gitlab_authenticator=gitlab_authenticator,
             gitlab_client=gitlab_client,
