@@ -6,7 +6,7 @@ import base64
 from enum import StrEnum
 from typing import Self
 
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field
 
 from renku_data_services.connected_services.apispec_base import BaseAPISpec
 
@@ -25,6 +25,8 @@ class PostTokenRequest(BaseAPISpec):
     )
     grant_type: PostTokenGrantType
     refresh_token: str
+    client_id: str | None = Field(None)
+    client_secret: str | None = Field(None)
 
 
 class PostTokenResponse(BaseAPISpec):
@@ -48,8 +50,6 @@ class RenkuTokens(BaseAPISpec):
     )
     access_token: str
     refresh_token: str
-    client_id: str | None
-    client_secret: str | None
 
     def encode(self) -> str:
         """Encode the Renku tokens as a single URL-safe string."""
