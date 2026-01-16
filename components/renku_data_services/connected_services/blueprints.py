@@ -249,8 +249,11 @@ class OAuth2ConnectionsBP(CustomBlueprint):
     def post_token_endpoint(self) -> BlueprintFactoryResponse:
         """OAuth 2.0 token endpoint to support applications running in sessions."""
 
+        # TODO: handle this `post_token_endpoint: request body = client_id=AAA&client_secret=BBB&grant_type=refresh_token&refresh_token=hello-world` # noqa E501
         async def _post_token_endpoint(request: Request, connection_id: ULID) -> JSONResponse:
             logger.warning(f"post_token_endpoint: connection_id = {str(connection_id)}")
+            logger.warning(f"post_token_endpoint: request headers = {list(request.headers.keys())}")
+            logger.warning(f"post_token_endpoint: request content-type = {request.headers.get("content-type")}")
             logger.warning(f"post_token_endpoint: request body = {request.body.decode("utf-8")}")
             raise NotImplementedError("TODO: post_token_endpoint()")
 
