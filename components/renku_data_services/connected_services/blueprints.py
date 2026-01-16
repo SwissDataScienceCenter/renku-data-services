@@ -274,10 +274,12 @@ class OAuth2ConnectionsBP(CustomBlueprint):
 
                 user: base_models.APIUser | None = None
                 try:
-                    _user = await self.authenticator.authenticate(
-                        access_token=renku_tokens.access_token or "", request=request
+                    _user = cast(
+                        base_models.APIUser,
+                        await self.authenticator.authenticate(
+                            access_token=renku_tokens.access_token or "", request=request
+                        ),
                     )
-                    _user = cast(base_models.APIUser, user)
                     if _user.is_authenticated and _user.access_token:
                         user = _user
                 except Exception as err:
