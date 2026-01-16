@@ -141,6 +141,8 @@ class ResourceClassORM(BaseORM):
                 and self.gpu >= matching_criteria.gpu
                 and self.max_storage >= matching_criteria.max_storage
             )
+        if self.resource_pool_id is None:
+            raise errors.ProgrammingError(message="Cannot dump a resource class without a reource pool id.")
         return models.ResourceClass(
             id=self.id,
             name=self.name,
@@ -154,6 +156,7 @@ class ResourceClassORM(BaseORM):
             tolerations=[toleration.key for toleration in self.tolerations],
             matching=matching,
             quota=self.resource_pool.quota if self.resource_pool else None,
+            resource_pool_id=self.resource_pool_id,
         )
 
 

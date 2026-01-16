@@ -279,6 +279,7 @@ async def test_resource_class_filtering(
     matching_class = matching_classes[0]
     matching_class.pop("id")
     matching_class.pop("matching")
+    matching_class.pop("resource_pool_id")
     assert matching_class == new_classes[2]
     # Test without any filtering
     _, res = await sanic_client.get(
@@ -471,6 +472,7 @@ async def test_put_resource_class(
     res_cls_payload = {**res.json.get("classes", [])[0], "cpu": 5.0}
     res_cls_expected_response = {**res.json.get("classes", [])[0], "cpu": 5.0}
     res_cls_payload.pop("id", None)
+    res_cls_payload.pop("resource_pool_id", None)
     _, res = await sanic_client.put(
         "/api/data/resource_pools/1/classes/1",
         headers=admin_headers,
@@ -973,6 +975,7 @@ async def test_remove_all_tolerations_put(
     assert res_class["tolerations"][0] == "toleration1"
     new_class = deepcopy(res_class)
     new_class.pop("id")
+    new_class.pop("resource_pool_id")
     new_class["tolerations"] = []
     _, res = await sanic_client.put(
         f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
@@ -1009,6 +1012,7 @@ async def test_remove_all_affinities_put(
     assert res_class["node_affinities"][0] == {"key": "affinity1", "required_during_scheduling": False}
     new_class = deepcopy(res_class)
     new_class.pop("id")
+    new_class.pop("resource_pool_id")
     new_class["node_affinities"] = []
     _, res = await sanic_client.put(
         f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
@@ -1045,6 +1049,7 @@ async def test_put_tolerations(
     assert res_class["tolerations"][0] == "toleration1"
     new_class = deepcopy(res_class)
     new_class.pop("id")
+    new_class.pop("resource_pool_id")
     new_class["tolerations"] = ["toleration2", "toleration3"]
     _, res = await sanic_client.put(
         f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
@@ -1081,6 +1086,7 @@ async def test_put_affinities(
     assert res_class["node_affinities"][0] == {"key": "affinity1", "required_during_scheduling": False}
     new_class = deepcopy(res_class)
     new_class.pop("id")
+    new_class.pop("resource_pool_id")
     new_class["node_affinities"] = [{"key": "affinity1", "required_during_scheduling": True}, {"key": "affinity2"}]
     _, res = await sanic_client.put(
         f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
@@ -1281,6 +1287,8 @@ async def _resource_pools_request(
             check_payload["id"] = resource_pool_id
         if "id" not in check_payload["quota"]:
             check_payload["quota"]["id"] = rp["quota"]["id"]
+        for clss in check_payload.get("classes", []):
+            clss["resource_pool_id"] = resource_pool_id
 
     url = f"{base_url}/{resource_pool_id}"
 
@@ -1473,6 +1481,7 @@ async def test_resource_pool_patch_platform(
     put = deepcopy(resource_pool_payload_2)
     put["quota"] = rp["quota"]
     put["classes"] = rp["classes"]
+    [clss.pop("resource_pool_id") for clss in put["classes"]]
     put["platform"] = "linux/amd64"
 
     _, res = await sanic_client.put(f"/api/data/resource_pools/{rp_id}", headers=admin_headers, json=put)
