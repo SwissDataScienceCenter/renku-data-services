@@ -1468,10 +1468,8 @@ async def test_project_copy_includes_public_data_connector_links_owned_by_others
     dc2 = await create_data_connector("dc2", member_1_user, member_1_headers, visibility="public")
     assert "id" in dc1
     assert "id" in dc2
-    link1_res = await link_data_connector(project_id, dc1["id"], user_headers)
-    link2_res = await link_data_connector(project_id, dc2["id"], user_headers)
-    link1 = link1_res.json
-    link2 = link2_res.json
+    link1 = await link_data_connector(project_id, dc1["id"])
+    link2 = await link_data_connector(project_id, dc2["id"])
 
     copy_project = await create_project_copy(
         sanic_client,
@@ -1489,7 +1487,7 @@ async def test_project_copy_includes_public_data_connector_links_owned_by_others
     assert {d["data_connector_id"] for d in data_connector_links} == {dc1["id"], dc2["id"]}
     assert data_connector_links[0]["project_id"] == data_connector_links[1]["project_id"] == project_copy_id
     # NOTE: Check that new data connector links are created
-    assert {d["id"] for d in data_connector_links} != {link1["id"], link2["id"]}
+    assert {d["id"] for d in data_connector_links} != {link1.id, link2.id}
 
 
 @pytest.mark.asyncio
