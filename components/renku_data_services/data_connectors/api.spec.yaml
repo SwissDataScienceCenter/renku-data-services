@@ -285,8 +285,8 @@ paths:
         name: data_connector_id
         required: true
         schema:
-          $ref: "#/components/schemas/Ulid"
-        description: the ID of the data connector
+          type: string
+        description: the ID of the data connector that can be ULID or DOI
     get:
       summary: Get all links from a given data connector to projects
       parameters:
@@ -668,6 +668,10 @@ components:
       type: array
       items:
         $ref: "#/components/schemas/DataConnectorToProjectLink"
+    ProjectPath:
+      description: The URL path to the project page
+      type: string
+      example: "/p/namespace/project-slug"
     DataConnectorToProjectLink:
       description: A link from a data connector to a project in Renku 2.0
       type: object
@@ -679,6 +683,8 @@ components:
           $ref: "#/components/schemas/Ulid"
         project_id:
           $ref: "#/components/schemas/Ulid"
+        project_path:
+          $ref: "#/components/schemas/ProjectPath"
         creation_date:
           $ref: "#/components/schemas/CreationDate"
         created_by:
@@ -687,6 +693,7 @@ components:
         - id
         - data_connector_id
         - project_id
+        - project_path
         - creation_date
         - created_by
     DataConnectorToProjectLinkPost:

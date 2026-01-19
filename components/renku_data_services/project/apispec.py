@@ -27,6 +27,14 @@ class Role(Enum):
     owner = "owner"
 
 
+class ProjectPath(RootModel[str]):
+    root: str = Field(
+        ...,
+        description="The URL path to the project page",
+        examples=["/p/namespace/project-slug"],
+    )
+
+
 class DataConnectorToProjectLink(BaseAPISpec):
     model_config = ConfigDict(
         extra="forbid",
@@ -51,6 +59,11 @@ class DataConnectorToProjectLink(BaseAPISpec):
         max_length=26,
         min_length=26,
         pattern="^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+    )
+    project_path: str = Field(
+        ...,
+        description="The URL path to the project page",
+        examples=["/p/namespace/project-slug"],
     )
     creation_date: datetime = Field(
         ...,

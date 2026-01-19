@@ -195,6 +195,33 @@ class DataConnectorRepository:
 
             return data_connector.dump()
 
+    async def get_data_connector_by_doi(
+        self,
+        user: base_models.APIUser,
+        doi: str,
+    ) -> models.DataConnector | models.GlobalDataConnector:
+        """Get one data connector from the database by DOI."""
+        not_found_msg = f"Data connector with DOI '{doi}' does not exist or you do not have access to it."
+
+        async with self.session_maker() as session:
+            stmt = select(schemas.DataConnectorORM).where(schemas.DataConnectorORM.doi == doi)
+            result = await session.scalars(stmt)
+            data_connector = result.one_or_none()
+
+            if data_connector is None:
+                raise errors.MissingResourceError(message=not_found_msg)
+
+            authorized = await self.authz.has_permission(
+                user=user,
+                resource_type=ResourceType.data_connector,
+                resource_id=data_connector.id,
+                scope=Scope.READ,
+            )
+            if not authorized:
+                raise errors.MissingResourceError(message=not_found_msg)
+
+            return data_connector.dump()
+
     async def get_global_data_connector_by_slug(
         self,
         user: base_models.APIUser,
