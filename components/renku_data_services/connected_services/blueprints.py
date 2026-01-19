@@ -33,18 +33,6 @@ from renku_data_services.notebooks.config import NotebooksConfig
 
 logger = logging.getLogger(__name__)
 
-EXP: dict[str, str | int] = {
-    "access_token": "AAA",
-    "expires_in": 1800,
-    "refresh_expires_in": 86400,
-    "refresh_token": "BBB",
-    "token_type": "Bearer",
-    "id_token": "CCC",
-    "not-before-policy": 0,
-    "session_state": "6b46b29f-58e3-49d8-aada-bb8a2c2a258b",
-    "scope": "openid microprofile-jwt email profile",
-}
-
 
 @dataclass(kw_only=True)
 class OAuth2ClientsBP(CustomBlueprint):
@@ -362,6 +350,8 @@ class OAuth2ConnectionsBP(CustomBlueprint):
                 if oauth_token.get("scope"):
                     result["scope"] = oauth_token["scope"]
                 if oauth_token.expires_at:
+                    # TODO: handle if parsed_response.refresh_expires_in < expires_in
+                    # This should be rare, but we should use the lowest value to be safe.
                     exp = datetime.fromtimestamp(oauth_token.expires_at, UTC)
                     expires_in = exp - datetime.now(UTC)
                     result["expires_in"] = math.ceil(expires_in.total_seconds())
