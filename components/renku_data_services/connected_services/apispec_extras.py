@@ -39,6 +39,7 @@ class PostTokenResponse(BaseAPISpec):
     token_type: str
     expires_in: int
     refresh_token: str
+    refresh_expires_in: int | None = Field(None)
     scope: str | None
 
 

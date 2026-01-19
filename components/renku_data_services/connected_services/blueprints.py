@@ -33,6 +33,18 @@ from renku_data_services.notebooks.config import NotebooksConfig
 
 logger = logging.getLogger(__name__)
 
+EXP: dict[str, str | int] = {
+    "access_token": "AAA",
+    "expires_in": 1800,
+    "refresh_expires_in": 86400,
+    "refresh_token": "BBB",
+    "token_type": "Bearer",
+    "id_token": "CCC",
+    "not-before-policy": 0,
+    "session_state": "6b46b29f-58e3-49d8-aada-bb8a2c2a258b",
+    "scope": "openid microprofile-jwt email profile",
+}
+
 
 @dataclass(kw_only=True)
 class OAuth2ClientsBP(CustomBlueprint):
@@ -302,10 +314,39 @@ class OAuth2ConnectionsBP(CustomBlueprint):
                         "grant_type": "refresh_token",
                         "refresh_token": renku_tokens.refresh_token,
                     }
-                    response = await http.post(renku_auth_token_uri, auth=auth, data=payload)
+                    response = await http.post(renku_auth_token_uri, auth=auth, data=payload, follow_redirects=True)
                     logger.warning(f"Get refresh response from Keycloak: {response}")
                     logger.warning(f"Get refresh response from Keycloak: {response.json()}")
-                    pass
+                    if 200 <= response.status_code < 300:
+                        try:
+                            parsed_response = apispec_extras.PostTokenResponse.model_validate_json(response.content)
+                        except Exception as err:
+                            logger.error(f"Failed to parse refreshed Renku tokens: {err.__class__}.")
+                            raise
+                        try:
+                            renku_tokens.access_token = parsed_response.access_token
+                            renku_tokens.refresh_token = parsed_response.refresh_token
+                            request.headers[self.authenticator.token_field] = renku_tokens.access_token
+                            _user = cast(
+                                base_models.APIUser,
+                                await self.authenticator.authenticate(
+                                    access_token=renku_tokens.access_token or "", request=request
+                                ),
+                            )
+                            if _user.is_authenticated and _user.access_token:
+                                user = _user
+                        except Exception as err:
+                            logger.error(f"Got authenticate error: {err.__class__}.")
+                            raise
+                    else:
+                        # Handle bad response: Get refresh response from Keycloak: <Response [400 Bad Request]>
+                        # Get refresh response from Keycloak:
+                        #   {'error': 'invalid_grant', 'error_description': 'Invalid refresh token'}
+                        logger.error(
+                            f"Got error from refreshing Renku tokens: HTTP {response.status_code}; {response.json()}."
+                        )
+                        raise errors.UnauthorizedError()
+                    logger.warning(f"post_token_endpoint: user = {user}")
 
             if user is not None and user.is_authenticated:
                 client = await self.oauth_client_factory.for_user_connection_raise(user, connection_id)
@@ -333,6 +374,6 @@ class OAuth2ConnectionsBP(CustomBlueprint):
             # 3. If access_token is expired, use the renku refresh_token -> if new tokens are valid,
             #    send back the new OAuth 2.0 access token and the new encoded refresh_token
 
-            raise NotImplementedError("TODO: post_token_endpoint()")
+            raise errors.UnauthorizedError()
 
         return "/oauth2/connections/<connection_id:ulid>/token_endpoint", ["POST"], _post_token_endpoint
