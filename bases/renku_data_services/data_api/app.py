@@ -185,6 +185,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         connected_services_repo=dm.connected_services_repo,
         oauth_client_factory=dm.oauth_http_client_factory,
         authenticator=dm.authenticator,
+        nb_config=dm.config.nb_config,
     )
     repositories = RepositoriesBP(
         name="repositories",
