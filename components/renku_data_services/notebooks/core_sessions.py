@@ -262,6 +262,7 @@ async def __get_gitlab_image_pull_secret(
 
 
 async def get_data_sources(
+    request: Request,
     nb_config: NotebooksConfig,
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     server_name: str,
@@ -327,6 +328,9 @@ async def get_data_sources(
             # if token_set.expires_at_iso:
             #     token_config["expiry"] = token_set.expires_at_iso
             configuration["token"] = json.dumps(token_config)
+            configuration["token_url"] = request.url_for(
+                "oauth2_connections.post_token_endpoint", connection_id=drive_connection.id
+            )
         mount_folder = (
             dc.data_connector.storage.target_path
             if PurePosixPath(dc.data_connector.storage.target_path).is_absolute()
@@ -871,6 +875,7 @@ async def start_session(
     # Data connectors
     session_extras = session_extras.concat(
         await get_data_sources(
+            request=request,
             nb_config=nb_config,
             server_name=server_name,
             user=user,
