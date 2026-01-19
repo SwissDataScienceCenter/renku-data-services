@@ -21,6 +21,7 @@ from yaml import safe_dump
 from renku_data_services.app_config import logging
 from renku_data_services.base_models import RESET, AnonymousAPIUser, APIUser, AuthenticatedAPIUser, ResetType
 from renku_data_services.base_models.metrics import MetricsService
+from renku_data_services.connected_services.apispec_extras import RenkuTokens
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.connected_services.models import OAuth2TokenSet, ProviderKind
 from renku_data_services.connected_services.oauth_http import (
@@ -312,11 +313,19 @@ async def get_data_sources(
             logger.warning(f"Adjusting rclone configuration for DC {str(dc.data_connector.id)}.")
             configuration["scope"] = configuration.get("drive") or "drive"
             token_config = {
-                "access_token": token_set.access_token,
+                # "access_token": token_set.access_token,
+                "access_token": "fake_one",
                 "token_type": "Bearer",
             }
-            if token_set.expires_at_iso:
-                token_config["expiry"] = token_set.expires_at_iso
+            if user.access_token and user.refresh_token:
+                renku_tokens = RenkuTokens(
+                    access_token=user.access_token,
+                    refresh_token=user.refresh_token,
+                )
+                token_config["refresh_token"] = renku_tokens.encode()
+            token_config["expiry"] = "2026-01-01T14:19:16.114854+01:00"
+            # if token_set.expires_at_iso:
+            #     token_config["expiry"] = token_set.expires_at_iso
             configuration["token"] = json.dumps(token_config)
         mount_folder = (
             dc.data_connector.storage.target_path
