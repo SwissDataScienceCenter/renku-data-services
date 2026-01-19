@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from io import StringIO
 from typing import Any, ClassVar, Self, Union
-from urllib.parse import urlunparse
 
 import yaml
 
@@ -223,25 +222,18 @@ class _SessionIngress:
     tls_secret: str | None = None
     class_name: str | None = None
     annotations: dict[str, str] = field(default_factory=dict)
+    use_default_cluster_tls_cert: bool = False
 
     @classmethod
     def from_env(cls) -> Self:
         return cls(
             host=os.environ["NB_SESSIONS__INGRESS__HOST"],
             tls_secret=os.environ["NB_SESSIONS__INGRESS__TLS_SECRET"],
+            use_default_cluster_tls_cert=os.environ.get("NB_SESSIONS__INGRESS__USE_DEFAULT_CLUSTER_TLS_CERT", "false")
+            == "true",
             class_name=os.environ.get("NB_SESSIONS__INGRESS__CLASS_NAME", None),
             annotations=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__INGRESS__ANNOTATIONS", "{}"))),
         )
-
-    @staticmethod
-    def base_path(server_name: str) -> str:
-        return f"/sessions/{server_name}"
-
-    def base_url(self, server_name: str, force_https: bool = False) -> str:
-        scheme = "https" if self.tls_secret else "http"
-        if force_https:
-            scheme = "https"
-        return str(urlunparse((scheme, self.host, self.base_path(server_name), None, None, None)))
 
 
 @dataclass

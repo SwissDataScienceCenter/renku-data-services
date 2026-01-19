@@ -4,10 +4,23 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from sqlalchemy import JSON, BigInteger, Column, Enum, Identity, Integer, MetaData, String, Table, literal
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    CheckConstraint,
+    Column,
+    Enum,
+    Identity,
+    Integer,
+    MetaData,
+    String,
+    Table,
+    literal,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import ForeignKey
+from sqlalchemy.sql import expression
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
@@ -161,6 +174,13 @@ class ClusterORM(BaseORM):
     """Cluster definition."""
 
     __tablename__ = "clusters"
+    __table_args__ = (
+        CheckConstraint(
+            "(session_tls_secret_name IS NULL AND session_use_default_cluster_tls_cert) "
+            "OR (session_tls_secret_name IS NOT NULL AND NOT session_use_default_cluster_tls_cert)",
+            name="either_tls_secret_name_or_default_cluster_tls_cert_is_set",
+        ),
+    )
     id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)
     name: Mapped[str] = mapped_column(String(40), unique=True, index=True)
     config_name: Mapped[str] = mapped_column(String(40), unique=True, index=True)
@@ -170,11 +190,12 @@ class ClusterORM(BaseORM):
     session_path: Mapped[str] = mapped_column(String())
     session_ingress_class_name: Mapped[str | None] = mapped_column(String())
     session_ingress_annotations: Mapped[dict[str, str]] = mapped_column(JSONVariant)
-    session_tls_secret_name: Mapped[str] = mapped_column(String(256))
     session_storage_class: Mapped[str | None] = mapped_column(String(256))
+    session_tls_secret_name: Mapped[str | None] = mapped_column(String(256), default=None, nullable=True)
     # NOTE: The service account name is expected to point to a service account that already exists
     # in the cluster in the namespace where the sessions will be launched.
     service_account_name: Mapped[str | None] = mapped_column(String(256), default=None, nullable=True)
+    session_use_default_cluster_tls_cert: Mapped[bool] = mapped_column(default=False, server_default=expression.false())
 
     def dump(self) -> SavedClusterSettings:
         """Create a cluster model from the ORM object."""
@@ -196,6 +217,12 @@ class ClusterORM(BaseORM):
     @classmethod
     def load(cls, cluster: ClusterSettings) -> ClusterORM:
         """Create an ORM object from the cluster model."""
+        if cluster.use_default_cluster_tls_cert and cluster.session_tls_secret_name:
+            raise errors.ValidationError(
+                message="Specifying both a tls secret and using the default cluster tls cert is not allowed. "
+                "The two configurations are mutually exclusive, if you want to use the default cluster tls cert, "
+                "do not specify a tls secret name or vice-versa."
+            )
         return ClusterORM(
             name=cluster.name,
             config_name=cluster.config_name,
