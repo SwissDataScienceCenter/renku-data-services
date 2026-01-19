@@ -1015,6 +1015,19 @@ class ClusterRepository:
 
         cluster_orm = ClusterORM.load(cluster)
         async with self.session_maker() as session, session.begin():
+            res = await session.scalar(select(ClusterORM).where(ClusterORM.name == cluster_orm.name))
+            if res is not None:
+                raise errors.ConflictError(
+                    message="Cannot create a cluster because the name is already used, please try a different name.",
+                    quiet=True,
+                )
+            res = await session.scalar(select(ClusterORM).where(ClusterORM.config_name == cluster_orm.config_name))
+            if res is not None:
+                raise errors.ConflictError(
+                    message="Cannot create a cluster because the config_name is already used, "
+                    "please try a different one.",
+                    quiet=True,
+                )
             session.add(cluster_orm)
             await session.flush()
             await session.refresh(cluster_orm)

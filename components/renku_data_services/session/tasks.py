@@ -6,7 +6,7 @@ from pathlib import PurePosixPath
 
 from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import InternalServiceAdmin
-from renku_data_services.session.db import SessionRepository
+from renku_data_services.session.db import SessionEnvironmentRepositoryProtocol
 from renku_data_services.session.models import EnvironmentImageSource, EnvironmentKind, UnsavedEnvironment
 
 
@@ -14,21 +14,21 @@ from renku_data_services.session.models import EnvironmentImageSource, Environme
 class SessionTasks:
     """Task definitions for sessions."""
 
-    session_repo: SessionRepository
+    session_environment_repo: SessionEnvironmentRepositoryProtocol
 
     async def initialize_session_environments_task(self, requested_by: InternalServiceAdmin) -> None:
         """Initialize session environments."""
         logger = logging.getLogger(self.__class__.__name__)
 
         # Skip this task if global session environments already exist
-        existing_envs = await self.session_repo.get_environments()
+        existing_envs = await self.session_environment_repo.get_environments()
         if existing_envs:
             logger.debug("Global session environments are already initialized.")
             return None
 
         for env in self._get_default_session_environments():
             try:
-                await self.session_repo.insert_environment(user=requested_by, environment=env)
+                await self.session_environment_repo.insert_environment(user=requested_by, environment=env)
                 logger.info(f"Added global environment with image {env.container_image}")
             except Exception as err:
                 logger.error(f"Failed to create global environment with image {env.container_image} because {err}")
