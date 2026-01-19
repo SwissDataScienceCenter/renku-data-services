@@ -33,7 +33,7 @@ class PostTokenResponse(BaseAPISpec):
     """Response for a refresh token request."""
 
     model_config = ConfigDict(
-        extra="forbid",
+        extra="allow",
     )
     access_token: str
     token_type: str
