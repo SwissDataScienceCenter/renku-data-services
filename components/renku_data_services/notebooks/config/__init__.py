@@ -240,5 +240,5 @@ class NotebooksConfig:
             session_tls_secret_name=self.sessions.ingress.tls_secret,
             session_storage_class=self.sessions.storage.pvs_storage_class,
             service_account_name=self.local_cluster_session_service_account,
-            use_default_cluster_tls_cert=self.sessions.ingress.use_default_cluster_tls_cert,
+            session_ingress_use_default_cluster_tls_cert=self.sessions.ingress.use_default_cluster_tls_cert,
         )

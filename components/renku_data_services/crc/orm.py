@@ -176,8 +176,8 @@ class ClusterORM(BaseORM):
     __tablename__ = "clusters"
     __table_args__ = (
         CheckConstraint(
-            "(session_tls_secret_name IS NULL AND session_use_default_cluster_tls_cert) "
-            "OR (session_tls_secret_name IS NOT NULL AND NOT session_use_default_cluster_tls_cert)",
+            "(session_tls_secret_name IS NULL AND session_ingress_use_default_cluster_tls_cert) "
+            "OR (session_tls_secret_name IS NOT NULL AND NOT session_ingress_use_default_cluster_tls_cert)",
             name="either_tls_secret_name_or_default_cluster_tls_cert_is_set",
         ),
     )
@@ -195,7 +195,9 @@ class ClusterORM(BaseORM):
     # NOTE: The service account name is expected to point to a service account that already exists
     # in the cluster in the namespace where the sessions will be launched.
     service_account_name: Mapped[str | None] = mapped_column(String(256), default=None, nullable=True)
-    session_use_default_cluster_tls_cert: Mapped[bool] = mapped_column(default=False, server_default=expression.false())
+    session_ingress_use_default_cluster_tls_cert: Mapped[bool] = mapped_column(
+        default=False, server_default=expression.false()
+    )
 
     def dump(self) -> SavedClusterSettings:
         """Create a cluster model from the ORM object."""
@@ -212,12 +214,13 @@ class ClusterORM(BaseORM):
             session_storage_class=self.session_storage_class,
             service_account_name=self.service_account_name,
             id=ClusterId(self.id),
+            session_ingress_use_default_cluster_tls_cert=self.session_ingress_use_default_cluster_tls_cert,
         )
 
     @classmethod
     def load(cls, cluster: ClusterSettings) -> ClusterORM:
         """Create an ORM object from the cluster model."""
-        if cluster.use_default_cluster_tls_cert and cluster.session_tls_secret_name:
+        if cluster.session_ingress_use_default_cluster_tls_cert and cluster.session_tls_secret_name:
             raise errors.ValidationError(
                 message="Specifying both a tls secret and using the default cluster tls cert is not allowed. "
                 "The two configurations are mutually exclusive, if you want to use the default cluster tls cert, "
@@ -235,6 +238,7 @@ class ClusterORM(BaseORM):
             session_ingress_annotations=cluster.session_ingress_annotations,
             session_tls_secret_name=cluster.session_tls_secret_name,
             session_storage_class=cluster.session_storage_class,
+            session_ingress_use_default_cluster_tls_cert=cluster.session_ingress_use_default_cluster_tls_cert,
         )
 
 

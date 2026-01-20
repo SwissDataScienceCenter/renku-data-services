@@ -1054,6 +1054,10 @@ class ClusterRepository:
                     case "service_account_name", "":
                         # If we received an empty string in the service account name, set it back to None.
                         setattr(saved_cluster, key, None)
+                    case "session_tls_secret_name", "":
+                        setattr(saved_cluster, key, None)
+                    case "session_tls_secret_name", x if x == RESET:
+                        setattr(saved_cluster, key, None)
                     case _, None:
                         # Do not modify a value which has not been set in the patch
                         pass

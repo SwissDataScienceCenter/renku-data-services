@@ -1,4 +1,5 @@
 from copy import deepcopy
+from typing import Any
 
 import pytest
 from sanic_testing.testing import SanicASGITestClient
@@ -16,6 +17,7 @@ cluster_payload = {
         "nginx.ingress.kubernetes.io/configuration-snippet": """more_set_headers "Content-Security-Policy: """
         + """frame-ancestors 'self'""",
     },
+    "session_ingress_use_default_cluster_tls_cert": False,
 }
 
 cluster_payload_with_storage = deepcopy(cluster_payload)
@@ -26,6 +28,15 @@ cluster_payload_with_ingress_class_name["session_ingress_class_name"] = "an-arbi
 
 cluster_payload_with_both = deepcopy(cluster_payload_with_storage)
 cluster_payload_with_both.update(cluster_payload_with_ingress_class_name)
+cluster_payload_patch_default_cluster_tls_cert = {
+    "session_ingress_use_default_cluster_tls_cert": True,
+    "session_tls_secret_name": "",
+}
+cluster_payload_patch_default_cluster_tls_cert_response = {
+    **cluster_payload,
+    "session_ingress_use_default_cluster_tls_cert": True,
+}
+cluster_payload_patch_default_cluster_tls_cert_response.pop("session_tls_secret_name", None)
 
 
 @pytest.mark.parametrize(
@@ -200,6 +211,55 @@ async def test_clusters_patch(
     await _clusters_request(
         sanic_client, "PATCH", admin_headers, expected_status_code, auth, cluster_id, payload, post_payload
     )
+
+
+@pytest.mark.parametrize(
+    "expected_status_code,payload,post_payload,expected_patch_response",
+    [
+        (
+            201,
+            cluster_payload_patch_default_cluster_tls_cert,
+            cluster_payload,
+            cluster_payload_patch_default_cluster_tls_cert_response,
+        ),
+        (
+            422,
+            {
+                "session_ingress_use_default_cluster_tls_cert": False,
+                "session_tls_secret_name": "",
+            },
+            cluster_payload,
+            None,
+        ),
+        (
+            422,
+            {
+                "session_ingress_use_default_cluster_tls_cert": True,
+                "session_tls_secret_name": "something",
+            },
+            cluster_payload,
+            None,
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_clusters_patch_single_field(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    expected_status_code: int,
+    payload: dict | None,
+    post_payload: dict,
+    expected_patch_response: dict[str, Any],
+) -> None:
+    _, res = await sanic_client.post("/api/data/clusters", headers=admin_headers, json=post_payload)
+    assert res.status_code == 201, res.text
+    cluster_id = res.json["id"]
+    _, res = await sanic_client.patch(url=f"/api/data/clusters/{cluster_id}", headers=admin_headers, json=payload)
+    assert res.status_code == expected_status_code, res.text
+    if 200 <= expected_status_code < 300 and expected_patch_response is not None:
+        expected_patch_response["id"] = cluster_id
+    if expected_patch_response is not None:
+        assert res.json == expected_patch_response
 
 
 @pytest.mark.parametrize(

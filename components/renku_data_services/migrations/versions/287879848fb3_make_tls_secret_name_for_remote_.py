@@ -21,7 +21,10 @@ def upgrade() -> None:
     op.add_column(
         "clusters",
         sa.Column(
-            "session_use_default_cluster_tls_cert", sa.Boolean(), server_default=sa.text("false"), nullable=False
+            "session_ingress_use_default_cluster_tls_cert",
+            sa.Boolean(),
+            server_default=sa.text("false"),
+            nullable=False,
         ),
         schema="resource_pools",
     )
@@ -34,8 +37,8 @@ def upgrade() -> None:
     )
     # ### end Alembic commands ###
     sa.CheckConstraint(
-        "(session_tls_secret_name IS NULL AND session_use_default_cluster_tls_cert) "
-        "OR (session_tls_secret_name IS NOT NULL AND NOT session_use_default_cluster_tls_cert)",
+        "(session_tls_secret_name IS NULL AND session_ingress_use_default_cluster_tls_cert) "
+        "OR (session_tls_secret_name IS NOT NULL AND NOT session_ingress_use_default_cluster_tls_cert)",
         name="either_tls_secret_name_or_default_cluster_tls_cert_is_set",
     )
 
@@ -55,5 +58,5 @@ def downgrade() -> None:
         nullable=False,
         schema="resource_pools",
     )
-    op.drop_column("clusters", "session_use_default_cluster_tls_cert", schema="resource_pools")
+    op.drop_column("clusters", "session_ingress_use_default_cluster_tls_cert", schema="resource_pools")
     # ### end Alembic commands ###

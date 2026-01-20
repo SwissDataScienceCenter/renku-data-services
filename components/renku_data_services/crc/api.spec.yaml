@@ -1008,7 +1008,6 @@ components:
           "session_port",
           "session_path",
           "session_ingress_annotations",
-          "session_tls_secret_name",
         ]
     ClusterPatch:
       type: object
@@ -1031,7 +1030,9 @@ components:
         session_ingress_annotations:
           $ref: "#/components/schemas/IngressAnnotations"
         session_tls_secret_name:
-          $ref: "#/components/schemas/TlsSecretName"
+          allOf:
+            - $ref: "#/components/schemas/TlsSecretName"
+            - description: 'If you want to remove the secret name pass in an empty string ""'
         session_storage_class:
           $ref: "#/components/schemas/StorageClassName"
         service_account_name:
@@ -1077,7 +1078,6 @@ components:
           "session_port",
           "session_path",
           "session_ingress_annotations",
-          "session_tls_secret_name",
           "id",
           "session_ingress_use_default_cluster_tls_cert",
         ]

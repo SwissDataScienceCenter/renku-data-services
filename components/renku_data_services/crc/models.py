@@ -195,10 +195,10 @@ class ClusterPatch:
     session_path: str | None
     session_ingress_class_name: str | None
     session_ingress_annotations: dict[str, Any] | None
-    session_tls_secret_name: str | None
+    session_tls_secret_name: str | None | ResetType
     session_storage_class: str | None
     service_account_name: str | None
-    use_default_cluster_tls_cert: bool = False
+    session_ingress_use_default_cluster_tls_cert: bool | None = False
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -216,7 +216,7 @@ class ClusterSettings:
     session_tls_secret_name: str | None
     session_storage_class: str | None
     service_account_name: str | None = None
-    use_default_cluster_tls_cert: bool = False
+    session_ingress_use_default_cluster_tls_cert: bool = False
 
     def to_cluster_patch(self) -> ClusterPatch:
         """Convert to ClusterPatch."""
@@ -233,7 +233,7 @@ class ClusterSettings:
             session_tls_secret_name=self.session_tls_secret_name,
             session_storage_class=self.session_storage_class,
             service_account_name=self.service_account_name,
-            use_default_cluster_tls_cert=self.use_default_cluster_tls_cert,
+            session_ingress_use_default_cluster_tls_cert=self.session_ingress_use_default_cluster_tls_cert,
         )
 
     def get_storage_class(self) -> str | None:

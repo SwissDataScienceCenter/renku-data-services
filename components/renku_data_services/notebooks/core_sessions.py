@@ -1358,7 +1358,7 @@ class SessionIngress:
             ingressClassName=ingress_class_name,
             pathPrefix=base_server_path,
             tlsSecret=tls_secret,
-            useDefaultClusterTLSCert=self.cluster_settings.use_default_cluster_tls_cert,
+            useDefaultClusterTLSCert=self.cluster_settings.session_ingress_use_default_cluster_tls_cert,
         )
 
     @property
