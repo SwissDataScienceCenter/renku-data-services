@@ -1,0 +1,1782 @@
+{
+    "apiVersion": "v1",
+    "items": [
+        {
+            "apiVersion": "amalthea.dev/v1alpha1",
+            "kind": "AmaltheaSession",
+            "metadata": {
+                "annotations": {
+                    "renku.io/launcher_id": "01K312ATNN2SEMPDE7XZPAX6E7",
+                    "renku.io/project_id": "01K2HG8GD5W5KGXM9JWE8TY0A5",
+                    "renku.io/resource_class_id": "4"
+                },
+                "creationTimestamp": "2026-01-16T13:50:23Z",
+                "finalizers": [
+                    "amalthea.dev/secrets-finalizer"
+                ],
+                "generation": 3,
+                "labels": {
+                    "renku.io/safe-username": "1a6d4c40-e500-419d-9812-22d6d1c27aa0"
+                },
+                "name": "a-degano-ba699d1c61ec",
+                "namespace": "renku",
+                "resourceVersion": "343586729",
+                "uid": "77b00050-1a7e-48b5-be20-ea6d6481df3e"
+            },
+            "spec": {
+                "affinity": {
+                    "nodeAffinity": {
+                        "requiredDuringSchedulingIgnoredDuringExecution": {
+                            "nodeSelectorTerms": [
+                                {
+                                    "matchExpressions": [
+                                        {
+                                            "key": "renku.io/node-purpose",
+                                            "operator": "In",
+                                            "values": [
+                                                "user"
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                },
+                "authentication": {
+                    "enabled": true,
+                    "extraVolumeMounts": [
+                        {
+                            "mountPath": "/authorized_emails",
+                            "name": "renku-authorized-emails",
+                            "subPath": "authorized_emails"
+                        },
+                        {
+                            "mountPath": "/etc/ssl/certs/",
+                            "name": "etc-ssl-certs",
+                            "readOnly": true
+                        },
+                        {
+                            "mountPath": "/usr/local/share/ca-certificates",
+                            "name": "custom-ca-certs",
+                            "readOnly": true
+                        }
+                    ],
+                    "secretRef": {
+                        "adopt": true,
+                        "key": "auth",
+                        "name": "a-degano-ba699d1c61ec"
+                    },
+                    "type": "oauth2proxy"
+                },
+                "culling": {
+                    "cpuIdleThreshold": "300m",
+                    "maxAge": "0s",
+                    "maxFailedDuration": "0s",
+                    "maxHibernatedDuration": "336h15m0s",
+                    "maxIdleDuration": "12h15m0s",
+                    "maxStartingDuration": "0s"
+                },
+                "extraContainers": [
+                    {
+                        "env": [
+                            {
+                                "name": "GIT_PROXY_PORT",
+                                "value": "65480"
+                            },
+                            {
+                                "name": "GIT_PROXY_HEALTH_PORT",
+                                "value": "65481"
+                            },
+                            {
+                                "name": "GIT_PROXY_ANONYMOUS_SESSION",
+                                "value": "false"
+                            },
+                            {
+                                "name": "GIT_PROXY_RENKU_ACCESS_TOKEN",
+                                "value": "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJzanJ4SURja21tTjhWdmlPcFRHY3ZhSmxSWGRrSWdScXp0WjVPNnZWeE9BIn0.eyJleHAiOjE3Njg1NzMyMDMsImlhdCI6MTc2ODU3MTQwMywiYXV0aF90aW1lIjoxNzY4NTcxNDAzLCJqdGkiOiJiYTJlNWNhZC0zYTFmLTQwZmUtOTJjMC05ZDVmM2ZmYjE2ZjkiLCJpc3MiOiJodHRwczovL2Rldi5yZW5rdS5jaC9hdXRoL3JlYWxtcy9SZW5rdSIsImF1ZCI6WyJyZW5rdSIsInJlYWxtLW1hbmFnZW1lbnQiLCJhY2NvdW50Il0sInN1YiI6IjFhNmQ0YzQwLWU1MDAtNDE5ZC05ODEyLTIyZDZkMWMyN2FhMCIsInR5cCI6IkJlYXJlciIsImF6cCI6InJlbmt1Iiwic2Vzc2lvbl9zdGF0ZSI6ImE1MjcyYWFiLTU2MjItNGFlMC1iOTEwLTJkOTQ1ZjA4ODFmYiIsImFjciI6IjEiLCJhbGxvd2VkLW9yaWdpbnMiOlsiaHR0cHM6Ly9kZXYucmVua3UuY2gvKiJdLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsiZGVmYXVsdC1yb2xlcy02MWFlNzg5OC01MGRhLTQwODgtYTkwZS1mOTcwMDJiMWZiMDMiLCJvZmZsaW5lX2FjY2VzcyIsInJlbmt1LWFkbWluIiwidW1hX2F1dGhvcml6YXRpb24iXX0sInJlc291cmNlX2FjY2VzcyI6eyJyZWFsbS1tYW5hZ2VtZW50Ijp7InJvbGVzIjpbInZpZXctdXNlcnMiLCJxdWVyeS1ncm91cHMiLCJxdWVyeS11c2VycyJdfSwiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJvcGVuaWQgZW1haWwgcHJvZmlsZSBtaWNyb3Byb2ZpbGUtand0Iiwic2lkIjoiYTUyNzJhYWItNTYyMi00YWUwLWI5MTAtMmQ5NDVmMDg4MWZiIiwidXBuIjoiYS5kZWdhbm9AZ21haWwuY29tIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsIm5hbWUiOiJBbGVzc2FuZHJvIERlZ2FubyIsImdyb3VwcyI6WyJkZWZhdWx0LXJvbGVzLTYxYWU3ODk4LTUwZGEtNDA4OC1hOTBlLWY5NzAwMmIxZmIwMyIsIm9mZmxpbmVfYWNjZXNzIiwicmVua3UtYWRtaW4iLCJ1bWFfYXV0aG9yaXphdGlvbiJdLCJwcmVmZXJyZWRfdXNlcm5hbWUiOiJhLmRlZ2Fub0BnbWFpbC5jb20iLCJnaXZlbl9uYW1lIjoiQWxlc3NhbmRybyIsImZhbWlseV9uYW1lIjoiRGVnYW5vIiwiZW1haWwiOiJhLmRlZ2Fub0BnbWFpbC5jb20ifQ.a2jEH-6nj8uJAkT_KRqjHzUH8CBKLacxs43QRupOXJHVUT4YmIwFH4prj7RV5awM2th1ZtkdlL-Jkt9qQ-XFvN_iPT_OvWYrDRkaJf2RY1uehsuRgukfu38iECkVIHLwmaNbWSF2RKWoR0Dpj5pEgKkjPmRyad-8QRP1SzcHUPANxiBF_-TU2KPN4Tapq6hCs8knIBaVXl96nDM-sMHdFnS1tGbqHnTNUrWIDGYYuoq32crOYxbRw6QfQSsJXK2n2-tOGpOyPlzkpRAihOTM_yvOepjWr8sUGsew-SvtJxLhiva9q06hpfgmz8iKSkwCBKEJIeM8bkebyRs6XflV1A"
+                            },
+                            {
+                                "name": "GIT_PROXY_RENKU_REFRESH_TOKEN",
+                                "value": "eyJhbGciOiJIUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICIzYjExODBkMC0xMTUwLTQ5MTQtOGIwZi1hZGVmMGEzNGU0YjEifQ.eyJleHAiOjE3Njg2NTc4MDMsImlhdCI6MTc2ODU3MTQwMywianRpIjoiNGU0NDE2ZmEtYjc2OC00YzAyLTk3ZjItODk1OWNkMzNjY2QzIiwiaXNzIjoiaHR0cHM6Ly9kZXYucmVua3UuY2gvYXV0aC9yZWFsbXMvUmVua3UiLCJhdWQiOiJodHRwczovL2Rldi5yZW5rdS5jaC9hdXRoL3JlYWxtcy9SZW5rdSIsInN1YiI6IjFhNmQ0YzQwLWU1MDAtNDE5ZC05ODEyLTIyZDZkMWMyN2FhMCIsInR5cCI6IlJlZnJlc2giLCJhenAiOiJyZW5rdSIsInNlc3Npb25fc3RhdGUiOiJhNTI3MmFhYi01NjIyLTRhZTAtYjkxMC0yZDk0NWYwODgxZmIiLCJzY29wZSI6Im9wZW5pZCBlbWFpbCBwcm9maWxlIG1pY3JvcHJvZmlsZS1qd3QiLCJzaWQiOiJhNTI3MmFhYi01NjIyLTRhZTAtYjkxMC0yZDk0NWYwODgxZmIifQ.wyauyQWlj8hFBphPIg9TWWGqtj9CGdl9cBuDrSEERRg"
+                            },
+                            {
+                                "name": "GIT_PROXY_RENKU_REALM",
+                                "value": "Renku"
+                            },
+                            {
+                                "name": "GIT_PROXY_RENKU_CLIENT_ID",
+                                "value": "renku"
+                            },
+                            {
+                                "name": "GIT_PROXY_RENKU_CLIENT_SECRET",
+                                "value": "8395ee80-7d62-47ab-bb00-86f8ad3d5ab8"
+                            },
+                            {
+                                "name": "GIT_PROXY_RENKU_URL",
+                                "value": "https://dev.renku.ch"
+                            },
+                            {
+                                "name": "GIT_PROXY_REPOSITORIES",
+                                "value": "[{\"url\": \"https://github.com/aledegano/renku-example-project.git\", \"provider\": \"github.com\", \"dirname\": null, \"branch\": null, \"commit_sha\": null}]"
+                            },
+                            {
+                                "name": "GIT_PROXY_PROVIDERS",
+                                "value": "[{\"id\": \"INTERNAL_GITLAB\", \"access_token_url\": \"http://dev.renku.ch/api/auth/gitlab/exchange\"}, {\"id\": \"github.com\", \"access_token_url\": \"http://dev.renku.ch/api/data/oauth2/connections/01KEH4QTMMVJB54133CDF7MBEX/token\"}, {\"id\": \"gitlab.com\", \"access_token_url\": \"http://dev.renku.ch/api/data/oauth2/connections/01K2282V7VQNF0586S7JFV3J7N/token\"}]"
+                            }
+                        ],
+                        "image": "renku/git-https-proxy:1.31.1",
+                        "livenessProbe": {
+                            "httpGet": {
+                                "path": "/health",
+                                "port": 65481
+                            },
+                            "initialDelaySeconds": 3
+                        },
+                        "name": "git-proxy",
+                        "readinessProbe": {
+                            "httpGet": {
+                                "path": "/health",
+                                "port": 65481
+                            },
+                            "initialDelaySeconds": 3
+                        },
+                        "resources": {
+                            "requests": {
+                                "cpu": "50m",
+                                "memory": "16Mi"
+                            }
+                        },
+                        "securityContext": {
+                            "allowPrivilegeEscalation": false,
+                            "capabilities": {
+                                "drop": [
+                                    "ALL"
+                                ]
+                            },
+                            "runAsGroup": 1000,
+                            "runAsNonRoot": true,
+                            "runAsUser": 1000
+                        },
+                        "volumeMounts": [
+                            {
+                                "mountPath": "/etc/ssl/certs/",
+                                "name": "etc-ssl-certs",
+                                "readOnly": true
+                            }
+                        ]
+                    }
+                ],
+                "extraVolumes": [
+                    {
+                        "emptyDir": {
+                            "medium": "Memory"
+                        },
+                        "name": "etc-ssl-certs"
+                    },
+                    {
+                        "name": "custom-ca-certs",
+                        "projected": {
+                            "defaultMode": 440,
+                            "sources": []
+                        }
+                    },
+                    {
+                        "name": "renku-authorized-emails",
+                        "secret": {
+                            "items": [
+                                {
+                                    "key": "authorized_emails",
+                                    "path": "authorized_emails"
+                                }
+                            ],
+                            "secretName": "a-degano-ba699d1c61ec"
+                        }
+                    }
+                ],
+                "hibernated": true,
+                "ingress": {
+                    "annotations": {
+                        "kubernetes.io/ingress.class": "webapprouting.kubernetes.azure.com",
+                        "nginx.ingress.kubernetes.io/proxy-body-size": "0",
+                        "nginx.ingress.kubernetes.io/proxy-buffer-size": "8k",
+                        "nginx.ingress.kubernetes.io/proxy-request-buffering": "off"
+                    },
+                    "host": "dev.renku.ch",
+                    "ingressClassName": "webapprouting.kubernetes.azure.com",
+                    "pathPrefix": "/sessions/a-degano-ba699d1c61ec",
+                    "tlsSecret": {
+                        "adopt": false,
+                        "name": "dev-azure-renku-ch-tls"
+                    }
+                },
+                "initContainers": [
+                    {
+                        "image": "renku/certificates:0.0.2",
+                        "name": "init-certificates",
+                        "resources": {
+                            "requests": {
+                                "cpu": "50m",
+                                "memory": "50Mi"
+                            }
+                        },
+                        "securityContext": {
+                            "allowPrivilegeEscalation": false,
+                            "capabilities": {
+                                "drop": [
+                                    "ALL"
+                                ]
+                            },
+                            "runAsGroup": 1000,
+                            "runAsNonRoot": true,
+                            "runAsUser": 1000
+                        },
+                        "volumeMounts": [
+                            {
+                                "mountPath": "/etc/ssl/certs/",
+                                "name": "etc-ssl-certs"
+                            },
+                            {
+                                "mountPath": "/usr/local/share/ca-certificates",
+                                "name": "custom-ca-certs",
+                                "readOnly": true
+                            }
+                        ]
+                    },
+                    {
+                        "env": [
+                            {
+                                "name": "GIT_CLONE_MOUNT_PATH",
+                                "value": "/home/renku/work"
+                            },
+                            {
+                                "name": "GIT_CLONE_LFS_AUTO_FETCH",
+                                "value": "0"
+                            },
+                            {
+                                "name": "GIT_CLONE_USER__USERNAME",
+                                "value": "a.degano@gmail.com"
+                            },
+                            {
+                                "name": "GIT_CLONE_USER__RENKU_TOKEN",
+                                "value": "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJzanJ4SURja21tTjhWdmlPcFRHY3ZhSmxSWGRrSWdScXp0WjVPNnZWeE9BIn0.eyJleHAiOjE3Njg1NzMyMDMsImlhdCI6MTc2ODU3MTQwMywiYXV0aF90aW1lIjoxNzY4NTcxNDAzLCJqdGkiOiJiYTJlNWNhZC0zYTFmLTQwZmUtOTJjMC05ZDVmM2ZmYjE2ZjkiLCJpc3MiOiJodHRwczovL2Rldi5yZW5rdS5jaC9hdXRoL3JlYWxtcy9SZW5rdSIsImF1ZCI6WyJyZW5rdSIsInJlYWxtLW1hbmFnZW1lbnQiLCJhY2NvdW50Il0sInN1YiI6IjFhNmQ0YzQwLWU1MDAtNDE5ZC05ODEyLTIyZDZkMWMyN2FhMCIsInR5cCI6IkJlYXJlciIsImF6cCI6InJlbmt1Iiwic2Vzc2lvbl9zdGF0ZSI6ImE1MjcyYWFiLTU2MjItNGFlMC1iOTEwLTJkOTQ1ZjA4ODFmYiIsImFjciI6IjEiLCJhbGxvd2VkLW9yaWdpbnMiOlsiaHR0cHM6Ly9kZXYucmVua3UuY2gvKiJdLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsiZGVmYXVsdC1yb2xlcy02MWFlNzg5OC01MGRhLTQwODgtYTkwZS1mOTcwMDJiMWZiMDMiLCJvZmZsaW5lX2FjY2VzcyIsInJlbmt1LWFkbWluIiwidW1hX2F1dGhvcml6YXRpb24iXX0sInJlc291cmNlX2FjY2VzcyI6eyJyZWFsbS1tYW5hZ2VtZW50Ijp7InJvbGVzIjpbInZpZXctdXNlcnMiLCJxdWVyeS1ncm91cHMiLCJxdWVyeS11c2VycyJdfSwiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJvcGVuaWQgZW1haWwgcHJvZmlsZSBtaWNyb3Byb2ZpbGUtand0Iiwic2lkIjoiYTUyNzJhYWItNTYyMi00YWUwLWI5MTAtMmQ5NDVmMDg4MWZiIiwidXBuIjoiYS5kZWdhbm9AZ21haWwuY29tIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsIm5hbWUiOiJBbGVzc2FuZHJvIERlZ2FubyIsImdyb3VwcyI6WyJkZWZhdWx0LXJvbGVzLTYxYWU3ODk4LTUwZGEtNDA4OC1hOTBlLWY5NzAwMmIxZmIwMyIsIm9mZmxpbmVfYWNjZXNzIiwicmVua3UtYWRtaW4iLCJ1bWFfYXV0aG9yaXphdGlvbiJdLCJwcmVmZXJyZWRfdXNlcm5hbWUiOiJhLmRlZ2Fub0BnbWFpbC5jb20iLCJnaXZlbl9uYW1lIjoiQWxlc3NhbmRybyIsImZhbWlseV9uYW1lIjoiRGVnYW5vIiwiZW1haWwiOiJhLmRlZ2Fub0BnbWFpbC5jb20ifQ.a2jEH-6nj8uJAkT_KRqjHzUH8CBKLacxs43QRupOXJHVUT4YmIwFH4prj7RV5awM2th1ZtkdlL-Jkt9qQ-XFvN_iPT_OvWYrDRkaJf2RY1uehsuRgukfu38iECkVIHLwmaNbWSF2RKWoR0Dpj5pEgKkjPmRyad-8QRP1SzcHUPANxiBF_-TU2KPN4Tapq6hCs8knIBaVXl96nDM-sMHdFnS1tGbqHnTNUrWIDGYYuoq32crOYxbRw6QfQSsJXK2n2-tOGpOyPlzkpRAihOTM_yvOepjWr8sUGsew-SvtJxLhiva9q06hpfgmz8iKSkwCBKEJIeM8bkebyRs6XflV1A"
+                            },
+                            {
+                                "name": "GIT_CLONE_IS_GIT_PROXY_ENABLED",
+                                "value": "1"
+                            },
+                            {
+                                "name": "GIT_CLONE_SENTRY__ENABLED",
+                                "value": "false"
+                            },
+                            {
+                                "name": "GIT_CLONE_SENTRY__DSN"
+                            },
+                            {
+                                "name": "GIT_CLONE_SENTRY__ENVIRONMENT"
+                            },
+                            {
+                                "name": "GIT_CLONE_SENTRY__SAMPLE_RATE",
+                                "value": "0.2"
+                            },
+                            {
+                                "name": "SENTRY_RELEASE"
+                            },
+                            {
+                                "name": "REQUESTS_CA_BUNDLE",
+                                "value": "/etc/ssl/certs/ca-certificates.crt"
+                            },
+                            {
+                                "name": "SSL_CERT_FILE",
+                                "value": "/etc/ssl/certs/ca-certificates.crt"
+                            },
+                            {
+                                "name": "GIT_CLONE_GIT_PROXY_PORT",
+                                "value": "65480"
+                            },
+                            {
+                                "name": "GIT_CLONE_USER__EMAIL",
+                                "value": "a.degano@gmail.com"
+                            },
+                            {
+                                "name": "GIT_CLONE_USER__FULL_NAME",
+                                "value": "Alessandro Degano"
+                            },
+                            {
+                                "name": "GIT_CLONE_REPOSITORIES_0_",
+                                "value": "{\"url\": \"https://github.com/aledegano/renku-example-project.git\", \"provider\": \"github.com\", \"dirname\": null, \"branch\": null, \"commit_sha\": null}"
+                            },
+                            {
+                                "name": "GIT_CLONE_GIT_PROVIDERS_0_",
+                                "value": "{\"id\": \"github.com\", \"access_token_url\": \"http://dev.renku.ch/api/data/oauth2/connections/01KEH4QTMMVJB54133CDF7MBEX/token\"}"
+                            }
+                        ],
+                        "image": "renku/git-clone:1.31.1",
+                        "name": "git-clone",
+                        "resources": {
+                            "requests": {
+                                "cpu": "100m",
+                                "memory": "100Mi"
+                            }
+                        },
+                        "securityContext": {
+                            "allowPrivilegeEscalation": false,
+                            "capabilities": {
+                                "drop": [
+                                    "ALL"
+                                ]
+                            },
+                            "runAsGroup": 1000,
+                            "runAsNonRoot": true,
+                            "runAsUser": 1000
+                        },
+                        "volumeMounts": [
+                            {
+                                "mountPath": "/home/renku/work",
+                                "name": "amalthea-volume"
+                            },
+                            {
+                                "mountPath": "/etc/ssl/certs/",
+                                "name": "etc-ssl-certs",
+                                "readOnly": true
+                            }
+                        ]
+                    }
+                ],
+                "location": "local",
+                "reconcileStrategy": "whenFailedOrHibernated",
+                "session": {
+                    "env": [
+                        {
+                            "name": "RENKU_BASE_URL_PATH",
+                            "value": "/sessions/a-degano-ba699d1c61ec"
+                        },
+                        {
+                            "name": "RENKU_BASE_URL",
+                            "value": "https://dev.renku.ch/sessions/a-degano-ba699d1c61ec"
+                        },
+                        {
+                            "name": "RENKU_MOUNT_DIR",
+                            "value": "/home/renku/work"
+                        },
+                        {
+                            "name": "RENKU_SESSION",
+                            "value": "1"
+                        },
+                        {
+                            "name": "RENKU_SESSION_IP",
+                            "value": "0.0.0.0"
+                        },
+                        {
+                            "name": "RENKU_SESSION_PORT",
+                            "value": "8888"
+                        },
+                        {
+                            "name": "RENKU_WORKING_DIR",
+                            "value": "/home/renku/work"
+                        },
+                        {
+                            "name": "RENKU_SECRETS_PATH",
+                            "value": "/secrets"
+                        },
+                        {
+                            "name": "RENKU_PROJECT_ID",
+                            "value": "01K2HG8GD5W5KGXM9JWE8TY0A5"
+                        },
+                        {
+                            "name": "RENKU_PROJECT_PATH",
+                            "value": "a.degano-3/barfoo"
+                        },
+                        {
+                            "name": "RENKU_LAUNCHER_ID",
+                            "value": "01K312ATNN2SEMPDE7XZPAX6E7"
+                        }
+                    ],
+                    "image": "harbor.dev.renku.ch/renku-build/renku-build:renku-01k312atp4kgj4bkfgqnpf4ae2",
+                    "imagePullPolicy": "Always",
+                    "port": 8888,
+                    "readinessProbe": {
+                        "type": "tcp"
+                    },
+                    "resources": {
+                        "limits": {
+                            "memory": "1Gi"
+                        },
+                        "requests": {
+                            "cpu": "500m",
+                            "memory": "1Gi"
+                        }
+                    },
+                    "runAsGroup": 1000,
+                    "runAsUser": 1000,
+                    "shmSize": "1G",
+                    "storage": {
+                        "mountPath": "/home/renku/work",
+                        "size": "1G"
+                    },
+                    "stripURLPath": false,
+                    "urlPath": "/sessions/a-degano-ba699d1c61ec/",
+                    "workingDir": "/home/renku/work"
+                },
+                "tolerations": [
+                    {
+                        "effect": "NoSchedule",
+                        "key": "renku.io/dedicated",
+                        "operator": "Equal",
+                        "value": "user"
+                    }
+                ]
+            },
+            "status": {
+                "conditions": [
+                    {
+                        "lastTransitionTime": "2026-01-17T02:23:03Z",
+                        "message": "The session is hibernated",
+                        "reason": "Hibernated",
+                        "status": "False",
+                        "type": "Ready"
+                    },
+                    {
+                        "lastTransitionTime": "2026-01-16T13:50:23Z",
+                        "message": "The ingress is setup and operational",
+                        "reason": "IngressOperational",
+                        "status": "True",
+                        "type": "RoutingReady"
+                    }
+                ],
+                "containerCounts": {},
+                "hibernatedSince": "2026-01-17T02:23:03Z",
+                "idle": false,
+                "initContainerCounts": {},
+                "state": "Hibernated",
+                "url": "https://dev.renku.ch/sessions/a-degano-ba699d1c61ec/"
+            }
+        },
+        {
+            "apiVersion": "amalthea.dev/v1alpha1",
+            "kind": "AmaltheaSession",
+            "metadata": {
+                "annotations": {
+                    "renku.io/launcher_id": "01KEESRJZ9TMVM4F0K7QNXDY1A",
+                    "renku.io/project_id": "01KEER2R11FR8EB22JR5Q1PWV9",
+                    "renku.io/resource_class_id": "4"
+                },
+                "creationTimestamp": "2026-01-08T12:37:14Z",
+                "finalizers": [
+                    "amalthea.dev/secrets-finalizer"
+                ],
+                "generation": 3,
+                "labels": {
+                    "renku.io/safe-username": "4cf16e99-62fe-4889-90ba-38b2d02bd293"
+                },
+                "name": "caterina-bar-203b577613cc",
+                "namespace": "renku",
+                "resourceVersion": "339249515",
+                "uid": "f98af74f-2b30-4033-8974-5cf489afefa4"
+            },
+            "spec": {
+                "affinity": {
+                    "nodeAffinity": {
+                        "requiredDuringSchedulingIgnoredDuringExecution": {
+                            "nodeSelectorTerms": [
+                                {
+                                    "matchExpressions": [
+                                        {
+                                            "key": "renku.io/node-purpose",
+                                            "operator": "In",
+                                            "values": [
+                                                "user"
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                },
+                "authentication": {
+                    "enabled": true,
+                    "extraVolumeMounts": [
+                        {
+                            "mountPath": "/authorized_emails",
+                            "name": "renku-authorized-emails",
+                            "subPath": "authorized_emails"
+                        },
+                        {
+                            "mountPath": "/etc/ssl/certs/",
+                            "name": "etc-ssl-certs",
+                            "readOnly": true
+                        },
+                        {
+                            "mountPath": "/usr/local/share/ca-certificates",
+                            "name": "custom-ca-certs",
+                            "readOnly": true
+                        }
+                    ],
+                    "secretRef": {
+                        "adopt": true,
+                        "key": "auth",
+                        "name": "caterina-bar-203b577613cc"
+                    },
+                    "type": "oauth2proxy"
+                },
+                "culling": {
+                    "cpuIdleThreshold": "300m",
+                    "maxAge": "0s",
+                    "maxFailedDuration": "0s",
+                    "maxHibernatedDuration": "336h15m0s",
+                    "maxIdleDuration": "12h15m0s",
+                    "maxStartingDuration": "0s"
+                },
+                "dataSources": [
+                    {
+                        "accessMode": "ReadOnlyMany",
+                        "mountPath": "/home/jovyan/work/openbis-eln-lims",
+                        "secretRef": {
+                            "adopt": true,
+                            "name": "caterina-bar-203b577613cc-ds-01keertfdcr58ryk3mew1sabw6"
+                        },
+                        "type": "rclone"
+                    }
+                ],
+                "extraVolumes": [
+                    {
+                        "emptyDir": {
+                            "medium": "Memory"
+                        },
+                        "name": "etc-ssl-certs"
+                    },
+                    {
+                        "name": "custom-ca-certs",
+                        "projected": {
+                            "defaultMode": 440,
+                            "sources": []
+                        }
+                    },
+                    {
+                        "name": "renku-authorized-emails",
+                        "secret": {
+                            "items": [
+                                {
+                                    "key": "authorized_emails",
+                                    "path": "authorized_emails"
+                                }
+                            ],
+                            "secretName": "caterina-bar-203b577613cc"
+                        }
+                    }
+                ],
+                "hibernated": true,
+                "ingress": {
+                    "annotations": {
+                        "kubernetes.io/ingress.class": "webapprouting.kubernetes.azure.com",
+                        "nginx.ingress.kubernetes.io/proxy-body-size": "0",
+                        "nginx.ingress.kubernetes.io/proxy-buffer-size": "8k",
+                        "nginx.ingress.kubernetes.io/proxy-request-buffering": "off"
+                    },
+                    "host": "dev.renku.ch",
+                    "ingressClassName": "webapprouting.kubernetes.azure.com",
+                    "pathPrefix": "/sessions/caterina-bar-203b577613cc",
+                    "tlsSecret": {
+                        "adopt": false,
+                        "name": "dev-azure-renku-ch-tls"
+                    }
+                },
+                "initContainers": [
+                    {
+                        "image": "renku/certificates:0.0.2",
+                        "name": "init-certificates",
+                        "resources": {
+                            "requests": {
+                                "cpu": "50m",
+                                "memory": "50Mi"
+                            }
+                        },
+                        "securityContext": {
+                            "allowPrivilegeEscalation": false,
+                            "capabilities": {
+                                "drop": [
+                                    "ALL"
+                                ]
+                            },
+                            "runAsGroup": 1000,
+                            "runAsNonRoot": true,
+                            "runAsUser": 1000
+                        },
+                        "volumeMounts": [
+                            {
+                                "mountPath": "/etc/ssl/certs/",
+                                "name": "etc-ssl-certs"
+                            },
+                            {
+                                "mountPath": "/usr/local/share/ca-certificates",
+                                "name": "custom-ca-certs",
+                                "readOnly": true
+                            }
+                        ]
+                    }
+                ],
+                "location": "local",
+                "reconcileStrategy": "whenFailedOrHibernated",
+                "session": {
+                    "args": [
+                        "/entrypoint.sh jupyter server --ServerApp.ip=0.0.0.0 --ServerApp.port=8888 --ServerApp.base_url=$RENKU_BASE_URL_PATH --ServerApp.token=\"\" --ServerApp.password=\"\" --ServerApp.allow_remote_access=true --ContentsManager.allow_hidden=true --ServerApp.allow_origin=* --ServerApp.root_dir=\"/home/jovyan/work\""
+                    ],
+                    "command": [
+                        "sh",
+                        "-c"
+                    ],
+                    "env": [
+                        {
+                            "name": "RENKU_BASE_URL_PATH",
+                            "value": "/sessions/caterina-bar-203b577613cc"
+                        },
+                        {
+                            "name": "RENKU_BASE_URL",
+                            "value": "https://dev.renku.ch/sessions/caterina-bar-203b577613cc"
+                        },
+                        {
+                            "name": "RENKU_MOUNT_DIR",
+                            "value": "/home/jovyan/work"
+                        },
+                        {
+                            "name": "RENKU_SESSION",
+                            "value": "1"
+                        },
+                        {
+                            "name": "RENKU_SESSION_IP",
+                            "value": "0.0.0.0"
+                        },
+                        {
+                            "name": "RENKU_SESSION_PORT",
+                            "value": "8888"
+                        },
+                        {
+                            "name": "RENKU_WORKING_DIR",
+                            "value": "/home/jovyan/work"
+                        },
+                        {
+                            "name": "RENKU_SECRETS_PATH",
+                            "value": "/secrets"
+                        },
+                        {
+                            "name": "RENKU_PROJECT_ID",
+                            "value": "01KEER2R11FR8EB22JR5Q1PWV9"
+                        },
+                        {
+                            "name": "RENKU_PROJECT_PATH",
+                            "value": "caterina.barillari/project-1"
+                        },
+                        {
+                            "name": "RENKU_LAUNCHER_ID",
+                            "value": "01KEESRJZ9TMVM4F0K7QNXDY1A"
+                        }
+                    ],
+                    "image": "renku/renkulab-py:3.10-0.23.0",
+                    "imagePullPolicy": "Always",
+                    "port": 8888,
+                    "readinessProbe": {
+                        "type": "tcp"
+                    },
+                    "resources": {
+                        "limits": {
+                            "memory": "1Gi"
+                        },
+                        "requests": {
+                            "cpu": "500m",
+                            "memory": "1Gi"
+                        }
+                    },
+                    "runAsGroup": 100,
+                    "runAsUser": 1000,
+                    "shmSize": "1G",
+                    "storage": {
+                        "mountPath": "/home/jovyan/work",
+                        "size": "1G"
+                    },
+                    "stripURLPath": false,
+                    "urlPath": "/sessions/caterina-bar-203b577613cc/lab",
+                    "workingDir": "/home/jovyan/work"
+                },
+                "tolerations": [
+                    {
+                        "effect": "NoSchedule",
+                        "key": "renku.io/dedicated",
+                        "operator": "Equal",
+                        "value": "user"
+                    }
+                ]
+            },
+            "status": {
+                "conditions": [
+                    {
+                        "lastTransitionTime": "2026-01-10T01:42:43Z",
+                        "message": "The session is hibernated",
+                        "reason": "Hibernated",
+                        "status": "False",
+                        "type": "Ready"
+                    },
+                    {
+                        "lastTransitionTime": "2026-01-08T12:37:14Z",
+                        "message": "The ingress is setup and operational",
+                        "reason": "IngressOperational",
+                        "status": "True",
+                        "type": "RoutingReady"
+                    }
+                ],
+                "containerCounts": {},
+                "hibernatedSince": "2026-01-10T01:42:43Z",
+                "idle": false,
+                "initContainerCounts": {},
+                "state": "Hibernated",
+                "url": "https://dev.renku.ch/sessions/caterina-bar-203b577613cc/lab/"
+            }
+        },
+        {
+            "apiVersion": "amalthea.dev/v1alpha1",
+            "kind": "AmaltheaSession",
+            "metadata": {
+                "annotations": {
+                    "renku.io/launcher_id": "01KCVFZW2N6S20JAY67K30JNJ7",
+                    "renku.io/project_id": "01KCVFX9BVTADB8SGHN7RJFJAP",
+                    "renku.io/resource_class_id": "4"
+                },
+                "creationTimestamp": "2026-01-14T14:42:04Z",
+                "finalizers": [
+                    "amalthea.dev/secrets-finalizer"
+                ],
+                "generation": 6,
+                "labels": {
+                    "renku.io/safe-username": "c59e6907-e670-4e03-a1b7-18616bb4678e"
+                },
+                "name": "eike-kettner-962026d34ba4",
+                "namespace": "renku",
+                "resourceVersion": "363666425",
+                "uid": "3f51dcde-04fa-4a50-a887-a95ec0887145"
+            },
+            "spec": {
+                "affinity": {
+                    "nodeAffinity": {
+                        "requiredDuringSchedulingIgnoredDuringExecution": {
+                            "nodeSelectorTerms": [
+                                {
+                                    "matchExpressions": [
+                                        {
+                                            "key": "renku.io/node-purpose",
+                                            "operator": "In",
+                                            "values": [
+                                                "user"
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                },
+                "authentication": {
+                    "enabled": true,
+                    "extraVolumeMounts": [
+                        {
+                            "mountPath": "/authorized_emails",
+                            "name": "renku-authorized-emails",
+                            "subPath": "authorized_emails"
+                        },
+                        {
+                            "mountPath": "/etc/ssl/certs/",
+                            "name": "etc-ssl-certs",
+                            "readOnly": true
+                        },
+                        {
+                            "mountPath": "/usr/local/share/ca-certificates",
+                            "name": "custom-ca-certs",
+                            "readOnly": true
+                        }
+                    ],
+                    "secretRef": {
+                        "adopt": true,
+                        "key": "auth",
+                        "name": "eike-kettner-962026d34ba4"
+                    },
+                    "type": "oauth2proxy"
+                },
+                "culling": {
+                    "cpuIdleThreshold": "300m",
+                    "maxAge": "0s",
+                    "maxFailedDuration": "0s",
+                    "maxHibernatedDuration": "336h15m0s",
+                    "maxIdleDuration": "12h15m0s",
+                    "maxStartingDuration": "0s"
+                },
+                "extraVolumes": [
+                    {
+                        "emptyDir": {
+                            "medium": "Memory"
+                        },
+                        "name": "etc-ssl-certs"
+                    },
+                    {
+                        "name": "custom-ca-certs",
+                        "projected": {
+                            "defaultMode": 440,
+                            "sources": []
+                        }
+                    },
+                    {
+                        "name": "renku-authorized-emails",
+                        "secret": {
+                            "items": [
+                                {
+                                    "key": "authorized_emails",
+                                    "path": "authorized_emails"
+                                }
+                            ],
+                            "secretName": "eike-kettner-962026d34ba4"
+                        }
+                    }
+                ],
+                "hibernated": false,
+                "ingress": {
+                    "annotations": {
+                        "kubernetes.io/ingress.class": "webapprouting.kubernetes.azure.com",
+                        "nginx.ingress.kubernetes.io/proxy-body-size": "0",
+                        "nginx.ingress.kubernetes.io/proxy-buffer-size": "8k",
+                        "nginx.ingress.kubernetes.io/proxy-request-buffering": "off"
+                    },
+                    "host": "dev.renku.ch",
+                    "ingressClassName": "webapprouting.kubernetes.azure.com",
+                    "pathPrefix": "/sessions/eike-kettner-962026d34ba4",
+                    "tlsSecret": {
+                        "adopt": false,
+                        "name": "dev-azure-renku-ch-tls"
+                    }
+                },
+                "initContainers": [
+                    {
+                        "image": "renku/certificates:0.0.2",
+                        "name": "init-certificates",
+                        "resources": {
+                            "requests": {
+                                "cpu": "50m",
+                                "memory": "50Mi"
+                            }
+                        },
+                        "securityContext": {
+                            "allowPrivilegeEscalation": false,
+                            "capabilities": {
+                                "drop": [
+                                    "ALL"
+                                ]
+                            },
+                            "runAsGroup": 1000,
+                            "runAsNonRoot": true,
+                            "runAsUser": 1000
+                        },
+                        "volumeMounts": [
+                            {
+                                "mountPath": "/etc/ssl/certs/",
+                                "name": "etc-ssl-certs",
+                                "readOnly": false
+                            },
+                            {
+                                "mountPath": "/usr/local/share/ca-certificates",
+                                "name": "custom-ca-certs",
+                                "readOnly": true
+                            }
+                        ]
+                    }
+                ],
+                "location": "local",
+                "reconcileStrategy": "whenFailedOrHibernated",
+                "session": {
+                    "env": [
+                        {
+                            "name": "RENKU_BASE_URL_PATH",
+                            "value": "/sessions/eike-kettner-962026d34ba4"
+                        },
+                        {
+                            "name": "RENKU_BASE_URL",
+                            "value": "https://dev.renku.ch/sessions/eike-kettner-962026d34ba4"
+                        },
+                        {
+                            "name": "RENKU_MOUNT_DIR",
+                            "value": "/home/renku/work"
+                        },
+                        {
+                            "name": "RENKU_SESSION",
+                            "value": "1"
+                        },
+                        {
+                            "name": "RENKU_SESSION_IP",
+                            "value": "0.0.0.0"
+                        },
+                        {
+                            "name": "RENKU_SESSION_PORT",
+                            "value": "8888"
+                        },
+                        {
+                            "name": "RENKU_WORKING_DIR",
+                            "value": "/home/renku/work"
+                        },
+                        {
+                            "name": "RENKU_SECRETS_PATH",
+                            "value": "/secrets"
+                        },
+                        {
+                            "name": "RENKU_PROJECT_ID",
+                            "value": "01KCVFX9BVTADB8SGHN7RJFJAP"
+                        },
+                        {
+                            "name": "RENKU_PROJECT_PATH",
+                            "value": "eike.kettner/next-project-test"
+                        },
+                        {
+                            "name": "RENKU_LAUNCHER_ID",
+                            "value": "01KCVFZW2N6S20JAY67K30JNJ7"
+                        }
+                    ],
+                    "image": "ghcr.io/swissdatasciencecenter/renku/py-basic-ttyd:2.9.0",
+                    "imagePullPolicy": "Always",
+                    "port": 8888,
+                    "readinessProbe": {
+                        "type": "tcp"
+                    },
+                    "resources": {
+                        "limits": {
+                            "memory": "1Gi"
+                        },
+                        "requests": {
+                            "cpu": "500m",
+                            "memory": "1Gi"
+                        }
+                    },
+                    "runAsGroup": 1000,
+                    "runAsUser": 1000,
+                    "shmSize": "1G",
+                    "storage": {
+                        "mountPath": "/home/renku/work",
+                        "size": "1G"
+                    },
+                    "stripURLPath": false,
+                    "urlPath": "/sessions/eike-kettner-962026d34ba4/",
+                    "workingDir": "/home/renku/work"
+                },
+                "tolerations": [
+                    {
+                        "effect": "NoSchedule",
+                        "key": "renku.io/dedicated",
+                        "operator": "Equal",
+                        "value": "user"
+                    }
+                ]
+            },
+            "status": {
+                "conditions": [
+                    {
+                        "lastTransitionTime": "2026-01-20T13:28:13Z",
+                        "message": "The session is running",
+                        "reason": "Running",
+                        "status": "True",
+                        "type": "Ready"
+                    },
+                    {
+                        "lastTransitionTime": "2026-01-14T14:42:04Z",
+                        "message": "The ingress is setup and operational",
+                        "reason": "IngressOperational",
+                        "status": "True",
+                        "type": "RoutingReady"
+                    }
+                ],
+                "containerCounts": {
+                    "ready": 3,
+                    "total": 3
+                },
+                "failedSchedulingSince": "2026-01-20T10:29:25Z",
+                "idle": true,
+                "idleSince": "2026-01-20T13:28:13Z",
+                "initContainerCounts": {
+                    "ready": 1,
+                    "total": 1
+                },
+                "state": "Running",
+                "url": "https://dev.renku.ch/sessions/eike-kettner-962026d34ba4/",
+                "willHibernateAt": "2026-01-21T01:43:13Z"
+            }
+        },
+        {
+            "apiVersion": "amalthea.dev/v1alpha1",
+            "kind": "AmaltheaSession",
+            "metadata": {
+                "annotations": {
+                    "renku.io/launcher_id": "01K82X2T9VKZRH7XQ19NRF2F3F",
+                    "renku.io/project_id": "01K82WQ20PNMCTDR7A6JD4B3A8",
+                    "renku.io/resource_class_id": "4"
+                },
+                "creationTimestamp": "2026-01-15T13:11:17Z",
+                "finalizers": [
+                    "amalthea.dev/secrets-finalizer"
+                ],
+                "generation": 3,
+                "labels": {
+                    "renku.io/safe-username": "5daa2891-5310-4428-895d-10f859613223"
+                },
+                "name": "lorenzo-cava-6735b6189e50",
+                "namespace": "renku",
+                "resourceVersion": "339249523",
+                "uid": "4cab5379-7123-4cf1-92fa-834a8723437e"
+            },
+            "spec": {
+                "affinity": {
+                    "nodeAffinity": {
+                        "requiredDuringSchedulingIgnoredDuringExecution": {
+                            "nodeSelectorTerms": [
+                                {
+                                    "matchExpressions": [
+                                        {
+                                            "key": "renku.io/node-purpose",
+                                            "operator": "In",
+                                            "values": [
+                                                "user"
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                },
+                "authentication": {
+                    "enabled": true,
+                    "extraVolumeMounts": [
+                        {
+                            "mountPath": "/authorized_emails",
+                            "name": "renku-authorized-emails",
+                            "subPath": "authorized_emails"
+                        },
+                        {
+                            "mountPath": "/etc/ssl/certs/",
+                            "name": "etc-ssl-certs",
+                            "readOnly": true
+                        },
+                        {
+                            "mountPath": "/usr/local/share/ca-certificates",
+                            "name": "custom-ca-certs",
+                            "readOnly": true
+                        }
+                    ],
+                    "secretRef": {
+                        "adopt": true,
+                        "key": "auth",
+                        "name": "lorenzo-cava-6735b6189e50"
+                    },
+                    "type": "oauth2proxy"
+                },
+                "culling": {
+                    "cpuIdleThreshold": "300m",
+                    "maxAge": "0s",
+                    "maxFailedDuration": "0s",
+                    "maxHibernatedDuration": "336h15m0s",
+                    "maxIdleDuration": "12h15m0s",
+                    "maxStartingDuration": "0s"
+                },
+                "dataSources": [
+                    {
+                        "accessMode": "ReadOnlyMany",
+                        "mountPath": "/home/jovyan/work/weather-station-data-doi-10.13021-orc2020-ph5yxl",
+                        "secretRef": {
+                            "adopt": true,
+                            "name": "lorenzo-cava-6735b6189e50-ds-01jvw3gq19km1yv0k95e2zk08m"
+                        },
+                        "type": "rclone"
+                    },
+                    {
+                        "accessMode": "ReadOnlyMany",
+                        "mountPath": "/home/jovyan/work/giab-test",
+                        "secretRef": {
+                            "adopt": true,
+                            "name": "lorenzo-cava-6735b6189e50-ds-01k883y7h5xaqnenhrm8j8dpk8"
+                        },
+                        "type": "rclone"
+                    },
+                    {
+                        "accessMode": "ReadOnlyMany",
+                        "mountPath": "/home/jovyan/work/test-polybox",
+                        "secretRef": {
+                            "adopt": true,
+                            "name": "lorenzo-cava-6735b6189e50-ds-01k884160tzxzs3yf8tbzg9hnp"
+                        },
+                        "type": "rclone"
+                    },
+                    {
+                        "accessMode": "ReadOnlyMany",
+                        "mountPath": "/home/jovyan/work/test-polybox-1",
+                        "secretRef": {
+                            "adopt": true,
+                            "name": "lorenzo-cava-6735b6189e50-ds-01k8847hsh8s17ybq5j4sn3nz0"
+                        },
+                        "type": "rclone"
+                    }
+                ],
+                "extraContainers": [
+                    {
+                        "env": [
+                            {
+                                "name": "GIT_PROXY_PORT",
+                                "value": "65480"
+                            },
+                            {
+                                "name": "GIT_PROXY_HEALTH_PORT",
+                                "value": "65481"
+                            },
+                            {
+                                "name": "GIT_PROXY_ANONYMOUS_SESSION",
+                                "value": "false"
+                            },
+                            {
+                                "name": "GIT_PROXY_RENKU_ACCESS_TOKEN",
+                                "value": "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJzanJ4SURja21tTjhWdmlPcFRHY3ZhSmxSWGRrSWdScXp0WjVPNnZWeE9BIn0.eyJleHAiOjE3Njg0ODQ0NjQsImlhdCI6MTc2ODQ4MjY2NCwiYXV0aF90aW1lIjoxNzY4NDgyNjY0LCJqdGkiOiIyNDQ0MmUxNi02MTljLTRiMTktOTQ3ZS04ZmI2NmE0YjYzODIiLCJpc3MiOiJodHRwczovL2Rldi5yZW5rdS5jaC9hdXRoL3JlYWxtcy9SZW5rdSIsImF1ZCI6WyJyZW5rdSIsInJlYWxtLW1hbmFnZW1lbnQiLCJhY2NvdW50Il0sInN1YiI6IjVkYWEyODkxLTUzMTAtNDQyOC04OTVkLTEwZjg1OTYxMzIyMyIsInR5cCI6IkJlYXJlciIsImF6cCI6InJlbmt1Iiwic2Vzc2lvbl9zdGF0ZSI6IjQ5ZGM2MTMwLTNhOGYtNDg3YS1hMzM0LTY2ZDc3OTMxZDU2NyIsImFjciI6IjEiLCJhbGxvd2VkLW9yaWdpbnMiOlsiaHR0cHM6Ly9kZXYucmVua3UuY2gvKiJdLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsiZGVmYXVsdC1yb2xlcy02MWFlNzg5OC01MGRhLTQwODgtYTkwZS1mOTcwMDJiMWZiMDMiLCJvZmZsaW5lX2FjY2VzcyIsInJlbmt1LWFkbWluIiwidW1hX2F1dGhvcml6YXRpb24iXX0sInJlc291cmNlX2FjY2VzcyI6eyJyZWFsbS1tYW5hZ2VtZW50Ijp7InJvbGVzIjpbInZpZXctdXNlcnMiLCJxdWVyeS1ncm91cHMiLCJxdWVyeS11c2VycyJdfSwiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJvcGVuaWQgZW1haWwgcHJvZmlsZSBtaWNyb3Byb2ZpbGUtand0Iiwic2lkIjoiNDlkYzYxMzAtM2E4Zi00ODdhLWEzMzQtNjZkNzc5MzFkNTY3IiwidXBuIjoibG9yZW56by5jYXZhenppLnRlY2hAZ21haWwuY29tIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsIm5hbWUiOiJMb3JlbsWhbyBDYXbDpHp6aSIsImdyb3VwcyI6WyJkZWZhdWx0LXJvbGVzLTYxYWU3ODk4LTUwZGEtNDA4OC1hOTBlLWY5NzAwMmIxZmIwMyIsIm9mZmxpbmVfYWNjZXNzIiwicmVua3UtYWRtaW4iLCJ1bWFfYXV0aG9yaXphdGlvbiJdLCJwcmVmZXJyZWRfdXNlcm5hbWUiOiJsb3JlbnpvLmNhdmF6emkudGVjaEBnbWFpbC5jb20iLCJnaXZlbl9uYW1lIjoiTG9yZW7FoW8iLCJmYW1pbHlfbmFtZSI6IkNhdsOkenppIiwiZW1haWwiOiJsb3JlbnpvLmNhdmF6emkudGVjaEBnbWFpbC5jb20ifQ.k5cCcTeYHjQhtMlzbjiSAGFcBXvJ_fvG9YhfL5RkeCTNaZU4HN6ZXqO0awdaYCOnGKYnDdFNuWoRk5W2MoLxl8I0szUYyKb3H4YFLhg1nNTKowlIPUztjb7cgBgsZLa_oWzkYSRZBjk8yS_8P3ve1ylHtwQoEoL6_tiFgk7RmrYbydST2thhanRDtj2_DLGos4DbOatlof3y0iP_LtatVIlzd9gxIHtetWdpOyDBE-pw-oLxin6YT-ntK2TmlmT6fw8ae_Sf2NwquJnIwdCK0ar-ocq3FR9XRWi6sQ1V1Rxg8FOaYUYDUQuBormZKWHaF8-3tKQeUlr4MqVcShzgxA"
+                            },
+                            {
+                                "name": "GIT_PROXY_RENKU_REFRESH_TOKEN",
+                                "value": "eyJhbGciOiJIUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICIzYjExODBkMC0xMTUwLTQ5MTQtOGIwZi1hZGVmMGEzNGU0YjEifQ.eyJleHAiOjE3Njg1NjkwNjQsImlhdCI6MTc2ODQ4MjY2NCwianRpIjoiMGNjNzhhODctMDcyYS00ZWM4LTgyNDAtYTVmZjJmNWMxYWQxIiwiaXNzIjoiaHR0cHM6Ly9kZXYucmVua3UuY2gvYXV0aC9yZWFsbXMvUmVua3UiLCJhdWQiOiJodHRwczovL2Rldi5yZW5rdS5jaC9hdXRoL3JlYWxtcy9SZW5rdSIsInN1YiI6IjVkYWEyODkxLTUzMTAtNDQyOC04OTVkLTEwZjg1OTYxMzIyMyIsInR5cCI6IlJlZnJlc2giLCJhenAiOiJyZW5rdSIsInNlc3Npb25fc3RhdGUiOiI0OWRjNjEzMC0zYThmLTQ4N2EtYTMzNC02NmQ3NzkzMWQ1NjciLCJzY29wZSI6Im9wZW5pZCBlbWFpbCBwcm9maWxlIG1pY3JvcHJvZmlsZS1qd3QiLCJzaWQiOiI0OWRjNjEzMC0zYThmLTQ4N2EtYTMzNC02NmQ3NzkzMWQ1NjcifQ.CmMRyGC5c5ZzkaKh995qRLeEKVs9HHhFHrQ0wyTQHEA"
+                            },
+                            {
+                                "name": "GIT_PROXY_RENKU_REALM",
+                                "value": "Renku"
+                            },
+                            {
+                                "name": "GIT_PROXY_RENKU_CLIENT_ID",
+                                "value": "renku"
+                            },
+                            {
+                                "name": "GIT_PROXY_RENKU_CLIENT_SECRET",
+                                "value": "8395ee80-7d62-47ab-bb00-86f8ad3d5ab8"
+                            },
+                            {
+                                "name": "GIT_PROXY_RENKU_URL",
+                                "value": "https://dev.renku.ch"
+                            },
+                            {
+                                "name": "GIT_PROXY_REPOSITORIES",
+                                "value": "[{\"url\": \"https://github.com/SwissDataScienceCenter/renku-ui\", \"provider\": \"github.com\", \"dirname\": null, \"branch\": null, \"commit_sha\": null}, {\"url\": \"https://justarandomhttps.com\", \"provider\": null, \"dirname\": null, \"branch\": null, \"commit_sha\": null}]"
+                            },
+                            {
+                                "name": "GIT_PROXY_PROVIDERS",
+                                "value": "[{\"id\": \"INTERNAL_GITLAB\", \"access_token_url\": \"http://dev.renku.ch/api/auth/gitlab/exchange\"}, {\"id\": \"github.com\", \"access_token_url\": \"http://dev.renku.ch/api/data/oauth2/connections/01J0TW7NCJPYVE3774Y82AN94D/token\"}, {\"id\": \"gitlab.com\", \"access_token_url\": \"http://dev.renku.ch/api/data/oauth2/connections/01J0TW7AR8TFK027RESK00P9HN/token\"}, {\"id\": \"gitlab.datascience.ch\", \"access_token_url\": \"http://dev.renku.ch/api/data/oauth2/connections/01K9SPVM0J9D2XHXWBZPT4P1F2/token\"}]"
+                            }
+                        ],
+                        "image": "renku/git-https-proxy:1.31.1",
+                        "livenessProbe": {
+                            "httpGet": {
+                                "path": "/health",
+                                "port": 65481
+                            },
+                            "initialDelaySeconds": 3
+                        },
+                        "name": "git-proxy",
+                        "readinessProbe": {
+                            "httpGet": {
+                                "path": "/health",
+                                "port": 65481
+                            },
+                            "initialDelaySeconds": 3
+                        },
+                        "resources": {
+                            "requests": {
+                                "cpu": "50m",
+                                "memory": "16Mi"
+                            }
+                        },
+                        "securityContext": {
+                            "allowPrivilegeEscalation": false,
+                            "capabilities": {
+                                "drop": [
+                                    "ALL"
+                                ]
+                            },
+                            "runAsGroup": 1000,
+                            "runAsNonRoot": true,
+                            "runAsUser": 1000
+                        },
+                        "volumeMounts": [
+                            {
+                                "mountPath": "/etc/ssl/certs/",
+                                "name": "etc-ssl-certs",
+                                "readOnly": true
+                            }
+                        ]
+                    }
+                ],
+                "extraVolumes": [
+                    {
+                        "emptyDir": {
+                            "medium": "Memory"
+                        },
+                        "name": "etc-ssl-certs"
+                    },
+                    {
+                        "name": "custom-ca-certs",
+                        "projected": {
+                            "defaultMode": 440,
+                            "sources": []
+                        }
+                    },
+                    {
+                        "name": "renku-authorized-emails",
+                        "secret": {
+                            "items": [
+                                {
+                                    "key": "authorized_emails",
+                                    "path": "authorized_emails"
+                                }
+                            ],
+                            "secretName": "lorenzo-cava-6735b6189e50"
+                        }
+                    }
+                ],
+                "hibernated": true,
+                "ingress": {
+                    "annotations": {
+                        "kubernetes.io/ingress.class": "webapprouting.kubernetes.azure.com",
+                        "nginx.ingress.kubernetes.io/proxy-body-size": "0",
+                        "nginx.ingress.kubernetes.io/proxy-buffer-size": "8k",
+                        "nginx.ingress.kubernetes.io/proxy-request-buffering": "off"
+                    },
+                    "host": "dev.renku.ch",
+                    "ingressClassName": "webapprouting.kubernetes.azure.com",
+                    "pathPrefix": "/sessions/lorenzo-cava-6735b6189e50",
+                    "tlsSecret": {
+                        "adopt": false,
+                        "name": "dev-azure-renku-ch-tls"
+                    }
+                },
+                "initContainers": [
+                    {
+                        "image": "renku/certificates:0.0.2",
+                        "name": "init-certificates",
+                        "resources": {
+                            "requests": {
+                                "cpu": "50m",
+                                "memory": "50Mi"
+                            }
+                        },
+                        "securityContext": {
+                            "allowPrivilegeEscalation": false,
+                            "capabilities": {
+                                "drop": [
+                                    "ALL"
+                                ]
+                            },
+                            "runAsGroup": 1000,
+                            "runAsNonRoot": true,
+                            "runAsUser": 1000
+                        },
+                        "volumeMounts": [
+                            {
+                                "mountPath": "/etc/ssl/certs/",
+                                "name": "etc-ssl-certs"
+                            },
+                            {
+                                "mountPath": "/usr/local/share/ca-certificates",
+                                "name": "custom-ca-certs",
+                                "readOnly": true
+                            }
+                        ]
+                    },
+                    {
+                        "env": [
+                            {
+                                "name": "GIT_CLONE_MOUNT_PATH",
+                                "value": "/home/jovyan/work"
+                            },
+                            {
+                                "name": "GIT_CLONE_LFS_AUTO_FETCH",
+                                "value": "0"
+                            },
+                            {
+                                "name": "GIT_CLONE_USER__USERNAME",
+                                "value": "lorenzo.cavazzi.tech@gmail.com"
+                            },
+                            {
+                                "name": "GIT_CLONE_USER__RENKU_TOKEN",
+                                "value": "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJzanJ4SURja21tTjhWdmlPcFRHY3ZhSmxSWGRrSWdScXp0WjVPNnZWeE9BIn0.eyJleHAiOjE3Njg0ODQ0NjQsImlhdCI6MTc2ODQ4MjY2NCwiYXV0aF90aW1lIjoxNzY4NDgyNjY0LCJqdGkiOiIyNDQ0MmUxNi02MTljLTRiMTktOTQ3ZS04ZmI2NmE0YjYzODIiLCJpc3MiOiJodHRwczovL2Rldi5yZW5rdS5jaC9hdXRoL3JlYWxtcy9SZW5rdSIsImF1ZCI6WyJyZW5rdSIsInJlYWxtLW1hbmFnZW1lbnQiLCJhY2NvdW50Il0sInN1YiI6IjVkYWEyODkxLTUzMTAtNDQyOC04OTVkLTEwZjg1OTYxMzIyMyIsInR5cCI6IkJlYXJlciIsImF6cCI6InJlbmt1Iiwic2Vzc2lvbl9zdGF0ZSI6IjQ5ZGM2MTMwLTNhOGYtNDg3YS1hMzM0LTY2ZDc3OTMxZDU2NyIsImFjciI6IjEiLCJhbGxvd2VkLW9yaWdpbnMiOlsiaHR0cHM6Ly9kZXYucmVua3UuY2gvKiJdLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsiZGVmYXVsdC1yb2xlcy02MWFlNzg5OC01MGRhLTQwODgtYTkwZS1mOTcwMDJiMWZiMDMiLCJvZmZsaW5lX2FjY2VzcyIsInJlbmt1LWFkbWluIiwidW1hX2F1dGhvcml6YXRpb24iXX0sInJlc291cmNlX2FjY2VzcyI6eyJyZWFsbS1tYW5hZ2VtZW50Ijp7InJvbGVzIjpbInZpZXctdXNlcnMiLCJxdWVyeS1ncm91cHMiLCJxdWVyeS11c2VycyJdfSwiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJvcGVuaWQgZW1haWwgcHJvZmlsZSBtaWNyb3Byb2ZpbGUtand0Iiwic2lkIjoiNDlkYzYxMzAtM2E4Zi00ODdhLWEzMzQtNjZkNzc5MzFkNTY3IiwidXBuIjoibG9yZW56by5jYXZhenppLnRlY2hAZ21haWwuY29tIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsIm5hbWUiOiJMb3JlbsWhbyBDYXbDpHp6aSIsImdyb3VwcyI6WyJkZWZhdWx0LXJvbGVzLTYxYWU3ODk4LTUwZGEtNDA4OC1hOTBlLWY5NzAwMmIxZmIwMyIsIm9mZmxpbmVfYWNjZXNzIiwicmVua3UtYWRtaW4iLCJ1bWFfYXV0aG9yaXphdGlvbiJdLCJwcmVmZXJyZWRfdXNlcm5hbWUiOiJsb3JlbnpvLmNhdmF6emkudGVjaEBnbWFpbC5jb20iLCJnaXZlbl9uYW1lIjoiTG9yZW7FoW8iLCJmYW1pbHlfbmFtZSI6IkNhdsOkenppIiwiZW1haWwiOiJsb3JlbnpvLmNhdmF6emkudGVjaEBnbWFpbC5jb20ifQ.k5cCcTeYHjQhtMlzbjiSAGFcBXvJ_fvG9YhfL5RkeCTNaZU4HN6ZXqO0awdaYCOnGKYnDdFNuWoRk5W2MoLxl8I0szUYyKb3H4YFLhg1nNTKowlIPUztjb7cgBgsZLa_oWzkYSRZBjk8yS_8P3ve1ylHtwQoEoL6_tiFgk7RmrYbydST2thhanRDtj2_DLGos4DbOatlof3y0iP_LtatVIlzd9gxIHtetWdpOyDBE-pw-oLxin6YT-ntK2TmlmT6fw8ae_Sf2NwquJnIwdCK0ar-ocq3FR9XRWi6sQ1V1Rxg8FOaYUYDUQuBormZKWHaF8-3tKQeUlr4MqVcShzgxA"
+                            },
+                            {
+                                "name": "GIT_CLONE_IS_GIT_PROXY_ENABLED",
+                                "value": "1"
+                            },
+                            {
+                                "name": "GIT_CLONE_SENTRY__ENABLED",
+                                "value": "false"
+                            },
+                            {
+                                "name": "GIT_CLONE_SENTRY__DSN"
+                            },
+                            {
+                                "name": "GIT_CLONE_SENTRY__ENVIRONMENT"
+                            },
+                            {
+                                "name": "GIT_CLONE_SENTRY__SAMPLE_RATE",
+                                "value": "0.2"
+                            },
+                            {
+                                "name": "SENTRY_RELEASE"
+                            },
+                            {
+                                "name": "REQUESTS_CA_BUNDLE",
+                                "value": "/etc/ssl/certs/ca-certificates.crt"
+                            },
+                            {
+                                "name": "SSL_CERT_FILE",
+                                "value": "/etc/ssl/certs/ca-certificates.crt"
+                            },
+                            {
+                                "name": "GIT_CLONE_GIT_PROXY_PORT",
+                                "value": "65480"
+                            },
+                            {
+                                "name": "GIT_CLONE_USER__EMAIL",
+                                "value": "lorenzo.cavazzi.tech@gmail.com"
+                            },
+                            {
+                                "name": "GIT_CLONE_USER__FULL_NAME",
+                                "value": "Lorenšo Caväzzi"
+                            },
+                            {
+                                "name": "GIT_CLONE_REPOSITORIES_0_",
+                                "value": "{\"url\": \"https://github.com/SwissDataScienceCenter/renku-ui\", \"provider\": \"github.com\", \"dirname\": null, \"branch\": null, \"commit_sha\": null}"
+                            },
+                            {
+                                "name": "GIT_CLONE_REPOSITORIES_1_",
+                                "value": "{\"url\": \"https://justarandomhttps.com\", \"provider\": null, \"dirname\": null, \"branch\": null, \"commit_sha\": null}"
+                            },
+                            {
+                                "name": "GIT_CLONE_GIT_PROVIDERS_0_",
+                                "value": "{\"id\": \"github.com\", \"access_token_url\": \"http://dev.renku.ch/api/data/oauth2/connections/01J0TW7NCJPYVE3774Y82AN94D/token\"}"
+                            }
+                        ],
+                        "image": "renku/git-clone:1.31.1",
+                        "name": "git-clone",
+                        "resources": {
+                            "requests": {
+                                "cpu": "100m",
+                                "memory": "100Mi"
+                            }
+                        },
+                        "securityContext": {
+                            "allowPrivilegeEscalation": false,
+                            "capabilities": {
+                                "drop": [
+                                    "ALL"
+                                ]
+                            },
+                            "runAsGroup": 100,
+                            "runAsNonRoot": true,
+                            "runAsUser": 1000
+                        },
+                        "volumeMounts": [
+                            {
+                                "mountPath": "/home/jovyan/work",
+                                "name": "amalthea-volume"
+                            },
+                            {
+                                "mountPath": "/etc/ssl/certs/",
+                                "name": "etc-ssl-certs",
+                                "readOnly": true
+                            }
+                        ]
+                    }
+                ],
+                "location": "local",
+                "reconcileStrategy": "whenFailedOrHibernated",
+                "session": {
+                    "args": [
+                        "/entrypoint.sh jupyter server --ServerApp.ip=0.0.0.0 --ServerApp.port=8888 --ServerApp.base_url=$RENKU_BASE_URL_PATH --ServerApp.token=\"\" --ServerApp.password=\"\" --ServerApp.allow_remote_access=true --ContentsManager.allow_hidden=true --ServerApp.allow_origin=* --ServerApp.root_dir=\"/home/jovyan/work\""
+                    ],
+                    "command": [
+                        "sh",
+                        "-c"
+                    ],
+                    "env": [
+                        {
+                            "name": "RENKU_BASE_URL_PATH",
+                            "value": "/sessions/lorenzo-cava-6735b6189e50"
+                        },
+                        {
+                            "name": "RENKU_BASE_URL",
+                            "value": "https://dev.renku.ch/sessions/lorenzo-cava-6735b6189e50"
+                        },
+                        {
+                            "name": "RENKU_MOUNT_DIR",
+                            "value": "/home/jovyan/work"
+                        },
+                        {
+                            "name": "RENKU_SESSION",
+                            "value": "1"
+                        },
+                        {
+                            "name": "RENKU_SESSION_IP",
+                            "value": "0.0.0.0"
+                        },
+                        {
+                            "name": "RENKU_SESSION_PORT",
+                            "value": "8888"
+                        },
+                        {
+                            "name": "RENKU_WORKING_DIR",
+                            "value": "/home/jovyan/work"
+                        },
+                        {
+                            "name": "RENKU_SECRETS_PATH",
+                            "value": "/secrets"
+                        },
+                        {
+                            "name": "RENKU_PROJECT_ID",
+                            "value": "01K82WQ20PNMCTDR7A6JD4B3A8"
+                        },
+                        {
+                            "name": "RENKU_PROJECT_PATH",
+                            "value": "lorenzo.cavazzi.tech/test"
+                        },
+                        {
+                            "name": "RENKU_LAUNCHER_ID",
+                            "value": "01K82X2T9VKZRH7XQ19NRF2F3F"
+                        }
+                    ],
+                    "image": "renku/renkulab-py:3.10-0.23.0",
+                    "imagePullPolicy": "Always",
+                    "port": 8888,
+                    "readinessProbe": {
+                        "type": "tcp"
+                    },
+                    "resources": {
+                        "limits": {
+                            "memory": "1Gi"
+                        },
+                        "requests": {
+                            "cpu": "500m",
+                            "memory": "1Gi"
+                        }
+                    },
+                    "runAsGroup": 100,
+                    "runAsUser": 1000,
+                    "shmSize": "1G",
+                    "storage": {
+                        "mountPath": "/home/jovyan/work",
+                        "size": "1G"
+                    },
+                    "stripURLPath": false,
+                    "urlPath": "/sessions/lorenzo-cava-6735b6189e50/lab",
+                    "workingDir": "/home/jovyan/work"
+                },
+                "tolerations": [
+                    {
+                        "effect": "NoSchedule",
+                        "key": "renku.io/dedicated",
+                        "operator": "Equal",
+                        "value": "user"
+                    }
+                ]
+            },
+            "status": {
+                "conditions": [
+                    {
+                        "lastTransitionTime": "2026-01-16T02:09:41Z",
+                        "message": "The session is hibernated",
+                        "reason": "Hibernated",
+                        "status": "False",
+                        "type": "Ready"
+                    },
+                    {
+                        "lastTransitionTime": "2026-01-15T13:11:17Z",
+                        "message": "The ingress is setup and operational",
+                        "reason": "IngressOperational",
+                        "status": "True",
+                        "type": "RoutingReady"
+                    }
+                ],
+                "containerCounts": {},
+                "hibernatedSince": "2026-01-16T02:09:41Z",
+                "idle": false,
+                "initContainerCounts": {},
+                "state": "Hibernated",
+                "url": "https://dev.renku.ch/sessions/lorenzo-cava-6735b6189e50/lab/"
+            }
+        }
+    ],
+    "kind": "List",
+    "metadata": {
+        "resourceVersion": ""
+    }
+}
+{
+    "apiVersion": "amalthea.dev/v1alpha1",
+    "kind": "AmaltheaSession",
+    "metadata": {
+        "annotations": {
+            "renku.io/launcher_id": "01KCVFZW2N6S20JAY67K30JNJ7",
+            "renku.io/project_id": "01KCVFX9BVTADB8SGHN7RJFJAP",
+            "renku.io/resource_class_id": "4"
+        },
+        "creationTimestamp": "2026-01-14T14:42:04Z",
+        "finalizers": [
+            "amalthea.dev/secrets-finalizer"
+        ],
+        "generation": 6,
+        "labels": {
+            "renku.io/safe-username": "c59e6907-e670-4e03-a1b7-18616bb4678e"
+        },
+        "name": "eike-kettner-962026d34ba4",
+        "namespace": "renku",
+        "resourceVersion": "363666425",
+        "uid": "3f51dcde-04fa-4a50-a887-a95ec0887145"
+    },
+    "spec": {
+        "affinity": {
+            "nodeAffinity": {
+                "requiredDuringSchedulingIgnoredDuringExecution": {
+                    "nodeSelectorTerms": [
+                        {
+                            "matchExpressions": [
+                                {
+                                    "key": "renku.io/node-purpose",
+                                    "operator": "In",
+                                    "values": [
+                                        "user"
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        },
+        "authentication": {
+            "enabled": true,
+            "extraVolumeMounts": [
+                {
+                    "mountPath": "/authorized_emails",
+                    "name": "renku-authorized-emails",
+                    "subPath": "authorized_emails"
+                },
+                {
+                    "mountPath": "/etc/ssl/certs/",
+                    "name": "etc-ssl-certs",
+                    "readOnly": true
+                },
+                {
+                    "mountPath": "/usr/local/share/ca-certificates",
+                    "name": "custom-ca-certs",
+                    "readOnly": true
+                }
+            ],
+            "secretRef": {
+                "adopt": true,
+                "key": "auth",
+                "name": "eike-kettner-962026d34ba4"
+            },
+            "type": "oauth2proxy"
+        },
+        "culling": {
+            "cpuIdleThreshold": "300m",
+            "maxAge": "0s",
+            "maxFailedDuration": "0s",
+            "maxHibernatedDuration": "336h15m0s",
+            "maxIdleDuration": "12h15m0s",
+            "maxStartingDuration": "0s"
+        },
+        "extraVolumes": [
+            {
+                "emptyDir": {
+                    "medium": "Memory"
+                },
+                "name": "etc-ssl-certs"
+            },
+            {
+                "name": "custom-ca-certs",
+                "projected": {
+                    "defaultMode": 440,
+                    "sources": []
+                }
+            },
+            {
+                "name": "renku-authorized-emails",
+                "secret": {
+                    "items": [
+                        {
+                            "key": "authorized_emails",
+                            "path": "authorized_emails"
+                        }
+                    ],
+                    "secretName": "eike-kettner-962026d34ba4"
+                }
+            }
+        ],
+        "hibernated": false,
+        "ingress": {
+            "annotations": {
+                "kubernetes.io/ingress.class": "webapprouting.kubernetes.azure.com",
+                "nginx.ingress.kubernetes.io/proxy-body-size": "0",
+                "nginx.ingress.kubernetes.io/proxy-buffer-size": "8k",
+                "nginx.ingress.kubernetes.io/proxy-request-buffering": "off"
+            },
+            "host": "dev.renku.ch",
+            "ingressClassName": "webapprouting.kubernetes.azure.com",
+            "pathPrefix": "/sessions/eike-kettner-962026d34ba4",
+            "tlsSecret": {
+                "adopt": false,
+                "name": "dev-azure-renku-ch-tls"
+            }
+        },
+        "initContainers": [
+            {
+                "image": "renku/certificates:0.0.2",
+                "name": "init-certificates",
+                "resources": {
+                    "requests": {
+                        "cpu": "50m",
+                        "memory": "50Mi"
+                    }
+                },
+                "securityContext": {
+                    "allowPrivilegeEscalation": false,
+                    "capabilities": {
+                        "drop": [
+                            "ALL"
+                        ]
+                    },
+                    "runAsGroup": 1000,
+                    "runAsNonRoot": true,
+                    "runAsUser": 1000
+                },
+                "volumeMounts": [
+                    {
+                        "mountPath": "/etc/ssl/certs/",
+                        "name": "etc-ssl-certs",
+                        "readOnly": false
+                    },
+                    {
+                        "mountPath": "/usr/local/share/ca-certificates",
+                        "name": "custom-ca-certs",
+                        "readOnly": true
+                    }
+                ]
+            }
+        ],
+        "location": "local",
+        "reconcileStrategy": "whenFailedOrHibernated",
+        "session": {
+            "env": [
+                {
+                    "name": "RENKU_BASE_URL_PATH",
+                    "value": "/sessions/eike-kettner-962026d34ba4"
+                },
+                {
+                    "name": "RENKU_BASE_URL",
+                    "value": "https://dev.renku.ch/sessions/eike-kettner-962026d34ba4"
+                },
+                {
+                    "name": "RENKU_MOUNT_DIR",
+                    "value": "/home/renku/work"
+                },
+                {
+                    "name": "RENKU_SESSION",
+                    "value": "1"
+                },
+                {
+                    "name": "RENKU_SESSION_IP",
+                    "value": "0.0.0.0"
+                },
+                {
+                    "name": "RENKU_SESSION_PORT",
+                    "value": "8888"
+                },
+                {
+                    "name": "RENKU_WORKING_DIR",
+                    "value": "/home/renku/work"
+                },
+                {
+                    "name": "RENKU_SECRETS_PATH",
+                    "value": "/secrets"
+                },
+                {
+                    "name": "RENKU_PROJECT_ID",
+                    "value": "01KCVFX9BVTADB8SGHN7RJFJAP"
+                },
+                {
+                    "name": "RENKU_PROJECT_PATH",
+                    "value": "eike.kettner/next-project-test"
+                },
+                {
+                    "name": "RENKU_LAUNCHER_ID",
+                    "value": "01KCVFZW2N6S20JAY67K30JNJ7"
+                }
+            ],
+            "image": "ghcr.io/swissdatasciencecenter/renku/py-basic-ttyd:2.9.0",
+            "imagePullPolicy": "Always",
+            "port": 8888,
+            "readinessProbe": {
+                "type": "tcp"
+            },
+            "resources": {
+                "limits": {
+                    "memory": "1Gi"
+                },
+                "requests": {
+                    "cpu": "500m",
+                    "memory": "1Gi"
+                }
+            },
+            "runAsGroup": 1000,
+            "runAsUser": 1000,
+            "shmSize": "1G",
+            "storage": {
+                "mountPath": "/home/renku/work",
+                "size": "1G"
+            },
+            "stripURLPath": false,
+            "urlPath": "/sessions/eike-kettner-962026d34ba4/",
+            "workingDir": "/home/renku/work"
+        },
+        "tolerations": [
+            {
+                "effect": "NoSchedule",
+                "key": "renku.io/dedicated",
+                "operator": "Equal",
+                "value": "user"
+            }
+        ]
+    },
+    "status": {
+        "conditions": [
+            {
+                "lastTransitionTime": "2026-01-20T13:28:13Z",
+                "message": "The session is running",
+                "reason": "Running",
+                "status": "True",
+                "type": "Ready"
+            },
+            {
+                "lastTransitionTime": "2026-01-14T14:42:04Z",
+                "message": "The ingress is setup and operational",
+                "reason": "IngressOperational",
+                "status": "True",
+                "type": "RoutingReady"
+            }
+        ],
+        "containerCounts": {
+            "ready": 3,
+            "total": 3
+        },
+        "failedSchedulingSince": "2026-01-20T10:29:25Z",
+        "idle": true,
+        "idleSince": "2026-01-20T13:28:13Z",
+        "initContainerCounts": {
+            "ready": 1,
+            "total": 1
+        },
+        "state": "Running",
+        "url": "https://dev.renku.ch/sessions/eike-kettner-962026d34ba4/",
+        "willHibernateAt": "2026-01-21T01:43:13Z"
+    }
+}
