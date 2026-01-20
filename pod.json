@@ -1,0 +1,560 @@
+{
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+        "creationTimestamp": "2026-01-20T10:29:25Z",
+        "generateName": "eike-kettner-962026d34ba4-",
+        "labels": {
+            "app.kubernetes.io/created-by": "controller-manager",
+            "app.kubernetes.io/instance": "eike-kettner-962026d34ba4",
+            "app.kubernetes.io/name": "AmaltheaSession",
+            "app.kubernetes.io/part-of": "amaltheasession-operator",
+            "apps.kubernetes.io/pod-index": "0",
+            "controller-revision-hash": "eike-kettner-962026d34ba4-555f574fb7",
+            "statefulset.kubernetes.io/pod-name": "eike-kettner-962026d34ba4-0"
+        },
+        "name": "eike-kettner-962026d34ba4-0",
+        "namespace": "renku",
+        "ownerReferences": [
+            {
+                "apiVersion": "apps/v1",
+                "blockOwnerDeletion": true,
+                "controller": true,
+                "kind": "StatefulSet",
+                "name": "eike-kettner-962026d34ba4",
+                "uid": "ea7052d5-8e31-4212-9148-d58ef38f055d"
+            }
+        ],
+        "resourceVersion": "363666413",
+        "uid": "aa36ed58-0484-4e93-8daa-1212263dbc47"
+    },
+    "spec": {
+        "affinity": {
+            "nodeAffinity": {
+                "requiredDuringSchedulingIgnoredDuringExecution": {
+                    "nodeSelectorTerms": [
+                        {
+                            "matchExpressions": [
+                                {
+                                    "key": "renku.io/node-purpose",
+                                    "operator": "In",
+                                    "values": [
+                                        "user"
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        },
+        "automountServiceAccountToken": false,
+        "containers": [
+            {
+                "env": [
+                    {
+                        "name": "RENKU_BASE_URL_PATH",
+                        "value": "/sessions/eike-kettner-962026d34ba4"
+                    },
+                    {
+                        "name": "RENKU_BASE_URL",
+                        "value": "https://dev.renku.ch/sessions/eike-kettner-962026d34ba4"
+                    },
+                    {
+                        "name": "RENKU_MOUNT_DIR",
+                        "value": "/home/renku/work"
+                    },
+                    {
+                        "name": "RENKU_SESSION",
+                        "value": "1"
+                    },
+                    {
+                        "name": "RENKU_SESSION_IP",
+                        "value": "0.0.0.0"
+                    },
+                    {
+                        "name": "RENKU_SESSION_PORT",
+                        "value": "8888"
+                    },
+                    {
+                        "name": "RENKU_WORKING_DIR",
+                        "value": "/home/renku/work"
+                    },
+                    {
+                        "name": "RENKU_SECRETS_PATH",
+                        "value": "/secrets"
+                    },
+                    {
+                        "name": "RENKU_PROJECT_ID",
+                        "value": "01KCVFX9BVTADB8SGHN7RJFJAP"
+                    },
+                    {
+                        "name": "RENKU_PROJECT_PATH",
+                        "value": "eike.kettner/next-project-test"
+                    },
+                    {
+                        "name": "RENKU_LAUNCHER_ID",
+                        "value": "01KCVFZW2N6S20JAY67K30JNJ7"
+                    }
+                ],
+                "image": "ghcr.io/swissdatasciencecenter/renku/py-basic-ttyd:2.9.0",
+                "imagePullPolicy": "Always",
+                "name": "amalthea-session",
+                "readinessProbe": {
+                    "failureThreshold": 3,
+                    "initialDelaySeconds": 10,
+                    "periodSeconds": 5,
+                    "successThreshold": 5,
+                    "tcpSocket": {
+                        "port": 8888
+                    },
+                    "timeoutSeconds": 1
+                },
+                "resources": {
+                    "limits": {
+                        "memory": "1Gi"
+                    },
+                    "requests": {
+                        "cpu": "500m",
+                        "memory": "1Gi"
+                    }
+                },
+                "securityContext": {
+                    "runAsGroup": 1000,
+                    "runAsNonRoot": true,
+                    "runAsUser": 1000
+                },
+                "terminationMessagePath": "/dev/termination-log",
+                "terminationMessagePolicy": "File",
+                "volumeMounts": [
+                    {
+                        "mountPath": "/home/renku/work",
+                        "name": "amalthea-volume"
+                    },
+                    {
+                        "mountPath": "/dev/shm",
+                        "name": "amalthea-dev-shm"
+                    }
+                ]
+            },
+            {
+                "args": [
+                    "--upstream=http://127.0.0.1:65533",
+                    "--http-address=:65535",
+                    "--silence-ping-logging",
+                    "--config=/etc/oauth2-proxy/auth"
+                ],
+                "image": "harbor.renkulab.io/bitnami-mirror/oauth2-proxy:7.6.0",
+                "imagePullPolicy": "IfNotPresent",
+                "livenessProbe": {
+                    "failureThreshold": 3,
+                    "httpGet": {
+                        "path": "/ping",
+                        "port": 65535,
+                        "scheme": "HTTP"
+                    },
+                    "periodSeconds": 10,
+                    "successThreshold": 1,
+                    "timeoutSeconds": 1
+                },
+                "name": "oauth2-proxy",
+                "readinessProbe": {
+                    "failureThreshold": 3,
+                    "httpGet": {
+                        "path": "/ping",
+                        "port": 65535,
+                        "scheme": "HTTP"
+                    },
+                    "periodSeconds": 10,
+                    "successThreshold": 1,
+                    "timeoutSeconds": 1
+                },
+                "resources": {
+                    "limits": {
+                        "memory": "32Mi"
+                    },
+                    "requests": {
+                        "cpu": "20m",
+                        "memory": "16Mi"
+                    }
+                },
+                "securityContext": {
+                    "allowPrivilegeEscalation": false,
+                    "runAsNonRoot": true
+                },
+                "terminationMessagePath": "/dev/termination-log",
+                "terminationMessagePolicy": "File",
+                "volumeMounts": [
+                    {
+                        "mountPath": "/etc/oauth2-proxy",
+                        "name": "amalthea-proxy-configuration-secret"
+                    },
+                    {
+                        "mountPath": "/authorized_emails",
+                        "name": "renku-authorized-emails",
+                        "subPath": "authorized_emails"
+                    },
+                    {
+                        "mountPath": "/etc/ssl/certs/",
+                        "name": "etc-ssl-certs",
+                        "readOnly": true
+                    },
+                    {
+                        "mountPath": "/usr/local/share/ca-certificates",
+                        "name": "custom-ca-certs",
+                        "readOnly": true
+                    }
+                ]
+            },
+            {
+                "args": [
+                    "proxy",
+                    "serve",
+                    "--verbose"
+                ],
+                "env": [
+                    {
+                        "name": "AUTHPROXY_PORT",
+                        "value": "65533"
+                    },
+                    {
+                        "name": "AUTHPROXY_META_PORT",
+                        "value": "65534"
+                    },
+                    {
+                        "name": "AUTHPROXY_REMOTE",
+                        "value": "http://127.0.0.1:8888"
+                    }
+                ],
+                "image": "renku/sidecars:0.23.0",
+                "imagePullPolicy": "IfNotPresent",
+                "livenessProbe": {
+                    "failureThreshold": 3,
+                    "httpGet": {
+                        "path": "/__amalthea__/health",
+                        "port": 65533,
+                        "scheme": "HTTP"
+                    },
+                    "periodSeconds": 10,
+                    "successThreshold": 1,
+                    "timeoutSeconds": 1
+                },
+                "name": "authproxy",
+                "readinessProbe": {
+                    "failureThreshold": 3,
+                    "httpGet": {
+                        "path": "/__amalthea__/health",
+                        "port": 65533,
+                        "scheme": "HTTP"
+                    },
+                    "periodSeconds": 10,
+                    "successThreshold": 1,
+                    "timeoutSeconds": 1
+                },
+                "resources": {
+                    "limits": {
+                        "memory": "32Mi"
+                    },
+                    "requests": {
+                        "cpu": "20m",
+                        "memory": "16Mi"
+                    }
+                },
+                "securityContext": {
+                    "allowPrivilegeEscalation": false,
+                    "runAsGroup": 1000,
+                    "runAsNonRoot": true,
+                    "runAsUser": 1000
+                },
+                "terminationMessagePath": "/dev/termination-log",
+                "terminationMessagePolicy": "File"
+            }
+        ],
+        "dnsPolicy": "ClusterFirst",
+        "enableServiceLinks": false,
+        "hostname": "eike-kettner-962026d34ba4-0",
+        "initContainers": [
+            {
+                "image": "renku/certificates:0.0.2",
+                "imagePullPolicy": "IfNotPresent",
+                "name": "init-certificates",
+                "resources": {
+                    "requests": {
+                        "cpu": "50m",
+                        "memory": "50Mi"
+                    }
+                },
+                "securityContext": {
+                    "allowPrivilegeEscalation": false,
+                    "capabilities": {
+                        "drop": [
+                            "ALL"
+                        ]
+                    },
+                    "runAsGroup": 1000,
+                    "runAsNonRoot": true,
+                    "runAsUser": 1000
+                },
+                "terminationMessagePath": "/dev/termination-log",
+                "terminationMessagePolicy": "File",
+                "volumeMounts": [
+                    {
+                        "mountPath": "/etc/ssl/certs/",
+                        "name": "etc-ssl-certs"
+                    },
+                    {
+                        "mountPath": "/usr/local/share/ca-certificates",
+                        "name": "custom-ca-certs",
+                        "readOnly": true
+                    }
+                ]
+            }
+        ],
+        "nodeName": "aks-default4-14526025-vmss000000",
+        "preemptionPolicy": "PreemptLowerPriority",
+        "priority": 0,
+        "restartPolicy": "Always",
+        "schedulerName": "default-scheduler",
+        "securityContext": {
+            "fsGroup": 1000
+        },
+        "serviceAccount": "default",
+        "serviceAccountName": "default",
+        "terminationGracePeriodSeconds": 30,
+        "tolerations": [
+            {
+                "effect": "NoSchedule",
+                "key": "renku.io/dedicated",
+                "operator": "Equal",
+                "value": "user"
+            },
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/not-ready",
+                "operator": "Exists",
+                "tolerationSeconds": 300
+            },
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/unreachable",
+                "operator": "Exists",
+                "tolerationSeconds": 300
+            },
+            {
+                "effect": "NoSchedule",
+                "key": "node.kubernetes.io/memory-pressure",
+                "operator": "Exists"
+            }
+        ],
+        "volumes": [
+            {
+                "name": "amalthea-volume",
+                "persistentVolumeClaim": {
+                    "claimName": "eike-kettner-962026d34ba4"
+                }
+            },
+            {
+                "emptyDir": {
+                    "medium": "Memory",
+                    "sizeLimit": "1G"
+                },
+                "name": "amalthea-dev-shm"
+            },
+            {
+                "emptyDir": {
+                    "medium": "Memory"
+                },
+                "name": "etc-ssl-certs"
+            },
+            {
+                "name": "custom-ca-certs",
+                "projected": {
+                    "defaultMode": 440,
+                    "sources": null
+                }
+            },
+            {
+                "name": "renku-authorized-emails",
+                "secret": {
+                    "defaultMode": 420,
+                    "items": [
+                        {
+                            "key": "authorized_emails",
+                            "path": "authorized_emails"
+                        }
+                    ],
+                    "secretName": "eike-kettner-962026d34ba4"
+                }
+            },
+            {
+                "name": "amalthea-proxy-configuration-secret",
+                "secret": {
+                    "defaultMode": 420,
+                    "optional": false,
+                    "secretName": "eike-kettner-962026d34ba4"
+                }
+            }
+        ]
+    },
+    "status": {
+        "conditions": [
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-01-20T13:26:13Z",
+                "status": "True",
+                "type": "PodReadyToStartContainers"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-01-20T13:26:16Z",
+                "status": "True",
+                "type": "Initialized"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-01-20T13:28:13Z",
+                "status": "True",
+                "type": "Ready"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-01-20T13:28:13Z",
+                "status": "True",
+                "type": "ContainersReady"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-01-20T13:25:54Z",
+                "status": "True",
+                "type": "PodScheduled"
+            }
+        ],
+        "containerStatuses": [
+            {
+                "containerID": "containerd://ec10921183016b8b8753f5b564f350758746338a07bf28767435d408a6c9daeb",
+                "image": "ghcr.io/swissdatasciencecenter/renku/py-basic-ttyd:2.9.0",
+                "imageID": "ghcr.io/swissdatasciencecenter/renku/py-basic-ttyd@sha256:05273a0c21dcbad748f7c46d1b3441eca9946bc306c8b66a6358064fc158f2f9",
+                "lastState": {},
+                "name": "amalthea-session",
+                "ready": true,
+                "restartCount": 0,
+                "started": true,
+                "state": {
+                    "running": {
+                        "startedAt": "2026-01-20T13:27:31Z"
+                    }
+                },
+                "volumeMounts": [
+                    {
+                        "mountPath": "/home/renku/work",
+                        "name": "amalthea-volume"
+                    },
+                    {
+                        "mountPath": "/dev/shm",
+                        "name": "amalthea-dev-shm"
+                    }
+                ]
+            },
+            {
+                "containerID": "containerd://35e692fef99809cd6465f23ed09e21381b86c2c8b677f8973a6f59a40e3726eb",
+                "image": "docker.io/renku/sidecars:0.23.0",
+                "imageID": "docker.io/renku/sidecars@sha256:3f1dc52b4cd6d9d32d51df5e01563a9a0274285c11afd593a332ae912859d2f2",
+                "lastState": {},
+                "name": "authproxy",
+                "ready": true,
+                "restartCount": 0,
+                "started": true,
+                "state": {
+                    "running": {
+                        "startedAt": "2026-01-20T13:28:01Z"
+                    }
+                }
+            },
+            {
+                "containerID": "containerd://4949659f8ce9e1c35cc9bc28c28f0d21257f3952da4f7d887ecdad89d4044a33",
+                "image": "harbor.renkulab.io/bitnami-mirror/oauth2-proxy:7.6.0",
+                "imageID": "harbor.renkulab.io/bitnami-mirror/oauth2-proxy@sha256:5ab039546313f08255b6f2be20a81a453c07960b1b3e9cf561c9860fd9c3d71b",
+                "lastState": {},
+                "name": "oauth2-proxy",
+                "ready": true,
+                "restartCount": 0,
+                "started": true,
+                "state": {
+                    "running": {
+                        "startedAt": "2026-01-20T13:27:31Z"
+                    }
+                },
+                "volumeMounts": [
+                    {
+                        "mountPath": "/etc/oauth2-proxy",
+                        "name": "amalthea-proxy-configuration-secret"
+                    },
+                    {
+                        "mountPath": "/authorized_emails",
+                        "name": "renku-authorized-emails"
+                    },
+                    {
+                        "mountPath": "/etc/ssl/certs/",
+                        "name": "etc-ssl-certs",
+                        "readOnly": true,
+                        "recursiveReadOnly": "Disabled"
+                    },
+                    {
+                        "mountPath": "/usr/local/share/ca-certificates",
+                        "name": "custom-ca-certs",
+                        "readOnly": true,
+                        "recursiveReadOnly": "Disabled"
+                    }
+                ]
+            }
+        ],
+        "hostIP": "10.224.0.15",
+        "hostIPs": [
+            {
+                "ip": "10.224.0.15"
+            }
+        ],
+        "initContainerStatuses": [
+            {
+                "containerID": "containerd://3563929dd076d382b7e1a17f4d39404bbb8da99323d592ec14fcdace5044e1a0",
+                "image": "docker.io/renku/certificates:0.0.2",
+                "imageID": "docker.io/renku/certificates@sha256:1de1b0ea14bfcae077d70336215ff57427817bbcc05327613cfbdd4280c39609",
+                "lastState": {},
+                "name": "init-certificates",
+                "ready": true,
+                "restartCount": 0,
+                "started": false,
+                "state": {
+                    "terminated": {
+                        "containerID": "containerd://3563929dd076d382b7e1a17f4d39404bbb8da99323d592ec14fcdace5044e1a0",
+                        "exitCode": 0,
+                        "finishedAt": "2026-01-20T13:26:12Z",
+                        "reason": "Completed",
+                        "startedAt": "2026-01-20T13:26:12Z"
+                    }
+                },
+                "volumeMounts": [
+                    {
+                        "mountPath": "/etc/ssl/certs/",
+                        "name": "etc-ssl-certs"
+                    },
+                    {
+                        "mountPath": "/usr/local/share/ca-certificates",
+                        "name": "custom-ca-certs",
+                        "readOnly": true,
+                        "recursiveReadOnly": "Disabled"
+                    }
+                ]
+            }
+        ],
+        "phase": "Running",
+        "podIP": "10.244.0.8",
+        "podIPs": [
+            {
+                "ip": "10.244.0.8"
+            }
+        ],
+        "qosClass": "Burstable",
+        "startTime": "2026-01-20T13:25:54Z"
+    }
+}
