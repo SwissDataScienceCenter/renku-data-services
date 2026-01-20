@@ -8,7 +8,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from renku_data_services.k8s.client_interfaces import K8sClient
 from yaml import safe_load
 
 import renku_data_services.base_models as base_models
@@ -36,6 +35,7 @@ from renku_data_services.data_connectors.db import (
     DataConnectorSecretRepository,
 )
 from renku_data_services.git.gitlab import DummyGitlabAPI, EmptyGitlabAPI, GitlabAPI
+from renku_data_services.k8s.client_interfaces import K8sClient
 from renku_data_services.k8s.clients import (
     K8sClusterClientsPool,
     K8sResourceQuotaClient,

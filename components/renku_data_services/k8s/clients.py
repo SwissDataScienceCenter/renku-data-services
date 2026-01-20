@@ -489,10 +489,17 @@ class K8sClusterClientsPool(K8sClient):
         client = await self.__get_client_or_die(meta.cluster)
         return await client.get(meta)
 
+    # NOTE: this has to be defined before the `def list(self,…)` method. otherwise python/mypy confuses
+    # the list type in the type signature to be the list method
+    def get_clients(self) -> list[K8sClusterClient]:
+        """Return the underlying list of clients."""
+        return sorted(list(self.__clients.values()))
+
     async def list(self, _filter: K8sObjectFilter) -> AsyncIterable[K8sObject]:
         """List all k8s objects."""
         await self.__init_clients_if_needed()
-        cluster_clients = sorted(list(self.__clients.values()))
+        cluster_clients = self.get_clients()
+
         for c in cluster_clients:
             async for r in c.list(_filter):
                 yield r
