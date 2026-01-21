@@ -6,45 +6,45 @@ from typing import cast
 from sqlalchemy import Dialect, types
 from ulid import ULID
 
-from renku_data_services.resource_usage.model import CpuUsage, MemoryUsage
+from renku_data_services.resource_usage.model import ComputeCapacity, DataSize
 
 
-class CpuUsageType(types.TypeDecorator):
-    """Convert CpuUsage values to/from db."""
+class ComputeCapacityType(types.TypeDecorator):
+    """Convert ComputeCapacity values to/from db."""
 
     impl = types.Float
 
-    def process_bind_param(self, value: CpuUsage | None, dialect: Dialect) -> float | None:
+    def process_bind_param(self, value: ComputeCapacity | None, dialect: Dialect) -> float | None:
         """Transform value into a float."""
         if value is None:
             return None
         return value.cores
 
-    def process_result_value(self, value: float | None, dialect: Dialect) -> CpuUsage | None:
-        """Transform a float into CpuUsage value."""
+    def process_result_value(self, value: float | None, dialect: Dialect) -> ComputeCapacity | None:
+        """Transform a float into ComputeCapacity value."""
         if value is None:
             return None
-        return CpuUsage.from_cores(value)
+        return ComputeCapacity.from_cores(value)
 
-    def process_literal_param(self, value: CpuUsage | None, dialect: Dialect) -> str:
+    def process_literal_param(self, value: ComputeCapacity | None, dialect: Dialect) -> str:
         """Return a literal representation."""
         return str(value) if value else ""
 
 
-class MemoryUsageType(types.TypeDecorator):
-    """Convert MemoryUsage values to/from db."""
+class DataSizeType(types.TypeDecorator):
+    """Convert DataSize values to/from db."""
 
     impl = types.Float
 
-    def process_bind_param(self, value: MemoryUsage | None, dialect: Dialect) -> float | None:
+    def process_bind_param(self, value: DataSize | None, dialect: Dialect) -> float | None:
         """Convert to db value."""
         return value.bytes if value else None
 
-    def process_result_value(self, value: float | None, dialect: Dialect) -> MemoryUsage | None:
-        """Convert to MemoryUsage value."""
-        return MemoryUsage.from_bytes(value) if value else None
+    def process_result_value(self, value: float | None, dialect: Dialect) -> DataSize | None:
+        """Convert to DataSize value."""
+        return DataSize.from_bytes(value) if value else None
 
-    def process_literal_param(self, value: MemoryUsage | None, dialect: Dialect) -> str:
+    def process_literal_param(self, value: DataSize | None, dialect: Dialect) -> str:
         """Convert to literal."""
         return str(value) if value else ""
 
