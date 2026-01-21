@@ -357,13 +357,13 @@ class GenericOidcAdapter(ProviderAdapter):
 
 # TODO: test that this map is exhaustive
 _adapter_map: dict[models.ProviderKind, type[ProviderAdapter]] = {
-    models.ProviderKind.gitlab: GitLabAdapter,
+    models.ProviderKind.dropbox: DropboxAdapter,
+    models.ProviderKind.generic_oidc: GenericOidcAdapter,
     models.ProviderKind.github: GitHubAdapter,
+    models.ProviderKind.gitlab: GitLabAdapter,
     models.ProviderKind.google: GoogleAdapter,
     # models.ProviderKind.drive: GoogleDriveAdapter,
     # models.ProviderKind.onedrive: OneDriveAdapter,
-    # models.ProviderKind.dropbox: DropboxAdapter,
-    models.ProviderKind.generic_oidc: GenericOidcAdapter,
 }
 
 
