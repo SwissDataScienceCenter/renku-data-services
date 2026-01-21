@@ -15,8 +15,8 @@ from renku_data_services.k8s.models import K8sObject
 
 
 @dataclass
-class MemoryUsage:
-    """memory usage data in bytes."""
+class DataSize:
+    """Data size in bytes."""
 
     value: Decimal
 
@@ -39,50 +39,50 @@ class MemoryUsage:
         return str(self.value)
 
     @classmethod
-    def from_str(cls, s: str) -> MemoryUsage | None:
+    def from_str(cls, s: str) -> DataSize | None:
         """Parse a quantity string."""
         try:
-            return MemoryUsage(value=parse_quantity(s))
+            return DataSize(value=parse_quantity(s))
         except ValueError:
             return None
 
     @classmethod
-    def from_bytes(cls, bytes: float | Decimal) -> MemoryUsage:
+    def from_bytes(cls, bytes: float | Decimal) -> DataSize:
         """Create an instance given bytes."""
         return cls.__from_n_bytes(bytes, 1)
 
     @classmethod
-    def from_kb(cls, kb: float | Decimal) -> MemoryUsage:
+    def from_kb(cls, kb: float | Decimal) -> DataSize:
         """Create an instance given kilobytes."""
         return cls.__from_n_bytes(kb, 1024)
 
     @classmethod
-    def from_mb(cls, mb: float | Decimal) -> MemoryUsage:
+    def from_mb(cls, mb: float | Decimal) -> DataSize:
         """Create an instance given mega bytes."""
         return cls.__from_n_bytes(mb, 1024 * 1024)
 
     @classmethod
-    def __from_n_bytes(cls, n: float | Decimal, factor: int) -> MemoryUsage:
+    def __from_n_bytes(cls, n: float | Decimal, factor: int) -> DataSize:
         """Create an instance given mega bytes."""
         if isinstance(n, Decimal):
-            return MemoryUsage(n * factor)
+            return DataSize(n * factor)
         else:
-            return MemoryUsage(Decimal(str(n * factor)))
+            return DataSize(Decimal(str(n * factor)))
 
     @classmethod
-    def zero(cls) -> MemoryUsage:
+    def zero(cls) -> DataSize:
         """The zero value."""
-        return MemoryUsage(value=Decimal(0))
+        return DataSize(value=Decimal(0))
 
-    def __add__(self, other: Any) -> MemoryUsage:
-        if isinstance(other, MemoryUsage):
-            return MemoryUsage(self.value + other.value)
+    def __add__(self, other: Any) -> DataSize:
+        if isinstance(other, DataSize):
+            return DataSize(self.value + other.value)
         else:
             raise Exception("")
 
 
 @dataclass
-class CpuUsage:
+class ComputeCapacity:
     """Cpu usage data in 'cores'."""
 
     value: Decimal
@@ -107,9 +107,9 @@ class CpuUsage:
         """Return the value in millicores."""
         return self.cores * (10**3)
 
-    def __add__(self, other: Any) -> CpuUsage:
-        if isinstance(other, CpuUsage):
-            return CpuUsage(self.value + other.value)
+    def __add__(self, other: Any) -> ComputeCapacity:
+        if isinstance(other, ComputeCapacity):
+            return ComputeCapacity(self.value + other.value)
         else:
             raise Exception(f"Cannot add value of type {type(other)} to CpuUsage")
 
@@ -117,68 +117,80 @@ class CpuUsage:
         return str(self.value)
 
     @classmethod
-    def from_str(cls, s: str) -> CpuUsage | None:
+    def from_str(cls, s: str) -> ComputeCapacity | None:
         """Parses a quantity string."""
         try:
-            return CpuUsage(value=parse_quantity(s))
+            return ComputeCapacity(value=parse_quantity(s))
         except ValueError:
             return None
 
     @classmethod
-    def from_nano_cores(cls, n: float | Decimal) -> CpuUsage:
+    def from_nano_cores(cls, n: float | Decimal) -> ComputeCapacity:
         """Create an instance from nano cores."""
         return cls.__from_frac_cores(n, 10**9)
 
     @classmethod
-    def from_micro_cores(cls, n: float | Decimal) -> CpuUsage:
+    def from_micro_cores(cls, n: float | Decimal) -> ComputeCapacity:
         """Create an instance from nano cores."""
         return cls.__from_frac_cores(n, 10**6)
 
     @classmethod
-    def from_milli_cores(cls, n: float | Decimal) -> CpuUsage:
+    def from_milli_cores(cls, n: float | Decimal) -> ComputeCapacity:
         """Create an instance from nano cores."""
         return cls.__from_frac_cores(n, 10**3)
 
     @classmethod
-    def from_cores(cls, n: float | Decimal) -> CpuUsage:
+    def from_cores(cls, n: float | Decimal) -> ComputeCapacity:
         """Create an instance from cores."""
         return cls.__from_frac_cores(n, 1)
 
     @classmethod
-    def __from_frac_cores(cls, n: float | Decimal, f: int) -> CpuUsage:
+    def __from_frac_cores(cls, n: float | Decimal, f: int) -> ComputeCapacity:
         """Create an instance from nano cores."""
         if isinstance(n, Decimal):
-            return CpuUsage(n / f)
+            return ComputeCapacity(n / f)
         else:
-            return CpuUsage(Decimal(str(n / f)))
+            return ComputeCapacity(Decimal(str(n / f)))
 
     @classmethod
-    def zero(cls) -> CpuUsage:
+    def zero(cls) -> ComputeCapacity:
         """The zero value."""
-        return CpuUsage(value=Decimal(0))
+        return ComputeCapacity(value=Decimal(0))
 
 
 @dataclass
 class RequestData:
     """Contains resource requests quantities."""
 
-    cpu: CpuUsage
-    gpu: CpuUsage
-    memory: MemoryUsage
+    cpu: ComputeCapacity
+    gpu: ComputeCapacity
+    memory: DataSize
+    disk: DataSize
 
     def __str__(self) -> str:
         return f"cpu={self.cpu},mem={self.memory},gpu={self.gpu}"
 
     def __add__(self, other: Any) -> RequestData:
         if isinstance(other, RequestData):
-            return RequestData(cpu=self.cpu + other.cpu, gpu=self.gpu + other.gpu, memory=self.memory + other.memory)
+            return RequestData(
+                cpu=self.cpu + other.cpu,
+                gpu=self.gpu + other.gpu,
+                memory=self.memory + other.memory,
+                disk=self.disk + other.disk,
+            )
         else:
             raise Exception(f"Cannot add value of type {type(other)} to RequestData")
+
+    def with_disk(self, disk: DataSize | None) -> RequestData:
+        """Return a copy with disk set."""
+        return RequestData(cpu=self.cpu, gpu=self.gpu, memory=self.memory, disk=disk or DataSize.zero())
 
     @classmethod
     def zero(cls) -> RequestData:
         """Return a value with 0."""
-        return RequestData(cpu=CpuUsage.zero(), gpu=CpuUsage.zero(), memory=MemoryUsage.zero())
+        return RequestData(
+            cpu=ComputeCapacity.zero(), gpu=ComputeCapacity.zero(), memory=DataSize.zero(), disk=DataSize.zero()
+        )
 
 
 @dataclass
@@ -250,7 +262,7 @@ class ResourcesRequest:
 
 @dataclass
 class ResourceDataFacade:
-    """Wraps a k8s session or pod extracting certain data that should be stored."""
+    """Wraps a k8s session, pod or pvc extracting certain data that should be stored."""
 
     pod: K8sObject
 
@@ -261,6 +273,12 @@ class ResourceDataFacade:
     def __get_label(self, name: str) -> str | None:
         value = self.pod.manifest.get("metadata", {}).get("labels", {}).get(name)
         return cast(str, value) if value else None
+
+    @property
+    def storage(self) -> DataSize | None:
+        """Return the storage spec of a pvc."""
+        value = self.pod.manifest.get("spec", {}).get("resources", {}).get("requests", {}).get("storage")
+        return DataSize.from_str(str(value)) if value else None
 
     @property
     def name(self) -> str:
@@ -315,19 +333,20 @@ class ResourceDataFacade:
     @property
     def requested_data(self) -> RequestData:
         """Return the requested resources."""
-        result = RequestData.zero()
+        result = RequestData.zero().with_disk(self.storage)
         for container in self.pod.manifest.get("spec", {}).get("containers", []):
             requests = container.get("resources", {}).get("requests", {})
             lims = container.get("resources", {}).get("limits", {})
 
-            cpu_req = CpuUsage.from_str(requests.get("cpu", "0"))
-            mem_req = MemoryUsage.from_str(requests.get("memory", "0"))
-            gpu_req = CpuUsage.from_str(lims.get("nvidia.com/gpu") or requests.get("nvidia.com/gpu", "0"))
+            cpu_req = ComputeCapacity.from_str(requests.get("cpu", "0"))
+            mem_req = DataSize.from_str(requests.get("memory", "0"))
+            gpu_req = ComputeCapacity.from_str(lims.get("nvidia.com/gpu") or requests.get("nvidia.com/gpu", "0"))
 
             result = result + RequestData(
-                cpu=cpu_req or CpuUsage.zero(),
-                memory=mem_req or MemoryUsage.zero(),
-                gpu=gpu_req or CpuUsage.zero(),
+                cpu=cpu_req or ComputeCapacity.zero(),
+                memory=mem_req or DataSize.zero(),
+                gpu=gpu_req or ComputeCapacity.zero(),
+                disk=DataSize.zero(),
             )
 
         return result
