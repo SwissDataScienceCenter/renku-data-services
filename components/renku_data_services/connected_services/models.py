@@ -13,13 +13,13 @@ from renku_data_services.users.db import APIUser
 class ProviderKind(StrEnum):
     """The kind of platform we connnect to."""
 
-    gitlab = "gitlab"
+    dropbox = "dropbox"
+    generic_oidc = "generic_oidc"
     github = "github"
+    gitlab = "gitlab"
     google = "google"
     # drive = "drive"
     # onedrive = "onedrive"
-    # dropbox = "dropbox"
-    generic_oidc = "generic_oidc"
 
 
 class ConnectionStatus(StrEnum):

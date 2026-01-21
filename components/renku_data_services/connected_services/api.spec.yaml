@@ -426,13 +426,14 @@ components:
     ProviderKind:
       type: string
       enum:
-        - "gitlab"
+        - "dropbox"
+        - "generic_oidc"
         - "github"
+        - "gitlab"
         - "google"
         # - "drive"
         # - "onedrive"
-        # - "dropbox"
-        - "generic_oidc"
+        # - "dopbox"
       example: "gitlab"
     ApplicationSlug:
       description: |
