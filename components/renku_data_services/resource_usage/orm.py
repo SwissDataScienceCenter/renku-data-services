@@ -9,8 +9,8 @@ from sqlalchemy import DateTime, Integer, MetaData, String, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 from ulid import ULID
 
-from renku_data_services.resource_usage.model import CpuUsage, MemoryUsage, ResourcesRequest
-from renku_data_services.utils.sqlalchemy import CpuUsageType, MemoryUsageType, ULIDType
+from renku_data_services.resource_usage.model import ComputeCapacity, DataSize, ResourcesRequest
+from renku_data_services.utils.sqlalchemy import ComputeCapacityType, DataSizeType, ULIDType
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
@@ -52,11 +52,13 @@ class ResourceRequestsLogORM(BaseORM):
 
     resource_class_id: Mapped[int | None] = mapped_column("resource_class_id", Integer(), nullable=True)
 
-    cpu_request: Mapped[CpuUsage] = mapped_column("cpu_request", CpuUsageType(), nullable=False)
+    cpu_request: Mapped[ComputeCapacity | None] = mapped_column("cpu_request", ComputeCapacityType(), nullable=True)
 
-    memory_request: Mapped[MemoryUsage] = mapped_column("memory_request", MemoryUsageType(), nullable=False)
+    memory_request: Mapped[DataSize | None] = mapped_column("memory_request", DataSizeType(), nullable=True)
 
-    gpu_request: Mapped[CpuUsage] = mapped_column("gpu_request", CpuUsageType(), nullable=False)
+    gpu_request: Mapped[ComputeCapacity | None] = mapped_column("gpu_request", ComputeCapacityType(), nullable=True)
+
+    disk_request: Mapped[DataSize | None] = mapped_column("disk_request", DataSizeType(), nullable=True)
 
     @classmethod
     def from_resources_request(cls, req: ResourcesRequest) -> ResourceRequestsLogORM:
@@ -74,4 +76,5 @@ class ResourceRequestsLogORM(BaseORM):
             cpu_request=req.data.cpu,
             memory_request=req.data.memory,
             gpu_request=req.data.gpu,
+            disk_request=req.data.disk
         )

@@ -63,6 +63,17 @@ class ResourceRequestsFetch(ResourceRequestsFetchProto):
 
                 nreq = rreq.add(result.get(rreq.id, rreq.to_zero()))
                 result.update({nreq.id: nreq})
+            async for pvc in self._client.list(
+                K8sObjectFilter(
+                    gvk=GVK(kind="PersistentVolumeClaim", version="v1"), namespace=namespace, cluster=cluster_id
+                )
+            ):
+                obj = ResourceDataFacade(pod=pvc)
+                rreq = obj.to_resources_request(cluster_id, date)
+                await self._amend_session_fallback(cluster_id, obj, rreq)
+
+                nreq = rreq.add(result.get(rreq.id, rreq.to_zero()))
+                result.update({nreq.id: nreq})
 
         return result
 

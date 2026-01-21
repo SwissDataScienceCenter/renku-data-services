@@ -1,0 +1,789 @@
+{
+  "apiVersion": "v1",
+  "items": [
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "annotations": {
+          "pv.kubernetes.io/bind-completed": "yes",
+          "pv.kubernetes.io/bound-by-controller": "yes",
+          "volume.beta.kubernetes.io/storage-provisioner": "disk.csi.azure.com",
+          "volume.kubernetes.io/selected-node": "aks-default2-43016261-vmss00001b",
+          "volume.kubernetes.io/storage-provisioner": "disk.csi.azure.com"
+        },
+        "creationTimestamp": "2026-01-16T13:50:23Z",
+        "finalizers": [
+          "kubernetes.io/pvc-protection"
+        ],
+        "labels": {
+          "app.kubernetes.io/created-by": "controller-manager",
+          "app.kubernetes.io/instance": "a-degano-ba699d1c61ec",
+          "app.kubernetes.io/name": "AmaltheaSession",
+          "app.kubernetes.io/part-of": "amaltheasession-operator"
+        },
+        "name": "a-degano-ba699d1c61ec",
+        "namespace": "renku",
+        "ownerReferences": [
+          {
+            "apiVersion": "amalthea.dev/v1alpha1",
+            "blockOwnerDeletion": true,
+            "controller": true,
+            "kind": "AmaltheaSession",
+            "name": "a-degano-ba699d1c61ec",
+            "uid": "77b00050-1a7e-48b5-be20-ea6d6481df3e"
+          }
+        ],
+        "resourceVersion": "340550459",
+        "uid": "8945535b-e1df-423f-b87d-dfe3f415438a"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "1G"
+          }
+        },
+        "storageClassName": "default",
+        "volumeMode": "Filesystem",
+        "volumeName": "pvc-8945535b-e1df-423f-b87d-dfe3f415438a"
+      },
+      "status": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "capacity": {
+          "storage": "1Gi"
+        },
+        "phase": "Bound"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "annotations": {
+          "csi-rclone.dev/secretName": "caterina-bar-203b577613cc-ds-01keertfdcr58ryk3mew1sabw6",
+          "pv.kubernetes.io/bind-completed": "yes",
+          "pv.kubernetes.io/bound-by-controller": "yes",
+          "volume.beta.kubernetes.io/storage-provisioner": "csi-rclone",
+          "volume.kubernetes.io/storage-provisioner": "csi-rclone"
+        },
+        "creationTimestamp": "2026-01-08T12:37:14Z",
+        "finalizers": [
+          "kubernetes.io/pvc-protection"
+        ],
+        "name": "amalthea-caterina-bar-203b577613cc-ds-0",
+        "namespace": "renku",
+        "ownerReferences": [
+          {
+            "apiVersion": "amalthea.dev/v1alpha1",
+            "blockOwnerDeletion": true,
+            "controller": true,
+            "kind": "AmaltheaSession",
+            "name": "caterina-bar-203b577613cc",
+            "uid": "f98af74f-2b30-4033-8974-5cf489afefa4"
+          }
+        ],
+        "resourceVersion": "295837952",
+        "uid": "11d598b3-3fc9-40ed-acc9-451247ccd8b4"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadOnlyMany"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "1Gi"
+          }
+        },
+        "storageClassName": "csi-rclone-secret-annotation",
+        "volumeMode": "Filesystem",
+        "volumeName": "pvc-11d598b3-3fc9-40ed-acc9-451247ccd8b4"
+      },
+      "status": {
+        "accessModes": [
+          "ReadOnlyMany"
+        ],
+        "capacity": {
+          "storage": "1Gi"
+        },
+        "phase": "Bound"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "annotations": {
+          "csi-rclone.dev/secretName": "lorenzo-cava-6735b6189e50-ds-01jvw3gq19km1yv0k95e2zk08m",
+          "pv.kubernetes.io/bind-completed": "yes",
+          "pv.kubernetes.io/bound-by-controller": "yes",
+          "volume.beta.kubernetes.io/storage-provisioner": "csi-rclone",
+          "volume.kubernetes.io/storage-provisioner": "csi-rclone"
+        },
+        "creationTimestamp": "2026-01-15T13:11:17Z",
+        "finalizers": [
+          "kubernetes.io/pvc-protection"
+        ],
+        "name": "amalthea-lorenzo-cava-6735b6189e50-ds-0",
+        "namespace": "renku",
+        "ownerReferences": [
+          {
+            "apiVersion": "amalthea.dev/v1alpha1",
+            "blockOwnerDeletion": true,
+            "controller": true,
+            "kind": "AmaltheaSession",
+            "name": "lorenzo-cava-6735b6189e50",
+            "uid": "4cab5379-7123-4cf1-92fa-834a8723437e"
+          }
+        ],
+        "resourceVersion": "334848033",
+        "uid": "34250f02-fa57-4377-8cbc-a6a7510fd32f"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadOnlyMany"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "1Gi"
+          }
+        },
+        "storageClassName": "csi-rclone-secret-annotation",
+        "volumeMode": "Filesystem",
+        "volumeName": "pvc-34250f02-fa57-4377-8cbc-a6a7510fd32f"
+      },
+      "status": {
+        "accessModes": [
+          "ReadOnlyMany"
+        ],
+        "capacity": {
+          "storage": "1Gi"
+        },
+        "phase": "Bound"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "annotations": {
+          "csi-rclone.dev/secretName": "lorenzo-cava-6735b6189e50-ds-01k883y7h5xaqnenhrm8j8dpk8",
+          "pv.kubernetes.io/bind-completed": "yes",
+          "pv.kubernetes.io/bound-by-controller": "yes",
+          "volume.beta.kubernetes.io/storage-provisioner": "csi-rclone",
+          "volume.kubernetes.io/storage-provisioner": "csi-rclone"
+        },
+        "creationTimestamp": "2026-01-15T13:11:17Z",
+        "finalizers": [
+          "kubernetes.io/pvc-protection"
+        ],
+        "name": "amalthea-lorenzo-cava-6735b6189e50-ds-1",
+        "namespace": "renku",
+        "ownerReferences": [
+          {
+            "apiVersion": "amalthea.dev/v1alpha1",
+            "blockOwnerDeletion": true,
+            "controller": true,
+            "kind": "AmaltheaSession",
+            "name": "lorenzo-cava-6735b6189e50",
+            "uid": "4cab5379-7123-4cf1-92fa-834a8723437e"
+          }
+        ],
+        "resourceVersion": "334848047",
+        "uid": "941fb555-53db-43c6-8312-0baa5d757eb0"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadOnlyMany"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "1Gi"
+          }
+        },
+        "storageClassName": "csi-rclone-secret-annotation",
+        "volumeMode": "Filesystem",
+        "volumeName": "pvc-941fb555-53db-43c6-8312-0baa5d757eb0"
+      },
+      "status": {
+        "accessModes": [
+          "ReadOnlyMany"
+        ],
+        "capacity": {
+          "storage": "1Gi"
+        },
+        "phase": "Bound"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "annotations": {
+          "csi-rclone.dev/secretName": "lorenzo-cava-6735b6189e50-ds-01k884160tzxzs3yf8tbzg9hnp",
+          "pv.kubernetes.io/bind-completed": "yes",
+          "pv.kubernetes.io/bound-by-controller": "yes",
+          "volume.beta.kubernetes.io/storage-provisioner": "csi-rclone",
+          "volume.kubernetes.io/storage-provisioner": "csi-rclone"
+        },
+        "creationTimestamp": "2026-01-15T13:11:17Z",
+        "finalizers": [
+          "kubernetes.io/pvc-protection"
+        ],
+        "name": "amalthea-lorenzo-cava-6735b6189e50-ds-2",
+        "namespace": "renku",
+        "ownerReferences": [
+          {
+            "apiVersion": "amalthea.dev/v1alpha1",
+            "blockOwnerDeletion": true,
+            "controller": true,
+            "kind": "AmaltheaSession",
+            "name": "lorenzo-cava-6735b6189e50",
+            "uid": "4cab5379-7123-4cf1-92fa-834a8723437e"
+          }
+        ],
+        "resourceVersion": "334848065",
+        "uid": "3799a111-50c0-4b43-bd9b-46596f5cf713"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadOnlyMany"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "1Gi"
+          }
+        },
+        "storageClassName": "csi-rclone-secret-annotation",
+        "volumeMode": "Filesystem",
+        "volumeName": "pvc-3799a111-50c0-4b43-bd9b-46596f5cf713"
+      },
+      "status": {
+        "accessModes": [
+          "ReadOnlyMany"
+        ],
+        "capacity": {
+          "storage": "1Gi"
+        },
+        "phase": "Bound"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "annotations": {
+          "csi-rclone.dev/secretName": "lorenzo-cava-6735b6189e50-ds-01k8847hsh8s17ybq5j4sn3nz0",
+          "pv.kubernetes.io/bind-completed": "yes",
+          "pv.kubernetes.io/bound-by-controller": "yes",
+          "volume.beta.kubernetes.io/storage-provisioner": "csi-rclone",
+          "volume.kubernetes.io/storage-provisioner": "csi-rclone"
+        },
+        "creationTimestamp": "2026-01-15T13:11:17Z",
+        "finalizers": [
+          "kubernetes.io/pvc-protection"
+        ],
+        "name": "amalthea-lorenzo-cava-6735b6189e50-ds-3",
+        "namespace": "renku",
+        "ownerReferences": [
+          {
+            "apiVersion": "amalthea.dev/v1alpha1",
+            "blockOwnerDeletion": true,
+            "controller": true,
+            "kind": "AmaltheaSession",
+            "name": "lorenzo-cava-6735b6189e50",
+            "uid": "4cab5379-7123-4cf1-92fa-834a8723437e"
+          }
+        ],
+        "resourceVersion": "334848075",
+        "uid": "40bf7894-18b1-4f81-be6d-4a03040890f2"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadOnlyMany"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "1Gi"
+          }
+        },
+        "storageClassName": "csi-rclone-secret-annotation",
+        "volumeMode": "Filesystem",
+        "volumeName": "pvc-40bf7894-18b1-4f81-be6d-4a03040890f2"
+      },
+      "status": {
+        "accessModes": [
+          "ReadOnlyMany"
+        ],
+        "capacity": {
+          "storage": "1Gi"
+        },
+        "phase": "Bound"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "annotations": {
+          "pv.kubernetes.io/bind-completed": "yes",
+          "pv.kubernetes.io/bound-by-controller": "yes",
+          "volume.beta.kubernetes.io/storage-provisioner": "disk.csi.azure.com",
+          "volume.kubernetes.io/selected-node": "aks-default2-16713634-vmss000005",
+          "volume.kubernetes.io/storage-provisioner": "disk.csi.azure.com"
+        },
+        "creationTimestamp": "2026-01-08T12:37:14Z",
+        "finalizers": [
+          "kubernetes.io/pvc-protection"
+        ],
+        "labels": {
+          "app.kubernetes.io/created-by": "controller-manager",
+          "app.kubernetes.io/instance": "caterina-bar-203b577613cc",
+          "app.kubernetes.io/name": "AmaltheaSession",
+          "app.kubernetes.io/part-of": "amaltheasession-operator"
+        },
+        "name": "caterina-bar-203b577613cc",
+        "namespace": "renku",
+        "ownerReferences": [
+          {
+            "apiVersion": "amalthea.dev/v1alpha1",
+            "blockOwnerDeletion": true,
+            "controller": true,
+            "kind": "AmaltheaSession",
+            "name": "caterina-bar-203b577613cc",
+            "uid": "f98af74f-2b30-4033-8974-5cf489afefa4"
+          }
+        ],
+        "resourceVersion": "295838063",
+        "uid": "742f4ca2-4602-4624-bf4c-f26baf1a4c98"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "1G"
+          }
+        },
+        "storageClassName": "default",
+        "volumeMode": "Filesystem",
+        "volumeName": "pvc-742f4ca2-4602-4624-bf4c-f26baf1a4c98"
+      },
+      "status": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "capacity": {
+          "storage": "1Gi"
+        },
+        "phase": "Bound"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "annotations": {
+          "pv.kubernetes.io/bind-completed": "yes",
+          "pv.kubernetes.io/bound-by-controller": "yes",
+          "volume.beta.kubernetes.io/storage-provisioner": "disk.csi.azure.com",
+          "volume.kubernetes.io/selected-node": "aks-renkudev-21288650-vmss000009",
+          "volume.kubernetes.io/storage-provisioner": "disk.csi.azure.com"
+        },
+        "creationTimestamp": "2025-07-28T12:54:46Z",
+        "finalizers": [
+          "kubernetes.io/pvc-protection"
+        ],
+        "labels": {
+          "app.kubernetes.io/component": "solr",
+          "app.kubernetes.io/instance": "renku",
+          "app.kubernetes.io/name": "solr"
+        },
+        "name": "data-renku-solr-0",
+        "namespace": "renku",
+        "resourceVersion": "6416178",
+        "uid": "f8aa8f43-c195-4e31-8e5d-0a608560d37d"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "8Gi"
+          }
+        },
+        "storageClassName": "default",
+        "volumeMode": "Filesystem",
+        "volumeName": "pvc-f8aa8f43-c195-4e31-8e5d-0a608560d37d"
+      },
+      "status": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "capacity": {
+          "storage": "8Gi"
+        },
+        "phase": "Bound"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "annotations": {
+          "pv.kubernetes.io/bind-completed": "yes",
+          "pv.kubernetes.io/bound-by-controller": "yes",
+          "volume.beta.kubernetes.io/storage-provisioner": "disk.csi.azure.com",
+          "volume.kubernetes.io/selected-node": "aks-default2-43016261-vmss00000e",
+          "volume.kubernetes.io/storage-provisioner": "disk.csi.azure.com"
+        },
+        "creationTimestamp": "2026-01-14T14:42:04Z",
+        "finalizers": [
+          "kubernetes.io/pvc-protection"
+        ],
+        "labels": {
+          "app.kubernetes.io/created-by": "controller-manager",
+          "app.kubernetes.io/instance": "eike-kettner-962026d34ba4",
+          "app.kubernetes.io/name": "AmaltheaSession",
+          "app.kubernetes.io/part-of": "amaltheasession-operator"
+        },
+        "name": "eike-kettner-962026d34ba4",
+        "namespace": "renku",
+        "ownerReferences": [
+          {
+            "apiVersion": "amalthea.dev/v1alpha1",
+            "blockOwnerDeletion": true,
+            "controller": true,
+            "kind": "AmaltheaSession",
+            "name": "eike-kettner-962026d34ba4",
+            "uid": "3f51dcde-04fa-4a50-a887-a95ec0887145"
+          }
+        ],
+        "resourceVersion": "329707128",
+        "uid": "5681be8c-3069-49fa-828f-9b489fa210ce"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "1G"
+          }
+        },
+        "storageClassName": "default",
+        "volumeMode": "Filesystem",
+        "volumeName": "pvc-5681be8c-3069-49fa-828f-9b489fa210ce"
+      },
+      "status": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "capacity": {
+          "storage": "1Gi"
+        },
+        "phase": "Bound"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "annotations": {
+          "pv.kubernetes.io/bind-completed": "yes",
+          "pv.kubernetes.io/bound-by-controller": "yes",
+          "volume.beta.kubernetes.io/storage-provisioner": "disk.csi.azure.com",
+          "volume.kubernetes.io/selected-node": "aks-default4-14526025-vmss000000",
+          "volume.kubernetes.io/storage-provisioner": "disk.csi.azure.com"
+        },
+        "creationTimestamp": "2026-01-21T09:37:40Z",
+        "finalizers": [
+          "kubernetes.io/pvc-protection"
+        ],
+        "labels": {
+          "app.kubernetes.io/created-by": "controller-manager",
+          "app.kubernetes.io/instance": "ekettner-20dec419087c",
+          "app.kubernetes.io/name": "AmaltheaSession",
+          "app.kubernetes.io/part-of": "amaltheasession-operator"
+        },
+        "name": "ekettner-20dec419087c",
+        "namespace": "renku",
+        "ownerReferences": [
+          {
+            "apiVersion": "amalthea.dev/v1alpha1",
+            "blockOwnerDeletion": true,
+            "controller": true,
+            "kind": "AmaltheaSession",
+            "name": "ekettner-20dec419087c",
+            "uid": "28dcbb58-19bf-4bdd-b576-5f8448f8487c"
+          }
+        ],
+        "resourceVersion": "368145595",
+        "uid": "0785f071-0bb2-4362-a199-5802719417b6"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "1G"
+          }
+        },
+        "storageClassName": "default",
+        "volumeMode": "Filesystem",
+        "volumeName": "pvc-0785f071-0bb2-4362-a199-5802719417b6"
+      },
+      "status": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "capacity": {
+          "storage": "1Gi"
+        },
+        "phase": "Bound"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "annotations": {
+          "pv.kubernetes.io/bind-completed": "yes",
+          "pv.kubernetes.io/bound-by-controller": "yes",
+          "volume.beta.kubernetes.io/storage-provisioner": "disk.csi.azure.com",
+          "volume.kubernetes.io/selected-node": "aks-default2-43016261-vmss000006",
+          "volume.kubernetes.io/storage-provisioner": "disk.csi.azure.com"
+        },
+        "creationTimestamp": "2026-01-15T13:11:17Z",
+        "finalizers": [
+          "kubernetes.io/pvc-protection"
+        ],
+        "labels": {
+          "app.kubernetes.io/created-by": "controller-manager",
+          "app.kubernetes.io/instance": "lorenzo-cava-6735b6189e50",
+          "app.kubernetes.io/name": "AmaltheaSession",
+          "app.kubernetes.io/part-of": "amaltheasession-operator"
+        },
+        "name": "lorenzo-cava-6735b6189e50",
+        "namespace": "renku",
+        "ownerReferences": [
+          {
+            "apiVersion": "amalthea.dev/v1alpha1",
+            "blockOwnerDeletion": true,
+            "controller": true,
+            "kind": "AmaltheaSession",
+            "name": "lorenzo-cava-6735b6189e50",
+            "uid": "4cab5379-7123-4cf1-92fa-834a8723437e"
+          }
+        ],
+        "resourceVersion": "334848211",
+        "uid": "4756ee2b-7b94-42c9-9b2f-dd783a2863ab"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "1G"
+          }
+        },
+        "storageClassName": "default",
+        "volumeMode": "Filesystem",
+        "volumeName": "pvc-4756ee2b-7b94-42c9-9b2f-dd783a2863ab"
+      },
+      "status": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "capacity": {
+          "storage": "1Gi"
+        },
+        "phase": "Bound"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "annotations": {
+          "pv.kubernetes.io/bind-completed": "yes"
+        },
+        "creationTimestamp": "2025-07-22T07:55:18Z",
+        "finalizers": [
+          "kubernetes.io/pvc-protection"
+        ],
+        "labels": {
+          "kustomize.toolkit.fluxcd.io/name": "flux-system",
+          "kustomize.toolkit.fluxcd.io/namespace": "flux-system"
+        },
+        "name": "pvc-jena",
+        "namespace": "renku",
+        "resourceVersion": "702780",
+        "uid": "31e3b291-c65f-478a-94fc-23cbdc8a04fc"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "100Gi"
+          }
+        },
+        "storageClassName": "managed-csi",
+        "volumeMode": "Filesystem",
+        "volumeName": "pv-jena"
+      },
+      "status": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "capacity": {
+          "storage": "100Gi"
+        },
+        "phase": "Bound"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "annotations": {
+          "pv.kubernetes.io/bind-completed": "yes"
+        },
+        "creationTimestamp": "2025-07-22T08:16:42Z",
+        "finalizers": [
+          "kubernetes.io/pvc-protection"
+        ],
+        "labels": {
+          "kustomize.toolkit.fluxcd.io/name": "flux-system",
+          "kustomize.toolkit.fluxcd.io/namespace": "flux-system"
+        },
+        "name": "redis-data-renku-redis-node-0",
+        "namespace": "renku",
+        "resourceVersion": "717370",
+        "uid": "58d17b7e-6705-424f-8f50-d95065f11cd9"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "2Gi"
+          }
+        },
+        "storageClassName": "managed-csi",
+        "volumeMode": "Filesystem",
+        "volumeName": "pv-redis-0"
+      },
+      "status": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "capacity": {
+          "storage": "2Gi"
+        },
+        "phase": "Bound"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "annotations": {
+          "pv.kubernetes.io/bind-completed": "yes"
+        },
+        "creationTimestamp": "2025-07-22T08:16:42Z",
+        "finalizers": [
+          "kubernetes.io/pvc-protection"
+        ],
+        "labels": {
+          "kustomize.toolkit.fluxcd.io/name": "flux-system",
+          "kustomize.toolkit.fluxcd.io/namespace": "flux-system"
+        },
+        "name": "redis-data-renku-redis-node-1",
+        "namespace": "renku",
+        "resourceVersion": "730745",
+        "uid": "68f2b888-4c39-4ea6-88fe-e70777a2bbb0"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "2Gi"
+          }
+        },
+        "storageClassName": "managed-csi",
+        "volumeMode": "Filesystem",
+        "volumeName": "pv-redis-1"
+      },
+      "status": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "capacity": {
+          "storage": "2Gi"
+        },
+        "phase": "Bound"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "annotations": {
+          "pv.kubernetes.io/bind-completed": "yes"
+        },
+        "creationTimestamp": "2025-07-22T08:16:42Z",
+        "finalizers": [
+          "kubernetes.io/pvc-protection"
+        ],
+        "labels": {
+          "kustomize.toolkit.fluxcd.io/name": "flux-system",
+          "kustomize.toolkit.fluxcd.io/namespace": "flux-system"
+        },
+        "name": "redis-data-renku-redis-node-2",
+        "namespace": "renku",
+        "resourceVersion": "731032",
+        "uid": "63de2549-2c29-4b72-a610-d7362c1beb60"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "2Gi"
+          }
+        },
+        "storageClassName": "managed-csi",
+        "volumeMode": "Filesystem",
+        "volumeName": "pv-redis-2"
+      },
+      "status": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "capacity": {
+          "storage": "2Gi"
+        },
+        "phase": "Bound"
+      }
+    }
+  ],
+  "kind": "List",
+  "metadata": {
+    "resourceVersion": ""
+  }
+}
