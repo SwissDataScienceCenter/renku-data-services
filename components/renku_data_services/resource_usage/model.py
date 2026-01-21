@@ -39,12 +39,35 @@ class MemoryUsage:
         return str(self.value)
 
     @classmethod
-    def from_string(cls, s: str) -> MemoryUsage | None:
+    def from_str(cls, s: str) -> MemoryUsage | None:
         """Parse a quantity string."""
         try:
             return MemoryUsage(value=parse_quantity(s))
         except ValueError:
             return None
+
+    @classmethod
+    def from_bytes(cls, bytes: float | Decimal) -> MemoryUsage:
+        """Create an instance given bytes."""
+        return cls.__from_n_bytes(bytes, 1)
+
+    @classmethod
+    def from_kb(cls, kb: float | Decimal) -> MemoryUsage:
+        """Create an instance given kilobytes."""
+        return cls.__from_n_bytes(kb, 1024)
+
+    @classmethod
+    def from_mb(cls, mb: float | Decimal) -> MemoryUsage:
+        """Create an instance given mega bytes."""
+        return cls.__from_n_bytes(mb, 1024 * 1024)
+
+    @classmethod
+    def __from_n_bytes(cls, n: float | Decimal, factor: int) -> MemoryUsage:
+        """Create an instance given mega bytes."""
+        if isinstance(n, Decimal):
+            return MemoryUsage(n * factor)
+        else:
+            return MemoryUsage(Decimal(str(n * factor)))
 
     @classmethod
     def zero(cls) -> MemoryUsage:
@@ -80,7 +103,7 @@ class CpuUsage:
         return self.cores * (10**6)
 
     @property
-    def to_milli_cores(self) -> float:
+    def milli_cores(self) -> float:
         """Return the value in millicores."""
         return self.cores * (10**3)
 
@@ -94,12 +117,40 @@ class CpuUsage:
         return str(self.value)
 
     @classmethod
-    def from_string(cls, s: str) -> CpuUsage | None:
+    def from_str(cls, s: str) -> CpuUsage | None:
         """Parses a quantity string."""
         try:
             return CpuUsage(value=parse_quantity(s))
         except ValueError:
             return None
+
+    @classmethod
+    def from_nano_cores(cls, n: float | Decimal) -> CpuUsage:
+        """Create an instance from nano cores."""
+        return cls.__from_frac_cores(n, 10**9)
+
+    @classmethod
+    def from_micro_cores(cls, n: float | Decimal) -> CpuUsage:
+        """Create an instance from nano cores."""
+        return cls.__from_frac_cores(n, 10**6)
+
+    @classmethod
+    def from_milli_cores(cls, n: float | Decimal) -> CpuUsage:
+        """Create an instance from nano cores."""
+        return cls.__from_frac_cores(n, 10**3)
+
+    @classmethod
+    def from_cores(cls, n: float | Decimal) -> CpuUsage:
+        """Create an instance from cores."""
+        return cls.__from_frac_cores(n, 1)
+
+    @classmethod
+    def __from_frac_cores(cls, n: float | Decimal, f: int) -> CpuUsage:
+        """Create an instance from nano cores."""
+        if isinstance(n, Decimal):
+            return CpuUsage(n / f)
+        else:
+            return CpuUsage(Decimal(str(n / f)))
 
     @classmethod
     def zero(cls) -> CpuUsage:
@@ -136,11 +187,13 @@ class ResourcesRequest:
 
     namespace: str
     pod_name: str
+    pod_uid: str
     capture_date: datetime
     cluster_id: ClusterId | None
     user_id: str | None
     project_id: ULID | None
     launcher_id: ULID | None
+    resource_class_id: int | None
     data: RequestData
 
     @property
@@ -149,10 +202,13 @@ class ResourcesRequest:
         cid = self.cluster_id or "default-cluster"
         return (
             f"{cid}/{self.namespace}/"
+            f"{self.pod_uid}/"
             f"{self.pod_name}/"
             f"{self.user_id}/"
             f"{self.project_id}/"
-            f"{self.launcher_id}@{self.capture_date}"
+            f"{self.launcher_id}/"
+            f"{self.resource_class_id}/"
+            f"@{self.capture_date}"
         )
 
     def to_zero(self) -> ResourcesRequest:
@@ -160,11 +216,13 @@ class ResourcesRequest:
         return ResourcesRequest(
             namespace=self.namespace,
             pod_name=self.pod_name,
+            pod_uid=self.pod_uid,
             capture_date=self.capture_date,
             cluster_id=self.cluster_id,
             user_id=self.user_id,
             project_id=self.project_id,
             launcher_id=self.launcher_id,
+            resource_class_id=self.resource_class_id,
             data=RequestData.zero(),
         )
 
@@ -174,27 +232,25 @@ class ResourcesRequest:
             return ResourcesRequest(
                 namespace=self.namespace,
                 pod_name=self.pod_name,
+                pod_uid=self.pod_uid,
                 capture_date=self.capture_date,
                 cluster_id=self.cluster_id,
-                user_id=self.user_id or other.user_id,
-                project_id=self.project_id or other.project_id,
-                launcher_id=self.launcher_id or other.launcher_id,
+                user_id=self.user_id,
+                project_id=self.project_id,
+                launcher_id=self.launcher_id,
+                resource_class_id=self.resource_class_id,
                 data=self.data + other.data,
             )
         else:
             return self
 
     def __str__(self) -> str:
-        return (
-            f"{self.cluster_id or "default-cluster"}/"
-            f"{self.namespace}/"
-            f"{self.pod_name}/{self.user_id}/{self.project_id}: {self.data}  @ {self.capture_date}"
-        )
+        return f"{self.id}: {self.data}"
 
 
 @dataclass
 class ResourceDataFacade:
-    """Wraps a k8s session or pod extracting certain data."""
+    """Wraps a k8s session or pod extracting certain data that should be stored."""
 
     pod: K8sObject
 
@@ -211,10 +267,6 @@ class ResourceDataFacade:
         """Return the pod name."""
         return cast(str, self.pod.manifest.metadata.name)
 
-    def get_k8s_name(self) -> str | None:
-        """Return the kubernetes name."""
-        return self.__get_label("app.kubernetes.io/name")
-
     @property
     def session_instance_id(self) -> str | None:
         """Get the session instance name if this is a pod started for a session."""
@@ -223,6 +275,11 @@ class ResourceDataFacade:
             return self.__get_label("app.kubernetes.io/instance")
         else:
             return None
+
+    @property
+    def uid(self) -> str:
+        """Return the k8s uid of the object."""
+        return cast(str, self.pod.manifest.metadata.uid)
 
     @property
     def user_id(self) -> str | None:
@@ -242,6 +299,15 @@ class ResourceDataFacade:
         return ULID.from_str(id) if id else None
 
     @property
+    def resource_class_id(self) -> int | None:
+        """Return the resource class id."""
+        val = self.__get_annotation("renku.io/resource_class_id")
+        try:
+            return int(val) if val else None
+        except ValueError:
+            return None
+
+    @property
     def namespace(self) -> str:
         """Return the namespace."""
         return cast(str, self.pod.manifest.metadata.namespace)
@@ -254,9 +320,9 @@ class ResourceDataFacade:
             requests = container.get("resources", {}).get("requests", {})
             lims = container.get("resources", {}).get("limits", {})
 
-            cpu_req = CpuUsage.from_string(requests.get("cpu", "0"))
-            mem_req = MemoryUsage.from_string(requests.get("memory", "0"))
-            gpu_req = CpuUsage.from_string(lims.get("nvidia.com/gpu") or requests.get("nvidia.com/gpu", "0"))
+            cpu_req = CpuUsage.from_str(requests.get("cpu", "0"))
+            mem_req = MemoryUsage.from_str(requests.get("memory", "0"))
+            gpu_req = CpuUsage.from_str(lims.get("nvidia.com/gpu") or requests.get("nvidia.com/gpu", "0"))
 
             result = result + RequestData(
                 cpu=cpu_req or CpuUsage.zero(),
@@ -271,10 +337,12 @@ class ResourceDataFacade:
         return ResourcesRequest(
             namespace=self.namespace,
             pod_name=self.name,
+            pod_uid=self.uid,
             capture_date=date,
             cluster_id=cluster_id,
             user_id=self.user_id,
             project_id=self.project_id,
             launcher_id=self.launcher_id,
+            resource_class_id=self.resource_class_id,
             data=self.requested_data,
         )

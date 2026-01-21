@@ -1,13 +1,16 @@
 """ORM classes."""
 
-from datetime import datetime
+from __future__ import annotations
 
-from sqlalchemy import DateTime, MetaData, String, text
+from datetime import datetime
+from typing import cast
+
+from sqlalchemy import DateTime, Integer, MetaData, String, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
-from sqlalchemy.types import Float
 from ulid import ULID
 
-from renku_data_services.utils.sqlalchemy import ULIDType
+from renku_data_services.resource_usage.model import CpuUsage, MemoryUsage, ResourcesRequest
+from renku_data_services.utils.sqlalchemy import CpuUsageType, MemoryUsageType, ULIDType
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
@@ -26,7 +29,7 @@ class ResourceRequestsLogORM(BaseORM):
     )
     """Artificial identifier with stable order."""
 
-    cluster_id: Mapped[ULID | None] = mapped_column("cluster_id", String(), nullable=True)
+    cluster_id: Mapped[ULID | None] = mapped_column("cluster_id", ULIDType(), nullable=True)
     """The cluster id, may be null."""
 
     namespace: Mapped[str] = mapped_column("namespace", String(), nullable=False)
@@ -34,6 +37,9 @@ class ResourceRequestsLogORM(BaseORM):
 
     pod_name: Mapped[str] = mapped_column("pod_name", String(), nullable=False)
     """The name of the pod."""
+
+    pod_uid: Mapped[str] = mapped_column("pod_uid", String(), nullable=False)
+    """The k8s uid of the pod."""
 
     capture_date: Mapped[datetime] = mapped_column("capture_date", DateTime(timezone=True), nullable=False)
     """The timestamp the values were captured."""
@@ -44,8 +50,28 @@ class ResourceRequestsLogORM(BaseORM):
 
     launcher_id: Mapped[ULID | None] = mapped_column("launcher_id", ULIDType(), nullable=True)
 
-    cpu_request: Mapped[float] = mapped_column("cpu_request", Float(), nullable=False)
+    resource_class_id: Mapped[int | None] = mapped_column("resource_class_id", Integer(), nullable=True)
 
-    memory_request: Mapped[float] = mapped_column("memory_request", Float(), nullable=False)
+    cpu_request: Mapped[CpuUsage] = mapped_column("cpu_request", CpuUsageType(), nullable=False)
 
-    gpu_request: Mapped[float] = mapped_column("gpu_request", Float(), nullable=False)
+    memory_request: Mapped[MemoryUsage] = mapped_column("memory_request", MemoryUsageType(), nullable=False)
+
+    gpu_request: Mapped[CpuUsage] = mapped_column("gpu_request", CpuUsageType(), nullable=False)
+
+    @classmethod
+    def from_resources_request(cls, req: ResourcesRequest) -> ResourceRequestsLogORM:
+        """Create an ORM object given a ResourcesRequest."""
+        return ResourceRequestsLogORM(
+            cluster_id=cast(ULID, req.cluster_id) if req.cluster_id else None,
+            namespace=req.namespace,
+            pod_name=req.pod_name,
+            pod_uid=req.pod_uid,
+            capture_date=req.capture_date,
+            user_id=req.user_id,
+            project_id=req.project_id,
+            launcher_id=req.launcher_id,
+            resource_class_id=req.resource_class_id,
+            cpu_request=req.data.cpu,
+            memory_request=req.data.memory,
+            gpu_request=req.data.gpu,
+        )

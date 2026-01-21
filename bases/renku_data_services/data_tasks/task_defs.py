@@ -400,6 +400,13 @@ async def initialize_session_environments(dm: DependencyManager) -> None:
     await dm.session_tasks.initialize_session_environments_task(requested_by=api_user)
 
 
+async def record_resource_requests(dm: DependencyManager) -> None:
+    """Periodically record all resource requests."""
+    while True:
+        await dm.resource_requests_recorder.record_resource_requests("renku")
+        await asyncio.sleep(600)
+
+
 def all_tasks(dm: DependencyManager) -> TaskDefininions:
     """A dict of task factories to be managed in main."""
     # Impl. note: We pass the entire config to the coroutines, because
@@ -421,5 +428,6 @@ def all_tasks(dm: DependencyManager) -> TaskDefininions:
             "users_sync": lambda: users_sync(dm),
             "sync_admins_from_keycloak": lambda: sync_admins_from_keycloak(dm),
             "initialize_session_environments": lambda: initialize_session_environments(dm),
+            "record_resource_requests": lambda: record_resource_requests(dm),
         }
     )
