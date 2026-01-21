@@ -250,7 +250,7 @@ class DropboxAdapter(ProviderAdapter):
     @property
     def authorization_url_extra_params(self) -> dict[str, str]:
         """Extra parameters to add to the auth url."""
-        return {"access_type": "offline"}
+        return {"token_access_type": "offline"}
 
     @property
     def token_endpoint_url(self) -> str:
