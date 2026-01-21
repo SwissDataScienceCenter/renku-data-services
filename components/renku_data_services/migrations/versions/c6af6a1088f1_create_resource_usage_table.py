@@ -9,7 +9,7 @@ Create Date: 2026-01-20 16:58:55.442236
 import sqlalchemy as sa
 from alembic import op
 
-from renku_data_services.utils.sqlalchemy import ULIDType
+from renku_data_services.utils.sqlalchemy import CpuUsageType, MemoryUsageType, ULIDType
 
 # revision identifiers, used by Alembic.
 revision = "c6af6a1088f1"
@@ -26,13 +26,15 @@ def upgrade() -> None:
         sa.Column("cluster_id", sa.String(), nullable=True),
         sa.Column("namespace", sa.String(), nullable=False),
         sa.Column("pod_name", sa.String(), nullable=False),
+        sa.Column("pod_uid", sa.String(), nullable=False),
         sa.Column("capture_date", sa.DateTime(timezone=True), nullable=False),
         sa.Column("user_id", sa.String(), nullable=True),
         sa.Column("project_id", ULIDType(), nullable=True),
         sa.Column("launcher_id", ULIDType(), nullable=True),
-        sa.Column("cpu_request", sa.Float(), nullable=False),
-        sa.Column("memory_request", sa.Float(), nullable=False),
-        sa.Column("gpu_request", sa.Float(), nullable=True),
+        sa.Column("resource_class_id", sa.Integer(), nullable=True),
+        sa.Column("cpu_request", CpuUsageType(), nullable=False),
+        sa.Column("memory_request", MemoryUsageType(), nullable=False),
+        sa.Column("gpu_request", CpuUsageType(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
         schema="common",
     )
