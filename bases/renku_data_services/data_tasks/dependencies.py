@@ -9,14 +9,15 @@ from renku_data_services.capacity_reservation.tasks import CapacityReservationTa
 from renku_data_services.crc.db import ClusterRepository
 from renku_data_services.data_tasks.config import Config
 from renku_data_services.k8s.clients import K8sClusterClientsPool
-from renku_data_services.k8s.config import KubeConfigEnv
+from renku_data_services.k8s.config import KubeConfigEnv, get_clusters
 from renku_data_services.k8s.db import K8sDbCache
 from renku_data_services.metrics.core import StagingMetricsService
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
-from renku_data_services.notebooks.config import get_clusters
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
 from renku_data_services.project.db import ProjectRepository
+from renku_data_services.resource_usage.core import ResourceRequestsFetch, ResourcesRequestRecorder
+from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.tasks import SessionTasks
@@ -40,6 +41,7 @@ class DependencyManager:
     kc_api: IKeycloakAPI
     session_tasks: SessionTasks
     capacity_reservation_tasks: CapacityReservationTasks
+    resource_requests_recorder: ResourcesRequestRecorder
 
     @classmethod
     def from_env(cls, cfg: Config | None = None) -> "DependencyManager":
@@ -83,10 +85,11 @@ class DependencyManager:
         session_tasks = SessionTasks(session_environment_repo=session_environment_repo)
         cluster_repo = ClusterRepository(session_maker=cfg.db.async_session_maker)
         k8s_db_cache = K8sDbCache(cfg.db.async_session_maker)
+        default_kubeconfig = KubeConfigEnv()
         k8s_client = K8sClusterClientsPool(
             lambda: get_clusters(
                 kube_conf_root_dir=cfg.k8s_config_root,
-                default_kubeconfig=KubeConfigEnv(),
+                default_kubeconfig=default_kubeconfig,
                 cluster_repo=cluster_repo,
                 cache=k8s_db_cache,
                 kinds_to_cache=[AMALTHEA_SESSION_GVK],
@@ -99,6 +102,9 @@ class DependencyManager:
                 cfg.db.async_session_maker, cluster_repo=cluster_repo
             ),
             k8s_client=cr_k8s_client,
+        )
+        resource_requests_recorder = ResourcesRequestRecorder(
+            repo=ResourceRequestsRepo(cfg.db.async_session_maker), fetch=ResourceRequestsFetch(k8s_client)
         )
         kc_api: IKeycloakAPI
         if cfg.dummy_stores:
@@ -127,4 +133,5 @@ class DependencyManager:
             kc_api=kc_api,
             session_tasks=session_tasks,
             capacity_reservation_tasks=capacity_reservation_tasks,
+            resource_requests_recorder=resource_requests_recorder,
         )

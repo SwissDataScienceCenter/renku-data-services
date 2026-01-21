@@ -42,6 +42,7 @@ class Config:
     posthog: PosthogConfig
     authz: AuthzConfig
     keycloak: KeycloakConfig | None
+    k8s_config_root: str
     dummy_stores: bool
     max_retry_wait_seconds: int
     main_log_interval_seconds: int
@@ -82,11 +83,11 @@ class Config:
             posthog=posthog_config,
             authz=authz,
             keycloak=keycloak,
+            k8s_config_root=k8s_config_root,
             tcp_host=tcp_host,
             tcp_port=tcp_port,
             x_short_task_period_s=x_short_task_period,
             short_task_period_s=short_task_period,
             long_task_period_s=long_task_period,
-            k8s_config_root=k8s_config_root,
             dummy_stores=dummy_stores,
         )

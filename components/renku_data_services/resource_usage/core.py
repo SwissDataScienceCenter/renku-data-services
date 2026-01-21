@@ -1,59 +1,31 @@
-from collections.abc import Callable
-from datetime import datetime
-from typing import AsyncIterator, cast
-
-import sqlalchemy.sql as sa
-from sqlalchemy.ext.asyncio import AsyncScalarResult, AsyncSession
-from ulid import ULID
+from datetime import UTC, datetime
+from typing import Protocol
 
 from renku_data_services.app_config import logging
 from renku_data_services.k8s.client_interfaces import K8sClient
 from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import GVK, K8sObjectFilter, K8sObjectMeta
+from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.resource_usage.model import (
     ResourceDataFacade,
     ResourcesRequest,
 )
-from renku_data_services.resource_usage.orm import ResourceRequestsLogORM
 
 logger = logging.getLogger(__file__)
 
 
-class ResourceRequestsRepo:
-    """Repository for resource requests data."""
+class ResourceRequestsFetchProto(Protocol):
+    """Protocol defining methods for getting resource requests."""
 
-    def __init__(self, session_maker: Callable[..., AsyncSession]) -> None:
-        self.session_maker = session_maker
-
-    async def find_all(self, chunk_size: int = 100) -> AsyncIterator[ResourceRequestsLogORM]:
-        """Select all records."""
-        stmt = sa.select(ResourceRequestsLogORM).order_by(ResourceRequestsLogORM.capture_date.desc())
-        async with self.session_maker() as session:
-            result = await session.stream(stmt.execution_options(yield_per=chunk_size))
-            async for e in result.scalars():
-                yield e
-
-    async def insertOne(self, req: ResourcesRequest) -> None:
-        """Insert one data into the log."""
-        async with self.session_maker() as session, session.begin():
-            obj = ResourceRequestsLogORM(
-                cluster_id=cast(ULID, req.cluster_id) if req.cluster_id else None,
-                namespace=req.namespace,
-                pod_name=req.pod_name,
-                capture_date=req.capture_date,
-                user_id=req.user_id,
-                project_id=req.project_id,
-                launcher_id=req.launcher_id,
-                cpu_request=req.data.cpu.cores,
-                memory_request=req.data.memory.bytes,
-                gpu_request=req.data.gpu.cores if req.data.gpu else 0,
-            )
-            session.add(obj)
-            await session.flush()
+    async def get_resources_requests(
+        self, namespace: str, with_labels: dict[str, str] | None = None
+    ) -> dict[str, ResourcesRequest]:
+        """Return the resources requests of all pods."""
+        ...
 
 
-class ResourceRequestsFetch:
+class ResourceRequestsFetch(ResourceRequestsFetchProto):
     """Get resource request data."""
 
     def __init__(self, k8s_client: K8sClient) -> None:
@@ -73,7 +45,7 @@ class ResourceRequestsFetch:
 
         logger.debug(f"Get pods from clusters {clusters} (size={len(clusters)})")
 
-        date = datetime.now().replace(microsecond=0)
+        date = datetime.now(UTC).replace(microsecond=0)
         result: dict[str, ResourcesRequest] = {}
 
         for cluster_id in clusters:
@@ -118,12 +90,11 @@ class ResourceRequestsFetch:
 class ResourcesRequestRecorder:
     """Methods for recording resource requests."""
 
-    def __init__(self, repo: ResourceRequestsRepo, fetch: ResourceRequestsFetch) -> None:
+    def __init__(self, repo: ResourceRequestsRepo, fetch: ResourceRequestsFetchProto) -> None:
         self._repo = repo
         self._fetch = fetch
 
     async def record_resource_requests(self, namespace: str, with_labels: dict[str, str] | None = None) -> None:
         """Fetches all resource requests in the given namespace and stores them."""
         result = await self._fetch.get_resources_requests(namespace, with_labels)
-        for v in result.values():
-            await self._repo.insertOne(v)
+        await self._repo.insert_many(result.values())

@@ -433,6 +433,13 @@ async def cleanup_orphaned_capacity_reservations(dm: DependencyManager) -> None:
             await asyncio.sleep(dm.config.x_short_task_period_s)
 
 
+async def record_resource_requests(dm: DependencyManager) -> None:
+    """Periodically record all resource requests."""
+    while True:
+        await dm.resource_requests_recorder.record_resource_requests("renku")
+        await asyncio.sleep(600)
+
+
 def all_tasks(dm: DependencyManager) -> TaskDefininions:
     """A dict of task factories to be managed in main."""
     # Impl. note: We pass the entire config to the coroutines, because
@@ -457,5 +464,6 @@ def all_tasks(dm: DependencyManager) -> TaskDefininions:
             "activate_capacity_reservations": lambda: activate_capacity_reservations(dm),
             "monitor_capacity_reservations": lambda: monitor_capacity_reservations(dm),
             "cleanup_orphaned_capacity_reservations": lambda: cleanup_orphaned_capacity_reservations(dm),
+            "record_resource_requests": lambda: record_resource_requests(dm),
         }
     )
