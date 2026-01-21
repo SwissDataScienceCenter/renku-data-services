@@ -13,7 +13,7 @@ from renku_data_services.resource_usage.core import (
     ResourceRequestsRepo,
     ResourcesRequestRecorder,
 )
-from renku_data_services.resource_usage.model import CpuUsage, MemoryUsage, RequestData, ResourcesRequest
+from renku_data_services.resource_usage.model import ComputeCapacity, DataSize, RequestData, ResourcesRequest
 from renku_data_services.resource_usage.orm import ResourceRequestsLogORM
 
 
@@ -55,7 +55,7 @@ async def test_record_resource_requests(app_manager_instance: DependencyManager)
             project_id=ULID(),
             launcher_id=None,
             resource_class_id=4,
-            data=RequestData(cpu=CpuUsage.from_milli_cores(250), memory=MemoryUsage.from_mb(512), gpu=CpuUsage.zero()),
+            data=RequestData(cpu=ComputeCapacity.from_milli_cores(250), memory=DataSize.from_mb(512), gpu=ComputeCapacity.zero()),
         ),
         ResourcesRequest(
             namespace="renku",
@@ -68,7 +68,7 @@ async def test_record_resource_requests(app_manager_instance: DependencyManager)
             launcher_id=None,
             resource_class_id=4,
             data=RequestData(
-                cpu=CpuUsage.from_milli_cores(150), memory=MemoryUsage.from_mb(256), gpu=CpuUsage.from_milli_cores(100)
+                cpu=ComputeCapacity.from_milli_cores(150), memory=DataSize.from_mb(256), gpu=ComputeCapacity.from_milli_cores(100)
             ),
         ),
     ]
