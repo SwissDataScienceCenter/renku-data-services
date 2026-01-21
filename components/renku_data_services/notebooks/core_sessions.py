@@ -286,8 +286,13 @@ async def get_data_sources(
         configuration = dc.data_connector.storage.configuration
         if dc.data_connector.storage.configuration["type"] in ["drive", "dropbox"]:
             # TODO: move some logic to the repo, see how it is done for images
+            provider_kind = (
+                ProviderKind.google
+                if dc.data_connector.storage.configuration["type"] == "drive"
+                else ProviderKind.dropbox
+            )
             providers = await connected_services_repo.get_oauth2_clients(user=user)
-            drive_provider = next(filter(lambda p: p.kind == ProviderKind.google, providers), None)
+            drive_provider = next(filter(lambda p: p.kind == provider_kind, providers), None)
             connections = await connected_services_repo.get_oauth2_connections(user=user)
             drive_connection = next(
                 filter(lambda c: drive_provider is not None and c.provider_id == drive_provider.id, connections), None
@@ -312,7 +317,8 @@ async def get_data_sources(
                 )
                 continue
             logger.warning(f"Adjusting rclone configuration for DC {str(dc.data_connector.id)}.")
-            configuration["scope"] = configuration.get("drive") or "drive"
+            if provider_kind == ProviderKind.google:
+                configuration["scope"] = configuration.get("drive") or "drive"
             token_config = {
                 # "access_token": token_set.access_token,
                 "access_token": "fake_one",
