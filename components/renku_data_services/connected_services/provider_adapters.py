@@ -7,11 +7,8 @@ from urllib.parse import urljoin, urlparse, urlunparse
 from httpx import Client, Response
 
 from renku_data_services import errors
-from renku_data_services.app_config import logging
 from renku_data_services.connected_services import external_models, models
 from renku_data_services.connected_services import orm as schemas
-
-logger = logging.getLogger(__name__)
 
 
 class ProviderAdapter(ABC):
@@ -155,8 +152,6 @@ class GoogleAdapter(ProviderAdapter):
 
     def api_validate_account_response(self, response: Response) -> models.ConnectedAccount:
         """Validates and returns the connected account response from the Resource Server."""
-        logger = logging.getLogger(self.__class__.__name__)
-        logger.warning(f"Account response: {response.json()}")
         return external_models.GoogleConnectedAccount.model_validate(response.json()).to_connected_account()
 
 
@@ -272,9 +267,7 @@ class DropboxAdapter(ProviderAdapter):
 
     def api_validate_account_response(self, response: Response) -> models.ConnectedAccount:
         """Validates and returns the connected account response from the Resource Server."""
-        logger.getChild(self.__class__.__name__).warning(f"Account response: {response.json()}")
-        raise NotImplementedError()
-        # return external_models.DropboxConnectedAccount.model_validate(response.json()).to_connected_account()
+        return external_models.DropboxConnectedAccount.model_validate(response.json()).to_connected_account()
 
 
 class GenericOidcAdapter(ProviderAdapter):

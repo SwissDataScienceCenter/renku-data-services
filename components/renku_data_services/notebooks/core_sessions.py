@@ -284,7 +284,7 @@ async def get_data_sources(
 
     async for dc in data_connectors_stream:
         configuration = dc.data_connector.storage.configuration
-        if dc.data_connector.storage.configuration["type"] == "drive":
+        if dc.data_connector.storage.configuration["type"] in ["drive", "dropbox"]:
             # TODO: move some logic to the repo, see how it is done for images
             providers = await connected_services_repo.get_oauth2_clients(user=user)
             drive_provider = next(filter(lambda p: p.kind == ProviderKind.google, providers), None)
