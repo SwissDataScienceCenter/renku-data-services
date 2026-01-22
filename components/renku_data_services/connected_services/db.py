@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
@@ -285,6 +286,7 @@ class ConnectedServicesRepository:
                 .where(schemas.OAuth2ConnectionORM.user_id == user.id)
                 .where(schemas.OAuth2ConnectionORM.status == models.ConnectionStatus.connected.value)
                 .where(schemas.OAuth2ClientORM.kind == provider_kind.value)
+                .options(selectinload(schemas.OAuth2ConnectionORM.client))
                 .limit(1)
             )
             res = await session.scalars(stmt)
