@@ -30,6 +30,7 @@ from renku_data_services.notebooks.core_sessions import (
     start_session,
     validate_session_post_request,
 )
+from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.notebooks.errors.intermittent import AnonymousUserPatchError
 from renku_data_services.notebooks.image_check import ImageCheckRepository
 from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
@@ -202,6 +203,7 @@ class NotebooksNewBP(CustomBlueprint):
     data_connector_secret_repo: DataConnectorSecretRepository
     git_provider_helper: GitProviderHelperProto
     oauth_client_factory: OAuthHttpClientFactory
+    data_source_repo: DataSourceRepository
     image_check_repo: ImageCheckRepository
     project_repo: ProjectRepository
     project_session_secret_repo: ProjectSessionSecretRepository
@@ -239,6 +241,7 @@ class NotebooksNewBP(CustomBlueprint):
                 user_repo=self.user_repo,
                 metrics=self.metrics,
                 image_check_repo=self.image_check_repo,
+                data_source_repo=self.data_source_repo,
             )
             status = 201 if created else 200
             return json(session.as_apispec().model_dump(exclude_none=True, mode="json"), status)

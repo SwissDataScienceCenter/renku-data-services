@@ -21,12 +21,6 @@ from yaml import safe_dump
 from renku_data_services.app_config import logging
 from renku_data_services.base_models import RESET, AnonymousAPIUser, APIUser, AuthenticatedAPIUser, ResetType
 from renku_data_services.base_models.metrics import MetricsService
-from renku_data_services.connected_services.apispec_extras import RenkuTokens
-from renku_data_services.connected_services.db import ConnectedServicesRepository
-from renku_data_services.connected_services.models import OAuth2TokenSet, ProviderKind
-from renku_data_services.connected_services.oauth_http import (
-    OAuthHttpFactoryError,
-)
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
 from renku_data_services.crc.models import (
     ClusterSettings,
@@ -85,6 +79,7 @@ from renku_data_services.notebooks.crs import (
     State,
     Storage,
 )
+from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.notebooks.image_check import ImageCheckRepository
 from renku_data_services.notebooks.models import (
     ExtraSecret,
@@ -270,8 +265,7 @@ async def get_data_sources(
     work_dir: PurePosixPath,
     data_connectors_overrides: list[SessionDataConnectorOverride],
     user_repo: UserRepo,
-    connected_services_repo: ConnectedServicesRepository,
-    image_check_repo: ImageCheckRepository,
+    data_source_repo: DataSourceRepository,
 ) -> SessionExtraResources:
     """Generate cloud storage related resources."""
     data_sources: list[DataSource] = []
@@ -279,64 +273,12 @@ async def get_data_sources(
     dcs: dict[str, RCloneStorage] = {}
     dcs_secrets: dict[str, list[DataConnectorSecret]] = {}
     user_secret_key: str | None = None
-
-    logger = logging.getLogger(get_data_sources.__name__)
-
     async for dc in data_connectors_stream:
-        configuration = dc.data_connector.storage.configuration
-        if dc.data_connector.storage.configuration["type"] in ["drive", "dropbox"]:
-            # TODO: move some logic to the repo, see how it is done for images
-            provider_kind = (
-                ProviderKind.google
-                if dc.data_connector.storage.configuration["type"] == "drive"
-                else ProviderKind.dropbox
-            )
-            providers = await connected_services_repo.get_oauth2_clients(user=user)
-            drive_provider = next(filter(lambda p: p.kind == provider_kind, providers), None)
-            connections = await connected_services_repo.get_oauth2_connections(user=user)
-            drive_connection = next(
-                filter(lambda c: drive_provider is not None and c.provider_id == drive_provider.id, connections), None
-            )
-            if drive_connection is None:
-                logger.warning(
-                    f"Skipping Google Drive DC {str(dc.data_connector.id)} because no OAuth connection found."
-                )
-                continue
-            token_set: OAuth2TokenSet | None = None
-            client_or_error = await image_check_repo.oauth_client_factory.for_user_connection(
-                user=user, connection_id=drive_connection.id
-            )
-            match client_or_error:
-                case OAuthHttpFactoryError() as err:
-                    logger.info(f"Error getting oauth client for user={user} connection={drive_connection.id}: {err}")
-                case client:
-                    token_set = await client.get_token()
-            if not token_set or not token_set.access_token:
-                logger.warning(
-                    f"Skipping Google Drive DC {str(dc.data_connector.id)} because the connection is not active."
-                )
-                continue
-            logger.warning(f"Adjusting rclone configuration for DC {str(dc.data_connector.id)}.")
-            if provider_kind == ProviderKind.google:
-                configuration["scope"] = configuration.get("drive") or "drive"
-            token_config = {
-                # "access_token": token_set.access_token,
-                "access_token": "fake_one",
-                "token_type": "Bearer",
-            }
-            if user.access_token and user.refresh_token:
-                renku_tokens = RenkuTokens(
-                    access_token=user.access_token,
-                    refresh_token=user.refresh_token,
-                )
-                token_config["refresh_token"] = renku_tokens.encode()
-            token_config["expiry"] = "2026-01-01T14:19:16.114854+01:00"
-            # if token_set.expires_at_iso:
-            #     token_config["expiry"] = token_set.expires_at_iso
-            configuration["token"] = json.dumps(token_config)
-            configuration["token_url"] = request.url_for(
-                "oauth2_connections.post_token_endpoint", connection_id=drive_connection.id
-            )
+        configuration = await data_source_repo.handle_configuration(
+            request=request, user=user, data_connector=dc.data_connector
+        )
+        if configuration is None:
+            continue
         mount_folder = (
             dc.data_connector.storage.target_path
             if PurePosixPath(dc.data_connector.storage.target_path).is_absolute()
@@ -805,6 +747,7 @@ async def start_session(
     user_repo: UserRepo,
     metrics: MetricsService,
     image_check_repo: ImageCheckRepository,
+    data_source_repo: DataSourceRepository,
 ) -> tuple[AmaltheaSessionV1Alpha1, bool]:
     """Start an Amalthea session.
 
@@ -889,9 +832,7 @@ async def start_session(
             work_dir=work_dir,
             data_connectors_overrides=launch_request.data_connectors_overrides or [],
             user_repo=user_repo,
-            # TODO: maybe get the dependency explicitly
-            connected_services_repo=image_check_repo.connected_services_repo,
-            image_check_repo=image_check_repo,
+            data_source_repo=data_source_repo,
         )
     )
 

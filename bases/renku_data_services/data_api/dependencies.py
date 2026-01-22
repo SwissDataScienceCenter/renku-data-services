@@ -54,6 +54,7 @@ from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.notebooks.api.classes.data_service import DummyGitProviderHelper, GitProviderHelper
 from renku_data_services.notebooks.config import GitProviderHelperProto, get_clusters
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
+from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.notebooks.image_check import ImageCheckRepository
 from renku_data_services.notifications.db import NotificationsRepository
 from renku_data_services.platform.db import PlatformRepository, UrlRedirectRepository
@@ -141,6 +142,7 @@ class DependencyManager:
     data_connector_repo: DataConnectorRepository
     data_connector_secret_repo: DataConnectorSecretRepository
     cluster_repo: ClusterRepository
+    data_source_repo: DataSourceRepository
     image_check_repo: ImageCheckRepository
     metrics_repo: MetricsRepository
     metrics: StagingMetricsService
@@ -392,6 +394,11 @@ class DependencyManager:
             secret_service_public_key=config.secrets.public_key,
             authz=authz,
         )
+        data_source_repo = DataSourceRepository(
+            nb_config=config.nb_config,
+            connected_services_repo=connected_services_repo,
+            oauth_client_factory=oauth_http_client_factory,
+        )
         image_check_repo = ImageCheckRepository(
             nb_config=config.nb_config,
             connected_services_repo=connected_services_repo,
@@ -439,6 +446,7 @@ class DependencyManager:
             data_connector_repo=data_connector_repo,
             data_connector_secret_repo=data_connector_secret_repo,
             cluster_repo=cluster_repo,
+            data_source_repo=data_source_repo,
             image_check_repo=image_check_repo,
             metrics_repo=metrics_repo,
             metrics=metrics,

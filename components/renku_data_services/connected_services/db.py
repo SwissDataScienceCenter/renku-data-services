@@ -241,7 +241,7 @@ class ConnectedServicesRepository:
         return connection
 
     async def get_provider_for_image(self, user: APIUser, image: Image) -> models.ImageProvider | None:
-        """Find a provider supporting the given an image."""
+        """Find a provider supporting the given image."""
         registry_urls = [f"http://{image.hostname}", f"https://{image.hostname}"]
         async with self.session_maker() as session:
             stmt = (
@@ -273,6 +273,50 @@ class ConnectedServicesRepository:
                     str(row.OAuth2ClientORM.image_registry_url),  # above query makes it non-nil
                 )
 
+    async def get_provider_for_kind(
+        self, user: APIUser, provider_kind: models.ProviderKind
+    ) -> models.ServiceProvider | None:
+        """Find a service provider of a given kind."""
+        async with self.session_maker() as session:
+            # First, match an established connection if it exists
+            stmt = (
+                select(schemas.OAuth2ConnectionORM)
+                .join(schemas.OAuth2ClientORM)
+                .where(schemas.OAuth2ConnectionORM.user_id == user.id)
+                .where(schemas.OAuth2ConnectionORM.status == models.ConnectionStatus.connected.value)
+                .where(schemas.OAuth2ClientORM.kind == provider_kind.value)
+                .limit(1)
+            )
+            res = await session.scalars(stmt)
+            connection = res.one_or_none()
+            if connection is not None:
+                return models.ServiceProvider(
+                    provider=connection.client.dump(),
+                    connected_user=models.ConnectedUser(connection=connection.dump(), user=user),
+                )
+            # Otherwise, match the first suitable provider
+            provider_stmt = (
+                select(schemas.OAuth2ClientORM).where(schemas.OAuth2ClientORM.kind == provider_kind.value).limit(1)
+            )
+            provider_res = await session.scalars(provider_stmt)
+            provider = provider_res.one_or_none()
+            if provider is not None:
+                return models.ServiceProvider(
+                    provider=provider.dump(),
+                    connected_user=None,
+                )
+            return None
+
+    async def get_token_set(self, user: APIUser, connection_id: ULID) -> models.OAuth2TokenSet | None:
+        """Returns the token set from a given OAuth2 connection."""
+        client_or_error = await self.oauth_client_factory.for_user_connection(user=user, connection_id=connection_id)
+        match client_or_error:
+            case OAuthHttpFactoryError() as err:
+                logger.info(f"Error getting oauth client for user={user} connection={connection_id}: {err}")
+                return None
+            case client:
+                return await client.get_token()
+
     async def get_image_repo_client(self, image_provider: models.ImageProvider) -> ImageRepoDockerAPI:
         """Create a image repository client for the given user and image provider."""
         url = urlparse(image_provider.registry_url)
@@ -282,15 +326,9 @@ class ConnectedServicesRepository:
             user = image_provider.connected_user.user
             conn = image_provider.connected_user.connection
             access_token: str | None = None
-            client_or_error = await self.oauth_client_factory.for_user_connection(user, conn.id)
-            match client_or_error:
-                case OAuthHttpFactoryError() as err:
-                    logger.info(f"Error getting oauth client for user={user} connection={conn.id}: {err}")
-
-                case client:
-                    token_set = await client.get_token()
-                    access_token = token_set.access_token
-
+            token_set = await self.get_token_set(user=user, connection_id=conn.id)
+            if token_set is not None:
+                access_token = token_set.access_token
             if access_token:
                 logger.debug(f"Use connection {conn.id} to {image_provider.provider.id} for user {user.id}")
                 repo_api = repo_api.with_oauth2_token(access_token)

@@ -214,6 +214,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         data_connector_repo=dm.data_connector_repo,
         data_connector_secret_repo=dm.data_connector_secret_repo,
         git_provider_helper=dm.git_provider_helper,
+        data_source_repo=dm.data_source_repo,
         image_check_repo=dm.image_check_repo,
         internal_gitlab_authenticator=dm.gitlab_authenticator,
         metrics=dm.metrics,

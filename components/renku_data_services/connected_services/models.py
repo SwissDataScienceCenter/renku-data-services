@@ -172,12 +172,11 @@ class ConnectedUser:
 
 
 @dataclass(frozen=True, eq=True)
-class ImageProvider:
-    """Result when retrieving provider information for an image."""
+class ServiceProvider:
+    """Result when retrieving provider information for a connected service."""
 
     provider: OAuth2Client
     connected_user: ConnectedUser | None
-    registry_url: str
 
     def is_connected(self) -> bool:
         """Returns whether the connection exists and is in status 'connected'."""
@@ -186,10 +185,18 @@ class ImageProvider:
     @property
     def connection(self) -> OAuth2Connection | None:
         """Return the connection if present."""
-        if self.connected_user:
-            return self.connected_user.connection
-        else:
-            return None
+        return self.connected_user.connection if self.connected_user else None
+
+    def __str__(self) -> str:
+        conn = f"connection={self.connection.id}" if self.connection else "connection=None"
+        return f"ServiceProvider(provider={self.provider.id}/{self.provider.kind}, {conn})"
+
+
+@dataclass(frozen=True, eq=True)
+class ImageProvider(ServiceProvider):
+    """Result when retrieving provider information for an image."""
+
+    registry_url: str
 
     def __str__(self) -> str:
         conn = f"connection={self.connection.id}" if self.connection else "connection=None"
