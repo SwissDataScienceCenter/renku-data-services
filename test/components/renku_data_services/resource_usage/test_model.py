@@ -93,6 +93,46 @@ def load_manifest(name: str) -> Box:
     return Box(manifest_json)
 
 
+def test_resource_requests_to_zero() -> None:
+    date = datetime.now(UTC)
+    r1 = ResourcesRequest(
+        namespace="renku",
+        name="pod1",
+        uid="xyz-898-dec",
+        kind="Pod",
+        phase="Running",
+        capture_date=date,
+        cluster_id=DEFAULT_K8S_CLUSTER,
+        user_id="exyz",
+        project_id=ULID(),
+        launcher_id=None,
+        resource_class_id=4,
+        resource_pool_id=16,
+        since=datetime(2025, 1, 15, 13, 25, 15, 0, UTC),
+        data=RequestData(
+            cpu=ComputeCapacity.from_milli_cores(250),
+            memory=DataSize.from_mb(512),
+            gpu=ComputeCapacity.zero(),
+            disk=DataSize.zero(),
+        ),
+    )
+    r0 = r1.to_zero()
+    assert r1.namespace == r0.namespace
+    assert r1.name == r0.name
+    assert r1.uid == r0.uid
+    assert r1.kind == r0.kind
+    assert r1.phase == r0.phase
+    assert r1.capture_date == r0.capture_date
+    assert r1.cluster_id== r0.cluster_id
+    assert r1.user_id == r0.user_id
+    assert r1.project_id == r0.project_id
+    assert r1.launcher_id == r0.launcher_id
+    assert r1.resource_class_id == r0.resource_class_id
+    assert r1.resource_pool_id == r0.resource_pool_id
+    assert r1.since == r0.since
+    assert r0.data == RequestData.zero()
+
+
 def test_resource_data_facade() -> None:
     ams = K8sObject(
         name="xyz",
