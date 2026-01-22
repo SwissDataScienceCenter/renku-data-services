@@ -173,7 +173,7 @@ def certificates_volume_mounts(config: NotebooksConfig) -> list[ExtraVolumeMount
 
 
 def certificates_container(config: NotebooksConfig) -> tuple[client.V1Container, list[client.V1Volume]]:
-    """The specification for the container that setups self signed CAs."""
+    """The specification for the container that setups self-signed CAs."""
     init_container = client.V1Container(
         name="init-certificates",
         image=config.sessions.ca_certs.image,
@@ -209,7 +209,7 @@ def certificates_container(config: NotebooksConfig) -> tuple[client.V1Container,
             ],
         ),
     )
-    return (init_container, [volume_etc_certs, volume_custom_certs])
+    return init_container, [volume_etc_certs, volume_custom_certs]
 
 
 def user_secrets_extras(
