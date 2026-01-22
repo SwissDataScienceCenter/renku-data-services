@@ -23,7 +23,6 @@ ContextVar to be retained correctly in async contexts.
 
 Before accessing loggers, run the `configure_logging()` method to
 configure loggers appropriately.
-
 """
 
 from __future__ import annotations
@@ -35,17 +34,20 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from logging import Logger
 from typing import Final, cast, final
 
 from renku_data_services.errors.errors import ConfigurationError
+
+# Re-exports to be used in other modules
+ERROR = logging.ERROR
+Logger = logging.Logger
 
 __app_root_logger: Final[str] = "renku_data_services"
 
 _request_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_id")
 
 
-def getLogger(name: str) -> Logger:
+def getLogger(name: str) -> logging.Logger:
     """Return a logger with the name prefixed with our app name, if not already done."""
     if name.startswith(__app_root_logger + "."):
         return logging.getLogger(name)
@@ -54,7 +56,7 @@ def getLogger(name: str) -> Logger:
 
 
 def set_request_id(rid: str | None) -> None:
-    """Provide the request_id as a context sensitiv global variable.
+    """Provide the request_id as a context-sensitive global variable.
 
     The id will be used in subsequent logging statements.
     """
@@ -81,7 +83,7 @@ class _RenkuLogFormatter(logging.Formatter):
         )
 
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
-        """Overriden to format the time string for %(asctime) interpolator."""
+        """Overridden to format the time string for %(asctime) interpolator."""
         ct = datetime.fromtimestamp(record.created)
         return ct.strftime(cast(str, self.datefmt))
 
@@ -89,17 +91,8 @@ class _RenkuLogFormatter(logging.Formatter):
 class _RenkuJsonFormatter(_RenkuLogFormatter):
     """Formatter to produce json log messages."""
 
-    fields: Final[set[str]] = set(
-        [
-            "name",
-            "levelno",
-            "pathname",
-            "module",
-            "filename",
-            "lineno",
-        ]
-    )
-    default_fields: Final[set[str]] = set(fields).union(set(["exc_info", "stack_info", "asctime", "message", "msg"]))
+    fields: Final[set[str]] = {"name", "levelno", "pathname", "module", "filename", "lineno"}
+    default_fields: Final[set[str]] = fields.union({"exc_info", "stack_info", "asctime", "message", "msg"})
 
     def format(self, record: logging.LogRecord) -> str:
         """Format the log record."""
@@ -202,8 +195,7 @@ class Config:
 
     def update_override_levels(self, others: dict[int, set[str]]) -> None:
         """Applies the given override levels to this config."""
-        other_loggers = set()
-        [other_loggers := other_loggers.union(x) for x in others.values()]
+        other_loggers = {e for s in others.values() for e in s}
         self.remove_override_loggers(other_loggers)
         for level, names in others.items():
             cur_names = self.override_levels.get(level) or set()
@@ -223,16 +215,10 @@ class Config:
     def from_env(cls, prefix: str = "") -> Config:
         """Return a config obtained from environment variables."""
         default = cls()
-        match os.environ.get(f"{prefix}LOG_ROOT_LEVEL"):
-            case None:
-                root_level = default.root_level
-            case lvl:
-                root_level = _Utils.get_numeric_level(lvl)
-        match os.environ.get(f"{prefix}LOG_APP_LEVEL"):
-            case None:
-                app_level = default.app_level
-            case lvl:
-                app_level = _Utils.get_numeric_level(lvl)
+        root_level_var = os.environ.get(f"{prefix}LOG_ROOT_LEVEL")
+        root_level = _Utils.get_numeric_level(root_level_var) if root_level_var else default.root_level
+        app_level_var = os.environ.get(f"{prefix}LOG_APP_LEVEL")
+        app_level = _Utils.get_numeric_level(app_level_var) if app_level_var else default.app_level
         format_style = LogFormatStyle.from_env(prefix, default.format_style.value)
         levels = _Utils.logger_levels_from_env(prefix)
         return Config(format_style, root_level, app_level, levels)
@@ -255,7 +241,7 @@ def configure_logging(cfg: Config | None = None) -> None:
     identified by the app root logger `renku_data_services`. All our
     loggers should therefore be children of this logger.
 
-    Level for individual loggers can be overriden using the
+    Level for individual loggers can be overridden using the
     `override_levels` argument. It is a map from logging level to a
     list of logger names. The default reads it from environment
     variables like `DEBUG_LOGGING=logger.name.one,logger.name.two`.
@@ -270,7 +256,7 @@ def configure_logging(cfg: Config | None = None) -> None:
     # To have a uniform format *everywhere*, there is only one
     # handler. It is added to the root logger. However, imported
     # modules may change this configuration at any time (and they do).
-    # This tries to remove all existing handlers as an best effort.
+    # This tries to remove all existing handlers as the best effort.
     for ll in _Utils.get_all_loggers():
         ll.setLevel(logging.NOTSET)
         for hdl in ll.handlers:
@@ -281,7 +267,7 @@ def configure_logging(cfg: Config | None = None) -> None:
     handler.addFilter(_RequestIdFilter())
     logging.root.setLevel(cfg.root_level)
     logging.root.addHandler(handler)
-    logging.getLogger(__app_root_logger).setLevel(cfg.app_level)
+    logging.getLogger(__app_root_logger).setLevel(logging.WARNING)
 
     # this is for creating backwards compatibility, ideally these are
     # defined as env vars in the specific process

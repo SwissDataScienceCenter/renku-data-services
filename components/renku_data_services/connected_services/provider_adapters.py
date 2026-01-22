@@ -1,6 +1,5 @@
 """Adapters for each kind of OAuth2 client."""
 
-import logging
 from abc import ABC, abstractmethod
 from typing import Any
 from urllib.parse import urljoin, urlparse, urlunparse
@@ -10,8 +9,6 @@ from httpx import Client, Response
 from renku_data_services import errors
 from renku_data_services.connected_services import external_models, models
 from renku_data_services.connected_services import orm as schemas
-
-logger = logging.getLogger(__name__)
 
 
 class ProviderAdapter(ABC):
