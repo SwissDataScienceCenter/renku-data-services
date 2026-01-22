@@ -86,6 +86,14 @@ default_resource_pool = crc_models.UnsavedResourcePool(
             default=True,
         ),
         crc_models.UnsavedResourceClass(
+            name="medium",
+            cpu=0.75,
+            memory=1,
+            max_storage=20,
+            gpu=0,
+            default=False,
+        ),
+        crc_models.UnsavedResourceClass(
             name="large",
             cpu=1.0,
             memory=2,
