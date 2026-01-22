@@ -6,7 +6,7 @@ import json
 import os
 from dataclasses import asdict
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from kubernetes import client
 
@@ -27,10 +27,6 @@ from renku_data_services.notebooks.crs import (
 from renku_data_services.notebooks.models import SessionExtraResources
 from renku_data_services.project import constants as project_constants
 from renku_data_services.project.models import SessionSecret
-
-if TYPE_CHECKING:
-    # NOTE: If these are directly imported then you get circular imports.
-    pass
 
 
 async def git_clone_container_v2(
@@ -214,38 +210,6 @@ def certificates_container(config: NotebooksConfig) -> tuple[client.V1Container,
         ),
     )
     return (init_container, [volume_etc_certs, volume_custom_certs])
-
-
-def certificates(config: NotebooksConfig) -> list[dict[str, Any]]:
-    """Add a container that initializes custom certificate authorities for a session."""
-    container, vols = certificates_container(config)
-    api_client = client.ApiClient()
-    patches = [
-        {
-            "type": "application/json-patch+json",
-            "patch": [
-                {
-                    "op": "add",
-                    "path": "/statefulset/spec/template/spec/initContainers/-",
-                    "value": api_client.sanitize_for_serialization(container),
-                },
-            ],
-        },
-    ]
-    for vol in vols:
-        patches.append(
-            {
-                "type": "application/json-patch+json",
-                "patch": [
-                    {
-                        "op": "add",
-                        "path": "/statefulset/spec/template/spec/volumes/-",
-                        "value": api_client.sanitize_for_serialization(vol),
-                    },
-                ],
-            },
-        )
-    return patches
 
 
 def user_secrets_extras(
