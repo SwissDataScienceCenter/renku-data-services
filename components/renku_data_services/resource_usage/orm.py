@@ -35,10 +35,16 @@ class ResourceRequestsLogORM(BaseORM):
     namespace: Mapped[str] = mapped_column("namespace", String(), nullable=False)
     """The cluster namespace."""
 
-    pod_name: Mapped[str] = mapped_column("pod_name", String(), nullable=False)
+    name: Mapped[str] = mapped_column("name", String(), nullable=False)
     """The name of the pod."""
 
-    pod_uid: Mapped[str] = mapped_column("pod_uid", String(), nullable=False)
+    uid: Mapped[str] = mapped_column("uid", String(), nullable=False)
+    """The k8s uid of the pod."""
+
+    kind: Mapped[str] = mapped_column("kind", String(), nullable=False)
+    """The kind of the object: either pod or pvc."""
+
+    phase: Mapped[str] = mapped_column("phase", String(), nullable=False)
     """The k8s uid of the pod."""
 
     capture_date: Mapped[datetime] = mapped_column("capture_date", DateTime(timezone=True), nullable=False)
@@ -55,6 +61,12 @@ class ResourceRequestsLogORM(BaseORM):
 
     resource_class_id: Mapped[int | None] = mapped_column("resource_class_id", Integer(), nullable=True)
     """The resource class id used to start the session."""
+
+    resource_pool_id: Mapped[int | None] = mapped_column("resource_pool_id", Integer(), nullable=True)
+    """The resource class id used to start the session."""
+
+    since: Mapped[datetime | None] = mapped_column("since", DateTime(timezone=True), nullable=True)
+    """The timestamp the object has been started (pod) or created (pvc)."""
 
     cpu_request: Mapped[ComputeCapacity | None] = mapped_column("cpu_request", ComputeCapacityType(), nullable=True)
     """The cpu request."""
@@ -74,13 +86,17 @@ class ResourceRequestsLogORM(BaseORM):
         return ResourceRequestsLogORM(
             cluster_id=cast(ULID, req.cluster_id) if req.cluster_id else None,
             namespace=req.namespace,
-            pod_name=req.pod_name,
-            pod_uid=req.pod_uid,
+            name=req.name,
+            uid=req.uid,
+            kind=req.kind,
+            phase=req.phase,
             capture_date=req.capture_date,
             user_id=req.user_id,
             project_id=req.project_id,
             launcher_id=req.launcher_id,
             resource_class_id=req.resource_class_id,
+            resource_pool_id=req.resource_pool_id,
+            since=req.since,
             cpu_request=req.data.cpu,
             memory_request=req.data.memory,
             gpu_request=req.data.gpu,

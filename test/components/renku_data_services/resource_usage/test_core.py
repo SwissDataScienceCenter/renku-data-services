@@ -39,6 +39,7 @@ async def test_record_empty_resource_requests(app_manager_instance: DependencyMa
     all = [item async for item in repo.find_all()]
     assert len(all) == 0
 
+
 # import logging
 # logging.basicConfig()
 # logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
@@ -51,14 +52,18 @@ async def test_record_resource_requests(app_manager_instance: DependencyManager)
     data = [
         ResourcesRequest(
             namespace="renku",
-            pod_name="pod1",
-            pod_uid="xyz-898-dec",
+            name="pod1",
+            uid="xyz-898-dec",
+            kind="Pod",
+            phase="Running",
             capture_date=dt,
             cluster_id=DEFAULT_K8S_CLUSTER,
             user_id="exyz",
             project_id=ULID(),
             launcher_id=None,
             resource_class_id=4,
+            resource_pool_id=16,
+            since=datetime(2025, 1, 15, 13, 25, 15, 0, UTC),
             data=RequestData(
                 cpu=ComputeCapacity.from_milli_cores(250),
                 memory=DataSize.from_mb(512),
@@ -68,19 +73,23 @@ async def test_record_resource_requests(app_manager_instance: DependencyManager)
         ),
         ResourcesRequest(
             namespace="renku",
-            pod_name="pod2",
-            pod_uid="abc-def-123",
+            name="pod2",
+            uid="abc-def-123",
+            kind="Pod",
+            phase="Running",
             capture_date=dt,
             cluster_id=DEFAULT_K8S_CLUSTER,
             user_id="exyz",
             project_id=ULID(),
             launcher_id=None,
             resource_class_id=4,
+            resource_pool_id=16,
+            since=datetime(2025, 1, 15, 11, 13, 54, 0, UTC),
             data=RequestData(
                 cpu=ComputeCapacity.from_milli_cores(150),
                 memory=DataSize.from_mb(256),
                 gpu=ComputeCapacity.from_milli_cores(100),
-                disk=DataSize.from_mb(1202)
+                disk=DataSize.from_mb(1202),
             ),
         ),
     ]
@@ -91,13 +100,13 @@ async def test_record_resource_requests(app_manager_instance: DependencyManager)
     await recorder.record_resource_requests("whatever")
     all = [item async for item in repo.find_all()]
     assert len(all) == 2
-    assert {e.pod_name for e in all} == {"pod1", "pod2"}
+    assert {e.name for e in all} == {"pod1", "pod2"}
     for item in all:
-        if item.pod_name == "pod1":
+        if item.name == "pod1":
             obj = ResourceRequestsLogORM.from_resources_request(data[0])
             obj.id = item.id
             assert item == obj
-        if item.pod_name == "pod2":
+        if item.name == "pod2":
             obj = ResourceRequestsLogORM.from_resources_request(data[1])
             obj.id = item.id
             assert item == obj
