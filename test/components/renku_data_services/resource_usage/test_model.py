@@ -125,40 +125,49 @@ def test_resource_data_facade() -> None:
     r1 = pd.to_resources_request(DEFAULT_K8S_CLUSTER, date)
     assert r1 == ResourcesRequest(
         namespace=pd.namespace,
-        pod_name=pd.name,
-        pod_uid=pd.uid,
+        name=pd.name,
+        uid=pd.uid,
+        phase=pd.phase,
         capture_date=date,
         cluster_id=DEFAULT_K8S_CLUSTER,
         user_id=pd.user_id,
         project_id=pd.project_id,
         launcher_id=pd.launcher_id,
         resource_class_id=pd.resource_class_id,
+        resource_pool_id=pd.resource_pool_id,
+        since=pd.start_or_creation_time,
         data=pd.requested_data,
     )
     r2 = ad.to_resources_request(DEFAULT_K8S_CLUSTER, date)
     assert r2 == ResourcesRequest(
         namespace=ad.namespace,
-        pod_name=ad.name,
-        pod_uid=ad.uid,
+        name=ad.name,
+        uid=ad.uid,
+        phase=ad.phase,
         capture_date=date,
         cluster_id=DEFAULT_K8S_CLUSTER,
         user_id=ad.user_id,
         project_id=ad.project_id,
         launcher_id=ad.launcher_id,
         resource_class_id=ad.resource_class_id,
+        resource_pool_id=ad.resource_pool_id,
+        since=ad.start_or_creation_time,
         data=ad.requested_data,
     )
     r3 = pv.to_resources_request(DEFAULT_K8S_CLUSTER, date)
     assert r3 == ResourcesRequest(
         namespace=pv.namespace,
-        pod_name=pv.name,
-        pod_uid=pv.uid,
+        name=pv.name,
+        uid=pv.uid,
+        phase=pv.phase,
         capture_date=date,
         cluster_id=DEFAULT_K8S_CLUSTER,
         user_id=pv.user_id,
         project_id=pv.project_id,
         launcher_id=pv.launcher_id,
         resource_class_id=pv.resource_class_id,
+        resource_pool_id=pv.resource_pool_id,
+        since=pv.start_or_creation_time,
         data=pv.requested_data,
     )
 
