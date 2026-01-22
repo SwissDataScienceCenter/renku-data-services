@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
-from typing import Any, Generic, TypeVar, cast
+from typing import Any, cast
 
 import httpx
 from box import Box
@@ -20,14 +20,12 @@ from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import GVK, ClusterConnection, K8sObject, K8sObjectFilter, K8sObjectMeta, K8sSecret
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
-from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, AmaltheaSessionV1Alpha2
+from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1
 from renku_data_services.notebooks.util.kubernetes_ import find_env_var
 from renku_data_services.notebooks.util.retries import retry_with_exponential_backoff_async
 
-_SessionType = TypeVar("_SessionType", AmaltheaSessionV1Alpha1, AmaltheaSessionV1Alpha2)
 
-
-class NotebookK8sClient(SecretClient, Generic[_SessionType]):
+class NotebookK8sClient(SecretClient):
     """A K8s Client for Notebooks."""
 
     def __init__(
@@ -35,14 +33,14 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
         client: K8sClusterClientsPool,
         secrets_client: SecretClient,
         rp_repo: ResourcePoolRepository,
-        session_type: type[_SessionType],
+        session_type: type[AmaltheaSessionV1Alpha1],
         username_label: str,
         gvk: GVK,
     ) -> None:
         self.__client = client
         self.__secrets_client = secrets_client
         self.__rp_repo = rp_repo
-        self.__session_type: type[_SessionType] = session_type
+        self.__session_type: type[AmaltheaSessionV1Alpha1] = session_type
         self.__session_gvk = gvk
         self.__username_label = username_label
 
@@ -176,7 +174,7 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
 
         return await self.__client.cluster_by_id(cluster_id)
 
-    async def list_sessions(self, safe_username: str) -> list[_SessionType]:
+    async def list_sessions(self, safe_username: str) -> list[AmaltheaSessionV1Alpha1]:
         """Get a list of sessions that belong to a user."""
         sessions = [
             self.__session_type.model_validate(s.manifest)
@@ -190,7 +188,7 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
         ]
         return sorted(sessions, key=lambda sess: sess.metadata.name)
 
-    async def get_session(self, name: str, safe_username: str) -> _SessionType | None:
+    async def get_session(self, name: str, safe_username: str) -> AmaltheaSessionV1Alpha1 | None:
         """Get a specific session, None is returned if the session does not exist."""
         session = await self._get(name, self.__session_gvk, safe_username)
 
@@ -198,7 +196,7 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
             return None
         return self.__session_type.model_validate(session.manifest)
 
-    async def create_session(self, manifest: _SessionType, api_user: APIUser) -> _SessionType:
+    async def create_session(self, manifest: AmaltheaSessionV1Alpha1, api_user: APIUser) -> AmaltheaSessionV1Alpha1:
         """Launch a user session."""
         if api_user.id is None:
             raise errors.ProgrammingError(message=f"API user id un set for {api_user}.")
@@ -238,7 +236,7 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
 
     async def patch_session(
         self, session_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
-    ) -> _SessionType:
+    ) -> AmaltheaSessionV1Alpha1:
         """Patch a session."""
         session = await self._get(session_name, self.__session_gvk, safe_username)
         if session is None:
@@ -262,8 +260,6 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
             return None
 
         cluster = await self.__client.cluster_by_id(statefulset.cluster)
-        if cluster is None:
-            return None
 
         return StatefulSet(
             resource=statefulset.to_api_object(cluster.api), namespace=statefulset.namespace, api=cluster.api
@@ -327,8 +323,6 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
             return logs
 
         cluster = await self.__client.cluster_by_id(result.cluster)
-        if cluster is None:
-            return logs
 
         pod = Pod(resource=result.to_api_object(cluster.api), namespace=result.namespace, api=cluster.api)
 
@@ -361,8 +355,6 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
             return
 
         cluster = await self.__client.cluster_by_id(result.cluster)
-        if cluster is None:
-            return
 
         secret = Secret(resource=result.to_api_object(cluster.api), namespace=result.namespace, api=cluster.api)
 

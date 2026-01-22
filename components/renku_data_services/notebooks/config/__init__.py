@@ -131,7 +131,7 @@ class NotebooksConfig:
     cloud_storage: _CloudStorage
     user_secrets: _UserSecrets
     crc_validator: CRCValidatorProto
-    k8s_v2_client: NotebookK8sClient[AmaltheaSessionV1Alpha1]
+    k8s_v2_client: NotebookK8sClient
     cluster_rp: ClusterRepository
     enable_internal_gitlab: bool
     current_resource_schema_version: int = 1
