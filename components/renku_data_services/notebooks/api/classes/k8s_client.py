@@ -199,7 +199,7 @@ class NotebookK8sClient(SecretClient):
     async def create_session(self, manifest: AmaltheaSessionV1Alpha1, api_user: APIUser) -> AmaltheaSessionV1Alpha1:
         """Launch a user session."""
         if api_user.id is None:
-            raise errors.ProgrammingError(message=f"API user id un set for {api_user}.")
+            raise errors.ProgrammingError(message=f"API user id unset for {api_user}.")
 
         session_name = manifest.metadata.name
 
