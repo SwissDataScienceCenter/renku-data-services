@@ -21,9 +21,7 @@ class TestResourceRequestsFetch(ResourceRequestsFetchProto):
     def __init__(self, data: list[ResourcesRequest]) -> None:
         self.data = data
 
-    async def get_resources_requests(
-        self, namespace: str, with_labels: dict[str, str] | None = None
-    ) -> dict[str, ResourcesRequest]:
+    async def get_resources_requests(self) -> dict[str, ResourcesRequest]:
         """Return the resources requests of all pods."""
         return {e.id: e for e in self.data}
 
@@ -35,7 +33,7 @@ async def test_record_empty_resource_requests(app_manager_instance: DependencyMa
     fetch = TestResourceRequestsFetch([])
     repo = ResourceRequestsRepo(app_manager_instance.config.db.async_session_maker)
     recorder = ResourcesRequestRecorder(repo, fetch)
-    await recorder.record_resource_requests("whatever")
+    await recorder.record_resource_requests()
     all = [item async for item in repo.find_all()]
     assert len(all) == 0
 
@@ -97,7 +95,7 @@ async def test_record_resource_requests(app_manager_instance: DependencyManager)
     fetch = TestResourceRequestsFetch(data)
     repo = ResourceRequestsRepo(app_manager_instance.config.db.async_session_maker)
     recorder = ResourcesRequestRecorder(repo, fetch)
-    await recorder.record_resource_requests("whatever")
+    await recorder.record_resource_requests()
     all = [item async for item in repo.find_all()]
     assert len(all) == 2
     assert {e.name for e in all} == {"pod1", "pod2"}
