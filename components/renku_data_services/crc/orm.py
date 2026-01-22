@@ -176,8 +176,9 @@ class ClusterORM(BaseORM):
     __tablename__ = "clusters"
     __table_args__ = (
         CheckConstraint(
-            "(session_tls_secret_name IS NULL AND session_ingress_use_default_cluster_tls_cert) "
-            "OR (session_tls_secret_name IS NOT NULL AND NOT session_ingress_use_default_cluster_tls_cert)",
+            # The tls secret and default tls can be either: both null, one of them can be set
+            # but we cannot have both the secret set and the default tls flag set to true.
+            "NOT(session_tls_secret_name IS NOT NULL AND session_ingress_use_default_cluster_tls_cert)",
             name="either_tls_secret_name_or_default_cluster_tls_cert_is_set",
         ),
     )

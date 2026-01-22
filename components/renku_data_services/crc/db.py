@@ -1056,7 +1056,7 @@ class ClusterRepository:
                         setattr(saved_cluster, key, None)
                     case "session_tls_secret_name", "":
                         setattr(saved_cluster, key, None)
-                    case "session_tls_secret_name", x if x == RESET:
+                    case "session_tls_secret_name", x if x is RESET:
                         setattr(saved_cluster, key, None)
                     case _, None:
                         # Do not modify a value which has not been set in the patch

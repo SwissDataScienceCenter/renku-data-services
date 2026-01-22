@@ -31,6 +31,7 @@ from renku_data_services.crc.models import (
     RemoteConfigurationFirecrest,
     ResourceClass,
     ResourcePool,
+    SessionProtocol,
 )
 from renku_data_services.data_connectors.db import (
     DataConnectorSecretRepository,
@@ -1349,6 +1350,7 @@ class SessionIngress:
         tls_secret = (
             None
             if self.cluster_settings.session_tls_secret_name is None
+            or self.cluster_settings.session_protocol == SessionProtocol.HTTPS
             else TlsSecret(adopt=False, name=self.cluster_settings.session_tls_secret_name)
         )
 

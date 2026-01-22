@@ -388,6 +388,22 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
 
 def validate_cluster(body: apispec.Cluster) -> models.ClusterSettings:
     """Convert a REST API Cluster object to a model Cluster object."""
+    if body.session_protocol == apispec.Protocol.https:
+        if not body.session_tls_secret_name and not body.session_ingress_use_default_cluster_tls_cert:
+            raise errors.ValidationError(
+                message=f"You have indicated that cluster {body.name} should use HTTPS for the ingress "
+                "but neither the TLS secret name nor the flag that indicates that the default cluster TLS secret "
+                "should be used are set. Please set one of them or switch the protocol to HTTP."
+            )
+        if body.session_tls_secret_name and body.session_ingress_use_default_cluster_tls_cert:
+            raise errors.ValidationError(
+                message=f"You have indicated that cluster {body.name} should use HTTPS for the ingress "
+                "but you have set both the TLS secret name and the flag that indicates that the default "
+                "cluster TLS secret should be used are set. "
+                "Please set one of them or switch the protocol to HTTP."
+            )
+    # In the case of HTTP if either the tls secret and/or the default cluster tls flag are used
+    # then we simply ignore them.
     return models.ClusterSettings(
         name=body.name,
         config_name=body.config_name,
@@ -410,14 +426,6 @@ def validate_cluster_patch(patch: apispec.ClusterPatch) -> models.ClusterPatch:
         raise errors.ValidationError(
             message="Setting both the TLS secret name and indicating you want to use the default cluster TLS cert "
             "at the same time is not allowed."
-        )
-    if (
-        not patch.session_ingress_use_default_cluster_tls_cert
-        and patch.session_tls_secret_name is not None
-        and len(patch.session_tls_secret_name) == 0
-    ):
-        raise errors.ValidationError(
-            message="Removing both the TLS secret name and the default cluster TLS cert flag is not allowed."
         )
 
     session_tls_secret_name: None | ResetType | str = patch.session_tls_secret_name

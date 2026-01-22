@@ -37,8 +37,7 @@ def upgrade() -> None:
     )
     # ### end Alembic commands ###
     sa.CheckConstraint(
-        "(session_tls_secret_name IS NULL AND session_ingress_use_default_cluster_tls_cert) "
-        "OR (session_tls_secret_name IS NOT NULL AND NOT session_ingress_use_default_cluster_tls_cert)",
+        "NOT(session_tls_secret_name IS NOT NULL AND session_ingress_use_default_cluster_tls_cert)",
         name="either_tls_secret_name_or_default_cluster_tls_cert_is_set",
     )
 
