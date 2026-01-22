@@ -11,7 +11,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
-from renku_data_services.base_api.misc import validate_body_root_model, validate_db_ids, validate_query
+from renku_data_services.base_api.misc import validate_db_ids, validate_query
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.crc import apispec, models
 from renku_data_services.crc.core import (
@@ -157,7 +157,7 @@ class ResourcePoolUsersBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         @validate_db_ids
-        @validate_body_root_model(json=apispec.PoolUsersWithId)
+        @validate(json=apispec.PoolUsersWithId)
         async def _post(
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.PoolUsersWithId
         ) -> HTTPResponse:
@@ -171,7 +171,7 @@ class ResourcePoolUsersBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_admins
         @validate_db_ids
-        @validate_body_root_model(json=apispec.PoolUsersWithId)
+        @validate(json=apispec.PoolUsersWithId)
         async def _put(
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.PoolUsersWithId
         ) -> HTTPResponse:
@@ -511,7 +511,7 @@ class UserResourcePoolsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        @validate_body_root_model(json=apispec.IntegerIds)
+        @validate(json=apispec.IntegerIds)
         async def _post(_: Request, user: base_models.APIUser, user_id: str, body: apispec.IntegerIds) -> HTTPResponse:
             return await self._post_put(user_id=user_id, post=True, resource_pool_ids=body, api_user=user)
 
@@ -522,7 +522,7 @@ class UserResourcePoolsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        @validate_body_root_model(json=apispec.IntegerIds)
+        @validate(json=apispec.IntegerIds)
         async def _put(_: Request, user: base_models.APIUser, user_id: str, body: apispec.IntegerIds) -> HTTPResponse:
             return await self._post_put(user_id=user_id, post=False, resource_pool_ids=body, api_user=user)
 
