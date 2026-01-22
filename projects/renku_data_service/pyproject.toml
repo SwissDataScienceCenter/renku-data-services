@@ -81,7 +81,7 @@ python-box = "^7.0.1"
 werkzeug = "^3.1.3"
 toml = "^0.10.2"
 parsy = "^2.1"
-sanic-ext = "^24.12.0"
+sanic-ext = "^25.12.0"
 posthog = "^3.21.0"
 markdown-code-runner = "^2.2.0"
 

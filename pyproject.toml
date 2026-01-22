@@ -84,7 +84,7 @@ aiofiles = "^24.1.0"
 protobuf = "^5.29.3"
 poetry = "^2.1.1"
 parsy = "^2.1"
-sanic-ext = "^24.12.0"
+sanic-ext = "^25.12.0"
 posthog = "^3.21.0"
 markdown-code-runner = "^2.2.0"
 
