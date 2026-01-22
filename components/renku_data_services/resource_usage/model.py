@@ -260,7 +260,7 @@ class ResourcesRequest:
             launcher_id=self.launcher_id,
             resource_class_id=self.resource_class_id,
             resource_pool_id=self.resource_pool_id,
-            start_time=self.start_time,
+            since=self.since,
             data=RequestData.zero(),
         )
 
@@ -280,7 +280,7 @@ class ResourcesRequest:
                 launcher_id=self.launcher_id,
                 resource_class_id=self.resource_class_id,
                 resource_pool_id=self.resource_pool_id,
-                start_time=self.start_time,
+                since=self.since,
                 data=self.data + other.data,
             )
         else:
