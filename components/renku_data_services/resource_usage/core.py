@@ -50,8 +50,7 @@ class ResourceRequestsFetch(ResourceRequestsFetchProto):
 
         for cluster_id in clusters:
             async for pod in self._client.list(
-                K8sObjectFilter(
-                    gvk=GVK(kind="pod", version="v1"),
+                K8sObjectFilter(gvk=GVK(kind="pod", version="v1"),
                     namespace=namespace,
                     label_selector=with_labels,
                     cluster=cluster_id,
