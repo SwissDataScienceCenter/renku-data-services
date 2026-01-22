@@ -25,7 +25,7 @@ from renku_data_services.crc.blueprints import (
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_connectors.blueprints import DataConnectorsBP
 from renku_data_services.namespace.blueprints import GroupsBP
-from renku_data_services.notebooks.blueprints import NotebooksBP, NotebooksNewBP
+from renku_data_services.notebooks.blueprints import NotebooksNewBP
 from renku_data_services.notifications.blueprints import NotificationsBP
 from renku_data_services.platform.blueprints import PlatformConfigBP, PlatformUrlRedirectBP
 from renku_data_services.project.blueprints import ProjectsBP, ProjectSessionSecretBP
@@ -193,17 +193,6 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         authenticator=dm.authenticator,
         internal_gitlab_authenticator=dm.gitlab_authenticator,
     )
-    notebooks = NotebooksBP(
-        name="notebooks_old",
-        url_prefix=url_prefix,
-        authenticator=dm.authenticator,
-        nb_config=dm.config.nb_config,
-        internal_gitlab_authenticator=dm.gitlab_authenticator,
-        rp_repo=dm.rp_repo,
-        user_repo=dm.kc_user_repo,
-        storage_repo=dm.storage_repo,
-        git_provider_helper=dm.git_provider_helper,
-    )
     notebooks_new = NotebooksNewBP(
         name="notebooks",
         url_prefix=url_prefix,
@@ -291,7 +280,6 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
             oauth2_clients.blueprint(),
             oauth2_connections.blueprint(),
             repositories.blueprint(),
-            notebooks.blueprint(),
             notebooks_new.blueprint(),
             platform_config.blueprint(),
             search.blueprint(),

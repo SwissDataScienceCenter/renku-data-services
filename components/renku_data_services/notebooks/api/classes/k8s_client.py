@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import base64
 import json
-from typing import Any, Generic, Optional, TypeVar, cast
+from typing import Any, Generic, TypeVar, cast
 
 import httpx
 from box import Box
 from kr8s import NotFoundError, ServerError
-from kr8s.asyncio.objects import APIObject, Pod, Secret, StatefulSet
+from kr8s.asyncio.objects import Pod, Secret, StatefulSet
 
 from renku_data_services.app_config import logging
 from renku_data_services.base_models import APIUser
@@ -20,27 +20,11 @@ from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import GVK, ClusterConnection, K8sObject, K8sObjectFilter, K8sObjectMeta, K8sSecret
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
-from renku_data_services.notebooks.constants import JUPYTER_SESSION_GVK
-from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
-from renku_data_services.notebooks.errors.programming import ProgrammingError
+from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, AmaltheaSessionV1Alpha2
 from renku_data_services.notebooks.util.kubernetes_ import find_env_var
 from renku_data_services.notebooks.util.retries import retry_with_exponential_backoff_async
 
-
-# NOTE The type ignore below is because the kr8s library has no type stubs, they claim pyright better handles type hints
-class JupyterServerV1Alpha1Kr8s(APIObject):
-    """Spec for jupyter servers used by the k8s client."""
-
-    kind: str = JUPYTER_SESSION_GVK.kind
-    version: str = JUPYTER_SESSION_GVK.group_version
-    namespaced: bool = True
-    plural: str = "jupyterservers"
-    singular: str = "jupyterserver"
-    scalable: bool = False
-    endpoint: str = "jupyterservers"
-
-
-_SessionType = TypeVar("_SessionType", JupyterServerV1Alpha1, AmaltheaSessionV1Alpha1)
+_SessionType = TypeVar("_SessionType", AmaltheaSessionV1Alpha1, AmaltheaSessionV1Alpha2)
 
 
 class NotebookK8sClient(SecretClient, Generic[_SessionType]):
@@ -217,7 +201,7 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
     async def create_session(self, manifest: _SessionType, api_user: APIUser) -> _SessionType:
         """Launch a user session."""
         if api_user.id is None:
-            raise ProgrammingError(message=f"API user id un set for {api_user}.")
+            raise errors.ProgrammingError(message=f"API user id un set for {api_user}.")
 
         session_name = manifest.metadata.name
 
@@ -325,7 +309,7 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
         await self.patch_image_pull_secret(session_name, gitlab_token, safe_username)
 
     async def get_session_logs(
-        self, session_name: str, safe_username: str, max_log_lines: Optional[int] = None
+        self, session_name: str, safe_username: str, max_log_lines: int | None = None
     ) -> dict[str, str]:
         """Get the logs from the session."""
         # NOTE: this get_session ensures the user has access to the session, without this you could read someone else's
@@ -386,8 +370,8 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
         old_docker_config = json.loads(base64.b64decode(secret_data[".dockerconfigjson"]).decode())
         hostname = next(iter(old_docker_config["auths"].keys()), None)
         if not hostname:
-            raise ProgrammingError(
-                "Failed to refresh the access credentials in the image pull secret.",
+            raise errors.ProgrammingError(
+                message="Failed to refresh the access credentials in the image pull secret.",
                 detail="Please contact a Renku administrator.",
             )
         new_docker_config = {

@@ -232,7 +232,7 @@ async def __get_gitlab_image_pull_secret(
 ) -> ExtraSecret:
     """Create a Kubernetes secret for private GitLab registry authentication."""
 
-    k8s_namespace = await nb_config.k8s_client.namespace()
+    k8s_namespace = await nb_config.k8s_v2_client.namespace()
 
     registry_secret = {
         "auths": {
@@ -325,7 +325,7 @@ async def get_data_sources(
         secret = ExtraSecret(
             cs.secret(
                 secret_name,
-                await nb_config.k8s_client.namespace(),
+                await nb_config.k8s_v2_client.namespace(),
                 user_secret_key=user_secret_key if secret_key_needed else None,
             )
         )
@@ -758,7 +758,7 @@ async def start_session(
         user=user, project_id=str(launcher.project_id), launcher_id=str(launcher_id), cluster_id=str(cluster.id)
     )
     existing_session = await nb_config.k8s_v2_client.get_session(name=server_name, safe_username=user.id)
-    if existing_session is not None and existing_session.spec is not None:
+    if existing_session is not None:
         return existing_session, False
 
     # Fully determine the resource pool and resource class
@@ -1059,10 +1059,6 @@ async def patch_session(
     session = await nb_config.k8s_v2_client.get_session(session_id, user.id)
     if session is None:
         raise errors.MissingResourceError(message=f"The session with ID {session_id} does not exist")
-    if session.spec is None:
-        raise errors.ProgrammingError(
-            message=f"The session {session_id} being patched is missing the expected 'spec' field.", quiet=True
-        )
     cluster = await nb_config.k8s_v2_client.cluster_by_class_id(session.resource_class_id(), user)
 
     patch = AmaltheaSessionV1Alpha1Patch(spec=AmaltheaSessionV1Alpha1SpecPatch())

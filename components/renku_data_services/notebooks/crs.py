@@ -79,10 +79,6 @@ from renku_data_services.notebooks.cr_amalthea_session import Spec as _ASSpec
 from renku_data_services.notebooks.cr_amalthea_session import Type as AuthenticationType
 from renku_data_services.notebooks.cr_amalthea_session import Type1 as CodeRepositoryType
 from renku_data_services.notebooks.cr_base import BaseCRD
-from renku_data_services.notebooks.cr_jupyter_server import Model as _JSModel
-from renku_data_services.notebooks.cr_jupyter_server import Patch
-from renku_data_services.notebooks.cr_jupyter_server import Spec as JupyterServerSpec
-from renku_data_services.notebooks.cr_jupyter_server import Type as PatchType
 
 
 class Metadata(BaseModel):
@@ -137,31 +133,6 @@ class ComputeResources(BaseModel):
         if hasattr(val, "root"):
             val = val.root
         return round(parse_quantity(val) / 1_000_000_000, ndigits=None)
-
-
-class JupyterServerV1Alpha1(_JSModel):
-    """Jupyter server CRD."""
-
-    kind: str = JUPYTER_SESSION_GVK.kind
-    apiVersion: str = JUPYTER_SESSION_GVK.group_version
-    metadata: Metadata
-
-    def get_compute_resources(self) -> ComputeResources:
-        """Convert the k8s resource requests and storage into usable values."""
-        if self.spec is None:
-            return ComputeResources()
-        resource_requests: dict = self.spec.jupyterServer.resources.get("requests", {})
-        resource_requests["storage"] = self.spec.storage.size
-        return ComputeResources.model_validate(resource_requests)
-
-    def resource_class_id(self) -> int:
-        """Get the resource class from the annotations."""
-        if "renku.io/resourceClassId" not in self.metadata.annotations:
-            raise errors.ProgrammingError(
-                message=f"The session with name {self.metadata.name} is missing its renku.io/resourceClassId annotation"
-            )
-        i = int(self.metadata.annotations["renku.io/resourceClassId"])
-        return i
 
 
 class CullingDurationParsingMixin(BaseCRD):
@@ -332,17 +303,17 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             # Amalthea is sometimes slow when (un)hibernating and still shows the old status, so we patch it here
             # so the client sees the correct state
             if not self.spec.hibernated and self.status.state == State.Hibernated:
-                state = apispec.State3.starting
+                state = apispec.State1.starting
             elif self.spec.hibernated and self.status.state == State.Running:
-                state = apispec.State3.hibernated
+                state = apispec.State1.hibernated
             else:
-                state = apispec.State3(self.status.state.value.lower())
+                state = apispec.State1(self.status.state.value.lower())
         elif self.status.state == State.RunningDegraded:
-            state = apispec.State3.running
+            state = apispec.State1.running
         elif self.status.state == State.NotReady and self.metadata.deletionTimestamp is not None:
-            state = apispec.State3.stopping
+            state = apispec.State1.stopping
         else:
-            state = apispec.State3.starting
+            state = apispec.State1.starting
 
         will_delete_at: datetime | None = None
         match self.status, self.spec.culling:
@@ -551,3 +522,9 @@ class Affinity(_Affinity):
             )
         )
         return node_affinity_is_empty and pod_affinity_is_empty and pod_antiaffinity_is_empty
+
+
+class AmaltheaSessionV1Alpha2(AmaltheaSessionV1Alpha1):
+    """Placeholder for a new session type."""
+
+    pass
