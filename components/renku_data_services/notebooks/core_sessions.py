@@ -1181,6 +1181,24 @@ async def patch_session(
     # TODO: but that we do not save these overrides (e.g. as annotations) means that
     # TODO: we cannot patch data connectors upon resume.
     # TODO: If we did, we would lose the user's provided overrides (e.g. unsaved credentials).
+    # Experimental here:
+    paused_session = await nb_config.k8s_v2_client.get_session(session_id, user.id)
+    if paused_session is None:
+        logger.error(f"Paused session {session_id} not found!")
+    else:
+        secret_prefix = f"{server_name}-ds-"
+        dss = paused_session.spec.dataSources or []
+        dc_ids: list[ULID] = []
+        for ds in dss:
+            if ds.secretRef is not None:
+                name = ds.secretRef.name
+                if name.startswith(secret_prefix):
+                    ulid = name[len(secret_prefix) :]
+                    try:
+                        dc_ids.append(ULID.from_str(ulid.upper()))
+                    except ValueError:
+                        logger.warning(f"Could not parse {ulid.upper()} as a ULID.")
+        logger.info(f"Found mounted data connectors: {dc_ids}.")
 
     # More init containers
     session_extras = session_extras.concat(
