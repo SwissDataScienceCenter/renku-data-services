@@ -65,16 +65,33 @@ def test_memory_usage_from() -> None:
 
 
 def test_request_data_add() -> None:
-    r1 = RequestData(cpu=ComputeCapacity.from_milli_cores(250), memory=DataSize.from_mb(512), gpu=ComputeCapacity.zero())
-    r2 = RequestData(cpu=ComputeCapacity.from_milli_cores(200), memory=DataSize.from_mb(250), gpu=ComputeCapacity.zero())
-    expect = RequestData(cpu=ComputeCapacity.from_milli_cores(450), memory=DataSize.from_mb(762), gpu=ComputeCapacity.zero())
+    r1 = RequestData(
+        cpu=ComputeCapacity.from_milli_cores(250),
+        memory=DataSize.from_mb(512),
+        gpu=ComputeCapacity.zero(),
+        disk=DataSize.from_mb(120),
+    )
+    r2 = RequestData(
+        cpu=ComputeCapacity.from_milli_cores(200),
+        memory=DataSize.from_mb(250),
+        gpu=ComputeCapacity.zero(),
+        disk=DataSize.from_mb(1000),
+    )
+    expect = RequestData(
+        cpu=ComputeCapacity.from_milli_cores(450),
+        memory=DataSize.from_mb(762),
+        gpu=ComputeCapacity.zero(),
+        disk=DataSize.from_mb(1120),
+    )
     assert (r1 + r2) == expect
+
 
 def load_manifest(name: str) -> Box:
     manifest_json = {}
     with open(Path(__file__).parent / name) as f:
         manifest_json = json.load(f)
     return Box(manifest_json)
+
 
 def test_resource_data_facade() -> None:
     ams = K8sObject(
@@ -159,7 +176,10 @@ def test_resource_data_facade() -> None:
     assert not pd.resource_class_id
     assert pd.uid == "aa36ed58-0484-4e93-8daa-1212263dbc47"
     assert pd.requested_data == RequestData(
-        cpu=ComputeCapacity.from_cores(0.54), memory=DataSize.from_mb(1056), gpu=ComputeCapacity.zero()
+        cpu=ComputeCapacity.from_cores(0.54),
+        memory=DataSize.from_mb(1056),
+        gpu=ComputeCapacity.zero(),
+        disk=DataSize.zero(),
     )
     assert pd.session_instance_id == "eike-kettner-962026d34ba4"
 

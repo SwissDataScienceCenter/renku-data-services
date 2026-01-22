@@ -45,20 +45,28 @@ class ResourceRequestsLogORM(BaseORM):
     """The timestamp the values were captured."""
 
     user_id: Mapped[str | None] = mapped_column("user_id", String(), nullable=True)
+    """The user id associated to the request data."""
 
     project_id: Mapped[ULID | None] = mapped_column("project_id", ULIDType(), nullable=True)
+    """A project id associated to the requests data."""
 
     launcher_id: Mapped[ULID | None] = mapped_column("launcher_id", ULIDType(), nullable=True)
+    """The launcher id used to start the session."""
 
     resource_class_id: Mapped[int | None] = mapped_column("resource_class_id", Integer(), nullable=True)
+    """The resource class id used to start the session."""
 
     cpu_request: Mapped[ComputeCapacity | None] = mapped_column("cpu_request", ComputeCapacityType(), nullable=True)
+    """The cpu request."""
 
     memory_request: Mapped[DataSize | None] = mapped_column("memory_request", DataSizeType(), nullable=True)
+    """The memory request."""
 
     gpu_request: Mapped[ComputeCapacity | None] = mapped_column("gpu_request", ComputeCapacityType(), nullable=True)
+    """The gpu request."""
 
     disk_request: Mapped[DataSize | None] = mapped_column("disk_request", DataSizeType(), nullable=True)
+    """The disk request."""
 
     @classmethod
     def from_resources_request(cls, req: ResourcesRequest) -> ResourceRequestsLogORM:

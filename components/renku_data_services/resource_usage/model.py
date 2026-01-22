@@ -14,7 +14,7 @@ from renku_data_services.k8s.constants import ClusterId
 from renku_data_services.k8s.models import K8sObject
 
 
-@dataclass
+@dataclass(frozen=True)
 class DataSize:
     """Data size in bytes."""
 
@@ -81,7 +81,7 @@ class DataSize:
             raise Exception("")
 
 
-@dataclass
+@dataclass(frozen=True)
 class ComputeCapacity:
     """Cpu usage data in 'cores'."""
 
@@ -191,6 +191,19 @@ class RequestData:
         return RequestData(
             cpu=ComputeCapacity.zero(), gpu=ComputeCapacity.zero(), memory=DataSize.zero(), disk=DataSize.zero()
         )
+
+    @classmethod
+    def create(
+        cls,
+        cpu: ComputeCapacity | None = None,
+        gpu: ComputeCapacity | None = None,
+        memory: DataSize | None = None,
+        disk: DataSize | None = None,
+    ) -> RequestData:
+        """Creates a RequestData value setting all non specified numbers to 0."""
+        cz = ComputeCapacity.zero()
+        dz = DataSize.zero()
+        return RequestData(cpu=cpu or cz, gpu=gpu or cz, memory=memory or dz, disk=disk or dz)
 
 
 @dataclass
@@ -333,7 +346,7 @@ class ResourceDataFacade:
     @property
     def requested_data(self) -> RequestData:
         """Return the requested resources."""
-        result = RequestData.zero().with_disk(self.storage)
+        result = RequestData.create(disk=self.storage)
         for container in self.pod.manifest.get("spec", {}).get("containers", []):
             requests = container.get("resources", {}).get("requests", {})
             lims = container.get("resources", {}).get("limits", {})

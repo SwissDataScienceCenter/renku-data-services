@@ -39,6 +39,10 @@ async def test_record_empty_resource_requests(app_manager_instance: DependencyMa
     all = [item async for item in repo.find_all()]
     assert len(all) == 0
 
+# import logging
+# logging.basicConfig()
+# logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
+
 
 @pytest.mark.asyncio
 async def test_record_resource_requests(app_manager_instance: DependencyManager) -> None:
@@ -55,7 +59,12 @@ async def test_record_resource_requests(app_manager_instance: DependencyManager)
             project_id=ULID(),
             launcher_id=None,
             resource_class_id=4,
-            data=RequestData(cpu=ComputeCapacity.from_milli_cores(250), memory=DataSize.from_mb(512), gpu=ComputeCapacity.zero()),
+            data=RequestData(
+                cpu=ComputeCapacity.from_milli_cores(250),
+                memory=DataSize.from_mb(512),
+                gpu=ComputeCapacity.zero(),
+                disk=DataSize.zero(),
+            ),
         ),
         ResourcesRequest(
             namespace="renku",
@@ -68,7 +77,10 @@ async def test_record_resource_requests(app_manager_instance: DependencyManager)
             launcher_id=None,
             resource_class_id=4,
             data=RequestData(
-                cpu=ComputeCapacity.from_milli_cores(150), memory=DataSize.from_mb(256), gpu=ComputeCapacity.from_milli_cores(100)
+                cpu=ComputeCapacity.from_milli_cores(150),
+                memory=DataSize.from_mb(256),
+                gpu=ComputeCapacity.from_milli_cores(100),
+                disk=DataSize.from_mb(1202)
             ),
         ),
     ]
@@ -80,6 +92,7 @@ async def test_record_resource_requests(app_manager_instance: DependencyManager)
     all = [item async for item in repo.find_all()]
     assert len(all) == 2
     assert {e.pod_name for e in all} == {"pod1", "pod2"}
+    print(all)
     for item in all:
         if item.pod_name == "pod1":
             obj = ResourceRequestsLogORM.from_resources_request(data[0])
