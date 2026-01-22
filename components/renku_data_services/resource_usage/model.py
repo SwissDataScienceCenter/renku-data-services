@@ -214,6 +214,7 @@ class ResourcesRequest:
     namespace: str
     name: str
     uid: str
+    kind: str
     phase: str
     capture_date: datetime
     cluster_id: ClusterId | None
@@ -233,6 +234,7 @@ class ResourcesRequest:
             f"{cid}/{self.namespace}/"
             f"{self.uid}/"
             f"{self.name}/"
+            f"{self.kind}/"
             f"{self.phase}/"
             f"{self.user_id}/"
             f"{self.project_id}/"
@@ -250,6 +252,7 @@ class ResourcesRequest:
             name=self.name,
             uid=self.uid,
             phase=self.phase,
+            kind=self.kind,
             capture_date=self.capture_date,
             cluster_id=self.cluster_id,
             user_id=self.user_id,
@@ -268,6 +271,7 @@ class ResourcesRequest:
                 namespace=self.namespace,
                 name=self.name,
                 uid=self.uid,
+                kind=self.kind,
                 phase=self.phase,
                 capture_date=self.capture_date,
                 cluster_id=self.cluster_id,
@@ -426,6 +430,7 @@ class ResourceDataFacade:
             namespace=self.namespace,
             name=self.name,
             uid=self.uid,
+            kind=self.kind,
             phase=self.phase,
             capture_date=date,
             cluster_id=cluster_id,
