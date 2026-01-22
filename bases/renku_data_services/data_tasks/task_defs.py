@@ -436,7 +436,7 @@ async def cleanup_orphaned_capacity_reservations(dm: DependencyManager) -> None:
 async def record_resource_requests(dm: DependencyManager) -> None:
     """Periodically record all resource requests."""
     while True:
-        await dm.resource_requests_recorder.record_resource_requests("renku")
+        await dm.resource_requests_recorder.record_resource_requests()
         await asyncio.sleep(600)
 
 

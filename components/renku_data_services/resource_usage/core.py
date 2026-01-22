@@ -18,10 +18,8 @@ logger = logging.getLogger(__file__)
 class ResourceRequestsFetchProto(Protocol):
     """Protocol defining methods for getting resource requests."""
 
-    async def get_resources_requests(
-        self, namespace: str, with_labels: dict[str, str] | None = None
-    ) -> dict[str, ResourcesRequest]:
-        """Return the resources requests of all pods."""
+    async def get_resources_requests(self) -> dict[str, ResourcesRequest]:
+        """Return the resources requests of all pods and pvcs."""
         ...
 
 
@@ -31,48 +29,36 @@ class ResourceRequestsFetch(ResourceRequestsFetchProto):
     def __init__(self, k8s_client: K8sClient) -> None:
         self._client = k8s_client
 
-    async def get_resources_requests(
-        self, namespace: str, with_labels: dict[str, str] | None = None
-    ) -> dict[str, ResourcesRequest]:
-        """Return the resources requests of all pods."""
+    async def get_resources_requests(self) -> dict[str, ResourcesRequest]:
+        """Return the resources requests of all pods and pvcs."""
 
-        clusters: list[ClusterId | None] = []
-        if isinstance(self._client, K8sClusterClientsPool):
-            clusters = [e.get_cluster().id for e in self._client.get_clients()]
-
-        if clusters == []:
-            clusters = [None]
-
-        logger.debug(f"Get pods from clusters {clusters} (size={len(clusters)})")
+        logger.debug("Get pods and pvc from all clusters")
 
         date = datetime.now(UTC).replace(microsecond=0)
         result: dict[str, ResourcesRequest] = {}
 
-        for cluster_id in clusters:
-            async for pod in self._client.list(
-                K8sObjectFilter(gvk=GVK(kind="pod", version="v1"),
-                    namespace=namespace,
-                    label_selector=with_labels,
-                    cluster=cluster_id,
-                )
-            ):
-                obj = ResourceDataFacade(pod=pod)
-                rreq = obj.to_resources_request(cluster_id, date)
-                await self._amend_session_fallback(cluster_id, obj, rreq)
+        pod_filter = K8sObjectFilter(gvk=GVK(kind="pod", version="v1"))
+        pvc_filter = K8sObjectFilter(gvk=GVK(kind="PersistentVolumeClaim", version="v1"))
 
-                nreq = rreq.add(result.get(rreq.id, rreq.to_zero()))
-                result.update({nreq.id: nreq})
-            async for pvc in self._client.list(
-                K8sObjectFilter(
-                    gvk=GVK(kind="PersistentVolumeClaim", version="v1"), namespace=namespace, cluster=cluster_id
-                )
-            ):
-                obj = ResourceDataFacade(pod=pvc)
-                rreq = obj.to_resources_request(cluster_id, date)
-                await self._amend_session_fallback(cluster_id, obj, rreq)
+        async for pod in self._client.list(pod_filter):
+            obj = ResourceDataFacade(pod=pod)
+            rreq = obj.to_resources_request(pod.cluster, date)
+            await self._amend_session_fallback(pod.cluster, obj, rreq)
+            nreq = rreq.add(result.get(rreq.id, rreq.to_zero()))
+            result.update({nreq.id: nreq})
 
-                nreq = rreq.add(result.get(rreq.id, rreq.to_zero()))
-                result.update({nreq.id: nreq})
+        if result == {}:
+            logger.warning("Empty list returned when listing pods!")
+
+        async for pvc in self._client.list(pvc_filter):
+            obj = ResourceDataFacade(pod=pvc)
+            rreq = obj.to_resources_request(pvc.cluster, date)
+            await self._amend_session_fallback(pvc.cluster, obj, rreq)
+            nreq = rreq.add(result.get(rreq.id, rreq.to_zero()))
+            result.update({nreq.id: nreq})
+
+        if result == {}:
+            logger.warning("Empty list returned when listing pvcs!")
 
         return result
 
@@ -104,7 +90,9 @@ class ResourcesRequestRecorder:
         self._repo = repo
         self._fetch = fetch
 
-    async def record_resource_requests(self, namespace: str, with_labels: dict[str, str] | None = None) -> None:
+    async def record_resource_requests(self) -> None:
         """Fetches all resource requests in the given namespace and stores them."""
-        result = await self._fetch.get_resources_requests(namespace, with_labels)
+        result = await self._fetch.get_resources_requests()
+        if len(result) == 0:
+            logger.warning("No pod or pvc was found!")
         await self._repo.insert_many(result.values())
