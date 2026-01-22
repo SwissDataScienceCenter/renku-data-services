@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
-from typing import TYPE_CHECKING
 
 from kubernetes import client
 
@@ -12,10 +11,6 @@ from renku_data_services.base_models.core import AnonymousAPIUser, Authenticated
 from renku_data_services.notebooks.api.amalthea_patches.utils import get_certificates_volume_mounts
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.config import NotebooksConfig
-
-if TYPE_CHECKING:
-    # NOTE: If these are directly imported then you get circular imports.
-    pass
 
 
 async def main_container(
