@@ -92,7 +92,6 @@ async def test_record_resource_requests(app_manager_instance: DependencyManager)
     all = [item async for item in repo.find_all()]
     assert len(all) == 2
     assert {e.pod_name for e in all} == {"pod1", "pod2"}
-    print(all)
     for item in all:
         if item.pod_name == "pod1":
             obj = ResourceRequestsLogORM.from_resources_request(data[0])
