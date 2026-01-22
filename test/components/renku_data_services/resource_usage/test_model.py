@@ -127,6 +127,7 @@ def test_resource_data_facade() -> None:
         namespace=pd.namespace,
         name=pd.name,
         uid=pd.uid,
+        kind=pd.kind,
         phase=pd.phase,
         capture_date=date,
         cluster_id=DEFAULT_K8S_CLUSTER,
@@ -143,6 +144,7 @@ def test_resource_data_facade() -> None:
         namespace=ad.namespace,
         name=ad.name,
         uid=ad.uid,
+        kind=ad.kind,
         phase=ad.phase,
         capture_date=date,
         cluster_id=DEFAULT_K8S_CLUSTER,
@@ -159,6 +161,7 @@ def test_resource_data_facade() -> None:
         namespace=pv.namespace,
         name=pv.name,
         uid=pv.uid,
+        kind=pv.kind,
         phase=pv.phase,
         capture_date=date,
         cluster_id=DEFAULT_K8S_CLUSTER,
@@ -178,12 +181,16 @@ def test_resource_data_facade() -> None:
     assert ad.resource_class_id == 4
     assert not ad.session_instance_id
     assert ad.uid == "3f51dcde-04fa-4a50-a887-a95ec0887145"
+    assert ad.kind == "AmaltheaSession"
 
     assert not pd.user_id
     assert not pd.project_id
     assert not pd.launcher_id
     assert not pd.resource_class_id
     assert pd.uid == "aa36ed58-0484-4e93-8daa-1212263dbc47"
+    assert pd.start_or_creation_time == datetime(2026, 1, 20, 13, 25, 54, 0, UTC)
+    assert pd.phase == "Running"
+    assert pd.kind == "Pod"
     assert pd.requested_data == RequestData(
         cpu=ComputeCapacity.from_cores(0.54),
         memory=DataSize.from_mb(1056),
@@ -192,5 +199,7 @@ def test_resource_data_facade() -> None:
     )
     assert pd.session_instance_id == "eike-kettner-962026d34ba4"
 
-    print(pd.to_resources_request(DEFAULT_K8S_CLUSTER, date))
-    print(ad.to_resources_request(DEFAULT_K8S_CLUSTER, date))
+    assert pv.start_or_creation_time == datetime(2026, 1, 14, 14, 42, 4, 0, UTC)
+    assert pv.phase == "Bound"
+    assert pv.status_storage == DataSize.from_mb(1024)
+    assert pv.kind == "PersistentVolumeClaim"
