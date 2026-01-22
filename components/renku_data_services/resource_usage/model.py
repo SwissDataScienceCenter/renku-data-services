@@ -7,6 +7,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, cast
 
+from dateutil.parser import parse as parse_datetime
 from kubernetes.utils.quantity import parse_quantity
 from ulid import ULID
 
@@ -211,14 +212,17 @@ class ResourcesRequest:
     """Data structure capturing request to resources."""
 
     namespace: str
-    pod_name: str
-    pod_uid: str
+    name: str
+    uid: str
+    phase: str
     capture_date: datetime
     cluster_id: ClusterId | None
     user_id: str | None
     project_id: ULID | None
     launcher_id: ULID | None
     resource_class_id: int | None
+    resource_pool_id: int | None
+    since: datetime | None
     data: RequestData
 
     @property
@@ -227,12 +231,15 @@ class ResourcesRequest:
         cid = self.cluster_id or "default-cluster"
         return (
             f"{cid}/{self.namespace}/"
-            f"{self.pod_uid}/"
-            f"{self.pod_name}/"
+            f"{self.uid}/"
+            f"{self.name}/"
+            f"{self.phase}/"
             f"{self.user_id}/"
             f"{self.project_id}/"
             f"{self.launcher_id}/"
             f"{self.resource_class_id}/"
+            f"{self.resource_pool_id}/"
+            f"{self.since}/"
             f"@{self.capture_date}"
         )
 
@@ -240,14 +247,17 @@ class ResourcesRequest:
         """Return a new value with all numbers set to 0."""
         return ResourcesRequest(
             namespace=self.namespace,
-            pod_name=self.pod_name,
-            pod_uid=self.pod_uid,
+            name=self.name,
+            uid=self.uid,
+            phase=self.phase,
             capture_date=self.capture_date,
             cluster_id=self.cluster_id,
             user_id=self.user_id,
             project_id=self.project_id,
             launcher_id=self.launcher_id,
             resource_class_id=self.resource_class_id,
+            resource_pool_id=self.resource_pool_id,
+            start_time=self.start_time,
             data=RequestData.zero(),
         )
 
@@ -256,14 +266,17 @@ class ResourcesRequest:
         if other.id == self.id:
             return ResourcesRequest(
                 namespace=self.namespace,
-                pod_name=self.pod_name,
-                pod_uid=self.pod_uid,
+                name=self.name,
+                uid=self.uid,
+                phase=self.phase,
                 capture_date=self.capture_date,
                 cluster_id=self.cluster_id,
                 user_id=self.user_id,
                 project_id=self.project_id,
                 launcher_id=self.launcher_id,
                 resource_class_id=self.resource_class_id,
+                resource_pool_id=self.resource_pool_id,
+                start_time=self.start_time,
                 data=self.data + other.data,
             )
         else:
@@ -281,17 +294,28 @@ class ResourceDataFacade:
 
     def __get_annotation(self, name: str) -> str | None:
         value = self.pod.manifest.get("metadata", {}).get("annotations", {}).get(name)
-        return cast(str, value) if value else None
+        return cast(str, value) if value is not None else None
 
     def __get_label(self, name: str) -> str | None:
         value = self.pod.manifest.get("metadata", {}).get("labels", {}).get(name)
-        return cast(str, value) if value else None
+        return cast(str, value) if value is not None else None
 
     @property
-    def storage(self) -> DataSize | None:
+    def kind(self) -> str:
+        """Return the kind."""
+        return cast(str, self.pod.manifest.kind)
+
+    @property
+    def resource_request_storage(self) -> DataSize | None:
         """Return the storage spec of a pvc."""
         value = self.pod.manifest.get("spec", {}).get("resources", {}).get("requests", {}).get("storage")
-        return DataSize.from_str(str(value)) if value else None
+        return DataSize.from_str(str(value)) if value is not None else None
+
+    @property
+    def status_storage(self) -> DataSize | None:
+        """Return the storage spec of a pvc."""
+        value = self.pod.manifest.get("status", {}).get("capacity", {}).get("storage")
+        return DataSize.from_str(str(value)) if value is not None else None
 
     @property
     def name(self) -> str:
@@ -321,22 +345,54 @@ class ResourceDataFacade:
     def project_id(self) -> ULID | None:
         """Return the project id if this is a pod associated to a session."""
         id = self.__get_annotation("renku.io/project_id")
-        return ULID.from_str(id) if id else None
+        return ULID.from_str(id) if id is not None else None
 
     @property
     def launcher_id(self) -> ULID | None:
         """Return the launcher id if this is a pod associated to a session."""
         id = self.__get_annotation("renku.io/launcher_id")
-        return ULID.from_str(id) if id else None
+        return ULID.from_str(id) if id is not None else None
 
     @property
     def resource_class_id(self) -> int | None:
         """Return the resource class id."""
         val = self.__get_annotation("renku.io/resource_class_id")
         try:
-            return int(val) if val else None
+            return int(val) if val is not None else None
         except ValueError:
             return None
+
+    @property
+    def phase(self) -> str:
+        """Return the phase, if it is an amalthea session the state."""
+        if self.kind == "AmaltheaSession":
+            return cast(str, self.pod.manifest.get("status", {}).get("state"))
+        else:
+            return cast(str, self.pod.manifest.get("status", {}).get("phase"))
+
+    @property
+    def resource_pool_id(self) -> int | None:
+        """Return the resource pool id."""
+        return None #TODO implement when annotation is added
+
+    @property
+    def start_or_creation_time(self) -> datetime:
+        """Return startTime or creationTime of the pod or pvc."""
+        kind = self.kind
+        dtstr : str
+        if kind == "PersistentVolumeClaim" or kind == "AmaltheaSession":
+            dtstr = self.pod.manifest.get("metadata", {}).get("creationTimestamp")
+        elif kind == "Pod":
+            dtstr = self.pod.manifest.get("status", {}).get("startTime")
+        else:
+            raise ValueError(f"No startTime/creationTime for kind {kind}")
+
+        if dtstr is None:
+            raise ValueError(f"No startTime/creationTime found on {kind} {self.uid}")
+        else:
+            # note: using this instead of datetime, because the k8s library uses this
+            # but it doesn't expose the parsing itself
+            return parse_datetime(dtstr)
 
     @property
     def namespace(self) -> str:
@@ -346,7 +402,7 @@ class ResourceDataFacade:
     @property
     def requested_data(self) -> RequestData:
         """Return the requested resources."""
-        result = RequestData.create(disk=self.storage)
+        result = RequestData.create(disk=self.status_storage)
         for container in self.pod.manifest.get("spec", {}).get("containers", []):
             requests = container.get("resources", {}).get("requests", {})
             lims = container.get("resources", {}).get("limits", {})
@@ -368,13 +424,16 @@ class ResourceDataFacade:
         """Convert this into a ResourcesRequest data class."""
         return ResourcesRequest(
             namespace=self.namespace,
-            pod_name=self.name,
-            pod_uid=self.uid,
+            name=self.name,
+            uid=self.uid,
+            phase=self.phase,
             capture_date=date,
             cluster_id=cluster_id,
             user_id=self.user_id,
             project_id=self.project_id,
             launcher_id=self.launcher_id,
             resource_class_id=self.resource_class_id,
+            resource_pool_id=self.resource_pool_id,
+            since=self.start_or_creation_time,
             data=self.requested_data,
         )
