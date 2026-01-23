@@ -1,0 +1,482 @@
+#+title: testing query
+#+PROPERTY: org-confirm-babel-evaluate nil
+
+* notes
+
+Generate values: https://stackoverflow.com/questions/25261511/sql-create-a-table-with-24-hourly-rows
+
+* basic test
+
+#+header: :engine postgres
+#+header: :dbhost 127.0.0.1 :database requests :dbuser dev
+#+header: :dbpassword dev
+#+begin_src sql :exports both
+select count(*) from common.resource_requests_log
+#+end_src
+
+#+RESULTS:
+| SET   |
+|-------|
+| count |
+| 994   |
+
+* grouping per pod
+
+#+header: :engine postgres
+#+header: :dbhost 127.0.0.1 :database requests :dbuser dev
+#+header: :dbpassword dev
+#+begin_src sql :exports both
+  select
+    uid,
+    array_agg(distinct user_id) as user_ids,
+    array_agg(distinct launcher_id) as launchers,
+    min(capture_date) as min_date,
+    max(capture_date) as max_date,
+    array_agg(distinct cpu_request) as cpu,
+    sum(memory_request) as memory,
+    sum(disk_request) as disk,
+    array_remove(array_agg(distinct project_id), null) as projects,
+    array_remove(array_agg(distinct resource_class_id), null) as resource_classes
+
+  from common.resource_requests_log
+  where user_id is not null
+    and phase in ('Bound', 'Running')
+  --    and kind = 'PersistentVolumeClaim'
+  --    and kind = 'Pod'
+  group by uid
+  order by user_ids, launchers
+#+end_src
+
+#+RESULTS:
+| SET                                  |                                        |                              |                        |                        |        |             |             |                              |                  |
+|--------------------------------------+----------------------------------------+------------------------------+------------------------+------------------------+--------+-------------+-------------+------------------------------+------------------|
+| uid                                  | user_ids                               | launchers                    | min_date               | max_date               | cpu    |      memory |        disk | projects                     | resource_classes |
+| 8945535b-e1df-423f-b87d-dfe3f415438a | {1a6d4c40-e500-419d-9812-22d6d1c27aa0} | {01K312ATNN2SEMPDE7XZPAX6E7} | 2026-01-22 13:26:04+00 | 2026-01-22 17:06:26+00 | {0}    |           0 | 24696061952 | {01K2HG8GD5W5KGXM9JWE8TY0A5} | {}               |
+| 742f4ca2-4602-4624-bf4c-f26baf1a4c98 | {4cf16e99-62fe-4889-90ba-38b2d02bd293} | {01KEESRJZ9TMVM4F0K7QNXDY1A} | 2026-01-22 13:26:04+00 | 2026-01-22 17:06:26+00 | {0}    |           0 | 24696061952 | {01KEER2R11FR8EB22JR5Q1PWV9} | {}               |
+| 4756ee2b-7b94-42c9-9b2f-dd783a2863ab | {5daa2891-5310-4428-895d-10f859613223} | {01K82X2T9VKZRH7XQ19NRF2F3F} | 2026-01-22 13:26:04+00 | 2026-01-22 17:06:26+00 | {0}    |           0 | 24696061952 | {01K82WQ20PNMCTDR7A6JD4B3A8} | {}               |
+| a53ac5b3-d9af-4d0d-a5b8-169e599901c4 | {c59e6907-e670-4e03-a1b7-18616bb4678e} | {01KCVFZW2N6S20JAY67K30JNJ7} | 2026-01-22 13:36:05+00 | 2026-01-22 16:36:24+00 | {0.54} | 21038628864 |           0 | {01KCVFX9BVTADB8SGHN7RJFJAP} | {}               |
+| 5681be8c-3069-49fa-828f-9b489fa210ce | {c59e6907-e670-4e03-a1b7-18616bb4678e} | {01KCVFZW2N6S20JAY67K30JNJ7} | 2026-01-22 13:26:04+00 | 2026-01-22 16:36:24+00 | {0}    |           0 | 21474836480 | {01KCVFX9BVTADB8SGHN7RJFJAP} | {}               |
+| 2ab30fe3-2ce5-4bed-9722-05b02603568b | {e25cd000-59be-4e52-86aa-fb4fc60a12c8} | {01KFDKMX7K27GP83NT8MWH08KB} | 2026-01-22 14:06:08+00 | 2026-01-22 14:06:08+00 | {1.04} |  2181038080 |           0 | {01K8JAAR4RSHA2AGEPB4XKBE70} | {}               |
+| 19a85d0e-e5a2-4a1f-897a-dbf99c76c928 | {e25cd000-59be-4e52-86aa-fb4fc60a12c8} | {01KFDKMX7K27GP83NT8MWH08KB} | 2026-01-22 14:06:08+00 | 2026-01-22 14:06:08+00 | {0}    |           0 |  1073741824 | {01K8JAAR4RSHA2AGEPB4XKBE70} | {}               |
+| 0785f071-0bb2-4362-a199-5802719417b6 | {f5f1ebe7-6946-4c2c-b4e5-18ac2d4f41e4} | {01KFFYN9QTKKEWJR02TTC5989Q} | 2026-01-22 13:26:04+00 | 2026-01-22 17:06:26+00 | {0}    |           0 | 24696061952 | {01HZ6QYPGPTKWG0XNRVZKYWNTS} | {}               |
+
+* graph overall usage per hour
+
+#+header: :engine postgres
+#+header: :dbhost 127.0.0.1 :database requests :dbuser dev
+#+header: :dbpassword dev
+#+begin_src sql :exports both
+  select
+    user_id,
+    cpu_request,
+    min(capture_date) as min_date,
+    max(capture_date) as max_date,
+    (max(capture_date) - min(capture_date)) as duration
+  from common.resource_requests_log
+  where user_id is not null
+    and phase in ('Bound', 'Running')
+    and cpu_request > 0
+  group by user_id, cpu_request
+#+end_src
+
+#+RESULTS:
+| SET                                  |             |                        |                        |          |
+|--------------------------------------+-------------+------------------------+------------------------+----------|
+| user_id                              | cpu_request | min_date               | max_date               | duration |
+| c59e6907-e670-4e03-a1b7-18616bb4678e |        0.54 | 2026-01-22 13:36:05+00 | 2026-01-22 16:36:24+00 | 03:00:19 |
+| e25cd000-59be-4e52-86aa-fb4fc60a12c8 |        1.04 | 2026-01-22 14:06:08+00 | 2026-01-22 14:06:08+00 | 00:00:00 |
+
+
+#+name: cpu_hours
+#+header: :engine postgres
+#+header: :dbhost 127.0.0.1 :database requests :dbuser dev
+#+header: :dbpassword dev
+#+begin_src sql :exports both
+  with
+    -- generate a list of hours of a given day
+    hours as (
+    select i as hour_of_day
+    from generate_series(
+      '2026-01-22T12:00:00Z'::timestamptz,
+      '2026-01-22T20:00:00Z'::timestamptz,
+      interval '1' hour) i
+    ),
+
+    -- list cpu request with the corresponding time it was observed
+    cpu_requests as (
+      select
+        cpu_request,
+        min(capture_date) as min_date,
+        max(capture_date) as max_date,
+        (max(capture_date) - min(capture_date)) as duration
+      from common.resource_requests_log
+      where user_id is not null
+        and phase in ('Bound', 'Running')
+        and cpu_request > 0
+      group by cpu_request
+    ),
+    cpu_usage as (
+      select
+        hour_of_day,
+        coalesce(cpu_request, 0) as cpu,
+        min_date,
+        max_date,
+        greatest(hour_of_day, min_date) as usage_from,
+        least(hour_of_day + interval '1' hour, max_date) as usage_to
+      from hours h
+      left join cpu_requests c on (
+            extract(hour from h.hour_of_day) >= extract(hour from c.min_date)
+        and extract(hour from h.hour_of_day) <= extract(hour from c.max_date)
+      )
+    ),
+    cpu_hours as (
+      select
+        hour_of_day,
+        cpu,
+        greatest(interval '15' minute, usage_to - usage_from) as dur,
+        cpu * greatest(0.25, extract(epoch from (usage_to - usage_from)) / 3600) as cpu_h
+      from cpu_usage
+    )
+  select
+    hour_of_day,
+    sum(cpu_h) as cpu_h
+  from cpu_hours
+  group by hour_of_day
+  order by hour_of_day
+#+end_src
+
+#+RESULTS: cpu_hours
+| SET                    |                     |
+|------------------------+---------------------|
+| hour_of_day            |               cpu_h |
+| 2026-01-22 12:00:00+00 |                   0 |
+| 2026-01-22 13:00:00+00 | 0.21525000000000002 |
+| 2026-01-22 14:00:00+00 |                 0.8 |
+| 2026-01-22 15:00:00+00 |                0.54 |
+| 2026-01-22 16:00:00+00 | 0.32760000000000006 |
+| 2026-01-22 17:00:00+00 |                   0 |
+| 2026-01-22 18:00:00+00 |                   0 |
+| 2026-01-22 19:00:00+00 |                   0 |
+| 2026-01-22 20:00:00+00 |                   0 |
+
+
+#+begin_src R :exports both :results output :file plot.png :var cpu_hours=cpu_hours
+  library(ggplot2)
+  library(scales)
+
+  data <- as.data.frame(cpu_hours)
+  data <- subset(data, X >= 0)
+  data$X <- as.numeric(data$X)
+  data$SET <- as.POSIXct(data$SET, format="%Y-%m-%d %H:%M:%S", tz="UTC")
+  data <- na.omit(data)
+
+  plot <- ggplot(data, aes(x = SET, y = X)) +
+    geom_line(color = "green", size = 2) +
+    geom_point(color = "red") +
+    labs(title = "CPU Hours",
+         x = "Timestamp",
+         y = "Fractional Values") +
+    scale_x_datetime(breaks = data$SET, labels = date_format("%H:%M")) +
+    theme_minimal()
+
+  ggsave("plot.png", plot=plot)
+#+end_src
+
+#+RESULTS:
+
+[[file:plot.png]]
+
+* graph usage per user
+
+
+#+name: cpu_hours_per_user
+#+header: :engine postgres
+#+header: :dbhost 127.0.0.1 :database requests :dbuser dev
+#+header: :dbpassword dev
+#+begin_src sql :exports both
+  with
+    -- generate a list of hours of a given day
+    hours as (
+    select i as hour_of_day
+    from generate_series(
+      '2026-01-22T12:00:00Z'::timestamptz,
+      '2026-01-22T20:00:00Z'::timestamptz,
+      interval '1' hour) i
+    ),
+
+    -- list cpu request with the corresponding time it was observed
+    cpu_requests as (
+      select
+        user_id,
+        cpu_request,
+        min(capture_date) as min_date,
+        max(capture_date) as max_date,
+        (max(capture_date) - min(capture_date)) as duration
+      from common.resource_requests_log
+      where user_id is not null
+        and phase in ('Bound', 'Running')
+        and cpu_request > 0
+      group by user_id, cpu_request
+    ),
+    memory_requests as (
+      select
+        user_id,
+        memory_request,
+        min(capture_date) as min_date,
+        max(capture_date) as max_date,
+        (max(capture_date) - min(capture_date)) as duration
+      from common.resource_requests_log
+      where user_id is not null
+        and phase in ('Bound', 'Running')
+        and cpu_request > 0
+      group by user_id, memory_request
+    ),
+    cpu_usage as (
+      select
+        hour_of_day,
+        user_id,
+        coalesce(cpu_request, 0) as cpu,
+        min_date,
+        max_date,
+        greatest(hour_of_day, min_date) as usage_from,
+        least(hour_of_day + interval '1' hour, max_date) as usage_to
+      from hours h
+      left join cpu_requests c on (
+            extract(hour from h.hour_of_day) >= extract(hour from c.min_date)
+        and extract(hour from h.hour_of_day) <= extract(hour from c.max_date)
+      )
+    ),
+    memory_usage as (
+      select
+        hour_of_day,
+        user_id,
+        coalesce(memory_request, 0) as memory,
+        min_date,
+        max_date,
+        greatest(hour_of_day, min_date) as usage_from,
+        least(hour_of_day + interval '1' hour, max_date) as usage_to
+      from hours h
+      left join memory_requests c on (
+            extract(hour from h.hour_of_day) >= extract(hour from c.min_date)
+        and extract(hour from h.hour_of_day) <= extract(hour from c.max_date)
+      )
+    ),
+    cpu_hours as (
+      select
+        hour_of_day,
+        user_id,
+        cpu,
+        greatest(interval '15' minute, usage_to - usage_from) as dur,
+        cpu * greatest(0.25, extract(epoch from (usage_to - usage_from)) / 3600) as cpu_h
+      from cpu_usage
+    ),
+    memory_hours as (
+      select
+        hour_of_day,
+        user_id,
+        memory,
+        greatest(interval '15' minute, usage_to - usage_from) as dur,
+        memory * greatest(0.25, extract(epoch from (usage_to - usage_from)) / 3600) as mem_h
+      from memory_usage
+    )
+  select
+    ch.hour_of_day,
+    ch.user_id,
+    sum(cpu_h) as cpu_h
+  --  sum(mem_h) as mem_h
+  from cpu_hours ch
+--  left join memory_hours mh on mh.hour_of_day = ch.hour_of_day and mh.user_id = ch.user_id
+  group by ch.hour_of_day, ch.user_id
+  order by ch.hour_of_day, ch.user_id
+#+end_src
+
+#+RESULTS: cpu_hours_per_user
+| SET                    |                                      |                     |
+|------------------------+--------------------------------------+---------------------|
+| hour_of_day            | user_id                              |               cpu_h |
+| 2026-01-22 12:00:00+00 |                                      |                   0 |
+| 2026-01-22 13:00:00+00 | c59e6907-e670-4e03-a1b7-18616bb4678e | 0.21525000000000002 |
+| 2026-01-22 14:00:00+00 | c59e6907-e670-4e03-a1b7-18616bb4678e |                0.54 |
+| 2026-01-22 14:00:00+00 | e25cd000-59be-4e52-86aa-fb4fc60a12c8 |                0.26 |
+| 2026-01-22 15:00:00+00 | c59e6907-e670-4e03-a1b7-18616bb4678e |                0.54 |
+| 2026-01-22 16:00:00+00 | c59e6907-e670-4e03-a1b7-18616bb4678e | 0.32760000000000006 |
+| 2026-01-22 17:00:00+00 |                                      |                   0 |
+| 2026-01-22 18:00:00+00 |                                      |                   0 |
+| 2026-01-22 19:00:00+00 |                                      |                   0 |
+| 2026-01-22 20:00:00+00 |                                      |                   0 |
+
+
+* grouping per session
+
+A session is identified by the tuple ~(user_id, launcher_id)~.
+
+#+header: :engine postgres
+#+header: :dbhost 127.0.0.1 :database requests :dbuser dev
+#+header: :dbpassword dev
+#+begin_src sql :exports both
+  select
+    user_id,
+    launcher_id,
+    min(capture_date) as min_date,
+    max(capture_date) as max_date,
+    sum(cpu_request) as cpu,
+    sum(memory_request) as memory,
+    sum(disk_request) as disk,
+    array_agg(distinct since) as sinces
+
+  from common.resource_requests_log
+  where user_id is not null
+    and phase in ('Bound', 'Running')
+  --    and kind = 'PersistentVolumeClaim'
+  --    and kind = 'Pod'
+  group by user_id, launcher_id
+#+end_src
+
+#+RESULTS:
+| SET                                  |                            |                        |                        |                    |             |             |                                                     |
+|--------------------------------------+----------------------------+------------------------+------------------------+--------------------+-------------+-------------+-----------------------------------------------------|
+| user_id                              | launcher_id                | min_date               | max_date               |                cpu |      memory |        disk | sinces                                              |
+| 1a6d4c40-e500-419d-9812-22d6d1c27aa0 | 01K312ATNN2SEMPDE7XZPAX6E7 | 2026-01-22 13:26:04+00 | 2026-01-22 17:06:26+00 |                  0 |           0 | 24696061952 | {"2026-01-16 13:50:23+00"}                          |
+| 4cf16e99-62fe-4889-90ba-38b2d02bd293 | 01KEESRJZ9TMVM4F0K7QNXDY1A | 2026-01-22 13:26:04+00 | 2026-01-22 17:06:26+00 |                  0 |           0 | 24696061952 | {"2026-01-08 12:37:14+00"}                          |
+| 5daa2891-5310-4428-895d-10f859613223 | 01K82X2T9VKZRH7XQ19NRF2F3F | 2026-01-22 13:26:04+00 | 2026-01-22 17:06:26+00 |                  0 |           0 | 24696061952 | {"2026-01-15 13:11:17+00"}                          |
+| c59e6907-e670-4e03-a1b7-18616bb4678e | 01KCVFZW2N6S20JAY67K30JNJ7 | 2026-01-22 13:26:04+00 | 2026-01-22 16:36:24+00 | 10.259999999999998 | 21038628864 | 21474836480 | {"2026-01-14 14:42:04+00","2026-01-22 13:29:44+00"} |
+| e25cd000-59be-4e52-86aa-fb4fc60a12c8 | 01KFDKMX7K27GP83NT8MWH08KB | 2026-01-22 14:06:08+00 | 2026-01-22 14:06:08+00 |               1.04 |  2181038080 |  1073741824 | {"2026-01-22 14:04:53+00","2026-01-22 14:04:54+00"} |
+| f5f1ebe7-6946-4c2c-b4e5-18ac2d4f41e4 | 01KFFYN9QTKKEWJR02TTC5989Q | 2026-01-22 13:26:04+00 | 2026-01-22 17:06:26+00 |                  0 |           0 | 24696061952 | {"2026-01-21 09:37:40+00"}                          |
+
+* group by more flexible
+
+
+#+name: grouping_test
+#+header: :engine postgres
+#+header: :dbhost 127.0.0.1 :database requests :dbuser dev
+#+header: :dbpassword dev
+#+begin_src sql :exports both
+  with
+    cpu_requests as (
+      select
+        user_id,
+        cpu_request,
+        null::float8 as memory_request,
+        min(capture_date) as min_date,
+        max(capture_date) as max_date,
+        (max(capture_date) - min(capture_date)) as duration
+      from common.resource_requests_log
+      where user_id is not null
+        and phase in ('Bound', 'Running')
+        and cpu_request > 0
+      group by user_id, cpu_request
+    ),
+    mem_requests as (
+      select
+        user_id,
+        null::float8 as cpu_request,
+        memory_request,
+        min(capture_date) as min_date,
+        max(capture_date) as max_date,
+        (max(capture_date) - min(capture_date)) as duration
+      from common.resource_requests_log
+      where user_id is not null
+        and phase in ('Bound', 'Running')
+        and memory_request > 0
+      group by user_id, memory_request
+    )
+  select * from cpu_requests
+  union all
+  select * from mem_requests
+#+end_src
+
+#+RESULTS: grouping_test
+| SET                                  |             |                |                        |                        |          |
+|--------------------------------------+-------------+----------------+------------------------+------------------------+----------|
+| user_id                              | cpu_request | memory_request | min_date               | max_date               | duration |
+| c59e6907-e670-4e03-a1b7-18616bb4678e |        0.54 |                | 2026-01-22 13:36:05+00 | 2026-01-22 16:36:24+00 | 03:00:19 |
+| e25cd000-59be-4e52-86aa-fb4fc60a12c8 |        1.04 |                | 2026-01-22 14:06:08+00 | 2026-01-22 14:06:08+00 | 00:00:00 |
+| c59e6907-e670-4e03-a1b7-18616bb4678e |             |     1107296256 | 2026-01-22 13:36:05+00 | 2026-01-22 16:36:24+00 | 03:00:19 |
+| e25cd000-59be-4e52-86aa-fb4fc60a12c8 |             |     2181038080 | 2026-01-22 14:06:08+00 | 2026-01-22 14:06:08+00 | 00:00:00 |
+
+
+#+name: grouping_test_2
+#+header: :engine postgres
+#+header: :dbhost 127.0.0.1 :database requests :dbuser dev
+#+header: :dbpassword dev
+#+begin_src sql :exports both
+  with
+    -- list cpu request with the corresponding time it was observed
+    requests_diffs as (
+      select
+        user_id,
+        cpu_request,
+        memory_request,
+        disk_request,
+        capture_date,
+        lead(capture_date) over cpu_w as next_cpu_date ,
+        lag(capture_date) over cpu_w as prev_cpu_date ,
+        lead(capture_date) over mem_w as next_mem_date,
+        lag(capture_date) over mem_w as prev_mem_date,
+        lead(capture_date) over disk_w as next_disk_date,
+        lag(capture_date) over disk_w as prev_disk_date
+      from common.resource_requests_log
+      where user_id is not null
+        and phase in ('Bound', 'Running')
+        and (cpu_request > 0 or memory_request > 0 or disk_request > 0)
+      window
+         cpu_w as (partition by user_id, cpu_request order by capture_date asc),
+         mem_w as (partition by user_id, memory_request order by capture_date asc),
+         disk_w as (partition by user_id, disk_request order by capture_date asc)
+    ),
+    final_requests_diffs as (
+      select
+        *,
+        coalesce(
+          next_cpu_date - capture_date, -- the interval
+          capture_date - prev_cpu_date, -- use the previous if last occurence
+          interval '10' minute          -- use this fallback if there is only one row
+        ) as cpu_time_diff,
+        coalesce(
+          next_mem_date - capture_date,
+          capture_date - prev_mem_date,
+          interval '10' minute
+        ) as mem_time_diff,
+        coalesce(
+          next_disk_date - capture_date,
+          capture_date - prev_disk_date,
+          interval '10' minute
+        ) as disk_time_diff
+      from requests_diffs
+    ),
+    request_hours as (
+      select *,
+        cpu_request * (extract(epoch from cpu_time_diff) / 3600) as cpu_hours,
+        memory_request * (extract(epoch from mem_time_diff) / 3600) as mem_hours,
+        disk_request * (extract(epoch from disk_time_diff) / 3600) as disk_hours
+      from final_requests_diffs
+    ),
+    per_user as (
+      select
+        user_id,
+        sum(cpu_hours) as cpu_hours,
+        sum(mem_hours) as mem_hours,
+        sum(disk_hours) as disk_hours
+      from request_hours
+      group by user_id
+    )
+  select * from per_user
+--  where user_id = 'c59e6907-e670-4e03-a1b7-18616bb4678e'
+
+#+end_src
+
+#+RESULTS: grouping_test_2
+| SET                                  |                     |                    |                    |
+|--------------------------------------+---------------------+--------------------+--------------------|
+| user_id                              |           cpu_hours |          mem_hours |         disk_hours |
+| 1a6d4c40-e500-419d-9812-22d6d1c27aa0 |                   0 |                  0 |  4122572080.924443 |
+| 4cf16e99-62fe-4889-90ba-38b2d02bd293 |                   0 |                  0 |  4122572080.924443 |
+| 5daa2891-5310-4428-895d-10f859613223 |                   0 |                  0 |  4122572080.924443 |
+| c59e6907-e670-4e03-a1b7-18616bb4678e |  1.7129999999999996 | 3512589789.8666677 | 3585402907.3066654 |
+| e25cd000-59be-4e52-86aa-fb4fc60a12c8 | 0.17333333333333334 |  363506346.6666666 | 178956970.66666666 |
+| f5f1ebe7-6946-4c2c-b4e5-18ac2d4f41e4 |                   0 |                  0 |  4122572080.924443 |
+
+This could serve as the base for doing time-bucket calculations, like
+usage per hour, per week etc.
+
+Problem: edges, from one hour to the next, or one day to the next.
