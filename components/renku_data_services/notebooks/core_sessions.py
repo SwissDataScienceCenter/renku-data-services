@@ -34,7 +34,7 @@ from renku_data_services.data_connectors.db import (
 )
 from renku_data_services.data_connectors.models import DataConnectorSecret, DataConnectorWithSecrets
 from renku_data_services.errors import ValidationError, errors
-from renku_data_services.k8s.models import K8sSecret, sanitizer
+from renku_data_services.k8s.models import ClusterConnection, K8sSecret, sanitizer
 from renku_data_services.notebooks import apispec, core
 from renku_data_services.notebooks.api.amalthea_patches import git_proxy, init_containers
 from renku_data_services.notebooks.api.amalthea_patches.init_containers import user_secrets_extras
@@ -350,6 +350,56 @@ async def get_data_sources(
         secrets=secrets,
         data_connector_secrets=dcs_secrets,
     )
+
+
+async def patch_data_sources(
+    session: AmaltheaSessionV1Alpha1,
+    cluster: ClusterConnection,
+    nb_config: NotebooksConfig,
+    data_connectors_stream: AsyncIterator[DataConnectorWithSecrets],
+    # request: Request,
+    # nb_config: NotebooksConfig,
+    # user: AnonymousAPIUser | AuthenticatedAPIUser,
+    # server_name: str,
+    # data_connectors_stream: AsyncIterator[DataConnectorWithSecrets],
+    # work_dir: PurePosixPath,
+    # data_connectors_overrides: list[SessionDataConnectorOverride],
+    # user_repo: UserRepo,
+    # data_source_repo: DataSourceRepository,
+) -> SessionExtraResources:
+    """Handle updating data sources definitions when resuming a session."""
+    # Experimental here:
+    server_name = session.metadata.name
+    secret_prefix = f"{server_name}-ds-"
+    dss = session.spec.dataSources or []
+    mounted_dcs: list[tuple[ULID, str]] = []
+    for ds in dss:
+        if ds.secretRef is not None:
+            name = ds.secretRef.name
+            if name.startswith(secret_prefix):
+                ulid = name[len(secret_prefix) :]
+                try:
+                    mounted_dcs.append(ULID.from_str(ulid.upper(), name))
+                except ValueError:
+                    logger.warning(f"Could not parse {ulid.upper()} as a ULID.")
+    logger.info(f"Found mounted data connectors: {[str(u) for u, _ in mounted_dcs]}.")
+    async for dc in data_connectors_stream:
+        dc_id = dc.data_connector.id
+        mounted_dc = next(filter(lambda tup: tup[0] == dc_id, mounted_dcs), None)
+        if mounted_dc is None:
+            continue
+        _, secret_name = mounted_dc
+        logger.info(f"Patching DC secret {secret_name}.")
+        k8s_secret = await nb_config.k8s_v2_client.get_secret(
+            K8sSecret.from_v1_secret(V1Secret(metadata=V1ObjectMeta(name=secret_name)), cluster)
+        )
+        if k8s_secret is None:
+            logger.warning(f"Could not read secret {secret_name} for patching, skipping!")
+            continue
+        s_data = k8s_secret.to_v1_secret().data
+        s_string_data = k8s_secret.to_v1_secret().string_data
+        logger.info(f"Got secret: s_data={s_data}, s_string_data={s_string_data}")
+    return SessionExtraResources()
 
 
 async def request_dc_secret_creation(
@@ -1059,6 +1109,7 @@ async def patch_session(
     internal_gitlab_user: APIUser,
     nb_config: NotebooksConfig,
     git_provider_helper: GitProviderHelperProto,
+    data_connector_secret_repo: DataConnectorSecretRepository,
     project_repo: ProjectRepository,
     project_session_secret_repo: ProjectSessionSecretRepository,
     rp_repo: ResourcePoolRepository,
@@ -1160,6 +1211,7 @@ async def patch_session(
     session_secrets = await project_session_secret_repo.get_all_session_secrets_from_project(
         user=user, project_id=project.id
     )
+    data_connectors_stream = data_connector_secret_repo.get_data_connectors_with_secrets(user, project.id)
     git_providers = await git_provider_helper.get_providers(user=user)
     repositories = repositories_from_project(project, git_providers)
 
@@ -1181,6 +1233,15 @@ async def patch_session(
     # TODO: but that we do not save these overrides (e.g. as annotations) means that
     # TODO: we cannot patch data connectors upon resume.
     # TODO: If we did, we would lose the user's provided overrides (e.g. unsaved credentials).
+    session_extras = session_extras.concat(
+        await patch_data_sources(
+            session=session,
+            cluster=cluster,
+            nb_config=nb_config,
+            data_connectors_stream=data_connectors_stream,
+        )
+    )
+
     # Experimental here:
     paused_session = await nb_config.k8s_v2_client.get_session(session_id, user.id)
     if paused_session is None:
