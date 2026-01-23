@@ -1,6 +1,7 @@
 """Handling of data sources which require an OAuth2 connection."""
 
 import json
+from configparser import ConfigParser
 from typing import Any
 
 from sanic import Request
@@ -110,3 +111,20 @@ class DataSourceRepository:
                 return True
             case _:
                 return False
+
+    async def blah(self, config_data: str) -> None:
+        """Handles patching..."""
+        parser = ConfigParser(interpolation=None)
+        try:
+            parser.read_string(config_data)
+        except Exception as err:
+            logger.error(f"Failed to parse existing data connector configuration: {err}")
+            return None
+        main_section = next(filter(lambda s: s, parser.sections()), "")
+        if not main_section:
+            logger.error("Failed to parse existing data connector configuration: no main section.")
+            return None
+        logger.info(f"Got main section: {main_section}.")
+        items = parser.items(main_section)
+        logger.info(f"Got items: {items}.")
+        pass

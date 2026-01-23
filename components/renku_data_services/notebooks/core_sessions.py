@@ -413,6 +413,7 @@ async def patch_data_sources(
             logger.warning(f"Error decoding 'configData' for data connector {str(dc_id)}, skipping! {err}")
             continue
         logger.info(f"Got existing_config_data = {existing_config_data}")
+        await data_source_repo.blah(existing_config_data)
 
     return SessionExtraResources()
 
@@ -1258,25 +1259,6 @@ async def patch_session(
             data_source_repo=data_source_repo,
         )
     )
-
-    # Experimental here:
-    paused_session = await nb_config.k8s_v2_client.get_session(session_id, user.id)
-    if paused_session is None:
-        logger.error(f"Paused session {session_id} not found!")
-    else:
-        secret_prefix = f"{server_name}-ds-"
-        dss = paused_session.spec.dataSources or []
-        dc_ids: list[ULID] = []
-        for ds in dss:
-            if ds.secretRef is not None:
-                name = ds.secretRef.name
-                if name.startswith(secret_prefix):
-                    ulid = name[len(secret_prefix) :]
-                    try:
-                        dc_ids.append(ULID.from_str(ulid.upper()))
-                    except ValueError:
-                        logger.warning(f"Could not parse {ulid.upper()} as a ULID.")
-        logger.info(f"Found mounted data connectors: {dc_ids}.")
 
     # More init containers
     session_extras = session_extras.concat(
