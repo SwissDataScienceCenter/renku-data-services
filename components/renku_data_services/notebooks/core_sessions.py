@@ -424,6 +424,8 @@ async def patch_data_sources(
         new_secret = k8s_secret.to_v1_secret()
         new_secret.data = new_secret.data or dict()
         new_secret.data["configData"] = base64.b64encode(new_config_data.encode("utf-8")).decode("utf-8")
+        new_secret.string_data = None
+        logger.info(f"V1Secret = {new_secret}")
         secrets.append(ExtraSecret(new_secret))
 
     logger.info(f"Patching secrets: {secrets}")
