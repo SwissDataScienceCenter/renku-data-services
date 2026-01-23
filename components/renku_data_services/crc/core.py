@@ -59,21 +59,36 @@ def validate_resource_class(body: apispec.ResourceClass) -> models.UnsavedResour
 
 @overload
 def validate_resource_class_patch_or_put(
-    body: apispec.ResourceClassPatch | apispec.ResourceClass, method: Literal["PATCH", "PUT"]
-) -> models.ResourceClassPatch: ...
+    body: apispec.ResourceClassPatchWithId
+    | apispec.ResourceClassWithIdWithoutResourcePoolId
+    | apispec.ResourceClassWithId,
+    method: Literal["PATCH", "PUT"],
+) -> models.ResourceClassPatchWithId: ...
 @overload
 def validate_resource_class_patch_or_put(
-    body: apispec.ResourceClassPatchWithId | apispec.ResourceClassWithId, method: Literal["PATCH", "PUT"]
-) -> models.ResourceClassPatchWithId: ...
+    body: apispec.ResourceClassPatch | apispec.ResourceClass, method: Literal["PATCH", "PUT"]
+) -> models.ResourceClassPatch: ...
 def validate_resource_class_patch_or_put(
     body: apispec.ResourceClassPatch
     | apispec.ResourceClassPatchWithId
+    | apispec.ResourceClassWithIdWithoutResourcePoolId
     | apispec.ResourceClass
     | apispec.ResourceClassWithId,
     method: Literal["PATCH", "PUT"],
 ) -> models.ResourceClassPatch | models.ResourceClassPatchWithId:
     """Validate the patch to a resource class."""
-    rc_id = body.id if isinstance(body, (apispec.ResourceClassPatchWithId, apispec.ResourceClassWithId)) else None
+    rc_id = (
+        body.id
+        if isinstance(
+            body,
+            (
+                apispec.ResourceClassPatchWithId,
+                apispec.ResourceClassWithId,
+                apispec.ResourceClassWithIdWithoutResourcePoolId,
+            ),
+        )
+        else None
+    )
     node_affinities: list[models.NodeAffinity] | None = [] if method == "PUT" else None
     if body.node_affinities:
         node_affinities = sorted(
@@ -278,6 +293,7 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
             default_storage=rc.default_storage if rc.default_storage is not None else existing_rc.default_storage,
             node_affinities=rc.node_affinities if rc.node_affinities is not None else existing_rc.node_affinities,
             tolerations=rc.tolerations if rc.tolerations is not None else existing_rc.tolerations,
+            resource_pool_id=existing.id,
         )
     quota: models.Quota | models.UnsavedQuota | ResetType = existing.quota if existing.quota else RESET
     if update.quota is RESET:

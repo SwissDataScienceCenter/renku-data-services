@@ -996,7 +996,17 @@ components:
           $ref: "#/components/schemas/StorageClassName"
         service_account_name:
           $ref: "#/components/schemas/K8sResourceName"
-      required: [ "name", "config_name", "session_protocol", "session_host", "session_port", "session_path", "session_ingress_annotations", "session_tls_secret_name" ]
+      required:
+        [
+          "name",
+          "config_name",
+          "session_protocol",
+          "session_host",
+          "session_port",
+          "session_path",
+          "session_ingress_annotations",
+          "session_tls_secret_name",
+        ]
     ClusterPatch:
       type: object
       additionalProperties: false
@@ -1051,7 +1061,18 @@ components:
           $ref: "#/components/schemas/StorageClassName"
         service_account_name:
           type: string
-      required: [ "name", "config_name", "session_protocol", "session_host", "session_port", "session_path", "session_ingress_annotations", "session_tls_secret_name", "id" ]
+      required:
+        [
+          "name",
+          "config_name",
+          "session_protocol",
+          "session_host",
+          "session_port",
+          "session_path",
+          "session_ingress_annotations",
+          "session_tls_secret_name",
+          "id",
+        ]
     ClustersWithId:
       type: array
       items:
@@ -1078,7 +1099,16 @@ components:
           $ref: "#/components/schemas/K8sLabelList"
         node_affinities:
           $ref: "#/components/schemas/NodeAffinityList"
-      required: ["cpu", "memory", "gpu", "max_storage", "name", "default", "default_storage"]
+      required:
+        [
+          "cpu",
+          "memory",
+          "gpu",
+          "max_storage",
+          "name",
+          "default",
+          "default_storage",
+        ]
       example:
         name: "resource class"
         cpu: 1.5
@@ -1164,7 +1194,20 @@ components:
           $ref: "#/components/schemas/K8sLabelList"
         node_affinities:
           $ref: "#/components/schemas/NodeAffinityList"
-      required: ["cpu", "memory", "gpu", "max_storage", "name", "id", "default", "default_storage"]
+        resource_pool_id:
+          $ref: "#/components/schemas/IntegerId"
+      required:
+        [
+          "cpu",
+          "memory",
+          "gpu",
+          "max_storage",
+          "name",
+          "id",
+          "default",
+          "default_storage",
+          "resource_pool_id",
+        ]
       example:
         name: "resource class"
         cpu: 1.5
@@ -1174,6 +1217,7 @@ components:
         default_storage: 10
         id: 1
         default: true
+        resource_pool_id: 1
     ResourceClassWithIdFiltered:
       type: object
       additionalProperties: false
@@ -1200,7 +1244,20 @@ components:
           $ref: "#/components/schemas/K8sLabelList"
         node_affinities:
           $ref: "#/components/schemas/NodeAffinityList"
-      required: ["cpu", "memory", "gpu", "max_storage", "name", "id", "default", "default_storage"]
+        resource_pool_id:
+          $ref: "#/components/schemas/IntegerId"
+      required:
+        [
+          "cpu",
+          "memory",
+          "gpu",
+          "max_storage",
+          "name",
+          "id",
+          "default",
+          "default_storage",
+          "resource_pool_id",
+        ]
       example:
         name: "resource class"
         cpu: 1.5
@@ -1211,6 +1268,7 @@ components:
         id: 1
         default: true
         matching: true
+        resource_pool_id: 1
     ResourceClasses:
       type: array
       items:
@@ -1229,6 +1287,7 @@ components:
           id: 1
           default: true
           default_storage: 10
+          resource_pool_id: 1
         - name: "resource class 2"
           cpu: 4.5
           memory: 10
@@ -1237,6 +1296,7 @@ components:
           max_storage: 10000
           id: 2
           default: false
+          resource_pool_id: 1
     ResourceClassesWithIdResponse:
       # Note: this needs to be separate from ResourceClassesWithId or it doesn't get generated
       type: array
@@ -1252,6 +1312,7 @@ components:
           id: 1
           default: true
           default_storage: 10
+          resource_pool_id: 1
         - name: "resource class 2"
           cpu: 4.5
           memory: 10
@@ -1260,6 +1321,7 @@ components:
           max_storage: 10000
           id: 2
           default: false
+          resource_pool_id: 1
     ResourceClassesPatchWithId:
       type: array
       items:
@@ -1360,6 +1422,21 @@ components:
             max_storage: 10000
         name: "resource pool name"
         cluster_id: "4QZ886777NTN8GHQ551GSVAXSA"
+    ResourceClassWithIdWithoutResourcePoolId:
+      allOf:
+        - $ref: "#/components/schemas/ResourceClass"
+        - properties:
+            id:
+              $ref: "#/components/schemas/IntegerId"
+        - required:
+            - "cpu"
+            - "memory"
+            - "gpu"
+            - "max_storage"
+            - "name"
+            - "id"
+            - "default"
+            - "default_storage"
     ResourcePoolPut:
       type: object
       additionalProperties: false
@@ -1367,7 +1444,10 @@ components:
         quota:
           $ref: "#/components/schemas/QuotaWithId"
         classes:
-          $ref: "#/components/schemas/ResourceClassesWithId"
+          type: array
+          items:
+            $ref: "#/components/schemas/ResourceClassWithIdWithoutResourcePoolId"
+          uniqueItems: true
         name:
           $ref: "#/components/schemas/Name"
         public:
@@ -1746,7 +1826,7 @@ components:
       properties:
         kind:
           type: string
-          enum: [ "firecrest" ]
+          enum: ["firecrest"]
           description: Kind of remote resource pool
           example: "firecrest"
         provider_id:
@@ -1799,7 +1879,7 @@ components:
       properties:
         kind:
           type: string
-          enum: [ "firecrest" ]
+          enum: ["firecrest"]
           description: Kind of remote resource pool
           example: "firecrest"
         provider_id:
@@ -1888,7 +1968,7 @@ components:
       description: A list of k8s labels used for tolerations and/or node affinity
       items:
         $ref: "#/components/schemas/NodeAffinity"
-      example: [{"key": "test-label-1", "required_during_scheduling": false}]
+      example: [{ "key": "test-label-1", "required_during_scheduling": false }]
       uniqueItems: true
       default: []
       minItems: 0
@@ -1897,7 +1977,7 @@ components:
       description: A list of k8s labels used for tolerations and/or node affinity
       items:
         $ref: "#/components/schemas/NodeAffinity"
-      example: [{"key": "test-label-1", "required_during_scheduling": false}]
+      example: [{ "key": "test-label-1", "required_during_scheduling": false }]
       uniqueItems: true
       default: []
       minItems: 0
@@ -1930,11 +2010,11 @@ components:
       type: string
       minLength: 26
       maxLength: 26
-      pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"  # This is case-insensitive
+      pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$" # This is case-insensitive
     Protocol:
       description: Allowed Protocol strings
       type: string
-      enum: [ "http", "https" ]
+      enum: ["http", "https"]
     Port:
       type: integer
       minimum: 0

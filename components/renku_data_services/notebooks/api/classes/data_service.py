@@ -87,6 +87,7 @@ class DummyCRCValidator:
             id=1,
             default_storage=1,
             default=True,
+            resource_pool_id=1,
         )
 
 
