@@ -29,11 +29,6 @@ from renku_data_services.connected_services.oauth_http import DefaultOAuthHttpCl
 from renku_data_services.crc import models as crc_models
 from renku_data_services.crc.constants import DEFAULT_RUNTIME_PLATFORM
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository, UserRepository
-from renku_data_services.crc.server_options import (
-    ServerOptions,
-    ServerOptionsDefaults,
-    generate_default_resource_pool,
-)
 from renku_data_services.data_api.config import Config
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
@@ -89,6 +84,14 @@ default_resource_pool = crc_models.UnsavedResourcePool(
             max_storage=20,
             gpu=0,
             default=True,
+        ),
+        crc_models.UnsavedResourceClass(
+            name="medium",
+            cpu=0.75,
+            memory=1,
+            max_storage=20,
+            gpu=0,
+            default=False,
         ),
         crc_models.UnsavedResourceClass(
             name="large",
@@ -196,19 +199,6 @@ class DependencyManager:
 
     def __post_init__(self) -> None:
         self.spec = self.load_apispec()
-
-        if self.default_resource_pool_file is not None:
-            with open(self.default_resource_pool_file) as f:
-                self.default_resource_pool = crc_models.UnsavedResourcePool(**safe_load(f))
-        if (
-            self.config.server_options.defaults_path is not None
-            and self.config.server_options.ui_choices_path is not None
-        ):
-            with open(self.config.server_options.ui_choices_path) as f:
-                options = ServerOptions.model_validate(safe_load(f))
-            with open(self.config.server_options.defaults_path) as f:
-                defaults = ServerOptionsDefaults.model_validate(safe_load(f))
-            self.default_resource_pool = generate_default_resource_pool(options, defaults)
 
     @classmethod
     def from_env(cls) -> DependencyManager:

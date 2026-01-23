@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 from urllib.parse import urljoin, urlparse
 
@@ -13,13 +13,12 @@ from renku_data_services.connected_services.db import ConnectedServicesRepositor
 from renku_data_services.connected_services.utils import GitHubProviderType, get_github_provider_type
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.crc.models import ResourceClass, ResourcePool
+from renku_data_services.errors import errors
 from renku_data_services.notebooks.api.classes.repository import (
     INTERNAL_GITLAB_PROVIDER,
     GitProvider,
 )
-from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
 from renku_data_services.notebooks.config.dynamic import _GitConfig, _SessionConfig
-from renku_data_services.notebooks.errors.user import InvalidComputeResourceError
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +34,7 @@ class CRCValidator:
         user: APIUser,
         class_id: int,
         storage: Optional[int] = None,
-    ) -> ServerOptions:
+    ) -> None:
         """Ensures that the resource class and storage requested is valid.
 
         Storage in memory are assumed to be in gigabytes.
@@ -50,84 +49,32 @@ class CRCValidator:
                     pool = rp
                     break
         if pool is None or res_class is None:
-            raise InvalidComputeResourceError(message=f"The resource class ID {class_id} does not exist.")
+            raise errors.MissingResourceError(message=f"The resource class ID {class_id} does not exist.")
         if storage is None:
             storage = res_class.default_storage
         if storage < 1:
-            raise InvalidComputeResourceError(message="Storage requests have to be greater than or equal to 1GB.")
+            raise errors.ValidationError(message="Storage requests have to be greater than or equal to 1GB.")
         if storage > res_class.max_storage:
-            raise InvalidComputeResourceError(message="The requested storage surpasses the maximum value allowed.")
-        options = ServerOptions.from_resource_class(res_class)
-        options.idle_threshold_seconds = pool.idle_threshold
-        options.hibernation_threshold_seconds = pool.hibernation_threshold
-        options.set_storage(storage, gigabytes=True)
-        quota = pool.quota
-        if quota is not None:
-            options.priority_class = quota.id
-        return options
+            raise errors.ValidationError(message="The requested storage surpasses the maximum value allowed.")
 
     async def get_default_class(self) -> ResourceClass:
         """Get the default resource class from the default resource pool."""
         return await self.rp_repo.get_default_resource_class()
 
-    async def find_acceptable_class(
-        self, user: APIUser, requested_server_options: ServerOptions
-    ) -> Optional[ServerOptions]:
-        """Find a resource class greater than or equal to the old-style server options being requested.
-
-        Only classes available to the user are considered.
-        """
-        resource_pools = await self._get_resource_pools(user=user, server_options=requested_server_options)
-        # Difference and best candidate in the case that the resource class will be
-        # greater than or equal to the request
-        best_larger_or_equal_diff: ServerOptions | None = None
-        best_larger_or_equal_class: ServerOptions | None = None
-        zero_diff = ServerOptions(cpu=0, memory=0, gpu=0, storage=0)
-        for resource_pool in resource_pools:
-            quota = resource_pool.quota
-            for resource_class in resource_pool.classes:
-                resource_class_mdl = ServerOptions.from_resource_class(resource_class)
-                if quota is not None:
-                    resource_class_mdl.priority_class = quota.id
-                diff = resource_class_mdl - requested_server_options
-                if (
-                    diff >= zero_diff
-                    and (best_larger_or_equal_diff is None or diff < best_larger_or_equal_diff)
-                    and resource_class.matching
-                ):
-                    best_larger_or_equal_diff = diff
-                    best_larger_or_equal_class = resource_class_mdl
-        return best_larger_or_equal_class
-
     async def _get_resource_pools(
         self,
         user: APIUser,
-        server_options: Optional[ServerOptions] = None,
     ) -> list[ResourcePool]:
-        output: list[ResourcePool] = []
-        if server_options is not None:
-            options_gb = server_options.to_gigabytes()
-            output = await self.rp_repo.filter_resource_pools(
-                user,
-                cpu=options_gb.cpu,
-                memory=round(options_gb.memory),
-                max_storage=round(options_gb.storage or 1),
-                gpu=options_gb.gpu,
-            )
-        else:
-            output = await self.rp_repo.filter_resource_pools(user)
-        return output
+        return await self.rp_repo.filter_resource_pools(user)
 
 
 @dataclass
 class DummyCRCValidator:
     """Dummy validator for resource pools and classes."""
 
-    options: ServerOptions = field(default_factory=lambda: ServerOptions(0.5, 1, 0, 1, "/lab", False, True))
-
-    async def validate_class_storage(self, user: APIUser, class_id: int, storage: int | None = None) -> ServerOptions:
+    async def validate_class_storage(self, user: APIUser, class_id: int, storage: int | None = None) -> None:
         """Validate the storage against the resource class."""
-        return self.options
+        return None
 
     async def get_default_class(self) -> ResourceClass:
         """Get the default resource class."""
@@ -141,12 +88,6 @@ class DummyCRCValidator:
             default_storage=1,
             default=True,
         )
-
-    async def find_acceptable_class(
-        self, user: APIUser, requested_server_options: ServerOptions
-    ) -> Optional[ServerOptions]:
-        """Find an acceptable resource class based on the required options."""
-        return self.options
 
 
 class GitProviderHelper:

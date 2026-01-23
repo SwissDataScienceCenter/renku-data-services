@@ -2,8 +2,8 @@
 
 import os
 from collections.abc import Awaitable
-from dataclasses import dataclass, field
-from typing import Any, Optional, Protocol, Self
+from dataclasses import dataclass
+from typing import Any, Protocol, Self
 
 import kr8s
 
@@ -25,9 +25,7 @@ from renku_data_services.notebooks.api.classes.data_service import (
 )
 from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClient
 from renku_data_services.notebooks.api.classes.repository import GitProvider
-from renku_data_services.notebooks.api.schemas.server_options import ServerOptions
 from renku_data_services.notebooks.config.dynamic import (
-    ServerOptionsConfig,
     _CloudStorage,
     _GitConfig,
     _K8sConfig,
@@ -36,9 +34,8 @@ from renku_data_services.notebooks.config.dynamic import (
     _SessionConfig,
     _UserSecrets,
 )
-from renku_data_services.notebooks.config.static import _ServersGetEndpointAnnotations
-from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
-from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
+from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
+from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 
 
@@ -49,19 +46,13 @@ class CRCValidatorProto(Protocol):
         self,
         user: APIUser,
         class_id: int,
-        storage: Optional[int] = None,
-    ) -> ServerOptions:
+        storage: int | None = None,
+    ) -> None:
         """Validate the resource class storage for the session."""
         ...
 
     async def get_default_class(self) -> ResourceClass:
         """Get the default resource class."""
-        ...
-
-    async def find_acceptable_class(
-        self, user: APIUser, requested_server_options: ServerOptions
-    ) -> Optional[ServerOptions]:
-        """Find a suitable resource class based on resource requirements."""
         ...
 
 
@@ -132,7 +123,6 @@ class TestKubeConfig(KubeConfig):
 class NotebooksConfig:
     """The notebooks' configuration."""
 
-    server_options: ServerOptionsConfig
     sessions: _SessionConfig
     sentry: _SentryConfig
     git: _GitConfig
@@ -141,8 +131,7 @@ class NotebooksConfig:
     cloud_storage: _CloudStorage
     user_secrets: _UserSecrets
     crc_validator: CRCValidatorProto
-    k8s_client: NotebookK8sClient[JupyterServerV1Alpha1]
-    k8s_v2_client: NotebookK8sClient[AmaltheaSessionV1Alpha1]
+    k8s_v2_client: NotebookK8sClient
     cluster_rp: ClusterRepository
     enable_internal_gitlab: bool
     current_resource_schema_version: int = 1
@@ -153,9 +142,6 @@ class NotebooksConfig:
     keycloak_realm: str = "Renku"
     data_service_url: str = "http://renku-data-service"
     dummy_stores: bool = False
-    session_get_endpoint_annotations: _ServersGetEndpointAnnotations = field(
-        default_factory=_ServersGetEndpointAnnotations
-    )
     session_id_cookie_name: str = "_renku_session"  # NOTE: This cookie name is set and controlled by the gateway
     v1_sessions_enabled: bool = False
     local_cluster_session_service_account: str | None = None
@@ -169,7 +155,6 @@ class NotebooksConfig:
         git_config: _GitConfig
         default_kubeconfig = KubeConfigEnv()
         data_service_url = os.environ.get("NB_DATA_SERVICE_URL", "http://127.0.0.1:8000")
-        server_options = ServerOptionsConfig.from_env()
         crc_validator: CRCValidatorProto
         k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
         kube_config_root = os.environ.get("K8S_CONFIGS_ROOT", "/secrets/kube_configs")
@@ -193,7 +178,7 @@ class NotebooksConfig:
                 default_kubeconfig=default_kubeconfig,
                 cluster_repo=cluster_rp,
                 cache=k8s_db_cache,
-                kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
+                kinds_to_cache=[AMALTHEA_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
             )
         )
         secrets_client = K8sSecretClient(client)
@@ -203,14 +188,6 @@ class NotebooksConfig:
         )
         rp_repo = ResourcePoolRepository(db_config.async_session_maker, quota_repo)
         crc_validator = CRCValidator(rp_repo)
-        k8s_client = NotebookK8sClient(
-            client=client,
-            secrets_client=secrets_client,
-            rp_repo=rp_repo,
-            session_type=JupyterServerV1Alpha1,
-            gvk=JUPYTER_SESSION_GVK,
-            username_label="renku.io/userId",
-        )
         k8s_v2_client = NotebookK8sClient(
             client=client,
             secrets_client=secrets_client,
@@ -222,7 +199,6 @@ class NotebooksConfig:
         )
 
         return cls(
-            server_options=server_options,
             sessions=sessions_config,
             sentry=_SentryConfig.from_env(),
             git=git_config,
@@ -237,7 +213,6 @@ class NotebooksConfig:
             data_service_url=data_service_url,
             dummy_stores=dummy_stores,
             crc_validator=crc_validator,
-            k8s_client=k8s_client,
             k8s_v2_client=k8s_v2_client,
             k8s_db_cache=k8s_db_cache,
             cluster_rp=cluster_rp,

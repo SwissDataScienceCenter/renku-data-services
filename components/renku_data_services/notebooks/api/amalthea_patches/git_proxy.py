@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
-from typing import TYPE_CHECKING, Any
 
 from kubernetes import client
 
@@ -12,10 +11,6 @@ from renku_data_services.base_models.core import AnonymousAPIUser, Authenticated
 from renku_data_services.notebooks.api.amalthea_patches.utils import get_certificates_volume_mounts
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.config import NotebooksConfig
-
-if TYPE_CHECKING:
-    # NOTE: If these are directly imported then you get circular imports.
-    from renku_data_services.notebooks.api.classes.server import UserServer
 
 
 async def main_container(
@@ -97,31 +92,3 @@ async def main_container(
         },
     )
     return container
-
-
-async def main(server: UserServer) -> list[dict[str, Any]]:
-    """The patch that adds the git proxy container to a session statefulset."""
-    repositories = await server.repositories()
-    if not server.user.is_authenticated or not repositories:
-        return []
-
-    git_providers = await server.git_providers()
-    container = await main_container(server.user, server.config, repositories, git_providers)
-    if not container:
-        return []
-
-    patches = []
-
-    patches.append(
-        {
-            "type": "application/json-patch+json",
-            "patch": [
-                {
-                    "op": "add",
-                    "path": "/statefulset/spec/template/spec/containers/-",
-                    "value": client.ApiClient().sanitize_for_serialization(container),
-                },
-            ],
-        }
-    )
-    return patches

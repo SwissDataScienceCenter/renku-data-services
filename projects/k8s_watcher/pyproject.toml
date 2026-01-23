@@ -48,7 +48,6 @@ packages = [
 python = "^3.13"
 sanic = { extras = ["ext"], version = "^25.12.0" }
 pydantic = { extras = ["email"], version = "^2.10.6" }
-datamodel-code-generator = "^0.24.2"
 sqlalchemy = { extras = ["asyncio"], version = "^2.0.38" }
 alembic = "^1.14.1"
 asyncpg = "^0.30.0"
@@ -62,7 +61,6 @@ psycopg = { version = "^3.2.3", extras = ["binary"] }
 urllib3 = "^2.6.0"
 deepmerge = "^2.0"
 authlib = "^1.5.0"
-dataclasses-avroschema = "^0.65.8"
 undictify = "^0.11.3"
 prometheus-sanic = "^3.0.0"
 sentry-sdk = { version = "^2.22.0", extras = ["sanic"] }

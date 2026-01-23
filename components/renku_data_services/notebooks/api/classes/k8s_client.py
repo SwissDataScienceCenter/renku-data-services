@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import base64
 import json
-from typing import Any, Generic, Optional, TypeVar, cast
+from typing import Any, cast
 
 import httpx
 from box import Box
 from kr8s import NotFoundError, ServerError
-from kr8s.asyncio.objects import APIObject, Pod, Secret, StatefulSet
+from kr8s.asyncio.objects import Pod, Secret, StatefulSet
 
 from renku_data_services.app_config import logging
 from renku_data_services.base_models import APIUser
@@ -20,30 +20,12 @@ from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import GVK, ClusterConnection, K8sObject, K8sObjectFilter, K8sObjectMeta, K8sSecret
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
-from renku_data_services.notebooks.constants import JUPYTER_SESSION_GVK
-from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1, JupyterServerV1Alpha1
-from renku_data_services.notebooks.errors.programming import ProgrammingError
+from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1
 from renku_data_services.notebooks.util.kubernetes_ import find_env_var
 from renku_data_services.notebooks.util.retries import retry_with_exponential_backoff_async
 
 
-# NOTE The type ignore below is because the kr8s library has no type stubs, they claim pyright better handles type hints
-class JupyterServerV1Alpha1Kr8s(APIObject):
-    """Spec for jupyter servers used by the k8s client."""
-
-    kind: str = JUPYTER_SESSION_GVK.kind
-    version: str = JUPYTER_SESSION_GVK.group_version
-    namespaced: bool = True
-    plural: str = "jupyterservers"
-    singular: str = "jupyterserver"
-    scalable: bool = False
-    endpoint: str = "jupyterservers"
-
-
-_SessionType = TypeVar("_SessionType", JupyterServerV1Alpha1, AmaltheaSessionV1Alpha1)
-
-
-class NotebookK8sClient(SecretClient, Generic[_SessionType]):
+class NotebookK8sClient(SecretClient):
     """A K8s Client for Notebooks."""
 
     def __init__(
@@ -51,14 +33,14 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
         client: K8sClusterClientsPool,
         secrets_client: SecretClient,
         rp_repo: ResourcePoolRepository,
-        session_type: type[_SessionType],
+        session_type: type[AmaltheaSessionV1Alpha1],
         username_label: str,
         gvk: GVK,
     ) -> None:
         self.__client = client
         self.__secrets_client = secrets_client
         self.__rp_repo = rp_repo
-        self.__session_type: type[_SessionType] = session_type
+        self.__session_type: type[AmaltheaSessionV1Alpha1] = session_type
         self.__session_gvk = gvk
         self.__username_label = username_label
 
@@ -192,7 +174,7 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
 
         return await self.__client.cluster_by_id(cluster_id)
 
-    async def list_sessions(self, safe_username: str) -> list[_SessionType]:
+    async def list_sessions(self, safe_username: str) -> list[AmaltheaSessionV1Alpha1]:
         """Get a list of sessions that belong to a user."""
         sessions = [
             self.__session_type.model_validate(s.manifest)
@@ -206,7 +188,7 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
         ]
         return sorted(sessions, key=lambda sess: sess.metadata.name)
 
-    async def get_session(self, name: str, safe_username: str) -> _SessionType | None:
+    async def get_session(self, name: str, safe_username: str) -> AmaltheaSessionV1Alpha1 | None:
         """Get a specific session, None is returned if the session does not exist."""
         session = await self._get(name, self.__session_gvk, safe_username)
 
@@ -214,10 +196,10 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
             return None
         return self.__session_type.model_validate(session.manifest)
 
-    async def create_session(self, manifest: _SessionType, api_user: APIUser) -> _SessionType:
+    async def create_session(self, manifest: AmaltheaSessionV1Alpha1, api_user: APIUser) -> AmaltheaSessionV1Alpha1:
         """Launch a user session."""
         if api_user.id is None:
-            raise ProgrammingError(message=f"API user id un set for {api_user}.")
+            raise errors.ProgrammingError(message=f"API user id unset for {api_user}.")
 
         session_name = manifest.metadata.name
 
@@ -254,7 +236,7 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
 
     async def patch_session(
         self, session_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
-    ) -> _SessionType:
+    ) -> AmaltheaSessionV1Alpha1:
         """Patch a session."""
         session = await self._get(session_name, self.__session_gvk, safe_username)
         if session is None:
@@ -278,8 +260,6 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
             return None
 
         cluster = await self.__client.cluster_by_id(statefulset.cluster)
-        if cluster is None:
-            return None
 
         return StatefulSet(
             resource=statefulset.to_api_object(cluster.api), namespace=statefulset.namespace, api=cluster.api
@@ -325,7 +305,7 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
         await self.patch_image_pull_secret(session_name, gitlab_token, safe_username)
 
     async def get_session_logs(
-        self, session_name: str, safe_username: str, max_log_lines: Optional[int] = None
+        self, session_name: str, safe_username: str, max_log_lines: int | None = None
     ) -> dict[str, str]:
         """Get the logs from the session."""
         # NOTE: this get_session ensures the user has access to the session, without this you could read someone else's
@@ -343,8 +323,6 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
             return logs
 
         cluster = await self.__client.cluster_by_id(result.cluster)
-        if cluster is None:
-            return logs
 
         pod = Pod(resource=result.to_api_object(cluster.api), namespace=result.namespace, api=cluster.api)
 
@@ -377,8 +355,6 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
             return
 
         cluster = await self.__client.cluster_by_id(result.cluster)
-        if cluster is None:
-            return
 
         secret = Secret(resource=result.to_api_object(cluster.api), namespace=result.namespace, api=cluster.api)
 
@@ -386,8 +362,8 @@ class NotebookK8sClient(SecretClient, Generic[_SessionType]):
         old_docker_config = json.loads(base64.b64decode(secret_data[".dockerconfigjson"]).decode())
         hostname = next(iter(old_docker_config["auths"].keys()), None)
         if not hostname:
-            raise ProgrammingError(
-                "Failed to refresh the access credentials in the image pull secret.",
+            raise errors.ProgrammingError(
+                message="Failed to refresh the access credentials in the image pull secret.",
                 detail="Please contact a Renku administrator.",
             )
         new_docker_config = {

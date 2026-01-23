@@ -19,40 +19,13 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
 from enum import StrEnum
 from hashlib import md5
-from typing import Any, TypeAlias, cast
+from typing import Any, TypeAlias
 
-import escapism
 from box.box import Box
 
 from renku_data_services.base_models.core import AnonymousAPIUser, AuthenticatedAPIUser, Slug
-from renku_data_services.notebooks.crs import Patch, PatchType
-
-
-def renku_1_make_server_name(
-    safe_username: str, namespace: str, project: str, branch: str, commit_sha: str, cluster_id: str
-) -> str:
-    """Form a unique server name for Renku 1.0 sessions.
-
-    This is used in naming all the k8s resources created by amalthea.
-    """
-    server_string_for_hashing = f"{safe_username}-{namespace}-{project}-{branch}-{commit_sha}-{cluster_id}"
-    server_hash = md5(server_string_for_hashing.encode(), usedforsecurity=False).hexdigest().lower()
-    prefix = _make_server_name_prefix(safe_username)
-    # NOTE: A K8s object name can only contain lowercase alphanumeric characters, hyphens, or dots.
-    # Must be less than 253 characters long and start and end with an alphanumeric.
-    # NOTE: We use server name as a label value, so, server name must be less than 63 characters.
-    # NOTE: Amalthea adds 11 characters to the server name in a label, so we have only
-    # 52 characters available.
-    # !NOTE: For now we limit the server name to 42 characters.
-    # NOTE: This is 12 + 1 + 20 + 1 + 8 = 42 characters
-    return "{prefix}-{project}-{hash}".format(
-        prefix=prefix[:12],
-        project=escapism.escape(project, escape_char="-")[:20].lower(),
-        hash=server_hash[:8],
-    )
 
 
 def renku_2_make_server_name(
@@ -107,23 +80,3 @@ class PatchKind(StrEnum):
 
     json = "application/json-patch+json"
     merge = "application/merge-patch+json"
-
-
-def find_container(patches: Sequence[Patch], container_name: str) -> dict[str, Any] | None:
-    """Find the json patch corresponding a given container."""
-    # rfc 7386 patches are dictionaries, i.e. merge patch or json merge patch
-    # rfc 6902 patches are lists, i.e. json patch
-    for patch_obj in patches:
-        if patch_obj.type != PatchType.application_json_patch_json or not isinstance(patch_obj.patch, list):
-            continue
-        for p in patch_obj.patch:
-            if not isinstance(p, dict):
-                continue
-            p = cast(dict[str, Any], p)
-            if (
-                p.get("op") == "add"
-                and p.get("path") == "/statefulset/spec/template/spec/containers/-"
-                and p.get("value", {}).get("name") == container_name
-            ):
-                return p
-    return None
