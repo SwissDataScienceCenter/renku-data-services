@@ -36,7 +36,7 @@ class DataSourceRepository:
         self, request: Request, user: APIUser, data_connector: DataConnector | GlobalDataConnector
     ) -> dict[str, Any] | None:
         """Ajusts the configuration of the input data connector if it requires an OAuth2 connection."""
-        # NOTE: do not hanlde global data connectors
+        # NOTE: do not handle global data connectors
         if data_connector.namespace is None:
             return data_connector.storage.configuration
 
@@ -97,3 +97,16 @@ class DataSourceRepository:
             "oauth2_connections.post_token_endpoint", connection_id=connection.id
         )
         return configuration
+
+    def is_patching_enabled(self, data_connector: DataConnector | GlobalDataConnector) -> bool:
+        """Returns true iff the data connector can be patched."""
+        # NOTE: do not handle global data connectors
+        if data_connector.namespace is None:
+            return False
+        match data_connector.storage.configuration["type"]:
+            case "drive":
+                return True
+            case "dropbox":
+                return True
+            case _:
+                return False

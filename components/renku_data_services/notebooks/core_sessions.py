@@ -357,6 +357,7 @@ async def patch_data_sources(
     cluster: ClusterConnection,
     nb_config: NotebooksConfig,
     data_connectors_stream: AsyncIterator[DataConnectorWithSecrets],
+    data_source_repo: DataSourceRepository,
     # request: Request,
     # nb_config: NotebooksConfig,
     # user: AnonymousAPIUser | AuthenticatedAPIUser,
@@ -384,6 +385,8 @@ async def patch_data_sources(
                     logger.warning(f"Could not parse {ulid.upper()} as a ULID.")
     logger.info(f"Found mounted data connectors: {[str(u) for u, _ in mounted_dcs]}.")
     async for dc in data_connectors_stream:
+        if not data_source_repo.is_patching_enabled(dc.data_connector):
+            continue
         dc_id = dc.data_connector.id
         mounted_dc = next(filter(lambda tup: tup[0] == dc_id, mounted_dcs), None)
         if mounted_dc is None:
@@ -396,9 +399,21 @@ async def patch_data_sources(
         if k8s_secret is None:
             logger.warning(f"Could not read secret {secret_name} for patching, skipping!")
             continue
-        s_data = k8s_secret.to_v1_secret().data
-        s_string_data = k8s_secret.to_v1_secret().string_data
-        logger.info(f"Got secret: s_data={s_data}, s_string_data={s_string_data}")
+        secret_data: dict[str, str] = k8s_secret.to_v1_secret().data
+        logger.info(f"Got secret: secret_data={secret_data}")
+        config_data_raw = secret_data.get("configData")
+        if not config_data_raw:
+            logger.warning(f"Field 'configData' not found for data connector {str(dc_id)}, skipping!")
+            continue
+        logger.info(f"Check type config_data_raw = {type(config_data_raw)}")
+        existing_config_data: str = ""
+        try:
+            existing_config_data = base64.b64decode(config_data_raw).decode("utf-8")
+        except Exception as err:
+            logger.warning(f"Error decoding 'configData' for data connector {str(dc_id)}, skipping! {err}")
+            continue
+        logger.info(f"Got existing_config_data = {existing_config_data}")
+
     return SessionExtraResources()
 
 
@@ -1115,6 +1130,7 @@ async def patch_session(
     rp_repo: ResourcePoolRepository,
     session_repo: SessionRepository,
     image_check_repo: ImageCheckRepository,
+    data_source_repo: DataSourceRepository,
     metrics: MetricsService,
 ) -> AmaltheaSessionV1Alpha1:
     """Patch an Amalthea session."""
@@ -1239,6 +1255,7 @@ async def patch_session(
             cluster=cluster,
             nb_config=nb_config,
             data_connectors_stream=data_connectors_stream,
+            data_source_repo=data_source_repo,
         )
     )
 
