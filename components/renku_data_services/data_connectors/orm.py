@@ -198,8 +198,7 @@ class DataConnectorToProjectLinkORM(BaseORM):
 
     def dump(self) -> models.DataConnectorToProjectLink:
         """Create a link model from the DataConnectorProjectLinkORM."""
-        # Construct project URL from project namespace and slug
-        project_path = f"/p/{self.project.slug.namespace.slug}/{self.project.slug.slug}"
+        project_path = f"{self.project.slug.namespace.slug}/{self.project.slug.slug}"
 
         return models.DataConnectorToProjectLink(
             id=self.id,

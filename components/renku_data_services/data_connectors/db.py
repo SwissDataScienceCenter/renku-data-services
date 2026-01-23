@@ -200,7 +200,7 @@ class DataConnectorRepository:
         user: base_models.APIUser,
         doi: str,
     ) -> models.DataConnector | models.GlobalDataConnector:
-        """Get one data connector from the database by DOI."""
+        """Get a data connector from the database by DOI."""
         not_found_msg = f"Data connector with DOI '{doi}' does not exist or you do not have access to it."
 
         async with self.session_maker() as session:

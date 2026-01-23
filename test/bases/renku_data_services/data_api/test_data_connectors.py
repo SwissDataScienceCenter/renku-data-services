@@ -564,6 +564,46 @@ async def test_get_one_by_slug_data_connector(
 
 
 @pytest.mark.asyncio
+async def test_get_data_connector_by_doi(create_global_data_connector, monkeypatch, sanic_client, user_headers) -> None:
+    doi = "10.5281/zenodo.2600782"
+    metadata = RCloneDOIMetadata(
+        DOI=doi,
+        URL="https://doi.org/10.5281/zenodo.2600782",
+        metadataURL="https://zenodo.org/api/records/3542869",
+        provider="zenodo",
+    )
+    _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
+    zenodo_metadata = DOIMetadata(
+        name="SwissDataScienceCenter/renku-python: Version 0.7.2",
+        description="""<a href="https://github.com/SwissDataScienceCenter/renku-python/compare/v0.7.1...v0.7.2">0.7.2</a> (2019-11-15)\nBug Fixes\n<ul>\n<li>ensure all Person instances have valid ids (<a href="https://github.com/SwissDataScienceCenter/renku-python/commit/85585d0">85585d0</a>), addresses <a href="https://github.com/SwissDataScienceCenter/renku-python/issues/812">#812</a></li>\n</ul>""",  # noqa E501
+        keywords=[],
+    )
+    _mock_get_dataset_metadata(metadata=zenodo_metadata, monkeypatch=monkeypatch)
+
+    data_connector = await create_global_data_connector(configuration={"type": "doi", "doi": doi})
+
+    _, response = await sanic_client.get(f"/api/data/data_connectors/resolve?doi={doi}", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json["id"] == data_connector.id
+    assert response.json["name"] == data_connector.name
+    assert response.json["slug"] == data_connector.slug
+    assert response.json["doi"] == doi
+
+
+@pytest.mark.asyncio
+async def test_get_data_connector_by_doi_fails_if_not_found(sanic_client, user_headers) -> None:
+    non_existing_doi = "10.5281/zenodo.9999999"
+
+    _, response = await sanic_client.get(
+        f"/api/data/data_connectors/resolve?doi={non_existing_doi}", headers=user_headers
+    )
+
+    assert response.status_code == 404, response.text
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("headers_name", ["unauthorized_headers", "member_1_headers"])
 async def test_get_one_data_connector_unauthorized(
     # NOTE: dynamically requesting async fixtures with an already running event loop causes errors in pytest.
@@ -1068,6 +1108,30 @@ async def test_get_data_connector_project_links_empty(
 
 
 @pytest.mark.asyncio
+async def test_get_data_connector_project_link_pagination(
+    create_data_connector, create_project, link_data_connector, sanic_client, user_headers
+) -> None:
+    data_connector = await create_data_connector("Data Connector")
+    for i in range(1, 10):
+        project = await create_project(sanic_client, f"project-{i}")
+        await link_data_connector(project["id"], data_connector["id"])
+
+    parameters = {"page": 2, "per_page": 3}
+    _, response = await sanic_client.get(
+        f"/api/data/data_connectors/{data_connector["id"]}/project_links", headers=user_headers, params=parameters
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    projects = response.json
+    assert {p["project_path"] for p in projects} == {f"user.doe/{p}" for p in ("project-4", "project-5", "project-6")}
+    assert response.headers["page"] == "2"
+    assert response.headers["per-page"] == "3"
+    assert response.headers["total"] == "9"
+    assert response.headers["total-pages"] == "3"
+
+
+@pytest.mark.asyncio
 async def test_post_data_connector_project_links(
     sanic_client: SanicASGITestClient, create_data_connector, create_project, user_headers
 ) -> None:
@@ -1129,119 +1193,6 @@ async def test_post_data_connector_project_link_already_exists(
         f"/api/data/data_connectors/{data_connector_id}/project_links", headers=user_headers, json=payload
     )
     assert response.status_code == 409, response.text
-
-
-@pytest.mark.asyncio
-async def test_get_data_connector_project_links_by_doi(
-    create_global_data_connector, create_project, link_data_connector, monkeypatch, sanic_client, user_headers
-) -> None:
-    doi = "10.5281/zenodo.2600782"
-    metadata = RCloneDOIMetadata(
-        DOI=doi,
-        URL="https://doi.org/10.5281/zenodo.2600782",
-        metadataURL="https://zenodo.org/api/records/3542869",
-        provider="zenodo",
-    )
-    _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
-    zenodo_metadata = DOIMetadata(
-        name="SwissDataScienceCenter/renku-python: Version 0.7.2",
-        description="""<a href="https://github.com/SwissDataScienceCenter/renku-python/compare/v0.7.1...v0.7.2">0.7.2</a> (2019-11-15)\nBug Fixes\n<ul>\n<li>ensure all Person instances have valid ids (<a href="https://github.com/SwissDataScienceCenter/renku-python/commit/85585d0">85585d0</a>), addresses <a href="https://github.com/SwissDataScienceCenter/renku-python/issues/812">#812</a></li>\n</ul>""",  # noqa E501
-        keywords=[],
-    )
-    _mock_get_dataset_metadata(metadata=zenodo_metadata, monkeypatch=monkeypatch)
-
-    data_connector = await create_global_data_connector(configuration={"type": "doi", "doi": doi})
-    project = await create_project(sanic_client, "Project A")
-    project_id = project["id"]
-    link = await link_data_connector(project_id, data_connector.id)
-
-    # Get project links using DOI
-    _, response = await sanic_client.get(f"/api/data/data_connectors/{doi}/project_links", headers=user_headers)
-
-    assert response.status_code == 200, response.text
-    assert len(response.json) == 1
-    project_link = response.json[0]
-    assert project_link["id"] == link.id
-    assert project_link["data_connector_id"] == data_connector.id
-    assert project_link["project_id"] == project_id
-    assert project_link["project_path"] == f"/p/{project['namespace']}/{project['slug']}"
-
-
-@pytest.mark.asyncio
-async def test_post_data_connector_project_link_by_doi(
-    create_global_data_connector, create_project, monkeypatch, sanic_client, user_headers
-) -> None:
-    doi = "10.5281/zenodo.2600782"
-    metadata = RCloneDOIMetadata(
-        DOI=doi,
-        URL="https://doi.org/10.5281/zenodo.2600782",
-        metadataURL="https://zenodo.org/api/records/3542869",
-        provider="zenodo",
-    )
-    _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
-    zenodo_metadata = DOIMetadata(
-        name="SwissDataScienceCenter/renku-python: Version 0.7.2",
-        description="""<a href="https://github.com/SwissDataScienceCenter/renku-python/compare/v0.7.1...v0.7.2">0.7.2</a> (2019-11-15)\nBug Fixes\n<ul>\n<li>ensure all Person instances have valid ids (<a href="https://github.com/SwissDataScienceCenter/renku-python/commit/85585d0">85585d0</a>), addresses <a href="https://github.com/SwissDataScienceCenter/renku-python/issues/812">#812</a></li>\n</ul>""",  # noqa E501
-        keywords=[],
-    )
-    _mock_get_dataset_metadata(metadata=zenodo_metadata, monkeypatch=monkeypatch)
-
-    data_connector = await create_global_data_connector(configuration={"type": "doi", "doi": doi})
-    project = await create_project(sanic_client, "Project A")
-    project_id = project["id"]
-
-    # Link the data connector to the project using DOI
-    _, response = await sanic_client.post(
-        f"/api/data/data_connectors/{doi}/project_links", headers=user_headers, json={"project_id": project_id}
-    )
-
-    assert response.status_code == 201, response.text
-    link = response.json
-    assert link.get("data_connector_id") == data_connector.id
-    assert link.get("project_id") == project_id
-    link_id = link["id"]
-
-    # Get project links using DOI
-    _, response = await sanic_client.get(f"/api/data/data_connectors/{doi}/project_links", headers=user_headers)
-
-    assert response.status_code == 200, response.text
-    assert len(response.json) == 1
-    link = response.json[0]
-    assert link["id"] == link_id
-    assert link["data_connector_id"] == data_connector.id
-    assert link["project_id"] == project_id
-
-    # Retrieve project links using ULID
-    _, response = await sanic_client.get(
-        f"/api/data/data_connectors/{data_connector.id}/project_links", headers=user_headers
-    )
-
-    assert response.status_code == 200, response.text
-    assert len(response.json) == 1
-    link = response.json[0]
-    assert link["id"] == link_id
-    assert link["data_connector_id"] == data_connector.id
-    assert link["project_id"] == project_id
-
-
-@pytest.mark.asyncio
-async def test_get_data_connector_project_links_by_non_existing_doi(sanic_client, user_headers) -> None:
-    non_existing_doi = "10.5281/zenodo.9999999"
-    _, response = await sanic_client.get(
-        f"/api/data/data_connectors/{non_existing_doi}/project_links", headers=user_headers
-    )
-
-    assert response.status_code == 404, response.text
-
-
-@pytest.mark.asyncio
-async def test_get_data_connector_project_links_by_invalid_ulid_or_doi(sanic_client, user_headers) -> None:
-    invalid_identifier = "not-a-doi/ulid"
-    _, response = await sanic_client.get(
-        f"/api/data/data_connectors/{invalid_identifier}/project_links", headers=user_headers
-    )
-
-    assert response.status_code == 422, response.text
 
 
 @pytest.mark.asyncio

@@ -41,7 +41,6 @@ from renku_data_services.data_connectors.db import (
     DataConnectorSecretRepository,
 )
 from renku_data_services.storage.rclone import RCloneValidator
-from renku_data_services.utils.doi import parse_doi
 
 
 @dataclass(kw_only=True)
@@ -309,6 +308,25 @@ class DataConnectorsBP(CustomBlueprint):
 
         return "/data_connectors/<data_connector_id:ulid>/permissions", ["GET"], _get_permissions
 
+    def get_one_by_doi(self) -> BlueprintFactoryResponse:
+        """Get data connector by DOI."""
+
+        @authenticate(self.authenticator)
+        @validate(query=apispec.DataConnectorsResolveGetParametersQuery)
+        async def _get_one_by_doi(
+            _: Request,
+            user: base_models.APIUser,
+            query: apispec.DataConnectorsResolveGetParametersQuery,
+            validator: RCloneValidator,
+        ) -> JSONResponse:
+            data_connector = await self.data_connector_repo.get_data_connector_by_doi(user=user, doi=query.doi)
+            return validated_json(
+                apispec.DataConnector,
+                self._dump_data_connector(data_connector, validator=validator),
+            )
+
+        return "/data_connectors/resolve", ["GET"], _get_one_by_doi
+
     def get_all_project_links(self) -> BlueprintFactoryResponse:
         """List all links from a given data connector to projects."""
 
@@ -317,32 +335,18 @@ class DataConnectorsBP(CustomBlueprint):
         async def _get_all_project_links(
             _: Request,
             user: base_models.APIUser,
-            data_connector_id: str,
+            data_connector_id: ULID,
             pagination: PaginationRequest,
         ) -> tuple[list[dict[str, Any]], int]:
-            id: ULID
-            try:
-                doi = parse_doi(data_connector_id)
-            except TypeError:
-                try:
-                    id = ULID.from_str(data_connector_id)
-                except ValueError:
-                    raise errors.ValidationError(  # noqa: B904
-                        message=f"Data connector ID '{data_connector_id}' is not a valid ULID or DOI."
-                    )
-            else:
-                dc = await self.data_connector_repo.get_data_connector_by_doi(user=user, doi=doi)
-                id = dc.id
-
             links, total_num = await self.data_connector_repo.get_links_from(
-                user=user, data_connector_id=id, pagination=pagination
+                user=user, data_connector_id=data_connector_id, pagination=pagination
             )
             return [
                 validate_and_dump(apispec.DataConnectorToProjectLink, self._dump_data_connector_to_project_link(link))
                 for link in links
             ], total_num
 
-        return "/data_connectors/<data_connector_id:path>/project_links", ["GET"], _get_all_project_links
+        return "/data_connectors/<data_connector_id:ulid>/project_links", ["GET"], _get_all_project_links
 
     def post_project_link(self) -> BlueprintFactoryResponse:
         """Create a new link from a data connector to a project."""
@@ -353,25 +357,11 @@ class DataConnectorsBP(CustomBlueprint):
         async def _post_project_link(
             _: Request,
             user: base_models.APIUser,
-            data_connector_id: str,
+            data_connector_id: ULID,
             body: apispec.DataConnectorToProjectLinkPost,
         ) -> JSONResponse:
-            id: ULID
-            try:
-                doi = parse_doi(data_connector_id)
-            except TypeError:
-                try:
-                    id = ULID.from_str(data_connector_id)
-                except ValueError:
-                    raise errors.ValidationError(  # noqa: B904
-                        message=f"Data connector ID '{data_connector_id}' is not a valid ULID or DOI."
-                    )
-            else:
-                dc = await self.data_connector_repo.get_data_connector_by_doi(user=user, doi=doi)
-                id = dc.id
-
             unsaved_link = models.UnsavedDataConnectorToProjectLink(
-                data_connector_id=id,
+                data_connector_id=data_connector_id,
                 project_id=ULID.from_str(body.project_id),
             )
             link = await self.data_connector_repo.insert_link(user=user, link=unsaved_link)
@@ -380,7 +370,7 @@ class DataConnectorsBP(CustomBlueprint):
                 apispec.DataConnectorToProjectLink, self._dump_data_connector_to_project_link(link), status=201
             )
 
-        return "/data_connectors/<data_connector_id:path>/project_links", ["POST"], _post_project_link
+        return "/data_connectors/<data_connector_id:ulid>/project_links", ["POST"], _post_project_link
 
     def delete_project_link(self) -> BlueprintFactoryResponse:
         """Delete a link from a data connector to a project."""
