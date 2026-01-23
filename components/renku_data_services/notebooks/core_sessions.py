@@ -379,7 +379,7 @@ async def patch_data_sources(
             if name.startswith(secret_prefix):
                 ulid = name[len(secret_prefix) :]
                 try:
-                    mounted_dcs.append(ULID.from_str(ulid.upper(), name))
+                    mounted_dcs.append((ULID.from_str(ulid.upper()), name))
                 except ValueError:
                     logger.warning(f"Could not parse {ulid.upper()} as a ULID.")
     logger.info(f"Found mounted data connectors: {[str(u) for u, _ in mounted_dcs]}.")
