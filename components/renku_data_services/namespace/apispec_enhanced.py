@@ -4,7 +4,6 @@ from typing import Any
 
 from pydantic import field_validator
 
-from renku_data_services.namespace.apispec import GroupsGetParametersQuery as _GroupsGetParametersQuery
 from renku_data_services.namespace.apispec import NamespacesGetParametersQuery as _NamespacesGetParametersQuery
 
 
@@ -22,12 +21,3 @@ class NamespacesGetParametersQuery(_NamespacesGetParametersQuery):
         if isinstance(value, list):
             return value
         return [str(value)]
-
-
-class GroupsGetParametersQuery(_GroupsGetParametersQuery):
-    """The query parameters for listing groups."""
-
-    class Config(_GroupsGetParametersQuery.Config):
-        """Pydantic configuration."""
-
-        extra = "forbid"

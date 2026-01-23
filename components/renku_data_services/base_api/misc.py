@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from functools import wraps
 from typing import Any, Concatenate, NoReturn, ParamSpec, TypeVar, cast
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sanic import Request, json
 from sanic.response import JSONResponse
 from sanic_ext import validate
@@ -73,8 +73,8 @@ def validate_db_ids(f: Callable[_P, Awaitable[_T]]) -> Callable[_P, Coroutine[An
     return decorated_function
 
 
-def validate_query(
-    query: type[BaseModel],
+def validate_query[Q: BaseModel](
+    query: type[Q], model_config: ConfigDict | None = None
 ) -> Callable[
     [Callable[Concatenate[Request, _P], Awaitable[_T]]],
     Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]],
@@ -84,15 +84,20 @@ def validate_query(
     Should be removed once sanic fixes this error in their validation code.
     """
 
+    class _QueryNoExtras(query):  # type: ignore
+        pass
+
+    _QueryNoExtras.model_config = model_config or ConfigDict(extra="forbid")
+
     def decorator(
         f: Callable[Concatenate[Request, _P], Awaitable[_T]],
     ) -> Callable[Concatenate[Request, _P], Coroutine[Any, Any, _T]]:
         @wraps(f)
         async def decorated_function(request: Request, *args: _P.args, **kwargs: _P.kwargs) -> _T:
             try:
-                return await validate(query=query)(f)(request, *args, **kwargs)
+                return await validate(query=_QueryNoExtras)(f)(request, *args, **kwargs)
             except KeyError as err:
-                raise errors.ValidationError(message="Failed to validate the query parameters") from err
+                raise errors.ValidationError(message=f"Failed to validate the query parameters: {str(err)}") from err
 
         return decorated_function
 

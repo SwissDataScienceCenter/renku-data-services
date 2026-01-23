@@ -33,7 +33,7 @@ class GroupsBP(CustomBlueprint):
         """List all groups."""
 
         @authenticate(self.authenticator)
-        @validate_query(query=apispec_enhanced.GroupsGetParametersQuery)
+        @validate_query(query=apispec.GroupsGetParametersQuery)
         @paginate
         async def _get_all(
             _: Request,
