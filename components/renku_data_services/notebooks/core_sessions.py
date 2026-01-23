@@ -402,7 +402,8 @@ async def patch_data_sources(
         if k8s_secret is None:
             logger.warning(f"Could not read secret {secret_name} for patching, skipping!")
             continue
-        secret_data: dict[str, str] = k8s_secret.to_v1_secret().data
+        v1_secret = k8s_secret.to_v1_secret()
+        secret_data: dict[str, str] = v1_secret.data
         logger.info(f"Got secret: secret_data={secret_data}")
         config_data_raw = secret_data.get("configData")
         if not config_data_raw:
@@ -422,16 +423,15 @@ async def patch_data_sources(
         if not new_config_data:
             continue
 
+        metadata = v1_secret.metadata
         new_secret = V1Secret(
             api_version="v1",
             kind="Secret",
             metadata=V1ObjectMeta(
-                name=k8s_secret.to_v1_secret().metadata.name,
-                namespace=k8s_secret.to_v1_secret().metadata.namespace,
-                annotations=k8s_secret.to_v1_secret().metadata.annotations,
-                labels=k8s_secret.to_v1_secret().metadata.labels,
+                name=metadata.name,
+                namespace=metadata.namespace,
             ),
-            data=k8s_secret.to_v1_secret().data or dict(),
+            data=secret_data,
         )
         new_secret.data["configData"] = base64.b64encode(new_config_data.encode("utf-8")).decode("utf-8")
 
