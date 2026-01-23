@@ -290,13 +290,14 @@ class NotebooksNewBP(CustomBlueprint):
         @authenticate_2(self.authenticator, self.internal_gitlab_authenticator)
         @validate(json=apispec.SessionPatchRequest)
         async def _handler(
-            _: Request,
+            request: Request,
             user: AuthenticatedAPIUser | AnonymousAPIUser,
             internal_gitlab_user: APIUser,
             session_id: str,
             body: apispec.SessionPatchRequest,
         ) -> HTTPResponse:
             new_session = await patch_session(
+                request=request,
                 body=body,
                 session_id=session_id,
                 user=user,

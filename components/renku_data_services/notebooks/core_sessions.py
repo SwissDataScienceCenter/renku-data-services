@@ -353,6 +353,8 @@ async def get_data_sources(
 
 
 async def patch_data_sources(
+    request: Request,
+    user: AnonymousAPIUser | AuthenticatedAPIUser,
     session: AmaltheaSessionV1Alpha1,
     cluster: ClusterConnection,
     nb_config: NotebooksConfig,
@@ -370,6 +372,7 @@ async def patch_data_sources(
 ) -> SessionExtraResources:
     """Handle updating data sources definitions when resuming a session."""
     # Experimental here:
+    secrets: list[ExtraSecret] = []
     server_name = session.metadata.name
     secret_prefix = f"{server_name}-ds-"
     dss = session.spec.dataSources or []
@@ -413,9 +416,18 @@ async def patch_data_sources(
             logger.warning(f"Error decoding 'configData' for data connector {str(dc_id)}, skipping! {err}")
             continue
         logger.info(f"Got existing_config_data = {existing_config_data}")
-        await data_source_repo.blah(existing_config_data)
+        new_config_data = await data_source_repo.handle_patching_configuration(
+            request=request, user=user, data_connector=dc.data_connector, config_data=existing_config_data
+        )
+        if not new_config_data:
+            continue
+        new_secret = k8s_secret.to_v1_secret()
+        new_secret.data = new_secret.data or dict()
+        new_secret.data["configData"] = base64.b64encode(new_config_data.encode("utf-8")).decode("utf-8")
+        secrets.append(ExtraSecret(new_secret))
 
-    return SessionExtraResources()
+    logger.info(f"Patching secrets: {secrets}")
+    return SessionExtraResources(secrets=secrets)
 
 
 async def request_dc_secret_creation(
@@ -1119,6 +1131,7 @@ async def start_session(
 
 
 async def patch_session(
+    request: Request,
     body: apispec.SessionPatchRequest,
     session_id: str,
     user: AnonymousAPIUser | AuthenticatedAPIUser,
@@ -1252,6 +1265,8 @@ async def patch_session(
     # TODO: If we did, we would lose the user's provided overrides (e.g. unsaved credentials).
     session_extras = session_extras.concat(
         await patch_data_sources(
+            request=request,
+            user=user,
             session=session,
             cluster=cluster,
             nb_config=nb_config,

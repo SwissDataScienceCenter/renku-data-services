@@ -2,6 +2,7 @@
 
 import json
 from configparser import ConfigParser
+from io import StringIO
 from typing import Any
 
 from sanic import Request
@@ -112,7 +113,9 @@ class DataSourceRepository:
             case _:
                 return False
 
-    async def blah(self, config_data: str) -> None:
+    async def handle_patching_configuration(
+        self, request: Request, user: APIUser, data_connector: DataConnector | GlobalDataConnector, config_data: str
+    ) -> str | None:
         """Handles patching..."""
         parser = ConfigParser(interpolation=None)
         try:
@@ -127,4 +130,73 @@ class DataSourceRepository:
         logger.info(f"Got main section: {main_section}.")
         items = parser.items(main_section)
         logger.info(f"Got items: {items}.")
-        pass
+        configuration = dict(items)
+        if configuration.get("type") != data_connector.storage.configuration.get("type"):
+            logger.warning(
+                f"Data connector type changed to {data_connector.storage.configuration.get("type")}, skipping!"
+            )
+            return None
+
+        provider_kind: ProviderKind | None = None
+        match data_connector.storage.configuration["type"]:
+            case "drive":
+                provider_kind = ProviderKind.google
+            case "dropbox":
+                provider_kind = ProviderKind.dropbox
+            case _:
+                return None
+
+        provider = await self.connected_services_repo.get_provider_for_kind(user=user, provider_kind=provider_kind)
+        if provider is None:
+            logger.info(
+                f"Skipping data connector {str(data_connector.id)} of type "
+                f"{data_connector.storage.configuration["type"]} "
+                f"because no provider of kind {provider_kind.value} was found."
+            )
+            return None
+        connection = provider.connected_user.connection if provider.connected_user else None
+        if connection is None:
+            logger.info(
+                f"Skipping data connector {str(data_connector.id)} of type "
+                f"{data_connector.storage.configuration["type"]} "
+                f"because no active connection was found; user needs to connect with {provider.provider.id}."
+            )
+            return None
+        token_set = await self.connected_services_repo.get_token_set(user=user, connection_id=connection.id)
+        if not token_set or not token_set.access_token:
+            logger.info(
+                f"Skipping data connector {str(data_connector.id)} of type "
+                f"{data_connector.storage.configuration["type"]} "
+                f"because the connection is not active; user needs to re-connect with {provider.provider.id}."
+            )
+            return None
+        logger.info(f"Adjusting rclone configuration for data connector {str(data_connector.id)}.")
+        token_config = {
+            "access_token": token_set.access_token,
+            "token_type": "Bearer",
+        }
+        if user.access_token and user.refresh_token:
+            renku_tokens = RenkuTokens(
+                access_token=user.access_token,
+                refresh_token=user.refresh_token,
+            )
+            token_config["refresh_token"] = renku_tokens.encode()
+        if token_set.expires_at_iso:
+            token_config["expiry"] = token_set.expires_at_iso
+        # configuration["token"] = json.dumps(token_config)
+        # configuration["token_url"] = request.url_for(
+        #     "oauth2_connections.post_token_endpoint", connection_id=connection.id
+        # )
+        # return configuration
+
+        # for k, v in configuration.items():
+        #     parser.set(name, k, _stringify(v))
+        parser.set(main_section, "token", json.dumps(token_config))
+        parser.set(
+            main_section,
+            "token_url",
+            request.url_for("oauth2_connections.post_token_endpoint", connection_id=connection.id),
+        )
+        stringio = StringIO()
+        parser.write(stringio)
+        return stringio.getvalue()
