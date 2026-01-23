@@ -93,6 +93,9 @@ class ResourcesRequestRecorder:
     async def record_resource_requests(self) -> None:
         """Fetches all resource requests in the given namespace and stores them."""
         result = await self._fetch.get_resources_requests()
-        if len(result) == 0:
+        size = len(result)
+        if size == 0:
             logger.warning("No pod or pvc was found!")
+        else:
+            logger.info(f"Inserting {size} resource request records.")
         await self._repo.insert_many(result.values())
