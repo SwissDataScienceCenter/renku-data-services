@@ -421,10 +421,24 @@ async def patch_data_sources(
         )
         if not new_config_data:
             continue
-        new_secret = k8s_secret.to_v1_secret()
-        new_secret.data = new_secret.data or dict()
+
+        new_secret = V1Secret(
+            api_version="v1",
+            kind="Secret",
+            metadata=V1ObjectMeta(
+                name=k8s_secret.to_v1_secret().metadata.name,
+                namespace=k8s_secret.to_v1_secret().metadata.namespace,
+                annotations=k8s_secret.to_v1_secret().metadata.annotations,
+                labels=k8s_secret.to_v1_secret().metadata.labels,
+            ),
+            data=k8s_secret.to_v1_secret().data or dict(),
+        )
         new_secret.data["configData"] = base64.b64encode(new_config_data.encode("utf-8")).decode("utf-8")
-        new_secret.string_data = None
+
+        # new_secret = k8s_secret.to_v1_secret()
+        # new_secret.data = new_secret.data or dict()
+        # new_secret.data["configData"] = base64.b64encode(new_config_data.encode("utf-8")).decode("utf-8")
+        # new_secret.string_data = None
         logger.info(f"V1Secret = {new_secret}")
         secrets.append(ExtraSecret(new_secret))
 
