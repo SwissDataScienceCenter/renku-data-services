@@ -388,6 +388,24 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
 
 def validate_cluster(body: apispec.Cluster) -> models.ClusterSettings:
     """Convert a REST API Cluster object to a model Cluster object."""
+    match (
+        body.session_protocol,
+        body.session_tls_secret_name,
+        body.session_ingress_use_default_cluster_tls_cert,
+    ):
+        case (apispec.Protocol.https, None, False) | (apispec.Protocol.https, "", False):
+            raise errors.ValidationError(
+                message=f"You have indicated that cluster {body.name} should use HTTPS for the ingress "
+                "but neither the TLS secret name nor the flag that indicates that the default cluster TLS secret "
+                "should be used are set. Please set only one of these two options."
+            )
+        case (apispec.Protocol.https, str(), True) if len(body.session_tls_secret_name) > 0:
+            raise errors.ValidationError(
+                message=f"You have indicated that cluster {body.name} should use HTTPS for the ingress "
+                "but you have set both the TLS secret name and the flag that indicates that the default "
+                "cluster TLS secret should be used. "
+                "Please set only one of these two options."
+            )
     return models.ClusterSettings(
         name=body.name,
         config_name=body.config_name,
@@ -406,6 +424,15 @@ def validate_cluster(body: apispec.Cluster) -> models.ClusterSettings:
 def validate_cluster_patch(patch: apispec.ClusterPatch) -> models.ClusterPatch:
     """Convert a REST API Cluster object patch to a model Cluster object."""
 
+    if patch.session_ingress_use_default_cluster_tls_cert and patch.session_tls_secret_name:
+        raise errors.ValidationError(
+            message="Setting both the TLS secret name and indicating you want to use the default cluster TLS cert "
+            "at the same time is not allowed."
+        )
+
+    session_tls_secret_name: None | ResetType | str = patch.session_tls_secret_name
+    if isinstance(patch.session_tls_secret_name, str) and len(patch.session_tls_secret_name) == 0:
+        session_tls_secret_name = RESET
     return models.ClusterPatch(
         name=patch.name,
         config_name=patch.config_name,
@@ -419,9 +446,10 @@ def validate_cluster_patch(patch: apispec.ClusterPatch) -> models.ClusterPatch:
         session_ingress_annotations=patch.session_ingress_annotations.model_dump()
         if patch.session_ingress_annotations is not None
         else None,
-        session_tls_secret_name=patch.session_tls_secret_name,
+        session_tls_secret_name=session_tls_secret_name,
         session_storage_class=patch.session_storage_class,
         service_account_name=patch.service_account_name,
+        session_ingress_use_default_cluster_tls_cert=patch.session_ingress_use_default_cluster_tls_cert,
     )
 
 

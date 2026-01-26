@@ -223,8 +223,11 @@ class NotebooksConfig:
 
     def local_cluster_settings(self) -> ClusterSettings:
         """The cluster settings for the local cluster where the Renku services are installed."""
-        if not self.sessions.ingress.tls_secret:
-            raise errors.ProgrammingError(message="The tls secret must be defined for a local cluster.")
+        if not self.sessions.ingress.tls_secret and not self.sessions.ingress.use_default_cluster_tls_cert:
+            raise errors.ProgrammingError(
+                message="The tls secret must be defined or the flag that indicates the "
+                "default cluster tls cert will be used should be set to true for a local cluster."
+            )
         return ClusterSettings(
             name="local-cluster-settings",
             config_name="",
@@ -237,4 +240,5 @@ class NotebooksConfig:
             session_tls_secret_name=self.sessions.ingress.tls_secret,
             session_storage_class=self.sessions.storage.pvs_storage_class,
             service_account_name=self.local_cluster_session_service_account,
+            session_ingress_use_default_cluster_tls_cert=self.sessions.ingress.use_default_cluster_tls_cert,
         )

@@ -1043,6 +1043,36 @@ class ClusterRepository:
             if saved_cluster is None:
                 raise errors.MissingResourceError(message=f"Cluster definition id='{cluster_id}' does not exist.")
 
+            _new_session_protocol = cluster.session_protocol or saved_cluster.session_protocol
+            if isinstance(_new_session_protocol, SessionProtocol):
+                new_session_protocol = _new_session_protocol.value.lower()
+            else:
+                new_session_protocol = _new_session_protocol.lower()
+            new_session_tls_secret_name = cluster.session_tls_secret_name or saved_cluster.session_tls_secret_name
+            new_session_ingress_use_default_cluster_tls_cert = (
+                cluster.session_ingress_use_default_cluster_tls_cert
+                or saved_cluster.session_ingress_use_default_cluster_tls_cert
+            )
+            match (
+                new_session_protocol,
+                new_session_tls_secret_name,
+                new_session_ingress_use_default_cluster_tls_cert,
+            ):
+                case ("https", str(), True) if new_session_tls_secret_name:
+                    raise errors.ValidationError(
+                        message=f"You are patching cluster {saved_cluster.id} which uses or will use https but"
+                        "you are using or will use both the TLS secret name and the flag "
+                        "that indicates that the cluster default TLS secret should be used.",
+                        detail="Please only use only one of the two configuration options.",
+                    )
+                case ("https", ResetType.Reset, False) | ("https", "", False):
+                    raise errors.ValidationError(
+                        message=f"You are patching cluster {saved_cluster.id} which uses or will use https but"
+                        "you are also removing both the TLS secret name and the flag "
+                        "that indicates that the cluster default TLS secret should be used.",
+                        detail="Please only use only one of the two configuration options.",
+                    )
+
             for key, value in asdict(cluster).items():
                 match key, value:
                     case "session_protocol", SessionProtocol():
@@ -1053,6 +1083,10 @@ class ClusterRepository:
                         setattr(saved_cluster, key, None)
                     case "service_account_name", "":
                         # If we received an empty string in the service account name, set it back to None.
+                        setattr(saved_cluster, key, None)
+                    case "session_tls_secret_name", "":
+                        setattr(saved_cluster, key, None)
+                    case "session_tls_secret_name", ResetType.Reset:
                         setattr(saved_cluster, key, None)
                     case _, None:
                         # Do not modify a value which has not been set in the patch
