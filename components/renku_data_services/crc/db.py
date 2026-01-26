@@ -10,7 +10,7 @@ from asyncio import gather
 from collections.abc import AsyncGenerator, Callable, Collection, Coroutine, Sequence
 from dataclasses import asdict, dataclass, field
 from functools import wraps
-from typing import Any, Concatenate, Literal, Optional, ParamSpec, TypeVar
+from typing import Any, Concatenate, Optional, ParamSpec, TypeVar
 
 from sqlalchemy import NullPool, delete, false, select, true
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -1038,66 +1038,39 @@ class ClusterRepository:
     async def update(self, api_user: base_models.APIUser, cluster: ClusterPatch, cluster_id: ULID) -> ClusterSettings:
         """Updates a cluster configuration."""
 
-        def _no_tls_secret_name_after_patch(old_cluster: ClusterORM, patch: ClusterPatch) -> bool:
-            """Indicates whether the final state after applying the patch results in no tls secret name."""
-            match (old_cluster.session_tls_secret_name, patch.session_tls_secret_name):
-                case (str(), ResetType.Reset) | (str(), "") | (None, ResetType.Reset) | (None, ""):
-                    return True
-                case _:
-                    return False
-
-        def _no_default_tls_after_patch(old_cluster: ClusterORM, patch: ClusterPatch) -> bool:
-            """Indicates that the patch will result in not having a cluster default tls."""
-            match (
-                old_cluster.session_ingress_use_default_cluster_tls_cert,
-                patch.session_ingress_use_default_cluster_tls_cert,
-            ):
-                case (True, False) | (False, False):
-                    return True
-                case _:
-                    return False
-
-        def _protocol_changes(
-            old_cluster: ClusterORM, patch: ClusterPatch
-        ) -> Literal["http", "https->http", "http->https", "https"]:
-            match (old_cluster.session_protocol.lower(), patch.session_protocol):
-                case ("https", SessionProtocol.HTTP):
-                    return "https->http"
-                case ("http", SessionProtocol.HTTPS) | ("", SessionProtocol.HTTPS):
-                    return "http->https"
-                case ("https", SessionProtocol.HTTPS) | ("https", None):
-                    return "https"
-                case ("http", SessionProtocol.HTTP) | ("http", None):
-                    return "http"
-                case _:
-                    raise errors.ValidationError(
-                        message="Unexpected combination or values for protocol when trying to patch a cluster.",
-                        detail=f"Current value: '{old_cluster.session_protocol}', patch: '{patch.session_protocol}'",
-                    )
-
         async with self.session_maker() as session, session.begin():
             saved_cluster = (await session.scalars(select(ClusterORM).where(ClusterORM.id == cluster_id))).one_or_none()
             if saved_cluster is None:
                 raise errors.MissingResourceError(message=f"Cluster definition id='{cluster_id}' does not exist.")
 
+            _new_session_protocol = cluster.session_protocol or saved_cluster.session_protocol
+            if isinstance(_new_session_protocol, SessionProtocol):
+                new_session_protocol = _new_session_protocol.value.lower()
+            else:
+                new_session_protocol = _new_session_protocol.lower()
+            new_session_tls_secret_name = cluster.session_tls_secret_name or saved_cluster.session_tls_secret_name
+            new_session_ingress_use_default_cluster_tls_cert = (
+                cluster.session_ingress_use_default_cluster_tls_cert
+                or saved_cluster.session_ingress_use_default_cluster_tls_cert
+            )
             match (
-                _protocol_changes(saved_cluster, cluster),
-                _no_tls_secret_name_after_patch(saved_cluster, cluster),
-                _no_default_tls_after_patch(saved_cluster, cluster),
+                new_session_protocol,
+                new_session_tls_secret_name,
+                new_session_ingress_use_default_cluster_tls_cert,
             ):
-                case ("https", True, True) | ("http->https", True, True):
+                case ("https", str(), True) if new_session_tls_secret_name:
                     raise errors.ValidationError(
                         message=f"You are patching cluster {saved_cluster.id} which uses or will use https but"
                         "you are using or will use both the TLS secret name and the flag "
                         "that indicates that the cluster default TLS secret should be used.",
-                        detail="Please only use only one of the configuration options.",
+                        detail="Please only use only one of the two configuration options.",
                     )
-                case ("https", False, False) | ("http->https", False, False):
+                case ("https", ResetType.Reset, False) | ("https", "", False):
                     raise errors.ValidationError(
                         message=f"You are patching cluster {saved_cluster.id} which uses or will use https but"
                         "you are also removing both the TLS secret name and the flag "
                         "that indicates that the cluster default TLS secret should be used.",
-                        detail="Please only use only one of the configuration options.",
+                        detail="Please only use only one of the two configuration options.",
                     )
 
             for key, value in asdict(cluster).items():
@@ -1113,7 +1086,7 @@ class ClusterRepository:
                         setattr(saved_cluster, key, None)
                     case "session_tls_secret_name", "":
                         setattr(saved_cluster, key, None)
-                    case "session_tls_secret_name", x if x is RESET:
+                    case "session_tls_secret_name", ResetType.Reset:
                         setattr(saved_cluster, key, None)
                     case _, None:
                         # Do not modify a value which has not been set in the patch

@@ -397,14 +397,14 @@ def validate_cluster(body: apispec.Cluster) -> models.ClusterSettings:
             raise errors.ValidationError(
                 message=f"You have indicated that cluster {body.name} should use HTTPS for the ingress "
                 "but neither the TLS secret name nor the flag that indicates that the default cluster TLS secret "
-                "should be used are set. Please set one of them or switch the protocol to HTTP."
+                "should be used are set. Please set only one of these two options."
             )
         case (apispec.Protocol.https, str(), True) if len(body.session_tls_secret_name) > 0:
             raise errors.ValidationError(
                 message=f"You have indicated that cluster {body.name} should use HTTPS for the ingress "
                 "but you have set both the TLS secret name and the flag that indicates that the default "
                 "cluster TLS secret should be used. "
-                "Please set one of them or switch the protocol to HTTP."
+                "Please set only one of these two options."
             )
     return models.ClusterSettings(
         name=body.name,
