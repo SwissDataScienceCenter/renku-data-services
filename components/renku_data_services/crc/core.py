@@ -388,22 +388,24 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
 
 def validate_cluster(body: apispec.Cluster) -> models.ClusterSettings:
     """Convert a REST API Cluster object to a model Cluster object."""
-    if body.session_protocol == apispec.Protocol.https:
-        if not body.session_tls_secret_name and not body.session_ingress_use_default_cluster_tls_cert:
+    match (
+        body.session_protocol,
+        body.session_tls_secret_name,
+        body.session_ingress_use_default_cluster_tls_cert,
+    ):
+        case (apispec.Protocol.https, None, False) | (apispec.Protocol.https, "", False):
             raise errors.ValidationError(
                 message=f"You have indicated that cluster {body.name} should use HTTPS for the ingress "
                 "but neither the TLS secret name nor the flag that indicates that the default cluster TLS secret "
                 "should be used are set. Please set one of them or switch the protocol to HTTP."
             )
-        if body.session_tls_secret_name and body.session_ingress_use_default_cluster_tls_cert:
+        case (apispec.Protocol.https, str(), True) if len(body.session_tls_secret_name) > 0:
             raise errors.ValidationError(
                 message=f"You have indicated that cluster {body.name} should use HTTPS for the ingress "
                 "but you have set both the TLS secret name and the flag that indicates that the default "
-                "cluster TLS secret should be used are set. "
+                "cluster TLS secret should be used. "
                 "Please set one of them or switch the protocol to HTTP."
             )
-    # In the case of HTTP if either the tls secret and/or the default cluster tls flag are used
-    # then we simply ignore them.
     return models.ClusterSettings(
         name=body.name,
         config_name=body.config_name,

@@ -225,6 +225,7 @@ async def test_clusters_patch(
         (
             422,
             {
+                "session_protocol": "https",
                 "session_ingress_use_default_cluster_tls_cert": False,
                 "session_tls_secret_name": "",
             },
@@ -234,6 +235,7 @@ async def test_clusters_patch(
         (
             422,
             {
+                "session_protocol": "https",
                 "session_ingress_use_default_cluster_tls_cert": True,
                 "session_tls_secret_name": "something",
             },
@@ -243,7 +245,7 @@ async def test_clusters_patch(
     ],
 )
 @pytest.mark.asyncio
-async def test_clusters_patch_single_field(
+async def test_clusters_patch_some_fields(
     sanic_client: SanicASGITestClient,
     admin_headers: dict[str, str],
     expected_status_code: int,

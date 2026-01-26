@@ -1350,7 +1350,8 @@ class SessionIngress:
         tls_secret = (
             None
             if self.cluster_settings.session_tls_secret_name is None
-            or self.cluster_settings.session_protocol == SessionProtocol.HTTPS
+            or len(self.cluster_settings.session_tls_secret_name) == 0
+            or self.cluster_settings.session_protocol == SessionProtocol.HTTP
             else TlsSecret(adopt=False, name=self.cluster_settings.session_tls_secret_name)
         )
 

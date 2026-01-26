@@ -36,16 +36,19 @@ def upgrade() -> None:
         schema="resource_pools",
     )
     # ### end Alembic commands ###
-    sa.CheckConstraint(
-        "NOT(session_tls_secret_name IS NOT NULL AND session_ingress_use_default_cluster_tls_cert)",
-        name="either_tls_secret_name_or_default_cluster_tls_cert_is_set",
+    op.create_check_constraint(
+        condition="(session_protocol='https' AND (session_tls_secret_name IS NOT NULL <> session_ingress_use_default_cluster_tls_cert)) "
+        "OR session_protocol='http'",
+        constraint_name="protocol_tls_secrets",
+        table_name="clusters",
+        schema="resource_pools",
     )
 
 
 def downgrade() -> None:
     op.drop_constraint(
-        "either_tls_secret_name_or_default_cluster_tls_cert_is_set",
-        "clusters",
+        constraint_name="protocol_tls_secrets",
+        table_name="clusters",
         schema="resource_pools",
         type_="check",
     )

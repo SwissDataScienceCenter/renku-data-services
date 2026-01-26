@@ -176,10 +176,12 @@ class ClusterORM(BaseORM):
     __tablename__ = "clusters"
     __table_args__ = (
         CheckConstraint(
-            # The tls secret and default tls can be either: both null, one of them can be set
+            # The tls secret and default tls can be either: ignored if http, OR
+            # with https one of them can be set
             # but we cannot have both the secret set and the default tls flag set to true.
-            "NOT(session_tls_secret_name IS NOT NULL AND session_ingress_use_default_cluster_tls_cert)",
-            name="either_tls_secret_name_or_default_cluster_tls_cert_is_set",
+            "(session_protocol='https' AND (session_tls_secret_name IS NOT NULL <> session_ingress_use_default_cluster_tls_cert)) "  # noqa: E501
+            "OR session_protocol='http'",
+            name="protocol_tls_secrets",
         ),
     )
     id: Mapped[ULID] = mapped_column("id", ULIDType, primary_key=True, default_factory=lambda: str(ULID()), init=False)

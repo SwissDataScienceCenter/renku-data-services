@@ -228,7 +228,7 @@ class _SessionIngress:
     def from_env(cls) -> Self:
         return cls(
             host=os.environ["NB_SESSIONS__INGRESS__HOST"],
-            tls_secret=os.environ["NB_SESSIONS__INGRESS__TLS_SECRET"],
+            tls_secret=os.environ.get("NB_SESSIONS__INGRESS__TLS_SECRET"),
             use_default_cluster_tls_cert=os.environ.get("NB_SESSIONS__INGRESS__USE_DEFAULT_CLUSTER_TLS_CERT", "false")
             == "true",
             class_name=os.environ.get("NB_SESSIONS__INGRESS__CLASS_NAME", None),
