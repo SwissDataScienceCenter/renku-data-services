@@ -28,13 +28,12 @@ def upgrade() -> None:
         try:
             op.execute("DELETE FROM connected_services.oauth2_clients WHERE kind = 'drive'")
             op.execute("DELETE FROM connected_services.oauth2_clients WHERE kind = 'onedrive'")
-            op.execute("DELETE FROM connected_services.oauth2_clients WHERE kind = 'dropbox'")
             tx.commit()
         except OperationalError as err:
             logger.debug(f"Skipped DELETE section from migration of the connected_services.oauth2_clients table: {err}")
             tx.rollback()
     op.execute("ALTER TYPE providerkind RENAME TO providerkind_old")
-    op.execute("CREATE TYPE providerkind AS ENUM ('gitlab', 'github', 'google', 'generic_oidc')")
+    op.execute("CREATE TYPE providerkind AS ENUM ('dropbox', 'generic_oidc', 'github', 'gitlab', 'google')")
     op.execute(
         "ALTER TABLE connected_services.oauth2_clients ALTER COLUMN kind SET DATA TYPE providerkind USING kind::text::providerkind"
     )

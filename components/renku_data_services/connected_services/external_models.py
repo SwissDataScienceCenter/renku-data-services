@@ -73,17 +73,6 @@ class GoogleConnectedAccount(BaseModel):
         return models.ConnectedAccount(username=self.email, web_url="")
 
 
-# class GoogleDriveConnectedAccount(BaseModel):
-#     """OAuth2 connected account model for google drive."""
-
-#     name: str
-#     email: str
-
-#     def to_connected_account(self) -> models.ConnectedAccount:
-#         """Returns the corresponding ConnectedAccount object."""
-#         return models.ConnectedAccount(username=self.name, web_url=f"mailto:{self.email}")
-
-
 # class OneDriveConnectedAccount(BaseModel):
 #     """OAuth2 connected account model for onedrive."""
 
