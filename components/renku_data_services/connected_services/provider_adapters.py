@@ -1,6 +1,5 @@
 """Adapters for each kind of OAuth2 client."""
 
-import logging
 from abc import ABC, abstractmethod
 from typing import Any
 from urllib.parse import urljoin, urlparse, urlunparse
@@ -10,8 +9,6 @@ from httpx import Client, Response
 from renku_data_services import errors
 from renku_data_services.connected_services import external_models, models
 from renku_data_services.connected_services import orm as schemas
-
-logger = logging.getLogger(__name__)
 
 
 class ProviderAdapter(ABC):
@@ -120,8 +117,8 @@ class GitHubAdapter(ProviderAdapter):
         return external_models.GitHubAppInstallationList.model_validate(response.json()).to_app_installation_list()
 
 
-class GoogleDriveAdapter(ProviderAdapter):
-    """Adapter for Google Drive OAuth2 clients."""
+class GoogleAdapter(ProviderAdapter):
+    """Adapter for Google OAuth2 clients."""
 
     user_info_endpoint = "userinfo"
 
@@ -155,45 +152,83 @@ class GoogleDriveAdapter(ProviderAdapter):
 
     def api_validate_account_response(self, response: Response) -> models.ConnectedAccount:
         """Validates and returns the connected account response from the Resource Server."""
-        return external_models.GoogleDriveConnectedAccount.model_validate(response.json()).to_connected_account()
+        return external_models.GoogleConnectedAccount.model_validate(response.json()).to_connected_account()
 
 
-class OneDriveAdapter(ProviderAdapter):
-    """Adapter for One Drive OAuth2 clients."""
+# class GoogleDriveAdapter(ProviderAdapter):
+#     """Adapter for Google Drive OAuth2 clients."""
 
-    user_info_endpoint = "userinfo"
+#     user_info_endpoint = "userinfo"
 
-    @property
-    def authorization_url(self) -> str:
-        """The authorization URL for the OAuth2 protocol."""
-        return "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+#     @property
+#     def authorization_url(self) -> str:
+#         """The authorization URL for the OAuth2 protocol."""
+#         return "https://accounts.google.com/o/oauth2/auth"
 
-    @property
-    def authorization_url_extra_params(self) -> dict[str, str]:
-        """Extra parameters to add to the auth url."""
-        return {"access_type": "offline"}
+#     @property
+#     def authorization_url_extra_params(self) -> dict[str, str]:
+#         """Extra parameters to add to the auth url."""
+#         return {"access_type": "offline"}
 
-    @property
-    def token_endpoint_url(self) -> str:
-        """The token endpoint URL for the OAuth2 protocol."""
-        return "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+#     @property
+#     def token_endpoint_url(self) -> str:
+#         """The token endpoint URL for the OAuth2 protocol."""
+#         return "https://oauth2.googleapis.com/token"
 
-    @property
-    def api_url(self) -> str:
-        """The URL used for API calls on the Resource Server."""
-        return "https://graph.microsoft.com/oidc/"
+#     @property
+#     def api_url(self) -> str:
+#         """The URL used for API calls on the Resource Server."""
+#         return "https://www.googleapis.com/oauth2/v2/"
 
-    @property
-    def api_common_headers(self) -> dict[str, str] | None:
-        """The HTTP headers used for API calls on the Resource Server."""
-        return {
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-        }
+#     @property
+#     def api_common_headers(self) -> dict[str, str] | None:
+#         """The HTTP headers used for API calls on the Resource Server."""
+#         return {
+#             "Accept": "application/json",
+#             "Content-Type": "application/json",
+#         }
 
-    def api_validate_account_response(self, response: Response) -> models.ConnectedAccount:
-        """Validates and returns the connected account response from the Resource Server."""
-        return external_models.OneDriveConnectedAccount.model_validate(response.json()).to_connected_account()
+#     def api_validate_account_response(self, response: Response) -> models.ConnectedAccount:
+#         """Validates and returns the connected account response from the Resource Server."""
+#         return external_models.GoogleDriveConnectedAccount.model_validate(response.json()).to_connected_account()
+
+
+# class OneDriveAdapter(ProviderAdapter):
+#     """Adapter for One Drive OAuth2 clients."""
+
+#     user_info_endpoint = "userinfo"
+
+#     @property
+#     def authorization_url(self) -> str:
+#         """The authorization URL for the OAuth2 protocol."""
+#         return "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+
+#     @property
+#     def authorization_url_extra_params(self) -> dict[str, str]:
+#         """Extra parameters to add to the auth url."""
+#         return {"access_type": "offline"}
+
+#     @property
+#     def token_endpoint_url(self) -> str:
+#         """The token endpoint URL for the OAuth2 protocol."""
+#         return "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+
+#     @property
+#     def api_url(self) -> str:
+#         """The URL used for API calls on the Resource Server."""
+#         return "https://graph.microsoft.com/oidc/"
+
+#     @property
+#     def api_common_headers(self) -> dict[str, str] | None:
+#         """The HTTP headers used for API calls on the Resource Server."""
+#         return {
+#             "Accept": "application/json",
+#             "Content-Type": "application/json",
+#         }
+
+#     def api_validate_account_response(self, response: Response) -> models.ConnectedAccount:
+#         """Validates and returns the connected account response from the Resource Server."""
+#         return external_models.OneDriveConnectedAccount.model_validate(response.json()).to_connected_account()
 
 
 class DropboxAdapter(ProviderAdapter):
@@ -210,7 +245,7 @@ class DropboxAdapter(ProviderAdapter):
     @property
     def authorization_url_extra_params(self) -> dict[str, str]:
         """Extra parameters to add to the auth url."""
-        return {"access_type": "offline"}
+        return {"token_access_type": "offline"}
 
     @property
     def token_endpoint_url(self) -> str:
@@ -313,13 +348,15 @@ class GenericOidcAdapter(ProviderAdapter):
         return cls._httpx_client
 
 
+# TODO: test that this map is exhaustive
 _adapter_map: dict[models.ProviderKind, type[ProviderAdapter]] = {
-    models.ProviderKind.gitlab: GitLabAdapter,
-    models.ProviderKind.github: GitHubAdapter,
-    models.ProviderKind.drive: GoogleDriveAdapter,
-    models.ProviderKind.onedrive: OneDriveAdapter,
     models.ProviderKind.dropbox: DropboxAdapter,
     models.ProviderKind.generic_oidc: GenericOidcAdapter,
+    models.ProviderKind.github: GitHubAdapter,
+    models.ProviderKind.gitlab: GitLabAdapter,
+    models.ProviderKind.google: GoogleAdapter,
+    # models.ProviderKind.drive: GoogleDriveAdapter,
+    # models.ProviderKind.onedrive: OneDriveAdapter,
 }
 
 
@@ -330,5 +367,7 @@ def get_provider_adapter(client: schemas.OAuth2ClientORM) -> ProviderAdapter:
     if not client.url:
         raise errors.ValidationError(message=f"URL not defined for provider {client.id}.")
 
-    adapter_class = _adapter_map[client.kind]
+    adapter_class = _adapter_map.get(client.kind)
+    if adapter_class is None:
+        raise errors.ProgrammingError(message=f"Provider adapter not implemented for kind {client.kind}.")
     return adapter_class(client_url=client.url, oidc_issuer_url=client.oidc_issuer_url)
