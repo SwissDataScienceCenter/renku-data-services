@@ -77,13 +77,8 @@ class DataSourceRepository:
         # NOTE: do not handle global data connectors
         if data_connector.namespace is None:
             return False
-        match data_connector.storage.configuration["type"]:
-            case "drive":
-                return True
-            case "dropbox":
-                return True
-            case _:
-                return False
+        provider_kind = self._get_oauth2_provider_kind(data_connector=data_connector)
+        return provider_kind is not None
 
     async def handle_patching_configuration(
         self, request: Request, user: APIUser, data_connector: DataConnector | GlobalDataConnector, config_data: str
