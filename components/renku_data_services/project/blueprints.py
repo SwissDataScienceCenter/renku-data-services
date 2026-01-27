@@ -17,7 +17,7 @@ from renku_data_services.base_api.auth import (
 )
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.etag import extract_if_none_match, if_match_required
-from renku_data_services.base_api.misc import validate_body_root_model, validate_query
+from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.base_models.core import Slug
 from renku_data_services.base_models.metrics import MetricsService, ProjectCreationType
@@ -343,7 +343,7 @@ class ProjectsBP(CustomBlueprint):
         """Update or add project members."""
 
         @authenticate(self.authenticator)
-        @validate_body_root_model(json=apispec.ProjectMemberListPatchRequest)
+        @validate(json=apispec.ProjectMemberListPatchRequest)
         async def _update_members(
             _: Request, user: base_models.APIUser, project_id: ULID, body: apispec.ProjectMemberListPatchRequest
         ) -> HTTPResponse:
@@ -519,7 +519,7 @@ class ProjectSessionSecretBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        @validate_body_root_model(json=apispec.SessionSecretPatchList)
+        @validate(json=apispec.SessionSecretPatchList)
         async def _patch_session_secrets(
             _: Request, user: base_models.APIUser, project_id: ULID, body: apispec.SessionSecretPatchList
         ) -> JSONResponse:

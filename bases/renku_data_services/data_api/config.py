@@ -10,7 +10,6 @@ from renku_data_services.app_config.logging import Config as LoggingConfig
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.notebooks.config import NotebooksConfig
-from renku_data_services.notebooks.config.dynamic import ServerOptionsConfig
 from renku_data_services.secrets.config import PublicSecretsConfig
 from renku_data_services.session.config import BuildsConfig
 from renku_data_services.solr.solr_client import SolrClientConfig
@@ -36,7 +35,6 @@ class Config:
     trusted_proxies: TrustedProxiesConfig
     keycloak: KeycloakConfig | None
     user_preferences: UserPreferencesConfig
-    server_options: ServerOptionsConfig
     gitlab_url: str | None
     log_cfg: LoggingConfig
     version: str
@@ -80,7 +78,6 @@ class Config:
             trusted_proxies=TrustedProxiesConfig.from_env(),
             keycloak=keycloak,
             user_preferences=UserPreferencesConfig.from_env(),
-            server_options=ServerOptionsConfig.from_env(),
             gitlab_url=gitlab_url,
             log_cfg=LoggingConfig.from_env(),
             alertmanager_webhook_role=os.environ.get("ALERTMANAGER_WEBHOOK_ROLE", "alertmanager-webhook"),

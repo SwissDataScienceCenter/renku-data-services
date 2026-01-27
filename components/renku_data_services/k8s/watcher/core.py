@@ -8,6 +8,9 @@ from asyncio import CancelledError, Task
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 
+import httpcore
+import httpx
+
 from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import APIUser, InternalServiceAdmin, ServiceAdminId
 from renku_data_services.base_models.metrics import MetricsService
@@ -118,6 +121,13 @@ class K8sWatcher:
                         await self.__handler(cluster.with_api_object(obj), event_type)
             except ValueError:
                 pass
+            except (httpx.ReadError, httpcore.ReadError):
+                # This can happen occasionally - most likely means that the k8s cluster stopped the connection
+                logger.warning(
+                    "Encountered HTTP ReadError, will try to immediately restart event "
+                    f"watch for cluster {cluster_id} and kind {kind}."
+                )
+                continue
             except Exception as e:
                 logger.error(f"watch loop failed for {kind} in cluster {cluster_id}", exc_info=e)
 
@@ -189,7 +199,7 @@ async def collect_metrics(
         await metrics.session_stopped(user=user, metadata={"session_id": new_obj.meta.name})
         return
     previous_state = previous_obj.manifest.get("status", {}).get("state", None) if previous_obj else None
-    match new_obj.obj.status.get("state"):
+    match new_obj.obj.raw.get("status", {}).get("state"):
         case State.Running.value if previous_state is None or previous_state == State.NotReady.value:
             # session starting
             resource_class_id = int(new_obj.obj.metadata.annotations.get("renku.io/resource_class_id"))

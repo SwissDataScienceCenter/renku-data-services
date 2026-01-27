@@ -47,9 +47,8 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.13"
-sanic = { extras = ["ext"], version = "^24.12.0" }
+sanic = { extras = ["ext"], version = "^25.12.0" }
 pydantic = { extras = ["email"], version = "^2.10.6" }
-datamodel-code-generator = "^0.28.4"
 sqlalchemy = { extras = ["asyncio"], version = "^2.0.38" }
 alembic = "^1.14.1"
 asyncpg = "^0.30.0"
@@ -84,7 +83,7 @@ aiofiles = "^24.1.0"
 protobuf = "^5.29.3"
 poetry = "^2.1.1"
 parsy = "^2.1"
-sanic-ext = "^24.12.0"
+sanic-ext = "^25.12.0"
 posthog = "^3.21.0"
 markdown-code-runner = "^2.2.0"
 
@@ -111,6 +110,7 @@ pytest-mock = "^3.14.0"
 uvloop = "^0.21.0"
 syrupy = "^4.8.2"
 ruamel-yaml = "^0.18.14"
+datamodel-code-generator = "^0.28.4"
 
 [build-system]
 requires = ["poetry-core"]

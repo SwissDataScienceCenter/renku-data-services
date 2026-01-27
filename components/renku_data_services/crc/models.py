@@ -10,7 +10,6 @@ from typing import Any, Optional, Protocol, Self
 from renku_data_services import errors
 from renku_data_services.base_models import ResetType
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
-from renku_data_services.notebooks.cr_amalthea_session import TlsSecret
 
 
 class ResourcesProtocol(Protocol):
@@ -196,9 +195,10 @@ class ClusterPatch:
     session_path: str | None
     session_ingress_class_name: str | None
     session_ingress_annotations: dict[str, Any] | None
-    session_tls_secret_name: str | None
+    session_tls_secret_name: str | None | ResetType
     session_storage_class: str | None
     service_account_name: str | None
+    session_ingress_use_default_cluster_tls_cert: bool | None = False
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -212,10 +212,11 @@ class ClusterSettings:
     session_port: int
     session_path: str
     session_ingress_class_name: str | None = None
-    session_ingress_annotations: dict[str, Any]
-    session_tls_secret_name: str
+    session_ingress_annotations: dict[str, str]
+    session_tls_secret_name: str | None
     session_storage_class: str | None
     service_account_name: str | None = None
+    session_ingress_use_default_cluster_tls_cert: bool = False
 
     def to_cluster_patch(self) -> ClusterPatch:
         """Convert to ClusterPatch."""
@@ -232,48 +233,13 @@ class ClusterSettings:
             session_tls_secret_name=self.session_tls_secret_name,
             session_storage_class=self.session_storage_class,
             service_account_name=self.service_account_name,
+            session_ingress_use_default_cluster_tls_cert=self.session_ingress_use_default_cluster_tls_cert,
         )
 
     def get_storage_class(self) -> str | None:
         """Get the default storage class for the cluster."""
 
         return self.session_storage_class
-
-    def get_ingress_parameters(
-        self, server_name: str
-    ) -> tuple[str, str, str, str, TlsSecret | None, str | None, dict[str, str]]:
-        """Returns the ingress parameters of the cluster."""
-
-        host = self.session_host
-        base_server_path = f"{self.session_path}/{server_name}"
-        if self.session_port in [80, 443]:
-            # No need to specify the port in these cases. If we specify the port on https or http
-            # when it is the usual port then the URL callbacks for authentication do not work.
-            # I.e. if the callback is registered as https://some.host/link it will not work when a redirect
-            # like https://some.host:443/link is used.
-            base_server_url = f"{self.session_protocol.value}://{host}{base_server_path}"
-        else:
-            base_server_url = f"{self.session_protocol.value}://{host}:{self.session_port}{base_server_path}"
-        base_server_https_url = base_server_url
-        ingress_class_name = self.session_ingress_class_name
-        ingress_annotations = self.session_ingress_annotations
-
-        if ingress_class_name is None:
-            ingress_class_name = ingress_annotations.get("kubernetes.io/ingress.class")
-
-        tls_secret = (
-            None if self.session_tls_secret_name is None else TlsSecret(adopt=False, name=self.session_tls_secret_name)
-        )
-
-        return (
-            base_server_path,
-            base_server_url,
-            base_server_https_url,
-            host,
-            tls_secret,
-            ingress_class_name,
-            ingress_annotations,
-        )
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

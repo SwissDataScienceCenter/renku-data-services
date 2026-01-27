@@ -10,7 +10,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services.authz.models import Change, Role, UnsavedMember
 from renku_data_services.base_api.auth import authenticate, only_authenticated, validate_path_user_id
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
-from renku_data_services.base_api.misc import validate_body_root_model, validate_query
+from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.base_models.core import NamespaceSlug, ProjectPath, Slug
 from renku_data_services.base_models.metrics import MetricsService
@@ -33,7 +33,7 @@ class GroupsBP(CustomBlueprint):
         """List all groups."""
 
         @authenticate(self.authenticator)
-        @validate_query(query=apispec.GroupsGetParametersQuery)
+        @validate_query(query=apispec_enhanced.GroupsGetParametersQuery)
         @paginate
         async def _get_all(
             _: Request,
@@ -128,7 +128,7 @@ class GroupsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        @validate_body_root_model(json=apispec.GroupMemberPatchRequestList)
+        @validate(json=apispec.GroupMemberPatchRequestList)
         async def _update_members(
             _: Request, user: base_models.APIUser, slug: Slug, body: apispec.GroupMemberPatchRequestList
         ) -> JSONResponse:

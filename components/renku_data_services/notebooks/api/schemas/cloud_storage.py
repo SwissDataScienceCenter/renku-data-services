@@ -325,12 +325,3 @@ class RCloneStorage(ICloudStorageRequest):
             f"{RCloneStorageRequest.__name__}(name={self.name}, source_path={self.source_path}, "
             f"mount_folder={self.mount_folder}, readonly={self.readonly})"
         )
-
-
-class LaunchNotebookResponseCloudStorage(RCloneStorageRequest):
-    """Notebook launch response with cloud storage attached."""
-
-    class Meta:
-        """Specify fields."""
-
-        fields = ("remote", "mount_folder", "type")

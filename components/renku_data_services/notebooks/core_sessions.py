@@ -1,11 +1,14 @@
 """A selection of core functions for AmaltheaSessions."""
 
+from __future__ import annotations
+
 import base64
 import json
 import os
 import random
 import string
 from collections.abc import AsyncIterator, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import PurePosixPath
 from typing import Protocol, TypeVar, cast
@@ -28,6 +31,7 @@ from renku_data_services.crc.models import (
     RemoteConfigurationFirecrest,
     ResourceClass,
     ResourcePool,
+    SessionProtocol,
 )
 from renku_data_services.data_connectors.db import (
     DataConnectorSecretRepository,
@@ -78,6 +82,7 @@ from renku_data_services.notebooks.crs import (
     SizeStr,
     State,
     Storage,
+    TlsSecret,
 )
 from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.notebooks.image_check import ImageCheckRepository
@@ -160,7 +165,6 @@ async def get_auth_secret_authenticated(
     user: AuthenticatedAPIUser,
     server_name: str,
     base_server_url: str,
-    base_server_https_url: str,
     base_server_path: str,
 ) -> ExtraSecret:
     """Get the extra secrets that need to be added to the session for an authenticated user."""
@@ -182,7 +186,7 @@ async def get_auth_secret_authenticated(
             "session_cookie_minimal": True,
             "skip_provider_button": True,
             # NOTE: If the redirect url is not HTTPS then some or identity providers will fail.
-            "redirect_url": urljoin(base_server_https_url + "/", "oauth2/callback"),
+            "redirect_url": urljoin(base_server_url + "/", "oauth2/callback"),
             "cookie_path": base_server_path,
             "proxy_prefix": parsed_proxy_url.path,
             "authenticated_emails_file": "/authorized_emails",
@@ -233,7 +237,7 @@ async def __get_gitlab_image_pull_secret(
 ) -> ExtraSecret:
     """Create a Kubernetes secret for private GitLab registry authentication."""
 
-    k8s_namespace = await nb_config.k8s_client.namespace()
+    k8s_namespace = await nb_config.k8s_v2_client.namespace()
 
     registry_secret = {
         "auths": {
@@ -333,7 +337,7 @@ async def get_data_sources(
         secret = ExtraSecret(
             cs.secret(
                 secret_name,
-                await nb_config.k8s_client.namespace(),
+                await nb_config.k8s_v2_client.namespace(),
                 user_secret_key=user_secret_key if secret_key_needed else None,
             )
         )
@@ -844,7 +848,7 @@ async def start_session(
         user=user, project_id=str(launcher.project_id), launcher_id=str(launcher_id), cluster_id=str(cluster.id)
     )
     existing_session = await nb_config.k8s_v2_client.get_session(name=server_name, safe_username=user.id)
-    if existing_session is not None and existing_session.spec is not None:
+    if existing_session is not None:
         return existing_session, False
 
     # Fully determine the resource pool and resource class
@@ -938,27 +942,12 @@ async def start_session(
         # Fallback to global, main cluster parameters
         cluster_settings = nb_config.local_cluster_settings()
 
-    (
-        base_server_path,
-        base_server_url,
-        base_server_https_url,
-        host,
-        tls_secret,
-        ingress_class_name,
-        ingress_annotations,
-    ) = cluster_settings.get_ingress_parameters(server_name)
+    ingress_config = SessionIngress(server_name=server_name, cluster_settings=cluster_settings)
+
     storage_class = cluster_settings.get_storage_class()
     service_account_name = cluster_settings.service_account_name
 
-    ui_path = f"{base_server_path}/{environment.default_url.lstrip('/')}"
-
-    ingress = Ingress(
-        host=host,
-        ingressClassName=ingress_class_name,
-        annotations=ingress_annotations,
-        tlsSecret=tls_secret,
-        pathPrefix=base_server_path,
-    )
+    ui_path = f"{ingress_config.url}/{environment.default_url.lstrip('/')}"
 
     # Annotations
     annotations: dict[str, str] = {
@@ -970,7 +959,7 @@ async def start_session(
     # Authentication
     if isinstance(user, AuthenticatedAPIUser):
         auth_secret = await get_auth_secret_authenticated(
-            nb_config, user, server_name, base_server_url, base_server_https_url, base_server_path
+            nb_config, user, server_name, ingress_config.url, ingress_config.url_path
         )
     else:
         auth_secret = get_auth_secret_anonymous(nb_config, server_name, request)
@@ -1020,8 +1009,8 @@ async def start_session(
     # Raise an error if there are invalid environment variables in the request body
     verify_launcher_env_variable_overrides(launcher, launch_request)
     env = [
-        SessionEnvItem(name="RENKU_BASE_URL_PATH", value=base_server_path),
-        SessionEnvItem(name="RENKU_BASE_URL", value=base_server_url),
+        SessionEnvItem(name="RENKU_BASE_URL_PATH", value=ingress_config.url_path),
+        SessionEnvItem(name="RENKU_BASE_URL", value=ingress_config.url),
         SessionEnvItem(name="RENKU_MOUNT_DIR", value=storage_mount.as_posix()),
         SessionEnvItem(name="RENKU_SESSION", value="1"),
         SessionEnvItem(name="RENKU_SESSION_IP", value="0.0.0.0"),  # nosec B104
@@ -1073,7 +1062,7 @@ async def start_session(
                 env=env,
                 remoteSecretRef=remote_secret.ref() if remote_secret else None,
             ),
-            ingress=ingress,
+            ingress=ingress_config.get_k8s_ingress(),
             extraContainers=session_extras.containers,
             initContainers=session_extras.init_containers,
             extraVolumes=session_extras.volumes,
@@ -1150,10 +1139,6 @@ async def patch_session(
     session = await nb_config.k8s_v2_client.get_session(session_id, user.id)
     if session is None:
         raise errors.MissingResourceError(message=f"The session with ID {session_id} does not exist")
-    if session.spec is None:
-        raise errors.ProgrammingError(
-            message=f"The session {session_id} being patched is missing the expected 'spec' field.", quiet=True
-        )
     cluster = await nb_config.k8s_v2_client.cluster_by_class_id(session.resource_class_id(), user)
 
     patch = AmaltheaSessionV1Alpha1Patch(spec=AmaltheaSessionV1Alpha1SpecPatch())
@@ -1446,3 +1431,58 @@ def validate_session_post_request(body: apispec.SessionPostRequest) -> SessionLa
         data_connectors_overrides=data_connectors_overrides,
         env_variable_overrides=env_variable_overrides,
     )
+
+
+@dataclass(kw_only=True, frozen=True, eq=True)
+class SessionIngress:
+    """Helper for generating ingress and related information for a session."""
+
+    server_name: str
+    cluster_settings: ClusterSettings
+
+    def get_k8s_ingress(self) -> Ingress:
+        """Get the amalthea session ingress from the cluster settings."""
+        host = self.cluster_settings.session_host
+        base_server_path = f"{self.cluster_settings.session_path}/{self.server_name}"
+        ingress_class_name = self.cluster_settings.session_ingress_class_name
+        ingress_annotations = self.cluster_settings.session_ingress_annotations
+
+        if ingress_class_name is None:
+            ingress_class_name = ingress_annotations.get("kubernetes.io/ingress.class")
+
+        tls_secret = (
+            None
+            if self.cluster_settings.session_tls_secret_name is None
+            or len(self.cluster_settings.session_tls_secret_name) == 0
+            or self.cluster_settings.session_protocol == SessionProtocol.HTTP
+            else TlsSecret(adopt=False, name=self.cluster_settings.session_tls_secret_name)
+        )
+
+        return Ingress(
+            annotations=ingress_annotations,
+            host=host,
+            ingressClassName=ingress_class_name,
+            pathPrefix=base_server_path,
+            tlsSecret=tls_secret,
+            useDefaultClusterTLSCert=self.cluster_settings.session_ingress_use_default_cluster_tls_cert,
+        )
+
+    @property
+    def url_path(self) -> str:
+        """The path portion of the url where the session can be accessed, usually the path prefix of the ingress."""
+        return f"{self.cluster_settings.session_path.rstrip('/')}/{self.server_name}"
+
+    @property
+    def url(self) -> str:
+        """The full url where the session can be accessed in the browser."""
+        if self.cluster_settings.session_port in [80, 443]:
+            # No need to specify the port in these cases. If we specify the port on https or http
+            # when it is the usual port then the URL callbacks for authentication do not work.
+            # I.e. if the callback is registered as https://some.host/link it will not work when a redirect
+            # like https://some.host:443/link is used.
+            base_server_url = (
+                f"{self.cluster_settings.session_protocol.value}://{self.cluster_settings.session_host}{self.url_path}"
+            )
+        else:
+            base_server_url = f"{self.cluster_settings.session_protocol.value}://{self.cluster_settings.session_host}:{self.cluster_settings.session_port}{self.url_path}"
+        return base_server_url

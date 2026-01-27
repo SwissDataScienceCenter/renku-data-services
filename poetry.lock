@@ -57,7 +57,7 @@ version = "0.7.0"
 description = "Reusable constraint types to use with typing.Annotated"
 optional = false
 python-versions = ">=3.8"
-groups = ["main"]
+groups = ["main", "dev"]
 files = [
     {file = "annotated_types-0.7.0-py3-none-any.whl", hash = "sha256:1f02e8b43a8fbbc3f3e0d4f0f4bfc8131bcb4eebe8849b8e5c773f3a1c582a53"},
     {file = "annotated_types-0.7.0.tar.gz", hash = "sha256:aff07c09a53a08bc8cfccb9c85b05f1aa9a2a6f23728d790723543408344ce89"},
@@ -90,7 +90,7 @@ version = "3.6.2"
 description = "Bash tab completion for argparse"
 optional = false
 python-versions = ">=3.8"
-groups = ["main"]
+groups = ["dev"]
 files = [
     {file = "argcomplete-3.6.2-py3-none-any.whl", hash = "sha256:65b3133a29ad53fb42c48cf5114752c7ab66c1c38544fdf6460f450c09b42591"},
     {file = "argcomplete-3.6.2.tar.gz", hash = "sha256:d0519b1bc867f5f4f4713c41ad0aba73a4a5f007449716b16f385f2166dc6adf"},
@@ -295,7 +295,7 @@ version = "25.1.0"
 description = "The uncompromising code formatter."
 optional = false
 python-versions = ">=3.9"
-groups = ["main"]
+groups = ["dev"]
 files = [
     {file = "black-25.1.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:759e7ec1e050a15f89b770cefbf91ebee8917aac5c20483bc2d80a6c3a04df32"},
     {file = "black-25.1.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:0e519ecf93120f34243e6b0054db49c00a35f84f195d5bce7e9f5cfc578fc2da"},
@@ -640,7 +640,7 @@ version = "8.1.8"
 description = "Composable command line interface toolkit"
 optional = false
 python-versions = ">=3.7"
-groups = ["main", "dev"]
+groups = ["dev"]
 files = [
     {file = "click-8.1.8-py3-none-any.whl", hash = "sha256:63c132bbbed01578a06712a2d1f497bb62d9c1c0d329b7903a866228027263b2"},
     {file = "click-8.1.8.tar.gz", hash = "sha256:ed53c9d8990d83c2a27deae68e4ee337473f6330c040a31d4225c9574d16096a"},
@@ -660,7 +660,7 @@ files = [
     {file = "colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6"},
     {file = "colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44"},
 ]
-markers = {main = "platform_system == \"Windows\" or os_name == \"nt\""}
+markers = {main = "os_name == \"nt\""}
 
 [[package]]
 name = "coverage"
@@ -814,7 +814,7 @@ version = "0.28.5"
 description = "Datamodel Code Generator"
 optional = false
 python-versions = ">=3.9"
-groups = ["main"]
+groups = ["dev"]
 files = [
     {file = "datamodel_code_generator-0.28.5-py3-none-any.whl", hash = "sha256:f899c1da5af04b5d5b6e3edbd718c1bf3a00fc4b2fe8210cef609d93a9983e9e"},
     {file = "datamodel_code_generator-0.28.5.tar.gz", hash = "sha256:20e8b817d301d2d0bb15f436e81c97b25ad1c2ef922c99249c2444141ae15a6a"},
@@ -1122,7 +1122,7 @@ version = "1.3.0"
 description = "GenSON is a powerful, user-friendly JSON Schema generator."
 optional = false
 python-versions = "*"
-groups = ["main"]
+groups = ["dev"]
 files = [
     {file = "genson-1.3.0-py3-none-any.whl", hash = "sha256:468feccd00274cc7e4c09e84b08704270ba8d95232aa280f65b986139cec67f7"},
     {file = "genson-1.3.0.tar.gz", hash = "sha256:e02db9ac2e3fd29e65b5286f7135762e2cd8a986537c075b06fc5f1517308e37"},
@@ -1607,7 +1607,7 @@ version = "5.6.2"
 description = "Correctly generate plurals, singular nouns, ordinals, indefinite articles; convert numbers to words"
 optional = false
 python-versions = ">=3.7"
-groups = ["main"]
+groups = ["dev"]
 files = [
     {file = "inflect-5.6.2-py3-none-any.whl", hash = "sha256:b45d91a4a28a4e617ff1821117439b06eaa86e2a4573154af0149e9be6687238"},
     {file = "inflect-5.6.2.tar.gz", hash = "sha256:aadc7ed73928f5e014129794bbac03058cca35d0a973a5fc4eb45c7fa26005f9"},
@@ -1662,7 +1662,7 @@ version = "6.0.1"
 description = "A Python utility / library to sort Python imports."
 optional = false
 python-versions = ">=3.9.0"
-groups = ["main"]
+groups = ["dev"]
 files = [
     {file = "isort-6.0.1-py3-none-any.whl", hash = "sha256:2dc5d7f65c9678d94c88dfc29161a320eec67328bc97aad576874cb4be1e9615"},
     {file = "isort-6.0.1.tar.gz", hash = "sha256:1cb5df28dfbc742e490c5e41bad6da41b805b0a8be7bc93cd0fb2a8a890ac450"},
@@ -1753,7 +1753,7 @@ version = "3.1.6"
 description = "A very fast and expressive template engine."
 optional = false
 python-versions = ">=3.7"
-groups = ["main"]
+groups = ["dev"]
 files = [
     {file = "jinja2-3.1.6-py3-none-any.whl", hash = "sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67"},
     {file = "jinja2-3.1.6.tar.gz", hash = "sha256:0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d"},
@@ -2083,14 +2083,14 @@ files = [
 
 [[package]]
 name = "marshmallow"
-version = "3.26.1"
+version = "3.26.2"
 description = "A lightweight library for converting complex datatypes to and from native Python datatypes."
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "marshmallow-3.26.1-py3-none-any.whl", hash = "sha256:3350409f20a70a7e4e11a27661187b77cdcaeb20abca41c1454fe33636bea09c"},
-    {file = "marshmallow-3.26.1.tar.gz", hash = "sha256:e6d8affb6cb61d39d26402096dc0aee12d5a26d490a121f118d2e81dc0719dc6"},
+    {file = "marshmallow-3.26.2-py3-none-any.whl", hash = "sha256:013fa8a3c4c276c24d26d84ce934dc964e2aa794345a0f8c7e5a7191482c8a73"},
+    {file = "marshmallow-3.26.2.tar.gz", hash = "sha256:bbe2adb5a03e6e3571b573f42527c6fe926e17467833660bebd11593ab8dfd57"},
 ]
 
 [package.dependencies]
@@ -2399,7 +2399,7 @@ version = "1.1.0"
 description = "Type system extensions for programs checked with the mypy type checker."
 optional = false
 python-versions = ">=3.8"
-groups = ["main", "dev"]
+groups = ["dev"]
 files = [
     {file = "mypy_extensions-1.1.0-py3-none-any.whl", hash = "sha256:1be4cccdb0f2482337c4743e60421de3a356cd97508abadd57d47403e94f5505"},
     {file = "mypy_extensions-1.1.0.tar.gz", hash = "sha256:52e68efc3284861e772bbcd66823fde5ae21fd2fdb51c62a211403730b916558"},
@@ -2464,7 +2464,7 @@ version = "0.12.1"
 description = "Utility library for gitignore style pattern matching of file paths."
 optional = false
 python-versions = ">=3.8"
-groups = ["main"]
+groups = ["dev"]
 files = [
     {file = "pathspec-0.12.1-py3-none-any.whl", hash = "sha256:a0d503e138a4c123b27490a4f7beda6a01c6f288df0e4a8b79c7eb0dc7b4cc08"},
     {file = "pathspec-0.12.1.tar.gz", hash = "sha256:a482d51503a1ab33b1c67a6c3813a26953dbdc71c31dacaef9a838c4e29f5712"},
@@ -3002,7 +3002,7 @@ version = "2.11.3"
 description = "Data validation using Python type hints"
 optional = false
 python-versions = ">=3.9"
-groups = ["main"]
+groups = ["main", "dev"]
 files = [
     {file = "pydantic-2.11.3-py3-none-any.whl", hash = "sha256:a082753436a07f9ba1289c6ffa01cd93db3548776088aa917cc43b63f68fa60f"},
     {file = "pydantic-2.11.3.tar.gz", hash = "sha256:7471657138c16adad9322fe3070c0116dd6c3ad8d649300e3cbdfe91f4db4ec3"},
@@ -3025,7 +3025,7 @@ version = "2.33.1"
 description = "Core functionality for Pydantic validation and serialization"
 optional = false
 python-versions = ">=3.9"
-groups = ["main"]
+groups = ["main", "dev"]
 files = [
     {file = "pydantic_core-2.33.1-cp310-cp310-macosx_10_12_x86_64.whl", hash = "sha256:3077cfdb6125cc8dab61b155fdd714663e401f0e6883f9632118ec12cf42df26"},
     {file = "pydantic_core-2.33.1-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:8ffab8b2908d152e74862d276cf5017c81a2f3719f14e8e3e8d6b83fda863927"},
@@ -3974,14 +3974,14 @@ files = [
 
 [[package]]
 name = "sanic"
-version = "24.12.0"
+version = "25.12.0"
 description = "A web server and web framework that's written to go fast. Build fast. Run fast."
 optional = false
-python-versions = ">=3.8"
+python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "sanic-24.12.0-py3-none-any.whl", hash = "sha256:3c2a01ec0b6c5926e3efe34eac1b497d31ed989038fe213eb25ad0c98687d388"},
-    {file = "sanic-24.12.0.tar.gz", hash = "sha256:09c23aa917616c1e60e44c66dfd7582cb9fd6503f78298c309945909f5839836"},
+    {file = "sanic-25.12.0-py3-none-any.whl", hash = "sha256:42ccf717f564aadab529a1522c489a709c4971c8123793ae07852aa110f8a913"},
+    {file = "sanic-25.12.0.tar.gz", hash = "sha256:ec124338f83a781da8095ed2676e60eb40c7fe21e7aa649a879f8860b4c7bd7a"},
 ]
 
 [package.dependencies]
@@ -3992,38 +3992,39 @@ multidict = ">=5.0,<7.0"
 sanic-ext = {version = "*", optional = true, markers = "extra == \"ext\""}
 sanic-routing = ">=23.12.0"
 setuptools = ">=70.1.0"
-tracerite = ">=1.0.0"
+tracerite = ">=2.2.0"
 typing-extensions = ">=4.4.0"
 ujson = {version = ">=1.35", markers = "sys_platform != \"win32\" and implementation_name == \"cpython\""}
 uvloop = {version = ">=0.15.0", markers = "sys_platform != \"win32\" and implementation_name == \"cpython\""}
 websockets = ">=10.0"
 
 [package.extras]
-all = ["autodocsumm (>=0.2.11)", "bandit", "beautifulsoup4", "chardet (==3.*)", "coverage", "cryptography", "docutils", "enum-tools[sphinx]", "m2r2", "mistune (<2.0.0)", "mypy", "pygments", "pytest (>=8.2.2)", "pytest-benchmark", "pytest-sanic", "ruff", "sanic-testing (>=23.6.0)", "slotscheck (>=0.8.0,<1)", "sphinx (>=2.1.2)", "sphinx_rtd_theme (>=0.4.3)", "towncrier", "tox", "types-ujson ; sys_platform != \"win32\" and implementation_name == \"cpython\"", "uvicorn"]
-dev = ["bandit", "beautifulsoup4", "chardet (==3.*)", "coverage", "cryptography", "docutils", "mypy", "pygments", "pytest (>=8.2.2)", "pytest-benchmark", "pytest-sanic", "ruff", "sanic-testing (>=23.6.0)", "slotscheck (>=0.8.0,<1)", "towncrier", "tox", "types-ujson ; sys_platform != \"win32\" and implementation_name == \"cpython\"", "uvicorn"]
-docs = ["autodocsumm (>=0.2.11)", "docutils", "enum-tools[sphinx]", "m2r2", "mistune (<2.0.0)", "pygments", "sphinx (>=2.1.2)", "sphinx_rtd_theme (>=0.4.3)"]
+all = ["autodocsumm (>=0.2.11)", "bandit", "beautifulsoup4", "chardet (==3.*)", "coverage", "cryptography", "docstring-parser", "docutils", "enum-tools[sphinx]", "libsass", "m2r2", "mistune (>=2.0.0)", "msgspec", "mypy", "pygments", "pytest (>=8.2.2)", "pytest-benchmark", "pytest-cov (>=4.0.0)", "pytest-sanic", "pytest-xdist (>=3.5.0)", "python-frontmatter", "ruff", "sanic-testing (>=23.6.0)", "slotscheck (>=0.8.0,<1)", "sphinx (>=2.1.2)", "sphinx_rtd_theme (>=0.4.3)", "towncrier", "tox", "types-ujson ; sys_platform != \"win32\" and implementation_name == \"cpython\"", "uvicorn"]
+dev = ["bandit", "beautifulsoup4", "chardet (==3.*)", "coverage", "cryptography", "docutils", "mypy", "pygments", "pytest (>=8.2.2)", "pytest-benchmark", "pytest-cov (>=4.0.0)", "pytest-sanic", "pytest-xdist (>=3.5.0)", "ruff", "sanic-testing (>=23.6.0)", "slotscheck (>=0.8.0,<1)", "towncrier", "tox", "types-ujson ; sys_platform != \"win32\" and implementation_name == \"cpython\"", "uvicorn"]
+docs = ["autodocsumm (>=0.2.11)", "docstring-parser", "docutils", "enum-tools[sphinx]", "libsass", "m2r2", "mistune (>=2.0.0)", "msgspec", "pygments", "python-frontmatter", "sphinx (>=2.1.2)", "sphinx_rtd_theme (>=0.4.3)"]
 ext = ["sanic-ext"]
 http3 = ["aioquic"]
-test = ["bandit", "beautifulsoup4", "chardet (==3.*)", "coverage", "docutils", "mypy", "pygments", "pytest (>=8.2.2)", "pytest-benchmark", "pytest-sanic", "ruff", "sanic-testing (>=23.6.0)", "slotscheck (>=0.8.0,<1)", "types-ujson ; sys_platform != \"win32\" and implementation_name == \"cpython\"", "uvicorn"]
+test = ["bandit", "beautifulsoup4", "chardet (==3.*)", "coverage", "docutils", "mypy", "pygments", "pytest (>=8.2.2)", "pytest-benchmark", "pytest-cov (>=4.0.0)", "pytest-sanic", "pytest-xdist (>=3.5.0)", "ruff", "sanic-testing (>=23.6.0)", "slotscheck (>=0.8.0,<1)", "types-ujson ; sys_platform != \"win32\" and implementation_name == \"cpython\"", "uvicorn"]
 
 [[package]]
 name = "sanic-ext"
-version = "24.12.0"
+version = "25.12.0"
 description = "Extend your Sanic installation with some core functionality."
 optional = false
 python-versions = "*"
 groups = ["main"]
 files = [
-    {file = "sanic_ext-24.12.0-py3-none-any.whl", hash = "sha256:861f809f071770cf28acd5f13e97ed59985e07361b13b4b4540da1333730c83e"},
-    {file = "sanic_ext-24.12.0.tar.gz", hash = "sha256:8f912f4c29f242bc638346d09b79f0c8896ff64e79bd0e7fa09eac4b6c0e23c8"},
+    {file = "sanic_ext-25.12.0-py3-none-any.whl", hash = "sha256:4bf9afcb28c7abbc4bcac489cf4b6d53f12fa49ea4777200ea7d7d6d23ffe8ca"},
+    {file = "sanic_ext-25.12.0.tar.gz", hash = "sha256:db6f5c8b880bb6b4cb73717b655b63aea4e77cf57825678ec74310fd69581ce1"},
 ]
 
 [package.dependencies]
 pyyaml = ">=3.0.0"
+sanic = ">=25.12.0"
 
 [package.extras]
-dev = ["Jinja2", "black (>=21.4b2)", "coverage", "flake8 (>=3.7.7)", "isort (>=5.0.0)", "pytest", "pytest-asyncio", "pytest-cov", "sanic_testing (>=22.9.0)", "tox"]
-test = ["Jinja2", "coverage", "pytest", "pytest-asyncio", "pytest-cov", "sanic_testing (>=22.9.0)", "tox"]
+dev = ["Jinja2", "black (>=21.4b2)", "coverage", "flake8 (>=3.7.7)", "isort (>=5.0.0)", "pytest", "pytest-asyncio", "pytest-cov", "pytest-xdist", "sanic_testing (>=24.6.0)", "tox"]
+test = ["Jinja2", "coverage", "pytest", "pytest-asyncio", "pytest-cov", "pytest-xdist", "sanic_testing (>=24.6.0)", "tox"]
 
 [[package]]
 name = "sanic-routing"
@@ -4497,18 +4498,21 @@ files = [
 
 [[package]]
 name = "tracerite"
-version = "1.1.1"
+version = "2.3.1"
 description = "Human-readable HTML tracebacks for Python exceptions"
 optional = false
-python-versions = "*"
+python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "tracerite-1.1.1-py3-none-any.whl", hash = "sha256:3a787a9ecb1a136ea9ce17e6328e414ec414a4f644130af4e1e330bec2dece29"},
-    {file = "tracerite-1.1.1.tar.gz", hash = "sha256:6400a35a187747189e4bb8d4a8e471bd86d14dbdcc94bcad23f4eda023f41356"},
+    {file = "tracerite-2.3.1-py3-none-any.whl", hash = "sha256:5f9595ba90f075b58e14a9baf84d8204fec3cdce50029f1c32d757af79d9ccbe"},
+    {file = "tracerite-2.3.1.tar.gz", hash = "sha256:f46ee672d240d500a2331781b09eb33564d473f6ae60cd871ebce6c2413cffa8"},
 ]
 
 [package.dependencies]
 html5tagger = ">=1.2.1"
+
+[package.extras]
+nb = ["ipykernel (>=6.29.5)", "ipywidgets (>=8.1.8)", "jupyter (>=1.1.1)", "jupyter-client (>=8.6.3)", "jupyterlab (>=4.3.8)", "notebook (>=7.3.3)"]
 
 [[package]]
 name = "trove-classifiers"
@@ -4615,7 +4619,7 @@ version = "0.4.0"
 description = "Runtime typing introspection tools"
 optional = false
 python-versions = ">=3.9"
-groups = ["main"]
+groups = ["main", "dev"]
 files = [
     {file = "typing_inspection-0.4.0-py3-none-any.whl", hash = "sha256:50e72559fcd2a6367a19f7a7e610e6afcb9fac940c650290eed893d61386832f"},
     {file = "typing_inspection-0.4.0.tar.gz", hash = "sha256:9765c87de36671694a67904bf2c96e395be9c6439bb6c87b5142569dcdd65122"},
@@ -5307,4 +5311,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.13"
-content-hash = "327d864b47a99c9f6d86bc4827c459dc54b2c6bc79ec6fb06ec6a6a6d3626337"
+content-hash = "13fdf0da495d1a4ad63f7663c79a6badb451be3692b551d84184006a5b9f981d"
