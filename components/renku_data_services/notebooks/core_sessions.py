@@ -947,7 +947,7 @@ async def start_session(
     storage_class = cluster_settings.get_storage_class()
     service_account_name = cluster_settings.service_account_name
 
-    ui_path = f"{ingress_config.url}/{environment.default_url.lstrip('/')}"
+    ui_path = f"{ingress_config.url_path}/{environment.default_url.lstrip('/')}"
 
     # Annotations
     annotations: dict[str, str] = {
