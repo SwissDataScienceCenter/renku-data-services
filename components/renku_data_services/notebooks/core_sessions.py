@@ -361,7 +361,11 @@ async def patch_data_sources(
     data_connectors_stream: AsyncIterator[DataConnectorWithSecrets],
     data_source_repo: DataSourceRepository,
 ) -> SessionExtraResources:
-    """Handle updating data sources definitions when resuming a session."""
+    """Handle updating data sources definitions when resuming a session.
+
+    This touches data connectors which use OAuth2 tokens for access.
+    Other data connectors are left untouched.
+    """
     secrets: list[ExtraSecret] = []
     server_name = session.metadata.name
     secret_prefix = f"{server_name}-ds-"
@@ -376,7 +380,6 @@ async def patch_data_sources(
                     mounted_dcs.append((ULID.from_str(ulid.upper()), name))
                 except ValueError:
                     logger.warning(f"Could not parse {ulid.upper()} as a ULID.")
-    logger.info(f"Found mounted data connectors: {[str(u) for u, _ in mounted_dcs]}.")
     async for dc in data_connectors_stream:
         if not data_source_repo.is_patching_enabled(dc.data_connector):
             continue
@@ -385,7 +388,7 @@ async def patch_data_sources(
         if mounted_dc is None:
             continue
         _, secret_name = mounted_dc
-        logger.info(f"Patching DC secret {secret_name}.")
+        logger.debug(f"Patching DC secret {secret_name} for data connector {str(dc_id)}.")
         k8s_secret = await nb_config.k8s_v2_client.get_secret(
             K8sSecret.from_v1_secret(V1Secret(metadata=V1ObjectMeta(name=secret_name)), cluster)
         )
@@ -394,25 +397,22 @@ async def patch_data_sources(
             continue
         v1_secret = k8s_secret.to_v1_secret()
         secret_data: dict[str, str] = v1_secret.data
-        logger.info(f"Got secret: secret_data={secret_data}")
         config_data_raw = secret_data.get("configData")
         if not config_data_raw:
             logger.warning(f"Field 'configData' not found for data connector {str(dc_id)}, skipping!")
             continue
-        logger.info(f"Check type config_data_raw = {type(config_data_raw)}")
         existing_config_data: str = ""
         try:
             existing_config_data = base64.b64decode(config_data_raw).decode("utf-8")
         except Exception as err:
             logger.warning(f"Error decoding 'configData' for data connector {str(dc_id)}, skipping! {err}")
             continue
-        logger.info(f"Got existing_config_data = {existing_config_data}")
         new_config_data = await data_source_repo.handle_patching_configuration(
             request=request, user=user, data_connector=dc.data_connector, config_data=existing_config_data
         )
         if not new_config_data:
             continue
-
+        # We re-create the secret for the data connector, with the updated configuration.
         metadata = v1_secret.metadata
         new_secret = V1Secret(
             api_version="v1",
@@ -424,10 +424,8 @@ async def patch_data_sources(
             data=secret_data,
         )
         new_secret.data["configData"] = base64.b64encode(new_config_data.encode("utf-8")).decode("utf-8")
-        logger.info(f"V1Secret = {new_secret}")
         secrets.append(ExtraSecret(new_secret))
 
-    logger.info(f"Patching secrets: {secrets}")
     return SessionExtraResources(secrets=secrets)
 
 
