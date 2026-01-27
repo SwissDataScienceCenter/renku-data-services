@@ -7,6 +7,7 @@ from typing import Any, cast
 from urllib.parse import unquote, urlparse, urlunparse
 
 import httpx
+import jwt
 from sanic import HTTPResponse, Request, empty, json, redirect
 from sanic.response import JSONResponse
 from sanic_ext import validate
@@ -252,22 +253,23 @@ class OAuth2ConnectionsBP(CustomBlueprint):
         return "/oauth2/connections/<connection_id:ulid>/installations", ["GET"], _get_installations
 
     def post_token_endpoint(self) -> BlueprintFactoryResponse:
-        """OAuth 2.0 token endpoint to support applications running in sessions."""
+        """OAuth 2.0 token endpoint to support applications running in sessions.
+
+        Details:
+            1. Decode the refresh_token value into an instance of RenkuTokens
+            2. Validate the access_token
+                -> if the access_token is invalid (expired), use the renku refresh_token
+                to get a fresh set of tokens
+            3. Send back the refreshed OAuth 2.0 access token and a the encoded value
+            of the current RenkuTokens
+        """
 
         @validate(form=apispec_extras.PostTokenRequest)
         async def _post_token_endpoint(
             request: Request, body: apispec_extras.PostTokenRequest, connection_id: ULID
         ) -> JSONResponse:
-            logger.warning(f"post_token_endpoint: connection_id = {str(connection_id)}")
-            logger.warning(f"post_token_endpoint: request headers = {list(request.headers.keys())}")
-            logger.warning(f"post_token_endpoint: request content-type = {request.headers.get("content-type")}")
-            logger.warning(f"post_token_endpoint: request body = {request.body!r}")
-
-            logger.warning(f"post_token_endpoint: request body grant_type = {body.grant_type.value}")
-            logger.warning(f"post_token_endpoint: request body refresh_token = {body.refresh_token}")
-
             renku_tokens = apispec_extras.RenkuTokens.decode(body.refresh_token)
-            logger.warning(f"post_token_endpoint: renku_tokens = {renku_tokens}")
+            # NOTE: inject the access token in the headers so that we can use `self.authenticator`
             request.headers[self.authenticator.token_field] = renku_tokens.access_token
 
             user: base_models.APIUser | None = None
@@ -283,8 +285,6 @@ class OAuth2ConnectionsBP(CustomBlueprint):
             except Exception as err:
                 logger.error(f"Got authenticate error: {err.__class__}.")
                 raise
-
-            logger.warning(f"post_token_endpoint: user = {user}")
 
             # Try to refresh the Renku access token
             if user is None and renku_tokens.refresh_token:
@@ -303,8 +303,6 @@ class OAuth2ConnectionsBP(CustomBlueprint):
                         "refresh_token": renku_tokens.refresh_token,
                     }
                     response = await http.post(renku_auth_token_uri, auth=auth, data=payload, follow_redirects=True)
-                    logger.warning(f"Get refresh response from Keycloak: {response}")
-                    logger.warning(f"Get refresh response from Keycloak: {response.json()}")
                     if 200 <= response.status_code < 300:
                         try:
                             parsed_response = apispec_extras.PostTokenResponse.model_validate_json(response.content)
@@ -327,43 +325,48 @@ class OAuth2ConnectionsBP(CustomBlueprint):
                             logger.error(f"Got authenticate error: {err.__class__}.")
                             raise
                     else:
-                        # Handle bad response: Get refresh response from Keycloak: <Response [400 Bad Request]>
-                        # Get refresh response from Keycloak:
-                        #   {'error': 'invalid_grant', 'error_description': 'Invalid refresh token'}
                         logger.error(
                             f"Got error from refreshing Renku tokens: HTTP {response.status_code}; {response.json()}."
                         )
                         raise errors.UnauthorizedError()
-                    logger.warning(f"post_token_endpoint: user = {user}")
 
-            if user is not None and user.is_authenticated:
-                client = await self.oauth_client_factory.for_user_connection_raise(user, connection_id)
-                oauth_token = await client.get_token()
-                access_token = oauth_token.access_token
-                if access_token is None:
-                    raise errors.ProgrammingError(message="Unexpected error: access token not present.")
-                result: dict[str, str | int] = {
-                    "access_token": access_token,
-                    "token_type": str(oauth_token.get("token_type")) or "Bearer",
-                    "refresh_token": renku_tokens.encode(),
-                }
-                if oauth_token.get("scope"):
-                    result["scope"] = oauth_token["scope"]
-                if oauth_token.expires_at:
-                    # TODO: handle if parsed_response.refresh_expires_in < expires_in
-                    # This should be rare, but we should use the lowest value to be safe.
-                    exp = datetime.fromtimestamp(oauth_token.expires_at, UTC)
+            if user is None or not user.is_authenticated:
+                raise errors.UnauthorizedError()
+
+            client = await self.oauth_client_factory.for_user_connection_raise(user, connection_id)
+            oauth_token = await client.get_token()
+            access_token = oauth_token.access_token
+            if access_token is None:
+                raise errors.ProgrammingError(message="Unexpected error: access token not present.")
+            result: dict[str, str | int] = {
+                "access_token": access_token,
+                "token_type": str(oauth_token.get("token_type")) or "Bearer",
+                "refresh_token": renku_tokens.encode(),
+            }
+            if oauth_token.get("scope"):
+                result["scope"] = oauth_token["scope"]
+            # NOTE: Set "expires_in" according to whichever of the OAuth 2.0 access token or the Renku refresh
+            # token expires first.
+            try:
+                refresh_decoded: dict[str, Any] = jwt.decode(
+                    renku_tokens.refresh_token, options={"verify_signature": False}
+                )
+                refresh_exp: int | None = refresh_decoded.get("exp")
+                if refresh_exp is not None and refresh_exp > 0:
+                    exp = datetime.fromtimestamp(refresh_exp, UTC)
                     expires_in = exp - datetime.now(UTC)
                     result["expires_in"] = math.ceil(expires_in.total_seconds())
-                return validated_json(apispec_extras.PostTokenResponse, result)
+            except Exception as err:
+                logger.error(f"Could not parse Renku refresh token; cannot determine its expiration: {err.__class__}.")
+            if oauth_token.expires_at:
+                exp = datetime.fromtimestamp(oauth_token.expires_at, UTC)
+                expires_in = exp - datetime.now(UTC)
+                result_expires_in = result.get("expires_in")
+                if isinstance(result_expires_in, int) and result_expires_in > 0:
+                    result["expires_in"] = min(result_expires_in, math.ceil(expires_in.total_seconds()))
+                else:
+                    result["expires_in"] = math.ceil(expires_in.total_seconds())
 
-            # TODO:
-            # 1. Decode the refresh_token value -> RenkuTokens
-            # 2. Validate the access_token -> if valid, send back the new OAuth 2.0 access token
-            #    and the new encoded refresh_token
-            # 3. If access_token is expired, use the renku refresh_token -> if new tokens are valid,
-            #    send back the new OAuth 2.0 access token and the new encoded refresh_token
-
-            raise errors.UnauthorizedError()
+            return validated_json(apispec_extras.PostTokenResponse, result)
 
         return "/oauth2/connections/<connection_id:ulid>/token_endpoint", ["POST"], _post_token_endpoint
