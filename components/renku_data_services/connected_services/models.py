@@ -18,8 +18,6 @@ class ProviderKind(StrEnum):
     github = "github"
     gitlab = "gitlab"
     google = "google"
-    # drive = "drive"
-    # onedrive = "onedrive"
 
 
 class ConnectionStatus(StrEnum):

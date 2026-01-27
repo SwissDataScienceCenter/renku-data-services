@@ -431,9 +431,6 @@ components:
         - "github"
         - "gitlab"
         - "google"
-        # - "drive"
-        # - "onedrive"
-        # - "dopbox"
       example: "gitlab"
     ApplicationSlug:
       description: |

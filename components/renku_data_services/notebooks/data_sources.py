@@ -183,14 +183,7 @@ class DataSourceRepository:
             token_config["refresh_token"] = renku_tokens.encode()
         if token_set.expires_at_iso:
             token_config["expiry"] = token_set.expires_at_iso
-        # configuration["token"] = json.dumps(token_config)
-        # configuration["token_url"] = request.url_for(
-        #     "oauth2_connections.post_token_endpoint", connection_id=connection.id
-        # )
-        # return configuration
 
-        # for k, v in configuration.items():
-        #     parser.set(name, k, _stringify(v))
         parser.set(main_section, "token", json.dumps(token_config))
         parser.set(
             main_section,

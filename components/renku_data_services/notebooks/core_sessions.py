@@ -360,18 +360,8 @@ async def patch_data_sources(
     nb_config: NotebooksConfig,
     data_connectors_stream: AsyncIterator[DataConnectorWithSecrets],
     data_source_repo: DataSourceRepository,
-    # request: Request,
-    # nb_config: NotebooksConfig,
-    # user: AnonymousAPIUser | AuthenticatedAPIUser,
-    # server_name: str,
-    # data_connectors_stream: AsyncIterator[DataConnectorWithSecrets],
-    # work_dir: PurePosixPath,
-    # data_connectors_overrides: list[SessionDataConnectorOverride],
-    # user_repo: UserRepo,
-    # data_source_repo: DataSourceRepository,
 ) -> SessionExtraResources:
     """Handle updating data sources definitions when resuming a session."""
-    # Experimental here:
     secrets: list[ExtraSecret] = []
     server_name = session.metadata.name
     secret_prefix = f"{server_name}-ds-"
@@ -434,11 +424,6 @@ async def patch_data_sources(
             data=secret_data,
         )
         new_secret.data["configData"] = base64.b64encode(new_config_data.encode("utf-8")).decode("utf-8")
-
-        # new_secret = k8s_secret.to_v1_secret()
-        # new_secret.data = new_secret.data or dict()
-        # new_secret.data["configData"] = base64.b64encode(new_config_data.encode("utf-8")).decode("utf-8")
-        # new_secret.string_data = None
         logger.info(f"V1Secret = {new_secret}")
         secrets.append(ExtraSecret(new_secret))
 
