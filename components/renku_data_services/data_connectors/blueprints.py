@@ -312,11 +312,11 @@ class DataConnectorsBP(CustomBlueprint):
         """Get data connector by DOI."""
 
         @authenticate(self.authenticator)
-        @validate(query=apispec.DataConnectorsResolveGetParametersQuery)
+        @validate(query=apispec.DataConnectorsSearchGetParametersQuery)
         async def _get_one_by_doi(
             _: Request,
             user: base_models.APIUser,
-            query: apispec.DataConnectorsResolveGetParametersQuery,
+            query: apispec.DataConnectorsSearchGetParametersQuery,
             validator: RCloneValidator,
         ) -> JSONResponse:
             data_connector = await self.data_connector_repo.get_data_connector_by_doi(user=user, doi=query.doi)
@@ -325,7 +325,7 @@ class DataConnectorsBP(CustomBlueprint):
                 self._dump_data_connector(data_connector, validator=validator),
             )
 
-        return "/data_connectors/resolve", ["GET"], _get_one_by_doi
+        return "/data_connectors/search", ["GET"], _get_one_by_doi
 
     def get_all_project_links(self) -> BlueprintFactoryResponse:
         """List all links from a given data connector to projects."""

@@ -582,7 +582,7 @@ async def test_get_data_connector_by_doi(create_global_data_connector, monkeypat
 
     data_connector = await create_global_data_connector(configuration={"type": "doi", "doi": doi})
 
-    _, response = await sanic_client.get(f"/api/data/data_connectors/resolve?doi={doi}", headers=user_headers)
+    _, response = await sanic_client.get(f"/api/data/data_connectors/search?doi={doi}", headers=user_headers)
 
     assert response.status_code == 200, response.text
     assert response.json is not None
@@ -597,7 +597,7 @@ async def test_get_data_connector_by_doi_fails_if_not_found(sanic_client, user_h
     non_existing_doi = "10.5281/zenodo.9999999"
 
     _, response = await sanic_client.get(
-        f"/api/data/data_connectors/resolve?doi={non_existing_doi}", headers=user_headers
+        f"/api/data/data_connectors/search?doi={non_existing_doi}", headers=user_headers
     )
 
     assert response.status_code == 404, response.text

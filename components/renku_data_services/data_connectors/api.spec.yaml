@@ -96,7 +96,7 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - data_connectors
-  /data_connectors/resolve:
+  /data_connectors/search:
     get:
       summary: Get data connector details by DOI
       parameters:
@@ -312,7 +312,7 @@ paths:
         name: data_connector_id
         required: true
         schema:
-          type: string
+          $ref: "#/components/schemas/Ulid"
         description: the ID of the data connector that can be ULID or DOI
     get:
       summary: Get all links from a given data connector to projects
