@@ -1347,12 +1347,13 @@ class SessionIngress:
         if ingress_class_name is None:
             ingress_class_name = ingress_annotations.get("kubernetes.io/ingress.class")
 
-        tls_secret: TlsSecret | None = None
-        if (
-            self.cluster_settings.session_protocol == SessionProtocol.HTTPS
-            and self.cluster_settings.session_tls_secret_name
-        ):
-            tls_secret = TlsSecret(adopt=False, name=self.cluster_settings.session_tls_secret_name)
+        tls_secret = (
+            None
+            if self.cluster_settings.session_tls_secret_name is None
+            or len(self.cluster_settings.session_tls_secret_name) == 0
+            or self.cluster_settings.session_protocol == SessionProtocol.HTTP
+            else TlsSecret(adopt=False, name=self.cluster_settings.session_tls_secret_name)
+        )
 
         return Ingress(
             annotations=ingress_annotations,
