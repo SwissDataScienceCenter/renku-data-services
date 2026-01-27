@@ -274,6 +274,10 @@ module = [
 ]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["test.*"]
+disable_error_code = ["no-untyped-def"]
+
 [tool.coverage.run]
 source = ["bases/", "components/"]
 omit = ["components/renku_data_services/notebooks"]
