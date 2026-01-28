@@ -5,20 +5,47 @@
 
 Generate values: https://stackoverflow.com/questions/25261511/sql-create-a-table-with-24-hourly-rows
 
+- kind should be group, version and kind
+- fix query
+- commit in chunks?
+- retry network problems
+- store interval to the row?
+
+
 * basic test
 
 #+header: :engine postgres
 #+header: :dbhost 127.0.0.1 :database requests :dbuser dev
 #+header: :dbpassword dev
 #+begin_src sql :exports both
-select count(*) from common.resource_requests_log
+\d resource_requests_log
 #+end_src
 
 #+RESULTS:
-| SET   |
-|-------|
-| count |
-| 994   |
+| SET                                                  |                          |           |          |                 |
+|------------------------------------------------------+--------------------------+-----------+----------+-----------------|
+| Table "common.resource_requests_log"                 |                          |           |          |                 |
+| Column                                               | Type                     | Collation | Nullable | Default         |
+| id                                                   | character varying        |           | not null | generate_ulid() |
+| cluster_id                                           | character varying        |           |          |                 |
+| namespace                                            | character varying        |           | not null |                 |
+| name                                                 | character varying        |           | not null |                 |
+| uid                                                  | character varying        |           | not null |                 |
+| kind                                                 | character varying        |           | not null |                 |
+| phase                                                | character varying        |           | not null |                 |
+| capture_date                                         | timestamp with time zone |           | not null |                 |
+| user_id                                              | character varying        |           |          |                 |
+| project_id                                           | character varying        |           |          |                 |
+| launcher_id                                          | character varying        |           |          |                 |
+| resource_class_id                                    | integer                  |           |          |                 |
+| resource_pool_id                                     | integer                  |           |          |                 |
+| since                                                | timestamp with time zone |           |          |                 |
+| cpu_request                                          | double precision         |           |          |                 |
+| memory_request                                       | double precision         |           |          |                 |
+| gpu_request                                          | double precision         |           |          |                 |
+| disk_request                                         | double precision         |           |          |                 |
+| Indexes:                                             |                          |           |          |                 |
+| "resource_requests_log_pkey" PRIMARY KEY, btree (id) |                          |           |          |                 |
 
 * grouping per pod
 
@@ -400,83 +427,136 @@ A session is identified by the tuple ~(user_id, launcher_id)~.
 #+header: :dbhost 127.0.0.1 :database requests :dbuser dev
 #+header: :dbpassword dev
 #+begin_src sql :exports both
-  with
-    -- list cpu request with the corresponding time it was observed
-    requests_diffs as (
-      select
-        user_id,
-        cpu_request,
-        memory_request,
-        disk_request,
-        capture_date,
-        lead(capture_date) over cpu_w as next_cpu_date ,
-        lag(capture_date) over cpu_w as prev_cpu_date ,
-        lead(capture_date) over mem_w as next_mem_date,
-        lag(capture_date) over mem_w as prev_mem_date,
-        lead(capture_date) over disk_w as next_disk_date,
-        lag(capture_date) over disk_w as prev_disk_date
-      from common.resource_requests_log
-      where user_id is not null
-        and phase in ('Bound', 'Running')
-        and (cpu_request > 0 or memory_request > 0 or disk_request > 0)
-      window
-         cpu_w as (partition by user_id, cpu_request order by capture_date asc),
-         mem_w as (partition by user_id, memory_request order by capture_date asc),
-         disk_w as (partition by user_id, disk_request order by capture_date asc)
-    ),
-    final_requests_diffs as (
-      select
-        *,
-        coalesce(
-          next_cpu_date - capture_date, -- the interval
-          capture_date - prev_cpu_date, -- use the previous if last occurence
-          interval '10' minute          -- use this fallback if there is only one row
-        ) as cpu_time_diff,
-        coalesce(
-          next_mem_date - capture_date,
-          capture_date - prev_mem_date,
-          interval '10' minute
-        ) as mem_time_diff,
-        coalesce(
-          next_disk_date - capture_date,
-          capture_date - prev_disk_date,
-          interval '10' minute
-        ) as disk_time_diff
-      from requests_diffs
-    ),
-    request_hours as (
-      select *,
-        cpu_request * (extract(epoch from cpu_time_diff) / 3600) as cpu_hours,
-        memory_request * (extract(epoch from mem_time_diff) / 3600) as mem_hours,
-        disk_request * (extract(epoch from disk_time_diff) / 3600) as disk_hours
-      from final_requests_diffs
-    ),
-    per_user as (
-      select
-        user_id,
-        sum(cpu_hours) as cpu_hours,
-        sum(mem_hours) as mem_hours,
-        sum(disk_hours) as disk_hours
-      from request_hours
-      group by user_id
-    )
-  select * from per_user
---  where user_id = 'c59e6907-e670-4e03-a1b7-18616bb4678e'
+    with
+      -- list cpu request with the corresponding time it was observed
+      requests_diffs as (
+        select
+          cluster_id,
+          namespace,
+          name,
+          uid,
+          kind,
+          phase,
+          user_id,
+          cpu_request,
+          memory_request,
+          disk_request,
+          capture_date,
+          lead(capture_date) over cpu_w as next_cpu_date , -- next observation date
+          lag(capture_date) over cpu_w as prev_cpu_date ,  -- prev observation date
+          lead(capture_date) over mem_w as next_mem_date,
+          lag(capture_date) over mem_w as prev_mem_date,
+          lead(capture_date) over disk_w as next_disk_date,
+          lag(capture_date) over disk_w as prev_disk_date
+        from common.resource_requests_log
+        where user_id is not null
+          and phase in ('Bound', 'Running')
+          and (cpu_request > 0 or memory_request > 0 or disk_request > 0)
+        window
+           cpu_w as (partition by user_id, cpu_request order by capture_date asc),
+           mem_w as (partition by user_id, memory_request order by capture_date asc),
+           disk_w as (partition by user_id, disk_request order by capture_date asc)
+      ),
+      -- add the actual time the value is observed, using the previous interval
+      -- for the last observation or a fallback
+      final_requests_diffs as (
+        select
+          ,*,
+          coalesce(
+            next_cpu_date - capture_date, -- the interval
+            capture_date - prev_cpu_date, -- use the previous if last occurence
+            interval '10' minute          -- use this fallback if there is only one row
+          ) as cpu_time_diff,
+          coalesce(
+            next_mem_date - capture_date,
+            capture_date - prev_mem_date,
+            interval '10' minute
+          ) as mem_time_diff,
+          coalesce(
+            next_disk_date - capture_date,
+            capture_date - prev_disk_date,
+            interval '10' minute
+          ) as disk_time_diff
+        from requests_diffs
+      ),
+      -- ^ this could be a view
+
+
+      -- do a query for listing usage per hour given a single day
+      hourly_buckets as (
+        select h as hour_of_day
+        from generate_series(
+          date_trunc('hour', '2026-01-22T00:00:00Z'::timestamp),
+          date_trunc('hour', '2026-01-23T00:00:00Z'::timestamp),
+          '1 hour'::interval
+        ) as h
+      ),
+      -- need to split the time series a the hour edges
+      splitted as (
+        select hour_of_day, uid, user_id, capture_date,
+          t.cpu_request, 0 as memory_request, 0 as disk_request,
+          coalesce(least(t.capture_date + t.cpu_time_diff, b.hour_of_day + '1 hour'::interval) - greatest(t.capture_date, b.hour_of_day), '0 hour'::interval) as cpu_time,
+          '0 hour'::interval as memory_time,
+          '0 hour'::interval as disk_time
+        from final_requests_diffs t
+        join hourly_buckets b
+          on t.capture_date < b.hour_of_day + '1 hour'::interval
+         and t.capture_date + t.cpu_time_diff > b.hour_of_day
+
+        union
+
+        select hour_of_day, uid, user_id, capture_date,
+          0 as cpu_request, t.memory_request, 0 as disk_request,
+          '0 hour'::interval as cpu_time,
+          coalesce(least(t.capture_date + t.mem_time_diff, b.hour_of_day + '1 hour'::interval) - greatest(t.capture_date, b.hour_of_day), '0 hour'::interval) as memory_time,
+          '0 hour'::interval as disk_time
+        from final_requests_diffs t
+        join hourly_buckets b
+          on t.capture_date < b.hour_of_day + '1 hour'::interval
+         and t.capture_date + t.mem_time_diff > b.hour_of_day
+
+        union
+
+        select hour_of_day, uid, user_id, capture_date,
+          0 as cpu_request, 0 as memory_request, t.disk_request,
+          '0 hour'::interval as cpu_time,
+          '0 hour'::interval as memory_time,
+          coalesce(least(t.capture_date + t.disk_time_diff, b.hour_of_day + '1 hour'::interval) - greatest(t.capture_date, b.hour_of_day), '0 hour'::interval) as disk_time
+        from final_requests_diffs t
+        join hourly_buckets b
+          on t.capture_date < b.hour_of_day + '1 hour'::interval
+         and t.capture_date + t.mem_time_diff > b.hour_of_day
+
+      ),
+      -- now calculate the usage by creating "cpu hours" etc
+      -- (extract(epoch from cpu_time) / 3600) converts the interval in hours
+      request_hours as (
+        select
+          hour_of_day,
+          uid, user_id,
+          capture_date,
+          sum(cpu_time) as cpu_time, sum(cpu_request) * (extract(epoch from sum(cpu_time)) / 3600) as cpu_hours,
+          sum(memory_time) as memory_time, sum(memory_request) * (extract(epoch from sum(memory_time)) / 3600) as mem_hours,
+          sum(disk_time) as disk_time, sum(disk_request) * (extract(epoch from sum(disk_time)) / 3600) as disk_hours,
+          sum(cpu_request) as cpu_request,
+          sum(memory_request) as memory_request,
+          sum(disk_request) as disk_request
+        from splitted
+        group by hour_of_day, uid, user_id, capture_date
+      )
+      -- -- could group by user etc
+      -- per_user as (
+      --   select hour_of_day, user_id, sum(cpu_hours) as cpu_hours, sum(mem_hours) as mem_hours, sum(disk_hours) as disk_hours
+      --   from request_hours
+      --   group by hour_of_day, user_id
+      -- )
+    select * from per_user
+--     where user_id like 'c59e6907-e670-4e03-a1b7-18616bb4678e'
+--    order by uid, hour_of_day, capture_date
+  --  order by user_id, hour_of_day
 
 #+end_src
 
 #+RESULTS: grouping_test_2
-| SET                                  |                     |                    |                    |
-|--------------------------------------+---------------------+--------------------+--------------------|
-| user_id                              |           cpu_hours |          mem_hours |         disk_hours |
-| 1a6d4c40-e500-419d-9812-22d6d1c27aa0 |                   0 |                  0 |  4122572080.924443 |
-| 4cf16e99-62fe-4889-90ba-38b2d02bd293 |                   0 |                  0 |  4122572080.924443 |
-| 5daa2891-5310-4428-895d-10f859613223 |                   0 |                  0 |  4122572080.924443 |
-| c59e6907-e670-4e03-a1b7-18616bb4678e |  1.7129999999999996 | 3512589789.8666677 | 3585402907.3066654 |
-| e25cd000-59be-4e52-86aa-fb4fc60a12c8 | 0.17333333333333334 |  363506346.6666666 | 178956970.66666666 |
-| f5f1ebe7-6946-4c2c-b4e5-18ac2d4f41e4 |                   0 |                  0 |  4122572080.924443 |
-
-This could serve as the base for doing time-bucket calculations, like
-usage per hour, per week etc.
-
-Problem: edges, from one hour to the next, or one day to the next.
+| SET |
+|-----|
