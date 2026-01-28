@@ -386,6 +386,10 @@ class NotebookK8sClient(SecretClient):
 
         await secret.patch(patch, type="json")
 
+    async def get_secret(self, secret: K8sObjectMeta) -> K8sSecret | None:
+        """Get a secret."""
+        return await self.__secrets_client.get_secret(secret)
+
     async def create_secret(self, secret: K8sSecret) -> K8sSecret:
         """Create a secret."""
 

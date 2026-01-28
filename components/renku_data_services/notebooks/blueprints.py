@@ -28,6 +28,7 @@ from renku_data_services.notebooks.core_sessions import (
     start_session,
     validate_session_post_request,
 )
+from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.notebooks.image_check import ImageCheckRepository
 from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
 from renku_data_services.session.db import SessionRepository
@@ -49,6 +50,7 @@ class NotebooksNewBP(CustomBlueprint):
     data_connector_secret_repo: DataConnectorSecretRepository
     git_provider_helper: GitProviderHelperProto
     oauth_client_factory: OAuthHttpClientFactory
+    data_source_repo: DataSourceRepository
     image_check_repo: ImageCheckRepository
     project_repo: ProjectRepository
     project_session_secret_repo: ProjectSessionSecretRepository
@@ -86,6 +88,7 @@ class NotebooksNewBP(CustomBlueprint):
                 user_repo=self.user_repo,
                 metrics=self.metrics,
                 image_check_repo=self.image_check_repo,
+                data_source_repo=self.data_source_repo,
             )
             status = 201 if created else 200
             return json(session.as_apispec().model_dump(exclude_none=True, mode="json"), status)
@@ -134,25 +137,28 @@ class NotebooksNewBP(CustomBlueprint):
         @authenticate_2(self.authenticator, self.internal_gitlab_authenticator)
         @validate(json=apispec.SessionPatchRequest)
         async def _handler(
-            _: Request,
+            request: Request,
             user: AuthenticatedAPIUser | AnonymousAPIUser,
             internal_gitlab_user: APIUser,
             session_id: str,
             body: apispec.SessionPatchRequest,
         ) -> HTTPResponse:
             new_session = await patch_session(
+                request=request,
                 body=body,
                 session_id=session_id,
                 user=user,
                 internal_gitlab_user=internal_gitlab_user,
                 nb_config=self.nb_config,
                 git_provider_helper=self.git_provider_helper,
+                data_connector_secret_repo=self.data_connector_secret_repo,
                 project_repo=self.project_repo,
                 project_session_secret_repo=self.project_session_secret_repo,
                 rp_repo=self.rp_repo,
                 session_repo=self.session_repo,
                 metrics=self.metrics,
                 image_check_repo=self.image_check_repo,
+                data_source_repo=self.data_source_repo,
             )
             return json(new_session.as_apispec().model_dump(exclude_none=True, mode="json"))
 
