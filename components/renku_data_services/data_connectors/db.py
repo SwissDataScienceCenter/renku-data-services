@@ -612,8 +612,8 @@ class DataConnectorRepository:
         return permissions
 
     async def get_links_from(
-        self, user: base_models.APIUser, data_connector_id: ULID
-    ) -> list[models.DataConnectorToProjectLink]:
+        self, user: base_models.APIUser, data_connector_id: ULID, pagination: PaginationRequest
+    ) -> tuple[list[models.DataConnectorToProjectLink], int]:
         """Get links from a given data connector."""
         authorized = await self.authz.has_permission(user, ResourceType.data_connector, data_connector_id, Scope.READ)
         if not authorized:
@@ -628,10 +628,20 @@ class DataConnectorRepository:
                 select(schemas.DataConnectorToProjectLinkORM)
                 .where(schemas.DataConnectorToProjectLinkORM.data_connector_id == data_connector_id)
                 .where(schemas.DataConnectorToProjectLinkORM.project_id.in_(project_ids))
+                .limit(pagination.per_page)
+                .offset(pagination.offset)
+                .order_by(schemas.DataConnectorToProjectLinkORM.id.desc())
+            )
+            stmt_count = (
+                select(func.count())
+                .select_from(schemas.DataConnectorToProjectLinkORM)
+                .where(schemas.DataConnectorToProjectLinkORM.data_connector_id == data_connector_id)
+                .where(schemas.DataConnectorToProjectLinkORM.project_id.in_(project_ids))
             )
             result = await session.scalars(stmt)
             links_orm = result.all()
-            return [link.dump() for link in links_orm]
+            total_elements = await session.scalar(stmt_count) or 0
+            return [link.dump() for link in links_orm], total_elements
 
     async def get_links_to(
         self, user: base_models.APIUser, project_id: ULID
