@@ -28,7 +28,7 @@ class ComputeCapacityType(types.TypeDecorator):
 
     def process_literal_param(self, value: ComputeCapacity | None, dialect: Dialect) -> str:
         """Return a literal representation."""
-        return str(value) if value is not None  else ""
+        return str(value) if value is not None else ""
 
 
 class DataSizeType(types.TypeDecorator):
@@ -46,7 +46,7 @@ class DataSizeType(types.TypeDecorator):
 
     def process_literal_param(self, value: DataSize | None, dialect: Dialect) -> str:
         """Convert to literal."""
-        return str(value) if value is not None  else ""
+        return str(value) if value is not None else ""
 
 
 class ULIDType(types.TypeDecorator):

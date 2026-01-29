@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -100,8 +100,10 @@ def test_resource_requests_to_zero() -> None:
         name="pod1",
         uid="xyz-898-dec",
         kind="Pod",
+        api_version="v1",
         phase="Running",
         capture_date=date,
+        capture_interval=timedelta(seconds=500),
         cluster_id=DEFAULT_K8S_CLUSTER,
         user_id="exyz",
         project_id=ULID(),
@@ -109,6 +111,7 @@ def test_resource_requests_to_zero() -> None:
         resource_class_id=4,
         resource_pool_id=16,
         since=datetime(2025, 1, 15, 13, 25, 15, 0, UTC),
+        gpu_slice=None,
         data=RequestData(
             cpu=ComputeCapacity.from_milli_cores(250),
             memory=DataSize.from_mb(512),
@@ -123,7 +126,7 @@ def test_resource_requests_to_zero() -> None:
     assert r1.kind == r0.kind
     assert r1.phase == r0.phase
     assert r1.capture_date == r0.capture_date
-    assert r1.cluster_id== r0.cluster_id
+    assert r1.cluster_id == r0.cluster_id
     assert r1.user_id == r0.user_id
     assert r1.project_id == r0.project_id
     assert r1.launcher_id == r0.launcher_id
@@ -161,15 +164,18 @@ def test_resource_data_facade() -> None:
     ad = ResourceDataFacade(ams)
     pv = ResourceDataFacade(pvc)
     date = datetime.now(UTC)
+    interval = timedelta(seconds=600)
 
-    r1 = pd.to_resources_request(DEFAULT_K8S_CLUSTER, date)
+    r1 = pd.to_resources_request(DEFAULT_K8S_CLUSTER, date, interval)
     assert r1 == ResourcesRequest(
         namespace=pd.namespace,
         name=pd.name,
         uid=pd.uid,
         kind=pd.kind,
+        api_version=pd.api_version,
         phase=pd.phase,
         capture_date=date,
+        capture_interval=interval,
         cluster_id=DEFAULT_K8S_CLUSTER,
         user_id=pd.user_id,
         project_id=pd.project_id,
@@ -177,16 +183,19 @@ def test_resource_data_facade() -> None:
         resource_class_id=pd.resource_class_id,
         resource_pool_id=pd.resource_pool_id,
         since=pd.start_or_creation_time,
+        gpu_slice=None,
         data=pd.requested_data,
     )
-    r2 = ad.to_resources_request(DEFAULT_K8S_CLUSTER, date)
+    r2 = ad.to_resources_request(DEFAULT_K8S_CLUSTER, date, interval)
     assert r2 == ResourcesRequest(
         namespace=ad.namespace,
         name=ad.name,
         uid=ad.uid,
         kind=ad.kind,
+        api_version=ad.api_version,
         phase=ad.phase,
         capture_date=date,
+        capture_interval=interval,
         cluster_id=DEFAULT_K8S_CLUSTER,
         user_id=ad.user_id,
         project_id=ad.project_id,
@@ -194,16 +203,19 @@ def test_resource_data_facade() -> None:
         resource_class_id=ad.resource_class_id,
         resource_pool_id=ad.resource_pool_id,
         since=ad.start_or_creation_time,
+        gpu_slice=None,
         data=ad.requested_data,
     )
-    r3 = pv.to_resources_request(DEFAULT_K8S_CLUSTER, date)
+    r3 = pv.to_resources_request(DEFAULT_K8S_CLUSTER, date, interval)
     assert r3 == ResourcesRequest(
         namespace=pv.namespace,
         name=pv.name,
         uid=pv.uid,
         kind=pv.kind,
+        api_version=pv.api_version,
         phase=pv.phase,
         capture_date=date,
+        capture_interval=interval,
         cluster_id=DEFAULT_K8S_CLUSTER,
         user_id=pv.user_id,
         project_id=pv.project_id,
@@ -211,6 +223,7 @@ def test_resource_data_facade() -> None:
         resource_class_id=pv.resource_class_id,
         resource_pool_id=pv.resource_pool_id,
         since=pv.start_or_creation_time,
+        gpu_slice=None,
         data=pv.requested_data,
     )
 

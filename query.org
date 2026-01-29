@@ -332,7 +332,6 @@ Generate values: https://stackoverflow.com/questions/25261511/sql-create-a-table
 | 2026-01-22 19:00:00+00 |                                      |                   0 |
 | 2026-01-22 20:00:00+00 |                                      |                   0 |
 
-
 * grouping per session
 
 A session is identified by the tuple ~(user_id, launcher_id)~.
@@ -372,54 +371,69 @@ A session is identified by the tuple ~(user_id, launcher_id)~.
 
 * group by more flexible
 
+insert test data
 
-#+name: grouping_test
 #+header: :engine postgres
 #+header: :dbhost 127.0.0.1 :database requests :dbuser dev
 #+header: :dbpassword dev
 #+begin_src sql :exports both
-  with
-    cpu_requests as (
-      select
-        user_id,
-        cpu_request,
-        null::float8 as memory_request,
-        min(capture_date) as min_date,
-        max(capture_date) as max_date,
-        (max(capture_date) - min(capture_date)) as duration
-      from common.resource_requests_log
-      where user_id is not null
-        and phase in ('Bound', 'Running')
-        and cpu_request > 0
-      group by user_id, cpu_request
-    ),
-    mem_requests as (
-      select
-        user_id,
-        null::float8 as cpu_request,
-        memory_request,
-        min(capture_date) as min_date,
-        max(capture_date) as max_date,
-        (max(capture_date) - min(capture_date)) as duration
-      from common.resource_requests_log
-      where user_id is not null
-        and phase in ('Bound', 'Running')
-        and memory_request > 0
-      group by user_id, memory_request
-    )
-  select * from cpu_requests
-  union all
-  select * from mem_requests
+select * from common.resource_requests_log limit 5;
 #+end_src
 
-#+RESULTS: grouping_test
-| SET                                  |             |                |                        |                        |          |
-|--------------------------------------+-------------+----------------+------------------------+------------------------+----------|
-| user_id                              | cpu_request | memory_request | min_date               | max_date               | duration |
-| c59e6907-e670-4e03-a1b7-18616bb4678e |        0.54 |                | 2026-01-22 13:36:05+00 | 2026-01-22 16:36:24+00 | 03:00:19 |
-| e25cd000-59be-4e52-86aa-fb4fc60a12c8 |        1.04 |                | 2026-01-22 14:06:08+00 | 2026-01-22 14:06:08+00 | 00:00:00 |
-| c59e6907-e670-4e03-a1b7-18616bb4678e |             |     1107296256 | 2026-01-22 13:36:05+00 | 2026-01-22 16:36:24+00 | 03:00:19 |
-| e25cd000-59be-4e52-86aa-fb4fc60a12c8 |             |     2181038080 | 2026-01-22 14:06:08+00 | 2026-01-22 14:06:08+00 | 00:00:00 |
+#+RESULTS:
+| SET                        |                            |           |                                                             |                                      |      |         |                        |         |            |             |                   |                  |                        |             |                |             |              |
+|----------------------------+----------------------------+-----------+-------------------------------------------------------------+--------------------------------------+------+---------+------------------------+---------+------------+-------------+-------------------+------------------+------------------------+-------------+----------------+-------------+--------------|
+| id                         | cluster_id                 | namespace | name                                                        | uid                                  | kind | phase   | capture_date           | user_id | project_id | launcher_id | resource_class_id | resource_pool_id | since                  | cpu_request | memory_request | gpu_request | disk_request |
+| 01KFJY4C4CQRP8Z6204NS85APP | 0RENK1RENK2RENK3RENK4RENK5 | renku     | renku-amalthea-sessions-controller-manager-6b6486bc6c-hwhtk | 2f7c0196-4bcd-4d94-ade2-cb4f4ecbfaee | Pod  | Running | 2026-01-22 13:26:04+00 |         |            |             |                   |                  | 2026-01-17 01:10:06+00 |        0.01 |       67108864 |           0 |            0 |
+| 01KFJY4C4E5H6CTWQP8W48WQ8E | 0RENK1RENK2RENK3RENK4RENK5 | renku     | renku-authz-6c89955499-dc8s7                                | 96ef39b2-45cc-42fc-a9b1-8196dd33b5a5 | Pod  | Running | 2026-01-22 13:26:04+00 |         |            |             |                   |                  | 2026-01-21 15:35:36+00 |           0 |              0 |           0 |            0 |
+| 01KFJY4C4EEANTMCTXAAAT0CT1 | 0RENK1RENK2RENK3RENK4RENK5 | renku     | renku-csi-rclone-controller-0                               | 6a0eac50-aeef-4766-9ca7-ff974da1eff3 | Pod  | Running | 2026-01-22 13:26:04+00 |         |            |             |                   |                  | 2026-01-21 15:39:02+00 |         0.1 |      268435456 |           0 |            0 |
+| 01KFJY4C4E1K9Y8BKN4HGDZXEG | 0RENK1RENK2RENK3RENK4RENK5 | renku     | renku-csi-rclone-nodeplugin-lxl5h                           | fd7f284d-99e3-4732-8103-fbf0666d23f8 | Pod  | Running | 2026-01-22 13:26:04+00 |         |            |             |                   |                  | 2026-01-21 13:07:16+00 |         0.2 |     1258291200 |           0 |            0 |
+| 01KFJY4C4E9MPKV8ABQFTKZY35 | 0RENK1RENK2RENK3RENK4RENK5 | renku     | renku-data-service-774f7c6fd7-5lhqk                         | 2b269185-828e-4174-a372-537f110d99ef | Pod  | Running | 2026-01-22 13:26:04+00 |         |            |             |                   |                  | 2026-01-21 16:11:35+00 |         0.1 |      629145600 |           0 |            0 |
+
+
+#+header: :engine postgres
+#+header: :dbhost 127.0.0.1 :database requests :dbuser dev
+#+header: :dbpassword dev
+#+begin_src sql :exports both
+  delete from common.resource_requests_log;
+  insert into common.resource_requests_log
+    (cluster_id, uid, namespace, name, kind, phase, capture_date, capture_interval, user_id, project_id, launcher_id, resource_class_id, resource_pool_id, since, cpu_request, memory_request, gpu_request, disk_request)
+    values
+    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1','renku', 'my-pod-15','Pod','Running', '2026-01-22 13:26:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
+    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1','renku', 'my-pod-15','Pod','Running', '2026-01-22 13:36:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
+    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1','renku', 'my-pod-15','Pod','Running', '2026-01-22 13:46:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
+      -- pod is down
+    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1','renku', 'my-pod-15','Pod','Stopped', '2026-01-22 13:56:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
+    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1','renku', 'my-pod-15','Pod','Stopped', '2026-01-22 14:06:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
+    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1','renku', 'my-pod-15','Pod','Stopped', '2026-01-22 14:16:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
+    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1','renku', 'my-pod-15','Pod','Stopped', '2026-01-22 14:26:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
+      -- pod is up again
+    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1','renku', 'my-pod-15','Pod','Running', '2026-01-22 14:36:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
+      -- we don't observe this pod for some time
+    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1','renku', 'my-pod-15','Pod','Running', '2026-01-22 15:46:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
+    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1','renku', 'my-pod-15','Pod','Running', '2026-01-22 15:56:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
+      -- logging is restarted after 5min
+    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1','renku', 'my-pod-15','Pod','Running', '2026-01-22 16:01:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
+    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1','renku', 'my-pod-15','Pod','Running', '2026-01-22 16:11:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
+    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1','renku', 'my-pod-15','Pod','Running', '2026-01-22 16:21:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null)
+  ;
+
+#+end_src
+
+#+RESULTS:
+| SET         |
+|-------------|
+| DELETE 13   |
+| INSERT 0 13 |
+
+
+Things to watch out:
+- task gets restarted in the middle of the interval
+- task crashes/is shut down and doesn't collect for x-time
+  - no observation = nothing provided/running = no costs
+  - if a pod disappears for some time it means it is not scheduled and
+    doesn't consume resources (= no costs)
+- gpu usage depends on the fraction of the gpu being utilised
 
 
 #+name: grouping_test_2
@@ -427,136 +441,315 @@ A session is identified by the tuple ~(user_id, launcher_id)~.
 #+header: :dbhost 127.0.0.1 :database requests :dbuser dev
 #+header: :dbpassword dev
 #+begin_src sql :exports both
-    with
-      -- list cpu request with the corresponding time it was observed
-      requests_diffs as (
-        select
-          cluster_id,
-          namespace,
-          name,
-          uid,
-          kind,
-          phase,
-          user_id,
-          cpu_request,
-          memory_request,
-          disk_request,
-          capture_date,
-          lead(capture_date) over cpu_w as next_cpu_date , -- next observation date
-          lag(capture_date) over cpu_w as prev_cpu_date ,  -- prev observation date
-          lead(capture_date) over mem_w as next_mem_date,
-          lag(capture_date) over mem_w as prev_mem_date,
-          lead(capture_date) over disk_w as next_disk_date,
-          lag(capture_date) over disk_w as prev_disk_date
-        from common.resource_requests_log
-        where user_id is not null
-          and phase in ('Bound', 'Running')
-          and (cpu_request > 0 or memory_request > 0 or disk_request > 0)
-        window
-           cpu_w as (partition by user_id, cpu_request order by capture_date asc),
-           mem_w as (partition by user_id, memory_request order by capture_date asc),
-           disk_w as (partition by user_id, disk_request order by capture_date asc)
-      ),
-      -- add the actual time the value is observed, using the previous interval
-      -- for the last observation or a fallback
-      final_requests_diffs as (
-        select
-          ,*,
-          coalesce(
-            next_cpu_date - capture_date, -- the interval
-            capture_date - prev_cpu_date, -- use the previous if last occurence
-            interval '10' minute          -- use this fallback if there is only one row
-          ) as cpu_time_diff,
-          coalesce(
-            next_mem_date - capture_date,
-            capture_date - prev_mem_date,
-            interval '10' minute
-          ) as mem_time_diff,
-          coalesce(
-            next_disk_date - capture_date,
-            capture_date - prev_disk_date,
-            interval '10' minute
-          ) as disk_time_diff
-        from requests_diffs
-      ),
-      -- ^ this could be a view
+      with
+        cpu_obs as (
+          select *, row_number() over (order by capture_date asc) as rn
+          from common.resource_requests_log
+          where cpu_request is not null and user_id is not null
+          order by capture_date asc
+        ),
+        mem_obs as (
+          select *, row_number() over (order by capture_date asc) as rn
+          from common.resource_requests_log
+          where memory_request is not null and user_id is not null
+          order by capture_date asc
+        ),
+        disk_obs as (
+          select *, row_number() over (order by capture_date asc) as rn
+          from common.resource_requests_log
+          where disk_request is not null and user_id is not null
+          order by capture_date asc
+        ),
+        gpu_obs as (
+          select *, row_number() over (order by capture_date asc) as rn
+          from common.resource_requests_log
+          where gpu_request is not null and user_id is not null
+          order by capture_date asc
+        ),
+        requests_diffs as (
+          select
+            t.id,
+            t.cluster_id,
+            t.namespace,
+            t.name,
+            t.uid,
+            t.kind,
+            t.phase,
+            t.user_id,
+            t.project_id,
+            t.launcher_id,
+            t.resource_class_id,
+            t.resource_pool_id,
+            t.cpu_request,
+            t.memory_request,
+            t.disk_request,
+            t.gpu_request,
+            t.gpu_slice,
+            t.capture_date,
+            t.capture_interval,
+            cpu_prev.capture_date as cpu_prev_date
+          from common.resource_requests_log t
+          left join cpu_obs cpu_prev on cpu_prev.rn = (select max(rn) from cpu_obs where rn < (select row_number() over (order by capture_date asc) from cpu_obs where capture_date = t.capture_date))
+          where t.user_id is not null
+          order by capture_date asc
+        ),
+        -- add the timespan the value was observed: next observation date - this observation date
+        -- using the configured interval for the last observation
+        final_requests_diffs as (
+          select
+            id,
+            cluster_id,
+            namespace,
+            name,
+            uid,
+            kind,
+            phase,
+            user_id,
+            project_id,
+            launcher_id,
+            resource_class_id,
+            resource_pool_id,
+            cpu_request,
+            memory_request,
+            disk_request,
+            gpu_request,
+            gpu_slice,
+            capture_date,
+            capture_interval
+          from common.resource_requests_log
+          where phase in ('Running', 'Bound')
+            and user_id is not null
+            and (cpu_request > 0 or memory_request > 0 or disk_request > 0)
+        ),
+        -- ^ this could be a view
 
 
-      -- do a query for listing usage per hour given a single day
-      hourly_buckets as (
-        select h as hour_of_day
-        from generate_series(
-          date_trunc('hour', '2026-01-22T00:00:00Z'::timestamp),
-          date_trunc('hour', '2026-01-23T00:00:00Z'::timestamp),
-          '1 hour'::interval
-        ) as h
-      ),
-      -- need to split the time series a the hour edges
-      splitted as (
-        select hour_of_day, uid, user_id, capture_date,
-          t.cpu_request, 0 as memory_request, 0 as disk_request,
-          coalesce(least(t.capture_date + t.cpu_time_diff, b.hour_of_day + '1 hour'::interval) - greatest(t.capture_date, b.hour_of_day), '0 hour'::interval) as cpu_time,
-          '0 hour'::interval as memory_time,
-          '0 hour'::interval as disk_time
-        from final_requests_diffs t
-        join hourly_buckets b
-          on t.capture_date < b.hour_of_day + '1 hour'::interval
-         and t.capture_date + t.cpu_time_diff > b.hour_of_day
+        -- do a query for listing usage per hour given a single day
+        hourly_buckets as (
+          select h as hour_of_day
+          from generate_series(
+            date_trunc('hour', '2026-01-22T00:00:00Z'::timestamp),
+            date_trunc('hour', '2026-01-23T00:00:00Z'::timestamp),
+            '1 hour'::interval
+          ) as h
+        ),
+        -- need to split the time series a the hour edges
+        splitted as (
+          select hour_of_day, uid, user_id, capture_date,
+            t.cpu_request, t.memory_request, t.disk_request, t.gpu_request,
+            coalesce(least(t.capture_date + t.capture_interval, b.hour_of_day + '1 hour'::interval) - greatest(t.capture_date, b.hour_of_day), '0 hour'::interval) as cpu_time,
+            coalesce(least(t.capture_date + t.capture_interval, b.hour_of_day + '1 hour'::interval) - greatest(t.capture_date, b.hour_of_day), '0 hour'::interval) as memory_time,
+            coalesce(least(t.capture_date + t.capture_interval, b.hour_of_day + '1 hour'::interval) - greatest(t.capture_date, b.hour_of_day), '0 hour'::interval) as disk_time
+          from final_requests_diffs t
+          join hourly_buckets b
+            on t.capture_date < b.hour_of_day + '1 hour'::interval
+           and t.capture_date + t.capture_interval > b.hour_of_day
 
-        union
-
-        select hour_of_day, uid, user_id, capture_date,
-          0 as cpu_request, t.memory_request, 0 as disk_request,
-          '0 hour'::interval as cpu_time,
-          coalesce(least(t.capture_date + t.mem_time_diff, b.hour_of_day + '1 hour'::interval) - greatest(t.capture_date, b.hour_of_day), '0 hour'::interval) as memory_time,
-          '0 hour'::interval as disk_time
-        from final_requests_diffs t
-        join hourly_buckets b
-          on t.capture_date < b.hour_of_day + '1 hour'::interval
-         and t.capture_date + t.mem_time_diff > b.hour_of_day
-
-        union
-
-        select hour_of_day, uid, user_id, capture_date,
-          0 as cpu_request, 0 as memory_request, t.disk_request,
-          '0 hour'::interval as cpu_time,
-          '0 hour'::interval as memory_time,
-          coalesce(least(t.capture_date + t.disk_time_diff, b.hour_of_day + '1 hour'::interval) - greatest(t.capture_date, b.hour_of_day), '0 hour'::interval) as disk_time
-        from final_requests_diffs t
-        join hourly_buckets b
-          on t.capture_date < b.hour_of_day + '1 hour'::interval
-         and t.capture_date + t.mem_time_diff > b.hour_of_day
-
-      ),
-      -- now calculate the usage by creating "cpu hours" etc
-      -- (extract(epoch from cpu_time) / 3600) converts the interval in hours
-      request_hours as (
-        select
-          hour_of_day,
-          uid, user_id,
-          capture_date,
-          sum(cpu_time) as cpu_time, sum(cpu_request) * (extract(epoch from sum(cpu_time)) / 3600) as cpu_hours,
-          sum(memory_time) as memory_time, sum(memory_request) * (extract(epoch from sum(memory_time)) / 3600) as mem_hours,
-          sum(disk_time) as disk_time, sum(disk_request) * (extract(epoch from sum(disk_time)) / 3600) as disk_hours,
-          sum(cpu_request) as cpu_request,
-          sum(memory_request) as memory_request,
-          sum(disk_request) as disk_request
-        from splitted
-        group by hour_of_day, uid, user_id, capture_date
-      )
-      -- -- could group by user etc
-      -- per_user as (
-      --   select hour_of_day, user_id, sum(cpu_hours) as cpu_hours, sum(mem_hours) as mem_hours, sum(disk_hours) as disk_hours
-      --   from request_hours
-      --   group by hour_of_day, user_id
-      -- )
-    select * from per_user
---     where user_id like 'c59e6907-e670-4e03-a1b7-18616bb4678e'
---    order by uid, hour_of_day, capture_date
-  --  order by user_id, hour_of_day
+        ),
+        -- now calculate the usage by creating "cpu hours" etc
+        -- (extract(epoch from cpu_time) / 3600) converts the interval in hours
+        request_hours as (
+          select
+            hour_of_day,
+            uid, user_id,
+            capture_date,
+            sum(cpu_time) as cpu_time, sum(cpu_request) * (extract(epoch from sum(cpu_time)) / 3600) as cpu_hours,
+            sum(memory_time) as memory_time, sum(memory_request) * (extract(epoch from sum(memory_time)) / 3600) as mem_hours,
+            sum(disk_time) as disk_time, sum(disk_request) * (extract(epoch from sum(disk_time)) / 3600) as disk_hours,
+            sum(cpu_request) as cpu_request,
+            sum(memory_request) as memory_request,
+            sum(disk_request) as disk_request
+          from splitted
+          group by hour_of_day, uid, user_id, capture_date
+        )
+        -- -- could group by user etc
+        -- per_user as (
+        --   select hour_of_day, user_id, sum(cpu_hours) as cpu_hours, sum(mem_hours) as mem_hours, sum(disk_hours) as disk_hours
+        --   from request_hours
+        --   group by hour_of_day, user_id
+        -- )
+      select * from requests_diffs
+      order by capture_date
+  --     where user_id like 'c59e6907-e670-4e03-a1b7-18616bb4678e'
+  --    order by uid, hour_of_day, capture_date
+    --  order by user_id, hour_of_day
 
 #+end_src
 
 #+RESULTS: grouping_test_2
-| SET |
-|-----|
+| SET                        |                            |           |           |       |      |         |         |            |             |                   |                  |             |                |              |             |           |                        |                  |               |
+|----------------------------+----------------------------+-----------+-----------+-------+------+---------+---------+------------+-------------+-------------------+------------------+-------------+----------------+--------------+-------------+-----------+------------------------+------------------+---------------|
+| id                         | cluster_id                 | namespace | name      | uid   | kind | phase   | user_id | project_id | launcher_id | resource_class_id | resource_pool_id | cpu_request | memory_request | disk_request | gpu_request | gpu_slice | capture_date           | capture_interval | cpu_prev_date |
+| 01KG4XP8Y5TSAMSB92Y6KWRRE0 | 0RENK1RENK2RENK3RENK4RENK5 | renku     | my-pod-15 | uid-1 | Pod  | Running | user1   | project-1  | launcher-1  |                 4 |                5 |         0.5 |         524288 |              |             |           | 2026-01-22 13:26:04+00 |         00:10:00 |               |
+| 01KG4XP8Y7JVNTKE5QJC4SEGV2 | 0RENK1RENK2RENK3RENK4RENK5 | renku     | my-pod-15 | uid-1 | Pod  | Running | user1   | project-1  | launcher-1  |                 4 |                5 |         0.5 |         524288 |              |             |           | 2026-01-22 13:36:04+00 |         00:10:00 |               |
+| 01KG4XP8Y75DB2TAH2G28574B1 | 0RENK1RENK2RENK3RENK4RENK5 | renku     | my-pod-15 | uid-1 | Pod  | Running | user1   | project-1  | launcher-1  |                 4 |                5 |         0.5 |         524288 |              |             |           | 2026-01-22 13:46:04+00 |         00:10:00 |               |
+| 01KG4XP8Y7M6B35VZHDS1WN6NP | 0RENK1RENK2RENK3RENK4RENK5 | renku     | my-pod-15 | uid-1 | Pod  | Stopped | user1   | project-1  | launcher-1  |                 4 |                5 |         0.5 |         524288 |              |             |           | 2026-01-22 13:56:04+00 |         00:10:00 |               |
+| 01KG4XP8Y7GRCYBENEQJ0FK7J3 | 0RENK1RENK2RENK3RENK4RENK5 | renku     | my-pod-15 | uid-1 | Pod  | Stopped | user1   | project-1  | launcher-1  |                 4 |                5 |         0.5 |         524288 |              |             |           | 2026-01-22 14:06:04+00 |         00:10:00 |               |
+| 01KG4XP8Y7A35Q0DFW4DT08D7J | 0RENK1RENK2RENK3RENK4RENK5 | renku     | my-pod-15 | uid-1 | Pod  | Stopped | user1   | project-1  | launcher-1  |                 4 |                5 |         0.5 |         524288 |              |             |           | 2026-01-22 14:16:04+00 |         00:10:00 |               |
+| 01KG4XP8Y746S6PW7YXKJTX0KY | 0RENK1RENK2RENK3RENK4RENK5 | renku     | my-pod-15 | uid-1 | Pod  | Stopped | user1   | project-1  | launcher-1  |                 4 |                5 |         0.5 |         524288 |              |             |           | 2026-01-22 14:26:04+00 |         00:10:00 |               |
+| 01KG4XP8Y7R1FWVJMGXF96W1BD | 0RENK1RENK2RENK3RENK4RENK5 | renku     | my-pod-15 | uid-1 | Pod  | Running | user1   | project-1  | launcher-1  |                 4 |                5 |         0.5 |         524288 |              |             |           | 2026-01-22 14:36:04+00 |         00:10:00 |               |
+| 01KG4XP8Y7XRQWVAQ4CK0C4MHD | 0RENK1RENK2RENK3RENK4RENK5 | renku     | my-pod-15 | uid-1 | Pod  | Running | user1   | project-1  | launcher-1  |                 4 |                5 |         0.5 |         524288 |              |             |           | 2026-01-22 15:46:04+00 |         00:10:00 |               |
+| 01KG4XP8Y7PBAAPPZ2T8MT0H46 | 0RENK1RENK2RENK3RENK4RENK5 | renku     | my-pod-15 | uid-1 | Pod  | Running | user1   | project-1  | launcher-1  |                 4 |                5 |         0.5 |         524288 |              |             |           | 2026-01-22 15:56:04+00 |         00:10:00 |               |
+| 01KG4XP8Y7E96XGXAYYW986KSW | 0RENK1RENK2RENK3RENK4RENK5 | renku     | my-pod-15 | uid-1 | Pod  | Running | user1   | project-1  | launcher-1  |                 4 |                5 |         0.5 |         524288 |              |             |           | 2026-01-22 16:01:04+00 |         00:10:00 |               |
+| 01KG4XP8Y7MJ8FN3D57YJVFPJZ | 0RENK1RENK2RENK3RENK4RENK5 | renku     | my-pod-15 | uid-1 | Pod  | Running | user1   | project-1  | launcher-1  |                 4 |                5 |         0.5 |         524288 |              |             |           | 2026-01-22 16:11:04+00 |         00:10:00 |               |
+| 01KG4XP8Y7YT5HCQJ55DPM7KWS | 0RENK1RENK2RENK3RENK4RENK5 | renku     | my-pod-15 | uid-1 | Pod  | Running | user1   | project-1  | launcher-1  |                 4 |                5 |         0.5 |         524288 |              |             |           | 2026-01-22 16:21:04+00 |         00:10:00 |               |
+
+#+header: :engine postgres
+#+header: :dbhost 127.0.0.1 :database renku :dbuser dev
+#+header: :dbpassword dev
+#+begin_src sql :exports both
+  with
+    cpu_obs as (
+      select id, capture_date, dense_rank() over (order by capture_date asc) as rn
+      from common.resource_requests_log
+      where cpu_request is not null and user_id is not null
+    ),
+    mem_obs as (
+      select id, capture_date, dense_rank() over (order by capture_date asc) as rn
+      from common.resource_requests_log
+      where memory_request is not null and user_id is not null
+    ),
+    disk_obs as (
+      select id, capture_date, dense_rank() over (order by capture_date asc) as rn
+      from common.resource_requests_log
+      where disk_request is not null and user_id is not null
+    ),
+    gpu_obs as (
+      select id, capture_date, dense_rank() over (order by capture_date asc) as rn
+      from common.resource_requests_log
+      where gpu_request is not null and user_id is not null
+    ),
+    requests_diffs as (
+      select
+        t.id,
+        t.cluster_id,
+        t.namespace,
+        t.name,
+        t.uid,
+        t.kind,
+        t.phase,
+        t.user_id,
+        t.project_id,
+        t.launcher_id,
+        t.resource_class_id,
+        t.resource_pool_id,
+        t.cpu_request,
+        t.memory_request,
+        t.disk_request,
+        t.gpu_request,
+        t.gpu_slice,
+        t.capture_date,
+        t.capture_interval,
+        -- cpu next capture date
+        (select min(c.capture_date) from cpu_obs c where c.rn = cs.rn + 1) as cpu_next_date,
+        -- memory next capture date
+        (select min(c.capture_date) from mem_obs c where c.rn = ms.rn + 1) as mem_next_date,
+        -- disk next capture date
+        (select min(c.capture_date) from disk_obs c where c.rn = ds.rn + 1) as disk_next_date,
+        -- gpu next capture date
+        (select min(c.capture_date) from gpu_obs c where c.rn = gs.rn + 1) as gpu_next_date
+      from common.resource_requests_log t
+      left join cpu_obs cs on cs.id = t.id
+      left join mem_obs ms on ms.id = t.id
+      left join disk_obs ds on ds.id = t.id
+      left join gpu_obs gs on gs.id = t.id
+      where t.user_id is not null
+        and t.phase in ('Running', 'Bound')
+      order by t.capture_date asc
+    )
+    select
+      t.id,
+      t.cluster_id,
+      t.namespace,
+      t.name,
+      t.uid,
+      t.kind,
+      t.phase,
+      t.user_id,
+      t.project_id,
+      t.launcher_id,
+      t.resource_class_id,
+      t.resource_pool_id,
+      t.cpu_request,
+      t.memory_request,
+      t.disk_request,
+      t.gpu_request,
+      t.gpu_slice,
+      t.capture_date,
+      t.capture_interval,
+      case
+        when t.cpu_request is null then null
+        else least(t.cpu_next_date - t.capture_date, t.capture_interval)
+      end as cpu_time,
+      case
+        when t.memory_request is null then null
+        else least(t.mem_next_date - t.capture_date, t.capture_interval)
+      end as mem_time,
+      case
+         when t.gpu_request is null then null
+         else least(t.gpu_next_date - t.capture_date, t.capture_interval)
+      end as gpu_time,
+      case
+         when t.disk_request is null then null
+         else least(t.disk_next_date - t.capture_date, t.capture_interval)
+      end as disk_time
+    from requests_diffs t
+    order by t.capture_date asc
+
+#+end_src
+
+#+RESULTS:
+| SET                        |                            |           |                             |                                      |                       |         |                                      |                            |                            |                   |                  |             |                |              |             |           |                        |                  |          |          |          |           |
+|----------------------------+----------------------------+-----------+-----------------------------+--------------------------------------+-----------------------+---------+--------------------------------------+----------------------------+----------------------------+-------------------+------------------+-------------+----------------+--------------+-------------+-----------+------------------------+------------------+----------+----------+----------+-----------|
+| id                         | cluster_id                 | namespace | name                        | uid                                  | kind                  | phase   | user_id                              | project_id                 | launcher_id                | resource_class_id | resource_pool_id | cpu_request | memory_request | disk_request | gpu_request | gpu_slice | capture_date           | capture_interval | cpu_time | mem_time | gpu_time | disk_time |
+| 01KG5163MF9TD1C8527XP5ZJEW | 0RENK1RENK2RENK3RENK4RENK5 | renku     | ekettner-20dec419087c       | 0785f071-0bb2-4362-a199-5802719417b6 | PersistentVolumeClaim | Bound   | f5f1ebe7-6946-4c2c-b4e5-18ac2d4f41e4 | 01HZ6QYPGPTKWG0XNRVZKYWNTS | 01KFFYN9QTKKEWJR02TTC5989Q |                   |                  |             |                |   1073741824 |             |           | 2026-01-29 14:05:46+00 |         00:10:00 |          |          |          |  00:10:00 |
+| 01KG5163MGJ43VP58211K2CGWD | 0RENK1RENK2RENK3RENK4RENK5 | renku     | lorenzo-cava-6735b6189e50   | 4756ee2b-7b94-42c9-9b2f-dd783a2863ab | PersistentVolumeClaim | Bound   | 5daa2891-5310-4428-895d-10f859613223 | 01K82WQ20PNMCTDR7A6JD4B3A8 | 01K82X2T9VKZRH7XQ19NRF2F3F |                   |                  |             |                |   1073741824 |             |           | 2026-01-29 14:05:46+00 |         00:10:00 |          |          |          |  00:10:00 |
+| 01KG5163MG7ZDENV55Z1GT78RZ | 0RENK1RENK2RENK3RENK4RENK5 | renku     | lorenzo-cava-6e077c544338   | cd2ef30b-8bf4-40f2-a7e1-f90efa99789d | PersistentVolumeClaim | Bound   | 5daa2891-5310-4428-895d-10f859613223 | 01K82WQ20PNMCTDR7A6JD4B3A8 | 01KFNKP1QNGZ74SQSCV8DK53KY |                   |                  |             |                |   1073741824 |             |           | 2026-01-29 14:05:46+00 |         00:10:00 |          |          |          |  00:10:00 |
+| 01KG51RE84E4ZFT7GKWXN40BFY | 0RENK1RENK2RENK3RENK4RENK5 | renku     | eike-kettner-962026d34ba4-0 | cb1ab2e2-535f-470b-b7c7-d7b00fce91a8 | Pod                   | Running | c59e6907-e670-4e03-a1b7-18616bb4678e | 01KCVFX9BVTADB8SGHN7RJFJAP | 01KCVFZW2N6S20JAY67K30JNJ7 |                   |                  |        0.54 |     1107296256 |            0 |             |           | 2026-01-29 14:15:47+00 |         00:10:00 | 00:10:00 | 00:10:00 |          |  00:10:00 |
+| 01KG51RE89GNVXHP88F4WAX3W0 | 0RENK1RENK2RENK3RENK4RENK5 | renku     | eike-kettner-962026d34ba4   | c60ae7a9-590f-43fc-b999-1dffe30d9be7 | PersistentVolumeClaim | Bound   | c59e6907-e670-4e03-a1b7-18616bb4678e | 01KCVFX9BVTADB8SGHN7RJFJAP | 01KCVFZW2N6S20JAY67K30JNJ7 |                   |                  |             |                |   1073741824 |             |           | 2026-01-29 14:15:47+00 |         00:10:00 |          |          |          |  00:10:00 |
+| 01KG51RE89J1XW32XPZ3HYPXJZ | 0RENK1RENK2RENK3RENK4RENK5 | renku     | ekettner-20dec419087c       | 0785f071-0bb2-4362-a199-5802719417b6 | PersistentVolumeClaim | Bound   | f5f1ebe7-6946-4c2c-b4e5-18ac2d4f41e4 | 01HZ6QYPGPTKWG0XNRVZKYWNTS | 01KFFYN9QTKKEWJR02TTC5989Q |                   |                  |             |                |   1073741824 |             |           | 2026-01-29 14:15:47+00 |         00:10:00 |          |          |          |  00:10:00 |
+| 01KG51RE895QBEGA9NBXM4GRFW | 0RENK1RENK2RENK3RENK4RENK5 | renku     | lorenzo-cava-6735b6189e50   | 4756ee2b-7b94-42c9-9b2f-dd783a2863ab | PersistentVolumeClaim | Bound   | 5daa2891-5310-4428-895d-10f859613223 | 01K82WQ20PNMCTDR7A6JD4B3A8 | 01K82X2T9VKZRH7XQ19NRF2F3F |                   |                  |             |                |   1073741824 |             |           | 2026-01-29 14:15:47+00 |         00:10:00 |          |          |          |  00:10:00 |
+| 01KG51RE89WG9NEHZGGY7VSEQD | 0RENK1RENK2RENK3RENK4RENK5 | renku     | lorenzo-cava-6e077c544338   | cd2ef30b-8bf4-40f2-a7e1-f90efa99789d | PersistentVolumeClaim | Bound   | 5daa2891-5310-4428-895d-10f859613223 | 01K82WQ20PNMCTDR7A6JD4B3A8 | 01KFNKP1QNGZ74SQSCV8DK53KY |                   |                  |             |                |   1073741824 |             |           | 2026-01-29 14:15:47+00 |         00:10:00 |          |          |          |  00:10:00 |
+
+       (select c.capture_date from disk_obs c where c.rn = ds.rn - 1) as disk_prev_date,
+
+
+| SET   |         |             |                |              |             |                        |                  |          |          |           |          |
+|-------+---------+-------------+----------------+--------------+-------------+------------------------+------------------+----------+----------+-----------+----------|
+| uid   | phase   | cpu_request | memory_request | disk_request | gpu_request | capture_date           | capture_interval | cpu_time | mem_time | disk_time | gpu_time |
+| uid-1 | Running |         0.5 |         524288 |              |             | 2026-01-22 13:26:04+00 |         00:10:00 | 00:10:00 | 00:10:00 |           |          |
+| uid-1 | Running |         0.5 |         524288 |              |             | 2026-01-22 13:36:04+00 |         00:10:00 | 00:10:00 | 00:10:00 |           |          |
+| uid-1 | Running |         0.5 |         524288 |              |             | 2026-01-22 13:46:04+00 |         00:10:00 | 00:10:00 | 00:10:00 |           |          |
+| uid-1 | Running |         0.5 |         524288 |              |             | 2026-01-22 14:36:04+00 |         00:10:00 | 00:10:00 | 00:10:00 |           |          |
+| uid-1 | Running |         0.5 |         524288 |              |             | 2026-01-22 15:46:04+00 |         00:10:00 | 00:10:00 | 00:10:00 |           |          |
+| uid-1 | Running |         0.5 |         524288 |              |             | 2026-01-22 15:56:04+00 |         00:10:00 | 00:05:00 | 00:05:00 |           |          |
+| uid-1 | Running |         0.5 |         524288 |              |             | 2026-01-22 16:01:04+00 |         00:10:00 | 00:10:00 | 00:10:00 |           |          |
+| uid-1 | Running |         0.5 |         524288 |              |             | 2026-01-22 16:11:04+00 |         00:10:00 | 00:10:00 | 00:10:00 |           |          |
+| uid-1 | Running |         0.5 |         524288 |              |             | 2026-01-22 16:21:04+00 |         00:10:00 | 00:10:00 | 00:10:00 |           |          |
+
+
+#+header: :engine postgres
+#+header: :dbhost 127.0.0.1 :database renku :dbuser dev
+#+header: :dbpassword dev
+#+begin_src sql :exports both
+
+  select capture_date, dense_rank() over (order by capture_date asc) as rn
+  from common.resource_requests_log
+  where disk_request is not null and user_id is not null
+
+
+
+#+end_src
+
+#+RESULTS:
+| SET                    |    |
+|------------------------+----|
+| capture_date           | rn |
+| 2026-01-29 14:05:46+00 |  1 |
+| 2026-01-29 14:05:46+00 |  1 |
+| 2026-01-29 14:05:46+00 |  1 |
+| 2026-01-29 14:15:47+00 |  2 |
+| 2026-01-29 14:15:47+00 |  2 |
+| 2026-01-29 14:15:47+00 |  2 |
+| 2026-01-29 14:15:47+00 |  2 |
+| 2026-01-29 14:15:47+00 |  2 |
