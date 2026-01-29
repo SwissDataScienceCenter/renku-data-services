@@ -12,7 +12,7 @@ cd rclone
 git checkout "${RCLONE_REF}"
 
 echo "Building rclone"
-make rclone
+CGO_ENABLED=0 make rclone
 cd $HOME
 rm -rf /tmp/rclone
 
