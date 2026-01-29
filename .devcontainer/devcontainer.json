@@ -38,11 +38,14 @@
 		"./rclone": {
 			"rclone_repository": "https://github.com/SwissDataScienceCenter/rclone.git",
 			"rclone_ref": "v1.71.2+renku-1"
-		}
+		},
+		"./fix-yarnpkg": {}
 	},
 	"overrideFeatureInstallOrder": [
 		"ghcr.io/devcontainers-extra/features/poetry",
-		"ghcr.io/devcontainers-extra/features/bash-command"
+		"ghcr.io/devcontainers-extra/features/bash-command",
+		"./fix-yarnpkg",
+		"ghcr.io/devcontainers/features/docker-in-docker"
 	],
 	"postCreateCommand": "poetry install --with dev && mkdir -p /home/vscode/.config/k9s",
 	"customizations": {
