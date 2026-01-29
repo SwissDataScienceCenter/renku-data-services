@@ -367,6 +367,11 @@ class DataConnectorToProjectLink(BaseAPISpec):
         min_length=26,
         pattern="^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
     )
+    project_path: str = Field(
+        ...,
+        description="The path to the project page",
+        examples=["namespace/project-slug"],
+    )
     creation_date: datetime = Field(
         ...,
         description="The date and time the resource was created (in UTC and ISO-8601 format)",
