@@ -1,6 +1,7 @@
 """The task definitions in form of coroutines."""
 
 import asyncio
+from datetime import timedelta
 
 from authzed.api.v1 import (
     Consistency,
@@ -402,9 +403,10 @@ async def initialize_session_environments(dm: DependencyManager) -> None:
 
 async def record_resource_requests(dm: DependencyManager) -> None:
     """Periodically record all resource requests."""
+    interval_seconds = 600
     while True:
-        await dm.resource_requests_recorder.record_resource_requests()
-        await asyncio.sleep(600)
+        await dm.resource_requests_recorder.record_resource_requests(timedelta(seconds=interval_seconds))
+        await asyncio.sleep(interval_seconds)
 
 
 def all_tasks(dm: DependencyManager) -> TaskDefininions:

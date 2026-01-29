@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, cast
 
@@ -163,10 +163,10 @@ class ComputeCapacity:
 class RequestData:
     """Contains resource requests quantities."""
 
-    cpu: ComputeCapacity
-    gpu: ComputeCapacity
-    memory: DataSize
-    disk: DataSize
+    cpu: ComputeCapacity | None
+    gpu: ComputeCapacity | None
+    memory: DataSize | None
+    disk: DataSize | None
 
     def __str__(self) -> str:
         return f"cpu={self.cpu},mem={self.memory},gpu={self.gpu}"
@@ -174,37 +174,45 @@ class RequestData:
     def __add__(self, other: Any) -> RequestData:
         if isinstance(other, RequestData):
             return RequestData(
-                cpu=self.cpu + other.cpu,
-                gpu=self.gpu + other.gpu,
-                memory=self.memory + other.memory,
-                disk=self.disk + other.disk,
+                cpu=(self.cpu or ComputeCapacity.zero()) + (other.cpu or ComputeCapacity.zero())
+                if self.cpu is not None or other.cpu is not None
+                else None,
+                gpu=(self.gpu or ComputeCapacity.zero()) + (other.gpu or ComputeCapacity.zero())
+                if self.gpu is not None or other.gpu is not None
+                else None,
+                memory=(self.memory or DataSize.zero()) + (other.memory or DataSize.zero())
+                if self.memory is not None or other.memory is not None
+                else None,
+                disk=(self.disk or DataSize.zero()) + (other.disk or DataSize.zero())
+                if self.disk is not None or other.disk is not None
+                else None,
             )
         else:
             raise Exception(f"Cannot add value of type {type(other)} to RequestData")
 
     def with_disk(self, disk: DataSize | None) -> RequestData:
         """Return a copy with disk set."""
-        return RequestData(cpu=self.cpu, gpu=self.gpu, memory=self.memory, disk=disk or DataSize.zero())
+        return RequestData(cpu=self.cpu, gpu=self.gpu, memory=self.memory, disk=disk)
+
+    def is_empty(self) -> bool:
+        """Returns true when all values are None."""
+        return self.cpu is None and self.gpu is None and self.memory is None and self.disk is None
+
+    def is_non_empty(self) -> bool:
+        """Returns true when at least one value is not None."""
+        return not self.is_empty()
 
     @classmethod
-    def zero(cls) -> RequestData:
+    def all_zero(cls) -> RequestData:
         """Return a value with 0."""
         return RequestData(
             cpu=ComputeCapacity.zero(), gpu=ComputeCapacity.zero(), memory=DataSize.zero(), disk=DataSize.zero()
         )
 
     @classmethod
-    def create(
-        cls,
-        cpu: ComputeCapacity | None = None,
-        gpu: ComputeCapacity | None = None,
-        memory: DataSize | None = None,
-        disk: DataSize | None = None,
-    ) -> RequestData:
-        """Creates a RequestData value setting all non specified numbers to 0."""
-        cz = ComputeCapacity.zero()
-        dz = DataSize.zero()
-        return RequestData(cpu=cpu or cz, gpu=gpu or cz, memory=memory or dz, disk=disk or dz)
+    def empty(cls) -> RequestData:
+        """Return a value with None."""
+        return RequestData(cpu=None, gpu=None, memory=None, disk=None)
 
 
 @dataclass
@@ -215,8 +223,10 @@ class ResourcesRequest:
     name: str
     uid: str
     kind: str
+    api_version: str
     phase: str
     capture_date: datetime
+    capture_interval: timedelta
     cluster_id: ClusterId | None
     user_id: str | None
     project_id: ULID | None
@@ -224,6 +234,7 @@ class ResourcesRequest:
     resource_class_id: int | None
     resource_pool_id: int | None
     since: datetime | None
+    gpu_slice: float | None
     data: RequestData
 
     @property
@@ -235,6 +246,7 @@ class ResourcesRequest:
             f"{self.uid}/"
             f"{self.name}/"
             f"{self.kind}/"
+            f"{self.api_version}/"
             f"{self.phase}/"
             f"{self.user_id}/"
             f"{self.project_id}/"
@@ -242,18 +254,21 @@ class ResourcesRequest:
             f"{self.resource_class_id}/"
             f"{self.resource_pool_id}/"
             f"{self.since}/"
-            f"@{self.capture_date}"
+            f"{self.gpu_slice}/"
+            f"@{self.capture_date}/{self.capture_interval}"
         )
 
-    def to_zero(self) -> ResourcesRequest:
-        """Return a new value with all numbers set to 0."""
+    def to_empty(self) -> ResourcesRequest:
+        """Return a new value with all numbers set to None."""
         return ResourcesRequest(
             namespace=self.namespace,
             name=self.name,
             uid=self.uid,
             phase=self.phase,
             kind=self.kind,
+            api_version=self.api_version,
             capture_date=self.capture_date,
+            capture_interval=self.capture_interval,
             cluster_id=self.cluster_id,
             user_id=self.user_id,
             project_id=self.project_id,
@@ -261,7 +276,8 @@ class ResourcesRequest:
             resource_class_id=self.resource_class_id,
             resource_pool_id=self.resource_pool_id,
             since=self.since,
-            data=RequestData.zero(),
+            gpu_slice=self.gpu_slice,
+            data=RequestData.empty(),
         )
 
     def add(self, other: ResourcesRequest) -> ResourcesRequest:
@@ -272,8 +288,10 @@ class ResourcesRequest:
                 name=self.name,
                 uid=self.uid,
                 kind=self.kind,
+                api_version=self.api_version,
                 phase=self.phase,
                 capture_date=self.capture_date,
+                capture_interval=self.capture_interval,
                 cluster_id=self.cluster_id,
                 user_id=self.user_id,
                 project_id=self.project_id,
@@ -281,6 +299,7 @@ class ResourcesRequest:
                 resource_class_id=self.resource_class_id,
                 resource_pool_id=self.resource_pool_id,
                 since=self.since,
+                gpu_slice=self.gpu_slice,
                 data=self.data + other.data,
             )
         else:
@@ -308,6 +327,11 @@ class ResourceDataFacade:
     def kind(self) -> str:
         """Return the kind."""
         return cast(str, self.pod.manifest.kind)
+
+    @property
+    def api_version(self) -> str:
+        """Return the apiVersion field."""
+        return cast(str, self.pod.manifest.get("apiVersion"))
 
     @property
     def resource_request_storage(self) -> DataSize | None:
@@ -377,13 +401,13 @@ class ResourceDataFacade:
     @property
     def resource_pool_id(self) -> int | None:
         """Return the resource pool id."""
-        return None #TODO implement when annotation is added
+        return None  # TODO implement when annotation is added
 
     @property
     def start_or_creation_time(self) -> datetime:
         """Return startTime or creationTime of the pod or pvc."""
         kind = self.kind
-        dtstr : str
+        dtstr: str
         if kind == "PersistentVolumeClaim" or kind == "AmaltheaSession":
             dtstr = self.pod.manifest.get("metadata", {}).get("creationTimestamp")
         elif kind == "Pod":
@@ -406,33 +430,32 @@ class ResourceDataFacade:
     @property
     def requested_data(self) -> RequestData:
         """Return the requested resources."""
-        result = RequestData.create(disk=self.status_storage)
+        result = RequestData.empty().with_disk(self.status_storage)
         for container in self.pod.manifest.get("spec", {}).get("containers", []):
             requests = container.get("resources", {}).get("requests", {})
             lims = container.get("resources", {}).get("limits", {})
 
-            cpu_req = ComputeCapacity.from_str(requests.get("cpu", "0"))
-            mem_req = DataSize.from_str(requests.get("memory", "0"))
-            gpu_req = ComputeCapacity.from_str(lims.get("nvidia.com/gpu") or requests.get("nvidia.com/gpu", "0"))
+            cpu_req = ComputeCapacity.from_str(requests.get("cpu", ""))
+            mem_req = DataSize.from_str(requests.get("memory", ""))
+            gpu_req = ComputeCapacity.from_str(lims.get("nvidia.com/gpu") or requests.get("nvidia.com/gpu", ""))
 
-            result = result + RequestData(
-                cpu=cpu_req or ComputeCapacity.zero(),
-                memory=mem_req or DataSize.zero(),
-                gpu=gpu_req or ComputeCapacity.zero(),
-                disk=DataSize.zero(),
-            )
+            result = result + RequestData(cpu=cpu_req, memory=mem_req, gpu=gpu_req, disk=None)
 
         return result
 
-    def to_resources_request(self, cluster_id: ClusterId | None, date: datetime) -> ResourcesRequest:
+    def to_resources_request(
+        self, cluster_id: ClusterId | None, date: datetime, interval: timedelta
+    ) -> ResourcesRequest:
         """Convert this into a ResourcesRequest data class."""
         return ResourcesRequest(
             namespace=self.namespace,
             name=self.name,
             uid=self.uid,
             kind=self.kind,
+            api_version=self.api_version,
             phase=self.phase,
             capture_date=date,
+            capture_interval=interval,
             cluster_id=cluster_id,
             user_id=self.user_id,
             project_id=self.project_id,
@@ -440,5 +463,6 @@ class ResourceDataFacade:
             resource_class_id=self.resource_class_id,
             resource_pool_id=self.resource_pool_id,
             since=self.start_or_creation_time,
+            gpu_slice=None,  ## TODO get the cpu slice from somewhere
             data=self.requested_data,
         )

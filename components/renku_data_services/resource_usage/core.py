@@ -1,9 +1,8 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
 from renku_data_services.app_config import logging
 from renku_data_services.k8s.client_interfaces import K8sClient
-from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import GVK, K8sObjectFilter, K8sObjectMeta
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
@@ -18,7 +17,7 @@ logger = logging.getLogger(__file__)
 class ResourceRequestsFetchProto(Protocol):
     """Protocol defining methods for getting resource requests."""
 
-    async def get_resources_requests(self) -> dict[str, ResourcesRequest]:
+    async def get_resources_requests(self, capture_interval: timedelta) -> dict[str, ResourcesRequest]:
         """Return the resources requests of all pods and pvcs."""
         ...
 
@@ -29,7 +28,7 @@ class ResourceRequestsFetch(ResourceRequestsFetchProto):
     def __init__(self, k8s_client: K8sClient) -> None:
         self._client = k8s_client
 
-    async def get_resources_requests(self) -> dict[str, ResourcesRequest]:
+    async def get_resources_requests(self, capture_interval: timedelta) -> dict[str, ResourcesRequest]:
         """Return the resources requests of all pods and pvcs."""
 
         logger.debug("Get pods and pvc from all clusters")
@@ -42,9 +41,9 @@ class ResourceRequestsFetch(ResourceRequestsFetchProto):
 
         async for pod in self._client.list(pod_filter):
             obj = ResourceDataFacade(pod=pod)
-            rreq = obj.to_resources_request(pod.cluster, date)
+            rreq = obj.to_resources_request(pod.cluster, date, capture_interval)
             await self._amend_session_fallback(pod.cluster, obj, rreq)
-            nreq = rreq.add(result.get(rreq.id, rreq.to_zero()))
+            nreq = rreq.add(result.get(rreq.id, rreq.to_empty()))
             result.update({nreq.id: nreq})
 
         if result == {}:
@@ -52,9 +51,9 @@ class ResourceRequestsFetch(ResourceRequestsFetchProto):
 
         async for pvc in self._client.list(pvc_filter):
             obj = ResourceDataFacade(pod=pvc)
-            rreq = obj.to_resources_request(pvc.cluster, date)
+            rreq = obj.to_resources_request(pvc.cluster, date, capture_interval)
             await self._amend_session_fallback(pvc.cluster, obj, rreq)
-            nreq = rreq.add(result.get(rreq.id, rreq.to_zero()))
+            nreq = rreq.add(result.get(rreq.id, rreq.to_empty()))
             result.update({nreq.id: nreq})
 
         if result == {}:
@@ -90,9 +89,9 @@ class ResourcesRequestRecorder:
         self._repo = repo
         self._fetch = fetch
 
-    async def record_resource_requests(self) -> None:
+    async def record_resource_requests(self, interval: timedelta) -> None:
         """Fetches all resource requests in the given namespace and stores them."""
-        result = await self._fetch.get_resources_requests()
+        result = await self._fetch.get_resources_requests(interval)
         size = len(result)
         if size == 0:
             logger.warning("No pod or pvc was found!")
