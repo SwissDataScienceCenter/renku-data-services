@@ -1,6 +1,6 @@
 services:
   data_service:
-    image: "mcr.microsoft.com/devcontainers/python:3.13-bookworm"
+    image: "mcr.microsoft.com/devcontainers/python:3-3.14-trixie"
     volumes:
       - ../:/workspace:cached
       - .poetry_cache/:/poetry_cache:delegated
