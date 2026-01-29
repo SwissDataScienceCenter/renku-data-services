@@ -34,7 +34,9 @@
 		"ghcr.io/devcontainers-extra/features/kind:1": {
 			"version": "v0.30.0"
 		},
-		"ghcr.io/devcontainers/features/go:1": {},
+		"ghcr.io/devcontainers/features/go:1": {
+			"version": "1.24"
+		},
 		"./rclone": {
 			"rclone_repository": "https://github.com/SwissDataScienceCenter/rclone.git",
 			"rclone_ref": "v1.71.2+renku-1"
