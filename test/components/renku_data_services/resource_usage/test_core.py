@@ -1,6 +1,6 @@
 """Test core functions."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from ulid import ULID
@@ -16,12 +16,14 @@ from renku_data_services.resource_usage.core import (
 from renku_data_services.resource_usage.model import ComputeCapacity, DataSize, RequestData, ResourcesRequest
 from renku_data_services.resource_usage.orm import ResourceRequestsLogORM
 
+interval = timedelta(seconds=600)
+
 
 class TestResourceRequestsFetch(ResourceRequestsFetchProto):
     def __init__(self, data: list[ResourcesRequest]) -> None:
         self.data = data
 
-    async def get_resources_requests(self) -> dict[str, ResourcesRequest]:
+    async def get_resources_requests(self, capture_interval: timedelta) -> dict[str, ResourcesRequest]:
         """Return the resources requests of all pods."""
         return {e.id: e for e in self.data}
 
@@ -33,7 +35,7 @@ async def test_record_empty_resource_requests(app_manager_instance: DependencyMa
     fetch = TestResourceRequestsFetch([])
     repo = ResourceRequestsRepo(app_manager_instance.config.db.async_session_maker)
     recorder = ResourcesRequestRecorder(repo, fetch)
-    await recorder.record_resource_requests()
+    await recorder.record_resource_requests(interval)
     all = [item async for item in repo.find_all()]
     assert len(all) == 0
 
@@ -53,8 +55,10 @@ async def test_record_resource_requests(app_manager_instance: DependencyManager)
             name="pod1",
             uid="xyz-898-dec",
             kind="Pod",
+            api_version="v1",
             phase="Running",
             capture_date=dt,
+            capture_interval=interval,
             cluster_id=DEFAULT_K8S_CLUSTER,
             user_id="exyz",
             project_id=ULID(),
@@ -62,6 +66,7 @@ async def test_record_resource_requests(app_manager_instance: DependencyManager)
             resource_class_id=4,
             resource_pool_id=16,
             since=datetime(2025, 1, 15, 13, 25, 15, 0, UTC),
+            gpu_slice=None,
             data=RequestData(
                 cpu=ComputeCapacity.from_milli_cores(250),
                 memory=DataSize.from_mb(512),
@@ -74,8 +79,10 @@ async def test_record_resource_requests(app_manager_instance: DependencyManager)
             name="pod2",
             uid="abc-def-123",
             kind="Pod",
+            api_version="v1",
             phase="Running",
             capture_date=dt,
+            capture_interval=interval,
             cluster_id=DEFAULT_K8S_CLUSTER,
             user_id="exyz",
             project_id=ULID(),
@@ -83,6 +90,7 @@ async def test_record_resource_requests(app_manager_instance: DependencyManager)
             resource_class_id=4,
             resource_pool_id=16,
             since=datetime(2025, 1, 15, 11, 13, 54, 0, UTC),
+            gpu_slice=None,
             data=RequestData(
                 cpu=ComputeCapacity.from_milli_cores(150),
                 memory=DataSize.from_mb(256),
@@ -95,7 +103,7 @@ async def test_record_resource_requests(app_manager_instance: DependencyManager)
     fetch = TestResourceRequestsFetch(data)
     repo = ResourceRequestsRepo(app_manager_instance.config.db.async_session_maker)
     recorder = ResourcesRequestRecorder(repo, fetch)
-    await recorder.record_resource_requests()
+    await recorder.record_resource_requests(interval)
     all = [item async for item in repo.find_all()]
     assert len(all) == 2
     assert {e.name for e in all} == {"pod1", "pod2"}
