@@ -128,8 +128,8 @@ class DataSourceRepository:
         return stringio.getvalue()
 
     async def handle_configuration_for_test(
-        self, user: APIUser, configuration: RCloneConfig | dict[str, Any]
-    ) -> RCloneConfig | dict[str, Any] | None:
+        self, user: APIUser, configuration: "RCloneConfig | dict[str, Any]"
+    ) -> "RCloneConfig | dict[str, Any] | None":
         """Ajusts the input configuration if it requires an OAuth2 connection.
 
         Returns either an rclone configuration or None if the data connector should be skipped.
