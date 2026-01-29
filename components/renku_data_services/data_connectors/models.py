@@ -174,6 +174,7 @@ class DataConnectorToProjectLink(UnsavedDataConnectorToProjectLink):
     """A link from a data connector to a project."""
 
     id: ULID
+    project_path: str
     created_by: str
     creation_date: datetime
     updated_at: datetime

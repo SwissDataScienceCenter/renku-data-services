@@ -1,9 +1,8 @@
 import warnings
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING
 
 import pytest
-from httpx import Response
 from sanic_testing.testing import SanicASGITestClient
 
 from renku_data_services.authz.models import Visibility
@@ -19,25 +18,6 @@ from test.bases.renku_data_services.data_api.utils import merge_headers
 
 if TYPE_CHECKING:
     from pytest import MonkeyPatch
-
-
-async def create_data_connector(
-    sanic_client: SanicASGITestClient, headers: dict[str, Any], namespace: str, slug: str, private: bool
-) -> Response:
-    storage_config = {
-        "configuration": {"type": "s3", "endpoint": "http://s3.aws.com"},
-        "source_path": "giab",
-        "target_path": "giab",
-    }
-    payload = {
-        "name": slug,
-        "namespace": namespace,
-        "slug": slug,
-        "storage": storage_config,
-        "visibility": "private" if private else "public",
-    }
-    _, response = await sanic_client.post("/api/data/data_connectors", headers=headers, json=payload)
-    return cast(Response, response)
 
 
 @pytest.mark.asyncio
@@ -118,7 +98,7 @@ async def test_post_global_data_connector(
         description="""<a href="https://github.com/SwissDataScienceCenter/renku-python/compare/v0.7.1...v0.7.2">0.7.2</a> (2019-11-15)\nBug Fixes\n<ul>\n<li>ensure all Person instances have valid ids (<a href="https://github.com/SwissDataScienceCenter/renku-python/commit/85585d0">85585d0</a>), addresses <a href="https://github.com/SwissDataScienceCenter/renku-python/issues/812">#812</a></li>\n</ul>""",  # noqa E501
         keywords=[],
     )
-    _mock_get_dataset_metadata(metadata=zenodo_metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
+    _mock_get_dataset_metadata(metadata=zenodo_metadata, monkeypatch=monkeypatch)
 
     payload = {
         "storage": {
@@ -178,7 +158,7 @@ async def test_post_global_data_connector_dataverse(
         description="""<p>This dataset contains the metadata of the datasets published in 101 Dataverse installations, information about the metadata blocks of 106 installations, and the lists of pre-defined licenses or dataset terms that depositors can apply to datasets in the 88 installations that were running versions of the Dataverse software that include the "multiple-license" feature.\n\n<p>The data is useful for improving understandings about how certain Dataverse features and metadata fields are used and for learning about the quality of dataset and file-level metadata within and across Dataverse installations.\n\n<p><strong>How the metadata was downloaded</strong>\n<p>The dataset metadata and metadata block JSON files were downloaded from each installation between August 25 and August 30, 2024 using a "get_dataverse_installations_metadata" function in a collection of Python functions at <a href="https://github.com/jggautier/dataverse-scripts/blob/main/dataverse_repository_curation_assistant/dataverse_repository_curation_assistant_functions.py">https://github.com/jggautier/dataverse-scripts/blob/main/dataverse_repository_curation_assistant/dataverse_repository_curation_assistant_functions.py</a>.\n\n<p>In order to get the metadata from installations that require an installation account API token to use certain Dataverse software APIs, I created a CSV file with two columns: one column named "hostname" listing each installation URL for which I was able to create an account and another column named "apikey" listing my accounts\' API tokens. The Python script expects the CSV file and the listed API tokens to get metadata and other information from installations that require API tokens in order to use certain API endpoints.\n\n<p><strong>How the files are organized</strong>\n\n<pre>\n├── csv_files_with_metadata_from_most_known_dataverse_installations\n│\xa0\xa0 ├── author_2024.08.25-2024.08.30.csv\n│\xa0\xa0 ├── contributor_2024.08.25-2024.08.30.csv\n│\xa0\xa0 ├── data_source_2024.08.25-2024.08.30.csv\n│\xa0\xa0 ├── ...\n│\xa0\xa0 └── topic_classification_2024.08.25-2024.08.30.csv\n├── dataverse_json_metadata_from_each_known_dataverse_installation\n│\xa0\xa0 ├── Abacus_2024.08.26_15.52.42.zip\n│\xa0\xa0\xa0\xa0\xa0\xa0 ├── dataset_pids_Abacus_2024.08.26_15.52.42.csv\n│\xa0\xa0\xa0\xa0\xa0\xa0 ├── Dataverse_JSON_metadata_2024.08.26_15.52.42\n│\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0  ├── hdl_11272.1_AB2_0AQZNT_v1.0(latest_version).json\n│\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0  ├── ...\n│\xa0\xa0\xa0\xa0\xa0\xa0 ├── metadatablocks_v5.9\n│\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0  ├── astrophysics_v5.9.json\n│\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0  ├── biomedical_v5.9.json\n│\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0  ├── citation_v5.9.json\n│\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0  ├── ...\n│\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0  ├── socialscience_v5.6.json\n│\xa0\xa0 ├── ACSS_Dataverse_2024.08.26_00.02.51.zip\n│\xa0\xa0 ├── ...\n│\xa0\xa0 └── Yale_Dataverse_2024.08.25_03.52.57.zip\n└── dataverse_installations_summary_2024.08.30.csv\n└── dataset_pids_from_most_known_dataverse_installations_2024.08.csv\n└── license_options_for_each_dataverse_installation_2024.08.28_14.42.54.csv\n└── metadatablocks_from_most_known_dataverse_installations_2024.08.30.csv\n\n</pre>\n\n<p>This dataset contains two directories and four CSV files not in a directory.\n<p>One directory, "csv_files_with_metadata_from_most_known_dataverse_installations", contains 20 CSV files that list the values of many of the metadata fields in the "Citation" metadata block and "Geospatial" metadata block of datasets in the 101 Dataverse installations. For example, author_2024.08.25-2024.08.30.csv contains the "Author" metadata for the latest versions of all published, non-deaccessioned datasets in 101 installations, with a column for each of the four child fields: author name, affiliation, identifier type, and identifier.\n<p>The other directory, "dataverse_json_metadata_from_each_known_dataverse_installation", contains 106 zip files, one zip file for each of the 106 Dataverse installations whose sites were functioning when I attempted to collect their metadata. Each zip file contains a directory with JSON files that have information about the installation\'s metadata fields, such as the field names and how they\'re organized. For installations that had published datasets, and I was able to use Dataverse APIs to download the dataset metadata, the zip file also contains:\n<ul>\n<li>A CSV file listing information about the datasets published in the installation, including a column to indicate if the Python script was able to download the Dataverse JSON metadata for each dataset.\n<li>A directory of JSON files that contain the metadata of the installation\'s published, non-deaccessioned dataset versions in the Dataverse JSON metadata schema.\n</ul>\n<p>The dataverse_installations_summary_2024.08.30.csv file contains information about each installation, including its name, URL, Dataverse software version, and counts of dataset metadata included and not included in this dataset.\n<p>The dataset_pids_from_most_known_dataverse_installations_2024.08.csv file contains the dataset PIDs of published datasets in 101 Dataverse installations, with a column to indicate if the Python script was able to download the dataset\'s metadata. It\'s a union of all "dataset_pids_....csv" files in each of the 101 zip files in the dataverse_json_metadata_from_each_known_dataverse_installation directory.\n<p>The license_options_for_each_dataverse_installation_2024.08.28_14.42.54.csv file contains information about the licenses and data use agreements that some installations let depositors choose when creating datasets. When I collected this data, 88 of the available 106 installations were running versions of the Dataverse software that allow depositors to choose a "predefined license or data use agreement" from a dropdown menu in the dataset deposit form. For more information about this Dataverse feature, see <a href="https://guides.dataverse.org/en/5.14/user/dataset-management.html#choosing-a-license">https://guides.dataverse.org/en/5.14/user/dataset-management.html#choosing-a-license</a>.\n<p>The metadatablocks_from_most_known_dataverse_installations_2024.08.30.csv file contains the metadata block names, field names, child field names (if the field is a compound field), display names, descriptions/tooltip text, and watermarks of fields in the 106 Dataverse installations\' metadata blocks. This file is useful for learning about the metadata fields and field structures used in each installation.\n\n<p><strong>Known errors</strong>\n<p>The metadata of a few datasets from several known and functioning installations could not be downloaded.\n<p>In some cases, this is because of download timeouts caused by the datasets\' relatively large metadata exports, which contain information about the datasets\' large number of versions and files.\n<p>In other cases, datasets were publicly findable but in unpublished or deaccessioned states that prevented me from downloading their metadata export.\n\n<p><strong>About metadata blocks</strong>\n<p>Read about the Dataverse software\'s metadata blocks system at <a href="http://guides.dataverse.org/en/latest/admin/metadatacustomization.html">http://guides.dataverse.org/en/6.3/admin/metadatacustomization.html</a>""",  # noqa E501
         keywords=["dataset metadata", "dataverse", "metadata blocks"],
     )
-    _mock_get_dataset_metadata(metadata=dataverse_metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
+    _mock_get_dataset_metadata(metadata=dataverse_metadata, monkeypatch=monkeypatch)
 
     doi = "10.7910/DVN/2SA6SN"
     payload = {
@@ -259,7 +239,7 @@ async def test_post_global_data_connector_no_duplicates(
         description="""<a href="https://github.com/SwissDataScienceCenter/renku-python/compare/v0.7.1...v0.7.2">0.7.2</a> (2019-11-15)\nBug Fixes\n<ul>\n<li>ensure all Person instances have valid ids (<a href="https://github.com/SwissDataScienceCenter/renku-python/commit/85585d0">85585d0</a>), addresses <a href="https://github.com/SwissDataScienceCenter/renku-python/issues/812">#812</a></li>\n</ul>""",  # noqa E501
         keywords=[],
     )
-    _mock_get_dataset_metadata(metadata=zenodo_metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
+    _mock_get_dataset_metadata(metadata=zenodo_metadata, monkeypatch=monkeypatch)
 
     doi = "10.5281/zenodo.2600782"
     payload = {
@@ -344,7 +324,7 @@ async def test_post_data_connector_with_azure_url(
         "visibility": "public",
         "namespace": regular_user.namespace.path.serialize(),
         "storage": {
-            "storage_url": "azure://mycontainer/myfolder",
+            "storage_url": "azure://my-container/myfolder",
             "target_path": "my/target",
         },
         "keywords": ["keyword 1", "keyword.2", "keyword-3", "KEYWORD_4"],
@@ -361,7 +341,7 @@ async def test_post_data_connector_with_azure_url(
     assert data_connector.get("storage") is not None
     storage = data_connector["storage"]
     assert storage.get("storage_type") == "azureblob"
-    assert storage.get("source_path") == "mycontainer/myfolder"
+    assert storage.get("source_path") == "my-container/myfolder"
     assert storage.get("target_path") == "my/target"
     assert storage.get("readonly") is True
     assert data_connector.get("created_by") == "user"
@@ -581,6 +561,46 @@ async def test_get_one_by_slug_data_connector(
     assert data_connector.get("name") == "A new data connector"
     assert data_connector.get("namespace") == "user.doe"
     assert data_connector.get("slug") == "a-new-data-connector"
+
+
+@pytest.mark.asyncio
+async def test_get_data_connector_by_doi(create_global_data_connector, monkeypatch, sanic_client, user_headers) -> None:
+    doi = "10.5281/zenodo.2600782"
+    metadata = RCloneDOIMetadata(
+        DOI=doi,
+        URL="https://doi.org/10.5281/zenodo.2600782",
+        metadataURL="https://zenodo.org/api/records/3542869",
+        provider="zenodo",
+    )
+    _mock_get_doi_metadata(metadata=metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
+    zenodo_metadata = DOIMetadata(
+        name="SwissDataScienceCenter/renku-python: Version 0.7.2",
+        description="""<a href="https://github.com/SwissDataScienceCenter/renku-python/compare/v0.7.1...v0.7.2">0.7.2</a> (2019-11-15)\nBug Fixes\n<ul>\n<li>ensure all Person instances have valid ids (<a href="https://github.com/SwissDataScienceCenter/renku-python/commit/85585d0">85585d0</a>), addresses <a href="https://github.com/SwissDataScienceCenter/renku-python/issues/812">#812</a></li>\n</ul>""",  # noqa E501
+        keywords=[],
+    )
+    _mock_get_dataset_metadata(metadata=zenodo_metadata, monkeypatch=monkeypatch)
+
+    data_connector = await create_global_data_connector(configuration={"type": "doi", "doi": doi})
+
+    _, response = await sanic_client.get(f"/api/data/data_connectors/search?doi={doi}", headers=user_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    assert response.json["id"] == data_connector.id
+    assert response.json["name"] == data_connector.name
+    assert response.json["slug"] == data_connector.slug
+    assert response.json["doi"] == doi
+
+
+@pytest.mark.asyncio
+async def test_get_data_connector_by_doi_fails_if_not_found(sanic_client, user_headers) -> None:
+    non_existing_doi = "10.5281/zenodo.9999999"
+
+    _, response = await sanic_client.get(
+        f"/api/data/data_connectors/search?doi={non_existing_doi}", headers=user_headers
+    )
+
+    assert response.status_code == 404, response.text
 
 
 @pytest.mark.asyncio
@@ -867,7 +887,7 @@ async def test_patch_data_connector_as_group_editor(
 
     headers = merge_headers(user_headers, {"If-Match": data_connector["etag"]})
     patch = {
-        # Test that we do require DELETE permission when sending the current namepace
+        # Test that we do require DELETE permission when sending the current namespace
         "namespace": data_connector["namespace"],
         # Test that we do require DELETE permission when sending the current visibility
         "visibility": data_connector["visibility"],
@@ -955,7 +975,7 @@ async def test_patch_global_data_connector(
         description="""<a href="https://github.com/SwissDataScienceCenter/renku-python/compare/v0.7.1...v0.7.2">0.7.2</a> (2019-11-15)\nBug Fixes\n<ul>\n<li>ensure all Person instances have valid ids (<a href="https://github.com/SwissDataScienceCenter/renku-python/commit/85585d0">85585d0</a>), addresses <a href="https://github.com/SwissDataScienceCenter/renku-python/issues/812">#812</a></li>\n</ul>""",  # noqa E501
         keywords=[],
     )
-    _mock_get_dataset_metadata(metadata=zenodo_metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
+    _mock_get_dataset_metadata(metadata=zenodo_metadata, monkeypatch=monkeypatch)
 
     doi = "10.5281/zenodo.2600782"
     payload = {
@@ -1037,7 +1057,7 @@ async def test_delete_global_data_connector(
         description="""<a href="https://github.com/SwissDataScienceCenter/renku-python/compare/v0.7.1...v0.7.2">0.7.2</a> (2019-11-15)\nBug Fixes\n<ul>\n<li>ensure all Person instances have valid ids (<a href="https://github.com/SwissDataScienceCenter/renku-python/commit/85585d0">85585d0</a>), addresses <a href="https://github.com/SwissDataScienceCenter/renku-python/issues/812">#812</a></li>\n</ul>""",  # noqa E501
         keywords=[],
     )
-    _mock_get_dataset_metadata(metadata=zenodo_metadata, sanic_client=sanic_client, monkeypatch=monkeypatch)
+    _mock_get_dataset_metadata(metadata=zenodo_metadata, monkeypatch=monkeypatch)
 
     doi = "10.5281/zenodo.2600782"
     payload = {
@@ -1088,7 +1108,31 @@ async def test_get_data_connector_project_links_empty(
 
 
 @pytest.mark.asyncio
-async def test_post_data_connector_project_link(
+async def test_get_data_connector_project_link_pagination(
+    create_data_connector, create_project, link_data_connector, sanic_client, user_headers
+) -> None:
+    data_connector = await create_data_connector("Data Connector")
+    for i in range(1, 10):
+        project = await create_project(sanic_client, f"project-{i}")
+        await link_data_connector(project["id"], data_connector["id"])
+
+    parameters = {"page": 2, "per_page": 3}
+    _, response = await sanic_client.get(
+        f"/api/data/data_connectors/{data_connector["id"]}/project_links", headers=user_headers, params=parameters
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json is not None
+    projects = response.json
+    assert {p["project_path"] for p in projects} == {f"user.doe/{p}" for p in ("project-4", "project-5", "project-6")}
+    assert response.headers["page"] == "2"
+    assert response.headers["per-page"] == "3"
+    assert response.headers["total"] == "9"
+    assert response.headers["total-pages"] == "3"
+
+
+@pytest.mark.asyncio
+async def test_post_data_connector_project_links(
     sanic_client: SanicASGITestClient, create_data_connector, create_project, user_headers
 ) -> None:
     data_connector = await create_data_connector("Data connector 1")
@@ -2293,6 +2337,7 @@ async def test_move_data_connector(
     origin: DataConnectorTestCase,
     destination: DataConnectorTestCase,
     dc_visibility: Visibility,
+    create_data_connector,
 ) -> None:
     # Create origin namespace
     linked_project_id: str | None = None
@@ -2346,13 +2391,12 @@ async def test_move_data_connector(
             destination_id = response.json["id"]
 
     # Create the data connector
-    response = await create_data_connector(
-        sanic_client, member_1_headers, origin_path.serialize(), "dc1", private=dc_visibility == Visibility.PRIVATE
+    data_connector = await create_data_connector(
+        "dc1", headers=member_1_headers, namespace=origin_path.serialize(), visibility=dc_visibility.value
     )
-    assert response.status_code == 201, response.text
-    assert response.json["namespace"] == origin_path.serialize()
-    dc_id = response.json["id"]
-    dc_etag = response.json["etag"]
+    assert data_connector["namespace"] == origin_path.serialize()
+    dc_id = data_connector["id"]
+    dc_etag = data_connector["etag"]
 
     # Create a project to link the DC to if the origin is not project
     if not isinstance(origin_path, ProjectPath):
@@ -2381,7 +2425,7 @@ async def test_move_data_connector(
     assert response.json["namespace"] == destination_path.serialize()
     assert response.json["visibility"] == dc_visibility.value
 
-    # Check the data connector link remains unchaged after moving
+    # Check the data connector link remains unchanged after moving
     _, response = await sanic_client.get(
         f"/api/data/projects/{linked_project_id}/data_connector_links", headers=headers
     )
@@ -2449,7 +2493,7 @@ def _mock_get_doi_metadata(metadata: RCloneDOIMetadata, sanic_client: SanicASGIT
     monkeypatch.setattr(validator, "get_doi_metadata", _mock_get_doi_metadata)
 
 
-def _mock_get_dataset_metadata(metadata: DOIMetadata, sanic_client: SanicASGITestClient, monkeypatch: "MonkeyPatch"):
+def _mock_get_dataset_metadata(metadata: DOIMetadata, monkeypatch: "MonkeyPatch"):
     """Mock the _get_dataset_metadata_invenio method."""
 
     # The Zenodo API may be unresponsive, so we mock its response
@@ -2480,10 +2524,10 @@ def _mock_get_dataset_metadata(metadata: DOIMetadata, sanic_client: SanicASGITes
     )
 
 
-def _mock_get_envidat_metadata(metadata: DOIMetadata, sanic_client: SanicASGITestClient, monkeypatch: "MonkeyPatch"):
+def _mock_get_envidat_metadata(metadata: DOIMetadata, monkeypatch: "MonkeyPatch"):
     """Mock the _get_envidat_metadata method."""
 
-    # The Evnidat API may be unresponsive, so we mock its response
+    # The Envidat API may be unresponsive, so we mock its response
     from renku_data_services.data_connectors.doi import metadata as metadata_mod
 
     _orig_get_envidat_metadata = metadata_mod._get_envidat_metadata
@@ -2513,7 +2557,7 @@ async def test_validate_envidat_data_connector(
     sanic_client: SanicASGITestClient,
     monkeypatch: "MonkeyPatch",
 ) -> None:
-    _mock_get_envidat_metadata(envidat_metadata, sanic_client, monkeypatch)
+    _mock_get_envidat_metadata(envidat_metadata, monkeypatch)
     body = GlobalDataConnectorPost(
         storage=CloudStorageCorePost(
             storage_type="doi",
@@ -2549,7 +2593,7 @@ async def test_add_envidat_data_connector(
     envidat_metadata: DOIMetadata,
     monkeypatch: "MonkeyPatch",
 ) -> None:
-    _mock_get_envidat_metadata(envidat_metadata, sanic_client, monkeypatch)
+    _mock_get_envidat_metadata(envidat_metadata, monkeypatch)
     payload = {
         "storage": {
             "configuration": {"type": "doi", "doi": "10.16904/12"},
