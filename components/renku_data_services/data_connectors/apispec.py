@@ -134,6 +134,89 @@ class InaccessibleDataConnectorLinks(BaseAPISpec):
     )
 
 
+class DepositProvider(Enum):
+    zenodo = "zenodo"
+
+
+class DepositStatus(Enum):
+    complete = "complete"
+    in_progress = "in_progress"
+    cancelled = "cancelled"
+    missing = "missing"
+
+
+class DepositPost(BaseAPISpec):
+    name: str = Field(
+        ...,
+        description="Renku data connector name",
+        examples=["My Remote Data :)"],
+        max_length=99,
+        min_length=1,
+    )
+    provider: DepositProvider
+    data_connector_id: str = Field(
+        ...,
+        description="ULID identifier",
+        max_length=26,
+        min_length=26,
+        pattern="^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+    )
+    path: Optional[str] = Field(
+        None,
+        description="The path from the data connector that should be uploaded in the deposit",
+        examples=["/some/path"],
+    )
+
+
+class Deposit(DepositPost):
+    id: str = Field(
+        ...,
+        description="ULID identifier",
+        max_length=26,
+        min_length=26,
+        pattern="^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+    )
+    status: DepositStatus
+    external_url: str = Field(
+        ..., description="The URL from the provider where the deposit can be accessed"
+    )
+    name: str = Field(
+        ...,
+        description="Renku data connector name",
+        examples=["My Remote Data :)"],
+        max_length=99,
+        min_length=1,
+    )
+    provider: DepositProvider
+    data_connector_id: str = Field(
+        ...,
+        description="ULID identifier",
+        max_length=26,
+        min_length=26,
+        pattern="^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+    )
+    path: str = Field(
+        ...,
+        description="The path from the data connector that should be uploaded in the deposit",
+        examples=["/some/path"],
+    )
+
+
+class DepositPatch(BaseAPISpec):
+    name: Optional[str] = Field(
+        None,
+        description="Renku data connector name",
+        examples=["My Remote Data :)"],
+        max_length=99,
+        min_length=1,
+    )
+    status: Optional[DepositStatus] = None
+
+
+class DepositList(RootModel[List[Deposit]]):
+    root: List[Deposit]
+
+
 class CloudStorageCore(BaseAPISpec):
     model_config = ConfigDict(
         extra="forbid",
