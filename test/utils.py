@@ -40,6 +40,7 @@ from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.notebooks.api.classes.data_service import GitProviderHelper
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
+from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.notebooks.image_check import ImageCheckRepository
 from renku_data_services.notifications.db import NotificationsRepository
 from renku_data_services.platform.db import PlatformRepository, UrlRedirectRepository
@@ -327,6 +328,11 @@ class TestDependencyManager(DependencyManager):
             project_repo=project_repo,
             data_connector_repo=data_connector_repo,
         )
+        data_source_repo = DataSourceRepository(
+            nb_config=config.nb_config,
+            connected_services_repo=connected_services_repo,
+            oauth_client_factory=oauth_client_factory,
+        )
         image_check_repo = ImageCheckRepository(
             nb_config=config.nb_config,
             connected_services_repo=connected_services_repo,
@@ -364,6 +370,7 @@ class TestDependencyManager(DependencyManager):
             data_connector_repo=data_connector_repo,
             data_connector_secret_repo=data_connector_secret_repo,
             cluster_repo=cluster_repo,
+            data_source_repo=data_source_repo,
             image_check_repo=image_check_repo,
             metrics_repo=metrics_repo,
             metrics=metrics_mock,
