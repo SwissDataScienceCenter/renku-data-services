@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import cast
 
-from sqlalchemy import DateTime, Integer, MetaData, String, text
+from sqlalchemy import DateTime, Float, Integer, Interval, MetaData, String, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 from ulid import ULID
 
@@ -44,11 +44,17 @@ class ResourceRequestsLogORM(BaseORM):
     kind: Mapped[str] = mapped_column("kind", String(), nullable=False)
     """The kind of the object: either pod or pvc."""
 
+    api_version: Mapped[str] = mapped_column("api_version", String(), nullable=False)
+    """The k8s apiVersion of the object."""
+
     phase: Mapped[str] = mapped_column("phase", String(), nullable=False)
     """The k8s uid of the pod."""
 
     capture_date: Mapped[datetime] = mapped_column("capture_date", DateTime(timezone=True), nullable=False)
     """The timestamp the values were captured."""
+
+    capture_interval: Mapped[timedelta] = mapped_column("capture_interval", Interval(), nullable=False)
+    """The configured capture interval for that point."""
 
     user_id: Mapped[str | None] = mapped_column("user_id", String(), nullable=True)
     """The user id associated to the request data."""
@@ -77,6 +83,9 @@ class ResourceRequestsLogORM(BaseORM):
     gpu_request: Mapped[ComputeCapacity | None] = mapped_column("gpu_request", ComputeCapacityType(), nullable=True)
     """The gpu request."""
 
+    gpu_slice: Mapped[float | None] = mapped_column("gpu_slice", Float(), nullable=True)
+    """The slice of the cpu provided."""
+
     disk_request: Mapped[DataSize | None] = mapped_column("disk_request", DataSizeType(), nullable=True)
     """The disk request."""
 
@@ -89,8 +98,10 @@ class ResourceRequestsLogORM(BaseORM):
             name=req.name,
             uid=req.uid,
             kind=req.kind,
+            api_version=req.api_version,
             phase=req.phase,
             capture_date=req.capture_date,
+            capture_interval=req.capture_interval,
             user_id=req.user_id,
             project_id=req.project_id,
             launcher_id=req.launcher_id,
@@ -100,5 +111,6 @@ class ResourceRequestsLogORM(BaseORM):
             cpu_request=req.data.cpu,
             memory_request=req.data.memory,
             gpu_request=req.data.gpu,
-            disk_request=req.data.disk
+            gpu_slice=req.gpu_slice,
+            disk_request=req.data.disk,
         )
