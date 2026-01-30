@@ -742,24 +742,76 @@ Things to watch out:
 
 #+end_src
 
-* read out data
+* read out data 1
 
-At the end I need resource usage data per user.
+At the end we need resource usage data per user. This is a simple
+query that is not accurate for intervals that go over the day border,
+as the timeseries is not split correctly.
 
 #+header: :engine postgres
 #+header: :dbhost 127.0.0.1 :database renku :dbuser dev
 #+header: :dbpassword dev
 #+begin_src sql :exports both
 
-  select distinct capture_date::date from resource_requests_view
-  limit 5
+    select
+      cluster_id,
+      user_id,
+      resource_pool_id,
+      resource_class_id,
+      capture_date::date,
+      sum(cpu_request * (extract(epoch from cpu_time) / 3600)) as cpu_hour,
+      sum(memory_request * (extract(epoch from mem_time) / 3600)) as mem_hour,
+      sum(disk_request * (extract(epoch from disk_time) / 3600)) as disk_hour,
+      sum(gpu_request * (extract(epoch from gpu_time) / 3600)) as gpu_hour
+    from resource_requests_view
+    group by cluster_id, resource_class_id, resource_pool_id, user_id, capture_date::date
 
 #+end_src
 
 #+RESULTS:
-|          SET |
-|--------------|
-| capture_date |
-|   2026-01-23 |
-|   2026-01-28 |
-|   2026-01-30 |
+| SET                        |                                      |                  |                   |              |                    |                    |                    |          |
+|----------------------------+--------------------------------------+------------------+-------------------+--------------+--------------------+--------------------+--------------------+----------|
+| cluster_id                 | user_id                              | resource_pool_id | resource_class_id | capture_date |           cpu_hour |           mem_hour |          disk_hour | gpu_hour |
+| 0RENK1RENK2RENK3RENK4RENK5 | 1a6d4c40-e500-419d-9812-22d6d1c27aa0 |                  |                   |   2026-01-23 |                    |                    |  6641689704.675558 |          |
+| 0RENK1RENK2RENK3RENK4RENK5 | 1a6d4c40-e500-419d-9812-22d6d1c27aa0 |                  |                   |   2026-01-28 |                    |                    |  6442450944.000002 |          |
+| 0RENK1RENK2RENK3RENK4RENK5 | 4cf16e99-62fe-4889-90ba-38b2d02bd293 |                  |                   |   2026-01-23 |                    |                    |  6641689704.675558 |          |
+| 0RENK1RENK2RENK3RENK4RENK5 | 5daa2891-5310-4428-895d-10f859613223 |                  |                   |   2026-01-23 |                    |                    |  6641689704.675558 |          |
+| 0RENK1RENK2RENK3RENK4RENK5 | 5daa2891-5310-4428-895d-10f859613223 |                  |                   |   2026-01-28 |                    |                    |  12884901887.99999 |          |
+| 0RENK1RENK2RENK3RENK4RENK5 | 5daa2891-5310-4428-895d-10f859613223 |                  |                   |   2026-01-30 |                    |                    | 16106127359.999979 |          |
+| 0RENK1RENK2RENK3RENK4RENK5 | c59e6907-e670-4e03-a1b7-18616bb4678e |                  |                   |   2026-01-23 | 2.7983333333333325 | 10818508117.333334 | 16642998272.000002 |          |
+| 0RENK1RENK2RENK3RENK4RENK5 | f5f1ebe7-6946-4c2c-b4e5-18ac2d4f41e4 |                  |                   |   2026-01-23 |                    |                    |  6641689704.675558 |          |
+| 0RENK1RENK2RENK3RENK4RENK5 | f5f1ebe7-6946-4c2c-b4e5-18ac2d4f41e4 |                  |                   |   2026-01-28 |                    |                    |  6442450944.000002 |          |
+| 0RENK1RENK2RENK3RENK4RENK5 | f5f1ebe7-6946-4c2c-b4e5-18ac2d4f41e4 |                  |                   |   2026-01-30 |                    |                    |  8053063680.000005 |          |
+
+* read out data 2
+
+
+#+header: :engine postgres
+#+header: :dbhost 127.0.0.1 :database renku :dbuser dev
+#+header: :dbpassword dev
+#+begin_src sql :exports both
+  with
+    -- generate a list of hours of a given day
+    days as (
+      select i as day
+      from generate_series(
+        '2026-01-21T00:00:00Z'::timestamptz,
+        '2026-01-31T00:00:00Z'::timestamptz,
+        interval '1' day) i
+    ),
+
+  select
+    day,
+    sum(cpu_h) as cpu_h
+  from cpu_hours
+  group by hour_of_day
+  order by hour_of_day
+
+--  where user_id = 'c59e6907-e670-4e03-a1b7-18616bb4678e'
+--  group by user_id, capture_date::date
+
+#+end_src
+
+#+RESULTS:
+| SET |
+|-----|
