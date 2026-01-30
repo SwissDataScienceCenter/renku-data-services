@@ -119,6 +119,10 @@ components:
             description: The search query.
             type: string
             default: ""
+          include_counts:
+            description: Include counts (project_count, data_connector_count, members_count) in the results.
+            type: boolean
+            default: false
     PaginationRequest:
       type: object
       additionalProperties: false
@@ -379,16 +383,16 @@ components:
     SearchEntity:
       title: SearchEntity
       oneOf:
-        - $ref: '#/components/schemas/Group'
+        - $ref: '#/components/schemas/SearchGroup'
         - $ref: '#/components/schemas/SearchProject'
-        - $ref: '#/components/schemas/User'
+        - $ref: '#/components/schemas/SearchUser'
         - $ref: '#/components/schemas/SearchDataConnector'
       discriminator:
         propertyName: type
         mapping:
-          Group: '#/components/schemas/Group'
+          Group: '#/components/schemas/SearchGroup'
           Project: '#/components/schemas/SearchProject'
-          User: '#/components/schemas/User'
+          User: '#/components/schemas/SearchUser'
           DataConnector: '#/components/schemas/SearchDataConnector'
     SearchResult:
       title: SearchResult
@@ -438,6 +442,36 @@ components:
         type:
           type: string
           const: User
+    SearchUser:
+      title: SearchUser
+      allOf:
+      - $ref: '#/components/schemas/User'
+      - properties:
+          project_count:
+            description: Number of projects with this user namespace.
+            type: integer
+            format: int32
+          data_connector_count:
+            description: Number of data connectors with this user namespace.
+            type: integer
+            format: int32
+    SearchGroup:
+      title: SearchGroup
+      allOf:
+      - $ref: '#/components/schemas/Group'
+      - properties:
+          project_count:
+            description: Number of projects with this group namespace.
+            type: integer
+            format: int32
+          data_connector_count:
+            description: Number of data connectors with this group namespace.
+            type: integer
+            format: int32
+          members_count:
+            description: Number of members in this group.
+            type: integer
+            format: int32
     UserOrGroup:
       title: UserOrGroup
       examples:
