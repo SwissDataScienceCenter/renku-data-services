@@ -1,6 +1,7 @@
 """Repository implementation."""
 
 from collections.abc import AsyncIterator, Callable, Generator, Iterable, Sequence
+from datetime import datetime
 from itertools import islice
 
 import sqlalchemy.sql as sa
@@ -10,7 +11,7 @@ from renku_data_services.app_config import logging
 from renku_data_services.resource_usage.model import (
     ResourcesRequest,
 )
-from renku_data_services.resource_usage.orm import ResourceRequestsLogORM
+from renku_data_services.resource_usage.orm import ResourceRequestsLogORM, ResourceRequestsViewORM
 
 logger = logging.getLogger(__file__)
 
@@ -22,14 +23,14 @@ class ResourceRequestsRepo:
         self.session_maker = session_maker
 
     async def find_all(self, chunk_size: int = 100) -> AsyncIterator[ResourceRequestsLogORM]:
-        """Select all records."""
+        """Select all log records."""
         stmt = sa.select(ResourceRequestsLogORM).order_by(ResourceRequestsLogORM.capture_date.desc())
         async with self.session_maker() as session:
             result = await session.stream(stmt.execution_options(yield_per=chunk_size))
             async for e in result.scalars():
                 yield e
 
-    async def insertOne(self, req: ResourcesRequest) -> None:
+    async def insert_one(self, req: ResourcesRequest) -> None:
         """Insert one data into the log."""
         async with self.session_maker() as session, session.begin():
             obj = ResourceRequestsLogORM.from_resources_request(req)
@@ -52,3 +53,18 @@ class ResourceRequestsRepo:
                     vals = [ResourceRequestsLogORM.from_resources_request(e) for e in chunk]
                     session.add_all(vals)
                     await session.flush()
+
+    async def find_view(
+        self, start: datetime, end: datetime, chunk_size: int = 100
+    ) -> AsyncIterator[ResourceRequestsViewORM]:
+        """Select view records."""
+        stmt = (
+            sa.select(ResourceRequestsViewORM)
+            .where(ResourceRequestsViewORM.capture_date >= start)
+            .where(ResourceRequestsViewORM.capture_date <= end)
+            .order_by(ResourceRequestsViewORM.capture_date.desc())
+        )
+        async with self.session_maker() as session:
+            result = await session.stream(stmt.execution_options(yield_per=chunk_size))
+            async for e in result.scalars():
+                yield e

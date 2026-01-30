@@ -114,3 +114,86 @@ class ResourceRequestsLogORM(BaseORM):
             gpu_slice=req.gpu_slice,
             disk_request=req.data.disk,
         )
+
+
+class ResourceRequestsViewORM(BaseORM):
+    """View for resource requests."""
+
+    __tablename__ = "resource_requests_view"
+
+    __table_args__ = (
+        # info tells tools like Alembic to ignore this during 'revision'
+        {'info': dict(is_view=True)},
+    )
+
+    id: Mapped[ULID] = mapped_column("id", ULIDType(), nullable=False, primary_key=True)
+    """Artificial identifier with stable order."""
+
+    cluster_id: Mapped[ULID | None] = mapped_column("cluster_id", ULIDType(), nullable=True)
+    """The cluster id, may be null."""
+
+    namespace: Mapped[str] = mapped_column("namespace", String(), nullable=False)
+    """The cluster namespace."""
+
+    name: Mapped[str] = mapped_column("name", String(), nullable=False)
+    """The name of the pod."""
+
+    uid: Mapped[str] = mapped_column("uid", String(), nullable=False)
+    """The k8s uid of the pod."""
+
+    kind: Mapped[str] = mapped_column("kind", String(), nullable=False)
+    """The kind of the object: either pod or pvc."""
+
+    api_version: Mapped[str] = mapped_column("api_version", String(), nullable=False)
+    """The k8s apiVersion of the object."""
+
+    phase: Mapped[str] = mapped_column("phase", String(), nullable=False)
+    """The k8s uid of the pod."""
+
+    capture_date: Mapped[datetime] = mapped_column("capture_date", DateTime(timezone=True), nullable=False)
+    """The timestamp the values were captured."""
+
+    capture_interval: Mapped[timedelta] = mapped_column("capture_interval", Interval(), nullable=False)
+    """The configured capture interval for that point."""
+
+    user_id: Mapped[str | None] = mapped_column("user_id", String(), nullable=True)
+    """The user id associated to the request data."""
+
+    project_id: Mapped[ULID | None] = mapped_column("project_id", ULIDType(), nullable=True)
+    """A project id associated to the requests data."""
+
+    launcher_id: Mapped[ULID | None] = mapped_column("launcher_id", ULIDType(), nullable=True)
+    """The launcher id used to start the session."""
+
+    resource_class_id: Mapped[int | None] = mapped_column("resource_class_id", Integer(), nullable=True)
+    """The resource class id used to start the session."""
+
+    resource_pool_id: Mapped[int | None] = mapped_column("resource_pool_id", Integer(), nullable=True)
+    """The resource class id used to start the session."""
+
+    cpu_request: Mapped[ComputeCapacity | None] = mapped_column("cpu_request", ComputeCapacityType(), nullable=True)
+    """The cpu request."""
+
+    memory_request: Mapped[DataSize | None] = mapped_column("memory_request", DataSizeType(), nullable=True)
+    """The memory request."""
+
+    gpu_request: Mapped[ComputeCapacity | None] = mapped_column("gpu_request", ComputeCapacityType(), nullable=True)
+    """The gpu request."""
+
+    gpu_slice: Mapped[float | None] = mapped_column("gpu_slice", Float(), nullable=True)
+    """The slice of the cpu provided."""
+
+    disk_request: Mapped[DataSize | None] = mapped_column("disk_request", DataSizeType(), nullable=True)
+    """The disk request."""
+
+    cpu_time: Mapped[timedelta | None] = mapped_column("cpu_time", Interval(), nullable=True)
+    """The time period the cpu_request was observed."""
+
+    memory_time: Mapped[timedelta | None] = mapped_column("mem_time", Interval(), nullable=True)
+    """The time period the memory_request was observed."""
+
+    disk_time: Mapped[timedelta | None] = mapped_column("disk_time", Interval(), nullable=True)
+    """The time period the disk_request was observed."""
+
+    gpu_time: Mapped[timedelta | None] = mapped_column("gpu_time", Interval(), nullable=True)
+    """The time period the gpu_request was observed."""
