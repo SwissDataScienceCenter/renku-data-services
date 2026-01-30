@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, cast
 
@@ -466,3 +466,18 @@ class ResourceDataFacade:
             gpu_slice=None,  ## TODO get the cpu slice from somewhere
             data=self.requested_data,
         )
+
+
+@dataclass
+class ResourceUsage:
+    """Capture resource usage."""
+
+    cluster_id: ULID | None
+    user_id: str
+    resource_pool_id: int | None
+    resource_class_id: int | None
+    capture_date: date
+    cpu_hours: float
+    mem_hours: float
+    disk_hours: float
+    gpu_hours: float

@@ -1,17 +1,54 @@
 """Tests for resource data."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
+
 import pytest
+
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.resource_usage.model import ComputeCapacity, DataSize
-
 from test.components.renku_data_services.resource_usage.helper import assert_view_records, make_resources_request
 
 
 @pytest.mark.asyncio
-async def test_record_resource_requests(app_manager_instance: DependencyManager) -> None:
+async def test_resource_request_query(app_manager_instance: DependencyManager) -> None:
+    run_migrations_for_app("common")
+    repo = ResourceRequestsRepo(app_manager_instance.config.db.async_session_maker)
+    first_date = datetime(2026, 1, 24, 23, 55, 4, 0, tzinfo=UTC)
+    interval = timedelta(minutes=15)
+    await repo.insert_many(
+        [
+            # a pod is running
+            make_resources_request(
+                date=first_date + i * interval, interval=interval, cpu_request=0.5, memory_request="256Mi"
+            )
+            for i in range(0, 2)
+        ]
+    )
+    results = [x async for x in repo.find_usage(start=date(2026, 1, 24), end=date(2026, 1, 25))]
+    results.sort(key=lambda e: e.capture_date)
+    assert_view_records(
+        results,
+        [
+            {
+                "capture_date": date(2026, 1, 24),
+                "user_id": "user-1",
+                "cpu_hours": (0.5 * (15 / 60)),
+                "mem_hours": (256 * 1024 * 1024 * (15 / 60)),
+            },
+            {
+                "capture_date": date(2026, 1, 25),
+                "user_id": "user-1",
+                "cpu_hours": (0.5 * (15 / 60)),
+                "mem_hours": (256 * 1024 * 1024 * (15 / 60)),
+            },
+        ],
+    )
+
+
+@pytest.mark.asyncio
+async def test_record_resource_requests_grouping(app_manager_instance: DependencyManager) -> None:
     run_migrations_for_app("common")
     repo = ResourceRequestsRepo(app_manager_instance.config.db.async_session_maker)
     first_date = datetime(2026, 1, 22, 13, 26, 4, 0, tzinfo=UTC)
@@ -70,7 +107,6 @@ async def test_record_resource_requests(app_manager_instance: DependencyManager)
 
     records = [e async for e in repo.find_view(first_date, first_date + timedelta(days=1))]
     records.sort(key=lambda e: e.capture_date)
-    print(records)
     assert_view_records(
         records,
         [
@@ -101,6 +137,7 @@ async def test_record_resource_requests(app_manager_instance: DependencyManager)
                 "memory_time": interval,
                 "disk_time": None,
             },
+            # stopped pods are filtered out, the capture_interval will be used
             {
                 "kind": "Pod",
                 "capture_date": first_date + 7 * interval,
@@ -128,6 +165,8 @@ async def test_record_resource_requests(app_manager_instance: DependencyManager)
                 "memory_time": timedelta(minutes=5),
                 "disk_time": None,
             },
+            # here the request data collection was restarted 5min into the 10min wait interval
+            # so the previous value is observed 5min, because there is already a new record
             {
                 "kind": "Pod",
                 "capture_date": first_date + 15.5 * interval,
@@ -155,5 +194,5 @@ async def test_record_resource_requests(app_manager_instance: DependencyManager)
                 "memory_time": interval,
                 "disk_time": None,
             },
-        ]
+        ],
     )

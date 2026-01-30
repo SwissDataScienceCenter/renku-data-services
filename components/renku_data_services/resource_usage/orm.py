@@ -123,7 +123,7 @@ class ResourceRequestsViewORM(BaseORM):
 
     __table_args__ = (
         # info tells tools like Alembic to ignore this during 'revision'
-        {'info': dict(is_view=True)},
+        {"info": dict(is_view=True)},
     )
 
     id: Mapped[ULID] = mapped_column("id", ULIDType(), nullable=False, primary_key=True)

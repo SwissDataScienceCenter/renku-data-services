@@ -1,11 +1,12 @@
 """Some helper functions for testing."""
 
-from dataclasses import asdict
 from datetime import datetime, timedelta
+
 from pytest import fail
+from ulid import ULID
+
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
 from renku_data_services.resource_usage.model import ComputeCapacity, DataSize, RequestData, ResourcesRequest
-from ulid import ULID
 
 
 def make_resources_request(
