@@ -397,25 +397,25 @@ select * from common.resource_requests_log limit 5;
 #+begin_src sql :exports both
   delete from common.resource_requests_log;
   insert into common.resource_requests_log
-    (cluster_id, uid, namespace, name, kind, phase, capture_date, capture_interval, user_id, project_id, launcher_id, resource_class_id, resource_pool_id, since, cpu_request, memory_request, gpu_request, disk_request)
+    (cluster_id, uid, api_version, namespace, name, kind, phase, capture_date, capture_interval, user_id, project_id, launcher_id, resource_class_id, resource_pool_id, since, cpu_request, memory_request, gpu_request, disk_request)
     values
-    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1','renku', 'my-pod-15','Pod','Running', '2026-01-22 13:26:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
-    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1','renku', 'my-pod-15','Pod','Running', '2026-01-22 13:36:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
-    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1','renku', 'my-pod-15','Pod','Running', '2026-01-22 13:46:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
+    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1', 'v1','renku', 'my-pod-15','Pod','Running', '2026-01-22 13:26:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
+    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1', 'v1','renku', 'my-pod-15','Pod','Running', '2026-01-22 13:36:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
+    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1', 'v1','renku', 'my-pod-15','Pod','Running', '2026-01-22 13:46:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
       -- pod is down
-    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1','renku', 'my-pod-15','Pod','Stopped', '2026-01-22 13:56:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
-    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1','renku', 'my-pod-15','Pod','Stopped', '2026-01-22 14:06:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
-    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1','renku', 'my-pod-15','Pod','Stopped', '2026-01-22 14:16:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
-    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1','renku', 'my-pod-15','Pod','Stopped', '2026-01-22 14:26:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
+    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1', 'v1','renku', 'my-pod-15','Pod','Stopped', '2026-01-22 13:56:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
+    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1', 'v1','renku', 'my-pod-15','Pod','Stopped', '2026-01-22 14:06:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
+    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1', 'v1','renku', 'my-pod-15','Pod','Stopped', '2026-01-22 14:16:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
+    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1', 'v1','renku', 'my-pod-15','Pod','Stopped', '2026-01-22 14:26:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
       -- pod is up again
-    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1','renku', 'my-pod-15','Pod','Running', '2026-01-22 14:36:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
+    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1', 'v1','renku', 'my-pod-15','Pod','Running', '2026-01-22 14:36:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
       -- we don't observe this pod for some time
-    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1','renku', 'my-pod-15','Pod','Running', '2026-01-22 15:46:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
-    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1','renku', 'my-pod-15','Pod','Running', '2026-01-22 15:56:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
+    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1', 'v1', 'renku', 'my-pod-15','Pod','Running', '2026-01-22 15:46:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
+    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1', 'v1', 'renku', 'my-pod-15','Pod','Running', '2026-01-22 15:56:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
       -- logging is restarted after 5min
-    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1','renku', 'my-pod-15','Pod','Running', '2026-01-22 16:01:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
-    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1','renku', 'my-pod-15','Pod','Running', '2026-01-22 16:11:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
-    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1','renku', 'my-pod-15','Pod','Running', '2026-01-22 16:21:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null)
+    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1', 'v1', 'renku', 'my-pod-15','Pod','Running', '2026-01-22 16:01:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
+    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1', 'v1', 'renku', 'my-pod-15','Pod','Running', '2026-01-22 16:11:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null),
+    ('0RENK1RENK2RENK3RENK4RENK5', 'uid-1', 'v1', 'renku', 'my-pod-15','Pod','Running', '2026-01-22 16:21:04+00'::timestamptz, '10 minute'::interval, 'user1', 'project-1','launcher-1',4,5,null,0.5,512*1024,null,null)
   ;
 
 #+end_src
@@ -423,7 +423,7 @@ select * from common.resource_requests_log limit 5;
 #+RESULTS:
 | SET         |
 |-------------|
-| DELETE 13   |
+| DELETE 0    |
 | INSERT 0 13 |
 
 
@@ -595,7 +595,7 @@ Things to watch out:
 | 01KG4XP8Y7YT5HCQJ55DPM7KWS | 0RENK1RENK2RENK3RENK4RENK5 | renku     | my-pod-15 | uid-1 | Pod  | Running | user1   | project-1  | launcher-1  |                 4 |                5 |         0.5 |         524288 |              |             |           | 2026-01-22 16:21:04+00 |         00:10:00 |               |
 
 #+header: :engine postgres
-#+header: :dbhost 127.0.0.1 :database renku :dbuser dev
+#+header: :dbhost 127.0.0.1 :database requests :dbuser dev
 #+header: :dbpassword dev
 #+begin_src sql :exports both
   with
@@ -699,17 +699,18 @@ Things to watch out:
 #+end_src
 
 #+RESULTS:
-| SET                        |                            |           |                             |                                      |                       |         |                                      |                            |                            |                   |                  |             |                |              |             |           |                        |                  |          |          |          |           |
-|----------------------------+----------------------------+-----------+-----------------------------+--------------------------------------+-----------------------+---------+--------------------------------------+----------------------------+----------------------------+-------------------+------------------+-------------+----------------+--------------+-------------+-----------+------------------------+------------------+----------+----------+----------+-----------|
-| id                         | cluster_id                 | namespace | name                        | uid                                  | kind                  | phase   | user_id                              | project_id                 | launcher_id                | resource_class_id | resource_pool_id | cpu_request | memory_request | disk_request | gpu_request | gpu_slice | capture_date           | capture_interval | cpu_time | mem_time | gpu_time | disk_time |
-| 01KG5163MF9TD1C8527XP5ZJEW | 0RENK1RENK2RENK3RENK4RENK5 | renku     | ekettner-20dec419087c       | 0785f071-0bb2-4362-a199-5802719417b6 | PersistentVolumeClaim | Bound   | f5f1ebe7-6946-4c2c-b4e5-18ac2d4f41e4 | 01HZ6QYPGPTKWG0XNRVZKYWNTS | 01KFFYN9QTKKEWJR02TTC5989Q |                   |                  |             |                |   1073741824 |             |           | 2026-01-29 14:05:46+00 |         00:10:00 |          |          |          |  00:10:00 |
-| 01KG5163MGJ43VP58211K2CGWD | 0RENK1RENK2RENK3RENK4RENK5 | renku     | lorenzo-cava-6735b6189e50   | 4756ee2b-7b94-42c9-9b2f-dd783a2863ab | PersistentVolumeClaim | Bound   | 5daa2891-5310-4428-895d-10f859613223 | 01K82WQ20PNMCTDR7A6JD4B3A8 | 01K82X2T9VKZRH7XQ19NRF2F3F |                   |                  |             |                |   1073741824 |             |           | 2026-01-29 14:05:46+00 |         00:10:00 |          |          |          |  00:10:00 |
-| 01KG5163MG7ZDENV55Z1GT78RZ | 0RENK1RENK2RENK3RENK4RENK5 | renku     | lorenzo-cava-6e077c544338   | cd2ef30b-8bf4-40f2-a7e1-f90efa99789d | PersistentVolumeClaim | Bound   | 5daa2891-5310-4428-895d-10f859613223 | 01K82WQ20PNMCTDR7A6JD4B3A8 | 01KFNKP1QNGZ74SQSCV8DK53KY |                   |                  |             |                |   1073741824 |             |           | 2026-01-29 14:05:46+00 |         00:10:00 |          |          |          |  00:10:00 |
-| 01KG51RE84E4ZFT7GKWXN40BFY | 0RENK1RENK2RENK3RENK4RENK5 | renku     | eike-kettner-962026d34ba4-0 | cb1ab2e2-535f-470b-b7c7-d7b00fce91a8 | Pod                   | Running | c59e6907-e670-4e03-a1b7-18616bb4678e | 01KCVFX9BVTADB8SGHN7RJFJAP | 01KCVFZW2N6S20JAY67K30JNJ7 |                   |                  |        0.54 |     1107296256 |            0 |             |           | 2026-01-29 14:15:47+00 |         00:10:00 | 00:10:00 | 00:10:00 |          |  00:10:00 |
-| 01KG51RE89GNVXHP88F4WAX3W0 | 0RENK1RENK2RENK3RENK4RENK5 | renku     | eike-kettner-962026d34ba4   | c60ae7a9-590f-43fc-b999-1dffe30d9be7 | PersistentVolumeClaim | Bound   | c59e6907-e670-4e03-a1b7-18616bb4678e | 01KCVFX9BVTADB8SGHN7RJFJAP | 01KCVFZW2N6S20JAY67K30JNJ7 |                   |                  |             |                |   1073741824 |             |           | 2026-01-29 14:15:47+00 |         00:10:00 |          |          |          |  00:10:00 |
-| 01KG51RE89J1XW32XPZ3HYPXJZ | 0RENK1RENK2RENK3RENK4RENK5 | renku     | ekettner-20dec419087c       | 0785f071-0bb2-4362-a199-5802719417b6 | PersistentVolumeClaim | Bound   | f5f1ebe7-6946-4c2c-b4e5-18ac2d4f41e4 | 01HZ6QYPGPTKWG0XNRVZKYWNTS | 01KFFYN9QTKKEWJR02TTC5989Q |                   |                  |             |                |   1073741824 |             |           | 2026-01-29 14:15:47+00 |         00:10:00 |          |          |          |  00:10:00 |
-| 01KG51RE895QBEGA9NBXM4GRFW | 0RENK1RENK2RENK3RENK4RENK5 | renku     | lorenzo-cava-6735b6189e50   | 4756ee2b-7b94-42c9-9b2f-dd783a2863ab | PersistentVolumeClaim | Bound   | 5daa2891-5310-4428-895d-10f859613223 | 01K82WQ20PNMCTDR7A6JD4B3A8 | 01K82X2T9VKZRH7XQ19NRF2F3F |                   |                  |             |                |   1073741824 |             |           | 2026-01-29 14:15:47+00 |         00:10:00 |          |          |          |  00:10:00 |
-| 01KG51RE89WG9NEHZGGY7VSEQD | 0RENK1RENK2RENK3RENK4RENK5 | renku     | lorenzo-cava-6e077c544338   | cd2ef30b-8bf4-40f2-a7e1-f90efa99789d | PersistentVolumeClaim | Bound   | 5daa2891-5310-4428-895d-10f859613223 | 01K82WQ20PNMCTDR7A6JD4B3A8 | 01KFNKP1QNGZ74SQSCV8DK53KY |                   |                  |             |                |   1073741824 |             |           | 2026-01-29 14:15:47+00 |         00:10:00 |          |          |          |  00:10:00 |
+| SET                        |                            |           |           |       |      |         |         |            |             |                   |                  |             |                |              |             |           |                        |                  |          |          |          |           |
+|----------------------------+----------------------------+-----------+-----------+-------+------+---------+---------+------------+-------------+-------------------+------------------+-------------+----------------+--------------+-------------+-----------+------------------------+------------------+----------+----------+----------+-----------|
+| id                         | cluster_id                 | namespace | name      | uid   | kind | phase   | user_id | project_id | launcher_id | resource_class_id | resource_pool_id | cpu_request | memory_request | disk_request | gpu_request | gpu_slice | capture_date           | capture_interval | cpu_time | mem_time | gpu_time | disk_time |
+| 01KG6YNFV4W75S2QHGVSARPBM1 | 0RENK1RENK2RENK3RENK4RENK5 | renku     | my-pod-15 | uid-1 | Pod  | Running | user1   | project-1  | launcher-1  |                 4 |                5 |         0.5 |         524288 |              |             |           | 2026-01-22 13:26:04+00 |         00:10:00 | 00:10:00 | 00:10:00 |          |           |
+| 01KG6YNFV6YB8VRDDGSFDZ6261 | 0RENK1RENK2RENK3RENK4RENK5 | renku     | my-pod-15 | uid-1 | Pod  | Running | user1   | project-1  | launcher-1  |                 4 |                5 |         0.5 |         524288 |              |             |           | 2026-01-22 13:36:04+00 |         00:10:00 | 00:10:00 | 00:10:00 |          |           |
+| 01KG6YNFV6ZC1QEA3WM0G7GEH1 | 0RENK1RENK2RENK3RENK4RENK5 | renku     | my-pod-15 | uid-1 | Pod  | Running | user1   | project-1  | launcher-1  |                 4 |                5 |         0.5 |         524288 |              |             |           | 2026-01-22 13:46:04+00 |         00:10:00 | 00:10:00 | 00:10:00 |          |           |
+| 01KG6YNFV6YX0R6TAB5ACW2262 | 0RENK1RENK2RENK3RENK4RENK5 | renku     | my-pod-15 | uid-1 | Pod  | Running | user1   | project-1  | launcher-1  |                 4 |                5 |         0.5 |         524288 |              |             |           | 2026-01-22 14:36:04+00 |         00:10:00 | 00:10:00 | 00:10:00 |          |           |
+| 01KG6YNFV6YJ464T5WAV30DWNW | 0RENK1RENK2RENK3RENK4RENK5 | renku     | my-pod-15 | uid-1 | Pod  | Running | user1   | project-1  | launcher-1  |                 4 |                5 |         0.5 |         524288 |              |             |           | 2026-01-22 15:46:04+00 |         00:10:00 | 00:10:00 | 00:10:00 |          |           |
+| 01KG6YNFV6WHZBNCF3VZJSNBAC | 0RENK1RENK2RENK3RENK4RENK5 | renku     | my-pod-15 | uid-1 | Pod  | Running | user1   | project-1  | launcher-1  |                 4 |                5 |         0.5 |         524288 |              |             |           | 2026-01-22 15:56:04+00 |         00:10:00 | 00:05:00 | 00:05:00 |          |           |
+| 01KG6YNFV6CVTV78BWM4QQRXZ6 | 0RENK1RENK2RENK3RENK4RENK5 | renku     | my-pod-15 | uid-1 | Pod  | Running | user1   | project-1  | launcher-1  |                 4 |                5 |         0.5 |         524288 |              |             |           | 2026-01-22 16:01:04+00 |         00:10:00 | 00:10:00 | 00:10:00 |          |           |
+| 01KG6YNFV6J5FW49VEM25F96TB | 0RENK1RENK2RENK3RENK4RENK5 | renku     | my-pod-15 | uid-1 | Pod  | Running | user1   | project-1  | launcher-1  |                 4 |                5 |         0.5 |         524288 |              |             |           | 2026-01-22 16:11:04+00 |         00:10:00 | 00:10:00 | 00:10:00 |          |           |
+| 01KG6YNFV6THH79DMK98B1EQPV | 0RENK1RENK2RENK3RENK4RENK5 | renku     | my-pod-15 | uid-1 | Pod  | Running | user1   | project-1  | launcher-1  |                 4 |                5 |         0.5 |         524288 |              |             |           | 2026-01-22 16:21:04+00 |         00:10:00 | 00:10:00 | 00:10:00 |          |           |
 
        (select c.capture_date from disk_obs c where c.rn = ds.rn - 1) as disk_prev_date,
 
@@ -741,15 +742,24 @@ Things to watch out:
 
 #+end_src
 
+* read out data
+
+At the end I need resource usage data per user.
+
+#+header: :engine postgres
+#+header: :dbhost 127.0.0.1 :database renku :dbuser dev
+#+header: :dbpassword dev
+#+begin_src sql :exports both
+
+  select distinct capture_date::date from resource_requests_view
+  limit 5
+
+#+end_src
+
 #+RESULTS:
-| SET                    |    |
-|------------------------+----|
-| capture_date           | rn |
-| 2026-01-29 14:05:46+00 |  1 |
-| 2026-01-29 14:05:46+00 |  1 |
-| 2026-01-29 14:05:46+00 |  1 |
-| 2026-01-29 14:15:47+00 |  2 |
-| 2026-01-29 14:15:47+00 |  2 |
-| 2026-01-29 14:15:47+00 |  2 |
-| 2026-01-29 14:15:47+00 |  2 |
-| 2026-01-29 14:15:47+00 |  2 |
+|          SET |
+|--------------|
+| capture_date |
+|   2026-01-23 |
+|   2026-01-28 |
+|   2026-01-30 |
