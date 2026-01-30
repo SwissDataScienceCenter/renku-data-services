@@ -59,6 +59,21 @@ class User(BaseAPISpec):
     type: Literal["User"] = "User"
 
 
+class SearchUser(User):
+    project_count: Optional[int] = Field(default=None, description="Number of projects with this user namespace.")
+    data_connector_count: Optional[int] = Field(
+        default=None, description="Number of data connectors with this user namespace."
+    )
+
+
+class SearchGroup(Group):
+    project_count: Optional[int] = Field(default=None, description="Number of projects with this group namespace.")
+    data_connector_count: Optional[int] = Field(
+        default=None, description="Number of data connectors with this group namespace."
+    )
+    members_count: Optional[int] = Field(default=None, description="Number of members in this group.")
+
+
 class UserOrGroup(RootModel[Union[Group, User]]):
     root: Union[Group, User] = Field(
         ...,
@@ -108,6 +123,9 @@ class ErrorResponse(BaseAPISpec):
 
 class SearchQuery(PaginationRequest):
     q: str = Field("", description="The search query.")
+    include_counts: bool = Field(
+        False, description="Include counts (project_count, data_connector_count, members_count) in the results."
+    )
 
 
 class FacetData(BaseAPISpec):
@@ -183,8 +201,8 @@ class SearchDataConnector(BaseAPISpec):
     type: Literal["DataConnector"] = "DataConnector"
 
 
-class SearchEntity(RootModel[Union[Group, SearchProject, User, SearchDataConnector]]):
-    root: Union[Group, SearchProject, User, SearchDataConnector] = Field(
+class SearchEntity(RootModel[Union[SearchGroup, SearchProject, SearchUser, SearchDataConnector]]):
+    root: Union[SearchGroup, SearchProject, SearchUser, SearchDataConnector] = Field(
         ..., discriminator="type", title="SearchEntity"
     )
 

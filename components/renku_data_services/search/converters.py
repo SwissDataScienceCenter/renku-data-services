@@ -1,7 +1,5 @@
 """Conversion functions."""
 
-from typing import cast
-
 from renku_data_services.authz.models import Visibility
 from renku_data_services.search.apispec import (
     Group as GroupApi,
@@ -15,7 +13,13 @@ from renku_data_services.search.apispec import (
     UserOrGroupOrProject,
 )
 from renku_data_services.search.apispec import (
+    SearchGroup as SearchGroupApi,
+)
+from renku_data_services.search.apispec import (
     SearchProject as ProjectApi,
+)
+from renku_data_services.search.apispec import (
+    SearchUser as SearchUserApi,
 )
 from renku_data_services.search.apispec import (
     User as UserApi,
@@ -49,8 +53,44 @@ def from_visibility(v: Visibility) -> VisibilityApi:
             return VisibilityApi.private
 
 
-def from_user(user: UserDocument) -> UserApi:
+def from_user(user: UserDocument) -> SearchUserApi:
     """Creates an apispec user from a solr user document."""
+    return SearchUserApi(
+        id=user.id,
+        slug=user.slug.value,
+        path=user.path,
+        firstName=user.firstName,
+        lastName=user.lastName,
+        score=user.score,
+        project_count=None,
+        data_connector_count=None,
+    )
+
+
+def from_group(group: GroupDocument) -> SearchGroupApi:
+    """Creates a apispec group from a solr group document."""
+    return SearchGroupApi(
+        id=str(group.id),
+        name=group.name,
+        slug=group.slug.value,
+        path=group.path,
+        description=group.description,
+        score=group.score,
+        project_count=None,
+        data_connector_count=None,
+        members_count=None,
+    )
+
+
+def __creator_details(e: ProjectDocument | DataConnectorDocument) -> UserApi | None:
+    if e.creatorDetails is not None and e.creatorDetails.docs != []:
+        return __user_to_base(UserDocument.from_dict(e.creatorDetails.docs[0]))
+    else:
+        return None
+
+
+def __user_to_base(user: UserDocument) -> UserApi:
+    """Creates a base User (not SearchUser) from a solr user document."""
     return UserApi(
         id=user.id,
         slug=user.slug.value,
@@ -61,8 +101,8 @@ def from_user(user: UserDocument) -> UserApi:
     )
 
 
-def from_group(group: GroupDocument) -> GroupApi:
-    """Creates a apispec group from a solr group document."""
+def __group_to_base(group: GroupDocument) -> GroupApi:
+    """Creates a base Group (not SearchGroup) from a solr group document."""
     return GroupApi(
         id=str(group.id),
         name=group.name,
@@ -73,18 +113,15 @@ def from_group(group: GroupDocument) -> GroupApi:
     )
 
 
-def __creator_details(e: ProjectDocument | DataConnectorDocument) -> UserApi | None:
-    if e.creatorDetails is not None and e.creatorDetails.docs != []:
-        return from_user(UserDocument.from_dict(e.creatorDetails.docs[0]))
-    else:
-        return None
-
-
 def __namespace_details(d: ProjectDocument) -> UserOrGroup | None:
     if d.namespaceDetails is not None and d.namespaceDetails.docs != []:
         e = EntityDocReader.from_dict(d.namespaceDetails.docs[0])
         if e is not None:
-            return UserOrGroup(cast(UserApi | GroupApi, from_entity(e).root))
+            match e:
+                case UserDocument() as user_doc:
+                    return UserOrGroup(__user_to_base(user_doc))
+                case GroupDocument() as group_doc:
+                    return UserOrGroup(__group_to_base(group_doc))
     return None
 
 
@@ -92,7 +129,13 @@ def __namespace_details_dc(d: DataConnectorDocument) -> UserOrGroupOrProject | N
     if d.namespaceDetails is not None and d.namespaceDetails.docs != []:
         e = EntityDocReader.from_dict(d.namespaceDetails.docs[0])
         if e is not None:
-            return UserOrGroupOrProject(cast(UserApi | GroupApi | ProjectApi, from_entity(e).root))
+            match e:
+                case UserDocument() as user_doc:
+                    return UserOrGroupOrProject(__user_to_base(user_doc))
+                case GroupDocument() as group_doc:
+                    return UserOrGroupOrProject(__group_to_base(group_doc))
+                case ProjectDocument() as project_doc:
+                    return UserOrGroupOrProject(from_project(project_doc))
     return None
 
 
