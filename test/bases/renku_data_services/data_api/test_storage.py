@@ -562,7 +562,7 @@ async def test_storage_obscure(storage_test_client) -> None:
     storage_test_client, _ = storage_test_client
     body = {
         "configuration": {
-            "type": "seafile",
+            "type": "webdav",
             "provider": "Other",
             "user": "abcdefg",
             "pass": "123456",
@@ -570,7 +570,7 @@ async def test_storage_obscure(storage_test_client) -> None:
     }
     _, res = await storage_test_client.post("/api/data/storage_schema/obscure", data=json.dumps(body))
     assert res.status_code == 200
-    assert res.json["type"] == "seafile"
+    assert res.json["type"] == "webdav"
     assert res.json["user"] == "abcdefg"
     assert res.json["pass"] != "123456"
     assert len(res.json["pass"]) == 30
