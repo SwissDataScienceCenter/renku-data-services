@@ -36,8 +36,8 @@ def get_rclone_config(dataset: SchemaOrgDataset, provider: DatasetProvider) -> S
         case DatasetProvider.envidat:
             return __get_rclone_s3_config_envidat(dataset)
         # TODO: Add scicat here
-        case x:
-            raise errors.ValidationError(message=f"Got an unknown dataset provider {x}")
+        case _:
+            raise errors.ValidationError(message=f"Got an unknown dataset provider {provider}")
 
 
 def __get_rclone_s3_config_envidat(dataset: SchemaOrgDataset) -> S3Config:

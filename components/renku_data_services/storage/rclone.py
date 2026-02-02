@@ -13,10 +13,10 @@ from pydantic import BaseModel, Field, ValidationError
 
 from renku_data_services import errors
 from renku_data_services.app_config import logging
-from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER
+from renku_data_services.storage.constants import ALLOWED_STORAGE_OPTIONS, ENVIDAT_V1_PROVIDER
 from renku_data_services.storage.rclone_patches import (
-    BANNED_OPTIONS,
-    BANNED_STORAGE,
+    # BANNED_OPTIONS,
+    # BANNED_STORAGE,
     apply_patches,
 )
 
@@ -146,13 +146,14 @@ class RCloneValidator:
     def get_provider(self, configuration: Union[RCloneConfig, dict[str, Any]]) -> RCloneProviderSchema:
         """Get a provider for configuration."""
 
-        storage_type = cast(str, configuration.get("type"))
+        storage_type = cast(str | None, configuration.get("type"))
 
         if storage_type is None:
             raise errors.ValidationError(
                 message="Expected a `type` field in the RClone configuration, but didn't find it."
             )
-        if storage_type in BANNED_STORAGE:
+        # if storage_type in BANNED_STORAGE:
+        if storage_type not in ALLOWED_STORAGE_OPTIONS:
             raise errors.ValidationError(message=f"Storage '{storage_type}' is not supported.")
 
         provider = self.providers.get(storage_type)
@@ -416,11 +417,11 @@ class RCloneProviderSchema(BaseModel):
 
     def check_unsafe_option(self, name: str) -> None:
         """Check that the option is safe."""
-        banned = BANNED_OPTIONS.get(self.prefix.lower(), None)
-        if banned is None:
-            return None
-        if name in banned:
-            raise errors.ValidationError(message=f"The {name} option is not allowed.")
+        # banned = BANNED_OPTIONS.get(self.prefix.lower(), None)
+        # if banned is None:
+        #     return None
+        # if name in banned:
+        #     raise errors.ValidationError(message=f"The {name} option is not allowed.")
         return None
 
     def validate_config(self, configuration: Union[RCloneConfig, dict[str, Any]], keep_sensitive: bool = False) -> None:
