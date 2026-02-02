@@ -115,7 +115,12 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         storage_repo=dm.storage_repo,
         authenticator=dm.gitlab_authenticator,
     )
-    storage_schema = StorageSchemaBP(name="storage_schema", url_prefix=url_prefix)
+    storage_schema = StorageSchemaBP(
+        name="storage_schema",
+        url_prefix=url_prefix,
+        data_source_repo=dm.data_source_repo,
+        authenticator=dm.authenticator,
+    )
     user_preferences = UserPreferencesBP(
         name="user_preferences",
         url_prefix=url_prefix,
