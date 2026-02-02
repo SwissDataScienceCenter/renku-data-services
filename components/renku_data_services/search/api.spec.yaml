@@ -443,35 +443,78 @@ components:
           type: string
           const: User
     SearchUser:
-      title: SearchUser
-      allOf:
-      - $ref: '#/components/schemas/User'
-      - properties:
-          project_count:
-            description: Number of projects with this user namespace.
-            type: integer
-            format: int32
-          data_connector_count:
-            description: Number of data connectors with this user namespace.
-            type: integer
-            format: int32
+      title: User
+      type: object
+      required:
+        - id
+        - type
+        - path
+        - slug
+        - firstName
+        - lastName
+      properties:
+        id:
+          type: string
+        path:
+          type: string
+        slug:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        score:
+          type: number
+          format: double
+        project_count:
+          description: Number of projects with this user namespace.
+          type: integer
+          format: int32
+        data_connector_count:
+          description: Number of data connectors with this user namespace.
+          type: integer
+          format: int32
+        type:
+          type: string
+          const: User
     SearchGroup:
-      title: SearchGroup
-      allOf:
-      - $ref: '#/components/schemas/Group'
-      - properties:
-          project_count:
-            description: Number of projects with this group namespace.
-            type: integer
-            format: int32
-          data_connector_count:
-            description: Number of data connectors with this group namespace.
-            type: integer
-            format: int32
-          members_count:
-            description: Number of members in this group.
-            type: integer
-            format: int32
+      title: Group
+      type: object
+      required:
+        - id
+        - name
+        - path
+        - slug
+        - type
+      properties:
+        id:
+          type: string
+        path:
+          type: string
+        slug:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        score:
+          type: number
+          format: double
+        type:
+          type: string
+          const: Group
+        project_count:
+          description: Number of projects with this group namespace.
+          type: integer
+          format: int32
+        data_connector_count:
+          description: Number of data connectors with this group namespace.
+          type: integer
+          format: int32
+        members_count:
+          description: Number of members in this group.
+          type: integer
+          format: int32
     UserOrGroup:
       title: UserOrGroup
       examples:
