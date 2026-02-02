@@ -438,13 +438,20 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "set_modtime": True,
             "shell_type": True,
             "hashes": True,
-            "md5sum_command": True,
-            "sha1sum_command": True,
-            "crc32sum_command": True,
-            "sha256sum_command": True,
-            "blake3sum_command": True,
-            "xxh3sum_command": True,
-            "xxh128sum_command": True,
+            # Command, not validated
+            "md5sum_command": False,
+            # Command, not validated
+            "sha1sum_command": False,
+            # Command, not validated
+            "crc32sum_command": False,
+            # Command, not validated
+            "sha256sum_command": False,
+            # Command, not validated
+            "blake3sum_command": False,
+            # Command, not validated
+            "xxh3sum_command": False,
+            # Command, not validated
+            "xxh128sum_command": False,
             "skip_links": True,
             "subsystem": True,
             "server_command": True,
