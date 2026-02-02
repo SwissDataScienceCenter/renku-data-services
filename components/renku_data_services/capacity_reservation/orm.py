@@ -44,7 +44,6 @@ class CapacityReservationORM(BaseORM):
     )
     """Matching configuration of the capacity reservation."""
 
-    @classmethod
     def dump(self) -> base_models.CapacityReservation:
         "Create an ORM object from a capacity reservation model."
         return base_models.CapacityReservation(
@@ -55,6 +54,7 @@ class CapacityReservationORM(BaseORM):
             matching=self.matching,
         )
 
+    @classmethod
     def from_unsaved_model(
         cls, new_capacity_reservation: models.UnsavedCapacityReservation
     ) -> "CapacityReservationORM":
@@ -76,3 +76,44 @@ class OccurrenceORM(BaseORM):
         "id", ULIDType, primary_key=True, server_default=text("generate_ulid()"), init=False
     )
     """ID of the occurrence."""
+
+    reservation_id: Mapped[ULID] = mapped_column(
+        "reservation_id",
+        ULIDType,
+        ForeignKey("capacity_reservation.capacity_reservations.id"),
+        ondelete="CASCADE",
+    )
+    """ID of the associated capacity reservation."""
+
+    start_datetime: Mapped[datetime] = mapped_column("start_datetime", DateTime(timezone=True))
+    """Start datetime of the occurrence."""
+
+    end_datetime: Mapped[datetime] = mapped_column("end_datetime", DateTime(timezone=True))
+    """End datetime of the occurrence."""
+
+    status: Mapped[models.OccurrenceStatus] = mapped_column("status", models.OccurrenceStatusType)
+    """Status of the occurrence."""
+
+    deployment_name: Mapped[Optional[str]] = mapped_column("deployment_name", String(255), nullable=True)
+
+    def dump(self) -> models.Occurrence:
+        """Create an ORM object from an occurrence model."""
+        return models.Occurrence(
+            id=self.id,
+            reservation_id=self.reservation_id,
+            start_datetime=self.start_datetime,
+            end_datetime=self.end_datetime,
+            status=self.status,
+            deployment_name=self.deployment_name,
+        )
+
+    @classmethod
+    def from_unsaved_model(cls, new_occurrence: models.UnsavedOccurrence) -> "OccurrenceORM":
+        """Create an ORM object from an unsaved occurrence model."""
+        return cls(
+            reservation_id=new_occurrence.reservation_id,
+            start_datetime=new_occurrence.start_datetime,
+            end_datetime=new_occurrence.end_datetime,
+            status=new_occurrence.status,
+            deployment_name=new_occurrence.deployment_name,
+        )
