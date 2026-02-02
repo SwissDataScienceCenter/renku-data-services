@@ -66,7 +66,7 @@ provider_id: str = test_provider["id"]
 ### ---------------------------------------------------------------------
 
 deps = DependencyManager.from_env()
-logger = logging.getLogger(__file__)
+logger = logging.getLogger(__name__)
 factory = DefaultOAuthHttpClientFactory(deps.config.secrets.encryption_key, deps.config.db.async_session_maker)
 
 
