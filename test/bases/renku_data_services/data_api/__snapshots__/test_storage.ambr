@@ -369,44 +369,6 @@
           'type': 'string',
         }),
         dict({
-          'advanced': False,
-          'default': '',
-          'default_str': '',
-          'exclusive': False,
-          'help': '''
-            Path to a PEM or PKCS12 certificate file including the private key.
-            
-            Set this if using
-            - Service principal with certificate
-  
-          ''',
-          'ispassword': False,
-          'name': 'client_certificate_path',
-          'required': False,
-          'sensitive': False,
-          'type': 'string',
-        }),
-        dict({
-          'advanced': False,
-          'default': '',
-          'default_str': '',
-          'exclusive': False,
-          'help': '''
-            Password for the certificate file (optional).
-            
-            Optionally set this if using
-            - Service principal with certificate
-            
-            And the certificate has a password.
-  
-          ''',
-          'ispassword': True,
-          'name': 'client_certificate_password',
-          'required': False,
-          'sensitive': False,
-          'type': 'string',
-        }),
-        dict({
           'advanced': True,
           'default': False,
           'default_str': 'false',
@@ -460,34 +422,6 @@
           ''',
           'ispassword': True,
           'name': 'password',
-          'required': False,
-          'sensitive': False,
-          'type': 'string',
-        }),
-        dict({
-          'advanced': True,
-          'default': '',
-          'default_str': '',
-          'exclusive': False,
-          'help': '''
-            Path to file containing credentials for use with a service principal.
-            
-            Leave blank normally. Needed only if you want to use a service principal instead of interactive login.
-            
-                $ az ad sp create-for-rbac --name "<name>" \
-                  --role "Storage Blob Data Owner" \
-                  --scopes "/subscriptions/<subscription>/resourceGroups/<resource-group>/providers/Microsoft.Storage/storageAccounts/<storage-account>/blobServices/default/containers/<container>" \
-                  > azure-principal.json
-            
-            See ["Create an Azure service principal"](https://docs.microsoft.com/en-us/cli/azure/create-an-azure-service-principal-azure-cli) and ["Assign an Azure role for access to blob data"](https://docs.microsoft.com/en-us/azure/storage/common/storage-auth-aad-rbac-cli) pages for more details.
-            
-            It may be more convenient to put the credentials directly into the
-            rclone config file under the `client_id`, `tenant` and `client_secret`
-            keys instead of setting `service_principal_file`.
-  
-          ''',
-          'ispassword': False,
-          'name': 'service_principal_file',
           'required': False,
           'sensitive': False,
           'type': 'string',
@@ -1267,25 +1201,6 @@
           'name': 'root_folder_id',
           'required': False,
           'sensitive': True,
-          'type': 'string',
-        }),
-        dict({
-          'advanced': False,
-          'default': '',
-          'default_str': '',
-          'exclusive': False,
-          'help': '''
-            Service Account Credentials JSON file path.
-            
-            Leave blank normally.
-            Needed only if you want use SA instead of interactive login.
-            
-            Leading `~` will be expanded in the file name as will environment variables such as `${RCLONE_CONFIG_DIR}`.
-          ''',
-          'ispassword': False,
-          'name': 'service_account_file',
-          'required': False,
-          'sensitive': False,
           'type': 'string',
         }),
         dict({
@@ -7920,51 +7835,6 @@
           'default': '',
           'default_str': '',
           'exclusive': False,
-          'help': '''
-            Path to the shared credentials file.
-            
-            If env_auth = true then rclone can use a shared credentials file.
-            
-            If this variable is empty rclone will look for the
-            "AWS_SHARED_CREDENTIALS_FILE" env variable. If the env value is empty
-            it will default to the current user's home directory.
-            
-                Linux/OSX: "$HOME/.aws/credentials"
-                Windows:   "%USERPROFILE%\.aws\credentials"
-  
-          ''',
-          'ispassword': False,
-          'name': 'shared_credentials_file',
-          'required': False,
-          'sensitive': False,
-          'type': 'string',
-        }),
-        dict({
-          'advanced': True,
-          'default': '',
-          'default_str': '',
-          'exclusive': False,
-          'help': '''
-            Profile to use in the shared credentials file.
-            
-            If env_auth = true then rclone can use a shared credentials file. This
-            variable controls which profile is used in that file.
-            
-            If empty it will default to the environment variable "AWS_PROFILE" or
-            "default" if that environment variable is also not set.
-  
-          ''',
-          'ispassword': False,
-          'name': 'profile',
-          'required': False,
-          'sensitive': False,
-          'type': 'string',
-        }),
-        dict({
-          'advanced': True,
-          'default': '',
-          'default_str': '',
-          'exclusive': False,
           'help': 'An AWS session token.',
           'ispassword': False,
           'name': 'session_token',
@@ -8917,23 +8787,6 @@
           ''',
           'ispassword': False,
           'name': 'key_pem',
-          'required': False,
-          'sensitive': True,
-          'type': 'string',
-        }),
-        dict({
-          'advanced': False,
-          'default': '',
-          'default_str': '',
-          'exclusive': False,
-          'help': '''
-            The passphrase to decrypt the PEM-encoded private key file.
-            
-            Only PEM encrypted key files (old OpenSSH format) are supported. Encrypted keys
-            in the new OpenSSH format can't be used.
-          ''',
-          'ispassword': True,
-          'name': 'key_file_pass',
           'required': False,
           'sensitive': True,
           'type': 'string',

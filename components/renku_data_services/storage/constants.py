@@ -35,12 +35,15 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "tenant": True,
             "client_id": True,
             "client_secret": True,
-            "client_certificate_path": True,
-            "client_certificate_password": True,
+            # Path to a local file
+            "client_certificate_path": False,
+            # Related to above option
+            "client_certificate_password": False,
             "client_send_certificate_chain": True,
             "username": True,
             "password": True,
-            "service_principal_file": True,
+            # Path to a local file
+            "service_principal_file": False,
             "disable_instance_discovery": True,
             "use_msi": True,
             "msi_object_id": True,
@@ -104,7 +107,8 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "client_credentials": True,
             "scope": True,
             "root_folder_id": True,
-            "service_account_file": True,
+            # Path to a local file
+            "service_account_file": False,
             "service_account_credentials": True,
             "team_drive": True,
             "auth_owner_only": True,
@@ -360,8 +364,10 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "max_upload_parts": True,
             "copy_cutoff": True,
             "disable_checksum": True,
-            "shared_credentials_file": True,
-            "profile": True,
+            # Path to a local file
+            "shared_credentials_file": False,
+            # Related to above option
+            "profile": False,
             "session_token": True,
             "upload_concurrency": True,
             "force_path_style": True,
@@ -417,7 +423,8 @@ STORAGE_CONFIG: Final[dict[str, StorageConfig]] = {
             "key_pem": True,
             # Path to a local file
             "key_file": False,
-            "key_file_pass": True,
+            # Related to above option
+            "key_file_pass": False,
             "pubkey": True,
             # Path to a local file
             "pubkey_file": False,
