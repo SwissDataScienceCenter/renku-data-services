@@ -83,11 +83,11 @@ class DataSourceRepository:
     async def handle_patching_configuration(
         self, request: Request, user: APIUser, data_connector: DataConnector | GlobalDataConnector, config_data: str
     ) -> str | None:
-        """Handles patching the configuration of a data connector when a session is resumed.
+        """Handles patching the rclone configuration of a data connector when a session is resumed.
 
         This method updates the "token" and the "token_url" fields and no other part of the configuration.
 
-        Returns either a new configuration (INI form) or None if the configuration should be left untouched.
+        Returns either a new rclone configuration (INI form) or None if the configuration should be left untouched.
         """
         # NOTE: do not handle global data connectors
         if data_connector.namespace is None:
