@@ -31,7 +31,7 @@ class _OAuth2ConfigPartial:
 
 
 class DataSourceRepository:
-    """Repository for checking session images with rich responses."""
+    """Repository for handling mounts from data connectors into sessions."""
 
     def __init__(
         self,
@@ -81,7 +81,11 @@ class DataSourceRepository:
         return provider_kind is not None
 
     async def handle_patching_configuration(
-        self, request: Request, user: APIUser, data_connector: DataConnector | GlobalDataConnector, config_data: str
+        self,
+        request: Request,
+        user: APIUser,
+        data_connector: DataConnector | GlobalDataConnector,
+        rclone_ini_config: str,
     ) -> str | None:
         """Handles patching the rclone configuration of a data connector when a session is resumed.
 
@@ -95,7 +99,7 @@ class DataSourceRepository:
 
         parser = ConfigParser(interpolation=None)
         try:
-            parser.read_string(config_data)
+            parser.read_string(rclone_ini_config)
         except Exception as err:
             logger.error(f"Failed to parse existing data connector configuration: {err}")
             return None

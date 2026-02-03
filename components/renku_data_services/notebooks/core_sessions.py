@@ -374,24 +374,23 @@ async def patch_data_sources(
     server_name = session.metadata.name
     secret_prefix = f"{server_name}-ds-"
     dss = session.spec.dataSources or []
-    mounted_dcs: list[tuple[ULID, str]] = []
+    mounted_dcs: dict[ULID, str] = dict()
     for ds in dss:
         if ds.secretRef is not None:
             name = ds.secretRef.name
             if name.startswith(secret_prefix):
                 ulid = name[len(secret_prefix) :]
                 try:
-                    mounted_dcs.append((ULID.from_str(ulid.upper()), name))
+                    mounted_dcs[ULID.from_str(ulid.upper())] = name
                 except ValueError:
                     logger.warning(f"Could not parse {ulid.upper()} as a ULID.")
     async for dc in data_connectors_stream:
         if not data_source_repo.is_patching_enabled(dc.data_connector):
             continue
         dc_id = dc.data_connector.id
-        mounted_dc = next(filter(lambda tup: tup[0] == dc_id, mounted_dcs), None)
-        if mounted_dc is None:
+        secret_name = mounted_dcs.get(dc_id)
+        if secret_name is None:
             continue
-        _, secret_name = mounted_dc
         logger.debug(f"Patching DC secret {secret_name} for data connector {str(dc_id)}.")
         k8s_secret = await nb_config.k8s_v2_client.get_secret(
             K8sSecret.from_v1_secret(V1Secret(metadata=V1ObjectMeta(name=secret_name)), cluster)
@@ -412,7 +411,7 @@ async def patch_data_sources(
             logger.warning(f"Error decoding 'configData' for data connector {str(dc_id)}, skipping! {err}")
             continue
         new_config_data = await data_source_repo.handle_patching_configuration(
-            request=request, user=user, data_connector=dc.data_connector, config_data=existing_config_data
+            request=request, user=user, data_connector=dc.data_connector, rclone_ini_config=existing_config_data
         )
         if not new_config_data:
             continue
