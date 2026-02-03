@@ -27,7 +27,14 @@ class _OAuth2ConfigPartial:
     """Partial configuration; contains OAuth2 fields."""
 
     token: str
+    """Corresponds to the 'token' field in the rclone INI configuration.
+
+    The field is called 'token' but is a JSON object representing an OAuth 2.0 token set.
+    Common keys are 'access_token', 'token_type', 'refresh_token' and 'expiry'.
+    """
+
     token_url: str
+    """Corresponds to the 'token_url' field in the rclone INI configuration."""
 
 
 class DataSourceRepository:
