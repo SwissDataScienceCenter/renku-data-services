@@ -7,19 +7,12 @@ from datetime import UTC, datetime
 from authzed.api.v1 import (
     AsyncClient as AuthzClient,
 )
-from authzed.api.v1 import (
-    Consistency,
-    ReadRelationshipsRequest,
-    RelationshipFilter,
-    SubjectFilter,
-)
 
 import renku_data_services.search.apispec as apispec
 import renku_data_services.search.solr_token as st
 from renku_data_services.app_config import logging
 from renku_data_services.authz.models import Role
 from renku_data_services.base_models import APIUser
-from renku_data_services.base_models.core import ResourceType
 from renku_data_services.base_models.nel import Nel
 from renku_data_services.search import authz, converters
 from renku_data_services.search.db import SearchUpdatesRepo
@@ -195,45 +188,6 @@ async def _count_data_connectors_by_namespace(
     return result.response.num_found
 
 
-async def _count_group_members(
-    authz_client: AuthzClient,
-    group_id: str,
-    user: APIUser,
-) -> int:
-    """Count members of a group."""
-    try:
-        consistency = Consistency(fully_consistent=True)
-        sub_filter = SubjectFilter(subject_type=ResourceType.user.value)
-        rel_filter = RelationshipFilter(
-            resource_type=ResourceType.group.value,
-            optional_resource_id=group_id,
-            optional_subject_filter=sub_filter,
-        )
-
-        # Read relationships to count members
-        # We need to count all relationships where the subject is a user
-        # and the resource is the group with any role (viewer, editor, owner)
-        request = ReadRelationshipsRequest(
-            consistency=consistency,
-            relationship_filter=rel_filter,
-        )
-
-        count = 0
-        responses = authz_client.ReadRelationships(request)
-        async for response in responses:
-            # Count each relationship as a member
-            # Filter out wildcard subjects
-            if response.relationship.subject and response.relationship.subject.object:
-                subject_id = response.relationship.subject.object.object_id
-                if subject_id != "*":
-                    count += 1
-
-        return count
-    except Exception as e:
-        logger.warning(f"Error counting group members for group {group_id}: {e}")
-        return 0
-
-
 async def query(
     authz_client: AuthzClient,
     username_resolve: UsernameResolve,
@@ -288,7 +242,7 @@ async def query(
                         group_ids.append(str(doc.id))
 
             # Count projects and data connectors for each namespace
-            counts: dict[str, dict[str, int]] = {}  # entity_id -> {project_count, data_connector_count, members_count}
+            counts: dict[str, dict[str, int]] = {}  # entity_id -> {project_count, data_connector_count}
             for entity_id, namespace_path in namespace_paths.items():
                 project_count = await _count_projects_by_namespace(client, namespace_path, authz_client, user, ctx)
                 data_connector_count = await _count_data_connectors_by_namespace(
@@ -298,13 +252,6 @@ async def query(
                     "project_count": project_count,
                     "data_connector_count": data_connector_count,
                 }
-
-            # Count members for groups
-            for group_id in group_ids:
-                if group_id not in counts:
-                    counts[group_id] = {}
-                members_count = await _count_group_members(authz_client, group_id, user)
-                counts[group_id]["members_count"] = members_count
 
             # Update docs with counts using model_copy
             updated_docs = []
@@ -317,8 +264,6 @@ async def query(
                             "project_count": entity_counts.get("project_count"),
                             "data_connector_count": entity_counts.get("data_connector_count"),
                         }
-                        if isinstance(doc.root, apispec.SearchGroup):
-                            update_dict["members_count"] = entity_counts.get("members_count")
                         updated_root = doc.root.model_copy(update=update_dict)
                         updated_docs.append(apispec.SearchEntity(root=updated_root))
                     else:

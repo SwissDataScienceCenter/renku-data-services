@@ -78,7 +78,6 @@ def from_group(group: GroupDocument) -> SearchGroupApi:
         score=group.score,
         project_count=None,
         data_connector_count=None,
-        members_count=None,
     )
 
 
