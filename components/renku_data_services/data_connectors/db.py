@@ -195,6 +195,33 @@ class DataConnectorRepository:
 
             return data_connector.dump()
 
+    async def get_data_connector_by_doi(
+        self,
+        user: base_models.APIUser,
+        doi: str,
+    ) -> models.DataConnector | models.GlobalDataConnector:
+        """Get a data connector from the database by DOI."""
+        not_found_msg = f"Data connector with DOI '{doi}' does not exist or you do not have access to it."
+
+        async with self.session_maker() as session:
+            stmt = select(schemas.DataConnectorORM).where(schemas.DataConnectorORM.doi == doi)
+            result = await session.scalars(stmt)
+            data_connector = result.one_or_none()
+
+            if data_connector is None:
+                raise errors.MissingResourceError(message=not_found_msg)
+
+            authorized = await self.authz.has_permission(
+                user=user,
+                resource_type=ResourceType.data_connector,
+                resource_id=data_connector.id,
+                scope=Scope.READ,
+            )
+            if not authorized:
+                raise errors.MissingResourceError(message=not_found_msg)
+
+            return data_connector.dump()
+
     async def get_global_data_connector_by_slug(
         self,
         user: base_models.APIUser,
@@ -612,8 +639,8 @@ class DataConnectorRepository:
         return permissions
 
     async def get_links_from(
-        self, user: base_models.APIUser, data_connector_id: ULID
-    ) -> list[models.DataConnectorToProjectLink]:
+        self, user: base_models.APIUser, data_connector_id: ULID, pagination: PaginationRequest
+    ) -> tuple[list[models.DataConnectorToProjectLink], int]:
         """Get links from a given data connector."""
         authorized = await self.authz.has_permission(user, ResourceType.data_connector, data_connector_id, Scope.READ)
         if not authorized:
@@ -628,10 +655,20 @@ class DataConnectorRepository:
                 select(schemas.DataConnectorToProjectLinkORM)
                 .where(schemas.DataConnectorToProjectLinkORM.data_connector_id == data_connector_id)
                 .where(schemas.DataConnectorToProjectLinkORM.project_id.in_(project_ids))
+                .limit(pagination.per_page)
+                .offset(pagination.offset)
+                .order_by(schemas.DataConnectorToProjectLinkORM.id.desc())
+            )
+            stmt_count = (
+                select(func.count())
+                .select_from(schemas.DataConnectorToProjectLinkORM)
+                .where(schemas.DataConnectorToProjectLinkORM.data_connector_id == data_connector_id)
+                .where(schemas.DataConnectorToProjectLinkORM.project_id.in_(project_ids))
             )
             result = await session.scalars(stmt)
             links_orm = result.all()
-            return [link.dump() for link in links_orm]
+            total_elements = await session.scalar(stmt_count) or 0
+            return [link.dump() for link in links_orm], total_elements
 
     async def get_links_to(
         self, user: base_models.APIUser, project_id: ULID
