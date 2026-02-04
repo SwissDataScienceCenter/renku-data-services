@@ -35,7 +35,6 @@ from renku_data_services.data_connectors.core import (
     transform_secrets_for_front_end,
     validate_data_connector_patch,
     validate_data_connector_secrets_patch,
-    validate_unsaved_data_connector,
 )
 from renku_data_services.data_connectors.db import DataConnectorRepository, DataConnectorSecretRepository
 from renku_data_services.storage.rclone import RCloneValidator
@@ -97,17 +96,11 @@ class DataConnectorsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        @validate(json=apispec.DataConnectorPost)
-        async def _post(
-            _: Request, user: base_models.APIUser, body: apispec.DataConnectorPost, validator: RCloneValidator
-        ) -> JSONResponse:
-            data_connector = await validate_unsaved_data_connector(body, validator=validator)
-            result = await self.data_connector_repo.insert_namespaced_data_connector(
-                user=user, data_connector=data_connector
-            )
-
+        async def _post(*_: Any, **__: Any) -> JSONResponse:
             import sentry_sdk
             from sanic import Request
+
+            logger.warning("SENTRY_TRACE ----------------")
 
             request = Request.get_current()
             span = sentry_sdk.get_current_span()
@@ -116,13 +109,6 @@ class DataConnectorsBP(CustomBlueprint):
             logger.warning(f"SENTRY_TRACE ---------------- post_data_connectors: {trace_id}:{span}")
 
             raise TypeError("This is a test error")
-
-            # await self.metrics.data_connector_created(user)
-            # return validated_json(
-            #     apispec.DataConnector,
-            #     self._dump_data_connector(result, validator=validator),
-            #     status=201,
-            # )
 
         return "/data_connectors", ["POST"], _post
 
