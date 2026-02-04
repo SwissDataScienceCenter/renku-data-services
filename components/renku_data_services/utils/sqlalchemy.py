@@ -6,7 +6,26 @@ from typing import cast
 from sqlalchemy import Dialect, types
 from ulid import ULID
 
-from renku_data_services.resource_usage.model import ComputeCapacity, DataSize
+from renku_data_services.resource_usage.model import ComputeCapacity, Credit, DataSize
+
+
+class CreditType(types.TypeDecorator):
+    """Convert Credit values to/from db."""
+
+    impl = types.Integer
+    cache_ok = True
+
+    def process_bind_param(self, value: Credit | None, dialect: Dialect) -> int | None:
+        """Transform to int."""
+        return value.value if value is not None else None
+
+    def process_result_value(self, value: int | None, dialect: Dialect) -> Credit | None:
+        """Transform into Credit."""
+        return Credit.from_int(value) if value is not None else None
+
+    def process_literal_param(self, value: Credit | None, dialect: Dialect) -> str:
+        """Return literal."""
+        return str(value) if value is not None else ""
 
 
 class ComputeCapacityType(types.TypeDecorator):
