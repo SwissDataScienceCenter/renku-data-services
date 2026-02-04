@@ -4,7 +4,7 @@ import json
 from configparser import ConfigParser
 from dataclasses import dataclass
 from io import StringIO
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sanic import Request
 
@@ -18,6 +18,9 @@ from renku_data_services.connected_services.oauth_http import (
 )
 from renku_data_services.data_connectors.models import DataConnector, GlobalDataConnector
 from renku_data_services.notebooks.config import NotebooksConfig
+
+if TYPE_CHECKING:
+    from renku_data_services.storage.models import RCloneConfig
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +137,42 @@ class DataSourceRepository:
         stringio = StringIO()
         parser.write(stringio)
         return stringio.getvalue()
+
+    async def handle_configuration_for_test(
+        self, user: APIUser, configuration: "RCloneConfig | dict[str, Any]"
+    ) -> "RCloneConfig | dict[str, Any] | None":
+        """Ajusts the input configuration if it requires an OAuth2 connection.
+
+        Returns either an rclone configuration or None if the data connector should be skipped.
+        """
+        provider_kind: ProviderKind | None = None
+        match configuration.get("type"):
+            case "drive":
+                provider_kind = ProviderKind.google
+            case "dropbox":
+                provider_kind = ProviderKind.dropbox
+        if provider_kind is None:
+            return configuration
+
+        provider = await self.connected_services_repo.get_provider_for_kind(user=user, provider_kind=provider_kind)
+        if provider is None:
+            return None
+        connection = provider.connected_user.connection if provider.connected_user else None
+        if connection is None:
+            return None
+        token_set = await self.connected_services_repo.get_token_set(user=user, connection_id=connection.id)
+        if not token_set or not token_set.access_token:
+            return None
+        token_config = {
+            "access_token": token_set.access_token,
+            "token_type": "Bearer",
+        }
+        if provider_kind == ProviderKind.google:
+            configuration["scope"] = configuration.get("scope") or "drive"
+        if token_set.expires_at_iso:
+            token_config["expiry"] = token_set.expires_at_iso
+        configuration["token"] = json.dumps(token_config)
+        return configuration
 
     def _get_oauth2_provider_kind(self, data_connector: DataConnector | GlobalDataConnector) -> ProviderKind | None:
         """Returns the provider kind for data connectors which require an OAuth2 configuration."""
