@@ -102,6 +102,9 @@ class SearchReprovision:
             logger.info(f"Starting reprovisioning with ID {reprovisioning.id}")
             started = datetime.now()
             await self._search_updates_repo.clear_all()
+            if migrate_solr_schema:
+                await migrator.migrate(entity_schema.all_migrations)
+
             async with DefaultSolrClient(self._solr_config) as client:
                 res = await client.delete("_type:*")
                 if res.status_code != 200:
@@ -118,9 +121,6 @@ class SearchReprovision:
                             f"status code: {res.status_code}",
                             exc_info=False,
                         )
-
-            if migrate_solr_schema:
-                await migrator.migrate(entity_schema.all_migrations)
 
             all_users = self._user_repo.get_all_users(requested_by=admin)
             counter = await self.__update_entities(all_users, "user", started, counter, log_counter)
