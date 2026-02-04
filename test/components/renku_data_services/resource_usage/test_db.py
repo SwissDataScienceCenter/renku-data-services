@@ -3,12 +3,97 @@
 from datetime import UTC, date, datetime, timedelta
 
 import pytest
+import sqlalchemy as sa
 
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
-from renku_data_services.resource_usage.model import ComputeCapacity, DataSize
+from renku_data_services.resource_usage.model import ComputeCapacity, Credit, DataSize, ResourceUsageQuery
+from renku_data_services.resource_usage.orm import ResourcePoolLimits
 from test.components.renku_data_services.resource_usage.helper import assert_view_records, make_resources_request
+
+
+@pytest.mark.asyncio
+async def test_resource_requests_limits(app_manager_instance: DependencyManager) -> None:
+    run_migrations_for_app("common")
+    repo = ResourceRequestsRepo(app_manager_instance.config.db.async_session_maker)
+
+    async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
+        stmt = sa.text("""
+        insert into resource_pools.resource_pools (name,quota,"default","public")
+        values ('test', '1',true,true)
+        returning id""")
+        res = await session.execute(stmt)
+        pool_id = res.scalar_one()
+
+    limits = ResourcePoolLimits(pool_id, Credit.from_int(102), Credit.from_int(25))
+    await repo.set_resource_pool_limits(limits)
+
+    limits2 = await repo.find_resource_pool_limits(pool_id)
+    assert limits2 == limits
+
+    await repo.delete_resource_pool_limits(pool_id)
+    limits3 = await repo.find_resource_pool_limits(pool_id)
+    assert limits3 is None
+
+
+@pytest.mark.asyncio
+async def test_resource_request_query_by_user(app_manager_instance: DependencyManager) -> None:
+    run_migrations_for_app("common")
+    repo = ResourceRequestsRepo(app_manager_instance.config.db.async_session_maker)
+    first_date = datetime(2026, 1, 24, 23, 55, 4, 0, tzinfo=UTC)
+    interval = timedelta(minutes=15)
+    await repo.insert_many(
+        [
+            # a pod is running
+            make_resources_request(
+                date=first_date + i * interval,
+                interval=interval,
+                cpu_request=0.2,
+                memory_request="512Mi",
+                user_id="user-1",
+            )
+            for i in range(0, 2)
+        ]
+        + [
+            make_resources_request(
+                date=first_date + i * interval,
+                interval=interval,
+                cpu_request=0.5,
+                memory_request="256Mi",
+                user_id="user-2",
+            )
+            for i in range(0, 2)
+        ]
+    )
+    results = [
+        x
+        async for x in repo.find_usage(
+            ResourceUsageQuery(since=date(2026, 1, 24), until=date(2026, 1, 25), user_id="user-2")
+        )
+    ]
+    results.sort(key=lambda e: e.capture_date)
+    assert_view_records(
+        results,
+        [
+            {
+                "capture_date": date(2026, 1, 24),
+                "user_id": "user-2",
+                "cpu_hours": (0.5 * (15 / 60)),
+                "mem_hours": (256 * 1024 * 1024 * (15 / 60)),
+                "disk_hours": None,
+                "gpu_hours": None,
+            },
+            {
+                "capture_date": date(2026, 1, 25),
+                "user_id": "user-2",
+                "cpu_hours": (0.5 * (15 / 60)),
+                "mem_hours": (256 * 1024 * 1024 * (15 / 60)),
+                "disk_hours": None,
+                "gpu_hours": None,
+            },
+        ],
+    )
 
 
 @pytest.mark.asyncio
@@ -26,7 +111,7 @@ async def test_resource_request_query(app_manager_instance: DependencyManager) -
             for i in range(0, 2)
         ]
     )
-    results = [x async for x in repo.find_usage(start=date(2026, 1, 24), end=date(2026, 1, 25))]
+    results = [x async for x in repo.find_usage(ResourceUsageQuery(since=date(2026, 1, 24), until=date(2026, 1, 25)))]
     results.sort(key=lambda e: e.capture_date)
     assert_view_records(
         results,
@@ -36,12 +121,16 @@ async def test_resource_request_query(app_manager_instance: DependencyManager) -
                 "user_id": "user-1",
                 "cpu_hours": (0.5 * (15 / 60)),
                 "mem_hours": (256 * 1024 * 1024 * (15 / 60)),
+                "disk_hours": None,
+                "gpu_hours": None,
             },
             {
                 "capture_date": date(2026, 1, 25),
                 "user_id": "user-1",
                 "cpu_hours": (0.5 * (15 / 60)),
                 "mem_hours": (256 * 1024 * 1024 * (15 / 60)),
+                "disk_hours": None,
+                "gpu_hours": None,
             },
         ],
     )

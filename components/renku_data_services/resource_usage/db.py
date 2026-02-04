@@ -1,15 +1,26 @@
 """Repository implementation."""
 
 from collections.abc import AsyncGenerator, AsyncIterator, Callable, Generator, Iterable, Sequence
-from datetime import date, datetime
+from datetime import datetime
 from itertools import islice
 
 import sqlalchemy.sql as sa
+from sqlalchemy import bindparam
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.app_config import logging
-from renku_data_services.resource_usage.model import ResourcesRequest, ResourceUsage
-from renku_data_services.resource_usage.orm import ResourceRequestsLogORM, ResourceRequestsViewORM
+from renku_data_services.resource_usage.model import (
+    ResourcePoolLimits,
+    ResourcesRequest,
+    ResourceUsage,
+    ResourceUsageQuery,
+)
+from renku_data_services.resource_usage.orm import (
+    ResourceRequestsLimitsORM,
+    ResourceRequestsLogORM,
+    ResourceRequestsViewORM,
+)
+from renku_data_services.utils.sqlalchemy import CreditType
 
 logger = logging.getLogger(__file__)
 
@@ -67,25 +78,57 @@ class ResourceRequestsRepo:
             async for e in result.scalars():
                 yield e
 
-    async def find_usage(self, start: date, end: date, chunk_size: int = 500) -> AsyncGenerator[ResourceUsage]:
+    async def set_resource_pool_limits(self, limits: ResourcePoolLimits) -> None:
+        """Updates (insert or update) the limits of the given pool."""
+        stmt = sa.text("""
+        insert into resource_pools.resource_requests_limits
+          (resource_pool_id, total_limit, user_limit)
+        values
+          (:pool_id, :total_limit, :user_limit)
+        on conflict (resource_pool_id) do update
+        set
+          total_limit = EXCLUDED.total_limit,
+          user_limit = EXCLUDED.user_limit
+        """).bindparams(bindparam("total_limit", type_=CreditType()), bindparam("user_limit", type_=CreditType()))
+        async with self.session_maker() as session, session.begin():
+            await session.execute(stmt, limits.__dict__)
+
+    async def delete_resource_pool_limits(self, pool: int) -> None:
+        """Removes limits from the resource pool."""
+        stmt = sa.text("delete from resource_pools.resource_requests_limits where resource_pool_id = :pool")
+        async with self.session_maker() as session, session.begin():
+            await session.execute(stmt, {"pool": pool})
+
+    async def find_resource_pool_limits(self, pool: int) -> ResourcePoolLimits | None:
+        """Finds the limits of the given resource pool."""
+        stmt = sa.select(ResourceRequestsLimitsORM).where(ResourceRequestsLimitsORM.id == pool)
+        async with self.session_maker() as session:
+            result = await session.execute(stmt)
+            data = result.scalar_one_or_none()
+            return data.dump() if data is not None else None
+
+    async def find_usage(self, rq: ResourceUsageQuery, chunk_size: int = 500) -> AsyncGenerator[ResourceUsage]:
         """Find resource usage."""
-        stmt = """
+        by_user = " and user_id = :user_id " if rq.user_id is not None else ""
+        by_rp = " and resource_pool_id = :resource_pool_id " if rq.resource_pool_id is not None else ""
+        stmt = f"""
           select
             cluster_id,
             user_id,
             resource_pool_id,
             resource_class_id,
             capture_date::date,
+            gpu_slice,
             sum(cpu_request * (extract(epoch from cpu_time) / 3600)) as cpu_hours,
             sum(memory_request * (extract(epoch from mem_time) / 3600)) as mem_hours,
             sum(disk_request * (extract(epoch from disk_time) / 3600)) as disk_hours,
             sum(gpu_request * (extract(epoch from gpu_time) / 3600)) as gpu_hours
           from "common"."resource_requests_view"
           where capture_date::date >= :from and capture_date::date <= :until
-          group by cluster_id, resource_class_id, resource_pool_id, user_id, capture_date::date
+              {by_user} {by_rp}
+          group by cluster_id, resource_class_id, resource_pool_id, user_id, capture_date::date, gpu_slice
         """
-
-        params = {"from": start, "until": end}
+        params = {"from": rq.since, "until": rq.until, "user_id": rq.user_id, "resource_pool_id": rq.resource_pool_id}
 
         async with self.session_maker() as session:
             query = sa.text(stmt).execution_options(yield_per=chunk_size)

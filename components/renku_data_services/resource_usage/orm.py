@@ -5,18 +5,34 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import cast
 
-from sqlalchemy import DateTime, Float, Integer, Interval, MetaData, String, text
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    Interval,
+    MetaData,
+    String,
+    text,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 from ulid import ULID
 
-from renku_data_services.resource_usage.model import ComputeCapacity, DataSize, ResourcesRequest
-from renku_data_services.utils.sqlalchemy import ComputeCapacityType, DataSizeType, ULIDType
+from renku_data_services.resource_usage.model import (
+    ComputeCapacity,
+    Credit,
+    DataSize,
+    ResourcePoolLimits,
+    ResourcesRequest,
+)
+from renku_data_services.utils.sqlalchemy import ComputeCapacityType, CreditType, DataSizeType, ULIDType
 
 
 class BaseORM(MappedAsDataclass, DeclarativeBase):
     """Base class for all ORM classes."""
 
-    metadata = MetaData(schema="common")  # Has to match alembic ini section name
+    metadata = MetaData(schema="resource_pools")  # Has to match alembic ini section name
 
 
 class ResourceRequestsLogORM(BaseORM):
@@ -197,3 +213,23 @@ class ResourceRequestsViewORM(BaseORM):
 
     gpu_time: Mapped[timedelta | None] = mapped_column("gpu_time", Interval(), nullable=True)
     """The time period the gpu_request was observed."""
+
+
+class ResourceRequestsLimitsORM(BaseORM):
+    """Table for setting usage limits on resource pools."""
+
+    __tablename__ = "resource_requests_limits"
+
+    id: Mapped[int] = mapped_column(
+        "resource_pool_id", Integer(), ForeignKey("resource_pools.id"), nullable=False, primary_key=True
+    )
+    """Resource pool id."""
+
+    total_limit: Mapped[Credit] = mapped_column("total_limit", CreditType(), nullable=False)
+    user_limit: Mapped[Credit] = mapped_column("user_limit", CreditType(), nullable=False)
+
+    __table_args__ = (CheckConstraint((total_limit > user_limit), name="resource_request_limits_total_user_limit_chk"),)
+
+    def dump(self) -> ResourcePoolLimits:
+        """Convert to model type."""
+        return ResourcePoolLimits(self.id, self.total_limit, self.user_limit)

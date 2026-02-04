@@ -746,7 +746,8 @@ Things to watch out:
 
 At the end we need resource usage data per user. This is a simple
 query that is not accurate for intervals that go over the day border,
-as the timeseries is not split correctly.
+as the timeseries is not split correctly. But so it simply counts
+every "interval" started on a day to that specific day.
 
 #+header: :engine postgres
 #+header: :dbhost 127.0.0.1 :database renku :dbuser dev
@@ -769,21 +770,33 @@ as the timeseries is not split correctly.
 #+end_src
 
 #+RESULTS:
-| SET                        |                                      |                  |                   |              |                    |                    |                    |          |
-|----------------------------+--------------------------------------+------------------+-------------------+--------------+--------------------+--------------------+--------------------+----------|
-| cluster_id                 | user_id                              | resource_pool_id | resource_class_id | capture_date |           cpu_hour |           mem_hour |          disk_hour | gpu_hour |
-| 0RENK1RENK2RENK3RENK4RENK5 | 1a6d4c40-e500-419d-9812-22d6d1c27aa0 |                  |                   |   2026-01-23 |                    |                    |  6641689704.675558 |          |
-| 0RENK1RENK2RENK3RENK4RENK5 | 1a6d4c40-e500-419d-9812-22d6d1c27aa0 |                  |                   |   2026-01-28 |                    |                    |  6442450944.000002 |          |
-| 0RENK1RENK2RENK3RENK4RENK5 | 4cf16e99-62fe-4889-90ba-38b2d02bd293 |                  |                   |   2026-01-23 |                    |                    |  6641689704.675558 |          |
-| 0RENK1RENK2RENK3RENK4RENK5 | 5daa2891-5310-4428-895d-10f859613223 |                  |                   |   2026-01-23 |                    |                    |  6641689704.675558 |          |
-| 0RENK1RENK2RENK3RENK4RENK5 | 5daa2891-5310-4428-895d-10f859613223 |                  |                   |   2026-01-28 |                    |                    |  12884901887.99999 |          |
-| 0RENK1RENK2RENK3RENK4RENK5 | 5daa2891-5310-4428-895d-10f859613223 |                  |                   |   2026-01-30 |                    |                    | 16106127359.999979 |          |
-| 0RENK1RENK2RENK3RENK4RENK5 | c59e6907-e670-4e03-a1b7-18616bb4678e |                  |                   |   2026-01-23 | 2.7983333333333325 | 10818508117.333334 | 16642998272.000002 |          |
-| 0RENK1RENK2RENK3RENK4RENK5 | f5f1ebe7-6946-4c2c-b4e5-18ac2d4f41e4 |                  |                   |   2026-01-23 |                    |                    |  6641689704.675558 |          |
-| 0RENK1RENK2RENK3RENK4RENK5 | f5f1ebe7-6946-4c2c-b4e5-18ac2d4f41e4 |                  |                   |   2026-01-28 |                    |                    |  6442450944.000002 |          |
-| 0RENK1RENK2RENK3RENK4RENK5 | f5f1ebe7-6946-4c2c-b4e5-18ac2d4f41e4 |                  |                   |   2026-01-30 |                    |                    |  8053063680.000005 |          |
+| SET                        |                                      |                  |                   |              |                   |                    |                    |          |
+|----------------------------+--------------------------------------+------------------+-------------------+--------------+-------------------+--------------------+--------------------+----------|
+| cluster_id                 | user_id                              | resource_pool_id | resource_class_id | capture_date |          cpu_hour |           mem_hour |          disk_hour | gpu_hour |
+| 0RENK1RENK2RENK3RENK4RENK5 | 1a6d4c40-e500-419d-9812-22d6d1c27aa0 |                  |                   |   2026-01-23 |                   |                    |  6641689704.675558 |          |
+| 0RENK1RENK2RENK3RENK4RENK5 | 1a6d4c40-e500-419d-9812-22d6d1c27aa0 |                  |                   |   2026-01-28 |                   |                    |  6442450944.000002 |          |
+| 0RENK1RENK2RENK3RENK4RENK5 | 4cf16e99-62fe-4889-90ba-38b2d02bd293 |                  |                   |   2026-01-23 |                   |                    |  6641689704.675558 |          |
+| 0RENK1RENK2RENK3RENK4RENK5 | 4d9df121-db88-4988-8b12-aad43f75d45c |                  |                   |   2026-02-04 |                   |                    |        40802189312 |          |
+| 0RENK1RENK2RENK3RENK4RENK5 | 5daa2891-5310-4428-895d-10f859613223 |                  |                   |   2026-01-23 |                   |                    |  6641689704.675558 |          |
+| 0RENK1RENK2RENK3RENK4RENK5 | 5daa2891-5310-4428-895d-10f859613223 |                  |                   |   2026-01-28 |                   |                    |  12884901887.99999 |          |
+| 0RENK1RENK2RENK3RENK4RENK5 | 5daa2891-5310-4428-895d-10f859613223 |                  |                   |   2026-01-30 |                   |                    |  18253611007.99998 |          |
+| 0RENK1RENK2RENK3RENK4RENK5 | 5daa2891-5310-4428-895d-10f859613223 |                  |                   |   2026-02-04 |                   |                    |  4294967295.999998 |          |
+| 0RENK1RENK2RENK3RENK4RENK5 | c59e6907-e670-4e03-a1b7-18616bb4678e |                  |                   |   2026-01-23 | 2.798333333333333 | 10818508117.333334 | 16642998271.999998 |          |
+| 0RENK1RENK2RENK3RENK4RENK5 | f5f1ebe7-6946-4c2c-b4e5-18ac2d4f41e4 |                  |                   |   2026-01-23 |                   |                    |  6641689704.675558 |          |
+| 0RENK1RENK2RENK3RENK4RENK5 | f5f1ebe7-6946-4c2c-b4e5-18ac2d4f41e4 |                  |                   |   2026-01-28 |                   |                    |  6442450944.000002 |          |
+| 0RENK1RENK2RENK3RENK4RENK5 | f5f1ebe7-6946-4c2c-b4e5-18ac2d4f41e4 |                  |                   |   2026-01-30 |                   |                    |  9126805504.000004 |          |
+| 0RENK1RENK2RENK3RENK4RENK5 | f5f1ebe7-6946-4c2c-b4e5-18ac2d4f41e4 |                  |                   |   2026-02-04 |                   |                    |         2147483648 |          |
 
 * read out data 2
+
+1 cpu  = 1 credit
+2 gb memory =  1 credit
+20 gb disk = 1 credit
+1 gpu = 10 credits
+
+gpu: 0.25=3.0 0.5=5.0 0.75=6.0 1=8.0
+
+gpu: f(x) = floor(9 * x^a) where a = 0.6
 
 
 #+header: :engine postgres
@@ -791,27 +804,62 @@ as the timeseries is not split correctly.
 #+header: :dbpassword dev
 #+begin_src sql :exports both
   with
-    -- generate a list of hours of a given day
-    days as (
-      select i as day
-      from generate_series(
-        '2026-01-21T00:00:00Z'::timestamptz,
-        '2026-01-31T00:00:00Z'::timestamptz,
-        interval '1' day) i
-    ),
-
+    credits as (
+    select
+      cluster_id,
+      user_id,
+      resource_pool_id,
+      resource_class_id,
+      capture_date::date,
+      gpu_slice,
+      sum(cpu_request * (extract(epoch from cpu_time) / 3600)) as cpu_hours,
+      sum(memory_request * (extract(epoch from mem_time) / 3600)) as mem_hours,
+      sum(disk_request * (extract(epoch from disk_time) / 3600)) as disk_hours,
+      sum(gpu_request * (extract(epoch from gpu_time) / 3600)) as gpu_hours
+    from "common"."resource_requests_view"
+  --  where capture_date::date >= :from and capture_date::date <= :until
+    group by cluster_id, resource_class_id, resource_pool_id, user_id, capture_date::date, gpu_slice
+  )
   select
-    day,
-    sum(cpu_h) as cpu_h
-  from cpu_hours
-  group by hour_of_day
-  order by hour_of_day
+    cluster_id,
+    user_id,
+    resource_pool_id,
+    resource_class_id,
+    capture_date,
+    gpu_slice,
+    cpu_hours,
+    mem_hours,
+    disk_hours,
+    gpu_hours,
+    -- 1CPUh = 1C
+    cpu_hours as cpu_credits,
+    -- 2GBh = 1C
+    (mem_hours / 1024 / 1024 / 1024 / 2) as mem_credits,
+    -- 20GBh = 1C
+    (disk_hours / 1024 / 1024 / 1024 / 20) as disk_credits,
+    -- gpu
+    (gpu_hours * floor(10 * power(coalesce(gpu_slice, 0.2), 0.6))) as gpu_credits
 
---  where user_id = 'c59e6907-e670-4e03-a1b7-18616bb4678e'
---  group by user_id, capture_date::date
+  from credits
+
+
 
 #+end_src
 
 #+RESULTS:
-| SET |
-|-----|
+| SET                        |                                      |                  |                   |              |           |                    |                    |                   |           |                    |                   |                     |             |
+|----------------------------+--------------------------------------+------------------+-------------------+--------------+-----------+--------------------+--------------------+-------------------+-----------+--------------------+-------------------+---------------------+-------------|
+| cluster_id                 | user_id                              | resource_pool_id | resource_class_id | capture_date | gpu_slice |          cpu_hours |          mem_hours |        disk_hours | gpu_hours |        cpu_credits |       mem_credits |        disk_credits | gpu_credits |
+| 0RENK1RENK2RENK3RENK4RENK5 | 1a6d4c40-e500-419d-9812-22d6d1c27aa0 |                4 |                   |   2026-01-23 |           |                    |                    | 6641689704.675558 |           |                    |                   |  0.3092777777777779 |             |
+| 0RENK1RENK2RENK3RENK4RENK5 | 1a6d4c40-e500-419d-9812-22d6d1c27aa0 |                4 |                   |   2026-01-28 |           |                    |                    | 6442450944.000002 |           |                    |                   |  0.3000000000000001 |             |
+| 0RENK1RENK2RENK3RENK4RENK5 | 4cf16e99-62fe-4889-90ba-38b2d02bd293 |                4 |                   |   2026-01-23 |           |                    |                    | 6641689704.675558 |           |                    |                   |  0.3092777777777779 |             |
+| 0RENK1RENK2RENK3RENK4RENK5 | 4d9df121-db88-4988-8b12-aad43f75d45c |                4 |                   |   2026-02-04 |           |                    |                    | 88404743509.33334 |           |                    |                   |   4.116666666666667 |             |
+| 0RENK1RENK2RENK3RENK4RENK5 | 5daa2891-5310-4428-895d-10f859613223 |                4 |                   |   2026-01-23 |           |                    |                    | 6641689704.675558 |           |                    |                   |  0.3092777777777779 |             |
+| 0RENK1RENK2RENK3RENK4RENK5 | 5daa2891-5310-4428-895d-10f859613223 |                4 |                   |   2026-01-28 |           |                    |                    | 12884901887.99999 |           |                    |                   |  0.5999999999999995 |             |
+| 0RENK1RENK2RENK3RENK4RENK5 | 5daa2891-5310-4428-895d-10f859613223 |                4 |                   |   2026-01-30 |           |                    |                    | 18253611007.99998 |           |                    |                   |  0.8499999999999991 |             |
+| 0RENK1RENK2RENK3RENK4RENK5 | 5daa2891-5310-4428-895d-10f859613223 |                4 |                   |   2026-02-04 |           |                    |                    |  9305762474.66667 |           |                    |                   | 0.43333333333333346 |             |
+| 0RENK1RENK2RENK3RENK4RENK5 | c59e6907-e670-4e03-a1b7-18616bb4678e |                4 |                   |   2026-01-23 |           | 2.7983333333333325 | 10818508117.333334 |       16642998272 |           | 2.7983333333333325 | 5.037760416666667 |               0.775 |             |
+| 0RENK1RENK2RENK3RENK4RENK5 | f5f1ebe7-6946-4c2c-b4e5-18ac2d4f41e4 |                4 |                   |   2026-01-23 |           |                    |                    | 6641689704.675558 |           |                    |                   |  0.3092777777777779 |             |
+| 0RENK1RENK2RENK3RENK4RENK5 | f5f1ebe7-6946-4c2c-b4e5-18ac2d4f41e4 |                4 |                   |   2026-01-28 |           |                    |                    | 6442450944.000002 |           |                    |                   |  0.3000000000000001 |             |
+| 0RENK1RENK2RENK3RENK4RENK5 | f5f1ebe7-6946-4c2c-b4e5-18ac2d4f41e4 |                4 |                   |   2026-01-30 |           |                    |                    | 9126805504.000004 |           |                    |                   | 0.42500000000000016 |             |
+| 0RENK1RENK2RENK3RENK4RENK5 | f5f1ebe7-6946-4c2c-b4e5-18ac2d4f41e4 |                4 |                   |   2026-02-04 |           |                    |                    | 3937053354.666665 |           |                    |                   | 0.18333333333333326 |             |

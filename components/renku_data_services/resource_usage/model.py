@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from math import floor
 from typing import Any, cast
 
 from dateutil.parser import parse as parse_datetime
@@ -468,6 +469,27 @@ class ResourceDataFacade:
         )
 
 
+@dataclass(frozen=True)
+class Credit:
+    """A normalized number for counting usage and balances on resources."""
+
+    value: int
+
+    def __add__(self, other: Credit) -> Credit:
+        return Credit(self.value + other.value)
+
+    def __mult__(self, f: float) -> Credit:
+        return Credit(round(self.value * f))
+
+    def __str__(self) -> str:
+        return str(self.value)
+
+    @classmethod
+    def from_int(cls, n: int) -> Credit:
+        """Create new credit from the given number."""
+        return Credit(value=n)
+
+
 @dataclass
 class ResourceUsage:
     """Capture resource usage."""
@@ -477,7 +499,45 @@ class ResourceUsage:
     resource_pool_id: int | None
     resource_class_id: int | None
     capture_date: date
-    cpu_hours: float
-    mem_hours: float
-    disk_hours: float
-    gpu_hours: float
+    gpu_slice: float | None
+    cpu_hours: float | None
+    mem_hours: float | None
+    disk_hours: float | None
+    gpu_hours: float | None
+
+    def to_credits(self, one_gpu: Credit | None = None) -> Credit:
+        """Calculate the amount in credits."""
+        cpu_credit = self.cpu_hours
+        mem_credit = self.mem_hours / (1024 * 1024 * 1024) / 2 if self.mem_hours is not None else None
+        disk_credit = self.disk_hours / (1024 * 1024 * 1024) / 20 if self.disk_hours is not None else None
+        slice = self.gpu_slice or 0.2
+        one = one_gpu or Credit.from_int(10)
+        gpu_credits = self.gpu_hours * floor(one.value * (slice**0.6)) if self.gpu_hours is not None else None
+        return Credit.from_int(round((cpu_credit or 0) + (mem_credit or 0) + (disk_credit or 0) + (gpu_credits or 0)))
+
+
+@dataclass(frozen=True)
+class ResourceUsageQuery:
+    """Data for querying resource usage."""
+
+    since: date
+    until: date
+    user_id: str | None = None
+    resource_pool_id: int | None = None
+
+    def with_user_id(self, id: str) -> ResourceUsageQuery:
+        """Return a copy with the given user_id set."""
+        return ResourceUsageQuery(self.since, self.until, id, self.resource_pool_id)
+
+    def with_resource_pool_id(self, id: int) -> ResourceUsageQuery:
+        """Return a copy with the given resource pool id set."""
+        return ResourceUsageQuery(self.since, self.until, self.user_id, id)
+
+
+@dataclass(frozen=True)
+class ResourcePoolLimits:
+    """Limits for a resource pool."""
+
+    pool_id: int
+    total_limit: Credit
+    user_limit: Credit

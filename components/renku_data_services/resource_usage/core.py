@@ -1,3 +1,5 @@
+"""Core functions for resource usage."""
+
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
