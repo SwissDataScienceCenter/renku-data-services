@@ -17,26 +17,26 @@ depends_on = None
 
 def upgrade() -> None:
     op.execute("""
-    create or replace view "common"."resource_requests_view" as
+    create or replace view "resource_pools"."resource_requests_view" as
     with
       cpu_obs as (
         select id, capture_date, dense_rank() over (order by capture_date asc) as rn
-        from common.resource_requests_log
+        from resource_pools.resource_requests_log
         where cpu_request is not null and user_id is not null
       ),
       mem_obs as (
         select id, capture_date, dense_rank() over (order by capture_date asc) as rn
-        from common.resource_requests_log
+        from resource_pools.resource_requests_log
         where memory_request is not null and user_id is not null
       ),
       disk_obs as (
         select id, capture_date, dense_rank() over (order by capture_date asc) as rn
-        from common.resource_requests_log
+        from resource_pools.resource_requests_log
         where disk_request is not null and user_id is not null
       ),
       gpu_obs as (
         select id, capture_date, dense_rank() over (order by capture_date asc) as rn
-        from common.resource_requests_log
+        from resource_pools.resource_requests_log
         where gpu_request is not null and user_id is not null
       ),
       requests_diffs as (
@@ -69,7 +69,7 @@ def upgrade() -> None:
           (select min(c.capture_date) from disk_obs c where c.rn = ds.rn + 1) as disk_next_date,
           -- gpu next capture date
           (select min(c.capture_date) from gpu_obs c where c.rn = gs.rn + 1) as gpu_next_date
-        from common.resource_requests_log t
+        from resource_pools.resource_requests_log t
         left join cpu_obs cs on cs.id = t.id
         left join mem_obs ms on ms.id = t.id
         left join disk_obs ds on ds.id = t.id
@@ -120,4 +120,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("drop view resource_requests_view")
+    op.execute("drop view resource_pools.resource_requests_view")
