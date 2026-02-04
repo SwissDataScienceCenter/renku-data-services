@@ -1,6 +1,5 @@
 """Adapters for notification database classes."""
 
-import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
 
@@ -9,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
 from renku_data_services import base_models, errors
+from renku_data_services.app_config import logging
 from renku_data_services.notifications import models
 from renku_data_services.notifications import orm as schemas
 from renku_data_services.users.orm import UserORM

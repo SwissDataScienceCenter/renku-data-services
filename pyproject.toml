@@ -276,7 +276,7 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = ["test.*"]
-disable_error_code = ["no-untyped-def"]
+disable_error_code = ["no-untyped-def", "var-annotated"]
 
 [tool.coverage.run]
 source = ["bases/", "components/"]
