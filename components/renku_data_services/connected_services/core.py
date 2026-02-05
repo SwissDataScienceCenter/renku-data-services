@@ -113,7 +113,7 @@ def validate_oidc_issuer_url(url: str) -> None:
 
 async def handle_oauth2_token_refresh(
     request: Request,
-    body: apispec_extras.PostTokenRequest,
+    body: apispec.PostTokenRequest,
     connection_id: ULID,
     oauth_client_factory: OAuthHttpClientFactory,
     authenticator: base_models.Authenticator,
@@ -164,7 +164,7 @@ async def handle_oauth2_token_refresh(
             response = await http.post(renku_auth_token_uri, auth=auth, data=payload, follow_redirects=True)
             if 200 <= response.status_code < 300:
                 try:
-                    parsed_response = apispec_extras.PostTokenResponse.model_validate_json(response.content)
+                    parsed_response = apispec.PostTokenResponse.model_validate_json(response.content)
                 except Exception as err:
                     logger.error(f"Failed to parse refreshed Renku tokens: {err.__class__}.")
                     raise

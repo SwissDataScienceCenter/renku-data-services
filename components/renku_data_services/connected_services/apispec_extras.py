@@ -3,44 +3,11 @@
 from __future__ import annotations
 
 import base64
-from enum import StrEnum
 from typing import Self
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict
 
 from renku_data_services.connected_services.apispec_base import BaseAPISpec
-
-
-class PostTokenGrantType(StrEnum):
-    """Grant type for token refresh."""
-
-    refresh_token = "refresh_token"  # nosec B105
-
-
-class PostTokenRequest(BaseAPISpec):
-    """Body for a refresh token request."""
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    grant_type: PostTokenGrantType
-    refresh_token: str
-    client_id: str | None = Field(None)
-    client_secret: str | None = Field(None)
-
-
-class PostTokenResponse(BaseAPISpec):
-    """Response for a refresh token request."""
-
-    model_config = ConfigDict(
-        extra="allow",
-    )
-    access_token: str
-    token_type: str
-    expires_in: int
-    refresh_token: str
-    refresh_expires_in: int | None = Field(None)
-    scope: str | None
 
 
 class RenkuTokens(BaseAPISpec):

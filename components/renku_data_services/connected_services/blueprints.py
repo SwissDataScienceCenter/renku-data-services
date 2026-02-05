@@ -17,7 +17,7 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
-from renku_data_services.connected_services import apispec, apispec_extras
+from renku_data_services.connected_services import apispec
 from renku_data_services.connected_services.apispec_base import AuthorizeParams, CallbackParams
 from renku_data_services.connected_services.core import (
     handle_oauth2_token_refresh,
@@ -264,9 +264,9 @@ class OAuth2ConnectionsBP(CustomBlueprint):
             of the current RenkuTokens
         """
 
-        @validate(form=apispec_extras.PostTokenRequest)
+        @validate(form=apispec.PostTokenRequest)
         async def _post_token_endpoint(
-            request: Request, body: apispec_extras.PostTokenRequest, connection_id: ULID
+            request: Request, body: apispec.PostTokenRequest, connection_id: ULID
         ) -> JSONResponse:
             result = await handle_oauth2_token_refresh(
                 request=request,
@@ -277,6 +277,6 @@ class OAuth2ConnectionsBP(CustomBlueprint):
                 nb_config=self.nb_config,
             )
 
-            return validated_json(apispec_extras.PostTokenResponse, result)
+            return validated_json(apispec.PostTokenResponse, result)
 
         return "/oauth2/connections/<connection_id:ulid>/token_endpoint", ["POST"], _post_token_endpoint
