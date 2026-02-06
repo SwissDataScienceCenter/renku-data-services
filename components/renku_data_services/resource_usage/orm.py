@@ -23,6 +23,7 @@ from renku_data_services.resource_usage.model import (
     ComputeCapacity,
     Credit,
     DataSize,
+    ResourceClassCost,
     ResourcePoolLimits,
     ResourcesRequest,
 )
@@ -84,6 +85,9 @@ class ResourceRequestsLogORM(BaseORM):
     resource_class_id: Mapped[int | None] = mapped_column("resource_class_id", Integer(), nullable=True)
     """The resource class id used to start the session."""
 
+    resource_class_cost: Mapped[Credit | None] = mapped_column("resource_class_cost", CreditType(), nullable=True)
+    """The resource class cost at the time of snapshot."""
+
     resource_pool_id: Mapped[int | None] = mapped_column("resource_pool_id", Integer(), nullable=True)
     """The resource class id used to start the session."""
 
@@ -101,6 +105,9 @@ class ResourceRequestsLogORM(BaseORM):
 
     gpu_slice: Mapped[float | None] = mapped_column("gpu_slice", Float(), nullable=True)
     """The slice of the cpu provided."""
+
+    gpu_kind: Mapped[str | None] = mapped_column("gpu_kind", String(), nullable=True)
+    """The type of gpu used."""
 
     disk_request: Mapped[DataSize | None] = mapped_column("disk_request", DataSizeType(), nullable=True)
     """The disk request."""
@@ -122,12 +129,14 @@ class ResourceRequestsLogORM(BaseORM):
             project_id=req.project_id,
             launcher_id=req.launcher_id,
             resource_class_id=req.resource_class_id,
+            resource_class_cost=req.resource_class_cost,
             resource_pool_id=req.resource_pool_id,
             since=req.since,
             cpu_request=req.data.cpu,
             memory_request=req.data.memory,
             gpu_request=req.data.gpu,
             gpu_slice=req.gpu_slice,
+            gpu_kind=req.gpu_kind,
             disk_request=req.data.disk,
         )
 
@@ -184,6 +193,9 @@ class ResourceRequestsViewORM(BaseORM):
     resource_class_id: Mapped[int | None] = mapped_column("resource_class_id", Integer(), nullable=True)
     """The resource class id used to start the session."""
 
+    resource_class_cost: Mapped[Credit | None] = mapped_column("resource_class_cost", CreditType(), nullable=True)
+    """The resource class cost at the time of snapshot."""
+
     resource_pool_id: Mapped[int | None] = mapped_column("resource_pool_id", Integer(), nullable=True)
     """The resource class id used to start the session."""
 
@@ -198,6 +210,9 @@ class ResourceRequestsViewORM(BaseORM):
 
     gpu_slice: Mapped[float | None] = mapped_column("gpu_slice", Float(), nullable=True)
     """The slice of the cpu provided."""
+
+    gpu_kind: Mapped[str | None] = mapped_column("gpu_kind", String(), nullable=True)
+    """The type of gpu used."""
 
     disk_request: Mapped[DataSize | None] = mapped_column("disk_request", DataSizeType(), nullable=True)
     """The disk request."""
@@ -233,3 +248,22 @@ class ResourceRequestsLimitsORM(BaseORM):
     def dump(self) -> ResourcePoolLimits:
         """Convert to model type."""
         return ResourcePoolLimits(self.id, self.total_limit, self.user_limit)
+
+
+class ResourceClassCostORM(BaseORM):
+    """Table to attach costs in hours to a resource class."""
+
+    __tablename__ = "resource_class_costs"
+
+    id: Mapped[int] = mapped_column(
+        "resource_class_id", Integer(), ForeignKey("resource_classes.id"), nullable=False, primary_key=True
+    )
+    """Resource class id."""
+
+    cost_hours: Mapped[int] = mapped_column("cost_hours", Integer(), nullable=False, primary_key=True)
+
+    __table_args__ = (CheckConstraint((cost_hours > 0), name="resource_class_costs_hours_chk"),)
+
+    def dump(self) -> ResourceClassCost:
+        """Convert to model type."""
+        return ResourceClassCost(resource_class_id=self.id, cost_hours=self.cost_hours)
