@@ -51,6 +51,10 @@ class ResourceQuotaClient(Protocol):
 class SecretClient(Protocol):
     """Methods to manipulate Secret kubernetes resources."""
 
+    async def get_secret(self, secret: K8sObjectMeta) -> K8sSecret | None:
+        """Get a secret."""
+        ...
+
     async def create_secret(self, secret: K8sSecret) -> K8sSecret:
         """Create a secret."""
         ...

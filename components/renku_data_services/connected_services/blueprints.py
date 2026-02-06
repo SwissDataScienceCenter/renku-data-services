@@ -19,13 +19,18 @@ from renku_data_services.base_api.pagination import PaginationRequest, paginate
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
 from renku_data_services.connected_services import apispec
 from renku_data_services.connected_services.apispec_base import AuthorizeParams, CallbackParams
-from renku_data_services.connected_services.core import validate_oauth2_client_patch, validate_unsaved_oauth2_client
+from renku_data_services.connected_services.core import (
+    handle_oauth2_token_refresh,
+    validate_oauth2_client_patch,
+    validate_unsaved_oauth2_client,
+)
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.connected_services.oauth_http import (
     OAuthHttpClientFactory,
     OAuthHttpError,
     OAuthHttpFactoryError,
 )
+from renku_data_services.notebooks.config import NotebooksConfig
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +164,7 @@ class OAuth2ConnectionsBP(CustomBlueprint):
     connected_services_repo: ConnectedServicesRepository
     oauth_client_factory: OAuthHttpClientFactory
     authenticator: base_models.Authenticator
+    nb_config: NotebooksConfig
 
     def get_all(self) -> BlueprintFactoryResponse:
         """List all OAuth2 connections."""
@@ -202,7 +208,7 @@ class OAuth2ConnectionsBP(CustomBlueprint):
             account = await client.get_connected_account()
             match account:
                 case OAuthHttpError() as err:
-                    raise errors.InvalidTokenError(message=f"OAuth error getting the connected accoun: {err}")
+                    raise errors.InvalidTokenError(message=f"OAuth error getting the connected account: {err}")
                 case account:
                     return validated_json(apispec.ConnectedAccount, account)
 
@@ -245,3 +251,32 @@ class OAuth2ConnectionsBP(CustomBlueprint):
                     return body, installations_list.total_count
 
         return "/oauth2/connections/<connection_id:ulid>/installations", ["GET"], _get_installations
+
+    def post_token_endpoint(self) -> BlueprintFactoryResponse:
+        """OAuth 2.0 token endpoint to support applications running in sessions.
+
+        Details:
+            1. Decode the refresh_token value into an instance of RenkuTokens
+            2. Validate the access_token
+                -> if the access_token is invalid (expired), use the renku refresh_token
+                to get a fresh set of tokens
+            3. Send back the refreshed OAuth 2.0 access token and a the encoded value
+            of the current RenkuTokens
+        """
+
+        @validate(form=apispec.PostTokenRequest)
+        async def _post_token_endpoint(
+            request: Request, body: apispec.PostTokenRequest, connection_id: ULID
+        ) -> JSONResponse:
+            result = await handle_oauth2_token_refresh(
+                request=request,
+                body=body,
+                connection_id=connection_id,
+                oauth_client_factory=self.oauth_client_factory,
+                authenticator=self.authenticator,
+                nb_config=self.nb_config,
+            )
+
+            return validated_json(apispec.PostTokenResponse, result)
+
+        return "/oauth2/connections/<connection_id:ulid>/token_endpoint", ["POST"], _post_token_endpoint

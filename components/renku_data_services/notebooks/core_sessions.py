@@ -38,7 +38,7 @@ from renku_data_services.data_connectors.db import (
 )
 from renku_data_services.data_connectors.models import DataConnectorSecret, DataConnectorWithSecrets
 from renku_data_services.errors import ValidationError, errors
-from renku_data_services.k8s.models import K8sSecret, sanitizer
+from renku_data_services.k8s.models import ClusterConnection, K8sSecret, sanitizer
 from renku_data_services.notebooks import apispec, core
 from renku_data_services.notebooks.api.amalthea_patches import git_proxy, init_containers
 from renku_data_services.notebooks.api.amalthea_patches.init_containers import user_secrets_extras
@@ -84,6 +84,7 @@ from renku_data_services.notebooks.crs import (
     Storage,
     TlsSecret,
 )
+from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.notebooks.image_check import ImageCheckRepository
 from renku_data_services.notebooks.models import (
     ExtraSecret,
@@ -260,6 +261,7 @@ async def __get_gitlab_image_pull_secret(
 
 
 async def get_data_sources(
+    request: Request,
     nb_config: NotebooksConfig,
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     server_name: str,
@@ -267,6 +269,7 @@ async def get_data_sources(
     work_dir: PurePosixPath,
     data_connectors_overrides: list[SessionDataConnectorOverride],
     user_repo: UserRepo,
+    data_source_repo: DataSourceRepository,
 ) -> SessionExtraResources:
     """Generate cloud storage related resources."""
     data_sources: list[DataSource] = []
@@ -275,6 +278,11 @@ async def get_data_sources(
     dcs_secrets: dict[str, list[DataConnectorSecret]] = {}
     user_secret_key: str | None = None
     async for dc in data_connectors_stream:
+        configuration = await data_source_repo.handle_configuration(
+            request=request, user=user, data_connector=dc.data_connector
+        )
+        if configuration is None:
+            continue
         mount_folder = (
             dc.data_connector.storage.target_path
             if PurePosixPath(dc.data_connector.storage.target_path).is_absolute()
@@ -283,7 +291,7 @@ async def get_data_sources(
         dcs[str(dc.data_connector.id)] = RCloneStorage(
             source_path=dc.data_connector.storage.source_path,
             mount_folder=mount_folder,
-            configuration=dc.data_connector.storage.configuration,
+            configuration=configuration,
             readonly=dc.data_connector.storage.readonly,
             name=dc.data_connector.name,
             secrets={str(secret.secret_id): secret.name for secret in dc.secrets},
@@ -346,6 +354,82 @@ async def get_data_sources(
         secrets=secrets,
         data_connector_secrets=dcs_secrets,
     )
+
+
+async def patch_data_sources(
+    request: Request,
+    user: AnonymousAPIUser | AuthenticatedAPIUser,
+    session: AmaltheaSessionV1Alpha1,
+    cluster: ClusterConnection,
+    nb_config: NotebooksConfig,
+    data_connectors_stream: AsyncIterator[DataConnectorWithSecrets],
+    data_source_repo: DataSourceRepository,
+) -> SessionExtraResources:
+    """Handle updating data sources definitions when resuming a session.
+
+    This touches data connectors which use OAuth2 tokens for access.
+    Other data connectors are left untouched.
+    """
+    secrets: list[ExtraSecret] = []
+    server_name = session.metadata.name
+    secret_prefix = f"{server_name}-ds-"
+    dss = session.spec.dataSources or []
+    mounted_dcs: dict[ULID, str] = dict()
+    for ds in dss:
+        if ds.secretRef is not None:
+            name = ds.secretRef.name
+            if name.startswith(secret_prefix):
+                ulid = name[len(secret_prefix) :]
+                try:
+                    mounted_dcs[ULID.from_str(ulid.upper())] = name
+                except ValueError:
+                    logger.warning(f"Could not parse {ulid.upper()} as a ULID.")
+    async for dc in data_connectors_stream:
+        if not data_source_repo.is_patching_enabled(dc.data_connector):
+            continue
+        dc_id = dc.data_connector.id
+        secret_name = mounted_dcs.get(dc_id)
+        if secret_name is None:
+            continue
+        logger.debug(f"Patching DC secret {secret_name} for data connector {str(dc_id)}.")
+        k8s_secret = await nb_config.k8s_v2_client.get_secret(
+            K8sSecret.from_v1_secret(V1Secret(metadata=V1ObjectMeta(name=secret_name)), cluster)
+        )
+        if k8s_secret is None:
+            logger.warning(f"Could not read secret {secret_name} for patching, skipping!")
+            continue
+        v1_secret = k8s_secret.to_v1_secret()
+        secret_data: dict[str, str] = v1_secret.data
+        config_data_raw = secret_data.get("configData")
+        if not config_data_raw:
+            logger.warning(f"Field 'configData' not found for data connector {str(dc_id)}, skipping!")
+            continue
+        existing_config_data: str = ""
+        try:
+            existing_config_data = base64.b64decode(config_data_raw).decode("utf-8")
+        except Exception as err:
+            logger.warning(f"Error decoding 'configData' for data connector {str(dc_id)}, skipping! {err}")
+            continue
+        new_config_data = await data_source_repo.handle_patching_configuration(
+            request=request, user=user, data_connector=dc.data_connector, rclone_ini_config=existing_config_data
+        )
+        if not new_config_data:
+            continue
+        # We re-create the secret for the data connector, with the updated configuration.
+        metadata = v1_secret.metadata
+        new_secret = V1Secret(
+            api_version="v1",
+            kind="Secret",
+            metadata=V1ObjectMeta(
+                name=metadata.name,
+                namespace=metadata.namespace,
+            ),
+            data=secret_data,
+        )
+        new_secret.data["configData"] = base64.b64encode(new_config_data.encode("utf-8")).decode("utf-8")
+        secrets.append(ExtraSecret(new_secret))
+
+    return SessionExtraResources(secrets=secrets)
 
 
 async def request_dc_secret_creation(
@@ -743,6 +827,7 @@ async def start_session(
     user_repo: UserRepo,
     metrics: MetricsService,
     image_check_repo: ImageCheckRepository,
+    data_source_repo: DataSourceRepository,
 ) -> tuple[AmaltheaSessionV1Alpha1, bool]:
     """Start an Amalthea session.
 
@@ -819,6 +904,7 @@ async def start_session(
     # Data connectors
     session_extras = session_extras.concat(
         await get_data_sources(
+            request=request,
             nb_config=nb_config,
             server_name=server_name,
             user=user,
@@ -826,6 +912,7 @@ async def start_session(
             work_dir=work_dir,
             data_connectors_overrides=launch_request.data_connectors_overrides or [],
             user_repo=user_repo,
+            data_source_repo=data_source_repo,
         )
     )
 
@@ -1031,17 +1118,20 @@ async def start_session(
 
 
 async def patch_session(
+    request: Request,
     body: apispec.SessionPatchRequest,
     session_id: str,
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     internal_gitlab_user: APIUser,
     nb_config: NotebooksConfig,
     git_provider_helper: GitProviderHelperProto,
+    data_connector_secret_repo: DataConnectorSecretRepository,
     project_repo: ProjectRepository,
     project_session_secret_repo: ProjectSessionSecretRepository,
     rp_repo: ResourcePoolRepository,
     session_repo: SessionRepository,
     image_check_repo: ImageCheckRepository,
+    data_source_repo: DataSourceRepository,
     metrics: MetricsService,
 ) -> AmaltheaSessionV1Alpha1:
     """Patch an Amalthea session."""
@@ -1134,6 +1224,7 @@ async def patch_session(
     session_secrets = await project_session_secret_repo.get_all_session_secrets_from_project(
         user=user, project_id=project.id
     )
+    data_connectors_stream = data_connector_secret_repo.get_data_connectors_with_secrets(user, project.id)
     git_providers = await git_provider_helper.get_providers(user=user)
     repositories = repositories_from_project(project, git_providers)
 
@@ -1155,6 +1246,17 @@ async def patch_session(
     # TODO: but that we do not save these overrides (e.g. as annotations) means that
     # TODO: we cannot patch data connectors upon resume.
     # TODO: If we did, we would lose the user's provided overrides (e.g. unsaved credentials).
+    session_extras = session_extras.concat(
+        await patch_data_sources(
+            request=request,
+            user=user,
+            session=session,
+            cluster=cluster,
+            nb_config=nb_config,
+            data_connectors_stream=data_connectors_stream,
+            data_source_repo=data_source_repo,
+        )
+    )
 
     # More init containers
     session_extras = session_extras.concat(

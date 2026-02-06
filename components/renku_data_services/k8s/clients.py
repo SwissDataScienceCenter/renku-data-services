@@ -107,6 +107,11 @@ class K8sSecretClient(SecretClient):
     def __init__(self, client: K8sClient) -> None:
         self.__client = client
 
+    async def get_secret(self, secret: K8sObjectMeta) -> K8sSecret | None:
+        """Get a secret."""
+        res = await self.__client.get(secret)
+        return K8sSecret.from_k8s_object(res) if res is not None else None
+
     async def create_secret(self, secret: K8sSecret) -> K8sSecret:
         """Create a secret."""
 
@@ -209,6 +214,10 @@ class DummyCoreClient(ResourceQuotaClient, SecretClient):
         self, name: str, namespace: str, body: client.V1ResourceQuota, cluster_id: ClusterId
     ) -> client.V1ResourceQuota:
         """Update a resource quota."""
+        raise NotImplementedError()
+
+    async def get_secret(self, secret: K8sObjectMeta) -> K8sSecret | None:
+        """Get a secret."""
         raise NotImplementedError()
 
     async def create_secret(self, secret: K8sSecret) -> K8sSecret:
