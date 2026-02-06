@@ -10,12 +10,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.app_config import logging
 from renku_data_services.resource_usage.model import (
+    ResourceClassCostQuery,
     ResourcePoolLimits,
     ResourcesRequest,
     ResourceUsage,
     ResourceUsageQuery,
 )
 from renku_data_services.resource_usage.orm import (
+    ResourceClassCost,
+    ResourceClassCostORM,
     ResourceRequestsLimitsORM,
     ResourceRequestsLogORM,
     ResourceRequestsViewORM,
@@ -78,6 +81,32 @@ class ResourceRequestsRepo:
             async for e in result.scalars():
                 yield e
 
+    async def set_resource_class_costs(self, costs: ResourceClassCost) -> None:
+        """Updates (inserts or update) the costs of a resource_class."""
+        stmt = sa.text("""
+        insert into resource_pools.resource_class_costs (resource_class_id, cost_hours)
+        values (:resource_class_id, :cost_hours)
+        on conflict (resource_class_id) do update
+        set
+          cost_hours = EXCLUDED.cost_hours
+        """)
+        async with self.session_maker() as session, session.begin():
+            await session.execute(stmt, costs.__dict__)
+
+    async def delete_resource_class_costs(self, resource_class_id: int) -> None:
+        """Remove a cost associated to a resource_class."""
+        stmt = sa.text("delete from resource_pools.resource_class_costs where resource_class_id = :id")
+        async with self.session_maker() as session, session.begin():
+            await session.execute(stmt, {"id": resource_class_id})
+
+    async def find_resource_class_costs(self, resource_class_id: int) -> ResourceClassCost | None:
+        """Finds the costs of  the given resource class."""
+        stmt = sa.select(ResourceClassCostORM).where(ResourceClassCostORM.id == resource_class_id)
+        async with self.session_maker() as session:
+            result = await session.execute(stmt)
+            data = result.scalar_one_or_none()
+            return data.dump() if data is not None else None
+
     async def set_resource_pool_limits(self, limits: ResourcePoolLimits) -> None:
         """Updates (insert or update) the limits of the given pool."""
         stmt = sa.text("""
@@ -123,7 +152,7 @@ class ResourceRequestsRepo:
             sum(memory_request * (extract(epoch from mem_time) / 3600)) as mem_hours,
             sum(disk_request * (extract(epoch from disk_time) / 3600)) as disk_hours,
             sum(gpu_request * (extract(epoch from gpu_time) / 3600)) as gpu_hours
-          from "common"."resource_requests_view"
+          from "resource_pools"."resource_requests_view"
           where capture_date::date >= :from and capture_date::date <= :until
               {by_user} {by_rp}
           group by cluster_id, resource_class_id, resource_pool_id, user_id, capture_date::date, gpu_slice
@@ -137,3 +166,24 @@ class ResourceRequestsRepo:
             async for row in result:
                 ru = ResourceUsage(**row._mapping)
                 yield ru
+
+    async def get_resource_class_usage(self, rq: ResourceClassCostQuery) -> ResourceClassCost:
+        """Query the current usage of a resource class."""
+
+        by_user = " and user_id = :user_id " if rq.user_id is not None else ""
+        stmt = f"""
+        select  sum(greatest(cpu_time, mem_time, gpu_time, '0 second'::interval)) as runtime
+        from resource_requests_view
+        where phase = 'Running'
+          and capture_date::date >= :from and capture_date::date <= :until
+          and resource_class_id = :class_id {by_user}
+        """
+        params = {"from": rq.since, "until": rq.until, "user_id": rq.user_id, "class_id": rq.resource_class_id}
+
+        async with self.session_maker() as session:
+            query = sa.text(stmt)
+            result = await session.execute(query, params)
+            row = result.one_or_none()
+            return (
+                ResourceClassCost(**row._mapping) if row is not None else ResourceClassCost.zero(rq.resource_class_id)
+            )
