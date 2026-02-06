@@ -320,7 +320,7 @@ class ResourcesRequest:
 
 @dataclass
 class ResourceDataFacade:
-    """Wraps a k8s session, pod or pvc extracting certain data that should be stored."""
+    """Wraps a k8s session, pod or pvc extracting certain data that should for being stored."""
 
     pod: K8sObject
 
@@ -358,6 +358,11 @@ class ResourceDataFacade:
     def name(self) -> str:
         """Return the pod name."""
         return cast(str, self.pod.manifest.metadata.name)
+
+    @property
+    def node_name(self) -> str | None:
+        """Return the node this pod is running on."""
+        return self.pod.manifest.get("spec", {}).get("nodeName")
 
     @property
     def session_instance_id(self) -> str | None:
