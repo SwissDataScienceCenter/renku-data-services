@@ -233,9 +233,11 @@ class ResourcesRequest:
     project_id: ULID | None
     launcher_id: ULID | None
     resource_class_id: int | None
+    resource_class_cost: Credit | None
     resource_pool_id: int | None
     since: datetime | None
     gpu_slice: float | None
+    gpu_kind: str | None
     data: RequestData
 
     @property
@@ -253,9 +255,11 @@ class ResourcesRequest:
             f"{self.project_id}/"
             f"{self.launcher_id}/"
             f"{self.resource_class_id}/"
+            f"{self.resource_class_cost}/"
             f"{self.resource_pool_id}/"
             f"{self.since}/"
             f"{self.gpu_slice}/"
+            f"{self.gpu_kind}/"
             f"@{self.capture_date}/{self.capture_interval}"
         )
 
@@ -275,9 +279,11 @@ class ResourcesRequest:
             project_id=self.project_id,
             launcher_id=self.launcher_id,
             resource_class_id=self.resource_class_id,
+            resource_class_cost=self.resource_class_cost,
             resource_pool_id=self.resource_pool_id,
             since=self.since,
             gpu_slice=self.gpu_slice,
+            gpu_kind=self.gpu_kind,
             data=RequestData.empty(),
         )
 
@@ -298,9 +304,11 @@ class ResourcesRequest:
                 project_id=self.project_id,
                 launcher_id=self.launcher_id,
                 resource_class_id=self.resource_class_id,
+                resource_class_cost=self.resource_class_cost,
                 resource_pool_id=self.resource_pool_id,
                 since=self.since,
                 gpu_slice=self.gpu_slice,
+                gpu_kind=self.gpu_kind,
                 data=self.data + other.data,
             )
         else:
@@ -445,7 +453,7 @@ class ResourceDataFacade:
         return result
 
     def to_resources_request(
-        self, cluster_id: ClusterId | None, date: datetime, interval: timedelta
+        self, cluster_id: ClusterId | None, date: datetime, interval: timedelta, resource_class_cost: Credit | None
     ) -> ResourcesRequest:
         """Convert this into a ResourcesRequest data class."""
         return ResourcesRequest(
@@ -462,9 +470,11 @@ class ResourceDataFacade:
             project_id=self.project_id,
             launcher_id=self.launcher_id,
             resource_class_id=self.resource_class_id,
+            resource_class_cost=resource_class_cost,
             resource_pool_id=self.resource_pool_id,
             since=self.start_or_creation_time,
             gpu_slice=None,  ## TODO get the cpu slice from somewhere
+            gpu_kind=None,
             data=self.requested_data,
         )
 
@@ -541,3 +551,31 @@ class ResourcePoolLimits:
     pool_id: int
     total_limit: Credit
     user_limit: Credit
+
+
+@dataclass(frozen=True)
+class ResourceClassCost:
+    """The costs associated to a resource class."""
+
+    resource_class_id: int
+    cost_hours: int
+
+    def to_credit(self) -> Credit:
+        """Convert to a credit value."""
+        ### impl note: currently it's a simply 1-1 for hour of running time
+        return Credit.from_int(self.cost_hours)
+
+    @classmethod
+    def zero(cls, resource_class_id: int) -> ResourceClassCost:
+        """Create an instance with a cost of 0."""
+        return ResourceClassCost(resource_class_id=resource_class_id, cost_hours=0)
+
+
+@dataclass
+class ResourceClassCostQuery:
+    """Query for getting resource class costs."""
+
+    since: date
+    until: date
+    resource_class_id: int
+    user_id: str | None

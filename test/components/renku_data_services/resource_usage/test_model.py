@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from box import Box
+from renku_data_services.resource_usage.orm import Credit
 from ulid import ULID
 
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
@@ -110,8 +111,10 @@ def test_resource_requests_to_zero() -> None:
         launcher_id=None,
         resource_class_id=4,
         resource_pool_id=16,
+        resource_class_cost=None,
         since=datetime(2025, 1, 15, 13, 25, 15, 0, UTC),
         gpu_slice=None,
+        gpu_kind=None,
         data=RequestData(
             cpu=ComputeCapacity.from_milli_cores(250),
             memory=DataSize.from_mb(512),
@@ -119,7 +122,7 @@ def test_resource_requests_to_zero() -> None:
             disk=DataSize.zero(),
         ),
     )
-    r0 = r1.to_zero()
+    r0 = r1.to_empty()
     assert r1.namespace == r0.namespace
     assert r1.name == r0.name
     assert r1.uid == r0.uid
@@ -133,7 +136,7 @@ def test_resource_requests_to_zero() -> None:
     assert r1.resource_class_id == r0.resource_class_id
     assert r1.resource_pool_id == r0.resource_pool_id
     assert r1.since == r0.since
-    assert r0.data == RequestData.zero()
+    assert r0.data == RequestData.empty()
 
 
 def test_resource_data_facade() -> None:
@@ -166,7 +169,7 @@ def test_resource_data_facade() -> None:
     date = datetime.now(UTC)
     interval = timedelta(seconds=600)
 
-    r1 = pd.to_resources_request(DEFAULT_K8S_CLUSTER, date, interval)
+    r1 = pd.to_resources_request(DEFAULT_K8S_CLUSTER, date, interval, None)
     assert r1 == ResourcesRequest(
         namespace=pd.namespace,
         name=pd.name,
@@ -181,12 +184,14 @@ def test_resource_data_facade() -> None:
         project_id=pd.project_id,
         launcher_id=pd.launcher_id,
         resource_class_id=pd.resource_class_id,
+        resource_class_cost=None,
         resource_pool_id=pd.resource_pool_id,
         since=pd.start_or_creation_time,
         gpu_slice=None,
+        gpu_kind=None,
         data=pd.requested_data,
     )
-    r2 = ad.to_resources_request(DEFAULT_K8S_CLUSTER, date, interval)
+    r2 = ad.to_resources_request(DEFAULT_K8S_CLUSTER, date, interval, None)
     assert r2 == ResourcesRequest(
         namespace=ad.namespace,
         name=ad.name,
@@ -201,12 +206,14 @@ def test_resource_data_facade() -> None:
         project_id=ad.project_id,
         launcher_id=ad.launcher_id,
         resource_class_id=ad.resource_class_id,
+        resource_class_cost=None,
         resource_pool_id=ad.resource_pool_id,
         since=ad.start_or_creation_time,
         gpu_slice=None,
+        gpu_kind=None,
         data=ad.requested_data,
     )
-    r3 = pv.to_resources_request(DEFAULT_K8S_CLUSTER, date, interval)
+    r3 = pv.to_resources_request(DEFAULT_K8S_CLUSTER, date, interval, Credit.from_int(15))
     assert r3 == ResourcesRequest(
         namespace=pv.namespace,
         name=pv.name,
@@ -221,14 +228,16 @@ def test_resource_data_facade() -> None:
         project_id=pv.project_id,
         launcher_id=pv.launcher_id,
         resource_class_id=pv.resource_class_id,
+        resource_class_cost=Credit.from_int(15),
         resource_pool_id=pv.resource_pool_id,
         since=pv.start_or_creation_time,
         gpu_slice=None,
+        gpu_kind=None,
         data=pv.requested_data,
     )
 
     assert ad.user_id, "user_id not provided"
-    assert ad.requested_data == RequestData.zero()
+    assert ad.requested_data == RequestData.empty()
     assert ad.project_id == ULID.from_str("01KCVFX9BVTADB8SGHN7RJFJAP")
     assert ad.launcher_id == ULID.from_str("01KCVFZW2N6S20JAY67K30JNJ7")
     assert ad.resource_class_id == 4
@@ -247,8 +256,8 @@ def test_resource_data_facade() -> None:
     assert pd.requested_data == RequestData(
         cpu=ComputeCapacity.from_cores(0.54),
         memory=DataSize.from_mb(1056),
-        gpu=ComputeCapacity.zero(),
-        disk=DataSize.zero(),
+        gpu=None,
+        disk=None,
     )
     assert pd.session_instance_id == "eike-kettner-962026d34ba4"
 
