@@ -185,6 +185,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         connected_services_repo=dm.connected_services_repo,
         oauth_client_factory=dm.oauth_http_client_factory,
         authenticator=dm.authenticator,
+        nb_config=dm.config.nb_config,
     )
     repositories = RepositoriesBP(
         name="repositories",
@@ -202,6 +203,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         data_connector_repo=dm.data_connector_repo,
         data_connector_secret_repo=dm.data_connector_secret_repo,
         git_provider_helper=dm.git_provider_helper,
+        data_source_repo=dm.data_source_repo,
         image_check_repo=dm.image_check_repo,
         internal_gitlab_authenticator=dm.gitlab_authenticator,
         metrics=dm.metrics,
