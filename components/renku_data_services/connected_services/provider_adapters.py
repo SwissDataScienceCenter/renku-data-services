@@ -130,7 +130,7 @@ class GoogleAdapter(ProviderAdapter):
     @property
     def authorization_url_extra_params(self) -> dict[str, str]:
         """Extra parameters to add to the auth url."""
-        return {"access_type": "offline"}
+        return {"access_type": "offline", "prompt": "consent"}
 
     @property
     def token_endpoint_url(self) -> str:
