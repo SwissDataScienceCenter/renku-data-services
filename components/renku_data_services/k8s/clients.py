@@ -26,6 +26,7 @@ from renku_data_services.k8s.models import (
     K8sObjectFilter,
     K8sObjectMeta,
     K8sSecret,
+    deserializer,
     sanitizer,
 )
 
@@ -36,7 +37,6 @@ class K8sResourceQuotaClient(ResourceQuotaClient):
     def __init__(self, k8s_client: K8sClient) -> None:
         self.__client = k8s_client
         self.__quota_gvk = GVK(kind="ResourceQuota", version="v1")
-        self.__converter = client.ApiClient()
 
     def _meta(self, name: str, namespace: str, cluster_id: ClusterId) -> K8sObjectMeta:
         return K8sObjectMeta(
@@ -47,9 +47,7 @@ class K8sResourceQuotaClient(ResourceQuotaClient):
         )
 
     def _convert(self, data: Box) -> client.V1ResourceQuota:
-        # NOTE: There is unfortunately no other way around this, this is the only thing that will
-        # properly handle snake case - camel case conversions and a bunch of other things.
-        output = self.__converter._ApiClient__deserialize(data.to_dict(), client.V1ResourceQuota)
+        output = deserializer(data.to_dict(), client.V1ResourceQuota)
         if not isinstance(output, client.V1ResourceQuota):
             raise errors.ProgrammingError(message="Could not convert the output from kr8s to a ResourceQuota")
         return output
