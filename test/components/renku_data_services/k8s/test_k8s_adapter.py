@@ -6,7 +6,6 @@ import pytest_asyncio
 from box import Box
 from hypothesis import given, settings
 from kr8s.asyncio.objects import StatefulSet
-from kubernetes import client
 from kubernetes.client import (
     V1Container,
     V1EnvVar,
@@ -27,7 +26,7 @@ from renku_data_services.k8s.clients import (
 from renku_data_services.k8s.config import from_kubeconfig_file
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
 from renku_data_services.k8s.db import QuotaRepository
-from renku_data_services.k8s.models import ClusterConnection
+from renku_data_services.k8s.models import ClusterConnection, sanitizer
 from renku_data_services.notebooks.api.classes.auth import RenkuTokens
 from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClient
 from renku_data_services.notebooks.util.kubernetes_ import find_env_var
@@ -148,7 +147,7 @@ def test_patch_statefulset_tokens() -> None:
             ),
         )
     )
-    sanitized_sts = client.ApiClient().sanitize_for_serialization(sts)
+    sanitized_sts = sanitizer(sts)
     patches = NotebookK8sClient._get_statefulset_token_patches(StatefulSet(sanitized_sts), new_renku_tokens)
 
     # Order of patches should be git proxy access, git proxy refresh, git clone, secrets

@@ -9,11 +9,10 @@ from typing import Any, Final, Optional, Protocol, Self
 from kubernetes import client
 from marshmallow import EXCLUDE, Schema, ValidationError, fields, validates_schema
 
+from renku_data_services.k8s.models import sanitizer
 from renku_data_services.notebooks.api.classes.cloud_storage import ICloudStorageRequest
 from renku_data_services.storage.models import CloudStorage
 from renku_data_services.storage.rclone import RCloneValidator
-
-_sanitize_for_serialization = client.ApiClient().sanitize_for_serialization
 
 
 class RCloneStorageRequest(Schema):
@@ -201,22 +200,22 @@ class RCloneStorage(ICloudStorageRequest):
                     {
                         "op": "add",
                         "path": f"/{base_name}-pv",
-                        "value": _sanitize_for_serialization(self.pvc(base_name, namespace, labels, annotations)),
+                        "value": sanitizer(self.pvc(base_name, namespace, labels, annotations)),
                     },
                     {
                         "op": "add",
                         "path": f"/{base_name}-secret",
-                        "value": _sanitize_for_serialization(self.secret(base_name, namespace, labels, annotations)),
+                        "value": sanitizer(self.secret(base_name, namespace, labels, annotations)),
                     },
                     {
                         "op": "add",
                         "path": "/statefulset/spec/template/spec/containers/0/volumeMounts/-",
-                        "value": _sanitize_for_serialization(self.volume_mount(base_name)),
+                        "value": sanitizer(self.volume_mount(base_name)),
                     },
                     {
                         "op": "add",
                         "path": "/statefulset/spec/template/spec/volumes/-",
-                        "value": _sanitize_for_serialization(self.volume(base_name)),
+                        "value": sanitizer(self.volume(base_name)),
                     },
                 ],
             }

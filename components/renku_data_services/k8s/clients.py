@@ -26,6 +26,7 @@ from renku_data_services.k8s.models import (
     K8sObjectFilter,
     K8sObjectMeta,
     K8sSecret,
+    sanitizer,
 )
 
 
@@ -82,7 +83,7 @@ class K8sResourceQuotaClient(ResourceQuotaClient):
             name=body.metadata.name,
             namespace=namespace,
             gvk=self.__quota_gvk,
-            manifest=Box(self.__converter.sanitize_for_serialization(body)),
+            manifest=Box(sanitizer(body)),
             cluster=cluster_id,
         )
         res = await self.__client.create(obj, False)
@@ -96,7 +97,7 @@ class K8sResourceQuotaClient(ResourceQuotaClient):
         self, name: str, namespace: str, body: client.V1ResourceQuota, cluster_id: ClusterId
     ) -> client.V1ResourceQuota:
         """Update a resource quota."""
-        patch = self.__converter.sanitize_for_serialization(body)
+        patch = sanitizer(body)
         res = await self.__client.patch(self._meta(name, namespace, cluster_id), patch)
         return self._convert(res.manifest)
 
@@ -154,7 +155,7 @@ class K8sSchedulingClient(PriorityClassClient):
         obj = ClusterScopedK8sObject(
             name=body.metadata.name,
             gvk=self.__pc_gvk,
-            manifest=Box(self.__converter.sanitize_for_serialization(body)),
+            manifest=Box(sanitizer(body)),
             cluster=cluster_id,
         )
         output = await self.__client.create(obj, refresh=True)
