@@ -13,12 +13,15 @@ from sqlalchemy import Select, bindparam, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from renku_data_services.app_config import logging
 from renku_data_services.crc import models
 from renku_data_services.errors import errors
 from renku_data_services.k8s.client_interfaces import PriorityClassClient, ResourceQuotaClient
 from renku_data_services.k8s.constants import ClusterId
 from renku_data_services.k8s.models import DeletePropagationPolicy, K8sObject, K8sObjectFilter, K8sObjectMeta
 from renku_data_services.k8s.orm import K8sObjectORM
+
+logger = logging.getLogger(__name__)
 
 
 class K8sDbCache:
@@ -200,6 +203,7 @@ class QuotaRepository:
 
         # Check if we have a priority class with the given name, return it or create one otherwise.
         pc = await self.pc_client.read_priority_class(quota.id, cluster_id)
+        logger.warn(f"#### read_priority_class({quota.id,}, {cluster_id}): {pc}")
         if pc is None:
             pc = await self.pc_client.create_priority_class(
                 client.V1PriorityClass(
