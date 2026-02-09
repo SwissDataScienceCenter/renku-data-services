@@ -17,7 +17,11 @@ from kubernetes.client import V1Secret
 from renku_data_services.errors import ProgrammingError, errors
 from renku_data_services.k8s.constants import DUMMY_TASK_RUN_USER_ID, ClusterId
 
-sanitizer = kubernetes.client.ApiClient().sanitize_for_serialization
+_kubernetes_client = kubernetes.client.ApiClient()
+sanitizer = _kubernetes_client.sanitize_for_serialization
+# NOTE: There is unfortunately no other way around this, this is the only thing that will
+# properly handle snake case - camel case conversions and a bunch of other things.
+deserializer = _kubernetes_client._ApiClient__deserialize
 
 
 class K8sObjectMeta:
