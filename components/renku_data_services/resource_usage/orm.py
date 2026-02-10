@@ -106,14 +106,14 @@ class ResourceRequestsLogORM(BaseORM):
     gpu_slice: Mapped[float | None] = mapped_column("gpu_slice", Float(), nullable=True)
     """The slice of the cpu provided."""
 
-    gpu_kind: Mapped[str | None] = mapped_column("gpu_kind", String(), nullable=True)
+    gpu_product: Mapped[str | None] = mapped_column("gpu_product", String(), nullable=True)
     """The type of gpu used."""
 
     disk_request: Mapped[DataSize | None] = mapped_column("disk_request", DataSizeType(), nullable=True)
     """The disk request."""
 
     @classmethod
-    def from_resources_request(cls, req: ResourcesRequest) -> ResourceRequestsLogORM:
+    def from_resources_request(cls, req: ResourcesRequest, costs: Credit | None) -> ResourceRequestsLogORM:
         """Create an ORM object given a ResourcesRequest."""
         return ResourceRequestsLogORM(
             cluster_id=cast(ULID, req.cluster_id) if req.cluster_id else None,
@@ -129,14 +129,14 @@ class ResourceRequestsLogORM(BaseORM):
             project_id=req.project_id,
             launcher_id=req.launcher_id,
             resource_class_id=req.resource_class_id,
-            resource_class_cost=req.resource_class_cost,
+            resource_class_cost=costs,
             resource_pool_id=req.resource_pool_id,
             since=req.since,
             cpu_request=req.data.cpu,
             memory_request=req.data.memory,
             gpu_request=req.data.gpu,
             gpu_slice=req.gpu_slice,
-            gpu_kind=req.gpu_kind,
+            gpu_product=req.gpu_product,
             disk_request=req.data.disk,
         )
 
@@ -211,7 +211,7 @@ class ResourceRequestsViewORM(BaseORM):
     gpu_slice: Mapped[float | None] = mapped_column("gpu_slice", Float(), nullable=True)
     """The slice of the cpu provided."""
 
-    gpu_kind: Mapped[str | None] = mapped_column("gpu_kind", String(), nullable=True)
+    gpu_product: Mapped[str | None] = mapped_column("gpu_product", String(), nullable=True)
     """The type of gpu used."""
 
     disk_request: Mapped[DataSize | None] = mapped_column("disk_request", DataSizeType(), nullable=True)
@@ -260,10 +260,10 @@ class ResourceClassCostORM(BaseORM):
     )
     """Resource class id."""
 
-    cost_hours: Mapped[int] = mapped_column("cost_hours", Integer(), nullable=False, primary_key=True)
+    cost: Mapped[Credit] = mapped_column("cost", CreditType(), nullable=False, primary_key=True)
 
-    __table_args__ = (CheckConstraint((cost_hours > 0), name="resource_class_costs_hours_chk"),)
+    __table_args__ = (CheckConstraint((cost > 0), name="resource_class_costs_chk"),)
 
     def dump(self) -> ResourceClassCost:
         """Convert to model type."""
-        return ResourceClassCost(resource_class_id=self.id, cost_hours=self.cost_hours)
+        return ResourceClassCost(resource_class_id=self.id, cost=self.cost)

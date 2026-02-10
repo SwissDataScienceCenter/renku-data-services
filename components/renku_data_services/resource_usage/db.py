@@ -10,7 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.app_config import logging
 from renku_data_services.resource_usage.model import (
+    Credit,
     ResourceClassCostQuery,
+    ResourceClassRuntimeCost,
     ResourcePoolLimits,
     ResourcesRequest,
     ResourceUsage,
@@ -45,7 +47,14 @@ class ResourceRequestsRepo:
     async def insert_one(self, req: ResourcesRequest) -> None:
         """Insert one data into the log."""
         async with self.session_maker() as session, session.begin():
-            obj = ResourceRequestsLogORM.from_resources_request(req)
+            costs: Credit | None = None
+            if req.resource_class_id:
+                stmt = sa.select(ResourceClassCostORM).where(ResourceClassCostORM.id == req.resource_class_id)
+                result = await session.execute(stmt)
+                data = result.scalar_one_or_none()
+                costs = data.dump().cost if data is not None else None
+
+            obj = ResourceRequestsLogORM.from_resources_request(req, costs)
             session.add(obj)
             await session.flush()
 
@@ -61,10 +70,23 @@ class ResourceRequestsRepo:
         """Insert many values."""
         for chunk in self._chunk_seq(reqs, 100):
             if len(chunk) > 0:
+                resource_classes = {e.resource_class_id for e in chunk if e.resource_class_id is not None}
                 async with self.session_maker() as session, session.begin():
-                    vals = [ResourceRequestsLogORM.from_resources_request(e) for e in chunk]
+                    all_costs = await self._get_all_costs(session, resource_classes)
+                    vals = [
+                        ResourceRequestsLogORM.from_resources_request(
+                            e, all_costs.get(e.resource_class_id) if e.resource_class_id is not None else None
+                        )
+                        for e in chunk
+                    ]
                     session.add_all(vals)
                     await session.flush()
+
+    async def _get_all_costs(self, session: AsyncSession, ids: set[int]) -> dict[int, Credit]:
+        stmt = sa.select(ResourceClassCostORM.id, ResourceClassCostORM.cost).where(ResourceClassCostORM.id.in_(ids))
+        rows = await session.execute(stmt)
+        result = {id: value for id, value in rows.all()}
+        return result
 
     async def find_view(
         self, start: datetime, end: datetime, chunk_size: int = 100
@@ -84,12 +106,12 @@ class ResourceRequestsRepo:
     async def set_resource_class_costs(self, costs: ResourceClassCost) -> None:
         """Updates (inserts or update) the costs of a resource_class."""
         stmt = sa.text("""
-        insert into resource_pools.resource_class_costs (resource_class_id, cost_hours)
-        values (:resource_class_id, :cost_hours)
+        insert into resource_pools.resource_class_costs (resource_class_id, cost)
+        values (:resource_class_id, :cost)
         on conflict (resource_class_id) do update
         set
-          cost_hours = EXCLUDED.cost_hours
-        """)
+          cost = EXCLUDED.cost
+        """).bindparams(bindparam("cost", type_=CreditType()))
         async with self.session_maker() as session, session.begin():
             await session.execute(stmt, costs.__dict__)
 
@@ -167,13 +189,17 @@ class ResourceRequestsRepo:
                 ru = ResourceUsage(**row._mapping)
                 yield ru
 
-    async def get_resource_class_usage(self, rq: ResourceClassCostQuery) -> ResourceClassCost:
+    async def get_resource_class_usage(self, rq: ResourceClassCostQuery) -> list[ResourceClassRuntimeCost]:
         """Query the current usage of a resource class."""
 
         by_user = " and user_id = :user_id " if rq.user_id is not None else ""
         stmt = f"""
-        select  sum(greatest(cpu_time, mem_time, gpu_time, '0 second'::interval)) as runtime
-        from resource_requests_view
+        select
+          resource_class_id,
+          user_id,
+          greatest(cpu_time, mem_time, gpu_time, '0 second'::interval) as runtime,
+          coalesce(resource_class_cost, 0) as cost
+        from "resource_pools"."resource_requests_view"
         where phase = 'Running'
           and capture_date::date >= :from and capture_date::date <= :until
           and resource_class_id = :class_id {by_user}
@@ -183,7 +209,13 @@ class ResourceRequestsRepo:
         async with self.session_maker() as session:
             query = sa.text(stmt)
             result = await session.execute(query, params)
-            row = result.one_or_none()
-            return (
-                ResourceClassCost(**row._mapping) if row is not None else ResourceClassCost.zero(rq.resource_class_id)
-            )
+            values = result.all()
+            return [
+                ResourceClassRuntimeCost(
+                    resource_class_id=row.resource_class_id,
+                    runtime=row.runtime,
+                    cost=Credit.from_int(row.cost),
+                    user_id=row.user_id,
+                )
+                for row in values
+            ]

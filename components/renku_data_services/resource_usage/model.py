@@ -217,152 +217,51 @@ class RequestData:
 
 
 @dataclass
-class ResourcesRequest:
-    """Data structure capturing request to resources."""
-
-    namespace: str
-    name: str
-    uid: str
-    kind: str
-    api_version: str
-    phase: str
-    capture_date: datetime
-    capture_interval: timedelta
-    cluster_id: ClusterId | None
-    user_id: str | None
-    project_id: ULID | None
-    launcher_id: ULID | None
-    resource_class_id: int | None
-    resource_class_cost: Credit | None
-    resource_pool_id: int | None
-    since: datetime | None
-    gpu_slice: float | None
-    gpu_kind: str | None
-    data: RequestData
-
-    @property
-    def id(self) -> str:
-        """Return an identifier string."""
-        cid = self.cluster_id or "default-cluster"
-        return (
-            f"{cid}/{self.namespace}/"
-            f"{self.uid}/"
-            f"{self.name}/"
-            f"{self.kind}/"
-            f"{self.api_version}/"
-            f"{self.phase}/"
-            f"{self.user_id}/"
-            f"{self.project_id}/"
-            f"{self.launcher_id}/"
-            f"{self.resource_class_id}/"
-            f"{self.resource_class_cost}/"
-            f"{self.resource_pool_id}/"
-            f"{self.since}/"
-            f"{self.gpu_slice}/"
-            f"{self.gpu_kind}/"
-            f"@{self.capture_date}/{self.capture_interval}"
-        )
-
-    def to_empty(self) -> ResourcesRequest:
-        """Return a new value with all numbers set to None."""
-        return ResourcesRequest(
-            namespace=self.namespace,
-            name=self.name,
-            uid=self.uid,
-            phase=self.phase,
-            kind=self.kind,
-            api_version=self.api_version,
-            capture_date=self.capture_date,
-            capture_interval=self.capture_interval,
-            cluster_id=self.cluster_id,
-            user_id=self.user_id,
-            project_id=self.project_id,
-            launcher_id=self.launcher_id,
-            resource_class_id=self.resource_class_id,
-            resource_class_cost=self.resource_class_cost,
-            resource_pool_id=self.resource_pool_id,
-            since=self.since,
-            gpu_slice=self.gpu_slice,
-            gpu_kind=self.gpu_kind,
-            data=RequestData.empty(),
-        )
-
-    def add(self, other: ResourcesRequest) -> ResourcesRequest:
-        """Adds the values of other to this returning a new value. Returns this if both ids do not match."""
-        if other.id == self.id:
-            return ResourcesRequest(
-                namespace=self.namespace,
-                name=self.name,
-                uid=self.uid,
-                kind=self.kind,
-                api_version=self.api_version,
-                phase=self.phase,
-                capture_date=self.capture_date,
-                capture_interval=self.capture_interval,
-                cluster_id=self.cluster_id,
-                user_id=self.user_id,
-                project_id=self.project_id,
-                launcher_id=self.launcher_id,
-                resource_class_id=self.resource_class_id,
-                resource_class_cost=self.resource_class_cost,
-                resource_pool_id=self.resource_pool_id,
-                since=self.since,
-                gpu_slice=self.gpu_slice,
-                gpu_kind=self.gpu_kind,
-                data=self.data + other.data,
-            )
-        else:
-            return self
-
-    def __str__(self) -> str:
-        return f"{self.id}: {self.data}"
-
-
-@dataclass
 class ResourceDataFacade:
-    """Wraps a k8s session, pod or pvc extracting certain data that should for being stored."""
+    """Wraps a k8s session, pod, node or pvc extracting certain data that should for being stored."""
 
-    pod: K8sObject
+    obj: K8sObject
 
     def __get_annotation(self, name: str) -> str | None:
-        value = self.pod.manifest.get("metadata", {}).get("annotations", {}).get(name)
+        value = self.obj.manifest.get("metadata", {}).get("annotations", {}).get(name)
         return cast(str, value) if value is not None else None
 
     def __get_label(self, name: str) -> str | None:
-        value = self.pod.manifest.get("metadata", {}).get("labels", {}).get(name)
+        value = self.obj.manifest.get("metadata", {}).get("labels", {}).get(name)
         return cast(str, value) if value is not None else None
 
     @property
     def kind(self) -> str:
         """Return the kind."""
-        return cast(str, self.pod.manifest.kind)
+        return cast(str, self.obj.manifest.kind)
 
     @property
     def api_version(self) -> str:
         """Return the apiVersion field."""
-        return cast(str, self.pod.manifest.get("apiVersion"))
+        return cast(str, self.obj.manifest.get("apiVersion"))
 
     @property
     def resource_request_storage(self) -> DataSize | None:
         """Return the storage spec of a pvc."""
-        value = self.pod.manifest.get("spec", {}).get("resources", {}).get("requests", {}).get("storage")
+        value = self.obj.manifest.get("spec", {}).get("resources", {}).get("requests", {}).get("storage")
         return DataSize.from_str(str(value)) if value is not None else None
 
     @property
     def status_storage(self) -> DataSize | None:
         """Return the storage spec of a pvc."""
-        value = self.pod.manifest.get("status", {}).get("capacity", {}).get("storage")
+        value = self.obj.manifest.get("status", {}).get("capacity", {}).get("storage")
         return DataSize.from_str(str(value)) if value is not None else None
 
     @property
     def name(self) -> str:
         """Return the pod name."""
-        return cast(str, self.pod.manifest.metadata.name)
+        return cast(str, self.obj.manifest.metadata.name)
 
     @property
     def node_name(self) -> str | None:
         """Return the node this pod is running on."""
-        return self.pod.manifest.get("spec", {}).get("nodeName")
+        value = self.obj.manifest.get("spec", {}).get("nodeName")
+        return str(value) if value is not None else None
 
     @property
     def session_instance_id(self) -> str | None:
@@ -376,7 +275,7 @@ class ResourceDataFacade:
     @property
     def uid(self) -> str:
         """Return the k8s uid of the object."""
-        return cast(str, self.pod.manifest.metadata.uid)
+        return cast(str, self.obj.manifest.metadata.uid)
 
     @property
     def user_id(self) -> str | None:
@@ -408,9 +307,9 @@ class ResourceDataFacade:
     def phase(self) -> str:
         """Return the phase, if it is an amalthea session the state."""
         if self.kind == "AmaltheaSession":
-            return cast(str, self.pod.manifest.get("status", {}).get("state"))
+            return cast(str, self.obj.manifest.get("status", {}).get("state"))
         else:
-            return cast(str, self.pod.manifest.get("status", {}).get("phase"))
+            return cast(str, self.obj.manifest.get("status", {}).get("phase"))
 
     @property
     def resource_pool_id(self) -> int | None:
@@ -423,9 +322,9 @@ class ResourceDataFacade:
         kind = self.kind
         dtstr: str
         if kind == "PersistentVolumeClaim" or kind == "AmaltheaSession":
-            dtstr = self.pod.manifest.get("metadata", {}).get("creationTimestamp")
+            dtstr = self.obj.manifest.get("metadata", {}).get("creationTimestamp")
         elif kind == "Pod":
-            dtstr = self.pod.manifest.get("status", {}).get("startTime")
+            dtstr = self.obj.manifest.get("status", {}).get("startTime")
         else:
             raise ValueError(f"No startTime/creationTime for kind {kind}")
 
@@ -439,13 +338,28 @@ class ResourceDataFacade:
     @property
     def namespace(self) -> str:
         """Return the namespace."""
-        return cast(str, self.pod.manifest.metadata.namespace)
+        return cast(str, self.obj.manifest.metadata.namespace)
+
+    @property
+    def gpu_product(self) -> str | None:
+        """Return the gpu product available on a node."""
+        value = self.obj.manifest.get("metadata", {}).get("labels", {}).get("nvidia.com/gpu.product")
+        return str(value) if value is not None else None
+
+    @property
+    def gpu_count(self) -> int | None:
+        """Return the gpu count label available on a node."""
+        value = self.obj.manifest.get("metadata", {}).get("labels", {}).get("nvidia.com/gpu.count")
+        try:
+            return int(value) if value is not None else None
+        except ValueError:
+            return None
 
     @property
     def requested_data(self) -> RequestData:
         """Return the requested resources."""
         result = RequestData.empty().with_disk(self.status_storage)
-        for container in self.pod.manifest.get("spec", {}).get("containers", []):
+        for container in self.obj.manifest.get("spec", {}).get("containers", []):
             requests = container.get("resources", {}).get("requests", {})
             lims = container.get("resources", {}).get("limits", {})
 
@@ -456,32 +370,6 @@ class ResourceDataFacade:
             result = result + RequestData(cpu=cpu_req, memory=mem_req, gpu=gpu_req, disk=None)
 
         return result
-
-    def to_resources_request(
-        self, cluster_id: ClusterId | None, date: datetime, interval: timedelta, resource_class_cost: Credit | None
-    ) -> ResourcesRequest:
-        """Convert this into a ResourcesRequest data class."""
-        return ResourcesRequest(
-            namespace=self.namespace,
-            name=self.name,
-            uid=self.uid,
-            kind=self.kind,
-            api_version=self.api_version,
-            phase=self.phase,
-            capture_date=date,
-            capture_interval=interval,
-            cluster_id=cluster_id,
-            user_id=self.user_id,
-            project_id=self.project_id,
-            launcher_id=self.launcher_id,
-            resource_class_id=self.resource_class_id,
-            resource_class_cost=resource_class_cost,
-            resource_pool_id=self.resource_pool_id,
-            since=self.start_or_creation_time,
-            gpu_slice=None,  ## TODO get the cpu slice from somewhere
-            gpu_kind=None,
-            data=self.requested_data,
-        )
 
 
 @dataclass(frozen=True)
@@ -503,6 +391,16 @@ class Credit:
     def from_int(cls, n: int) -> Credit:
         """Create new credit from the given number."""
         return Credit(value=n)
+
+    @classmethod
+    def from_hours(cls, hours: float) -> Credit:
+        """Create a new credit converting runtime in hours."""
+        return Credit(value=round(hours))
+
+    @classmethod
+    def from_seconds(cls, seconds: float) -> Credit:
+        """Create a new credit converting runtime in seconds."""
+        return cls.from_hours(seconds / 3600)
 
 
 @dataclass
@@ -563,17 +461,30 @@ class ResourceClassCost:
     """The costs associated to a resource class."""
 
     resource_class_id: int
-    cost_hours: int
-
-    def to_credit(self) -> Credit:
-        """Convert to a credit value."""
-        ### impl note: currently it's a simply 1-1 for hour of running time
-        return Credit.from_int(self.cost_hours)
+    cost: Credit
 
     @classmethod
     def zero(cls, resource_class_id: int) -> ResourceClassCost:
         """Create an instance with a cost of 0."""
-        return ResourceClassCost(resource_class_id=resource_class_id, cost_hours=0)
+        return ResourceClassCost(resource_class_id=resource_class_id, cost=Credit.from_int(0))
+
+
+@dataclass(frozen=True)
+class ResourceClassRuntimeCost:
+    """The costs and running time associated to a resource class."""
+
+    resource_class_id: int
+    runtime: timedelta
+    user_id: str
+    cost: Credit
+
+    def to_effective_costs(self) -> float:
+        """Calculate the effective costs for this runtime of the resource_class."""
+        ## impl note: here we have the costs associated to the
+        ## resource class and assume to be the cost for 1 hour for
+        ## runtime
+        hours = self.runtime.total_seconds() / 3600
+        return hours * self.cost.value
 
 
 @dataclass
@@ -584,3 +495,169 @@ class ResourceClassCostQuery:
     until: date
     resource_class_id: int
     user_id: str | None
+
+
+@dataclass
+class ResourcesRequest:
+    """Data structure capturing request to resources."""
+
+    namespace: str
+    name: str
+    uid: str
+    kind: str
+    api_version: str
+    phase: str
+    capture_date: datetime
+    capture_interval: timedelta
+    cluster_id: ClusterId | None
+    user_id: str | None
+    project_id: ULID | None
+    launcher_id: ULID | None
+    resource_class_id: int | None
+    resource_pool_id: int | None
+    since: datetime | None
+    gpu_slice: float | None
+    gpu_product: str | None
+    data: RequestData
+
+    @property
+    def id(self) -> str:
+        """Return an identifier string."""
+        cid = self.cluster_id or "default-cluster"
+        return (
+            f"{cid}/{self.namespace}/"
+            f"{self.uid}/"
+            f"{self.name}/"
+            f"{self.kind}/"
+            f"{self.api_version}/"
+            f"{self.phase}/"
+            f"{self.user_id}/"
+            f"{self.project_id}/"
+            f"{self.launcher_id}/"
+            f"{self.resource_class_id}/"
+            f"{self.resource_pool_id}/"
+            f"{self.since}/"
+            f"{self.gpu_slice}/"
+            f"{self.gpu_product}/"
+            f"@{self.capture_date}/{self.capture_interval}"
+        )
+
+    def to_empty(self) -> ResourcesRequest:
+        """Return a new value with all numbers set to None."""
+        return ResourcesRequest(
+            namespace=self.namespace,
+            name=self.name,
+            uid=self.uid,
+            phase=self.phase,
+            kind=self.kind,
+            api_version=self.api_version,
+            capture_date=self.capture_date,
+            capture_interval=self.capture_interval,
+            cluster_id=self.cluster_id,
+            user_id=self.user_id,
+            project_id=self.project_id,
+            launcher_id=self.launcher_id,
+            resource_class_id=self.resource_class_id,
+            resource_pool_id=self.resource_pool_id,
+            since=self.since,
+            gpu_slice=self.gpu_slice,
+            gpu_product=self.gpu_product,
+            data=RequestData.empty(),
+        )
+
+    def add(self, other: ResourcesRequest) -> ResourcesRequest:
+        """Adds the values of other to this returning a new value. Returns this if both ids do not match."""
+        if other.id == self.id:
+            return ResourcesRequest(
+                namespace=self.namespace,
+                name=self.name,
+                uid=self.uid,
+                kind=self.kind,
+                api_version=self.api_version,
+                phase=self.phase,
+                capture_date=self.capture_date,
+                capture_interval=self.capture_interval,
+                cluster_id=self.cluster_id,
+                user_id=self.user_id,
+                project_id=self.project_id,
+                launcher_id=self.launcher_id,
+                resource_class_id=self.resource_class_id,
+                resource_pool_id=self.resource_pool_id,
+                since=self.since,
+                gpu_slice=self.gpu_slice,
+                gpu_product=self.gpu_product,
+                data=self.data + other.data,
+            )
+        else:
+            return self
+
+    def __str__(self) -> str:
+        return f"{self.id}: {self.data}"
+
+    @classmethod
+    def from_pvc(
+        cls,
+        obj: ResourceDataFacade,
+        cluster: ClusterId,
+        date: datetime,
+        interval: timedelta,
+    ) -> ResourcesRequest:
+        """Convert this into a ResourcesRequest data class."""
+        return ResourcesRequest(
+            namespace=obj.namespace,
+            name=obj.name,
+            uid=obj.uid,
+            kind=obj.kind,
+            api_version=obj.api_version,
+            phase=obj.phase,
+            capture_date=date,
+            capture_interval=interval,
+            cluster_id=cluster,
+            user_id=obj.user_id,
+            project_id=obj.project_id,
+            launcher_id=obj.launcher_id,
+            resource_class_id=obj.resource_class_id,
+            resource_pool_id=obj.resource_pool_id,
+            since=obj.start_or_creation_time,
+            gpu_slice=None,
+            gpu_product=None,
+            data=obj.requested_data,
+        )
+
+    @classmethod
+    def from_pod_and_node(
+        cls,
+        pod: ResourceDataFacade,
+        node: ResourceDataFacade | None,
+        cluster: ClusterId,
+        date: datetime,
+        interval: timedelta,
+    ) -> ResourcesRequest:
+        """Convert this into a ResourcesRequest data class."""
+        gpu_slice: float | None = None
+        if pod.requested_data.gpu is not None and node and node.gpu_count is not None:
+            gpu_slice = pod.requested_data.gpu.cores / node.gpu_count
+        gpu_product: str | None = None
+        if node:
+            gpu_product = node.gpu_product
+
+        return ResourcesRequest(
+            namespace=pod.namespace,
+            name=pod.name,
+            uid=pod.uid,
+            kind=pod.kind,
+            api_version=pod.api_version,
+            phase=pod.phase,
+            capture_date=date,
+            capture_interval=interval,
+            cluster_id=cluster,
+            user_id=pod.user_id,
+            project_id=pod.project_id,
+            launcher_id=pod.launcher_id,
+            resource_class_id=pod.resource_class_id,
+            resource_pool_id=pod.resource_pool_id,
+            since=pod.start_or_creation_time,
+            gpu_slice=gpu_slice,
+            gpu_product=gpu_product,
+            data=pod.requested_data,
+        )
