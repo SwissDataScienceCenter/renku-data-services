@@ -46,7 +46,7 @@ class K8sResourceQuotaClient(ResourceQuotaClient):
             cluster=cluster_id,
         )
 
-    def _convert(self, data: Box) -> client.V1ResourceQuota:
+    def _to_k8s_v1_resource_quota(self, data: Box) -> client.V1ResourceQuota:
         output = deserializer(data.to_dict(), client.V1ResourceQuota)
         if not isinstance(output, client.V1ResourceQuota):
             raise errors.ProgrammingError(message="Could not convert the output from kr8s to a ResourceQuota")
@@ -57,7 +57,7 @@ class K8sResourceQuotaClient(ResourceQuotaClient):
         res = await self.__client.get(self._meta(name, namespace, cluster_id))
         if res is None:
             raise errors.MissingResourceError(message=f"The resource quota {namespace}/{name} cannot be found.")
-        return self._convert(res.manifest)
+        return self._to_k8s_v1_resource_quota(res.manifest)
 
     async def list_resource_quota(
         self, namespace: str, label_selector: dict[str, str], cluster_id: ClusterId
@@ -71,7 +71,7 @@ class K8sResourceQuotaClient(ResourceQuotaClient):
         )
         quotas = self.__client.list(filter)
         async for quota in quotas:
-            yield self._convert(quota.manifest)
+            yield self._to_k8s_v1_resource_quota(quota.manifest)
 
     async def create_resource_quota(
         self, namespace: str, body: client.V1ResourceQuota, cluster_id: ClusterId
@@ -85,7 +85,7 @@ class K8sResourceQuotaClient(ResourceQuotaClient):
             cluster=cluster_id,
         )
         res = await self.__client.create(obj, False)
-        return self._convert(res.manifest)
+        return self._to_k8s_v1_resource_quota(res.manifest)
 
     async def delete_resource_quota(self, name: str, namespace: str, cluster_id: ClusterId) -> None:
         """Delete a resource quota."""
@@ -97,7 +97,7 @@ class K8sResourceQuotaClient(ResourceQuotaClient):
         """Update a resource quota."""
         patch = sanitizer(body)
         res = await self.__client.patch(self._meta(name, namespace, cluster_id), patch)
-        return self._convert(res.manifest)
+        return self._to_k8s_v1_resource_quota(res.manifest)
 
 
 class K8sSecretClient(SecretClient):
