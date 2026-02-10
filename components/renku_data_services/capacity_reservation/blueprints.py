@@ -37,7 +37,7 @@ class CapacityReservationBP(CustomBlueprint):
         async def _post(_: Request, user: base_models.APIUser, body: apispec.CapacityReservationPost) -> JSONResponse:
             new_reservation = validate_capacity_reservation(body)
             reservation = await self.capacity_reservation_repo.create_capacity_reservation(
-                user=user, reservation=new_reservation
+                user=user, capacity_reservation=new_reservation
             )
             return validated_json(apispec.CapacityReservation, reservation, 201)
 
