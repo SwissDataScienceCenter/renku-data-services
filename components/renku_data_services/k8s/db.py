@@ -194,7 +194,7 @@ class QuotaRepository:
 
     async def create_quota(self, new_quota: models.UnsavedQuota, cluster_id: ClusterId) -> models.Quota:
         """Create a resource quota and priority class."""
-        quota_id = str(uuid4())
+        quota_id = str(uuid4()) if new_quota.id is None else new_quota.id
         quota = models.Quota(
             cpu=new_quota.cpu, memory=new_quota.memory, gpu=new_quota.gpu, gpu_kind=new_quota.gpu_kind, id=quota_id
         )
