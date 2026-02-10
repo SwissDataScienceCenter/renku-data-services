@@ -41,9 +41,30 @@ class ResourceRequestsFetch(ResourceRequestsFetchProto):
         pod_filter = K8sObjectFilter(gvk=GVK(kind="pod", version="v1"))
         pvc_filter = K8sObjectFilter(gvk=GVK(kind="PersistentVolumeClaim", version="v1"))
 
+        node_cache: dict[str, ResourceDataFacade] = {}
+
+        async def get_node(name: str | None) -> ResourceDataFacade | None:
+            if name:
+                node_obj = node_cache.get(name)
+                if node_obj is not None:
+                    return node_obj
+                else:
+                    pod_node = await self._client.get(
+                        K8sObjectMeta(
+                            name=name, namespace=pod.namespace, cluster=pod.cluster, gvk=GVK(kind="node", version="v1")
+                        )
+                    )
+                    if pod_node:
+                        node_obj = ResourceDataFacade(pod_node)
+                        node_cache[name] = node_obj
+                        return node_obj
+            return None
+
         async for pod in self._client.list(pod_filter):
-            obj = ResourceDataFacade(pod=pod)
-            rreq = obj.to_resources_request(pod.cluster, date, capture_interval)
+            obj = ResourceDataFacade(obj=pod)
+            node_obj: ResourceDataFacade | None = await get_node(obj.node_name)
+
+            rreq = ResourcesRequest.from_pod_and_node(obj, node_obj, pod.cluster, date, capture_interval)
             await self._amend_session_fallback(pod.cluster, obj, rreq)
             nreq = rreq.add(result.get(rreq.id, rreq.to_empty()))
             result.update({nreq.id: nreq})
@@ -52,8 +73,8 @@ class ResourceRequestsFetch(ResourceRequestsFetchProto):
             logger.warning("Empty list returned when listing pods!")
 
         async for pvc in self._client.list(pvc_filter):
-            obj = ResourceDataFacade(pod=pvc)
-            rreq = obj.to_resources_request(pvc.cluster, date, capture_interval)
+            obj = ResourceDataFacade(obj=pvc)
+            rreq = ResourcesRequest.from_pvc(obj, pvc.cluster, date, capture_interval)
             await self._amend_session_fallback(pvc.cluster, obj, rreq)
             nreq = rreq.add(result.get(rreq.id, rreq.to_empty()))
             result.update({nreq.id: nreq})

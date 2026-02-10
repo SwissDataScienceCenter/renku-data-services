@@ -90,6 +90,7 @@ def make_resources_request(
         resource_pool_id=resource_pool_id,
         since=None,
         gpu_slice=gpu_slice if gpu_slice is not None else 0.5 if gpu_request is not None else None,
+        gpu_product="NVIDIA-A100-80GB-PCIe-MIG-2g.20gb" if gpu_request is not None else None,
         data=RequestData(cpu=ccpu, memory=mmreq, gpu=ggpu, disk=ddisk),
     )
 

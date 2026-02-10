@@ -13,8 +13,16 @@ from renku_data_services.resource_usage.core import (
     ResourceRequestsRepo,
     ResourcesRequestRecorder,
 )
-from renku_data_services.resource_usage.model import ComputeCapacity, DataSize, RequestData, ResourcesRequest
+from renku_data_services.resource_usage.model import (
+    ComputeCapacity,
+    Credit,
+    DataSize,
+    RequestData,
+    ResourceClassCost,
+    ResourcesRequest,
+)
 from renku_data_services.resource_usage.orm import ResourceRequestsLogORM
+from test.components.renku_data_services.resource_usage import test_db
 
 interval = timedelta(seconds=600)
 
@@ -48,6 +56,12 @@ async def test_record_empty_resource_requests(app_manager_instance: DependencyMa
 @pytest.mark.asyncio
 async def test_record_resource_requests(app_manager_instance: DependencyManager) -> None:
     run_migrations_for_app("common")
+    (_, class_id) = await test_db.create_resource_class(app_manager_instance)
+
+    repo = ResourceRequestsRepo(app_manager_instance.config.db.async_session_maker)
+    cost = ResourceClassCost(resource_class_id=class_id, cost=Credit.from_int(15))
+    await repo.set_resource_class_costs(cost)
+
     dt = datetime.now(UTC).replace(microsecond=0)
     data = [
         ResourcesRequest(
@@ -63,10 +77,11 @@ async def test_record_resource_requests(app_manager_instance: DependencyManager)
             user_id="exyz",
             project_id=ULID(),
             launcher_id=None,
-            resource_class_id=4,
+            resource_class_id=class_id,
             resource_pool_id=16,
             since=datetime(2025, 1, 15, 13, 25, 15, 0, UTC),
             gpu_slice=None,
+            gpu_product=None,
             data=RequestData(
                 cpu=ComputeCapacity.from_milli_cores(250),
                 memory=DataSize.from_mb(512),
@@ -87,10 +102,11 @@ async def test_record_resource_requests(app_manager_instance: DependencyManager)
             user_id="exyz",
             project_id=ULID(),
             launcher_id=None,
-            resource_class_id=4,
+            resource_class_id=class_id,
             resource_pool_id=16,
             since=datetime(2025, 1, 15, 11, 13, 54, 0, UTC),
             gpu_slice=None,
+            gpu_product=None,
             data=RequestData(
                 cpu=ComputeCapacity.from_milli_cores(150),
                 memory=DataSize.from_mb(256),
@@ -101,7 +117,6 @@ async def test_record_resource_requests(app_manager_instance: DependencyManager)
     ]
 
     fetch = TestResourceRequestsFetch(data)
-    repo = ResourceRequestsRepo(app_manager_instance.config.db.async_session_maker)
     recorder = ResourcesRequestRecorder(repo, fetch)
     await recorder.record_resource_requests(interval)
     all = [item async for item in repo.find_all()]
@@ -109,10 +124,10 @@ async def test_record_resource_requests(app_manager_instance: DependencyManager)
     assert {e.name for e in all} == {"pod1", "pod2"}
     for item in all:
         if item.name == "pod1":
-            obj = ResourceRequestsLogORM.from_resources_request(data[0])
+            obj = ResourceRequestsLogORM.from_resources_request(data[0], cost.cost)
             obj.id = item.id
             assert item == obj
         if item.name == "pod2":
-            obj = ResourceRequestsLogORM.from_resources_request(data[1])
+            obj = ResourceRequestsLogORM.from_resources_request(data[1], cost.cost)
             obj.id = item.id
             assert item == obj

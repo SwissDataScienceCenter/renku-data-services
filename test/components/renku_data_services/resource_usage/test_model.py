@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 from box import Box
-from renku_data_services.resource_usage.orm import Credit
 from ulid import ULID
 
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
@@ -111,10 +110,9 @@ def test_resource_requests_to_zero() -> None:
         launcher_id=None,
         resource_class_id=4,
         resource_pool_id=16,
-        resource_class_cost=None,
         since=datetime(2025, 1, 15, 13, 25, 15, 0, UTC),
         gpu_slice=None,
-        gpu_kind=None,
+        gpu_product=None,
         data=RequestData(
             cpu=ComputeCapacity.from_milli_cores(250),
             memory=DataSize.from_mb(512),
@@ -169,7 +167,7 @@ def test_resource_data_facade() -> None:
     date = datetime.now(UTC)
     interval = timedelta(seconds=600)
 
-    r1 = pd.to_resources_request(DEFAULT_K8S_CLUSTER, date, interval, None)
+    r1 = ResourcesRequest.from_pod_and_node(pd, None, DEFAULT_K8S_CLUSTER, date, interval)
     assert r1 == ResourcesRequest(
         namespace=pd.namespace,
         name=pd.name,
@@ -184,14 +182,14 @@ def test_resource_data_facade() -> None:
         project_id=pd.project_id,
         launcher_id=pd.launcher_id,
         resource_class_id=pd.resource_class_id,
-        resource_class_cost=None,
         resource_pool_id=pd.resource_pool_id,
         since=pd.start_or_creation_time,
         gpu_slice=None,
-        gpu_kind=None,
+        gpu_product=None,
         data=pd.requested_data,
     )
-    r2 = ad.to_resources_request(DEFAULT_K8S_CLUSTER, date, interval, None)
+    ## impl note: amalthea session will be removed once the labels are passed to child resources
+    r2 = ResourcesRequest.from_pvc(ad, DEFAULT_K8S_CLUSTER, date, interval)
     assert r2 == ResourcesRequest(
         namespace=ad.namespace,
         name=ad.name,
@@ -206,14 +204,13 @@ def test_resource_data_facade() -> None:
         project_id=ad.project_id,
         launcher_id=ad.launcher_id,
         resource_class_id=ad.resource_class_id,
-        resource_class_cost=None,
         resource_pool_id=ad.resource_pool_id,
         since=ad.start_or_creation_time,
         gpu_slice=None,
-        gpu_kind=None,
+        gpu_product=None,
         data=ad.requested_data,
     )
-    r3 = pv.to_resources_request(DEFAULT_K8S_CLUSTER, date, interval, Credit.from_int(15))
+    r3 = ResourcesRequest.from_pvc(pv, DEFAULT_K8S_CLUSTER, date, interval)
     assert r3 == ResourcesRequest(
         namespace=pv.namespace,
         name=pv.name,
@@ -228,11 +225,10 @@ def test_resource_data_facade() -> None:
         project_id=pv.project_id,
         launcher_id=pv.launcher_id,
         resource_class_id=pv.resource_class_id,
-        resource_class_cost=Credit.from_int(15),
         resource_pool_id=pv.resource_pool_id,
         since=pv.start_or_creation_time,
         gpu_slice=None,
-        gpu_kind=None,
+        gpu_product=None,
         data=pv.requested_data,
     )
 
