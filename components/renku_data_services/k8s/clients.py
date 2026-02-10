@@ -128,7 +128,6 @@ class K8sSchedulingClient(PriorityClassClient):
     def __init__(self, k8s_client: K8sClient) -> None:
         self.__client = k8s_client
         self.__pc_gvk = GVK(kind="PriorityClass", version="v1", group="scheduling.k8s.io")
-        self.__converter = client.ApiClient()
 
     def _meta(self, name: str, cluster_id: ClusterId) -> K8sObjectMeta:
         return K8sObjectMeta(
@@ -138,10 +137,8 @@ class K8sSchedulingClient(PriorityClassClient):
             cluster=cluster_id,
         )
 
-    def _convert(self, data: Box) -> client.V1PriorityClass:
-        # NOTE: There is unfortunately no other way around this, this is the only thing that will
-        # properly handle snake case - camel case conversions and a bunch of other things.
-        output = self.__converter._ApiClient__deserialize(data.to_dict(), client.V1PriorityClass)
+    def _to_k8s_v1_priority_class(self, data: Box) -> client.V1PriorityClass:
+        output = deserializer(data.to_dict(), client.V1PriorityClass)
         if not isinstance(output, client.V1PriorityClass):
             raise errors.ProgrammingError(message="Could not convert the output from kr8s to a PriorityClass")
         return output
@@ -157,7 +154,7 @@ class K8sSchedulingClient(PriorityClassClient):
             cluster=cluster_id,
         )
         output = await self.__client.create(obj, refresh=True)
-        return self._convert(output.manifest)
+        return self._to_k8s_v1_priority_class(output.manifest)
 
     async def delete_priority_class(
         self,
@@ -175,7 +172,7 @@ class K8sSchedulingClient(PriorityClassClient):
         output = await self.__client.get(metadata)
         if not output:
             return None
-        return self._convert(output.manifest)
+        return self._to_k8s_v1_priority_class(output.manifest)
 
 
 class DummyCoreClient(ResourceQuotaClient, SecretClient):
