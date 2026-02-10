@@ -1,5 +1,4 @@
-AMALTHEA_JS_VERSION ?= 0.22.0
-AMALTHEA_SESSIONS_VERSION ?= 0.22.0
+AMALTHEA_SESSIONS_VERSION ?= 0.25.0
 COMMON_CODEGEN_PARAMS := \
 	--output-model-type pydantic_v2.BaseModel \
 	--use-double-quotes \
@@ -106,14 +105,12 @@ k3d_cluster:  ## Creates a k3d cluster for testing
 install_amaltheas:  ## Installs both version of amalthea in the. NOTE: It uses the currently active k8s context.
 	helm repo add renku https://swissdatasciencecenter.github.io/helm-charts
 	helm repo update
-	helm upgrade --install amalthea-js renku/amalthea --version $(AMALTHEA_JS_VERSION)
 	helm upgrade --install amalthea-se renku/amalthea-sessions --version ${AMALTHEA_SESSIONS_VERSION}
 
 # TODO: Add the version variables from the top of the file here when the charts are fully published
 .PHONY: amalthea_schema
 amalthea_schema:  ## Updates generates pydantic classes from CRDs
 	curl https://raw.githubusercontent.com/SwissDataScienceCenter/amalthea/${AMALTHEA_SESSIONS_VERSION}/config/crd/bases/amalthea.dev_amaltheasessions.yaml | yq '.spec.versions[0].schema.openAPIV3Schema' | poetry run datamodel-codegen --output components/renku_data_services/notebooks/cr_amalthea_session.py --base-class renku_data_services.notebooks.cr_base.BaseCRD ${CR_CODEGEN_PARAMS}
-	curl https://raw.githubusercontent.com/SwissDataScienceCenter/amalthea/${AMALTHEA_JS_VERSION}/controller/crds/jupyter_server.yaml | yq '.spec.versions[0].schema.openAPIV3Schema' | poetry run datamodel-codegen --output components/renku_data_services/notebooks/cr_jupyter_server.py --base-class renku_data_services.notebooks.cr_base.BaseCRD ${CR_CODEGEN_PARAMS}
 
 .PHONY: shipwright_schema
 shipwright_schema:  ## Updates the Shipwright pydantic classes
