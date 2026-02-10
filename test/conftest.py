@@ -509,7 +509,7 @@ def cluster_name():
 @pytest.fixture(scope="session")
 def kubeconfig_path(monkeysession):
     kconf = ".kind-kubeconfig.yaml"
-    #    monkeysession.setenv("KUBECONFIG", kconf)
+    monkeysession.setenv("KUBECONFIG", kconf)
     return Path(kconf)
 
 
