@@ -234,9 +234,7 @@ class DependencyManager:
                 kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
             ),
         )
-        quota_repo = QuotaRepository(
-            K8sResourceQuotaClient(client), K8sSchedulingClient(client), namespace=config.k8s_namespace
-        )
+        quota_repo = QuotaRepository(K8sResourceQuotaClient(client), K8sSchedulingClient(client))
 
         if config.dummy_stores:
             authenticator = DummyAuthenticator()

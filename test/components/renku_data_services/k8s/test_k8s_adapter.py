@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import AsyncIterable
 from dataclasses import asdict
 
 import pytest
@@ -20,6 +21,7 @@ from kubernetes.client import (
 from renku_data_services.crc import models
 from renku_data_services.k8s.clients import (
     K8sClusterClient,
+    K8sClusterClientsPool,
     K8sResourceQuotaClient,
     K8sSchedulingClient,
 )
@@ -33,15 +35,20 @@ from renku_data_services.notebooks.util.kubernetes_ import find_env_var
 from test.components.renku_data_services.crc_models.hypothesis import quota_strat, quota_strat_w_id
 
 
-@pytest_asyncio.fixture(scope="session")
-async def quota_repo(cluster):
+async def get_default_cluster(cluster) -> AsyncIterable[K8sClusterClient]:
     default_kubeconfig = await from_kubeconfig_file(cluster.kubeconfig)
     default_api = await default_kubeconfig.api()
     cluster_connection = ClusterConnection(id=DEFAULT_K8S_CLUSTER, namespace=default_api.namespace, api=default_api)
-    clnt = K8sClusterClient(cluster_connection)
+
+    yield K8sClusterClient(cluster_connection)
+
+
+@pytest_asyncio.fixture(scope="session")
+async def quota_repo(cluster):
+    clnt = K8sClusterClientsPool(lambda: get_default_cluster(cluster))
     rc_client = K8sResourceQuotaClient(clnt)
     pc_client = K8sSchedulingClient(clnt)
-    yield QuotaRepository(rc_client, pc_client, namespace=default_api.namespace)
+    yield QuotaRepository(rc_client, pc_client)
 
 
 @given(quota=quota_strat)
