@@ -28,7 +28,7 @@ def validate_recurrence_config(recurrence: apispec.RecurrenceConfig) -> models.R
     if recurrence.type is None:
         raise errors.ValidationError(message="Recurrence type is required")
 
-    if recurrence.end_date and recurrence.start_date >= recurrence.end_date:
+    if recurrence.start_date >= recurrence.end_date:
         raise errors.ValidationError(message="Recurrence end date must be after start date")
 
     if recurrence.type == apispec.RecurrenceType.weekly and not recurrence.schedule:
@@ -154,19 +154,13 @@ def _generate_weekly_occurrences(
 
 def generate_occurrences(
     reservation: models.CapacityReservation,
-    from_date: date,
-    to_date: date,
 ) -> list[models.UnsavedOccurrence]:
     """Generate occurrences for a reservation within a date range."""
     recurrence = reservation.recurrence
     occurrences: list[models.UnsavedOccurrence] = []
 
-    # Determine the effective date range
-    start = max(from_date, recurrence.start_date)
-    end = min(to_date, recurrence.end_date) if recurrence.end_date else to_date
-
-    if start > end:
-        return []
+    start = max(date.today(), recurrence.start_date)
+    end = recurrence.end_date
 
     match recurrence.type:
         case models.RecurrenceType.ONCE:

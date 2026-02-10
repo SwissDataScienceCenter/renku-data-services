@@ -45,7 +45,7 @@ class RecurrenceConfig:
 
     type: RecurrenceType
     start_date: date
-    end_date: date | None = None
+    end_date: date
     schedule: list[ScheduleEntry] = field(default_factory=list)
 
 

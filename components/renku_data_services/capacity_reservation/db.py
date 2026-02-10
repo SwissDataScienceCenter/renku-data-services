@@ -51,6 +51,23 @@ class CapacityReservationRepository:
             capacity_reservation_list = capacity_reservations.all()
             return [cr.dump() for cr in capacity_reservation_list]
 
+    async def get_capacity_reservations_by_ids(
+        self, capacity_reservation_ids: list[ULID]
+    ) -> list[models.CapacityReservation]:
+        """Get capacity reservations by their IDs."""
+
+        if not capacity_reservation_ids:
+            return []
+
+        async with self.session_maker() as session:
+            query = select(schemas.CapacityReservationORM).where(
+                schemas.CapacityReservationORM.id.in_(capacity_reservation_ids)
+            )
+
+            capacity_reservations = await session.scalars(query)
+            capacity_reservation_list = capacity_reservations.all()
+            return [cr.dump() for cr in capacity_reservation_list]
+
     async def delete_capacity_reservation(self, user: base_models.APIUser, capacity_reservation_id: ULID) -> None:
         """Delete a capacity reservation by ID."""
         if user.id is None:
@@ -87,7 +104,6 @@ class OccurrenceAdapter:
 
     async def get_occurrences_by_properties(
         self,
-        user: base_models.APIUser,
         id: ULID | None,
         reservation_id: ULID | None,
         status: models.OccurrenceState | None,
@@ -99,10 +115,7 @@ class OccurrenceAdapter:
     ) -> list[models.Occurrence]:
         """Get occurrences by their properties."""
 
-        if user.id is None:
-            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
-        if not user.is_admin:
-            raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+        time_now = datetime.now(UTC)
 
         async with self.session_maker() as session:
             query = select(schemas.OccurrenceORM)
@@ -128,8 +141,9 @@ class OccurrenceAdapter:
             elif starts_within_minutes is not None:
                 query = query.where(
                     schemas.OccurrenceORM.start_datetime.between(
-                        datetime.now(UTC),
-                        datetime.now(UTC) + timedelta(minutes=starts_within_minutes),
+                        time_now,
+                        time_now,
+                        +timedelta(minutes=starts_within_minutes),
                     )
                 )
 
@@ -145,8 +159,8 @@ class OccurrenceAdapter:
             elif ends_within_minutes is not None:
                 query = query.where(
                     schemas.OccurrenceORM.end_datetime.between(
-                        datetime.now(UTC),
-                        datetime.now(UTC) + timedelta(minutes=ends_within_minutes),
+                        time_now,
+                        time_now + timedelta(minutes=ends_within_minutes),
                     )
                 )
 

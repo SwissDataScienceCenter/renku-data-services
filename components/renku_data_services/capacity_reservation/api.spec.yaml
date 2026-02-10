@@ -193,12 +193,11 @@ components:
         start_date:
           type: string
           format: date
-          example: "2024-01-15"
+          example: "2026-01-15"
         end_date:
           type: string
           format: date
-          nullable: true
-          example: "2024-06-15"
+          example: "2026-06-15"
         schedule:
           type: array
           items:
@@ -207,6 +206,7 @@ components:
       required:
         - type
         - start_date
+        - end_date
 
     ProvisioningConfig:
       type: object

@@ -17,8 +17,9 @@ from renku_data_services.base_models.validation import validated_json
 from renku_data_services.capacity_reservation import apispec
 from renku_data_services.capacity_reservation.core import (
     validate_capacity_reservation,
+    generate_occurrences,
 )
-from renku_data_services.capacity_reservation.db import CapacityReservationRepository
+from renku_data_services.capacity_reservation.db import CapacityReservationRepository, OccurrenceAdapter
 
 
 @dataclass(kw_only=True)
@@ -26,6 +27,7 @@ class CapacityReservationBP(CustomBlueprint):
     """Handlers for capacity reservations."""
 
     capacity_reservation_repo: CapacityReservationRepository
+    occurrence_adapter: OccurrenceAdapter
     authenticator: base_models.Authenticator
 
     def post(self) -> BlueprintFactoryResponse:
@@ -35,11 +37,16 @@ class CapacityReservationBP(CustomBlueprint):
         @only_admins
         @validate(json=apispec.CapacityReservationPost)
         async def _post(_: Request, user: base_models.APIUser, body: apispec.CapacityReservationPost) -> JSONResponse:
-            new_reservation = validate_capacity_reservation(body)
-            reservation = await self.capacity_reservation_repo.create_capacity_reservation(
-                user=user, capacity_reservation=new_reservation
+            new_capacity_reservation = validate_capacity_reservation(body)
+            capacity_reservation = await self.capacity_reservation_repo.create_capacity_reservation(
+                user=user, capacity_reservation=new_capacity_reservation
             )
-            return validated_json(apispec.CapacityReservation, reservation, 201)
+            generate_occurrences(
+                reservation=capacity_reservation,
+                from_date=capacity_reservation.recurrence.start_date,
+                to_date=capacity_reservation.recurrence.end_date,
+            )
+            return validated_json(apispec.CapacityReservation, capacity_reservation, 201)
 
         return "/capacity-reservations", ["POST"], _post
 
