@@ -1,8 +1,7 @@
 """Business logic for capacity reservation."""
 
 import logging
-from datetime import date, datetime, timedelta
-from datetime import UTC
+from datetime import UTC, date, datetime, timedelta
 
 from ulid import ULID
 

@@ -122,9 +122,7 @@ class CapacityReservationORM(BaseORM):
         )
 
     @classmethod
-    def from_unsaved_model(
-        cls, new_capacity_reservation: models.UnsavedCapacityReservation
-    ) -> "CapacityReservationORM":
+    def from_unsaved_model(cls, new_capacity_reservation: models.UnsavedCapacityReservation) -> CapacityReservationORM:
         """Create an ORM object from an unsaved capacity reservation model."""
         return cls(
             name=new_capacity_reservation.name,
@@ -152,9 +150,7 @@ class OccurrenceORM(BaseORM):
     status: Mapped[models.OccurrenceState] = mapped_column(
         "status", Enum(models.OccurrenceState, name="occurrence_state")
     )
-    deployment_name: Mapped[Optional[str]] = mapped_column(
-        "deployment_name", String(255), nullable=True, default=None
-    )
+    deployment_name: Mapped[Optional[str]] = mapped_column("deployment_name", String(255), nullable=True, default=None)
 
     def dump(self) -> models.Occurrence:
         """Create an occurrence model from this ORM object."""
@@ -168,7 +164,7 @@ class OccurrenceORM(BaseORM):
         )
 
     @classmethod
-    def from_unsaved_model(cls, new_occurrence: models.UnsavedOccurrence) -> "OccurrenceORM":
+    def from_unsaved_model(cls, new_occurrence: models.UnsavedOccurrence) -> OccurrenceORM:
         """Create an ORM object from an unsaved occurrence model."""
         return cls(
             reservation_id=new_occurrence.reservation_id,

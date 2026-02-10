@@ -1,7 +1,7 @@
 """Models for capacity reservations."""
 
 from dataclasses import dataclass, field
-from datetime import date, time, datetime
+from datetime import date, datetime, time
 from enum import StrEnum
 
 from ulid import ULID

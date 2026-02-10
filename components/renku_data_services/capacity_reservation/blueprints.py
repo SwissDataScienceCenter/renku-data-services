@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from sanic import Request, HTTPResponse
+from sanic import HTTPResponse, Request
 from sanic.response import JSONResponse
 from sanic_ext import validate
 from ulid import ULID
