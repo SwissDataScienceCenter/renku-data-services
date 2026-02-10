@@ -45,7 +45,7 @@ class CapacityReservationORM(BaseORM):
     """Matching configuration of the capacity reservation."""
 
     def dump(self) -> base_models.CapacityReservation:
-        "Create an ORM object from a capacity reservation model."
+        """Create an ORM object from a capacity reservation model."""
         return base_models.CapacityReservation(
             id=self.id,
             name=self.name,
@@ -58,7 +58,7 @@ class CapacityReservationORM(BaseORM):
     def from_unsaved_model(
         cls, new_capacity_reservation: models.UnsavedCapacityReservation
     ) -> "CapacityReservationORM":
-        "Create an ORM object from an unsaved capacity reservation model."
+        """Create an ORM object from an unsaved capacity reservation model."""
         return cls(
             name=new_capacity_reservation.name,
             recurrence=new_capacity_reservation.recurrence,

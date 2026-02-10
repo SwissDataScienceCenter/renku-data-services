@@ -1,0 +1,376 @@
+openapi: 3.0.2
+info:
+  title: Renku Data Services API
+  description: |
+    A service that allows admins to reserve capacity for Renku sessions.
+  version: v1
+servers:
+  - url: /api/data
+paths:
+  /capacity-reservations:
+    post:
+      summary: Create a capacity reservation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CapacityReservationPost"
+      responses:
+        "201":
+          description: Capacity reservation created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CapacityReservation"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - capacity-reservations
+    get:
+      summary: Retrieve all capacity reservations
+      parameters:
+        - in: query
+          description: query parameters
+          name: parameters
+          style: form
+          explode: true
+          schema:
+            $ref: "#/components/schemas/CapacityReservationGetParameters"
+      responses:
+        "200":
+          description: A list of capacity reservations.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CapacityReservationList"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - capacity-reservations
+  /capacity-reservations/{reservation_id}:
+    get:
+      summary: Retrieve a specific capacity reservation
+      parameters:
+        - in: path
+          name: reservation_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/Ulid"
+          description: The ID of the capacity reservation to retrieve.
+      responses:
+        "200":
+          description: Capacity reservation retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CapacityReservation"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - capacity-reservations
+    delete:
+      summary: Delete a capacity reservation
+      parameters:
+        - in: path
+          name: reservation_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/Ulid"
+          description: The ID of the capacity reservation to delete.
+      responses:
+        "204":
+          description: Capacity reservation deleted successfully
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - capacity-reservations
+  /capacity-reservations/{reservation_id}/occurrences:
+    get:
+      summary: Retrieve occurrences of a specific capacity reservation
+      parameters:
+        - in: path
+          name: reservation_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/Ulid"
+          description: The ID of the capacity reservation.
+      responses:
+        "200":
+          description: A list of capacity reservation occurrences.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OccurrenceList"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - capacity-reservations
+  /capacity-reservations/{reservation_id}/occurrences/{occurrence_id}:
+    get:
+      summary: Retrieve a specific occurrence of a capacity reservation
+      parameters:
+        - in: path
+          name: reservation_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/Ulid"
+          description: The ID of the capacity reservation.
+        - in: path
+          name: occurrence_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/Ulid"
+          description: The ID of the occurrence to retrieve.
+      responses:
+        "200":
+          description: Capacity reservation occurrence retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Occurrence"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - capacity-reservations
+components:
+  schemas:
+    Ulid:
+      description: ULID identifier
+      type: string
+      minLength: 26
+      maxLength: 26
+      pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+
+    RecurrenceType:
+      type: string
+      enum:
+        - once
+        - daily
+        - weekly
+
+    ScaleDownBehavior:
+      type: string
+      enum:
+        - maintain
+        - reduce
+
+    OccurrenceState:
+      type: string
+      enum:
+        - active
+        - pending
+        - completed
+
+    ScheduleEntry:
+      type: object
+      additionalProperties: false
+      properties:
+        day_of_week:
+          type: integer
+          minimum: 1
+          maximum: 7
+          example: 1
+        start_time:
+          type: string
+          format: time
+          example: "08:00:00"
+        end_time:
+          type: string
+          format: time
+          example: "18:00:00"
+      required:
+        - day_of_week
+        - start_time
+        - end_time
+
+    RecurrenceConfig:
+      type: object
+      additionalProperties: false
+      properties:
+        type:
+          $ref: "#/components/schemas/RecurrenceType"
+        start_date:
+          type: string
+          format: date
+          example: "2024-01-15"
+        end_date:
+          type: string
+          format: date
+          nullable: true
+          example: "2024-06-15"
+        schedule:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScheduleEntry"
+          default: []
+      required:
+        - type
+        - start_date
+
+    ProvisioningConfig:
+      type: object
+      additionalProperties: false
+      properties:
+        placeholder_count:
+          type: integer
+          minimum: 1
+          example: 10
+        cpu_request:
+          type: string
+          example: "1"
+        memory_request:
+          type: string
+          example: "2Gi"
+        priority_class_name:
+          type: string
+          nullable: true
+          example: "renku-capacity-reservation"
+        lead_time_minutes:
+          type: integer
+          minimum: 0
+          maximum: 180
+          example: 30
+        scale_down_behavior:
+          $ref: "#/components/schemas/ScaleDownBehavior"
+      required:
+        - placeholder_count
+        - cpu_request
+        - memory_request
+        - lead_time_minutes
+        - scale_down_behavior
+
+    MatchingConfig:
+      type: object
+      additionalProperties: false
+      properties:
+        project_template_id:
+          type: string
+          nullable: true
+          example: "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+        resource_class_id:
+          type: integer
+          nullable: true
+          example: 42
+
+    CapacityReservationPost:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          maxLength: 40
+          example: "Monday Morning Course"
+        recurrence:
+          $ref: "#/components/schemas/RecurrenceConfig"
+        provisioning:
+          $ref: "#/components/schemas/ProvisioningConfig"
+        matching:
+          $ref: "#/components/schemas/MatchingConfig"
+      required:
+        - name
+        - recurrence
+        - provisioning
+        - matching
+
+    CapacityReservation:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        name:
+          type: string
+          maxLength: 40
+          example: "Monday Morning Course"
+        recurrence:
+          $ref: "#/components/schemas/RecurrenceConfig"
+        provisioning:
+          $ref: "#/components/schemas/ProvisioningConfig"
+        matching:
+          $ref: "#/components/schemas/MatchingConfig"
+      required:
+        - id
+        - name
+        - recurrence
+        - provisioning
+        - matching
+
+    Occurrence:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        reservation_id:
+          $ref: "#/components/schemas/Ulid"
+        start_datetime:
+          type: string
+          format: date-time
+          example: "2024-01-15T08:00:00Z"
+        end_datetime:
+          type: string
+          format: date-time
+          example: "2024-01-15T17:00:00Z"
+        status:
+          $ref: "#/components/schemas/OccurrenceState"
+        deployment_name:
+          type: string
+          nullable: true
+          example: "reservation-01ARZ3NDEKTSV4RRFFQ69G5FAV"
+      required:
+        - id
+        - reservation_id
+        - start_datetime
+        - end_datetime
+        - status
+
+    CapacityReservationList:
+      type: array
+      items:
+        $ref: "#/components/schemas/CapacityReservation"
+
+    OccurrenceList:
+      type: array
+      items:
+        $ref: "#/components/schemas/Occurrence"
+
+    CapacityReservationGetParameters:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/Ulid"
+        name:
+          type: string
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: integer
+              minimum: 0
+              exclusiveMinimum: true
+              example: 1404
+            detail:
+              type: string
+              example: A more detailed optional message showing what the problem was
+            message:
+              type: string
+              example: Something went wrong - please try again later
+          required:
+            - code
+            - message
+      required:
+        - error
+
+  responses:
+    Error:
+      description: The schema for all 4xx and 5xx responses
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"

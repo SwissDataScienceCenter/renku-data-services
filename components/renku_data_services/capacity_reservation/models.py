@@ -15,8 +15,8 @@ class RecurrenceType(StrEnum):
     WEEKLY = "weekly"
 
 
-class ScaleDownBehaviour(StrEnum):
-    """The scale down behaviours for capacity reservations."""
+class ScaleDownBehavior(StrEnum):
+    """The scale down behaviors for capacity reservations."""
 
     MAINTAIN = "maintain"
     REDUCE = "reduce"
@@ -51,16 +51,20 @@ class RecurrenceConfig:
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class ProvisioningConfig:
+    """A provisioning configuration for capacity reservations."""
+
     placeholder_count: int
     cpu_request: str
     memory_request: str
-    priority_class: str | None = None
+    priority_class_name: str | None = None
     lead_time_minutes: int
-    scale_down_behaviour: ScaleDownBehaviour = ScaleDownBehaviour.REDUCE
+    scale_down_behavior: ScaleDownBehavior = ScaleDownBehavior.REDUCE
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class MatchingConfig:
+    """A matching configuration for capacity reservations."""
+
     project_template_id: ULID | None = None
     resource_class_id: int | None = None
 
