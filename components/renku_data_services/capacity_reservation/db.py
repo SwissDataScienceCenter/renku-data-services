@@ -15,7 +15,7 @@ from renku_data_services.capacity_reservation import orm as schemas
 logger = logging.getLogger(__name__)
 
 
-class CapacityReservationAdapter:
+class CapacityReservationRepository:
     """Repository for Capacity Reservations."""
 
     def __init__(self, session_maker: Callable[..., AsyncSession]):
@@ -31,27 +31,7 @@ class CapacityReservationAdapter:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session, session.begin():
-            query = (
-                select(schemas.CapacityReservationORM)
-                .where(schemas.CapacityReservationORM.name == capacity_reservation.name)
-                .where(schemas.CapacityReservationORM.recurrence == capacity_reservation.recurrence)
-                .where(schemas.CapacityReservationORM.provisioning == capacity_reservation.provisioning)
-                .where(schemas.CapacityReservationORM.matching == capacity_reservation.matching)
-            )
-
-            res = await session.scalars(query)
-            existing_capacity_reservation = res.one_or_none()
-            if existing_capacity_reservation is not None:
-                raise errors.ConflictError(message="An identical capacity reservation already exists.")
-
             capacity_reservation_orm = schemas.CapacityReservationORM.from_unsaved_model(capacity_reservation)
-
-            capacity_reservation_orm = schemas.CapacityReservationORM(
-                name=capacity_reservation.name,
-                recurrence=capacity_reservation.recurrence,
-                provisioning=capacity_reservation.provisioning,
-                matching=capacity_reservation.matching,
-            )
             session.add(capacity_reservation_orm)
             await session.flush()
             await session.refresh(capacity_reservation_orm)
