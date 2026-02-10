@@ -314,7 +314,11 @@ class ResourceDataFacade:
     @property
     def resource_pool_id(self) -> int | None:
         """Return the resource pool id."""
-        return None  # TODO implement when annotation is added
+        val = self.__get_annotation("renku.io/resource_pool_id")
+        try:
+            return int(val) if val is not None else None
+        except ValueError:
+            return None
 
     @property
     def start_or_creation_time(self) -> datetime:
