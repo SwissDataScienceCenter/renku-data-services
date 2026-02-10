@@ -30,7 +30,7 @@ from renku_data_services.k8s.models import ClusterConnection, sanitizer
 from renku_data_services.notebooks.api.classes.auth import RenkuTokens
 from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClient
 from renku_data_services.notebooks.util.kubernetes_ import find_env_var
-from test.components.renku_data_services.crc_models.hypothesis import quota_strat
+from test.components.renku_data_services.crc_models.hypothesis import quota_strat, quota_strat_w_id
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -71,7 +71,7 @@ async def test_delete_quota(quota: models.UnsavedQuota, quota_repo: QuotaReposit
     assert no_quota is None
 
 
-@given(old_quota=quota_strat, new_quota=quota_strat)
+@given(old_quota=quota_strat_w_id, new_quota=quota_strat)
 @pytest.mark.xdist_group("sessions")
 async def test_update_quota(
     old_quota: models.UnsavedQuota, new_quota: models.UnsavedQuota, quota_repo: QuotaRepository
@@ -79,7 +79,9 @@ async def test_update_quota(
     created_quota = None
     try:
         created_quota = await quota_repo.create_quota(old_quota, DEFAULT_K8S_CLUSTER)
-        quota_update = models.Quota(**asdict(new_quota), id=created_quota.id)
+        tmp = asdict(new_quota)
+        tmp.pop("id", None)
+        quota_update = models.Quota(**tmp, id=created_quota.id)
         updated_quota = await quota_repo.update_quota(quota_update, DEFAULT_K8S_CLUSTER)
         retrieved_quota = await quota_repo.get_quota(created_quota.id, DEFAULT_K8S_CLUSTER)
         assert updated_quota == retrieved_quota

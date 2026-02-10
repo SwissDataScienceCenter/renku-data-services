@@ -145,6 +145,7 @@ class UnsavedQuota(ResourcesCompareMixin):
     memory: int
     gpu: int
     gpu_kind: GpuKind = GpuKind.NVIDIA
+    id: str | None = None
 
     def is_resource_class_compatible(self, rc: ResourceClass | UnsavedResourceClass) -> bool:
         """Determine if a resource class is compatible with the quota."""
