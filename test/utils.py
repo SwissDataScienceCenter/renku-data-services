@@ -188,7 +188,6 @@ class TestDependencyManager(DependencyManager):
         authenticator: base_models.Authenticator
         gitlab_authenticator: base_models.Authenticator
         gitlab_client: base_models.GitlabAPIProtocol
-        k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
         config.authz_config = AuthzConfigStack.from_env()
         kc_api: IKeycloakAPI
 
@@ -204,9 +203,7 @@ class TestDependencyManager(DependencyManager):
                 kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
             ),
         )
-        quota_repo = QuotaRepository(
-            K8sResourceQuotaClient(client), K8sSchedulingClient(client), namespace=k8s_namespace
-        )
+        quota_repo = QuotaRepository(K8sResourceQuotaClient(client), K8sSchedulingClient(client))
 
         authenticator = DummyAuthenticator()
         gitlab_authenticator = DummyAuthenticator()
