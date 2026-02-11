@@ -6,16 +6,12 @@ from renku_data_services.data_connectors.apispec import DataConnector as ApiData
 from renku_data_services.namespace.apispec import GroupResponse as ApiGroup
 from renku_data_services.project.apispec import Project as ApiProject
 from renku_data_services.search.apispec import (
-    Group as SearchGroup,
-)
-from renku_data_services.search.apispec import (
     SearchDataConnector,
     SearchEntity,
+    SearchGroup,
     SearchProject,
     SearchResult,
-)
-from renku_data_services.search.apispec import (
-    User as SearchUser,
+    SearchUser,
 )
 from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.users.models import UserInfo
@@ -54,6 +50,7 @@ async def test_direct_member_search(
     #   - project yb (owner=wout, private, viewer=florian)
 
     mads = await create_user(app_manager_instance, APIUser(id="mads-123", first_name="Mads", last_name="Pedersen"))
+    print(mads)
     wout = await create_user(app_manager_instance, APIUser(id="wout-567", first_name="Wout", last_name="van Art"))
     flor = await create_user(app_manager_instance, APIUser(id="flor-789", first_name="Florian", last_name="Lipowitz"))
     gr_lidl = await create_group_model(
@@ -62,6 +59,7 @@ async def test_direct_member_search(
         members=[{"id": mads.id, "role": "editor"}, {"id": wout.id, "role": "viewer"}],
         user=regular_user,
     )
+    print(gr_lidl)
     gr_visma = await create_group_model(
         sanic_client_with_solr,
         "Visma LeaseABike",
@@ -131,6 +129,7 @@ async def test_direct_member_search(
         sanic_client_with_solr, f"direct_member:@{wout.namespace.path.first}", user=regular_user
     )
     assert_search_result(result, [gr_lidl, gr_visma, p3, p4, p5])
+    print(result)
 
     result = await search_query(
         sanic_client_with_solr, f"direct_member:@{wout.namespace.path.first},@{mads.namespace.path.first}", user=mads
