@@ -108,7 +108,7 @@ class K8sWatcher:
     async def __watch_kind(self, kind: GVK, client: K8sClusterClient) -> None:
         cluster = client.get_cluster()
         cluster_id = cluster.id
-        logger.info(f"Watching {kind} in cluster {cluster}")
+        logger.info(f"Watching {kind} through {cluster}")
         while True:
             try:
                 watch = cluster.api.async_watch(kind=kind.kr8s_kind, namespace=cluster.namespace)
@@ -118,7 +118,6 @@ class K8sWatcher:
                             f"Pausing k8s watch event processing for cluster {cluster} until full sync completes"
                         )
                     else:
-                        logger.warn(f"#### e {event_type} o {obj} cluster {cluster}")
                         await self.__handler(cluster.with_api_object(obj), event_type)
             except ValueError:
                 pass
