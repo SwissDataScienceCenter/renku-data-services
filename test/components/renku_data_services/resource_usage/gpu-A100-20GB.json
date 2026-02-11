@@ -1,0 +1,588 @@
+{
+    "apiVersion": "v1",
+    "kind": "Node",
+    "metadata": {
+        "annotations": {
+            "alpha.kubernetes.io/provided-node-ip": "10.224.0.17",
+            "csi.volume.kubernetes.io/nodeid": "{\"blob.csi.azure.com\":\"aks-defaultgpu20-59521611-vmss00000h\",\"csi-rclone\":\"aks-defaultgpu20-59521611-vmss00000h\",\"disk.csi.azure.com\":\"aks-defaultgpu20-59521611-vmss00000h\",\"file.csi.azure.com\":\"aks-defaultgpu20-59521611-vmss00000h\"}",
+            "nfd.node.kubernetes.io/feature-labels": "cpu-cpuid.ADX,cpu-cpuid.AESNI,cpu-cpuid.AVX,cpu-cpuid.AVX2,cpu-cpuid.CETSS,cpu-cpuid.CLZERO,cpu-cpuid.CMPXCHG8,cpu-cpuid.FMA3,cpu-cpuid.FSRM,cpu-cpuid.FXSR,cpu-cpuid.FXSROPT,cpu-cpuid.HYPERVISOR,cpu-cpuid.LAHF,cpu-cpuid.MOVBE,cpu-cpuid.MOVU,cpu-cpuid.OSXSAVE,cpu-cpuid.PSFD,cpu-cpuid.RDPRU,cpu-cpuid.SHA,cpu-cpuid.SSE4A,cpu-cpuid.SYSCALL,cpu-cpuid.SYSEE,cpu-cpuid.TOPEXT,cpu-cpuid.VAES,cpu-cpuid.VPCLMULQDQ,cpu-cpuid.X87,cpu-cpuid.XGETBV1,cpu-cpuid.XSAVE,cpu-cpuid.XSAVEC,cpu-cpuid.XSAVEOPT,cpu-cpuid.XSAVES,cpu-hardware_multithreading,cpu-model.family,cpu-model.id,cpu-model.vendor_id,kernel-config.NO_HZ,kernel-config.NO_HZ_FULL,kernel-version.full,kernel-version.major,kernel-version.minor,kernel-version.revision,nvidia.com/cuda.driver-version.full,nvidia.com/cuda.driver-version.major,nvidia.com/cuda.driver-version.minor,nvidia.com/cuda.driver-version.revision,nvidia.com/cuda.driver.major,nvidia.com/cuda.driver.minor,nvidia.com/cuda.driver.rev,nvidia.com/cuda.runtime-version.full,nvidia.com/cuda.runtime-version.major,nvidia.com/cuda.runtime-version.minor,nvidia.com/cuda.runtime.major,nvidia.com/cuda.runtime.minor,nvidia.com/gfd.timestamp,nvidia.com/gpu.compute.major,nvidia.com/gpu.compute.minor,nvidia.com/gpu.count,nvidia.com/gpu.engines.copy,nvidia.com/gpu.engines.decoder,nvidia.com/gpu.engines.encoder,nvidia.com/gpu.engines.jpeg,nvidia.com/gpu.engines.ofa,nvidia.com/gpu.family,nvidia.com/gpu.machine,nvidia.com/gpu.memory,nvidia.com/gpu.mode,nvidia.com/gpu.multiprocessors,nvidia.com/gpu.product,nvidia.com/gpu.replicas,nvidia.com/gpu.sharing-strategy,nvidia.com/gpu.slices.ci,nvidia.com/gpu.slices.gi,nvidia.com/mig.capable,nvidia.com/mig.strategy,nvidia.com/mps.capable,nvidia.com/vgpu.present,pci-10de.present,pci-15b3.present,rdma.capable,storage-nonrotationaldisk,system-os_release.ID,system-os_release.VERSION_ID,system-os_release.VERSION_ID.major,system-os_release.VERSION_ID.minor",
+            "node.alpha.kubernetes.io/ttl": "0",
+            "volumes.kubernetes.io/controller-managed-attach-detach": "true"
+        },
+        "creationTimestamp": "2026-02-06T08:31:37Z",
+        "labels": {
+            "accelerator": "nvidia",
+            "agentpool": "defaultgpu20",
+            "beta.kubernetes.io/arch": "amd64",
+            "beta.kubernetes.io/instance-type": "Standard_NC24ads_A100_v4",
+            "beta.kubernetes.io/os": "linux",
+            "failure-domain.beta.kubernetes.io/region": "switzerlandnorth",
+            "failure-domain.beta.kubernetes.io/zone": "0",
+            "feature.node.kubernetes.io/cpu-cpuid.ADX": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.AESNI": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.AVX": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.AVX2": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.CETSS": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.CLZERO": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.CMPXCHG8": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.FMA3": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.FSRM": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.FXSR": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.FXSROPT": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.HYPERVISOR": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.LAHF": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.MOVBE": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.MOVU": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.OSXSAVE": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.PSFD": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.RDPRU": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.SHA": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.SSE4A": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.SYSCALL": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.SYSEE": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.TOPEXT": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.VAES": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.VPCLMULQDQ": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.X87": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.XGETBV1": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.XSAVE": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.XSAVEC": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.XSAVEOPT": "true",
+            "feature.node.kubernetes.io/cpu-cpuid.XSAVES": "true",
+            "feature.node.kubernetes.io/cpu-hardware_multithreading": "false",
+            "feature.node.kubernetes.io/cpu-model.family": "25",
+            "feature.node.kubernetes.io/cpu-model.id": "1",
+            "feature.node.kubernetes.io/cpu-model.vendor_id": "AMD",
+            "feature.node.kubernetes.io/kernel-config.NO_HZ": "true",
+            "feature.node.kubernetes.io/kernel-config.NO_HZ_FULL": "true",
+            "feature.node.kubernetes.io/kernel-version.full": "5.15.0-1102-azure",
+            "feature.node.kubernetes.io/kernel-version.major": "5",
+            "feature.node.kubernetes.io/kernel-version.minor": "15",
+            "feature.node.kubernetes.io/kernel-version.revision": "0",
+            "feature.node.kubernetes.io/pci-10de.present": "true",
+            "feature.node.kubernetes.io/pci-15b3.present": "true",
+            "feature.node.kubernetes.io/rdma.capable": "true",
+            "feature.node.kubernetes.io/storage-nonrotationaldisk": "true",
+            "feature.node.kubernetes.io/system-os_release.ID": "ubuntu",
+            "feature.node.kubernetes.io/system-os_release.VERSION_ID": "22.04",
+            "feature.node.kubernetes.io/system-os_release.VERSION_ID.major": "22",
+            "feature.node.kubernetes.io/system-os_release.VERSION_ID.minor": "04",
+            "gpuA100-parted": "true",
+            "gputype": "nvidia",
+            "kubernetes.azure.com/accelerator": "nvidia",
+            "kubernetes.azure.com/agentpool": "defaultgpu20",
+            "kubernetes.azure.com/cluster": "MC_renku-prod_aks-switzerlandnorth-renku-prod_switzerlandnorth",
+            "kubernetes.azure.com/consolidated-additional-properties": "b7e88291-026e-11f1-b91e-6ed9c48f19db",
+            "kubernetes.azure.com/kubelet-identity-client-id": "3f42fcf7-565d-47a4-bccf-e550fd3afe14",
+            "kubernetes.azure.com/kubelet-serving-ca": "cluster",
+            "kubernetes.azure.com/localdns-state": "disabled",
+            "kubernetes.azure.com/mode": "user",
+            "kubernetes.azure.com/node-image-version": "AKSUbuntu-2204gen2containerd-202601.13.0",
+            "kubernetes.azure.com/nodepool-type": "VirtualMachineScaleSets",
+            "kubernetes.azure.com/os-sku": "Ubuntu",
+            "kubernetes.azure.com/os-sku-effective": "Ubuntu2204",
+            "kubernetes.azure.com/os-sku-requested": "Ubuntu",
+            "kubernetes.azure.com/role": "agent",
+            "kubernetes.azure.com/sku-cpu": "24",
+            "kubernetes.azure.com/sku-memory": "225280",
+            "kubernetes.azure.com/storageprofile": "managed",
+            "kubernetes.azure.com/storagetier": "Premium_LRS",
+            "kubernetes.io/arch": "amd64",
+            "kubernetes.io/hostname": "aks-defaultgpu20-59521611-vmss00000h",
+            "kubernetes.io/os": "linux",
+            "node.kubernetes.io/instance-type": "Standard_NC24ads_A100_v4",
+            "nvidia.com/cuda.driver-version.full": "580.95.05",
+            "nvidia.com/cuda.driver-version.major": "580",
+            "nvidia.com/cuda.driver-version.minor": "95",
+            "nvidia.com/cuda.driver-version.revision": "05",
+            "nvidia.com/cuda.driver.major": "580",
+            "nvidia.com/cuda.driver.minor": "95",
+            "nvidia.com/cuda.driver.rev": "05",
+            "nvidia.com/cuda.runtime-version.full": "13.0",
+            "nvidia.com/cuda.runtime-version.major": "13",
+            "nvidia.com/cuda.runtime-version.minor": "0",
+            "nvidia.com/cuda.runtime.major": "13",
+            "nvidia.com/cuda.runtime.minor": "0",
+            "nvidia.com/gfd.timestamp": "1770366793",
+            "nvidia.com/gpu.compute.major": "8",
+            "nvidia.com/gpu.compute.minor": "0",
+            "nvidia.com/gpu.count": "3",
+            "nvidia.com/gpu.engines.copy": "2",
+            "nvidia.com/gpu.engines.decoder": "1",
+            "nvidia.com/gpu.engines.encoder": "0",
+            "nvidia.com/gpu.engines.jpeg": "0",
+            "nvidia.com/gpu.engines.ofa": "0",
+            "nvidia.com/gpu.family": "ampere",
+            "nvidia.com/gpu.machine": "Virtual-Machine",
+            "nvidia.com/gpu.memory": "19968",
+            "nvidia.com/gpu.mode": "compute",
+            "nvidia.com/gpu.multiprocessors": "28",
+            "nvidia.com/gpu.product": "NVIDIA-A100-80GB-PCIe-MIG-2g.20gb",
+            "nvidia.com/gpu.replicas": "1",
+            "nvidia.com/gpu.sharing-strategy": "none",
+            "nvidia.com/gpu.slices.ci": "2",
+            "nvidia.com/gpu.slices.gi": "2",
+            "nvidia.com/mig.capable": "true",
+            "nvidia.com/mig.strategy": "single",
+            "nvidia.com/mps.capable": "false",
+            "nvidia.com/vgpu.present": "false",
+            "renku.io/expiration": "2035-12-31",
+            "renku.io/node-purpose": "user",
+            "storageprofile": "managed",
+            "storagetier": "Premium_LRS",
+            "topology.disk.csi.azure.com/zone": "",
+            "topology.kubernetes.io/region": "switzerlandnorth",
+            "topology.kubernetes.io/zone": "0"
+        },
+        "name": "aks-defaultgpu20-59521611-vmss00000h",
+        "resourceVersion": "175085651",
+        "uid": "cc245afe-4a11-4549-8596-db31ff5925de"
+    },
+    "spec": {
+        "podCIDR": "10.244.3.0/24",
+        "podCIDRs": [
+            "10.244.3.0/24"
+        ],
+        "providerID": "azure:///subscriptions/dc63af61-b029-4882-9687-6e22def5ad34/resourceGroups/mc_renku-prod_aks-switzerlandnorth-renku-prod_switzerlandnorth/providers/Microsoft.Compute/virtualMachineScaleSets/aks-defaultgpu20-59521611-vmss/virtualMachines/17",
+        "taints": [
+            {
+                "effect": "NoSchedule",
+                "key": "renku.io/gpu",
+                "value": "true"
+            },
+            {
+                "effect": "NoSchedule",
+                "key": "renku.io/dedicated",
+                "value": "user"
+            }
+        ]
+    },
+    "status": {
+        "addresses": [
+            {
+                "address": "10.224.0.17",
+                "type": "InternalIP"
+            },
+            {
+                "address": "aks-defaultgpu20-59521611-vmss00000h",
+                "type": "Hostname"
+            }
+        ],
+        "allocatable": {
+            "cpu": "23660m",
+            "ephemeral-storage": "479347519924",
+            "hugepages-1Gi": "0",
+            "hugepages-2Mi": "0",
+            "memory": "224358240Ki",
+            "nvidia.com/gpu": "3",
+            "pods": "110"
+        },
+        "capacity": {
+            "cpu": "24",
+            "ephemeral-storage": "520125348Ki",
+            "hugepages-1Gi": "0",
+            "hugepages-2Mi": "0",
+            "memory": "226764640Ki",
+            "nvidia.com/gpu": "3",
+            "pods": "110"
+        },
+        "conditions": [
+            {
+                "lastHeartbeatTime": "2026-02-06T08:32:45Z",
+                "lastTransitionTime": "2026-02-06T08:32:45Z",
+                "message": "RouteController created a route",
+                "reason": "RouteCreated",
+                "status": "False",
+                "type": "NetworkUnavailable"
+            },
+            {
+                "lastHeartbeatTime": "2026-02-06T11:06:07Z",
+                "lastTransitionTime": "2026-02-06T08:31:37Z",
+                "message": "kubelet has sufficient memory available",
+                "reason": "KubeletHasSufficientMemory",
+                "status": "False",
+                "type": "MemoryPressure"
+            },
+            {
+                "lastHeartbeatTime": "2026-02-06T11:06:07Z",
+                "lastTransitionTime": "2026-02-06T08:31:37Z",
+                "message": "kubelet has no disk pressure",
+                "reason": "KubeletHasNoDiskPressure",
+                "status": "False",
+                "type": "DiskPressure"
+            },
+            {
+                "lastHeartbeatTime": "2026-02-06T11:06:07Z",
+                "lastTransitionTime": "2026-02-06T08:31:37Z",
+                "message": "kubelet has sufficient PID available",
+                "reason": "KubeletHasSufficientPID",
+                "status": "False",
+                "type": "PIDPressure"
+            },
+            {
+                "lastHeartbeatTime": "2026-02-06T11:06:07Z",
+                "lastTransitionTime": "2026-02-06T08:31:39Z",
+                "message": "kubelet is posting ready status",
+                "reason": "KubeletReady",
+                "status": "True",
+                "type": "Ready"
+            }
+        ],
+        "daemonEndpoints": {
+            "kubeletEndpoint": {
+                "Port": 10250
+            }
+        },
+        "images": [
+            {
+                "names": [
+                    "ghcr.io/swissdatasciencecenter/renku/py-datascience-vscodium@sha256:ad634d243fbbed978417038151d96494e33749fbe287e80eb35b541d7e400eaf",
+                    "ghcr.io/swissdatasciencecenter/renku/py-datascience-vscodium:2.13.2"
+                ],
+                "sizeBytes": 869135915
+            },
+            {
+                "names": [
+                    "ghcr.io/swissdatasciencecenter/renku/py-datascience-jupyterlab@sha256:9b01e664f418478fcc01cd81c4b7e47a26a26fceae6b624b127f32b8ad4f7426",
+                    "ghcr.io/swissdatasciencecenter/renku/py-datascience-jupyterlab:2.9.0"
+                ],
+                "sizeBytes": 842075158
+            },
+            {
+                "names": [
+                    "nvcr.io/nvidia/k8s/dcgm-exporter@sha256:993e1d3535bcd7115cee7ec24fc6e80dde84d6711a827e8a7f7eed5977cd02d2",
+                    "nvcr.io/nvidia/k8s/dcgm-exporter:3.3.6-3.4.2-ubuntu22.04"
+                ],
+                "sizeBytes": 819511554
+            },
+            {
+                "names": null,
+                "sizeBytes": 711066667
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/azuremonitor/containerinsights/ciprod/prometheus-collector/images:6.24.1-main-11-14-2025-15146744"
+                ],
+                "sizeBytes": 312616989
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/azuremonitor/containerinsights/ciprod:3.1.32"
+                ],
+                "sizeBytes": 287031745
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/containernetworking/cilium/cilium:v1.17.7-250927"
+                ],
+                "sizeBytes": 281224403
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/containernetworking/cilium/cilium:v1.17.7-250821"
+                ],
+                "sizeBytes": 273909071
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/containernetworking/cilium/cilium:v1.16.10-250610"
+                ],
+                "sizeBytes": 236745020
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/containernetworking/cilium/cilium:v1.16.13-250826"
+                ],
+                "sizeBytes": 233320417
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/containernetworking/azure-cns:v1.5.49"
+                ],
+                "sizeBytes": 226534040
+            },
+            {
+                "names": [
+                    "docker.io/renku/git-clone@sha256:8389d04a4e09f9d2df2a452faa7fe8d1192fc304c79d19ffdd232b36371b0eb1",
+                    "docker.io/renku/git-clone:1.31.1"
+                ],
+                "sizeBytes": 156536409
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/oss/v2/kubernetes-csi/blob-csi:v1.27.1"
+                ],
+                "sizeBytes": 152921474
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/oss/v2/kubernetes-csi/blob-csi:v1.26.8"
+                ],
+                "sizeBytes": 152113927
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/oss/v2/kubernetes-csi/blob-csi:v1.25.10"
+                ],
+                "sizeBytes": 151669209
+            },
+            {
+                "names": [
+                    "docker.io/grafana/alloy@sha256:8c7256f412feb9f5f48f9f6f9394dc97ca887f63dea9304f347970ecc1787669",
+                    "docker.io/grafana/alloy:v1.11.3"
+                ],
+                "sizeBytes": 150131069
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/azuremonitor/containerinsights/ciprod/prometheus-collector/images:6.24.1-main-11-14-2025-15146744-cfg"
+                ],
+                "sizeBytes": 143567560
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/oss/v2/kubernetes-csi/azurefile-csi:v1.34.3"
+                ],
+                "sizeBytes": 133328691
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/oss/v2/kubernetes-csi/azurefile-csi:v1.33.7"
+                ],
+                "sizeBytes": 127428553
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/oss/v2/kubernetes-csi/azurefile-csi:v1.32.9"
+                ],
+                "sizeBytes": 111771812
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/containernetworking/azure-cni:v1.6.32"
+                ],
+                "sizeBytes": 109068249
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/containernetworking/azure-npm:v1.6.29"
+                ],
+                "sizeBytes": 101515988
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/oss/kubernetes/kube-proxy:v1.33.5-hotfix.20250926"
+                ],
+                "sizeBytes": 99248477
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/oss/kubernetes/kube-proxy:v1.33.5"
+                ],
+                "sizeBytes": 99248475
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/oss/kubernetes/kube-proxy:v1.32.10"
+                ],
+                "sizeBytes": 96187740
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/oss/kubernetes/kube-proxy:v1.32.9"
+                ],
+                "sizeBytes": 95443805
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/oss/kubernetes/kube-proxy@sha256:bc6ec83b2e3ffa811dc49ff5b405ee7983cb47ddbe851b0de99335aec47db60d",
+                    "mcr.microsoft.com/oss/kubernetes/kube-proxy:v1.32.6"
+                ],
+                "sizeBytes": 95351133
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/oss/kubernetes/kube-proxy:v1.31.14"
+                ],
+                "sizeBytes": 94147932
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/oss/kubernetes/kube-proxy:v1.31.13"
+                ],
+                "sizeBytes": 93391197
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/oss/kubernetes/kube-proxy:v1.30.101-akslts"
+                ],
+                "sizeBytes": 86507869
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/oss/kubernetes/kube-proxy:v1.30.14"
+                ],
+                "sizeBytes": 86507869
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/oss/kubernetes/kube-proxy:v1.30.100-akslts"
+                ],
+                "sizeBytes": 86507869
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/oss/kubernetes/kube-proxy:v1.30.13"
+                ],
+                "sizeBytes": 86393693
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/containernetworking/azure-cni:v1.5.44"
+                ],
+                "sizeBytes": 84666530
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/oss/kubernetes/kube-proxy:v1.29.100-akslts"
+                ],
+                "sizeBytes": 84648797
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/oss/kubernetes/kube-proxy:v1.29.15"
+                ],
+                "sizeBytes": 84648797
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/oss/kubernetes/kube-proxy:v1.29.101-akslts"
+                ],
+                "sizeBytes": 84648797
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/oss/kubernetes/kube-proxy:v1.29.14"
+                ],
+                "sizeBytes": 84243293
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/oss/kubernetes/kube-proxy:v1.28.102-akslts"
+                ],
+                "sizeBytes": 83041629
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/oss/kubernetes/kube-proxy:v1.28.103-akslts"
+                ],
+                "sizeBytes": 83041629
+            },
+            {
+                "names": [
+                    "registry.k8s.io/nfd/node-feature-discovery@sha256:5ad4e3ac1afcbeb9d096241b0352614e5e77ee1bfe0f37c45a8d7b4329599d11",
+                    "registry.k8s.io/nfd/node-feature-discovery:v0.17.3"
+                ],
+                "sizeBytes": 80718055
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/oss/v2/kubernetes-csi/azuredisk-csi:v1.33.7"
+                ],
+                "sizeBytes": 78225519
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/oss/v2/kubernetes-csi/azuredisk-csi:v1.32.11"
+                ],
+                "sizeBytes": 77671419
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/containernetworking/azure-cns:v1.6.33"
+                ],
+                "sizeBytes": 74383328
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/oss/v2/kubernetes/kube-proxy:v1.34.2-1"
+                ],
+                "sizeBytes": 72190147
+            },
+            {
+                "names": [
+                    "docker.io/renku/csi-rclone@sha256:aa2084ea42e4a30c57d7cb0134f87036af3e7750f873203092b29c381431c114",
+                    "docker.io/renku/csi-rclone:v0.5.0"
+                ],
+                "sizeBytes": 65854932
+            },
+            {
+                "names": [
+                    "nvcr.io/nvidia/k8s-device-plugin@sha256:b5788e29e7ae5272de8de863ebe386d6611e608421a6ecc5b4e7d5952aba637f",
+                    "nvcr.io/nvidia/k8s-device-plugin:v0.18.2"
+                ],
+                "sizeBytes": 54235011
+            },
+            {
+                "names": [
+                    "harbor.renkulab.io/bitnami-mirror/oauth2-proxy@sha256:5ab039546313f08255b6f2be20a81a453c07960b1b3e9cf561c9860fd9c3d71b",
+                    "harbor.renkulab.io/bitnami-mirror/oauth2-proxy:7.6.0"
+                ],
+                "sizeBytes": 53977779
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/containernetworking/azure-cni:v1.7.9-0"
+                ],
+                "sizeBytes": 51791518
+            },
+            {
+                "names": [
+                    "mcr.microsoft.com/azuremonitor/containerinsights/ciprod/prometheus-collector/images:6.24.1-main-11-14-2025-15146744-targetallocator"
+                ],
+                "sizeBytes": 45506664
+            }
+        ],
+        "nodeInfo": {
+            "architecture": "amd64",
+            "bootID": "158d0820-8d2b-4835-9c24-2065dd8211a1",
+            "containerRuntimeVersion": "containerd://1.7.30-1",
+            "kernelVersion": "5.15.0-1102-azure",
+            "kubeProxyVersion": "v1.32.6",
+            "kubeletVersion": "v1.32.6",
+            "machineID": "0d33118345df469f90bfb063d71b768c",
+            "operatingSystem": "linux",
+            "osImage": "Ubuntu 22.04.5 LTS",
+            "systemUUID": "22434986-cdc3-494f-9fe5-0b52b9ff09b4"
+        },
+        "volumesAttached": [
+            {
+                "devicePath": "",
+                "name": "kubernetes.io/csi/disk.csi.azure.com^/subscriptions/dc63af61-b029-4882-9687-6e22def5ad34/resourceGroups/MC_renku-prod_aks-switzerlandnorth-renku-prod_switzerlandnorth/providers/Microsoft.Compute/disks/pvc-3952166a-ded2-4c62-bbe1-f39ee69be404"
+            },
+            {
+                "devicePath": "",
+                "name": "kubernetes.io/csi/csi-rclone^pvc-9e3ca5cf-1b1b-48fa-a9e5-4907d9dd1aad"
+            },
+            {
+                "devicePath": "",
+                "name": "kubernetes.io/csi/csi-rclone^pvc-3a7a7385-46bc-40d6-bf74-9037b50a2f4d"
+            },
+            {
+                "devicePath": "",
+                "name": "kubernetes.io/csi/csi-rclone^pvc-fe1ff533-18fc-4344-ab37-7adc369b2e0f"
+            },
+            {
+                "devicePath": "",
+                "name": "kubernetes.io/csi/disk.csi.azure.com^/subscriptions/dc63af61-b029-4882-9687-6e22def5ad34/resourceGroups/MC_renku-prod_aks-switzerlandnorth-renku-prod_switzerlandnorth/providers/Microsoft.Compute/disks/pvc-64b4e2c2-f707-4175-8d95-d86143c11910"
+            }
+        ],
+        "volumesInUse": [
+            "kubernetes.io/csi/csi-rclone^pvc-3a7a7385-46bc-40d6-bf74-9037b50a2f4d",
+            "kubernetes.io/csi/csi-rclone^pvc-9e3ca5cf-1b1b-48fa-a9e5-4907d9dd1aad",
+            "kubernetes.io/csi/csi-rclone^pvc-fe1ff533-18fc-4344-ab37-7adc369b2e0f",
+            "kubernetes.io/csi/disk.csi.azure.com^/subscriptions/dc63af61-b029-4882-9687-6e22def5ad34/resourceGroups/MC_renku-prod_aks-switzerlandnorth-renku-prod_switzerlandnorth/providers/Microsoft.Compute/disks/pvc-3952166a-ded2-4c62-bbe1-f39ee69be404",
+            "kubernetes.io/csi/disk.csi.azure.com^/subscriptions/dc63af61-b029-4882-9687-6e22def5ad34/resourceGroups/MC_renku-prod_aks-switzerlandnorth-renku-prod_switzerlandnorth/providers/Microsoft.Compute/disks/pvc-64b4e2c2-f707-4175-8d95-d86143c11910"
+        ]
+    }
+}

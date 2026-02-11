@@ -35,6 +35,7 @@ from renku_data_services.data_connectors.db import (
     DataConnectorSecretRepository,
 )
 from renku_data_services.git.gitlab import DummyGitlabAPI, EmptyGitlabAPI, GitlabAPI
+from renku_data_services.k8s.client_interfaces import K8sClient
 from renku_data_services.k8s.clients import (
     K8sClusterClientsPool,
     K8sResourceQuotaClient,
@@ -115,6 +116,7 @@ class DependencyManager:
 
     config: Config
 
+    k8s_client: K8sClient
     user_store: base_models.UserStore
     authenticator: base_models.Authenticator
     gitlab_authenticator: base_models.Authenticator
@@ -402,6 +404,7 @@ class DependencyManager:
         )
         return cls(
             config,
+            k8s_client=client,
             authenticator=authenticator,
             gitlab_authenticator=gitlab_authenticator,
             gitlab_client=gitlab_client,
