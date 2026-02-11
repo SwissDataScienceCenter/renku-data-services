@@ -19,6 +19,8 @@ from renku_data_services.storage.rclone_patches import apply_patches
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
+    from renku_data_services import base_models
+    from renku_data_services.notebooks.data_sources import DataSourceRepository
     from renku_data_services.storage.models import RCloneConfig
 
 
@@ -83,7 +85,11 @@ class RCloneValidator:
         return real_config
 
     async def test_connection(
-        self, configuration: Union[RCloneConfig, dict[str, Any]], source_path: str
+        self,
+        configuration: Union[RCloneConfig, dict[str, Any]],
+        source_path: str,
+        user: base_models.APIUser | None = None,
+        data_source_repo: DataSourceRepository | None = None,
     ) -> ConnectionResult:
         """Tests connecting with an RClone config."""
         try:
@@ -95,6 +101,14 @@ class RCloneValidator:
         obscured_config = await self.obscure_config(self.get_real_configuration(configuration))
         transformed_config = self.inject_default_values(self.transform_polybox_switchdriver_config(obscured_config))
         transformed_config = self.transform_envidat_config(transformed_config)
+
+        # Handle testing with Renku integrations
+        if user is not None and data_source_repo is not None:
+            with_oauth2_config = await data_source_repo.handle_configuration_for_test(
+                user=user, configuration=transformed_config
+            )
+            if with_oauth2_config is not None:
+                transformed_config = with_oauth2_config
 
         with tempfile.NamedTemporaryFile(mode="w+", delete=False, encoding="utf-8") as f:
             config = "\n".join(f"{k}={v}" for k, v in transformed_config.items())
