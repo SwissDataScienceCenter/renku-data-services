@@ -187,8 +187,9 @@ skips = ["B101", "B603", "B607", "B404"]
 exclude_dirs = [
   "test",
   ".devcontainer",
-  "components/renku_data_services/notebooks/cr_jupyter_server.py",
+  "components/renku_data_services/connected_services/apispec.py",
   "components/renku_data_services/notebooks/cr_amalthea_session.py",
+  "components/renku_data_services/notebooks/cr_jupyter_server.py",
 ]
 
 [tool.pytest.ini_options]

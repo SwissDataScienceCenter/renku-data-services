@@ -210,7 +210,7 @@ async def test_get_provider_for_image_unsupported_provider(app_manager_instance)
     run_migrations_for_app("common")
 
     setup = await setup_users(app_manager_instance)
-    await setup.insert_client("google-drive", ProviderKind.drive, "")
+    await setup.insert_client("google-drive", ProviderKind.dropbox, "")
 
     p = await setup.connected_repo.get_provider_for_image(setup.user1, gitlab_image)
     assert p is None
