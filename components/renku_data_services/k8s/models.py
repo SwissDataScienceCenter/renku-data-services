@@ -12,16 +12,25 @@ from box import Box
 from kr8s._api import Api
 from kr8s.asyncio.objects import APIObject
 from kr8s.objects import Secret
-from kubernetes.client import V1Secret
+from kubernetes.client import V1PriorityClass, V1ResourceQuota, V1Secret
 
 from renku_data_services.errors import ProgrammingError, errors
 from renku_data_services.k8s.constants import DUMMY_TASK_RUN_USER_ID, ClusterId
 
 _kubernetes_client = kubernetes.client.ApiClient()
 sanitizer = _kubernetes_client.sanitize_for_serialization
-# NOTE: There is unfortunately no other way around this, this is the only thing that will
-# properly handle snake case - camel case conversions and a bunch of other things.
-deserializer = _kubernetes_client._ApiClient__deserialize
+
+
+def _deserializer(data: Any, klass: type) -> Any:
+    """Deserialise k8s object into a klass instance."""
+
+    # NOTE: There is unfortunately no other way around this, this is the only thing that will
+    # properly handle snake case - camel case conversions and a bunch of other things.
+    obj = _kubernetes_client._ApiClient__deserialize(data, klass)
+    if not isinstance(obj, klass):
+        raise errors.ProgrammingError(message=f"Could not convert from a kr8s object to a {klass}")
+
+    return obj
 
 
 class K8sObjectMeta:
@@ -59,7 +68,7 @@ class K8sObjectMeta:
             user_id=self.user_id,
         )
 
-    def to_filter(self) -> K8sObjectFilter:
+    def to_filter(self, label_selector: dict[str, str] | None = None) -> K8sObjectFilter:
         """Convert the metadata to a filter used when listing resources."""
         return K8sObjectFilter(
             gvk=self.gvk,
@@ -67,6 +76,7 @@ class K8sObjectMeta:
             cluster=self.cluster,
             name=self.name,
             user_id=self.user_id,
+            label_selector=label_selector,
         )
 
     def __repr__(self) -> str:
@@ -106,6 +116,12 @@ class K8sObject(K8sObjectMeta):
             namespaced = self.namespaced()
 
         return _APIObj(resource=self.manifest, namespace=self.namespace, api=api)
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(name={self.name}, namespace={self.namespace}, cluster={self.cluster}, "
+            f"gvk={self.gvk}, user_id={self.user_id}, manifest={self.manifest})"
+        )
 
 
 class K8sSecret(K8sObject):
@@ -207,6 +223,85 @@ class K8sSecret(K8sObject):
             )
         # We never create 'finalizers' nor 'managedFields', so we do not patch them.
         return patch
+
+
+class K8sResourceQuota(K8sObject):
+    """Represents a ResourceQuota in k8s."""
+
+    def __init__(
+        self,
+        name: str,
+        namespace: str,
+        cluster: ClusterId,
+        manifest: Box | None = None,
+    ) -> None:
+        super().__init__(
+            name=name,
+            namespace=namespace,
+            cluster=cluster,
+            gvk=GVK(kind="ResourceQuota", version="v1"),
+            manifest=Box() if manifest is None else manifest,
+        )
+
+    @classmethod
+    def from_k8s_object(cls, k8s_object: K8sObject) -> K8sResourceQuota:
+        """Convert a k8s object to a K8sResourceQuota object."""
+        assert k8s_object.namespace is not None
+
+        return K8sResourceQuota(
+            name=k8s_object.name,
+            namespace=k8s_object.namespace,
+            cluster=k8s_object.cluster,
+            manifest=k8s_object.manifest,
+        )
+
+    @classmethod
+    def get_filter(cls, label_selector: dict[str, str], namespace: str, cluster_id: ClusterId) -> K8sObjectFilter:
+        """Return a filter to list K8s objects."""
+
+        return K8sObjectFilter(
+            gvk=GVK(kind="ResourceQuota", version="v1"),
+            namespace=namespace,
+            label_selector=label_selector,
+            cluster=cluster_id,
+        )
+
+    def to_v1_resource_quota(self) -> V1ResourceQuota:
+        """Convert a K8sResouceQuota to a V1ResourceQuota."""
+        return _deserializer(self.manifest.to_dict(), V1ResourceQuota)
+
+
+class K8sPriorityClass(K8sObject):
+    """Represents a PriorityClass in k8s."""
+
+    def __init__(
+        self,
+        name: str,
+        cluster: ClusterId,
+        manifest: Box | None = None,
+    ) -> None:
+        super().__init__(
+            name=name,
+            namespace=None,
+            cluster=cluster,
+            gvk=GVK(kind="PriorityClass", version="v1", group="scheduling.k8s.io"),
+            manifest=Box() if manifest is None else manifest,
+        )
+
+    @classmethod
+    def from_k8s_object(cls, k8s_object: K8sObject) -> K8sPriorityClass:
+        """Convert a k8s object to a K8sPriorityClass object."""
+        assert k8s_object.namespace is None
+
+        return K8sPriorityClass(
+            name=k8s_object.name,
+            cluster=k8s_object.cluster,
+            manifest=k8s_object.manifest,
+        )
+
+    def to_v1_priority_class(self) -> V1PriorityClass:
+        """Convert a K8sResouceQuota to a V1ResourceQuota."""
+        return _deserializer(self.manifest.to_dict(), V1PriorityClass)
 
 
 @dataclass
