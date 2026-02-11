@@ -9,6 +9,7 @@ from sanic_ext import validate
 from ulid import ULID
 
 from renku_data_services import base_models, errors
+from renku_data_services.app_config import logging
 from renku_data_services.base_api.auth import (
     authenticate,
     only_authenticated,
@@ -34,13 +35,11 @@ from renku_data_services.data_connectors.core import (
     transform_secrets_for_front_end,
     validate_data_connector_patch,
     validate_data_connector_secrets_patch,
-    validate_unsaved_data_connector,
 )
-from renku_data_services.data_connectors.db import (
-    DataConnectorRepository,
-    DataConnectorSecretRepository,
-)
+from renku_data_services.data_connectors.db import DataConnectorRepository, DataConnectorSecretRepository
 from renku_data_services.storage.rclone import RCloneValidator
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(kw_only=True)
@@ -78,6 +77,7 @@ class DataConnectorsBP(CustomBlueprint):
                     message="Got an unexpected number of path segments for the data connector namespace"
                     " in the request query parameter, expected 0, 1 or 2"
                 )
+
             data_connectors, total_num = await self.data_connector_repo.get_data_connectors(
                 user=user, pagination=pagination, namespace=ns
             )
@@ -96,20 +96,19 @@ class DataConnectorsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        @validate(json=apispec.DataConnectorPost)
-        async def _post(
-            _: Request, user: base_models.APIUser, body: apispec.DataConnectorPost, validator: RCloneValidator
-        ) -> JSONResponse:
-            data_connector = await validate_unsaved_data_connector(body, validator=validator)
-            result = await self.data_connector_repo.insert_namespaced_data_connector(
-                user=user, data_connector=data_connector
-            )
-            await self.metrics.data_connector_created(user)
-            return validated_json(
-                apispec.DataConnector,
-                self._dump_data_connector(result, validator=validator),
-                status=201,
-            )
+        async def _post(*_: Any, **__: Any) -> JSONResponse:
+            import sentry_sdk
+            from sanic import Request
+
+            logger.warning("SENTRY_TRACE ----------------")
+
+            request = Request.get_current()
+            span = sentry_sdk.get_current_span()
+            trace_id = span.trace_id if span else request.id
+
+            logger.warning(f"SENTRY_TRACE ---------------- post_data_connectors: {trace_id}:{span}")
+
+            raise TypeError("This is a test error")
 
         return "/data_connectors", ["POST"], _post
 
