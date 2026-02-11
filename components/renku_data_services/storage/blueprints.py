@@ -15,6 +15,7 @@ from renku_data_services.base_api.auth import authenticate
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_models.validation import validated_json
+from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.storage import apispec, models
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.storage.rclone import RCloneValidator
@@ -193,6 +194,9 @@ class StorageBP(CustomBlueprint):
 class StorageSchemaBP(CustomBlueprint):
     """Handler for getting RClone storage schema."""
 
+    data_source_repo: DataSourceRepository
+    authenticator: base_models.Authenticator
+
     def get(self) -> BlueprintFactoryResponse:
         """Get cloud storage for a repository."""
 
@@ -204,12 +208,18 @@ class StorageSchemaBP(CustomBlueprint):
     def test_connection(self) -> BlueprintFactoryResponse:
         """Validate an RClone config."""
 
+        @authenticate(self.authenticator)
         @validate(json=apispec.StorageSchemaTestConnectionPostRequest)
         async def _test_connection(
-            request: Request, validator: RCloneValidator, body: apispec.StorageSchemaTestConnectionPostRequest
+            request: Request,
+            user: base_models.APIUser,
+            validator: RCloneValidator,
+            body: apispec.StorageSchemaTestConnectionPostRequest,
         ) -> HTTPResponse:
             validator.validate(body.configuration, keep_sensitive=True)
-            result = await validator.test_connection(body.configuration, body.source_path)
+            result = await validator.test_connection(
+                body.configuration, body.source_path, user=user, data_source_repo=self.data_source_repo
+            )
             if not result.success:
                 raise errors.ValidationError(message=result.error)
             return empty(204)
