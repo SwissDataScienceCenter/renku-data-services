@@ -110,26 +110,24 @@ class K8sWatcher:
         cluster_id = cluster.id
         logger.info(f"Watching {kind} through {cluster}")
         while True:
-            try:
-                watch = cluster.api.async_watch(kind=kind.kr8s_kind, namespace=cluster.namespace)
-                async for event_type, obj in watch:
-                    if cluster_id in self.__full_sync_running:
-                        logger.info(
-                            f"Pausing k8s watch event processing for cluster {cluster} until full sync completes"
-                        )
-                    else:
+            if cluster_id in self.__full_sync_running:
+                logger.info(f"Pausing k8s watch event processing for cluster {cluster} until full sync completes")
+            else:
+                try:
+                    watch = cluster.api.async_watch(kind=kind.kr8s_kind, namespace=cluster.namespace)
+                    async for event_type, obj in watch:
                         await self.__handler(cluster.with_api_object(obj), event_type)
-            except ValueError:
-                pass
-            except (httpx.ReadError, httpcore.ReadError):
-                # This can happen occasionally - most likely means that the k8s cluster stopped the connection
-                logger.warning(
-                    "Encountered HTTP ReadError, will try to immediately restart event "
-                    f"watch for cluster {cluster_id} and kind {kind}."
-                )
-                continue
-            except Exception as e:
-                logger.error(f"watch loop failed for {kind} in cluster {cluster_id}", exc_info=e)
+                except ValueError:
+                    pass
+                except (httpx.ReadError, httpcore.ReadError):
+                    # This can happen occasionally - most likely means that the k8s cluster stopped the connection
+                    logger.warning(
+                        "Encountered HTTP ReadError, will try to immediately restart event "
+                        f"watch for cluster {cluster_id} and kind {kind}."
+                    )
+                    continue
+                except Exception as e:
+                    logger.error(f"watch loop failed for {kind} in cluster {cluster_id}", exc_info=e)
 
             # Add a sleep to prevent retrying in a loop the same action instantly.
             await asyncio.sleep(10)
