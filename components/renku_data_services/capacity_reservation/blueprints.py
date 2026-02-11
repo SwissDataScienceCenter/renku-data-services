@@ -41,11 +41,11 @@ class CapacityReservationBP(CustomBlueprint):
             capacity_reservation = await self.capacity_reservation_repo.create_capacity_reservation(
                 user=user, capacity_reservation=new_capacity_reservation
             )
-            generate_occurrences(
+            unsaved_occurrences = generate_occurrences(
                 reservation=capacity_reservation,
-                from_date=capacity_reservation.recurrence.start_date,
-                to_date=capacity_reservation.recurrence.end_date,
             )
+            if unsaved_occurrences:
+                await self.occurrence_adapter.create_occurrences(occurrences=unsaved_occurrences)
             return validated_json(apispec.CapacityReservation, capacity_reservation, 201)
 
         return "/capacity-reservations", ["POST"], _post

@@ -263,6 +263,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         name="capacity_reservation",
         url_prefix=url_prefix,
         capacity_reservation_repo=dm.capacity_reservation_repo,
+        occurrence_adapter=dm.occurrence_adapter,
         authenticator=dm.authenticator,
     )
     app.blueprint(
