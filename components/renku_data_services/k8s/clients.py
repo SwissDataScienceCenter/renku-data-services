@@ -24,8 +24,9 @@ from renku_data_services.k8s.models import (
     K8sObject,
     K8sObjectFilter,
     K8sObjectMeta,
+    K8sPriorityClass,
+    K8sResourceQuota,
     K8sSecret,
-    deserializer,
     sanitizer,
 )
 
@@ -37,71 +38,57 @@ class K8sResourceQuotaClient(ResourceQuotaClient):
         self.__client = k8s_client
         self.__quota_gvk = GVK(kind="ResourceQuota", version="v1")
 
-    async def _cluster_name_space(self, cluster_id: ClusterId) -> str | None:
+    async def __cluster_namespace(self, cluster_id: ClusterId) -> str:
         return (await self.__client.cluster_by_id(cluster_id)).namespace
 
-    async def _meta(self, name: str, cluster_id: ClusterId) -> K8sObjectMeta:
-        return K8sObjectMeta(
+    async def __meta(self, name: str, cluster_id: ClusterId) -> K8sObjectMeta:
+        return K8sResourceQuota(
             name=name,
-            namespace=await self._cluster_name_space(cluster_id),
-            gvk=self.__quota_gvk,
+            namespace=await self.__cluster_namespace(cluster_id),
             cluster=cluster_id,
         )
 
-    def _to_k8s_v1_resource_quota(self, data: Box) -> client.V1ResourceQuota:
-        output = deserializer(data.to_dict(), client.V1ResourceQuota)
-        if not isinstance(output, client.V1ResourceQuota):
-            raise errors.ProgrammingError(message="Could not convert the output from kr8s to a ResourceQuota")
-        return output
-
     async def read_resource_quota(self, name: str, cluster_id: ClusterId) -> client.V1ResourceQuota:
         """Get a resource quota."""
-        res = await self.__client.get(await self._meta(name, cluster_id))
+        res = await self.__client.get(await self.__meta(name, cluster_id))
         if res is None:
-            namespace = await self._cluster_name_space(cluster_id)
+            namespace = await self.__cluster_namespace(cluster_id)
             raise errors.MissingResourceError(message=f"The resource quota {namespace}/{name} cannot be found.")
-        return self._to_k8s_v1_resource_quota(res.manifest)
+        return K8sResourceQuota.from_k8s_object(res).to_v1_resource_quota()
 
     async def list_resource_quota(
         self, label_selector: dict[str, str], cluster_id: ClusterId
     ) -> AsyncIterable[client.V1ResourceQuota]:
         """List resource quotas."""
-        namespace = await self._cluster_name_space(cluster_id)
-        filter = K8sObjectFilter(
-            gvk=self.__quota_gvk,
-            namespace=namespace,
-            label_selector=label_selector,
-            cluster=cluster_id,
-        )
+        filter = K8sResourceQuota.get_filter(label_selector, await self.__cluster_namespace(cluster_id), cluster_id)
         quotas = self.__client.list(filter)
         async for quota in quotas:
-            yield self._to_k8s_v1_resource_quota(quota.manifest)
+            yield K8sResourceQuota.from_k8s_object(quota).to_v1_resource_quota()
 
     async def create_resource_quota(
         self, body: client.V1ResourceQuota, cluster_id: ClusterId
     ) -> client.V1ResourceQuota:
         """Create a resource quota."""
-        obj = K8sObject(
+        obj = K8sResourceQuota(
             name=body.metadata.name,
-            namespace=await self._cluster_name_space(cluster_id),
-            gvk=self.__quota_gvk,
+            namespace=await self.__cluster_namespace(cluster_id),
             manifest=Box(sanitizer(body)),
             cluster=cluster_id,
         )
         res = await self.__client.create(obj, False)
-        return self._to_k8s_v1_resource_quota(res.manifest)
+        return K8sResourceQuota.from_k8s_object(res).to_v1_resource_quota()
 
     async def delete_resource_quota(self, name: str, cluster_id: ClusterId) -> None:
         """Delete a resource quota."""
-        await self.__client.delete(await self._meta(name, cluster_id))
+        await self.__client.delete(await self.__meta(name, cluster_id))
 
     async def patch_resource_quota(
         self, name: str, body: client.V1ResourceQuota, cluster_id: ClusterId
     ) -> client.V1ResourceQuota:
         """Update a resource quota."""
         patch = sanitizer(body)
-        res = await self.__client.patch(await self._meta(name, cluster_id), patch)
-        return self._to_k8s_v1_resource_quota(res.manifest)
+        res = await self.__client.patch(await self.__meta(name, cluster_id), patch)
+        return K8sResourceQuota.from_k8s_object(res).to_v1_resource_quota()
 
 
 class K8sSecretClient(SecretClient):
@@ -141,12 +128,6 @@ class K8sSchedulingClient(PriorityClassClient):
             cluster=cluster_id,
         )
 
-    def _to_k8s_v1_priority_class(self, data: Box) -> client.V1PriorityClass:
-        output = deserializer(data.to_dict(), client.V1PriorityClass)
-        if not isinstance(output, client.V1PriorityClass):
-            raise errors.ProgrammingError(message="Could not convert the output from kr8s to a PriorityClass")
-        return output
-
     async def create_priority_class(
         self, body: client.V1PriorityClass, cluster_id: ClusterId
     ) -> client.V1PriorityClass:
@@ -159,7 +140,7 @@ class K8sSchedulingClient(PriorityClassClient):
             cluster=cluster_id,
         )
         output = await self.__client.create(obj, refresh=True)
-        return self._to_k8s_v1_priority_class(output.manifest)
+        return K8sPriorityClass.from_k8s_object(output).to_v1_priority_class()
 
     async def delete_priority_class(
         self,
@@ -173,11 +154,10 @@ class K8sSchedulingClient(PriorityClassClient):
 
     async def read_priority_class(self, name: str, cluster_id: ClusterId) -> client.V1PriorityClass | None:
         """Get a priority class."""
-        metadata = self._meta(name, cluster_id)
-        output = await self.__client.get(metadata)
-        if not output:
+        output = await self.__client.get(self._meta(name, cluster_id))
+        if output is None:
             return None
-        return self._to_k8s_v1_priority_class(output.manifest)
+        return K8sPriorityClass.from_k8s_object(output).to_v1_priority_class()
 
 
 class DummyCoreClient(ResourceQuotaClient, SecretClient):
