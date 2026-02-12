@@ -11,6 +11,7 @@ from ulid import ULID
 from renku_data_services import base_models, errors
 from renku_data_services.capacity_reservation import models
 from renku_data_services.capacity_reservation import orm as schemas
+from renku_data_services.project.orm import ProjectORM
 
 logger = logging.getLogger(__name__)
 
@@ -104,14 +105,14 @@ class OccurrenceAdapter:
 
     async def get_occurrences_by_properties(
         self,
-        id: ULID | None,
-        reservation_id: ULID | None,
-        status: models.OccurrenceState | None,
-        start_datetime: datetime | None,
-        starts_within_minutes: int | None,
-        end_datetime: datetime | None,
-        ends_within_minutes: int | None,
-        deployment_name: str | None,
+        id: ULID | None = None,
+        reservation_id: ULID | None = None,
+        status: models.OccurrenceState | None = None,
+        start_datetime: datetime | None = None,
+        starts_within_minutes: int | None = None,
+        end_datetime: datetime | None = None,
+        ends_within_minutes: int | None = None,
+        deployment_name: str | None = None,
     ) -> list[models.Occurrence]:
         """Get occurrences by their properties."""
 
@@ -142,8 +143,7 @@ class OccurrenceAdapter:
                 query = query.where(
                     schemas.OccurrenceORM.start_datetime.between(
                         time_now,
-                        time_now,
-                        +timedelta(minutes=starts_within_minutes),
+                        time_now + timedelta(minutes=starts_within_minutes),
                     )
                 )
 
@@ -194,7 +194,8 @@ class OccurrenceAdapter:
             occurrence_orm = res.one_or_none()
             if occurrence_orm is None:
                 raise errors.MissingResourceError(message=f"Occurrence with id {occurrence_id} not found.")
-
+            if occurrence_patch.activate_at_datetime is not None:
+                occurrence_orm.activate_at_datetime = occurrence_patch.activate_at_datetime
             if occurrence_patch.start_datetime is not None:
                 occurrence_orm.start_datetime = occurrence_patch.start_datetime
             if occurrence_patch.end_datetime is not None:
@@ -221,3 +222,29 @@ class OccurrenceAdapter:
         async with self.session_maker() as session, session.begin():
             await session.execute(delete(schemas.OccurrenceORM).where(schemas.OccurrenceORM.id.in_(occurrence_ids)))
         return
+
+    async def get_occurrences_due_for_activation(self) -> list[models.Occurrence]:
+        """Get occurrences that are due for activation."""
+        time_now = datetime.now(UTC)
+
+        async with self.session_maker() as session:
+            query = select(schemas.OccurrenceORM).where(
+                schemas.OccurrenceORM.activate_at_datetime <= time_now,
+                schemas.OccurrenceORM.status == models.OccurrenceState.PENDING,
+            )
+
+            occurrences = await session.scalars(query)
+            occurrence_list = occurrences.all()
+            return [occurrence.dump() for occurrence in occurrence_list]
+
+    async def get_project_template_ids(self, project_ids: list[ULID]) -> dict[ULID, ULID | None]:
+        """Get project template IDs for a list of project IDs."""
+
+        if not project_ids:
+            return {}
+
+        async with self.session_maker() as session:
+            query = select(ProjectORM.id, ProjectORM.template_id).where(ProjectORM.id.in_(project_ids))
+
+            results = await session.execute(query)
+            return {project_id: template_id for project_id, template_id in results.all()}

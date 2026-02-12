@@ -145,6 +145,7 @@ class OccurrenceORM(BaseORM):
         ULIDType,
         ForeignKey("capacity_reservation.capacity_reservations.id", ondelete="CASCADE"),
     )
+    activate_at_datetime: Mapped[datetime] = mapped_column("activate_at_datetime", DateTime(timezone=True))
     start_datetime: Mapped[datetime] = mapped_column("start_datetime", DateTime(timezone=True))
     end_datetime: Mapped[datetime] = mapped_column("end_datetime", DateTime(timezone=True))
     status: Mapped[models.OccurrenceState] = mapped_column(
@@ -157,6 +158,7 @@ class OccurrenceORM(BaseORM):
         return models.Occurrence(
             id=self.id,
             reservation_id=self.reservation_id,
+            activate_at_datetime=self.activate_at_datetime,
             start_datetime=self.start_datetime,
             end_datetime=self.end_datetime,
             status=self.status,
@@ -168,6 +170,7 @@ class OccurrenceORM(BaseORM):
         """Create an ORM object from an unsaved occurrence model."""
         return cls(
             reservation_id=new_occurrence.reservation_id,
+            activate_at_datetime=new_occurrence.activate_at_datetime,
             start_datetime=new_occurrence.start_datetime,
             end_datetime=new_occurrence.end_datetime,
             status=new_occurrence.status,

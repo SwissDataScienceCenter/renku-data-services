@@ -101,6 +101,7 @@ class UnsavedOccurrence:
     """An occurrence that has not been persisted yet."""
 
     reservation_id: ULID
+    activate_at_datetime: datetime
     start_datetime: datetime
     end_datetime: datetime
     status: OccurrenceState = OccurrenceState.PENDING
@@ -118,6 +119,7 @@ class Occurrence(UnsavedOccurrence):
 class OccurrencePatch:
     """A patch for an existing occurrence."""
 
+    activate_at_datetime: datetime | None = None
     start_datetime: datetime | None = None
     end_datetime: datetime | None = None
     status: OccurrenceState | None = None

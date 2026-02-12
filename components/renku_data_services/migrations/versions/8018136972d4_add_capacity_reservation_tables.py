@@ -1,19 +1,18 @@
 """add capacity reservation tables
 
-Revision ID: 374fc2c46d9c
+Revision ID: 8018136972d4
 Revises: 287879848fb3
-Create Date: 2026-02-10 11:19:20.937054
+Create Date: 2026-02-12 13:57:23.099601
 
 """
 
-import sqlalchemy as sa
 from alembic import op
+import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
-
 from renku_data_services.utils.sqlalchemy import ULIDType
 
 # revision identifiers, used by Alembic.
-revision = "374fc2c46d9c"
+revision = "8018136972d4"
 down_revision = "287879848fb3"
 branch_labels = None
 depends_on = None
@@ -50,6 +49,7 @@ def upgrade() -> None:
         "occurrences",
         sa.Column("id", ULIDType(), server_default=sa.text("generate_ulid()"), nullable=False),
         sa.Column("reservation_id", ULIDType(), nullable=False),
+        sa.Column("activate_at_datetime", sa.DateTime(timezone=True), nullable=False),
         sa.Column("start_datetime", sa.DateTime(timezone=True), nullable=False),
         sa.Column("end_datetime", sa.DateTime(timezone=True), nullable=False),
         sa.Column("status", sa.Enum("PENDING", "ACTIVE", "COMPLETED", name="occurrence_state"), nullable=False),

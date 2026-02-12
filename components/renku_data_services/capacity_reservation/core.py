@@ -92,6 +92,10 @@ def _generate_once_occurrences(
     for schedule_entry in reservation.recurrence.schedule:
         occurrence = models.UnsavedOccurrence(
             reservation_id=reservation.id,
+            activate_at_datetime=datetime.combine(
+                reservation.recurrence.start_date, schedule_entry.start_time, tzinfo=UTC
+            )
+            - timedelta(minutes=reservation.provisioning.lead_time_minutes),
             start_datetime=datetime.combine(reservation.recurrence.start_date, schedule_entry.start_time, tzinfo=UTC),
             end_datetime=datetime.combine(reservation.recurrence.start_date, schedule_entry.end_time, tzinfo=UTC),
             status=models.OccurrenceState.PENDING,
@@ -114,6 +118,8 @@ def _generate_daily_occurrences(
         for schedule_entry in reservation.recurrence.schedule:
             occurrence = models.UnsavedOccurrence(
                 reservation_id=reservation.id,
+                activate_at_datetime=datetime.combine(current_date, schedule_entry.start_time, tzinfo=UTC)
+                - timedelta(minutes=reservation.provisioning.lead_time_minutes),
                 start_datetime=datetime.combine(current_date, schedule_entry.start_time, tzinfo=UTC),
                 end_datetime=datetime.combine(current_date, schedule_entry.end_time, tzinfo=UTC),
                 status=models.OccurrenceState.PENDING,
@@ -141,6 +147,8 @@ def _generate_weekly_occurrences(
             if schedule_entry.day_of_week == python_weekday:
                 occurrence = models.UnsavedOccurrence(
                     reservation_id=reservation.id,
+                    activate_at_datetime=datetime.combine(current_date, schedule_entry.start_time, tzinfo=UTC)
+                    - timedelta(minutes=reservation.provisioning.lead_time_minutes),
                     start_datetime=datetime.combine(current_date, schedule_entry.start_time, tzinfo=UTC),
                     end_datetime=datetime.combine(current_date, schedule_entry.end_time, tzinfo=UTC),
                     status=models.OccurrenceState.PENDING,
