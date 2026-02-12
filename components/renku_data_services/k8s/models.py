@@ -117,12 +117,6 @@ class K8sObject(K8sObjectMeta):
 
         return _APIObj(resource=self.manifest, namespace=self.namespace, api=api)
 
-    def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}(name={self.name}, namespace={self.namespace}, cluster={self.cluster}, "
-            f"gvk={self.gvk}, user_id={self.user_id}, manifest={self.manifest})"
-        )
-
 
 class K8sSecret(K8sObject):
     """Represents a secret in k8s."""
