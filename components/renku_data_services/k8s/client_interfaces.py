@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterable
-from typing import Any, Protocol, overload
+from typing import Any, Protocol
 
 from kubernetes.client import V1PriorityClass, V1ResourceQuota
 
 from renku_data_services.k8s.constants import ClusterId
 from renku_data_services.k8s.models import (
-    ClusterScopedK8sObject,
     DeletePropagationPolicy,
     K8sObject,
     K8sObjectFilter,
@@ -22,28 +21,24 @@ class ResourceQuotaClient(Protocol):
     """Methods to manipulate ResourceQuota kubernetes resources."""
 
     def list_resource_quota(
-        self, namespace: str, label_selector: dict[str, str], cluster_id: ClusterId
+        self, label_selector: dict[str, str], cluster_id: ClusterId
     ) -> AsyncIterable[V1ResourceQuota]:
         """List resource quotas."""
         ...
 
-    async def read_resource_quota(self, name: str, namespace: str, cluster_id: ClusterId) -> V1ResourceQuota:
+    async def read_resource_quota(self, name: str, cluster_id: ClusterId) -> V1ResourceQuota:
         """Get a resource quota."""
         ...
 
-    async def create_resource_quota(
-        self, namespace: str, body: V1ResourceQuota, cluster_id: ClusterId
-    ) -> V1ResourceQuota:
+    async def create_resource_quota(self, body: V1ResourceQuota, cluster_id: ClusterId) -> V1ResourceQuota:
         """Create a resource quota."""
         ...
 
-    async def delete_resource_quota(self, name: str, namespace: str, cluster_id: ClusterId) -> None:
+    async def delete_resource_quota(self, name: str, cluster_id: ClusterId) -> None:
         """Delete a resource quota."""
         ...
 
-    async def patch_resource_quota(
-        self, name: str, namespace: str, body: V1ResourceQuota, cluster_id: ClusterId
-    ) -> V1ResourceQuota:
+    async def patch_resource_quota(self, name: str, body: V1ResourceQuota, cluster_id: ClusterId) -> V1ResourceQuota:
         """Update a resource quota."""
         ...
 
@@ -88,13 +83,7 @@ class PriorityClassClient(Protocol):
 class K8sClient(Protocol):
     """Methods to manipulate resources on a Kubernetes cluster."""
 
-    @overload
-    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject: ...
-    @overload
-    async def create(self, obj: ClusterScopedK8sObject, refresh: bool) -> ClusterScopedK8sObject: ...
-    async def create(
-        self, obj: K8sObject | ClusterScopedK8sObject, refresh: bool
-    ) -> K8sObject | ClusterScopedK8sObject:
+    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject:
         """Create the k8s object."""
         ...
 

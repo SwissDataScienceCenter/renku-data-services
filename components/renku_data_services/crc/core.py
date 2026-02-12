@@ -16,6 +16,7 @@ def validate_quota(body: apispec.QuotaWithOptionalId) -> models.UnsavedQuota:
         cpu=body.cpu,
         memory=body.memory,
         gpu=body.gpu,
+        id=body.id,
     )
 
 

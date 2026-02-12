@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import AsyncIterable
 from dataclasses import asdict
 
 import pytest
@@ -6,7 +7,6 @@ import pytest_asyncio
 from box import Box
 from hypothesis import given, settings
 from kr8s.asyncio.objects import StatefulSet
-from kubernetes import client
 from kubernetes.client import (
     V1Container,
     V1EnvVar,
@@ -21,28 +21,34 @@ from kubernetes.client import (
 from renku_data_services.crc import models
 from renku_data_services.k8s.clients import (
     K8sClusterClient,
+    K8sClusterClientsPool,
     K8sResourceQuotaClient,
     K8sSchedulingClient,
 )
 from renku_data_services.k8s.config import from_kubeconfig_file
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
 from renku_data_services.k8s.db import QuotaRepository
-from renku_data_services.k8s.models import ClusterConnection
+from renku_data_services.k8s.models import ClusterConnection, sanitizer
 from renku_data_services.notebooks.api.classes.auth import RenkuTokens
 from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClient
 from renku_data_services.notebooks.util.kubernetes_ import find_env_var
-from test.components.renku_data_services.crc_models.hypothesis import quota_strat
+from test.components.renku_data_services.crc_models.hypothesis import quota_strat, quota_strat_w_id
+
+
+async def get_default_cluster(cluster) -> AsyncIterable[K8sClusterClient]:
+    default_kubeconfig = await from_kubeconfig_file(cluster.kubeconfig)
+    default_api = await default_kubeconfig.api()
+    cluster_connection = ClusterConnection(id=DEFAULT_K8S_CLUSTER, namespace=default_api.namespace, api=default_api)
+
+    yield K8sClusterClient(cluster_connection)
 
 
 @pytest_asyncio.fixture(scope="session")
 async def quota_repo(cluster):
-    default_kubeconfig = await from_kubeconfig_file(cluster.kubeconfig)
-    default_api = await default_kubeconfig.api()
-    cluster_connection = ClusterConnection(id=DEFAULT_K8S_CLUSTER, namespace=default_api.namespace, api=default_api)
-    clnt = K8sClusterClient(cluster_connection)
+    clnt = K8sClusterClientsPool(lambda: get_default_cluster(cluster))
     rc_client = K8sResourceQuotaClient(clnt)
     pc_client = K8sSchedulingClient(clnt)
-    yield QuotaRepository(rc_client, pc_client, namespace=default_api.namespace)
+    yield QuotaRepository(rc_client, pc_client)
 
 
 @given(quota=quota_strat)
@@ -72,7 +78,7 @@ async def test_delete_quota(quota: models.UnsavedQuota, quota_repo: QuotaReposit
     assert no_quota is None
 
 
-@given(old_quota=quota_strat, new_quota=quota_strat)
+@given(old_quota=quota_strat_w_id, new_quota=quota_strat)
 @pytest.mark.xdist_group("sessions")
 async def test_update_quota(
     old_quota: models.UnsavedQuota, new_quota: models.UnsavedQuota, quota_repo: QuotaRepository
@@ -80,7 +86,9 @@ async def test_update_quota(
     created_quota = None
     try:
         created_quota = await quota_repo.create_quota(old_quota, DEFAULT_K8S_CLUSTER)
-        quota_update = models.Quota(**asdict(new_quota), id=created_quota.id)
+        tmp = asdict(new_quota)
+        tmp.pop("id", None)
+        quota_update = models.Quota(**tmp, id=created_quota.id)
         updated_quota = await quota_repo.update_quota(quota_update, DEFAULT_K8S_CLUSTER)
         retrieved_quota = await quota_repo.get_quota(created_quota.id, DEFAULT_K8S_CLUSTER)
         assert updated_quota == retrieved_quota
@@ -148,7 +156,7 @@ def test_patch_statefulset_tokens() -> None:
             ),
         )
     )
-    sanitized_sts = client.ApiClient().sanitize_for_serialization(sts)
+    sanitized_sts = sanitizer(sts)
     patches = NotebookK8sClient._get_statefulset_token_patches(StatefulSet(sanitized_sts), new_renku_tokens)
 
     # Order of patches should be git proxy access, git proxy refresh, git clone, secrets

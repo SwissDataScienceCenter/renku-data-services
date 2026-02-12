@@ -115,7 +115,9 @@ user_list_strat = st.lists(user_strat, max_size=5, min_size=1, unique=True)
 
 rc_update_reqs_dict = st.dictionaries(
     keys=st.sampled_from(["cpu", "gpu", "memory", "max_storage"]),
-    values=st.integers(min_value=1, max_value=5),
+    # We have to ensure we do not overlap with the base values, or we may draw exactly the same set as in the initial
+    # conditions. Keep the range small, for faster tests...
+    values=st.integers(min_value=20_000, max_value=20_005),
     min_size=1,
 ).map(make_cpu_float)
 
