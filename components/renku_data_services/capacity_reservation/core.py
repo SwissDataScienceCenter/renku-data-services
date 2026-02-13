@@ -187,19 +187,13 @@ def calculate_target_replicas(
     active_sessions: int,
     now: datetime,
 ) -> int:
-    """Calculate the target number of placeholder replicas for an occurrence."""
     provisioning = reservation.provisioning
 
-    lead_time_delta = timedelta(minutes=provisioning.lead_time_minutes)
-    lead_time_start = occurrence.start_datetime - lead_time_delta
-
-    if now < lead_time_start:
-        return 0
-
-    if now > occurrence.end_datetime:
-        return 0
-
     if provisioning.scale_down_behavior == models.ScaleDownBehavior.MAINTAIN:
-        return provisioning.placeholder_count
-    else:
         return max(provisioning.placeholder_count - active_sessions, 0)
+    else:
+        remaining = max(provisioning.placeholder_count - active_sessions, 0)
+        total_duration = (occurrence.end_datetime - occurrence.start_datetime).total_seconds()
+        time_left = (occurrence.end_datetime - now).total_seconds()
+        time_remaining_fraction = time_left / total_duration if total_duration > 0 else 0
+        return round(remaining * time_remaining_fraction)
