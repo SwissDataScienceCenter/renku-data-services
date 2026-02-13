@@ -3,10 +3,16 @@
 from dataclasses import dataclass
 
 from renku_data_services.authz.authz import Authz
+from renku_data_services.capacity_reservation.db import CapacityReservationRepository, OccurrenceAdapter
+from renku_data_services.capacity_reservation.tasks import CapacityReservationTasks
+from renku_data_services.crc.db import ClusterRepository
 from renku_data_services.data_tasks.config import Config
+from renku_data_services.k8s.clients import K8sClusterClientsPool
+from renku_data_services.k8s.config import KubeConfigEnv
 from renku_data_services.metrics.core import StagingMetricsService
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
+from renku_data_services.notebooks.config import get_clusters
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.session.db import SessionRepository
