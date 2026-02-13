@@ -13,6 +13,7 @@ from renku_data_services.k8s.models import (
     K8sObject,
     K8sObjectFilter,
     K8sObjectMeta,
+    K8sResourceQuota,
     K8sSecret,
 )
 
@@ -22,15 +23,15 @@ class ResourceQuotaClient(Protocol):
 
     def list_resource_quota(
         self, label_selector: dict[str, str], cluster_id: ClusterId
-    ) -> AsyncIterable[V1ResourceQuota]:
+    ) -> AsyncIterable[K8sResourceQuota]:
         """List resource quotas."""
         ...
 
-    async def read_resource_quota(self, name: str, cluster_id: ClusterId) -> V1ResourceQuota:
+    async def read_resource_quota(self, name: str, cluster_id: ClusterId) -> K8sResourceQuota:
         """Get a resource quota."""
         ...
 
-    async def create_resource_quota(self, body: V1ResourceQuota, cluster_id: ClusterId) -> V1ResourceQuota:
+    async def create_resource_quota(self, body: V1ResourceQuota, cluster_id: ClusterId) -> K8sResourceQuota:
         """Create a resource quota."""
         ...
 
@@ -38,7 +39,7 @@ class ResourceQuotaClient(Protocol):
         """Delete a resource quota."""
         ...
 
-    async def patch_resource_quota(self, name: str, body: V1ResourceQuota, cluster_id: ClusterId) -> V1ResourceQuota:
+    async def patch_resource_quota(self, name: str, body: V1ResourceQuota, cluster_id: ClusterId) -> K8sResourceQuota:
         """Update a resource quota."""
         ...
 

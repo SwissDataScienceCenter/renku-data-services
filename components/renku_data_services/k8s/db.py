@@ -17,7 +17,13 @@ from renku_data_services.crc import models
 from renku_data_services.errors import errors
 from renku_data_services.k8s.client_interfaces import PriorityClassClient, ResourceQuotaClient
 from renku_data_services.k8s.constants import ClusterId
-from renku_data_services.k8s.models import DeletePropagationPolicy, K8sObject, K8sObjectFilter, K8sObjectMeta
+from renku_data_services.k8s.models import (
+    DeletePropagationPolicy,
+    K8sObject,
+    K8sObjectFilter,
+    K8sObjectMeta,
+    K8sResourceQuota,
+)
 from renku_data_services.k8s.orm import K8sObjectORM
 
 
@@ -118,7 +124,8 @@ class QuotaRepository:
     _label_name: str = field(init=False, default="app")
     _label_value: str = field(init=False, default="renku")
 
-    def _quota_from_manifest(self, manifest: client.V1ResourceQuota) -> models.Quota:
+    def _quota_from_manifest(self, quota: K8sResourceQuota) -> models.Quota:
+        manifest = quota.to_v1_resource_quota()
         gpu = 0
         gpu_kind = models.GpuKind.NVIDIA
         for igpu_kind in models.GpuKind:

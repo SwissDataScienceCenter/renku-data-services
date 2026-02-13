@@ -41,54 +41,45 @@ class K8sResourceQuotaClient(ResourceQuotaClient):
     async def __cluster_namespace(self, cluster_id: ClusterId) -> str:
         return (await self.__client.cluster_by_id(cluster_id)).namespace
 
-    async def __meta(self, name: str, cluster_id: ClusterId) -> K8sObjectMeta:
-        return K8sResourceQuota(
-            name=name,
-            namespace=await self.__cluster_namespace(cluster_id),
-            cluster=cluster_id,
-        )
-
-    async def read_resource_quota(self, name: str, cluster_id: ClusterId) -> client.V1ResourceQuota:
+    async def read_resource_quota(self, name: str, cluster_id: ClusterId) -> K8sResourceQuota:
         """Get a resource quota."""
-        res = await self.__client.get(await self.__meta(name, cluster_id))
+        namespace = await self.__cluster_namespace(cluster_id)
+        res = await self.__client.get(K8sResourceQuota.meta(name, namespace, cluster_id))
         if res is None:
-            namespace = await self.__cluster_namespace(cluster_id)
             raise errors.MissingResourceError(message=f"The resource quota {namespace}/{name} cannot be found.")
-        return K8sResourceQuota.from_k8s_object(res).to_v1_resource_quota()
+        return K8sResourceQuota.from_k8s_object(res)
 
     async def list_resource_quota(
         self, label_selector: dict[str, str], cluster_id: ClusterId
-    ) -> AsyncIterable[client.V1ResourceQuota]:
+    ) -> AsyncIterable[K8sResourceQuota]:
         """List resource quotas."""
-        filter = K8sResourceQuota.get_filter(label_selector, await self.__cluster_namespace(cluster_id), cluster_id)
-        quotas = self.__client.list(filter)
+        namespace = await self.__cluster_namespace(cluster_id)
+        quotas = self.__client.list(K8sResourceQuota.get_filter(label_selector, namespace, cluster_id))
         async for quota in quotas:
-            yield K8sResourceQuota.from_k8s_object(quota).to_v1_resource_quota()
+            yield K8sResourceQuota.from_k8s_object(quota)
 
-    async def create_resource_quota(
-        self, body: client.V1ResourceQuota, cluster_id: ClusterId
-    ) -> client.V1ResourceQuota:
+    async def create_resource_quota(self, body: client.V1ResourceQuota, cluster_id: ClusterId) -> K8sResourceQuota:
         """Create a resource quota."""
-        obj = K8sResourceQuota(
-            name=body.metadata.name,
-            namespace=await self.__cluster_namespace(cluster_id),
-            manifest=Box(sanitizer(body)),
-            cluster=cluster_id,
+        namespace = await self.__cluster_namespace(cluster_id)
+        res = await self.__client.create(
+            K8sResourceQuota(body.metadata.name, namespace, cluster_id, Box(sanitizer(body))),
+            False,
         )
-        res = await self.__client.create(obj, False)
-        return K8sResourceQuota.from_k8s_object(res).to_v1_resource_quota()
+        return K8sResourceQuota.from_k8s_object(res)
 
     async def delete_resource_quota(self, name: str, cluster_id: ClusterId) -> None:
         """Delete a resource quota."""
-        await self.__client.delete(await self.__meta(name, cluster_id))
+        namespace = await self.__cluster_namespace(cluster_id)
+        await self.__client.delete(K8sResourceQuota.meta(name, namespace, cluster_id))
 
     async def patch_resource_quota(
         self, name: str, body: client.V1ResourceQuota, cluster_id: ClusterId
-    ) -> client.V1ResourceQuota:
+    ) -> K8sResourceQuota:
         """Update a resource quota."""
         patch = sanitizer(body)
-        res = await self.__client.patch(await self.__meta(name, cluster_id), patch)
-        return K8sResourceQuota.from_k8s_object(res).to_v1_resource_quota()
+        namespace = await self.__cluster_namespace(cluster_id)
+        res = await self.__client.patch(K8sResourceQuota.meta(name, namespace, cluster_id), patch)
+        return K8sResourceQuota.from_k8s_object(res)
 
 
 class K8sSecretClient(SecretClient):
@@ -171,19 +162,17 @@ class DummyCoreClient(ResourceQuotaClient, SecretClient):
     Not suitable for production - to be used only for testing and development.
     """
 
-    async def read_resource_quota(self, name: str, cluster_id: ClusterId) -> client.V1ResourceQuota:
+    async def read_resource_quota(self, name: str, cluster_id: ClusterId) -> K8sResourceQuota:
         """Get a resource quota."""
         raise NotImplementedError()
 
     def list_resource_quota(
         self, label_selector: dict[str, str], cluster_id: ClusterId
-    ) -> AsyncIterable[client.V1ResourceQuota]:
+    ) -> AsyncIterable[K8sResourceQuota]:
         """List resource quotas."""
         raise NotImplementedError()
 
-    async def create_resource_quota(
-        self, body: client.V1ResourceQuota, cluster_id: ClusterId
-    ) -> client.V1ResourceQuota:
+    async def create_resource_quota(self, body: client.V1ResourceQuota, cluster_id: ClusterId) -> K8sResourceQuota:
         """Create a resource quota."""
         raise NotImplementedError()
 
@@ -193,7 +182,7 @@ class DummyCoreClient(ResourceQuotaClient, SecretClient):
 
     async def patch_resource_quota(
         self, name: str, body: client.V1ResourceQuota, cluster_id: ClusterId
-    ) -> client.V1ResourceQuota:
+    ) -> K8sResourceQuota:
         """Update a resource quota."""
         raise NotImplementedError()
 

@@ -227,14 +227,34 @@ class K8sResourceQuota(K8sObject):
         name: str,
         namespace: str,
         cluster: ClusterId,
-        manifest: Box | None = None,
+        manifest: Box,
     ) -> None:
         super().__init__(
             name=name,
             namespace=namespace,
             cluster=cluster,
             gvk=GVK(kind="ResourceQuota", version="v1"),
-            manifest=Box() if manifest is None else manifest,
+            manifest=manifest,
+        )
+
+    @classmethod
+    def meta(cls, name: str, namespace: str, cluster_id: ClusterId) -> K8sObjectMeta:
+        """Return a K8sObjectMeta describing the named resource quota."""
+        return K8sObjectMeta(
+            name=name,
+            namespace=namespace,
+            cluster=cluster_id,
+            gvk=GVK(kind="ResourceQuota", version="v1"),
+        )
+
+    @classmethod
+    def get_filter(cls, label_selector: dict[str, str], namespace: str, cluster_id: ClusterId) -> K8sObjectFilter:
+        """Return a filter to list K8s objects."""
+        return K8sObjectFilter(
+            gvk=GVK(kind="ResourceQuota", version="v1"),
+            namespace=namespace,
+            label_selector=label_selector,
+            cluster=cluster_id,
         )
 
     @classmethod
@@ -249,19 +269,8 @@ class K8sResourceQuota(K8sObject):
             manifest=k8s_object.manifest,
         )
 
-    @classmethod
-    def get_filter(cls, label_selector: dict[str, str], namespace: str, cluster_id: ClusterId) -> K8sObjectFilter:
-        """Return a filter to list K8s objects."""
-
-        return K8sObjectFilter(
-            gvk=GVK(kind="ResourceQuota", version="v1"),
-            namespace=namespace,
-            label_selector=label_selector,
-            cluster=cluster_id,
-        )
-
     def to_v1_resource_quota(self) -> V1ResourceQuota:
-        """Convert a K8sResouceQuota to a V1ResourceQuota."""
+        """Convert a K8sResourceQuota to a V1ResourceQuota."""
         return _deserializer(self.manifest.to_dict(), V1ResourceQuota)
 
 
