@@ -16,8 +16,8 @@ from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, Cus
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.capacity_reservation import apispec
 from renku_data_services.capacity_reservation.core import (
-    validate_capacity_reservation,
     generate_occurrences,
+    validate_capacity_reservation,
 )
 from renku_data_services.capacity_reservation.db import CapacityReservationRepository, OccurrenceAdapter
 

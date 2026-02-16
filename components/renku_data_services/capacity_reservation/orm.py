@@ -28,7 +28,7 @@ def _recurrence_to_dict(recurrence: models.RecurrenceConfig) -> dict[str, Any]:
     return {
         "type": recurrence.type.value,
         "start_date": recurrence.start_date.isoformat(),
-        "end_date": recurrence.end_date.isoformat() if recurrence.end_date else None,
+        "end_date": recurrence.end_date.isoformat(),
         "schedule": [
             {
                 "day_of_week": entry.day_of_week,
@@ -45,7 +45,7 @@ def _recurrence_from_dict(data: dict[str, Any]) -> models.RecurrenceConfig:
     return models.RecurrenceConfig(
         type=models.RecurrenceType(data["type"]),
         start_date=date.fromisoformat(data["start_date"]),
-        end_date=date.fromisoformat(data["end_date"]) if data.get("end_date") else None,
+        end_date=date.fromisoformat(data["end_date"]),
         schedule=[
             models.ScheduleEntry(
                 day_of_week=entry["day_of_week"],

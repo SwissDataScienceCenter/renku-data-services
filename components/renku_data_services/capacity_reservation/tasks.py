@@ -1,23 +1,24 @@
 """Task definitions."""
 
+import random
 from dataclasses import dataclass
+from datetime import UTC, datetime
+
+from ulid import ULID
 
 from renku_data_services.app_config import logging
+from renku_data_services.capacity_reservation.core import calculate_target_replicas
+from renku_data_services.capacity_reservation.db import CapacityReservationRepository, OccurrenceAdapter
 from renku_data_services.capacity_reservation.models import (
-    OccurrencePatch,
-    OccurrenceState,
     CapacityReservation,
     Occurrence,
+    OccurrencePatch,
+    OccurrenceState,
 )
-from renku_data_services.capacity_reservation.db import CapacityReservationRepository, OccurrenceAdapter
-from renku_data_services.capacity_reservation.core import calculate_target_replicas
-from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
 from renku_data_services.k8s.client_interfaces import K8sClient
-from renku_data_services.k8s.models import GVK, K8sObjectMeta, K8sObjectFilter
+from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
+from renku_data_services.k8s.models import GVK, K8sObjectFilter, K8sObjectMeta
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
-from datetime import datetime, UTC
-from ulid import ULID
-import random
 
 DEPLOYMENT_GVK = GVK(kind="Deployment", group="apps", version="v1")
 
@@ -51,7 +52,8 @@ class CapacityReservationTasks:
             )
             if not reservations:
                 logger.error(
-                    f"Could not find capacity reservation with id {occurrence.reservation_id} for occurrence {occurrence.id}."
+                    f"Could not find capacity reservation with id {occurrence.reservation_id} "
+                    f"for occurrence {occurrence.id}."
                 )
                 continue
             reservation = reservations[0]
@@ -88,14 +90,17 @@ class CapacityReservationTasks:
 
         for expired_occurrence in expired_occurrences:
             logger.info(f"Deactivating occurrence {expired_occurrence.id} as its end time has passed.")
-            await self.k8s_client.delete(
-                K8sObjectMeta(
-                    name=expired_occurrence.deployment_name,
-                    namespace=namespace,
-                    cluster=DEFAULT_K8S_CLUSTER,
-                    gvk=DEPLOYMENT_GVK,
+            if expired_occurrence.deployment_name is None:
+                logger.warning(f"Expired occurrence {expired_occurrence.id} has no deployment name, skipping delete.")
+            else:
+                await self.k8s_client.delete(
+                    K8sObjectMeta(
+                        name=expired_occurrence.deployment_name,
+                        namespace=namespace,
+                        cluster=DEFAULT_K8S_CLUSTER,
+                        gvk=DEPLOYMENT_GVK,
+                    )
                 )
-            )
             await self.occurrence_adapter.update_occurrence(
                 expired_occurrence.id, OccurrencePatch(status=OccurrenceState.COMPLETED)
             )
@@ -129,7 +134,8 @@ class CapacityReservationTasks:
             )
             if not reservations:
                 logger.error(
-                    f"Could not find capacity reservation with id {occurrence.reservation_id} for occurrence {occurrence.id}."
+                    f"Could not find capacity reservation with id {occurrence.reservation_id} "
+                    f"for occurrence {occurrence.id}."
                 )
                 continue
             reservation = reservations[0]
@@ -146,6 +152,9 @@ class CapacityReservationTasks:
             count = session_counts.get(occurrence.id, 0)
             target_replicas = calculate_target_replicas(reservation, occurrence, count, datetime_now)
 
+            if occurrence.deployment_name is None:
+                logger.warning(f"Active occurrence {occurrence.id} has no deployment name, skipping patch.")
+                continue
             meta = K8sObjectMeta(
                 name=occurrence.deployment_name,
                 namespace=namespace,
@@ -205,9 +214,11 @@ def _assign_sessions_to_occurrences(
             elif len(candidates) > 1:
                 logger = logging.getLogger(__name__)
                 logger.warning(
-                    f"Session with project_id {session.get('project_id')} and priority_class_name {session.get('priority_class_name')} matches multiple occurrences. Picking occurrence at random."
+                    f"Session with project_id {session.get('project_id')} and "
+                    f"priority_class_name {session.get('priority_class_name')} "
+                    "matches multiple occurrences. Picking occurrence at random."
                 )
-                random_choice = random.choice(candidates)
+                random_choice = random.choice(candidates)  # nosec B311
                 counts[random_choice[0].id] += 1
                 unmatched_sessions.remove(session)
 

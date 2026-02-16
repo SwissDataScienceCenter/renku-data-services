@@ -36,6 +36,7 @@ class DependencyManager:
     syncer: UsersSync
     kc_api: IKeycloakAPI
     session_tasks: SessionTasks
+    capacity_reservation_tasks: CapacityReservationTasks
 
     @classmethod
     def from_env(cls, cfg: Config | None = None) -> "DependencyManager":
@@ -77,6 +78,20 @@ class DependencyManager:
             authz=authz,
         )
         session_tasks = SessionTasks(session_environment_repo=session_environment_repo)
+        cluster_repo = ClusterRepository(session_maker=cfg.db.async_session_maker)
+        k8s_client = K8sClusterClientsPool(
+            lambda: get_clusters(
+                kube_conf_root_dir=cfg.k8s_config_root,
+                default_kubeconfig=KubeConfigEnv(),
+                cluster_repo=cluster_repo,
+            )
+        )
+        capacity_reservation_tasks = CapacityReservationTasks(
+            occurrence_adapter=OccurrenceAdapter(cfg.db.async_session_maker),
+            capacity_reservation_repo=CapacityReservationRepository(cfg.db.async_session_maker),
+            k8s_client=k8s_client,
+            namespace=cfg.k8s_namespace,
+        )
         kc_api: IKeycloakAPI
         if cfg.dummy_stores:
             dummy_users = [
@@ -103,4 +118,5 @@ class DependencyManager:
             syncer=syncer,
             kc_api=kc_api,
             session_tasks=session_tasks,
+            capacity_reservation_tasks=capacity_reservation_tasks,
         )

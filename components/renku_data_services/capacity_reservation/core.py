@@ -28,13 +28,20 @@ def validate_recurrence_config(recurrence: apispec.RecurrenceConfig) -> models.R
     if recurrence.type is None:
         raise errors.ValidationError(message="Recurrence type is required")
 
-    if recurrence.start_date >= recurrence.end_date:
-        raise errors.ValidationError(message="Recurrence end date must be after start date")
+    if recurrence.type == apispec.RecurrenceType.once:
+        if recurrence.start_date > recurrence.end_date:
+            raise errors.ValidationError(message="Recurrence end date must be on or after start date")
+    else:
+        if recurrence.start_date >= recurrence.end_date:
+            raise errors.ValidationError(message="Recurrence end date must be after start date")
 
-    if recurrence.type == apispec.RecurrenceType.weekly and not recurrence.schedule:
-        raise errors.ValidationError(message="Recurrence schedule is required for weekly recurrence type")
+    if recurrence.start_date < date.today():
+        raise errors.ValidationError(message="Recurrence start date must not be in the past")
 
-    schedule_entries = [validate_schedule_entry(entry) for entry in recurrence.schedule or []]
+    if not recurrence.schedule:
+        raise errors.ValidationError(message="At least one schedule entry is required")
+
+    schedule_entries = [validate_schedule_entry(entry) for entry in recurrence.schedule]
 
     return models.RecurrenceConfig(
         type=models.RecurrenceType(recurrence.type.value),
@@ -97,7 +104,7 @@ def _generate_once_occurrences(
             )
             - timedelta(minutes=reservation.provisioning.lead_time_minutes),
             start_datetime=datetime.combine(reservation.recurrence.start_date, schedule_entry.start_time, tzinfo=UTC),
-            end_datetime=datetime.combine(reservation.recurrence.start_date, schedule_entry.end_time, tzinfo=UTC),
+            end_datetime=datetime.combine(reservation.recurrence.end_date, schedule_entry.end_time, tzinfo=UTC),
             status=models.OccurrenceState.PENDING,
         )
         occurrences.append(occurrence)
@@ -187,6 +194,7 @@ def calculate_target_replicas(
     active_sessions: int,
     now: datetime,
 ) -> int:
+    """Calculate the target number of placeholder replicas for an active occurrence."""
     provisioning = reservation.provisioning
 
     if provisioning.scale_down_behavior == models.ScaleDownBehavior.MAINTAIN:

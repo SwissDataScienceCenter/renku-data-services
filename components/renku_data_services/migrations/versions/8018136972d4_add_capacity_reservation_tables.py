@@ -6,9 +6,10 @@ Create Date: 2026-02-12 13:57:23.099601
 
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
+
 from renku_data_services.utils.sqlalchemy import ULIDType
 
 # revision identifiers, used by Alembic.

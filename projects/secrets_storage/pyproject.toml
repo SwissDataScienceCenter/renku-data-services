@@ -42,6 +42,7 @@ packages = [
   { include = "renku_data_services/solr", from = "../../components" },
   { include = "renku_data_services/search", from = "../../components" },
   { include = "renku_data_services/metrics", from = "../../components" },
+  { include = "renku_data_services/capacity_reservation", from = "../../components" },
 ]
 
 [tool.poetry.dependencies]
