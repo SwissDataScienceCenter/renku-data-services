@@ -229,10 +229,8 @@ async def query(
 
         docs = list(map(converters.from_entity, solr_docs))
 
-        # If include_counts is True, compute counts for User and Group entities
         if include_counts:
-            # Collect namespace paths and group IDs for counting
-            namespace_paths: dict[str, str] = {}  # entity_id -> namespace_path
+            namespace_paths: dict[str, str] = {}
             group_ids: list[str] = []
 
             for doc in solr_docs:
@@ -242,7 +240,7 @@ async def query(
                         group_ids.append(str(doc.id))
 
             # Count projects and data connectors for each namespace
-            counts: dict[str, dict[str, int]] = {}  # entity_id -> {project_count, data_connector_count}
+            counts: dict[str, dict[str, int]] = {}
             for entity_id, namespace_path in namespace_paths.items():
                 project_count = await _count_projects_by_namespace(client, namespace_path, authz_client, user, ctx)
                 data_connector_count = await _count_data_connectors_by_namespace(
@@ -253,7 +251,6 @@ async def query(
                     "data_connector_count": data_connector_count,
                 }
 
-            # Update docs with counts using model_copy
             updated_docs = []
             for doc in docs:
                 entity_id = doc.root.id

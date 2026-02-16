@@ -338,7 +338,6 @@ async def search_query(
     ) -> SearchResult:
         headers = __make_headers(user, admin=user.id == admin_user.id) if user is not None else {}
         _, response = await client.get("/api/data/search/query", params={"q": query_str}, headers=headers or {})
-        print(response.text)
         assert response.status_code == 200, response.text
         return SearchResult.model_validate(response.json)
 
