@@ -15,7 +15,7 @@ from renku_data_services.capacity_reservation.models import (
     OccurrencePatch,
     OccurrenceState,
 )
-from renku_data_services.k8s.client_interfaces import K8sClient
+from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
 from renku_data_services.k8s.models import GVK, K8sObjectFilter, K8sObjectMeta
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
@@ -29,8 +29,7 @@ class CapacityReservationTasks:
 
     occurrence_adapter: OccurrenceAdapter
     capacity_reservation_repo: CapacityReservationRepository
-    k8s_client: K8sClient
-    namespace: str
+    k8s_client: K8sClusterClientsPool
 
     async def activate_pending_occurrences_task(self) -> None:
         """Activate pending capacity reservation occurrences."""
@@ -44,7 +43,8 @@ class CapacityReservationTasks:
 
         logger.info(f"Activating {len(due_pending_occurrences)} pending capacity reservation occurrence(s).")
 
-        namespace = self.namespace
+        cluster = await self.k8s_client.cluster_by_id(DEFAULT_K8S_CLUSTER)
+        namespace = cluster.namespace
 
         for occurrence in due_pending_occurrences:
             reservations = await self.capacity_reservation_repo.get_capacity_reservations_by_ids(
@@ -83,7 +83,8 @@ class CapacityReservationTasks:
         logger.info(f"Monitoring {len(active_occurrences)} active capacity reservation occurrence(s).")
 
         datetime_now = datetime.now(UTC)
-        namespace = self.namespace
+        cluster = await self.k8s_client.cluster_by_id(DEFAULT_K8S_CLUSTER)
+        namespace = cluster.namespace
 
         expired_occurrences = [o for o in active_occurrences if o.end_datetime < datetime_now]
         still_active_occurrences = [o for o in active_occurrences if o.end_datetime >= datetime_now]

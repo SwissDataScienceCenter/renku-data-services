@@ -50,7 +50,6 @@ class Config:
     x_short_task_period_s: int
     short_task_period_s: int
     long_task_period_s: int
-    k8s_namespace: str
     k8s_config_root: str
 
     @classmethod
@@ -70,7 +69,6 @@ class Config:
         short_task_period = int(os.environ.get("SHORT_TASK_PERIOD_S", 2 * 60))
         long_task_period = int(os.environ.get("LONG_TASK_PERIOD_S", 3 * 60 * 60))
 
-        k8s_namespace = os.environ.get("K8S_NAMESPACE", "renku")
         k8s_config_root = os.environ.get("K8S_CONFIG_ROOT", "/secrets/kube_configs")
 
         authz = AuthzConfig.from_env()
@@ -89,7 +87,6 @@ class Config:
             x_short_task_period_s=x_short_task_period,
             short_task_period_s=short_task_period,
             long_task_period_s=long_task_period,
-            k8s_namespace=k8s_namespace,
             k8s_config_root=k8s_config_root,
             dummy_stores=dummy_stores,
         )

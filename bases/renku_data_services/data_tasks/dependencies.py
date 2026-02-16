@@ -90,7 +90,6 @@ class DependencyManager:
             occurrence_adapter=OccurrenceAdapter(cfg.db.async_session_maker),
             capacity_reservation_repo=CapacityReservationRepository(cfg.db.async_session_maker),
             k8s_client=k8s_client,
-            namespace=cfg.k8s_namespace,
         )
         kc_api: IKeycloakAPI
         if cfg.dummy_stores:
