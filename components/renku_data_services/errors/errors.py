@@ -16,6 +16,7 @@ class BaseError(Exception):
     message: str = "An unexpected error occurred"
     detail: Optional[str] = None
     quiet: bool = False
+    trace_id: Optional[str] = None
 
     def __repr__(self) -> str:
         """String representation of the error."""

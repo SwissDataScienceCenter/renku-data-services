@@ -1,7 +1,6 @@
 """Business logic for notifications."""
 
-import logging
-
+from renku_data_services.app_config import logging
 from renku_data_services.notifications import apispec, models
 
 logger = logging.getLogger(__name__)

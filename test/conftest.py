@@ -1,7 +1,6 @@
 """Fixtures for testing."""
 
 import asyncio
-import logging as ll
 import os
 import secrets
 import socket
@@ -42,10 +41,10 @@ from test.utils import KindCluster, TestDependencyManager
 
 def __make_logging_config() -> logging.Config:
     def_cfg = logging.Config(
-        root_level=ll.ERROR,
-        app_level=ll.ERROR,
+        root_level=logging.ERROR,
+        app_level=logging.ERROR,
         format_style=logging.LogFormatStyle.plain,
-        override_levels={ll.ERROR: set(["alembic", "sanic"])},
+        override_levels={logging.ERROR: {"alembic", "sanic"}},
     )
     env_cfg = logging.Config.from_env()
     def_cfg.update_override_levels(env_cfg.override_levels)
