@@ -46,9 +46,8 @@ from renku_data_services.notebooks.api.classes.image import Image
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
-from renku_data_services.notebooks.cr_amalthea_session import Metadata as AmaltheaMetadata
-from renku_data_services.notebooks.cr_amalthea_session import Template
 from renku_data_services.notebooks.crs import (
+    AmaltheaMetadata,
     AmaltheaSessionSpec,
     AmaltheaSessionV1Alpha1,
     AmaltheaSessionV1Alpha1MetadataPatch,
@@ -84,6 +83,7 @@ from renku_data_services.notebooks.crs import (
     SizeStr,
     State,
     Storage,
+    Template,
     TlsSecret,
 )
 from renku_data_services.notebooks.image_check import ImageCheckRepository
