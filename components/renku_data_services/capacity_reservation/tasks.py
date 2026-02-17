@@ -168,6 +168,53 @@ class CapacityReservationTasks:
             )
 
 
+    async def cleanup_orphaned_deployments_task(self) -> None:
+        """Delete capacity reservation deployments whose occurrences no longer exist in the database."""
+        logger = logging.getLogger(self.__class__.__name__)
+
+        cluster = await self.k8s_client.cluster_by_id(DEFAULT_K8S_CLUSTER)
+        namespace = cluster.namespace
+
+        deployments = []
+        async for d in self.k8s_client.list(
+            K8sObjectFilter(
+                namespace=namespace,
+                cluster=DEFAULT_K8S_CLUSTER,
+                gvk=DEPLOYMENT_GVK,
+                label_selector={"app": "capacity-placeholder"},
+            )
+        ):
+            deployments.append(d)
+
+        if not deployments:
+            return None
+
+        occurrence_ids_from_k8s: dict[ULID, str] = {}
+        for d in deployments:
+            occurrence_id_str = d.manifest.get("metadata", {}).get("labels", {}).get("renku.io/occurrence-id")
+            if occurrence_id_str is None:
+                continue
+            occurrence_ids_from_k8s[ULID.from_str(occurrence_id_str)] = d.meta.name
+
+        if not occurrence_ids_from_k8s:
+            return None
+
+        existing_ids = await self.occurrence_adapter.get_existing_occurrence_ids(list(occurrence_ids_from_k8s.keys()))
+        orphaned_ids = set(occurrence_ids_from_k8s.keys()) - existing_ids
+
+        for orphaned_id in orphaned_ids:
+            deployment_name = occurrence_ids_from_k8s[orphaned_id]
+            logger.info(f"Deleting orphaned deployment {deployment_name} (occurrence {orphaned_id} no longer exists).")
+            await self.k8s_client.delete(
+                K8sObjectMeta(
+                    name=deployment_name,
+                    namespace=namespace,
+                    cluster=DEFAULT_K8S_CLUSTER,
+                    gvk=DEPLOYMENT_GVK,
+                )
+            )
+
+
 def _assign_sessions_to_occurrences(
     session_data: list[dict],
     active_pairs: list[tuple[Occurrence, CapacityReservation]],

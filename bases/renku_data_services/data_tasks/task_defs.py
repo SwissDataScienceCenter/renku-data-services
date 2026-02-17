@@ -422,6 +422,17 @@ async def monitor_capacity_reservations(dm: DependencyManager) -> None:
             await asyncio.sleep(dm.config.x_short_task_period_s)
 
 
+async def cleanup_orphaned_capacity_reservations(dm: DependencyManager) -> None:
+    """Clean up capacity reservation deployments whose occurrences no longer exist."""
+    while True:
+        try:
+            await dm.capacity_reservation_tasks.cleanup_orphaned_deployments_task()
+        except (asyncio.CancelledError, KeyboardInterrupt) as e:
+            logger.warning(f"Exiting: {e}")
+        else:
+            await asyncio.sleep(dm.config.x_short_task_period_s)
+
+
 def all_tasks(dm: DependencyManager) -> TaskDefininions:
     """A dict of task factories to be managed in main."""
     # Impl. note: We pass the entire config to the coroutines, because
@@ -445,5 +456,6 @@ def all_tasks(dm: DependencyManager) -> TaskDefininions:
             "initialize_session_environments": lambda: initialize_session_environments(dm),
             "activate_capacity_reservations": lambda: activate_capacity_reservations(dm),
             "monitor_capacity_reservations": lambda: monitor_capacity_reservations(dm),
+            "cleanup_orphaned_capacity_reservations": lambda: cleanup_orphaned_capacity_reservations(dm),
         }
     )

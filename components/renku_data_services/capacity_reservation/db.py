@@ -237,6 +237,17 @@ class OccurrenceAdapter:
             occurrence_list = occurrences.all()
             return [occurrence.dump() for occurrence in occurrence_list]
 
+    async def get_existing_occurrence_ids(self, occurrence_ids: list[ULID]) -> set[ULID]:
+        """Return the subset of occurrence IDs that exist in the database."""
+
+        if not occurrence_ids:
+            return set()
+
+        async with self.session_maker() as session:
+            query = select(schemas.OccurrenceORM.id).where(schemas.OccurrenceORM.id.in_(occurrence_ids))
+            result = await session.scalars(query)
+            return set(result.all())
+
     async def get_project_template_ids(self, project_ids: list[ULID]) -> dict[ULID, ULID | None]:
         """Get project template IDs for a list of project IDs."""
 
