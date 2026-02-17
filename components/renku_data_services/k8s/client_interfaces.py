@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterable
 from typing import Any, Protocol
 
-from kubernetes.client import V1PriorityClass, V1ResourceQuota
+from kubernetes.client import V1ResourceQuota
 
 from renku_data_services.k8s.constants import ClusterId
 from renku_data_services.k8s.models import (
@@ -13,6 +13,7 @@ from renku_data_services.k8s.models import (
     K8sObject,
     K8sObjectFilter,
     K8sObjectMeta,
+    K8sPriorityClass,
     K8sResourceQuota,
     K8sSecret,
 )
@@ -67,18 +68,17 @@ class SecretClient(Protocol):
 class PriorityClassClient(Protocol):
     """Methods to manipulate kubernetes Priority Class resources."""
 
-    async def create_priority_class(self, body: V1PriorityClass, cluster_id: ClusterId) -> V1PriorityClass:
+    async def create_priority_class(self, priority_class: K8sPriorityClass) -> K8sPriorityClass:
         """Create a priority class."""
         ...
 
-    async def read_priority_class(self, name: str, cluster_id: ClusterId) -> V1PriorityClass | None:
+    async def read_priority_class(self, meta: K8sObjectMeta) -> K8sPriorityClass | None:
         """Retrieve a priority class."""
         ...
 
     async def delete_priority_class(
         self,
-        name: str,
-        cluster_id: ClusterId,
+        meta: K8sObjectMeta,
         propagation_policy: DeletePropagationPolicy = DeletePropagationPolicy.foreground,
     ) -> None:
         """Delete a priority class."""

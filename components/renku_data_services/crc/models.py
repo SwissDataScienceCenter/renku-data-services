@@ -196,7 +196,7 @@ class Quota(ResourcesCompareMixin):
             id=manifest.metadata.name,
         )
 
-    def to_manifest(self, labels) -> client.V1ResourceQuota:
+    def to_manifest(self, labels: dict[str, str]) -> client.V1ResourceQuota:
         """Convert to a manifest."""
         return client.V1ResourceQuota(
             metadata=client.V1ObjectMeta(labels=labels, name=self.id),

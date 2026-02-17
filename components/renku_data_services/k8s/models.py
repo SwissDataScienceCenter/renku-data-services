@@ -12,7 +12,7 @@ from box import Box
 from kr8s._api import Api
 from kr8s.asyncio.objects import APIObject
 from kr8s.objects import Secret
-from kubernetes.client import V1PriorityClass, V1ResourceQuota, V1Secret
+from kubernetes.client import V1ObjectMeta, V1PriorityClass, V1ResourceQuota, V1Secret
 
 from renku_data_services.errors import ProgrammingError, errors
 from renku_data_services.k8s.constants import DUMMY_TASK_RUN_USER_ID, ClusterId
@@ -281,14 +281,52 @@ class K8sPriorityClass(K8sObject):
         self,
         name: str,
         cluster: ClusterId,
-        manifest: Box | None = None,
+        manifest: Box,
     ) -> None:
         super().__init__(
             name=name,
             namespace=None,
             cluster=cluster,
             gvk=GVK(kind="PriorityClass", version="v1", group="scheduling.k8s.io"),
-            manifest=Box() if manifest is None else manifest,
+            manifest=manifest,
+        )
+
+    @classmethod
+    def new(
+        cls,
+        name: str,
+        cluster: ClusterId,
+        global_default: bool,
+        value: int,
+        preemption_policy: str,
+        description: str,
+        labels: dict[str, str],
+    ) -> K8sPriorityClass:
+        """Instantiate a K8sPriorityClass."""
+        return K8sPriorityClass(
+            name=name,
+            cluster=cluster,
+            manifest=Box(
+                sanitizer(
+                    V1PriorityClass(
+                        global_default=global_default,
+                        value=value,
+                        preemption_policy=preemption_policy,
+                        description=description,
+                        metadata=V1ObjectMeta(labels=labels, name=name),
+                    )
+                )
+            ),
+        )
+
+    @classmethod
+    def meta(cls, name: str, cluster_id: ClusterId) -> K8sObjectMeta:
+        """Return a K8sObjectMeta describing the named resource quota."""
+        return K8sObjectMeta(
+            name=name,
+            namespace=None,
+            cluster=cluster_id,
+            gvk=GVK(kind="PriorityClass", version="v1", group="scheduling.k8s.io"),
         )
 
     @classmethod
@@ -303,7 +341,7 @@ class K8sPriorityClass(K8sObject):
         )
 
     def to_v1_priority_class(self) -> V1PriorityClass:
-        """Convert a K8sResouceQuota to a V1ResourceQuota."""
+        """Convert a K8sResourceQuota to a V1PriorityClass."""
         return _deserializer(self.manifest.to_dict(), V1PriorityClass)
 
 

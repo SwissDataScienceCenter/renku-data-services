@@ -33,7 +33,7 @@ from renku_data_services.crc.models import ClusterPatch, ClusterSettings, SavedC
 from renku_data_services.crc.orm import ClusterORM
 from renku_data_services.k8s.client_interfaces import PriorityClassClient, ResourceQuotaClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
-from renku_data_services.k8s.models import DeletePropagationPolicy
+from renku_data_services.k8s.models import DeletePropagationPolicy, K8sPriorityClass
 from renku_data_services.users.db import UserRepo
 
 
@@ -1156,33 +1156,33 @@ class QuotaRepository:
             cpu=new_quota.cpu, memory=new_quota.memory, gpu=new_quota.gpu, gpu_kind=new_quota.gpu_kind, id=quota_id
         )
         labels = {self._label_name: self._label_value}
-        metadata = {"labels": labels, "name": quota_id}
         quota_manifest = quota.to_manifest(labels)
 
         # Check if we have a priority class with the given name, return it or create one otherwise.
-        pc = await self.pc_client.read_priority_class(quota.id, cluster_id)
+        pc = await self.pc_client.read_priority_class(K8sPriorityClass.meta(quota.id, cluster_id))
         if pc is None:
             pc = await self.pc_client.create_priority_class(
-                client.V1PriorityClass(
+                K8sPriorityClass.new(
+                    name=quota.id,
+                    cluster=cluster_id,
                     global_default=False,
                     value=100,
                     preemption_policy="Never",
                     description="Renku resource quota priority class",
-                    metadata=client.V1ObjectMeta(**metadata),
+                    labels=labels,
                 ),
-                cluster_id,
             )
 
         # NOTE: The priority class is cluster-scoped and a namespace-scoped resource cannot be an owner
         # of a cluster-scoped resource. That is why the priority class is an owner of the quota.
         quota_manifest.owner_references = [
             client.V1OwnerReference(
-                api_version=pc.api_version,
+                api_version=pc.gvk.version,
                 block_owner_deletion=True,
                 controller=False,
-                kind=pc.kind,
-                name=pc.metadata.name,
-                uid=pc.metadata.uid,
+                kind=pc.gvk.kind,
+                name=pc.name,
+                uid=pc.manifest.metadata.uid,
             )
         ]
         res = await self.rq_client.create_resource_quota(quota_manifest, cluster_id)
@@ -1190,8 +1190,9 @@ class QuotaRepository:
 
     async def delete_quota(self, name: str, cluster_id: ClusterId) -> None:
         """Delete a resource quota and priority class."""
+
         await self.pc_client.delete_priority_class(
-            name=name, cluster_id=cluster_id, propagation_policy=DeletePropagationPolicy.foreground
+            meta=K8sPriorityClass.meta(name, cluster_id), propagation_policy=DeletePropagationPolicy.foreground
         )
         await self.rq_client.delete_resource_quota(name=name, cluster_id=cluster_id)
 

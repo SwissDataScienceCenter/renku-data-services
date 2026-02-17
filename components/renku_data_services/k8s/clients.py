@@ -36,7 +36,6 @@ class K8sResourceQuotaClient(ResourceQuotaClient):
 
     def __init__(self, k8s_client: K8sClusterClientsPool) -> None:
         self.__client = k8s_client
-        self.__quota_gvk = GVK(kind="ResourceQuota", version="v1")
 
     async def __cluster_namespace(self, cluster_id: ClusterId) -> str:
         return (await self.__client.cluster_by_id(cluster_id)).namespace
@@ -112,48 +111,27 @@ class K8sSecretClient(SecretClient):
 class K8sSchedulingClient(PriorityClassClient):
     """Real k8s scheduling API client that exposes the required functions."""
 
-    def __init__(self, k8s_client: K8sClient) -> None:
-        self.__client = k8s_client
-        self.__pc_gvk = GVK(kind="PriorityClass", version="v1", group="scheduling.k8s.io")
+    def __init__(self, client: K8sClient) -> None:
+        self.__client = client
 
-    def _meta(self, name: str, cluster_id: ClusterId) -> K8sObjectMeta:
-        return K8sObjectMeta(
-            name=name,
-            namespace=None,
-            gvk=self.__pc_gvk,
-            cluster=cluster_id,
-        )
-
-    async def create_priority_class(
-        self, body: client.V1PriorityClass, cluster_id: ClusterId
-    ) -> client.V1PriorityClass:
+    async def create_priority_class(self, priority_class: K8sPriorityClass) -> K8sPriorityClass:
         """Create a priority class."""
-        obj = K8sObject(
-            name=body.metadata.name,
-            namespace=None,
-            gvk=self.__pc_gvk,
-            manifest=Box(sanitizer(body)),
-            cluster=cluster_id,
-        )
-        output = await self.__client.create(obj, refresh=True)
-        return K8sPriorityClass.from_k8s_object(output).to_v1_priority_class()
+        return K8sPriorityClass.from_k8s_object(await self.__client.create(priority_class, refresh=True))
 
     async def delete_priority_class(
         self,
-        name: str,
-        cluster_id: ClusterId,
+        meta: K8sObjectMeta,
         propagation_policy: DeletePropagationPolicy = DeletePropagationPolicy.foreground,
     ) -> None:
         """Delete a priority class."""
-        metadata = self._meta(name, cluster_id)
-        await self.__client.delete(metadata, propagation_policy)
+        await self.__client.delete(meta, propagation_policy)
 
-    async def read_priority_class(self, name: str, cluster_id: ClusterId) -> client.V1PriorityClass | None:
+    async def read_priority_class(self, meta: K8sObjectMeta) -> K8sPriorityClass | None:
         """Get a priority class."""
-        output = await self.__client.get(self._meta(name, cluster_id))
+        output = await self.__client.get(meta)
         if output is None:
             return None
-        return K8sPriorityClass.from_k8s_object(output).to_v1_priority_class()
+        return K8sPriorityClass.from_k8s_object(output)
 
 
 class DummyCoreClient(ResourceQuotaClient, SecretClient):
@@ -209,20 +187,17 @@ class DummySchedulingClient(PriorityClassClient):
     Not suitable for production - to be used only for testing and development.
     """
 
-    async def create_priority_class(
-        self, body: client.V1PriorityClass, cluster_id: ClusterId
-    ) -> client.V1PriorityClass:
+    async def create_priority_class(self, priority_class: K8sPriorityClass) -> K8sPriorityClass:
         """Create a priority class."""
         raise NotImplementedError()
 
-    async def read_priority_class(self, name: str, cluster_id: ClusterId) -> client.V1PriorityClass | None:
+    async def read_priority_class(self, meta: K8sObjectMeta) -> K8sPriorityClass | None:
         """Get a priority class."""
         raise NotImplementedError()
 
     async def delete_priority_class(
         self,
-        name: str,
-        cluster_id: ClusterId,
+        meta: K8sObjectMeta,
         propagation_policy: DeletePropagationPolicy = DeletePropagationPolicy.foreground,
     ) -> None:
         """Delete a priority class."""
