@@ -178,7 +178,7 @@ class ResourceRequestsRepo:
           where capture_date::date >= :from and capture_date::date <= :until
               {by_user} {by_rp}
           group by cluster_id, resource_class_id, resource_pool_id, user_id, capture_date::date, gpu_slice
-        """
+        """  # nosec: B608
         params = {"from": rq.since, "until": rq.until, "user_id": rq.user_id, "resource_pool_id": rq.resource_pool_id}
 
         async with self.session_maker() as session:
@@ -203,7 +203,7 @@ class ResourceRequestsRepo:
         where phase = 'Running'
           and capture_date::date >= :from and capture_date::date <= :until
           and resource_class_id = :class_id {by_user}
-        """
+        """  # nosec: B608
         params = {"from": rq.since, "until": rq.until, "user_id": rq.user_id, "class_id": rq.resource_class_id}
 
         async with self.session_maker() as session:

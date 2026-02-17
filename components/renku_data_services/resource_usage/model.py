@@ -367,9 +367,9 @@ class ResourceDataFacade:
             requests = container.get("resources", {}).get("requests", {})
             lims = container.get("resources", {}).get("limits", {})
 
-            cpu_req = ComputeCapacity.from_str(requests.get("cpu", ""))
-            mem_req = DataSize.from_str(requests.get("memory", ""))
-            gpu_req = ComputeCapacity.from_str(lims.get("nvidia.com/gpu") or requests.get("nvidia.com/gpu", ""))
+            cpu_req = ComputeCapacity.from_str(requests.get("cpu", ""))  # nosec: B113
+            mem_req = DataSize.from_str(requests.get("memory", ""))  # nosec: B113
+            gpu_req = ComputeCapacity.from_str(lims.get("nvidia.com/gpu") or requests.get("nvidia.com/gpu", ""))  # nosec: B113
 
             result = result + RequestData(cpu=cpu_req, memory=mem_req, gpu=gpu_req, disk=None)
 
