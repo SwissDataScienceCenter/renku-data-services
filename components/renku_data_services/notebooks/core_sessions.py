@@ -946,6 +946,8 @@ async def start_session(
     launcher_env_variables = get_launcher_env_variables(launcher, launch_request)
     env.extend(launcher_env_variables)
 
+    labels = {"renku.io/safe-username": user.id}
+
     session = AmaltheaSessionV1Alpha1(
         metadata=Metadata(name=server_name, annotations=annotations),
         spec=AmaltheaSessionSpec(
@@ -994,7 +996,7 @@ async def start_session(
             tolerations=tolerations_from_resource_class(resource_class, nb_config.sessions.tolerations_model),
             affinity=node_affinity_from_resource_class(resource_class, nb_config.sessions.affinity_model),
             serviceAccountName=service_account_name,
-            template=Template(metadata=AmaltheaMetadata(annotations=annotations)),
+            template=Template(metadata=AmaltheaMetadata(annotations=annotations, labels=labels)),
         ),
     )
     secrets_to_create = session_extras.secrets or []
