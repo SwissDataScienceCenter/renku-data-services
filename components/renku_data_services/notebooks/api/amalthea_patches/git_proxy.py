@@ -7,13 +7,10 @@ from dataclasses import asdict
 
 from kubernetes import client
 
-from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import AnonymousAPIUser, AuthenticatedAPIUser
 from renku_data_services.notebooks.api.amalthea_patches.utils import get_certificates_volume_mounts
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.config import NotebooksConfig
-
-logger = logging.getLogger(__name__)
 
 
 async def main_container(
@@ -64,8 +61,6 @@ async def main_container(
             ),
         ),
     ]
-    logger.warning(f"DEBUG: git proxy image = {config.sessions.git_proxy.image}")
-    logger.warning(f"DEBUG: git proxy args = {config.sessions.git_proxy.args}")
     container = client.V1Container(
         image=config.sessions.git_proxy.image,
         args=config.sessions.git_proxy.args,
