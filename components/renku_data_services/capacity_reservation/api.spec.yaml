@@ -49,26 +49,6 @@ paths:
       tags:
         - capacity-reservations
   /capacity-reservations/{reservation_id}:
-    get:
-      summary: Retrieve a specific capacity reservation
-      parameters:
-        - in: path
-          name: reservation_id
-          required: true
-          schema:
-            $ref: "#/components/schemas/Ulid"
-          description: The ID of the capacity reservation to retrieve.
-      responses:
-        "200":
-          description: Capacity reservation retrieved successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CapacityReservation"
-        default:
-          $ref: "#/components/responses/Error"
-      tags:
-        - capacity-reservations
     delete:
       summary: Delete a capacity reservation
       parameters:
@@ -81,54 +61,6 @@ paths:
       responses:
         "204":
           description: Capacity reservation deleted successfully
-        default:
-          $ref: "#/components/responses/Error"
-      tags:
-        - capacity-reservations
-  /capacity-reservations/{reservation_id}/occurrences:
-    get:
-      summary: Retrieve occurrences of a specific capacity reservation
-      parameters:
-        - in: path
-          name: reservation_id
-          required: true
-          schema:
-            $ref: "#/components/schemas/Ulid"
-          description: The ID of the capacity reservation.
-      responses:
-        "200":
-          description: A list of capacity reservation occurrences.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OccurrenceList"
-        default:
-          $ref: "#/components/responses/Error"
-      tags:
-        - capacity-reservations
-  /capacity-reservations/{reservation_id}/occurrences/{occurrence_id}:
-    get:
-      summary: Retrieve a specific occurrence of a capacity reservation
-      parameters:
-        - in: path
-          name: reservation_id
-          required: true
-          schema:
-            $ref: "#/components/schemas/Ulid"
-          description: The ID of the capacity reservation.
-        - in: path
-          name: occurrence_id
-          required: true
-          schema:
-            $ref: "#/components/schemas/Ulid"
-          description: The ID of the occurrence to retrieve.
-      responses:
-        "200":
-          description: Capacity reservation occurrence retrieved successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Occurrence"
         default:
           $ref: "#/components/responses/Error"
       tags:
@@ -154,13 +86,6 @@ components:
       enum:
         - maintain
         - reduce
-
-    OccurrenceState:
-      type: string
-      enum:
-        - active
-        - pending
-        - completed
 
     ScheduleEntry:
       type: object
@@ -296,44 +221,10 @@ components:
         - provisioning
         - matching
 
-    Occurrence:
-      type: object
-      additionalProperties: false
-      properties:
-        id:
-          $ref: "#/components/schemas/Ulid"
-        reservation_id:
-          $ref: "#/components/schemas/Ulid"
-        start_datetime:
-          type: string
-          format: date-time
-          example: "2024-01-15T08:00:00Z"
-        end_datetime:
-          type: string
-          format: date-time
-          example: "2024-01-15T17:00:00Z"
-        status:
-          $ref: "#/components/schemas/OccurrenceState"
-        deployment_name:
-          type: string
-          nullable: true
-          example: "reservation-01ARZ3NDEKTSV4RRFFQ69G5FAV"
-      required:
-        - id
-        - reservation_id
-        - start_datetime
-        - end_datetime
-        - status
-
     CapacityReservationList:
       type: array
       items:
         $ref: "#/components/schemas/CapacityReservation"
-
-    OccurrenceList:
-      type: array
-      items:
-        $ref: "#/components/schemas/Occurrence"
 
     CapacityReservationGetParameters:
       type: object
