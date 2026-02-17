@@ -64,11 +64,11 @@ async def main_container(
             ),
         ),
     ]
+    logger.warning(f"DEBUG: git proxy image = {config.sessions.git_proxy.image}")
     logger.warning(f"DEBUG: git proxy args = {config.sessions.git_proxy.args}")
     container = client.V1Container(
         image=config.sessions.git_proxy.image,
-        # TODO: uncomment the line below
-        # args=config.sessions.git_proxy.args,
+        args=config.sessions.git_proxy.args,
         security_context={
             "runAsGroup": 1000,
             "runAsUser": 1000,
