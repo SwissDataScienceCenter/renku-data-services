@@ -7,9 +7,13 @@ from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from typing import Any, Optional, Protocol, Self
 
+from kubernetes import client
+from kubernetes.utils import parse_quantity
+
 from renku_data_services import errors
 from renku_data_services.base_models import ResetType
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
+from renku_data_services.k8s.models import K8sResourceQuota
 
 
 class ResourcesProtocol(Protocol):
@@ -161,6 +165,52 @@ class Quota(ResourcesCompareMixin):
     gpu: int
     gpu_kind: GpuKind = GpuKind.NVIDIA
     id: str
+
+    @classmethod
+    def from_k8s_resource_quota(cls, quota: K8sResourceQuota) -> Quota:
+        """Convert a K8s Resource Quota."""
+        manifest = quota.to_v1_resource_quota()
+        gpu = 0
+        gpu_kind = GpuKind.NVIDIA
+        for igpu_kind in GpuKind:
+            key = f"requests.{igpu_kind}/gpu"
+            if key in manifest.spec.hard:
+                gpu = int(parse_quantity(manifest.spec.hard.get(key)))
+                gpu_kind = igpu_kind
+                break
+        memory_raw = manifest.spec.hard.get("requests.memory")
+        if memory_raw is None:
+            raise errors.ValidationError(
+                message="Kubernetes resource quota with missing hard.requests.memory is not supported"
+            )
+        cpu_raw = manifest.spec.hard.get("requests.cpu")
+        if cpu_raw is None:
+            raise errors.ValidationError(
+                message="Kubernetes resource quota with missing hard.requests.cpu is not supported"
+            )
+        return cls(
+            cpu=float(parse_quantity(cpu_raw)),
+            memory=round(parse_quantity(memory_raw) / 1_000_000_000),
+            gpu=gpu,
+            gpu_kind=gpu_kind,
+            id=manifest.metadata.name,
+        )
+
+    def to_manifest(self, labels) -> client.V1ResourceQuota:
+        """Convert to a manifest."""
+        return client.V1ResourceQuota(
+            metadata=client.V1ObjectMeta(labels=labels, name=self.id),
+            spec=client.V1ResourceQuotaSpec(
+                hard={
+                    "requests.cpu": self.cpu,
+                    "requests.memory": str(self.memory * 1_000_000_000),
+                    f"requests.{self.gpu_kind}/gpu": self.gpu,
+                },
+                scope_selector=client.V1ScopeSelector(
+                    match_expressions=[{"operator": "In", "scopeName": "PriorityClass", "values": [self.id]}]
+                ),
+            ),
+        )
 
     def is_resource_class_compatible(self, rc: ResourceClass | UnsavedResourceClass) -> bool:
         """Determine if a resource class is compatible with the quota."""

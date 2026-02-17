@@ -22,7 +22,7 @@ from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.connected_services.oauth_http import DefaultOAuthHttpClientFactory
 from renku_data_services.crc import models as rp_models
-from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository, UserRepository
+from renku_data_services.crc.db import ClusterRepository, QuotaRepository, ResourcePoolRepository, UserRepository
 from renku_data_services.data_api.config import Config
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_connectors.db import DataConnectorRepository, DataConnectorSecretRepository
@@ -34,7 +34,7 @@ from renku_data_services.k8s.clients import (
     K8sSchedulingClient,
 )
 from renku_data_services.k8s.config import KubeConfigEnv, get_clusters
-from renku_data_services.k8s.db import K8sDbCache, QuotaRepository
+from renku_data_services.k8s.db import K8sDbCache
 from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository

@@ -8,7 +8,7 @@ from typing import Any, Protocol, Self
 import kr8s
 
 from renku_data_services.base_models import APIUser
-from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
+from renku_data_services.crc.db import ClusterRepository, QuotaRepository, ResourcePoolRepository
 from renku_data_services.crc.models import ClusterSettings, ResourceClass, SessionProtocol
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.errors import errors
@@ -19,7 +19,7 @@ from renku_data_services.k8s.clients import (
     K8sSecretClient,
 )
 from renku_data_services.k8s.config import KubeConfig, KubeConfigEnv, get_clusters
-from renku_data_services.k8s.db import K8sDbCache, QuotaRepository
+from renku_data_services.k8s.db import K8sDbCache
 from renku_data_services.notebooks.api.classes.data_service import (
     CRCValidator,
 )

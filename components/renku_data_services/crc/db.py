@@ -6,12 +6,16 @@ grows it is worth looking into separating this functionality into separate class
 it all in one place.
 """
 
+from __future__ import annotations
+
 from asyncio import gather
-from collections.abc import AsyncGenerator, Callable, Collection, Coroutine, Sequence
+from collections.abc import AsyncGenerator, AsyncIterable, Callable, Collection, Coroutine, Sequence
 from dataclasses import asdict, dataclass, field
 from functools import wraps
 from typing import Any, Concatenate, Optional, ParamSpec, TypeVar
+from uuid import uuid4
 
+from kubernetes import client
 from sqlalchemy import NullPool, delete, false, select, true
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import selectinload
@@ -27,8 +31,9 @@ from renku_data_services.crc import orm as schemas
 from renku_data_services.crc.core import validate_resource_class_update, validate_resource_pool_update
 from renku_data_services.crc.models import ClusterPatch, ClusterSettings, SavedClusterSettings, SessionProtocol
 from renku_data_services.crc.orm import ClusterORM
-from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
-from renku_data_services.k8s.db import QuotaRepository
+from renku_data_services.k8s.client_interfaces import PriorityClassClient, ResourceQuotaClient
+from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
+from renku_data_services.k8s.models import DeletePropagationPolicy
 from renku_data_services.users.db import UserRepo
 
 
@@ -1108,3 +1113,92 @@ class ClusterRepository:
             cluster = r.one_or_none()
             if cluster is not None:
                 await session.delete(cluster)
+
+
+@dataclass
+class QuotaRepository:
+    """Adapter for CRUD operations on resource quotas and priority classes in k8s."""
+
+    rq_client: ResourceQuotaClient
+    pc_client: PriorityClassClient
+    _label_name: str = field(init=False, default="app")
+    _label_value: str = field(init=False, default="renku")
+
+    async def get_quota(self, name: str | None, cluster_id: ClusterId) -> models.Quota | None:
+        """Get a specific quota by name."""
+        if not name:
+            return None
+        try:
+            res_quota = await self.rq_client.read_resource_quota(name=name, cluster_id=cluster_id)
+        except errors.MissingResourceError:
+            return None
+        return models.Quota.from_k8s_resource_quota(res_quota)
+
+    async def get_quotas(self, cluster_id: ClusterId, name: str | None = None) -> AsyncIterable[models.Quota]:
+        """Get a specific resource quota."""
+        if name is not None:
+            quota = await self.get_quota(name, cluster_id)
+            if not quota:
+                return
+            yield quota
+            return
+        quotas = self.rq_client.list_resource_quota(
+            label_selector={self._label_name: self._label_value},
+            cluster_id=cluster_id,
+        )
+        async for q in quotas:
+            yield models.Quota.from_k8s_resource_quota(q)
+
+    async def create_quota(self, new_quota: models.UnsavedQuota, cluster_id: ClusterId) -> models.Quota:
+        """Create a resource quota and priority class."""
+        quota_id = str(uuid4()) if new_quota.id is None else new_quota.id
+        quota = models.Quota(
+            cpu=new_quota.cpu, memory=new_quota.memory, gpu=new_quota.gpu, gpu_kind=new_quota.gpu_kind, id=quota_id
+        )
+        labels = {self._label_name: self._label_value}
+        metadata = {"labels": labels, "name": quota_id}
+        quota_manifest = quota.to_manifest(labels)
+
+        # Check if we have a priority class with the given name, return it or create one otherwise.
+        pc = await self.pc_client.read_priority_class(quota.id, cluster_id)
+        if pc is None:
+            pc = await self.pc_client.create_priority_class(
+                client.V1PriorityClass(
+                    global_default=False,
+                    value=100,
+                    preemption_policy="Never",
+                    description="Renku resource quota priority class",
+                    metadata=client.V1ObjectMeta(**metadata),
+                ),
+                cluster_id,
+            )
+
+        # NOTE: The priority class is cluster-scoped and a namespace-scoped resource cannot be an owner
+        # of a cluster-scoped resource. That is why the priority class is an owner of the quota.
+        quota_manifest.owner_references = [
+            client.V1OwnerReference(
+                api_version=pc.api_version,
+                block_owner_deletion=True,
+                controller=False,
+                kind=pc.kind,
+                name=pc.metadata.name,
+                uid=pc.metadata.uid,
+            )
+        ]
+        res = await self.rq_client.create_resource_quota(quota_manifest, cluster_id)
+        return models.Quota.from_k8s_resource_quota(res)
+
+    async def delete_quota(self, name: str, cluster_id: ClusterId) -> None:
+        """Delete a resource quota and priority class."""
+        await self.pc_client.delete_priority_class(
+            name=name, cluster_id=cluster_id, propagation_policy=DeletePropagationPolicy.foreground
+        )
+        await self.rq_client.delete_resource_quota(name=name, cluster_id=cluster_id)
+
+    async def update_quota(self, quota: models.Quota, cluster_id: ClusterId) -> models.Quota:
+        """Update a specific resource quota."""
+        labels = {self._label_name: self._label_value}
+        patched_quota = await self.rq_client.patch_resource_quota(
+            name=quota.id, body=quota.to_manifest(labels), cluster_id=cluster_id
+        )
+        return models.Quota.from_k8s_resource_quota(patched_quota)

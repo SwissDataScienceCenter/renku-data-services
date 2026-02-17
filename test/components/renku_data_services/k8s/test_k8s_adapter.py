@@ -19,6 +19,7 @@ from kubernetes.client import (
 )
 
 from renku_data_services.crc import models
+from renku_data_services.crc.db import QuotaRepository
 from renku_data_services.k8s.clients import (
     K8sClusterClient,
     K8sClusterClientsPool,
@@ -27,7 +28,6 @@ from renku_data_services.k8s.clients import (
 )
 from renku_data_services.k8s.config import from_kubeconfig_file
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
-from renku_data_services.k8s.db import QuotaRepository
 from renku_data_services.k8s.models import ClusterConnection, sanitizer
 from renku_data_services.notebooks.api.classes.auth import RenkuTokens
 from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClient

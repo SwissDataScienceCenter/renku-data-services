@@ -28,7 +28,7 @@ from renku_data_services.connected_services.db import ConnectedServicesRepositor
 from renku_data_services.connected_services.oauth_http import DefaultOAuthHttpClientFactory, OAuthHttpClientFactory
 from renku_data_services.crc import models as crc_models
 from renku_data_services.crc.constants import DEFAULT_RUNTIME_PLATFORM
-from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository, UserRepository
+from renku_data_services.crc.db import ClusterRepository, QuotaRepository, ResourcePoolRepository, UserRepository
 from renku_data_services.data_api.config import Config
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
@@ -41,7 +41,7 @@ from renku_data_services.k8s.clients import (
     K8sSchedulingClient,
 )
 from renku_data_services.k8s.config import KubeConfigEnv
-from renku_data_services.k8s.db import K8sDbCache, QuotaRepository
+from renku_data_services.k8s.db import K8sDbCache
 from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.metrics.core import StagingMetricsService
 from renku_data_services.metrics.db import MetricsRepository
