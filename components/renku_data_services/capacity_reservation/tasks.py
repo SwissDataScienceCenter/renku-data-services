@@ -194,7 +194,7 @@ class CapacityReservationTasks:
             occurrence_id_str = d.manifest.get("metadata", {}).get("labels", {}).get("renku.io/occurrence-id")
             if occurrence_id_str is None:
                 continue
-            occurrence_ids_from_k8s[ULID.from_str(occurrence_id_str)] = d.meta.name
+            occurrence_ids_from_k8s[ULID.from_str(occurrence_id_str)] = d.name
 
         if not occurrence_ids_from_k8s:
             return None
