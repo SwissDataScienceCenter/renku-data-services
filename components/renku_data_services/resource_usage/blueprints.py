@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 
-from renku_data_services.base_models.validation import validated_json
-from sanic import HTTPResponse, Request, empty, json
+from sanic import HTTPResponse, Request, empty
 from sanic.response import JSONResponse
 from sanic_ext import validate
 
@@ -9,6 +8,7 @@ from renku_data_services import base_models, errors
 from renku_data_services.base_api.auth import authenticate, only_admins
 from renku_data_services.base_api.blueprint import CustomBlueprint
 from renku_data_services.base_api.misc import BlueprintFactoryResponse, validate_db_ids
+from renku_data_services.base_models.validation import validated_json
 from renku_data_services.resource_usage import apispec, model
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
 
@@ -20,6 +20,11 @@ def validate_resource_pool_limit_put(id: int, body: apispec.ResourcePoolLimitPut
             message=f"The user_limit '{body.user_limit}' must be lower than total_limit '{body.total_limit}'.",
         )
     return model.ResourcePoolLimits(id, model.Credit.from_int(body.total_limit), model.Credit.from_int(body.user_limit))
+
+
+def validate_resource_class_costs_put(class_id: int, body: apispec.ResourceClassCostPut) -> model.ResourceClassCost:
+    """Validate the resource class cost data."""
+    return model.ResourceClassCost(resource_class_id=class_id, cost=model.Credit.from_int(body.cost))
 
 
 @dataclass(kw_only=True)
@@ -58,7 +63,7 @@ class ResourceUsageBP(CustomBlueprint):
                     apispec.ResourcePoolLimits,
                     apispec.ResourcePoolLimits(
                         total_limit=result.total_limit.value, user_limit=result.user_limit.value, pool_id=result.pool_id
-                    )
+                    ),
                 )
             else:
                 raise errors.MissingResourceError()
@@ -76,3 +81,23 @@ class ResourceUsageBP(CustomBlueprint):
             return empty()
 
         return "/resource_usage/pool_limits/<resource_pool_id>", ["DELETE"], _delete
+
+    def put_class_costs(self) -> BlueprintFactoryResponse:
+        """Set resource class cost."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate_db_ids
+        @validate(json=apispec.ResourceClassCostPut)
+        async def _put(
+            _: Request,
+            user: base_models.APIUser,
+            resource_pool_id: int,
+            class_id: int,
+            body: apispec.ResourceClassCostPut,
+        ) -> HTTPResponse:
+            costs = validate_resource_class_costs_put(class_id, body=body)
+            await self.rr_repo.set_resource_class_costs(costs)
+            return empty()
+
+        return "/resource_usage/class_cost/<resource_pool_id>/<class_id>", ["PUT"], _put

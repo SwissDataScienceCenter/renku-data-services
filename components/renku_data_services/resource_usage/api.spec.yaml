@@ -86,6 +86,98 @@ paths:
       tags:
         - resource-usage
 
+  /resource_usage/class_costs/{resource_pool_id}/{class_id}:
+    get:
+      summary: Get resource class costs
+      parameters:
+        - in: path
+          name: resource_pool_id
+          required: true
+          schema:
+            type: integer
+        - in: path
+          name: class_id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+      responses:
+        "200":
+          description: Return the resource class costs.
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ResourcePoolLimits"
+        "404":
+          description: The pool does not exist 
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - resource-usage
+    put:
+      summary: Update resource class costs
+      parameters:
+        - in: path
+          name: resource_pool_id
+          required: true
+          schema:
+            type: integer
+        - in: path
+          name: class_id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/ResourceClassCostPut"
+      responses:
+        "204":
+          description: The limits have been set
+        "404":
+          description: The class does not exist 
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - resource-usage
+    delete:
+      summary: Delete resource class costs
+      parameters:
+        - in: path
+          name: resource_pool_id
+          required: true
+          schema:
+            type: integer
+        - in: path
+          name: class_id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+      responses:
+        "204":
+          description: No content on success.
+        "404":
+          description: The class does not exist 
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - resource-usage
+
 components:
   schemas:
     ResourcePoolLimitPut:
@@ -99,6 +191,14 @@ components:
       required:
         - total_limit
         - user_limit
+    ResourceClassCostPut:
+      type: object
+      additionalProperties: false
+      properties:
+        cost:
+          type: integer
+      required:
+        - cost
     ResourcePoolLimits:
       type: object
       additionalProperties: false
