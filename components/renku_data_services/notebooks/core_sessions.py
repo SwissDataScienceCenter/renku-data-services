@@ -47,6 +47,7 @@ from renku_data_services.notebooks.api.classes.repository import GitProvider, Re
 from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
 from renku_data_services.notebooks.config import GitProviderHelperProto, NotebooksConfig
 from renku_data_services.notebooks.crs import (
+    AmaltheaMetadata,
     AmaltheaSessionSpec,
     AmaltheaSessionV1Alpha1,
     AmaltheaSessionV1Alpha1MetadataPatch,
@@ -82,6 +83,7 @@ from renku_data_services.notebooks.crs import (
     SizeStr,
     State,
     Storage,
+    Template,
     TlsSecret,
 )
 from renku_data_services.notebooks.image_check import ImageCheckRepository
@@ -865,7 +867,8 @@ async def start_session(
     annotations: dict[str, str] = {
         "renku.io/project_id": str(launcher.project_id),
         "renku.io/launcher_id": str(launcher_id),
-        "renku.io/resource_class_id": str(resource_class_id),
+        "renku.io/resource_class_id": str(resource_class.id),
+        "renku.io/resource_pool_id": str(resource_pool.id),
     }
 
     # Authentication
@@ -943,6 +946,8 @@ async def start_session(
     launcher_env_variables = get_launcher_env_variables(launcher, launch_request)
     env.extend(launcher_env_variables)
 
+    labels = {"renku.io/safe-username": user.id}
+
     session = AmaltheaSessionV1Alpha1(
         metadata=Metadata(name=server_name, annotations=annotations),
         spec=AmaltheaSessionSpec(
@@ -991,6 +996,7 @@ async def start_session(
             tolerations=tolerations_from_resource_class(resource_class, nb_config.sessions.tolerations_model),
             affinity=node_affinity_from_resource_class(resource_class, nb_config.sessions.affinity_model),
             serviceAccountName=service_account_name,
+            template=Template(metadata=AmaltheaMetadata(annotations=annotations, labels=labels)),
         ),
     )
     secrets_to_create = session_extras.secrets or []
