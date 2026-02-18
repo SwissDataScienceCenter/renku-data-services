@@ -39,16 +39,13 @@ def create_resource_class_costs() -> None:
         sa.Column("cost", CreditType(), nullable=False),
         schema="resource_pools",
     )
-    op.create_foreign_key(
-        "fk_resource_class_costs_resource_class_id",
-        source_table="resource_class_costs",
-        referent_table="resource_classes",
-        local_cols=["resource_class_id"],
-        remote_cols=["id"],
-        referent_schema="resource_pools",
-        source_schema="resource_pools",
-        ondelete="cascade",
-    )
+    op.execute("""
+    alter table "resource_pools"."resource_class_costs"
+    add constraint "fk_resource_class_costs_resource_class_id"
+    foreign key ("resource_class_id")
+    references "resource_pools"."resource_classes"("id")
+    on delete cascade
+    """)
 
 
 def create_resource_requests_limits() -> None:
