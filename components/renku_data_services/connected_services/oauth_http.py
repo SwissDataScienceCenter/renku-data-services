@@ -41,7 +41,7 @@ from renku_data_services.repositories.models import OAuth2ClientORM
 from renku_data_services.users.db import APIUser
 from renku_data_services.utils import cryptography as crypt
 
-logger = logging.getLogger(__file__)
+logger = logging.getLogger(__name__)
 
 
 class OAuthHttpFactoryError(StrEnum):
@@ -274,7 +274,14 @@ class DefaultOAuthClient(OAuthHttpClient):
         request_url = urljoin(self.adapter.api_url, self.adapter.user_info_endpoint)
         try:
             if self.adapter.user_info_method == "POST":
-                response = await self._delegate.post(request_url, headers=self.adapter.api_common_headers)
+                # NOTE: we need to remove "Content-Type" from the headers (empty post)
+                headers: dict[str, str] | None = None
+                if self.adapter.api_common_headers:
+                    headers = dict()
+                    for key, value in self.adapter.api_common_headers.items():
+                        if key.lower() != "content-type":
+                            headers[key] = value
+                response = await self._delegate.post(request_url, headers=headers)
             else:
                 response = await self.get(request_url, headers=self.adapter.api_common_headers)
         except OAuthError as e:
