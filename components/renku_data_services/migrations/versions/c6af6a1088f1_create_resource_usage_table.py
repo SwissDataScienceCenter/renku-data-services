@@ -98,8 +98,9 @@ def create_resource_requests_log() -> None:
         schema="resource_pools",
     )
     op.create_index(
-        "resource_requests_log",
-        ["capture_date"],
+        index_name=None,
+        table_name="resource_requests_log",
+        columns=["capture_date"],
         unique=False,
         schema="resource_pools",
     )

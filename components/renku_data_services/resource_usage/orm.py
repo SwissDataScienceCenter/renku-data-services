@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from typing import cast
-from renku_data_services.crc.orm import ResourceClassORM, ResourcePoolORM
 
 from sqlalchemy import (
     CheckConstraint,
@@ -19,6 +18,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 from ulid import ULID
+
+from renku_data_services.crc.orm import ResourceClassORM, ResourcePoolORM
 
 # from renku_data_services.crc.orm import metadata_obj
 # from renku_data_services.crc.orm import BaseORM
@@ -70,7 +71,7 @@ class ResourceRequestsLogORM(BaseORM):
     phase: Mapped[str] = mapped_column("phase", String(), nullable=False)
     """The k8s uid of the pod."""
 
-    capture_date: Mapped[datetime] = mapped_column("capture_date", DateTime(timezone=True), nullable=False,index=True)
+    capture_date: Mapped[datetime] = mapped_column("capture_date", DateTime(timezone=True), nullable=False, index=True)
     """The timestamp the values were captured."""
 
     capture_interval: Mapped[timedelta] = mapped_column("capture_interval", Interval(), nullable=False)
@@ -241,7 +242,7 @@ class ResourceRequestsLimitsORM(BaseORM):
     id: Mapped[int] = mapped_column(
         "resource_pool_id",
         Integer(),
-        ForeignKey(column=ResourcePoolORM.id, name="fk_resource_requests_limits_resource_pool_id",ondelete="cascade"),
+        ForeignKey(column=ResourcePoolORM.id, name="fk_resource_requests_limits_resource_pool_id", ondelete="cascade"),
         nullable=False,
         primary_key=True,
     )
@@ -265,7 +266,7 @@ class ResourceClassCostORM(BaseORM):
     id: Mapped[int] = mapped_column(
         "resource_class_id",
         Integer(),
-        ForeignKey(column=ResourceClassORM.id, name="fk_resource_class_costs_resource_class_id",ondelete="cascade"),
+        ForeignKey(column=ResourceClassORM.id, name="fk_resource_class_costs_resource_class_id", ondelete="cascade"),
         nullable=False,
         primary_key=True,
     )
