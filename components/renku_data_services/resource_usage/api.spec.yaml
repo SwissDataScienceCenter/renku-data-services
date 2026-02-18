@@ -9,12 +9,12 @@ info:
 servers:
   - url: /api/data
 paths:
-  /resource_usage/pool_limits/{pool_id}:
+  /resource_usage/pool_limits/{resource_pool_id}:
     get:
       summary: Get resource pool limits
       parameters:
         - in: path
-          name: pool_id
+          name: resource_pool_id
           required: true
           schema:
             type: integer
@@ -40,7 +40,7 @@ paths:
       summary: Update resource pool limits
       parameters:
         - in: path
-          name: pool_id
+          name: resource_pool_id
           required: true
           schema:
             type: integer
@@ -53,6 +53,28 @@ paths:
       responses:
         "204":
           description: The limits have been set
+        "404":
+          description: The pool does not exist 
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - resource-usage
+    delete:
+      summary: Delete resource pool limits
+      parameters:
+        - in: path
+          name: resource_pool_id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+      responses:
+        "204":
+          description: No content on success.
         "404":
           description: The pool does not exist 
           content:
