@@ -61,6 +61,7 @@ from renku_data_services.project.db import (
     ProjectSessionSecretRepository,
 )
 from renku_data_services.repositories.db import GitRepositoriesRepository
+from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.search import query_manual
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.reprovision import SearchReprovision
@@ -156,6 +157,7 @@ class DependencyManager:
     git_provider_helper: GitProviderHelperProto
     notifications_repo: NotificationsRepository
     oauth_http_client_factory: OAuthHttpClientFactory
+    resource_requests_repo: ResourceRequestsRepo
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
@@ -184,6 +186,7 @@ class DependencyManager:
             renku_data_services.data_connectors.__file__,
             renku_data_services.search.__file__,
             renku_data_services.notifications.__file__,
+            renku_data_services.resource_usage.__file__,
         ]
 
         api_specs = []
@@ -409,6 +412,9 @@ class DependencyManager:
             session_maker=config.db.async_session_maker,
             alertmanager_webhook_role=config.alertmanager_webhook_role,
         )
+        resource_requests_repo = ResourceRequestsRepo(
+            session_maker=config.db.async_session_maker,
+        )
         return cls(
             config,
             k8s_client=client,
@@ -450,4 +456,5 @@ class DependencyManager:
             git_provider_helper=git_provider_helper,
             notifications_repo=notifications_repo,
             oauth_http_client_factory=oauth_http_client_factory,
+            resource_requests_repo=resource_requests_repo,
         )

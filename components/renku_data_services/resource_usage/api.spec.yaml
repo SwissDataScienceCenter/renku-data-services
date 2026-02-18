@@ -1,0 +1,136 @@
+---
+openapi: 3.0.2
+info:
+  title: Renku Data Services API
+  description: |
+    This service is the main backend for Renku. It provides information about users, projects,
+    cloud storage, access to compute resources and many other things.
+  version: v1
+servers:
+  - url: /api/data
+paths:
+  /resource_usage/pool_limits/{pool_id}:
+    get:
+      summary: Get resource pool limits
+      parameters:
+        - in: path
+          name: pool_id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+      responses:
+        "200":
+          description: Return the resource pool limits.
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ResourcePoolLimits"
+        "404":
+          description: The pool does not exist 
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - resource-usage
+    put:
+      summary: Update resource pool limits
+      parameters:
+        - in: path
+          name: pool_id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/ResourcePoolLimitPut"
+      responses:
+        "204":
+          description: The limits have been set
+        "404":
+          description: The pool does not exist 
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - resource-usage
+
+components:
+  schemas:
+    ResourcePoolLimitPut:
+      type: object
+      additionalProperties: false
+      properties:
+        total_limit:
+          type: integer
+        user_limit:
+          type: integer
+      required:
+        - total_limit
+        - user_limit
+    ResourcePoolLimits:
+      type: object
+      additionalProperties: false
+      properties:
+        pool_id:
+          type: integer
+        total_limit:
+          type: integer
+        user_limit:
+          type: integer
+      required:
+        - pool_id
+        - total_limit
+        - user_limit
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: integer
+              minimum: 0
+              exclusiveMinimum: true
+              example: 1404
+            detail:
+              type: string
+              example: "A more detailed optional message showing what the problem was"
+            message:
+              type: string
+              example: "Something went wrong - please try again later"
+          required: ["code", "message"]
+      required: ["error"]
+    Ulid:
+      description: ULID identifier
+      type: string
+      minLength: 26
+      maxLength: 26
+      pattern: "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"  # This is case-insensitive
+  responses:
+    Error:
+      description: The schema for all 4xx and 5xx responses
+      content:
+        "application/json":
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  securitySchemes:
+    bearer:
+      scheme: bearer
+      type: http
+    oidc:
+      type: openIdConnect
+      openIdConnectUrl: /auth/realms/Renku/.well-known/openid-configuration
+security:
+  - bearer: []
+  - oidc:
+      - openid
