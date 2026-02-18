@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from typing import cast
+from renku_data_services.crc.orm import ResourceClassORM, ResourcePoolORM
 
 from sqlalchemy import (
     CheckConstraint,
@@ -19,6 +20,8 @@ from sqlalchemy import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 from ulid import ULID
 
+# from renku_data_services.crc.orm import metadata_obj
+# from renku_data_services.crc.orm import BaseORM
 from renku_data_services.resource_usage.model import (
     ComputeCapacity,
     Credit,
@@ -67,7 +70,7 @@ class ResourceRequestsLogORM(BaseORM):
     phase: Mapped[str] = mapped_column("phase", String(), nullable=False)
     """The k8s uid of the pod."""
 
-    capture_date: Mapped[datetime] = mapped_column("capture_date", DateTime(timezone=True), nullable=False)
+    capture_date: Mapped[datetime] = mapped_column("capture_date", DateTime(timezone=True), nullable=False,index=True)
     """The timestamp the values were captured."""
 
     capture_interval: Mapped[timedelta] = mapped_column("capture_interval", Interval(), nullable=False)
@@ -148,7 +151,7 @@ class ResourceRequestsViewORM(BaseORM):
 
     __table_args__ = (
         # info tells tools like Alembic to ignore this during 'revision'
-        {"info": dict(is_view=True)},
+        {"info": {"is_iew": True}}
     )
 
     id: Mapped[ULID] = mapped_column("id", ULIDType(), nullable=False, primary_key=True)
@@ -236,7 +239,11 @@ class ResourceRequestsLimitsORM(BaseORM):
     __tablename__ = "resource_requests_limits"
 
     id: Mapped[int] = mapped_column(
-        "resource_pool_id", Integer(), ForeignKey("resource_pools.id"), nullable=False, primary_key=True
+        "resource_pool_id",
+        Integer(),
+        ForeignKey(column=ResourcePoolORM.id, name="fk_resource_requests_limits_resource_pool_id",ondelete="cascade"),
+        nullable=False,
+        primary_key=True,
     )
     """Resource pool id."""
 
@@ -256,7 +263,11 @@ class ResourceClassCostORM(BaseORM):
     __tablename__ = "resource_class_costs"
 
     id: Mapped[int] = mapped_column(
-        "resource_class_id", Integer(), ForeignKey("resource_classes.id"), nullable=False, primary_key=True
+        "resource_class_id",
+        Integer(),
+        ForeignKey(column=ResourceClassORM.id, name="fk_resource_class_costs_resource_class_id",ondelete="cascade"),
+        nullable=False,
+        primary_key=True,
     )
     """Resource class id."""
 
