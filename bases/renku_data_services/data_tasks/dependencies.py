@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from renku_data_services.authz.authz import Authz
 from renku_data_services.capacity_reservation.db import CapacityReservationRepository, OccurrenceAdapter
+from renku_data_services.capacity_reservation.k8s_client import CapacityReservationK8sClient
 from renku_data_services.capacity_reservation.tasks import CapacityReservationTasks
 from renku_data_services.crc.db import ClusterRepository
 from renku_data_services.data_tasks.config import Config
@@ -86,10 +87,11 @@ class DependencyManager:
                 cluster_repo=cluster_repo,
             )
         )
+        cr_k8s_client = CapacityReservationK8sClient(client=k8s_client, cluster_repo=cluster_repo)
         capacity_reservation_tasks = CapacityReservationTasks(
             occurrence_adapter=OccurrenceAdapter(cfg.db.async_session_maker),
             capacity_reservation_repo=CapacityReservationRepository(cfg.db.async_session_maker),
-            k8s_client=k8s_client,
+            k8s_client=cr_k8s_client,
         )
         kc_api: IKeycloakAPI
         if cfg.dummy_stores:

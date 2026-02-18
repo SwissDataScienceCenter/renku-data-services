@@ -9,18 +9,14 @@ from ulid import ULID
 from renku_data_services.app_config import logging
 from renku_data_services.capacity_reservation.core import calculate_target_replicas
 from renku_data_services.capacity_reservation.db import CapacityReservationRepository, OccurrenceAdapter
+from renku_data_services.capacity_reservation.k8s_client import CapacityReservationK8sClient
 from renku_data_services.capacity_reservation.models import (
     CapacityReservation,
     Occurrence,
     OccurrencePatch,
     OccurrenceState,
 )
-from renku_data_services.k8s.clients import K8sClusterClientsPool
-from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
-from renku_data_services.k8s.models import GVK, K8sObjectFilter, K8sObjectMeta
-from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
-
-DEPLOYMENT_GVK = GVK(kind="Deployment", group="apps", version="v1")
+from renku_data_services.k8s.models import K8sObject
 
 
 @dataclass(kw_only=True)
@@ -29,7 +25,7 @@ class CapacityReservationTasks:
 
     occurrence_adapter: OccurrenceAdapter
     capacity_reservation_repo: CapacityReservationRepository
-    k8s_client: K8sClusterClientsPool
+    k8s_client: CapacityReservationK8sClient
 
     async def activate_pending_occurrences_task(self) -> None:
         """Activate pending capacity reservation occurrences."""
@@ -43,9 +39,6 @@ class CapacityReservationTasks:
 
         logger.info(f"Activating {len(due_pending_occurrences)} pending capacity reservation occurrence(s).")
 
-        cluster = await self.k8s_client.cluster_by_id(DEFAULT_K8S_CLUSTER)
-        namespace = cluster.namespace
-
         for occurrence in due_pending_occurrences:
             reservations = await self.capacity_reservation_repo.get_capacity_reservations_by_ids(
                 [occurrence.reservation_id]
@@ -58,13 +51,7 @@ class CapacityReservationTasks:
                 continue
             reservation = reservations[0]
 
-            deployment_name = f"capacity-reservation-{str(occurrence.id).lower()}"
-            manifest = _build_placeholder_deployment_manifest(occurrence, reservation)
-            meta = K8sObjectMeta(
-                name=deployment_name, namespace=namespace, cluster=DEFAULT_K8S_CLUSTER, gvk=DEPLOYMENT_GVK
-            )
-
-            await self.k8s_client.create(meta.with_manifest(manifest), refresh=False)
+            deployment_name = await self.k8s_client.create_placeholder_deployment(occurrence, reservation)
             await self.occurrence_adapter.update_occurrence(
                 occurrence.id,
                 OccurrencePatch(status=OccurrenceState.ACTIVE, deployment_name=deployment_name),
@@ -83,9 +70,6 @@ class CapacityReservationTasks:
         logger.info(f"Monitoring {len(active_occurrences)} active capacity reservation occurrence(s).")
 
         datetime_now = datetime.now(UTC)
-        cluster = await self.k8s_client.cluster_by_id(DEFAULT_K8S_CLUSTER)
-        namespace = cluster.namespace
-
         expired_occurrences = [o for o in active_occurrences if o.end_datetime < datetime_now]
         still_active_occurrences = [o for o in active_occurrences if o.end_datetime >= datetime_now]
 
@@ -94,14 +78,15 @@ class CapacityReservationTasks:
             if expired_occurrence.deployment_name is None:
                 logger.warning(f"Expired occurrence {expired_occurrence.id} has no deployment name, skipping delete.")
             else:
-                await self.k8s_client.delete(
-                    K8sObjectMeta(
-                        name=expired_occurrence.deployment_name,
-                        namespace=namespace,
-                        cluster=DEFAULT_K8S_CLUSTER,
-                        gvk=DEPLOYMENT_GVK,
-                    )
+                reservations = await self.capacity_reservation_repo.get_capacity_reservations_by_ids(
+                    [expired_occurrence.reservation_id]
                 )
+                if reservations:
+                    await self.k8s_client.delete_deployment(expired_occurrence.deployment_name, reservations[0])
+                else:
+                    logger.error(
+                        f"Could not find reservation for expired occurrence {expired_occurrence.id}, skipping delete."
+                    )
             await self.occurrence_adapter.update_occurrence(
                 expired_occurrence.id, OccurrencePatch(status=OccurrenceState.COMPLETED)
             )
@@ -111,22 +96,8 @@ class CapacityReservationTasks:
             return None
 
         session_data = []
-        async for s in self.k8s_client.list(
-            K8sObjectFilter(
-                namespace=namespace,
-                cluster=DEFAULT_K8S_CLUSTER,
-                gvk=AMALTHEA_SESSION_GVK,
-            )
-        ):
-            session_data.append(
-                {
-                    "project_id": s.manifest["metadata"]["annotations"].get("renku.io/project_id"),
-                    "priority_class_name": s.manifest["spec"]["priorityClassName"],
-                    "cpu_request": s.manifest["spec"]["session"]["resources"]["requests"]["cpu"],
-                    "memory_request": s.manifest["spec"]["session"]["resources"]["requests"]["memory"],
-                    "creation_time": s.manifest["metadata"]["creationTimestamp"],
-                }
-            )
+        async for session in self.k8s_client.list_sessions():
+            session_data.append(session)
 
         active_pairs: list[tuple[Occurrence, CapacityReservation]] = []
         for occurrence in still_active_occurrences:
@@ -139,8 +110,7 @@ class CapacityReservationTasks:
                     f"for occurrence {occurrence.id}."
                 )
                 continue
-            reservation = reservations[0]
-            active_pairs.append((occurrence, reservation))
+            active_pairs.append((occurrence, reservations[0]))
 
         project_template_map: dict[ULID, ULID | None] = {}
         if any(r.matching.project_template_id for _, r in active_pairs):
@@ -156,63 +126,35 @@ class CapacityReservationTasks:
             if occurrence.deployment_name is None:
                 logger.warning(f"Active occurrence {occurrence.id} has no deployment name, skipping patch.")
                 continue
-            meta = K8sObjectMeta(
-                name=occurrence.deployment_name,
-                namespace=namespace,
-                cluster=DEFAULT_K8S_CLUSTER,
-                gvk=DEPLOYMENT_GVK,
-            )
-            await self.k8s_client.patch(
-                meta,
-                {"spec": {"replicas": target_replicas}},
-            )
-
+            await self.k8s_client.patch_deployment_replicas(occurrence.deployment_name, reservation, target_replicas)
 
     async def cleanup_orphaned_deployments_task(self) -> None:
         """Delete capacity reservation deployments whose occurrences no longer exist in the database."""
         logger = logging.getLogger(self.__class__.__name__)
 
-        cluster = await self.k8s_client.cluster_by_id(DEFAULT_K8S_CLUSTER)
-        namespace = cluster.namespace
+        deployments: list[K8sObject] = []
+        occurrence_ids: list[ULID] = []
 
-        deployments = []
-        async for d in self.k8s_client.list(
-            K8sObjectFilter(
-                namespace=namespace,
-                cluster=DEFAULT_K8S_CLUSTER,
-                gvk=DEPLOYMENT_GVK,
-                label_selector={"app": "capacity-placeholder"},
-            )
-        ):
+        async for d in self.k8s_client.list_placeholder_deployments():
             deployments.append(d)
+            occurrence_id_str = d.manifest.get("metadata", {}).get("labels", {}).get("renku.io/occurrence-id")
+            if occurrence_id_str is not None:
+                occurrence_ids.append(ULID.from_str(occurrence_id_str))
 
-        if not deployments:
+        if not occurrence_ids:
             return None
 
-        occurrence_ids_from_k8s: dict[ULID, str] = {}
+        existing_ids = await self.occurrence_adapter.get_existing_occurrence_ids(occurrence_ids)
+        orphaned_ids = set(occurrence_ids) - existing_ids
+
         for d in deployments:
             occurrence_id_str = d.manifest.get("metadata", {}).get("labels", {}).get("renku.io/occurrence-id")
             if occurrence_id_str is None:
                 continue
-            occurrence_ids_from_k8s[ULID.from_str(occurrence_id_str)] = d.name
-
-        if not occurrence_ids_from_k8s:
-            return None
-
-        existing_ids = await self.occurrence_adapter.get_existing_occurrence_ids(list(occurrence_ids_from_k8s.keys()))
-        orphaned_ids = set(occurrence_ids_from_k8s.keys()) - existing_ids
-
-        for orphaned_id in orphaned_ids:
-            deployment_name = occurrence_ids_from_k8s[orphaned_id]
-            logger.info(f"Deleting orphaned deployment {deployment_name} (occurrence {orphaned_id} no longer exists).")
-            await self.k8s_client.delete(
-                K8sObjectMeta(
-                    name=deployment_name,
-                    namespace=namespace,
-                    cluster=DEFAULT_K8S_CLUSTER,
-                    gvk=DEPLOYMENT_GVK,
-                )
-            )
+            occurrence_id = ULID.from_str(occurrence_id_str)
+            if occurrence_id in orphaned_ids:
+                logger.info(f"Deleting orphaned deployment {d.name} (occurrence {occurrence_id} no longer exists).")
+                await self.k8s_client.delete_deployment_object(d)
 
 
 def _assign_sessions_to_occurrences(
@@ -271,41 +213,3 @@ def _assign_sessions_to_occurrences(
                 unmatched_sessions.remove(session)
 
     return counts
-
-
-def _build_placeholder_deployment_manifest(occurrence: Occurrence, reservation: CapacityReservation) -> dict:
-    """Build a placeholder deployment manifest for the given occurrence and reservation."""
-
-    labels = {
-        "app": "capacity-placeholder",
-        "renku.io/reservation-id": str(reservation.id),
-        "renku.io/occurrence-id": str(occurrence.id),
-    }
-
-    return {
-        "apiVersion": "apps/v1",
-        "kind": "Deployment",
-        "metadata": {"name": f"capacity-reservation-{str(occurrence.id).lower()}", "labels": labels},
-        "spec": {
-            "replicas": reservation.provisioning.placeholder_count,
-            "selector": {"matchLabels": labels},
-            "template": {
-                "metadata": {"labels": labels},
-                "spec": {
-                    "priorityClassName": reservation.provisioning.priority_class_name,
-                    "containers": [
-                        {
-                            "name": "placeholder",
-                            "image": "registry.k8s.io/pause:3.9",
-                            "resources": {
-                                "requests": {
-                                    "cpu": reservation.provisioning.cpu_request,
-                                    "memory": reservation.provisioning.memory_request,
-                                }
-                            },
-                        }
-                    ],
-                },
-            },
-        },
-    }

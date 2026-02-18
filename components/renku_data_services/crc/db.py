@@ -27,7 +27,7 @@ from renku_data_services.crc import orm as schemas
 from renku_data_services.crc.core import validate_resource_class_update, validate_resource_pool_update
 from renku_data_services.crc.models import ClusterPatch, ClusterSettings, SavedClusterSettings, SessionProtocol
 from renku_data_services.crc.orm import ClusterORM
-from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
+from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.db import QuotaRepository
 from renku_data_services.users.db import UserRepo
 
@@ -1098,6 +1098,22 @@ class ClusterRepository:
             await session.refresh(saved_cluster)
 
             return saved_cluster.dump()
+
+    async def get_cluster_id_for_resource_class(self, class_id: int) -> ClusterId | None:
+        """Return the cluster ID for the resource pool containing the given resource class.
+
+        Returns None if the resource pool uses the default cluster.
+        """
+        async with self.session_maker() as session:
+            stmt = (
+                select(schemas.ResourcePoolORM.cluster_id)
+                .join(schemas.ResourceClassORM, schemas.ResourceClassORM.resource_pool_id == schemas.ResourcePoolORM.id)
+                .where(schemas.ResourceClassORM.id == class_id)
+            )
+            result = await session.scalar(stmt)
+            if result is None:
+                return None
+            return ClusterId(result)
 
     @_only_admins
     async def delete(self, api_user: base_models.APIUser, cluster_id: ULID) -> None:
