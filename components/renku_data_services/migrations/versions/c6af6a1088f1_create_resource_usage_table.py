@@ -98,7 +98,6 @@ def create_resource_requests_log() -> None:
         schema="resource_pools",
     )
     op.create_index(
-        op.f("ix_common_resource_requests_log_capture_date"),
         "resource_requests_log",
         ["capture_date"],
         unique=False,
