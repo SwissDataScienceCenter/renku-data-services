@@ -62,7 +62,12 @@ class ResourceRequestsFetch(ResourceRequestsFetchProto):
 
         async for pod in self._client.list(pod_filter):
             obj = ResourceDataFacade(obj=pod)
-            node_obj: ResourceDataFacade | None = await get_node(obj.node_name)
+            node_obj: ResourceDataFacade | None = None
+            try:
+                node_obj = await get_node(obj.node_name)
+            except Exception as ex:
+                logger.debug(f"Cannot get node (ignoring): {ex}", exc_info=ex)
+                node_obj = None
 
             rreq = ResourcesRequest.from_pod_and_node(obj, node_obj, pod.cluster, date, capture_interval)
             await self._amend_session_fallback(pod.cluster, obj, rreq)
