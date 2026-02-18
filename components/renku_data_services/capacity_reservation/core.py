@@ -53,24 +53,10 @@ def validate_recurrence_config(recurrence: apispec.RecurrenceConfig) -> models.R
 
 def validate_provisioning_config(provisioning: apispec.ProvisioningConfig) -> models.ProvisioningConfig:
     """Validate a provisioning configuration."""
-
     return models.ProvisioningConfig(
         placeholder_count=provisioning.placeholder_count,
-        cpu_request=provisioning.cpu_request,
-        memory_request=provisioning.memory_request,
-        priority_class_name=provisioning.priority_class_name,
         lead_time_minutes=provisioning.lead_time_minutes,
         scale_down_behavior=models.ScaleDownBehavior(provisioning.scale_down_behavior.value),
-    )
-
-
-def validate_matching_config(matching: apispec.MatchingConfig) -> models.MatchingConfig:
-    """Validate a matching configuration."""
-    project_template_id = ULID.from_str(matching.project_template_id) if matching.project_template_id else None
-
-    return models.MatchingConfig(
-        project_template_id=project_template_id,
-        resource_class_id=matching.resource_class_id,
     )
 
 
@@ -78,11 +64,17 @@ def validate_capacity_reservation(
     capacity_reservation: apispec.CapacityReservationPost,
 ) -> models.UnsavedCapacityReservation:
     """Validate a capacity reservation."""
+    project_template_id = (
+        ULID.from_str(capacity_reservation.project_template_id)
+        if capacity_reservation.project_template_id
+        else None
+    )
     return models.UnsavedCapacityReservation(
         name=capacity_reservation.name,
+        resource_class_id=capacity_reservation.resource_class_id,
+        project_template_id=project_template_id,
         recurrence=validate_recurrence_config(capacity_reservation.recurrence),
         provisioning=validate_provisioning_config(capacity_reservation.provisioning),
-        matching=validate_matching_config(capacity_reservation.matching),
     )
 
 
@@ -196,6 +188,9 @@ def calculate_target_replicas(
 ) -> int:
     """Calculate the target number of placeholder replicas for an active occurrence."""
     provisioning = reservation.provisioning
+
+    if provisioning.scale_down_behavior == models.ScaleDownBehavior.NONE:
+        raise ValueError("calculate_target_replicas called for NONE scale down behavior")
 
     if provisioning.scale_down_behavior == models.ScaleDownBehavior.MAINTAIN:
         return max(provisioning.placeholder_count - active_sessions, 0)

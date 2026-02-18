@@ -90,7 +90,9 @@ class DependencyManager:
         cr_k8s_client = CapacityReservationK8sClient(client=k8s_client, cluster_repo=cluster_repo)
         capacity_reservation_tasks = CapacityReservationTasks(
             occurrence_adapter=OccurrenceAdapter(cfg.db.async_session_maker),
-            capacity_reservation_repo=CapacityReservationRepository(cfg.db.async_session_maker),
+            capacity_reservation_repo=CapacityReservationRepository(
+                cfg.db.async_session_maker, cluster_repo=cluster_repo
+            ),
             k8s_client=cr_k8s_client,
         )
         kc_api: IKeycloakAPI

@@ -407,6 +407,7 @@ class DependencyManager:
         )
         capacity_reservation_repo = CapacityReservationRepository(
             session_maker=config.db.async_session_maker,
+            cluster_repo=cluster_repo,
         )
         occurrence_adapter = OccurrenceAdapter(
             session_maker=config.db.async_session_maker,

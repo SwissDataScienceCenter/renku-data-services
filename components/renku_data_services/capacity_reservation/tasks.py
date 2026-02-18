@@ -15,6 +15,7 @@ from renku_data_services.capacity_reservation.models import (
     Occurrence,
     OccurrencePatch,
     OccurrenceState,
+    ScaleDownBehavior,
 )
 from renku_data_services.k8s.models import K8sObject
 
@@ -95,10 +96,7 @@ class CapacityReservationTasks:
             logger.debug("No active capacity reservation occurrences to scale.")
             return None
 
-        session_data = []
-        async for session in self.k8s_client.list_sessions():
-            session_data.append(session)
-
+        # Build (occurrence, reservation) pairs for all still-active occurrences.
         active_pairs: list[tuple[Occurrence, CapacityReservation]] = []
         for occurrence in still_active_occurrences:
             reservations = await self.capacity_reservation_repo.get_capacity_reservations_by_ids(
@@ -112,14 +110,28 @@ class CapacityReservationTasks:
                 continue
             active_pairs.append((occurrence, reservations[0]))
 
+        # Occurrences with NONE scale-down behavior are left alone — the deployment was created
+        # at activation with placeholder_count replicas and remains fixed until expiry.
+        scalable_pairs = [
+            (o, r) for o, r in active_pairs if r.provisioning.scale_down_behavior != ScaleDownBehavior.NONE
+        ]
+
+        if not scalable_pairs:
+            logger.debug("No scalable capacity reservation occurrences to process.")
+            return None
+
+        session_data = []
+        async for session in self.k8s_client.list_sessions():
+            session_data.append(session)
+
         project_template_map: dict[ULID, ULID | None] = {}
-        if any(r.matching.project_template_id for _, r in active_pairs):
+        if any(r.project_template_id for _, r in scalable_pairs):
             project_ids = [ULID.from_str(s["project_id"]) for s in session_data if s.get("project_id") is not None]
             project_template_map = await self.occurrence_adapter.get_project_template_ids(project_ids)
 
-        session_counts = _assign_sessions_to_occurrences(session_data, active_pairs, project_template_map)
+        session_counts = _assign_sessions_to_occurrences(session_data, scalable_pairs, project_template_map)
 
-        for occurrence, reservation in active_pairs:
+        for occurrence, reservation in scalable_pairs:
             count = session_counts.get(occurrence.id, 0)
             target_replicas = calculate_target_replicas(reservation, occurrence, count, datetime_now)
 
@@ -159,45 +171,33 @@ class CapacityReservationTasks:
 
 def _assign_sessions_to_occurrences(
     session_data: list[dict],
-    active_pairs: list[tuple[Occurrence, CapacityReservation]],
+    scalable_pairs: list[tuple[Occurrence, CapacityReservation]],
     project_template_map: dict[ULID, ULID | None],
 ) -> dict[ULID, int]:
     """Assign sessions to occurrences based on matching criteria and return a count of sessions per occurrence."""
-
-    counts = {occurrence.id: 0 for occurrence, _ in active_pairs}
+    counts = {occurrence.id: 0 for occurrence, _ in scalable_pairs}
     unmatched_sessions = session_data.copy()
 
-    for session in session_data:
+    # Pass 1: match by project_template_id (session's project → template → reservation with that template)
+    for session in list(unmatched_sessions):
         if session.get("project_id"):
             project_id = ULID.from_str(session["project_id"])
-            project_template_id = project_template_map.get(project_id)
-
-            if project_template_id:
-                candidates = [(o, r) for o, r in active_pairs if r.matching.project_template_id == project_template_id]
+            template_id = project_template_map.get(project_id)
+            if template_id is not None:
+                candidates = [
+                    (o, r)
+                    for o, r in scalable_pairs
+                    if r.project_template_id is not None and r.project_template_id == template_id
+                ]
                 if len(candidates) == 1:
                     counts[candidates[0][0].id] += 1
                     unmatched_sessions.remove(session)
 
-    for session in unmatched_sessions.copy():
-        if session.get("priority_class_name"):
-            candidates = [
-                (o, r) for o, r in active_pairs if r.provisioning.priority_class_name == session["priority_class_name"]
-            ]
-            if len(candidates) == 1:
-                counts[candidates[0][0].id] += 1
-                unmatched_sessions.remove(session)
-
-    for session in unmatched_sessions.copy():
-        if session.get("cpu_request") and session.get("memory_request"):
-            candidates = []
-            for o, r in active_pairs:
-                if (
-                    r.provisioning.cpu_request == session["cpu_request"]
-                    and r.provisioning.memory_request == session["memory_request"]
-                    and (datetime.fromisoformat(session["creation_time"]) >= o.start_datetime)
-                ):
-                    candidates.append((o, r))
-
+    # Pass 2: match by resource_class_id
+    for session in list(unmatched_sessions):
+        rc_id = session.get("resource_class_id")
+        if rc_id is not None:
+            candidates = [(o, r) for o, r in scalable_pairs if r.resource_class_id == rc_id]
             if len(candidates) == 1:
                 counts[candidates[0][0].id] += 1
                 unmatched_sessions.remove(session)
@@ -205,8 +205,7 @@ def _assign_sessions_to_occurrences(
                 logger = logging.getLogger(__name__)
                 logger.warning(
                     f"Session with project_id {session.get('project_id')} and "
-                    f"priority_class_name {session.get('priority_class_name')} "
-                    "matches multiple occurrences. Picking occurrence at random."
+                    f"resource_class_id {rc_id} matches multiple occurrences. Picking occurrence at random."
                 )
                 random_choice = random.choice(candidates)  # nosec B311
                 counts[random_choice[0].id] += 1

@@ -20,6 +20,7 @@ class ScaleDownBehavior(StrEnum):
 
     MAINTAIN = "maintain"
     REDUCE = "reduce"
+    NONE = "none"
 
 
 class OccurrenceState(StrEnum):
@@ -54,19 +55,8 @@ class ProvisioningConfig:
     """A provisioning configuration for capacity reservations."""
 
     placeholder_count: int
-    cpu_request: str
-    memory_request: str
-    priority_class_name: str | None = None
     lead_time_minutes: int
     scale_down_behavior: ScaleDownBehavior = ScaleDownBehavior.REDUCE
-
-
-@dataclass(frozen=True, eq=True, kw_only=True)
-class MatchingConfig:
-    """A matching configuration for capacity reservations."""
-
-    project_template_id: ULID | None = None
-    resource_class_id: int | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -74,9 +64,10 @@ class UnsavedCapacityReservation:
     """A capacity reservation that has not been persisted yet."""
 
     name: str
+    resource_class_id: int
     recurrence: RecurrenceConfig
     provisioning: ProvisioningConfig
-    matching: MatchingConfig
+    project_template_id: ULID | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -91,9 +82,10 @@ class CapacityReservationPatch:
     """A patch for an existing capacity reservation."""
 
     name: str | None = None
+    resource_class_id: int | None = None
+    project_template_id: ULID | None = None
     recurrence: RecurrenceConfig | None = None
     provisioning: ProvisioningConfig | None = None
-    matching: MatchingConfig | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
