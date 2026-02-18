@@ -63,6 +63,7 @@ from renku_data_services.project.db import (
     ProjectSessionSecretRepository,
 )
 from renku_data_services.repositories.db import GitRepositoriesRepository
+from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.search import query_manual
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.reprovision import SearchReprovision
@@ -160,6 +161,7 @@ class DependencyManager:
     oauth_http_client_factory: OAuthHttpClientFactory
     capacity_reservation_repo: CapacityReservationRepository
     occurrence_repo: OccurrenceRepository
+    resource_requests_repo: ResourceRequestsRepo
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
@@ -189,6 +191,7 @@ class DependencyManager:
             renku_data_services.search.__file__,
             renku_data_services.notifications.__file__,
             renku_data_services.capacity_reservation.__file__,
+            renku_data_services.resource_usage.__file__,
         ]
 
         api_specs = []
@@ -419,6 +422,9 @@ class DependencyManager:
         occurrence_repo = OccurrenceRepository(
             session_maker=config.db.async_session_maker,
         )
+        resource_requests_repo = ResourceRequestsRepo(
+            session_maker=config.db.async_session_maker,
+        )
         return cls(
             config,
             k8s_client=client,
@@ -462,4 +468,5 @@ class DependencyManager:
             oauth_http_client_factory=oauth_http_client_factory,
             capacity_reservation_repo=capacity_reservation_repo,
             occurrence_repo=occurrence_repo,
+            resource_requests_repo=resource_requests_repo,
         )

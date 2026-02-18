@@ -31,6 +31,7 @@ from renku_data_services.notifications.blueprints import NotificationsBP
 from renku_data_services.platform.blueprints import PlatformConfigBP, PlatformUrlRedirectBP
 from renku_data_services.project.blueprints import ProjectsBP, ProjectSessionSecretBP
 from renku_data_services.repositories.blueprints import RepositoriesBP
+from renku_data_services.resource_usage.blueprints import ResourceUsageBP
 from renku_data_services.search.blueprints import SearchBP
 from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.search.solr_user_query import UsernameResolve
@@ -273,6 +274,12 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         occurrence_repo=dm.occurrence_repo,
         authenticator=dm.authenticator,
     )
+    resource_usage = ResourceUsageBP(
+        name="resource_usage",
+        url_prefix=url_prefix,
+        rr_repo=dm.resource_requests_repo,
+        authenticator=dm.authenticator,
+    )
     app.blueprint(
         [
             resource_pools.blueprint(),
@@ -302,6 +309,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
             platform_redirects.blueprint(),
             notifications.blueprint(),
             capacity_reservation.blueprint(),
+            resource_usage.blueprint(),
         ]
     )
     if builds is not None:
