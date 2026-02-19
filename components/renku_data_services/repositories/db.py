@@ -97,7 +97,12 @@ class GitRepositoriesRepository:
             # don't overwrite previous errors
             result = result.with_error(repo_err) if not result.error else result
             if repo_err is None:
-                result = result.with_metadata(models.Metadata(git_url=valid_url.render(), pull_permission=True))
+                # NOTE: we assume public visibility since we can request git-upload-pack
+                result = result.with_metadata(
+                    models.Metadata(
+                        git_url=valid_url.render(), pull_permission=True, visibility=models.RepositoryVisibility.public
+                    )
+                )
 
         return result
 
