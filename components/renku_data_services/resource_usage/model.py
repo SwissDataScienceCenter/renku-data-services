@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from math import floor
 from typing import Any, cast
 
 from dateutil.parser import parse as parse_datetime
@@ -397,17 +396,12 @@ class Credit:
         return Credit(value=n)
 
     @classmethod
-    def from_hours(cls, hours: float) -> Credit:
-        """Create a new credit converting runtime in hours."""
-        return Credit(value=round(hours))
-
-    @classmethod
-    def from_seconds(cls, seconds: float) -> Credit:
-        """Create a new credit converting runtime in seconds."""
-        return cls.from_hours(seconds / 3600)
+    def zero(cls) -> Credit:
+        """Return zero credit."""
+        return cls.from_int(0)
 
 
-@dataclass
+@dataclass(frozen=True)
 class ResourceUsage:
     """Capture resource usage."""
 
@@ -415,22 +409,14 @@ class ResourceUsage:
     user_id: str
     resource_pool_id: int | None
     resource_class_id: int | None
+    resource_class_cost: Credit
+    runtime_hour: timedelta
     capture_date: date
     gpu_slice: float | None
     cpu_hours: float | None
     mem_hours: float | None
     disk_hours: float | None
     gpu_hours: float | None
-
-    def to_credits(self, one_gpu: Credit | None = None) -> Credit:
-        """Calculate the amount in credits."""
-        cpu_credit = self.cpu_hours
-        mem_credit = self.mem_hours / (1024 * 1024 * 1024) / 2 if self.mem_hours is not None else None
-        disk_credit = self.disk_hours / (1024 * 1024 * 1024) / 20 if self.disk_hours is not None else None
-        slice = self.gpu_slice or 0.2
-        one = one_gpu or Credit.from_int(10)
-        gpu_credits = self.gpu_hours * floor(one.value * (slice**0.6)) if self.gpu_hours is not None else None
-        return Credit.from_int(round((cpu_credit or 0) + (mem_credit or 0) + (disk_credit or 0) + (gpu_credits or 0)))
 
 
 @dataclass(frozen=True)
@@ -665,3 +651,56 @@ class ResourcesRequest:
             gpu_product=gpu_product,
             data=pod.requested_data,
         )
+
+
+@dataclass(frozen=True)
+class ResourceUsageSummary:
+    """Summarizes resource usage across a time period."""
+
+    first_capture: date
+    last_capture: date
+    entries: int
+    runtime_hours: float
+    cost_raw: float
+
+    @property
+    def cost(self) -> Credit:
+        """Return the costs."""
+        return Credit.from_int(round(self.cost_raw))
+
+    def is_empty(self) -> bool:
+        """Return whether this summary is empty."""
+        return self.entries == 0
+
+    def add(self, entry: ResourceUsage) -> ResourceUsageSummary:
+        """Adds an resource usage entry to this summary.
+
+        Takes the largest runtime and applies the cost of the associated resource class to calculate
+        the overall cost for that entry.
+        """
+        # we don't look at disk_hours for now
+        runtime_h = entry.runtime_hour.total_seconds() / 3600.0
+        cost = runtime_h * entry.resource_class_cost.value
+        return ResourceUsageSummary(
+            entries=self.entries + 1,
+            first_capture=min(self.first_capture, entry.capture_date),
+            last_capture=max(self.last_capture, entry.capture_date),
+            runtime_hours=self.runtime_hours + runtime_h,
+            cost_raw=self.cost_raw + cost,
+        )
+
+    @classmethod
+    def empty(cls) -> ResourceUsageSummary:
+        """Return an empty instance."""
+        return ResourceUsageSummary(
+            entries=0, first_capture=datetime.max.date(), last_capture=datetime.min.date(), runtime_hours=0, cost_raw=0
+        )
+
+
+@dataclass(frozen=True)
+class ResourcePoolUsage:
+    """Overview of a resource pool in context of a user."""
+
+    total_usage: ResourceUsageSummary
+    user_usage: ResourceUsageSummary
+    pool_limits: ResourcePoolLimits

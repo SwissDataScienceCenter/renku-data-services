@@ -107,7 +107,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/ResourcePoolLimits"
+                $ref: "#/components/schemas/ResourceClassCost"
         "404":
           description: The pool does not exist 
           content:
@@ -180,6 +180,32 @@ paths:
 
 components:
   schemas:
+    ResourcePoolUsage:
+      type: object
+      additionalProperties: false
+      properties:
+        total_usage:
+          $ref: "#/components/schemas/ResourceUsageSummary"
+        user_usage:
+          $ref: "#/components/schemas/ResourceUsageSummary"
+        pool_limits:
+          $ref: "#/components/schemas/ResourcePoolLimits"
+      required:
+        - total_usage
+        - user_usage
+        - pool_limits
+    ResourceUsageSummary:
+      type: object
+      additionalProperties: false
+      properties:
+        runtime:
+          type: number
+          format: double
+        cost:
+          type: integer
+      required:
+        - runtime
+        - cost
     ResourcePoolLimitPut:
       type: object
       additionalProperties: false
@@ -198,6 +224,17 @@ components:
         cost:
           type: integer
       required:
+        - cost
+    ResourceClassCost:
+      type: object
+      additionalProperties: false
+      properties:
+        resource_class_id:
+          type: integer
+        cost:
+          type: integer
+      required:
+        - resource_class_id
         - cost
     ResourcePoolLimits:
       type: object
