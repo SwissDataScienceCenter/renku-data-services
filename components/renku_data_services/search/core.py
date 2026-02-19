@@ -130,62 +130,43 @@ async def _renku_query(
     )
 
 
-async def _count_projects_by_namespace(
+async def _count_by_namespace(
     solr_client: SolrClient,
-    namespace_path: str,
+    namespace_paths: list[str],
+    entity_type: EntityType,
     authz_client: AuthzClient,
     user: APIUser,
     ctx: Context,
-) -> int:
-    """Count projects with the given namespace path."""
+) -> dict[str, int]:
+    """Count entities of a given type grouped by namespace path.
+
+    Returns a dict mapping namespace_path -> count. Uses a single Solr
+    query with a terms facet on namespacePath instead of one query per
+    namespace.
+    """
+    if not namespace_paths:
+        return {}
+
     role_constraint: list[str] = [st.public_only()]
     match ctx.role:
         case AdminRole():
             role_constraint = []
         case UserRole() as u:
-            ids = await authz.get_non_public_read(authz_client, u.id, [EntityType.project])
+            ids = await authz.get_non_public_read(authz_client, u.id, [entity_type])
             role_constraint = [st.public_or_ids(ids)]
 
-    # Use exact match for namespace_path (not prefix search)
-    namespace_filter = st.field_is(Fields.namespace_path, st.from_str(namespace_path))
+    ns_tokens = Nel.unsafe_from_list([st.from_str(p) for p in namespace_paths])
+    ns_filter = st.field_is_any(Fields.namespace_path, ns_tokens)
     count_query = (
         SolrQuery.query_all_fields("*:*", limit=0, offset=0)
-        .add_filter(st.type_is(EntityType.project))
-        .add_filter(namespace_filter)
+        .add_filter(st.type_is(entity_type))
+        .add_filter(ns_filter)
         .add_filter(st.created_by_exists())
         .add_filter(*role_constraint)
+        .with_facet(FacetTerms(name=Fields.namespace_path, field=Fields.namespace_path, limit=len(namespace_paths)))
     )
     result = await solr_client.query(count_query)
-    return result.response.num_found
-
-
-async def _count_data_connectors_by_namespace(
-    solr_client: SolrClient,
-    namespace_path: str,
-    authz_client: AuthzClient,
-    user: APIUser,
-    ctx: Context,
-) -> int:
-    """Count data connectors with the given namespace path."""
-    role_constraint: list[str] = [st.public_only()]
-    match ctx.role:
-        case AdminRole():
-            role_constraint = []
-        case UserRole() as u:
-            ids = await authz.get_non_public_read(authz_client, u.id, [EntityType.dataconnector])
-            role_constraint = [st.public_or_ids(ids)]
-
-    # Use exact match for namespace_path (not prefix search)
-    namespace_filter = st.field_is(Fields.namespace_path, st.from_str(namespace_path))
-    count_query = (
-        SolrQuery.query_all_fields("*:*", limit=0, offset=0)
-        .add_filter(st.type_is(EntityType.dataconnector))
-        .add_filter(namespace_filter)
-        .add_filter(st.created_by_exists())
-        .add_filter(*role_constraint)
-    )
-    result = await solr_client.query(count_query)
-    return result.response.num_found
+    return result.facets.get_counts(Fields.namespace_path).to_simple_dict()
 
 
 async def query(
@@ -230,41 +211,28 @@ async def query(
         docs = list(map(converters.from_entity, solr_docs))
 
         if include_counts:
-            namespace_paths: dict[str, str] = {}
-            group_ids: list[str] = []
-
+            id_to_path: dict[str, str] = {}
             for doc in solr_docs:
                 if isinstance(doc, (Group, User)):
-                    namespace_paths[str(doc.id)] = doc.path
-                    if isinstance(doc, Group):
-                        group_ids.append(str(doc.id))
+                    id_to_path[str(doc.id)] = doc.path
 
-            # Count projects and data connectors for each namespace
-            counts: dict[str, dict[str, int]] = {}
-            for entity_id, namespace_path in namespace_paths.items():
-                project_count = await _count_projects_by_namespace(client, namespace_path, authz_client, user, ctx)
-                data_connector_count = await _count_data_connectors_by_namespace(
-                    client, namespace_path, authz_client, user, ctx
-                )
-                counts[entity_id] = {
-                    "project_count": project_count,
-                    "data_connector_count": data_connector_count,
-                }
+            ns_paths = list(set(id_to_path.values()))
+            project_counts, dc_counts = await asyncio.gather(
+                _count_by_namespace(client, ns_paths, EntityType.project, authz_client, user, ctx),
+                _count_by_namespace(client, ns_paths, EntityType.dataconnector, authz_client, user, ctx),
+            )
 
             updated_docs = []
             for doc in docs:
-                entity_id = doc.root.id
-                if entity_id in counts:
-                    entity_counts = counts[entity_id]
-                    if isinstance(doc.root, (apispec.SearchGroup, apispec.SearchUser)):
-                        update_dict: dict[str, int | None] = {
-                            "project_count": entity_counts.get("project_count"),
-                            "data_connector_count": entity_counts.get("data_connector_count"),
+                if isinstance(doc.root, (apispec.SearchGroup, apispec.SearchUser)):
+                    path = id_to_path.get(doc.root.id, "")
+                    updated_root = doc.root.model_copy(
+                        update={
+                            "project_count": project_counts.get(path, 0),
+                            "data_connector_count": dc_counts.get(path, 0),
                         }
-                        updated_root = doc.root.model_copy(update=update_dict)
-                        updated_docs.append(apispec.SearchEntity(root=updated_root))
-                    else:
-                        updated_docs.append(doc)
+                    )
+                    updated_docs.append(apispec.SearchEntity(root=updated_root))
                 else:
                     updated_docs.append(doc)
             docs = updated_docs
