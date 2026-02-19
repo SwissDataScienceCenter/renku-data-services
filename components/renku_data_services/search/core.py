@@ -130,6 +130,47 @@ async def _renku_query(
     )
 
 
+async def _amend_counts_by_namespace(
+    client: SolrClient,
+    docs: list[apispec.SearchEntity],
+    solr_docs: list[Group | Project | DataConnector | User],
+    authz_client: AuthzClient,
+    user: APIUser,
+    ctx: Context,
+) -> list[apispec.SearchEntity]:
+    """Enrich user/group entities with project and data connector counts."""
+
+    # Map id -> namespace path
+    id_to_path: dict[str, str] = {str(doc.id): doc.path for doc in solr_docs if isinstance(doc, (Group, User))}
+
+    if not id_to_path:
+        return docs
+
+    ns_paths = list(set(id_to_path.values()))
+
+    project_counts, dc_counts = await asyncio.gather(
+        _count_by_namespace(client, ns_paths, EntityType.project, authz_client, user, ctx),
+        _count_by_namespace(client, ns_paths, EntityType.dataconnector, authz_client, user, ctx),
+    )
+
+    updated_docs: list[apispec.SearchEntity] = []
+
+    for doc in docs:
+        if isinstance(doc.root, (apispec.SearchGroup, apispec.SearchUser)):
+            path = id_to_path.get(doc.root.id, "")
+            updated_root = doc.root.model_copy(
+                update={
+                    "project_count": project_counts.get(path, 0),
+                    "data_connector_count": dc_counts.get(path, 0),
+                }
+            )
+            updated_docs.append(apispec.SearchEntity(root=updated_root))
+        else:
+            updated_docs.append(doc)
+
+    return updated_docs
+
+
 async def _count_by_namespace(
     solr_client: SolrClient,
     namespace_paths: list[str],
@@ -211,31 +252,7 @@ async def query(
         docs = list(map(converters.from_entity, solr_docs))
 
         if include_counts:
-            id_to_path: dict[str, str] = {}
-            for doc in solr_docs:
-                if isinstance(doc, (Group, User)):
-                    id_to_path[str(doc.id)] = doc.path
-
-            ns_paths = list(set(id_to_path.values()))
-            project_counts, dc_counts = await asyncio.gather(
-                _count_by_namespace(client, ns_paths, EntityType.project, authz_client, user, ctx),
-                _count_by_namespace(client, ns_paths, EntityType.dataconnector, authz_client, user, ctx),
-            )
-
-            updated_docs = []
-            for doc in docs:
-                if isinstance(doc.root, (apispec.SearchGroup, apispec.SearchUser)):
-                    path = id_to_path.get(doc.root.id, "")
-                    updated_root = doc.root.model_copy(
-                        update={
-                            "project_count": project_counts.get(path, 0),
-                            "data_connector_count": dc_counts.get(path, 0),
-                        }
-                    )
-                    updated_docs.append(apispec.SearchEntity(root=updated_root))
-                else:
-                    updated_docs.append(doc)
-            docs = updated_docs
+            docs = await _amend_counts_by_namespace(client, docs, solr_docs, authz_client, user, ctx)
 
         return apispec.SearchResult(
             items=docs,
