@@ -65,9 +65,7 @@ def validate_capacity_reservation(
 ) -> models.UnsavedCapacityReservation:
     """Validate a capacity reservation."""
     project_template_id = (
-        ULID.from_str(capacity_reservation.project_template_id)
-        if capacity_reservation.project_template_id
-        else None
+        ULID.from_str(capacity_reservation.project_template_id) if capacity_reservation.project_template_id else None
     )
     return models.UnsavedCapacityReservation(
         name=capacity_reservation.name,
