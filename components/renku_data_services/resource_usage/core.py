@@ -10,7 +10,10 @@ from renku_data_services.k8s.models import GVK, K8sObjectFilter, K8sObjectMeta
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.resource_usage.model import (
     ResourceDataFacade,
+    ResourcePoolUsage,
     ResourcesRequest,
+    ResourceUsageQuery,
+    ResourceUsageSummary,
 )
 
 logger = logging.getLogger(__file__)
@@ -126,3 +129,43 @@ class ResourcesRequestRecorder:
         else:
             logger.info(f"Inserting {size} resource request records.")
         await self._repo.insert_many(result.values())
+
+
+class ResourceUsageService:
+    """Queries for resource usages."""
+
+    def __init__(self, repo: ResourceRequestsRepo) -> None:
+        self._repo = repo
+
+    async def usage_of_running_week(
+        self, resource_pool_id: int, user_id: str | None, current_time: datetime | None = None
+    ) -> ResourceUsageSummary:
+        """Return the resource usage for the given pool of the currently running week.
+
+        The week start is Monday 0:00 UTC. Resource usage is returned in 'credits'. When a user_id
+        is given, the results represent the usage of only that user. Otherwise the overall pool usage
+        is returned. The running week is calculated from the `current_time` argument, which is the current
+        time if not specified.
+        """
+        now = current_time.replace(tzinfo=UTC) if current_time is not None else datetime.now(UTC)
+        start = (now - timedelta(days=now.weekday())).date()
+        query = ResourceUsageQuery(since=start, until=now.date(), user_id=user_id, resource_pool_id=resource_pool_id)
+        result = ResourceUsageSummary.empty()
+        async for item in self._repo.find_usage(query):
+            result = result.add(item)
+
+        return result
+
+    async def get_running_week(
+        self, resource_pool_id: int, user_id: str, current_time: datetime | None = None
+    ) -> ResourcePoolUsage | None:
+        """Get resource pool usage and its limits."""
+
+        limits = await self._repo.find_resource_pool_limits(resource_pool_id)
+
+        if limits:
+            user_usage = await self.usage_of_running_week(resource_pool_id, user_id, current_time)
+            total_usage = await self.usage_of_running_week(resource_pool_id, None, current_time)
+            return ResourcePoolUsage(total_usage, user_usage, limits)
+        else:
+            return None

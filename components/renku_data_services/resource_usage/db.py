@@ -21,7 +21,6 @@ from renku_data_services.resource_usage.model import (
 from renku_data_services.resource_usage.orm import (
     ResourceClassCost,
     ResourceClassCostORM,
-    ResourceRequestsLimitsORM,
     ResourceRequestsLogORM,
     ResourceRequestsViewORM,
 )
@@ -151,12 +150,29 @@ class ResourceRequestsRepo:
             await session.execute(stmt, {"pool": pool})
 
     async def find_resource_pool_limits(self, pool: int) -> ResourcePoolLimits | None:
-        """Finds the limits of the given resource pool."""
-        stmt = sa.select(ResourceRequestsLimitsORM).where(ResourceRequestsLimitsORM.id == pool)
+        """Finds the limits of the given resource pool.
+
+        If the resource pool doesn't exists, None is returned. If the pool exists, but has no
+        limits defined, the limits returned are set to 0.
+        """
+        stmt = sa.text("""
+        select rp.id as pool_id, coalesce(l.total_limit, 0) as total_limit, coalesce(l.user_limit, 0) as user_limit
+        from "resource_pools"."resource_pools" rp
+        left join "resource_pools"."resource_requests_limits" l on l.resource_pool_id = rp.id
+        where rp.id = :pool_id
+        """)
         async with self.session_maker() as session:
-            result = await session.execute(stmt)
-            data = result.scalar_one_or_none()
-            return data.dump() if data is not None else None
+            result = await session.execute(stmt, {"pool_id": pool})
+            data = result.one_or_none()
+            return (
+                ResourcePoolLimits(
+                    pool_id=data.pool_id,
+                    total_limit=Credit.from_int(data.total_limit),
+                    user_limit=Credit.from_int(data.user_limit),
+                )
+                if data is not None
+                else None
+            )
 
     async def find_usage(self, rq: ResourceUsageQuery, chunk_size: int = 500) -> AsyncGenerator[ResourceUsage]:
         """Find resource usage."""
@@ -168,6 +184,8 @@ class ResourceRequestsRepo:
             user_id,
             resource_pool_id,
             resource_class_id,
+            coalesce(resource_class_cost, 0) as resource_class_cost,
+            sum(greatest(cpu_time, mem_time, gpu_time, '0 second'::interval)) as runtime_hour,
             capture_date::date,
             gpu_slice,
             sum(cpu_request * (extract(epoch from cpu_time) / 3600)) as cpu_hours,
@@ -177,7 +195,9 @@ class ResourceRequestsRepo:
           from "resource_pools"."resource_requests_view"
           where capture_date::date >= :from and capture_date::date <= :until
               {by_user} {by_rp}
-          group by cluster_id, resource_class_id, resource_pool_id, user_id, capture_date::date, gpu_slice
+          group by cluster_id, resource_class_id, resource_pool_id,
+            coalesce(resource_class_cost, 0),
+            user_id, capture_date::date, gpu_slice
         """  # nosec: B608
         params = {"from": rq.since, "until": rq.until, "user_id": rq.user_id, "resource_pool_id": rq.resource_pool_id}
 
@@ -186,7 +206,9 @@ class ResourceRequestsRepo:
             result = await session.stream(query, params)
 
             async for row in result:
-                ru = ResourceUsage(**row._mapping)
+                mapping = dict(row._mapping)
+                mapping["resource_class_cost"] = Credit.from_int(mapping["resource_class_cost"])
+                ru = ResourceUsage(**mapping)
                 yield ru
 
     async def get_resource_class_usage(self, rq: ResourceClassCostQuery) -> list[ResourceClassRuntimeCost]:

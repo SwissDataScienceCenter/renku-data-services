@@ -61,6 +61,7 @@ from renku_data_services.project.db import (
     ProjectSessionSecretRepository,
 )
 from renku_data_services.repositories.db import GitRepositoriesRepository
+from renku_data_services.resource_usage.core import ResourceUsageService
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.search import query_manual
 from renku_data_services.search.db import SearchUpdatesRepo
@@ -158,6 +159,7 @@ class DependencyManager:
     notifications_repo: NotificationsRepository
     oauth_http_client_factory: OAuthHttpClientFactory
     resource_requests_repo: ResourceRequestsRepo
+    resource_usage_service: ResourceUsageService
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
@@ -415,6 +417,7 @@ class DependencyManager:
         resource_requests_repo = ResourceRequestsRepo(
             session_maker=config.db.async_session_maker,
         )
+        resource_usage_service = ResourceUsageService(repo=resource_requests_repo)
         return cls(
             config,
             k8s_client=client,
@@ -457,4 +460,5 @@ class DependencyManager:
             notifications_repo=notifications_repo,
             oauth_http_client_factory=oauth_http_client_factory,
             resource_requests_repo=resource_requests_repo,
+            resource_usage_service=resource_usage_service,
         )

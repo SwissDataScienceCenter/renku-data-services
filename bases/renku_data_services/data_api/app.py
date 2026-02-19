@@ -270,6 +270,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         name="resource_usage",
         url_prefix=url_prefix,
         rr_repo=dm.resource_requests_repo,
+        rr_svc=dm.resource_usage_service,
         authenticator=dm.authenticator,
     )
     app.blueprint(
