@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterable
+from collections.abc import AsyncIterable, AsyncIterator
 from typing import Any, Protocol, overload
 
 from kubernetes.client import V1PriorityClass, V1ResourceQuota
@@ -120,3 +120,6 @@ class K8sClient(Protocol):
     def list(self, _filter: K8sObjectFilter) -> AsyncIterable[K8sObject]:
         """List all k8s objects."""
         ...
+
+    async def logs(self, meta: K8sObjectMeta, max_log_lines: int | None = None) -> dict[str, AsyncIterator[str]]:
+        """Get the logs of a specific pod, keyed by container names."""
