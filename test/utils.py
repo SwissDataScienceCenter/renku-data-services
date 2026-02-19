@@ -19,6 +19,7 @@ from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.authz.authz import Authz
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.base_models.metrics import MetricsService
+from renku_data_services.capacity_reservation.db import CapacityReservationRepository, OccurrenceAdapter
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.connected_services.oauth_http import DefaultOAuthHttpClientFactory
 from renku_data_services.crc import models as rp_models
@@ -335,6 +336,10 @@ class TestDependencyManager(DependencyManager):
         metrics_repo = MetricsRepository(session_maker=config.db.async_session_maker)
         notifications_repo = NotificationsRepository(session_maker=config.db.async_session_maker)
         git_provider_helper = GitProviderHelper(connected_services_repo, "", "", "", config.enable_internal_gitlab)
+        capacity_reservation_repo = CapacityReservationRepository(
+            session_maker=config.db.async_session_maker, cluster_repo=cluster_repo
+        )
+        occurrence_adapter = OccurrenceAdapter(session_maker=config.db.async_session_maker)
         return cls(
             config=config,
             authenticator=authenticator,
@@ -374,6 +379,8 @@ class TestDependencyManager(DependencyManager):
             git_provider_helper=git_provider_helper,
             notifications_repo=notifications_repo,
             oauth_http_client_factory=oauth_client_factory,
+            capacity_reservation_repo=capacity_reservation_repo,
+            occurrence_adapter=occurrence_adapter,
         )
 
     def __post_init__(self) -> None:

@@ -29,14 +29,6 @@ paths:
         - capacity-reservations
     get:
       summary: Retrieve all capacity reservations
-      parameters:
-        - in: query
-          description: query parameters
-          name: parameters
-          style: form
-          explode: true
-          schema:
-            $ref: "#/components/schemas/CapacityReservationGetParameters"
       responses:
         "200":
           description: A list of capacity reservations.
@@ -211,15 +203,6 @@ components:
       type: array
       items:
         $ref: "#/components/schemas/CapacityReservation"
-
-    CapacityReservationGetParameters:
-      type: object
-      additionalProperties: false
-      properties:
-        id:
-          $ref: "#/components/schemas/Ulid"
-        name:
-          type: string
 
     ErrorResponse:
       type: object
