@@ -6,7 +6,7 @@ import contextlib
 import os
 from collections.abc import AsyncIterable, AsyncIterator, Callable
 from copy import deepcopy
-from typing import Final, TypeVar
+from typing import Any, Final, TypeVar, overload
 
 import httpx
 import kr8s

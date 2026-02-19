@@ -1,7 +1,7 @@
 """add zenodo provider kind
 
 Revision ID: 53ef858f34ea
-Revises: c6af6a1088f1
+Revises: 287879848fb3
 Create Date: 2026-02-20 16:45:47.200173
 
 """
