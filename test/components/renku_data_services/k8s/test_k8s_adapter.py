@@ -57,11 +57,7 @@ async def test_get_insert_quota(quota: models.UnsavedQuota, quota_repo: QuotaRep
     created_quota = await quota_repo.create_quota(quota, DEFAULT_K8S_CLUSTER)
     recovered_quota = await quota_repo.get_quota(created_quota.id, DEFAULT_K8S_CLUSTER)
     assert recovered_quota is not None
-    assert created_quota.id == recovered_quota.id
-    specific_quota_list = [q async for q in quota_repo.get_quotas(DEFAULT_K8S_CLUSTER, created_quota.id)]
-    assert len(specific_quota_list) == 1
-    specific_quota = specific_quota_list[0]
-    assert specific_quota == created_quota
+    assert created_quota == recovered_quota
 
 
 @settings(deadline=None, max_examples=5)

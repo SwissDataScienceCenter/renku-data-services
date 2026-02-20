@@ -87,17 +87,14 @@ class K8sSecretClient(SecretClient):
 
     async def create_secret(self, secret: K8sSecret) -> K8sSecret:
         """Create a secret."""
-
         return K8sSecret.from_k8s_object(await self.__client.create(secret, False))
 
     async def patch_secret(self, secret: K8sObjectMeta, patch: K8sPatches) -> K8sSecret:
         """Patch a secret."""
-
         return K8sSecret.from_k8s_object(await self.__client.patch(secret, patch))
 
     async def delete_secret(self, secret: K8sObjectMeta) -> None:
         """Delete a secret."""
-
         await self.__client.delete(secret)
 
 
@@ -236,7 +233,6 @@ class K8sClusterClient(K8sClient):
 
     async def create(self, obj: K8sObject, refresh: bool) -> K8sObject:
         """Create the k8s object, scoped or not."""
-
         api_obj = obj.to_api_object(self.__cluster.api)
         await api_obj.create()
 

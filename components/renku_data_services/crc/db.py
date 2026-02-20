@@ -9,7 +9,7 @@ it all in one place.
 from __future__ import annotations
 
 from asyncio import gather
-from collections.abc import AsyncGenerator, AsyncIterable, Callable, Collection, Coroutine, Sequence
+from collections.abc import AsyncGenerator, Callable, Collection, Coroutine, Sequence
 from dataclasses import asdict, dataclass, field
 from functools import wraps
 from typing import Any, Concatenate, Optional, ParamSpec, TypeVar
@@ -1131,21 +1131,6 @@ class QuotaRepository:
         except errors.MissingResourceError:
             return None
         return models.Quota.from_k8s_resource_quota(res_quota)
-
-    async def get_quotas(self, cluster_id: ClusterId, name: str | None = None) -> AsyncIterable[models.Quota]:
-        """Get a specific resource quota."""
-        if name is not None:
-            quota = await self.get_quota(name, cluster_id)
-            if not quota:
-                return
-            yield quota
-            return
-        quotas = self.rq_client.list_resource_quota(
-            label_selector={self._label_name: self._label_value},
-            cluster_id=cluster_id,
-        )
-        async for q in quotas:
-            yield models.Quota.from_k8s_resource_quota(q)
 
     async def create_quota(self, new_quota: models.UnsavedQuota, cluster_id: ClusterId) -> models.Quota:
         """Create a resource quota and priority class."""
