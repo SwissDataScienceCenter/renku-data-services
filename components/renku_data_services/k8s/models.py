@@ -12,25 +12,15 @@ from box import Box
 from kr8s._api import Api
 from kr8s.asyncio.objects import APIObject
 from kr8s.objects import Secret
-from kubernetes.client import V1ObjectMeta, V1PriorityClass, V1ResourceQuota, V1Secret
+from kubernetes.client import V1Secret
 
 from renku_data_services.errors import ProgrammingError, errors
 from renku_data_services.k8s.constants import DUMMY_TASK_RUN_USER_ID, ClusterId
 
 _kubernetes_client = kubernetes.client.ApiClient()
 sanitizer = _kubernetes_client.sanitize_for_serialization
-
-
-def _deserializer(data: Any, klass: type) -> Any:
-    """Deserialise k8s object into a klass instance."""
-
-    # NOTE: There is unfortunately no other way around this, this is the only thing that will
-    # properly handle snake case - camel case conversions and a bunch of other things.
-    obj = _kubernetes_client._ApiClient__deserialize(data, klass)
-    if not isinstance(obj, klass):
-        raise errors.ProgrammingError(message=f"Could not convert from a kr8s object to a {klass}")
-
-    return obj
+K8sPatch = dict[str, Any]
+K8sPatches = K8sPatch | list[K8sPatch]
 
 
 class K8sObjectMeta:
@@ -181,24 +171,25 @@ class K8sSecret(K8sObject):
             type=self.manifest.get("type"),
         )
 
-    def __b64encode_values(self, stringData: dict[str, Any], new_data: dict[str, str]) -> None:
-        for k, v in stringData.items():
+    @staticmethod
+    def __b64encode_values(string_data: dict[str, Any], new_data: dict[str, str]) -> None:
+        for k, v in string_data.items():
             if k in new_data:
                 raise ProgrammingError(
                     message=f"Patching a secret with both stringData and data and conflicting key {k}."
                 )
             new_data[k] = b64encode(str(v).encode("utf-8")).decode("utf-8")
 
-    def to_patch(self) -> list[dict[str, Any]]:
+    def to_patch(self) -> K8sPatches:
         """Create a rfc6902 patch that would take an existing secret and patch it to this state."""
-        secretData = self.manifest.get("data") or {}
-        stringData = self.manifest.get("stringData")
-        if stringData:
-            secretData = secretData.copy()
-            self.__b64encode_values(stringData, secretData)
+        secret_data = self.manifest.get("data") or {}
+        string_data = self.manifest.get("stringData")
+        if string_data:
+            secret_data = secret_data.copy()
+            self.__b64encode_values(string_data, secret_data)
 
         patch = [
-            {"op": "replace", "path": "/data", "value": secretData},
+            {"op": "replace", "path": "/data", "value": secret_data},
             {"op": "replace", "path": "/type", "value": self.manifest.get("type", "Opaque")},
         ]
         if "metadata" not in self.manifest:
@@ -269,9 +260,12 @@ class K8sResourceQuota(K8sObject):
             manifest=k8s_object.manifest,
         )
 
-    def to_v1_resource_quota(self) -> V1ResourceQuota:
-        """Convert a K8sResourceQuota to a V1ResourceQuota."""
-        return _deserializer(self.manifest.to_dict(), V1ResourceQuota)
+    @classmethod
+    def from_patch(cls, patch: K8sPatch, namespace: str, cluster_id: ClusterId) -> K8sResourceQuota:
+        """Convert a valid K8sPatch to K8sResourceQuota."""
+        name = patch["metadata"]["name"]
+        patch["metadata"]["namespace"] = namespace
+        return K8sResourceQuota(name=name, namespace=namespace, cluster=cluster_id, manifest=Box(patch))
 
 
 class K8sPriorityClass(K8sObject):
@@ -307,15 +301,16 @@ class K8sPriorityClass(K8sObject):
             name=name,
             cluster=cluster,
             manifest=Box(
-                sanitizer(
-                    V1PriorityClass(
-                        global_default=global_default,
-                        value=value,
-                        preemption_policy=preemption_policy,
-                        description=description,
-                        metadata=V1ObjectMeta(labels=labels, name=name),
-                    )
-                )
+                {
+                    "metadata": {
+                        "name": name,
+                        "labels": labels,
+                    },
+                    "description": description,
+                    "globalDefault": global_default,
+                    "preemptionPolicy": preemption_policy,
+                    "value": value,
+                }
             ),
         )
 
@@ -339,10 +334,6 @@ class K8sPriorityClass(K8sObject):
             cluster=k8s_object.cluster,
             manifest=k8s_object.manifest,
         )
-
-    def to_v1_priority_class(self) -> V1PriorityClass:
-        """Convert a K8sResourceQuota to a V1PriorityClass."""
-        return _deserializer(self.manifest.to_dict(), V1PriorityClass)
 
 
 @dataclass

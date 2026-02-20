@@ -480,6 +480,7 @@ class QuotaBP(CustomBlueprint):
         async def _patch(
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.QuotaPatch
         ) -> HTTPResponse:
+
             patch = validate_quota_put_patch(body=body)
             quota = await self.rp_repo.update_quota(api_user=user, resource_pool_id=resource_pool_id, update=patch)
             return validated_json(apispec.QuotaWithId, quota)

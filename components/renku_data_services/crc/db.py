@@ -15,7 +15,6 @@ from functools import wraps
 from typing import Any, Concatenate, Optional, ParamSpec, TypeVar
 from uuid import uuid4
 
-from kubernetes import client
 from sqlalchemy import NullPool, delete, false, select, true
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import selectinload
@@ -295,7 +294,6 @@ class ResourcePoolRepository(_Base):
         self, api_user: base_models.APIUser, new_resource_pool: models.UnsavedResourcePool
     ) -> models.ResourcePool:
         """Insert resource pool into database."""
-
         cluster = None
         if new_resource_pool.cluster_id:
             cluster = await self.__cluster_repo.select(cluster_id=new_resource_pool.cluster_id)
@@ -1151,17 +1149,19 @@ class QuotaRepository:
 
     async def create_quota(self, new_quota: models.UnsavedQuota, cluster_id: ClusterId) -> models.Quota:
         """Create a resource quota and priority class."""
-        quota_id = str(uuid4()) if new_quota.id is None else new_quota.id
         quota = models.Quota(
-            cpu=new_quota.cpu, memory=new_quota.memory, gpu=new_quota.gpu, gpu_kind=new_quota.gpu_kind, id=quota_id
+            cpu=new_quota.cpu,
+            memory=new_quota.memory,
+            gpu=new_quota.gpu,
+            gpu_kind=new_quota.gpu_kind,
+            id=str(uuid4()) if new_quota.id is None else new_quota.id,
         )
         labels = {self._label_name: self._label_value}
-        quota_manifest = quota.to_manifest(labels)
 
-        # Check if we have a priority class with the given name, return it or create one otherwise.
+        # Check if we have a priority class with the given name, if not, create one it.
         pc = await self.pc_client.read_priority_class(K8sPriorityClass.meta(quota.id, cluster_id))
         if pc is None:
-            pc = await self.pc_client.create_priority_class(
+            await self.pc_client.create_priority_class(
                 K8sPriorityClass.new(
                     name=quota.id,
                     cluster=cluster_id,
@@ -1173,24 +1173,11 @@ class QuotaRepository:
                 ),
             )
 
-        # NOTE: The priority class is cluster-scoped and a namespace-scoped resource cannot be an owner
-        # of a cluster-scoped resource. That is why the priority class is an owner of the quota.
-        quota_manifest.owner_references = [
-            client.V1OwnerReference(
-                api_version=pc.gvk.version,
-                block_owner_deletion=True,
-                controller=False,
-                kind=pc.gvk.kind,
-                name=pc.name,
-                uid=pc.manifest.metadata.uid,
-            )
-        ]
-        res = await self.rq_client.create_resource_quota(quota_manifest, cluster_id)
+        res = await self.rq_client.create_resource_quota(quota.to_patch(labels), cluster_id)
         return models.Quota.from_k8s_resource_quota(res)
 
     async def delete_quota(self, name: str, cluster_id: ClusterId) -> None:
         """Delete a resource quota and priority class."""
-
         await self.pc_client.delete_priority_class(
             meta=K8sPriorityClass.meta(name, cluster_id), propagation_policy=DeletePropagationPolicy.foreground
         )
@@ -1198,8 +1185,6 @@ class QuotaRepository:
 
     async def update_quota(self, quota: models.Quota, cluster_id: ClusterId) -> models.Quota:
         """Update a specific resource quota."""
-        labels = {self._label_name: self._label_value}
-        patched_quota = await self.rq_client.patch_resource_quota(
-            name=quota.id, body=quota.to_manifest(labels), cluster_id=cluster_id
-        )
+        patch = quota.to_patch({self._label_name: self._label_value})
+        patched_quota = await self.rq_client.patch_resource_quota(quota.id, patch, cluster_id)
         return models.Quota.from_k8s_resource_quota(patched_quota)

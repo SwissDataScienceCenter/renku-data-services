@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterable
-from typing import Any, Protocol
-
-from kubernetes.client import V1ResourceQuota
+from typing import Protocol
 
 from renku_data_services.k8s.constants import ClusterId
 from renku_data_services.k8s.models import (
@@ -13,6 +11,8 @@ from renku_data_services.k8s.models import (
     K8sObject,
     K8sObjectFilter,
     K8sObjectMeta,
+    K8sPatch,
+    K8sPatches,
     K8sPriorityClass,
     K8sResourceQuota,
     K8sSecret,
@@ -32,7 +32,7 @@ class ResourceQuotaClient(Protocol):
         """Get a resource quota."""
         ...
 
-    async def create_resource_quota(self, body: V1ResourceQuota, cluster_id: ClusterId) -> K8sResourceQuota:
+    async def create_resource_quota(self, quota: K8sPatch, cluster_id: ClusterId) -> K8sResourceQuota:
         """Create a resource quota."""
         ...
 
@@ -40,7 +40,7 @@ class ResourceQuotaClient(Protocol):
         """Delete a resource quota."""
         ...
 
-    async def patch_resource_quota(self, name: str, body: V1ResourceQuota, cluster_id: ClusterId) -> K8sResourceQuota:
+    async def patch_resource_quota(self, name: str, patch: K8sPatches, cluster_id: ClusterId) -> K8sResourceQuota:
         """Update a resource quota."""
         ...
 
@@ -56,7 +56,7 @@ class SecretClient(Protocol):
         """Create a secret."""
         ...
 
-    async def patch_secret(self, secret: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sSecret:
+    async def patch_secret(self, secret: K8sObjectMeta, patch: K8sPatches) -> K8sSecret:
         """Patch an existing secret."""
         ...
 
@@ -92,7 +92,7 @@ class K8sClient(Protocol):
         """Create the k8s object."""
         ...
 
-    async def patch(self, meta: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
+    async def patch(self, meta: K8sObjectMeta, patch: K8sPatches) -> K8sObject:
         """Patch a k8s object.
 
         If the patch is a list we assume that we have a rfc6902 json patch like

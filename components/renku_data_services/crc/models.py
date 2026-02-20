@@ -7,13 +7,12 @@ from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from typing import Any, Optional, Protocol, Self
 
-from kubernetes import client
 from kubernetes.utils import parse_quantity
 
 from renku_data_services import errors
 from renku_data_services.base_models import ResetType
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
-from renku_data_services.k8s.models import K8sResourceQuota
+from renku_data_services.k8s.models import K8sPatch, K8sResourceQuota
 
 
 class ResourcesProtocol(Protocol):
@@ -169,48 +168,56 @@ class Quota(ResourcesCompareMixin):
     @classmethod
     def from_k8s_resource_quota(cls, quota: K8sResourceQuota) -> Quota:
         """Convert a K8s Resource Quota."""
-        manifest = quota.to_v1_resource_quota()
+
+        def require_key(manifest: dict, key: str, prefix: str = "") -> Any:
+            try:
+                return manifest.get(key)
+            except Exception:
+                raise errors.ValidationError(
+                    message=f"Kubernetes resource quota with missing {prefix}{key} is not supported"
+                ) from None
+
+        spec = require_key(quota.manifest.to_dict(), "spec", "")
+        hard = require_key(spec, "hard", "spec.")
+
         gpu = 0
         gpu_kind = GpuKind.NVIDIA
         for igpu_kind in GpuKind:
             key = f"requests.{igpu_kind}/gpu"
-            if key in manifest.spec.hard:
-                gpu = int(parse_quantity(manifest.spec.hard.get(key)))
+            if key in hard:
+                gpu = int(parse_quantity(hard.get(key)))
                 gpu_kind = igpu_kind
                 break
-        memory_raw = manifest.spec.hard.get("requests.memory")
-        if memory_raw is None:
-            raise errors.ValidationError(
-                message="Kubernetes resource quota with missing hard.requests.memory is not supported"
-            )
-        cpu_raw = manifest.spec.hard.get("requests.cpu")
-        if cpu_raw is None:
-            raise errors.ValidationError(
-                message="Kubernetes resource quota with missing hard.requests.cpu is not supported"
-            )
+
+        memory_raw = require_key(hard, "requests.memory", "hard.")
+        cpu_raw = require_key(hard, "requests.cpu", "hard.")
         return cls(
-            cpu=float(parse_quantity(cpu_raw)),
+            cpu=float(parse_quantity(cpu_raw)) / 1_000_000_000,
             memory=round(parse_quantity(memory_raw) / 1_000_000_000),
             gpu=gpu,
             gpu_kind=gpu_kind,
-            id=manifest.metadata.name,
+            id=quota.name,
         )
 
-    def to_manifest(self, labels: dict[str, str]) -> client.V1ResourceQuota:
+    def to_patch(self, labels: dict[str, str]) -> K8sPatch:
         """Convert to a manifest."""
-        return client.V1ResourceQuota(
-            metadata=client.V1ObjectMeta(labels=labels, name=self.id),
-            spec=client.V1ResourceQuotaSpec(
-                hard={
-                    "requests.cpu": self.cpu,
+
+        return {
+            "metadata": {
+                "name": self.id,
+                "labels": labels,
+            },
+            "spec": {
+                "hard": {
+                    "requests.cpu": str(round(self.cpu * 1_000_000_000)),
                     "requests.memory": str(self.memory * 1_000_000_000),
                     f"requests.{self.gpu_kind}/gpu": self.gpu,
                 },
-                scope_selector=client.V1ScopeSelector(
-                    match_expressions=[{"operator": "In", "scopeName": "PriorityClass", "values": [self.id]}]
-                ),
-            ),
-        )
+                "scopeSelector": {
+                    "matchExpressions": [{"operator": "In", "scopeName": "PriorityClass", "values": [self.id]}]
+                },
+            },
+        }
 
     def is_resource_class_compatible(self, rc: ResourceClass | UnsavedResourceClass) -> bool:
         """Determine if a resource class is compatible with the quota."""

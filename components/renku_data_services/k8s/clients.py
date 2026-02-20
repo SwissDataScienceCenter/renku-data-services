@@ -6,11 +6,8 @@ import contextlib
 import os
 from collections.abc import AsyncIterable, Callable
 from copy import deepcopy
-from typing import Any
 
 import kr8s
-from box import Box
-from kubernetes import client
 
 from renku_data_services.errors import errors
 from renku_data_services.k8s.client_interfaces import K8sClient, PriorityClassClient, ResourceQuotaClient, SecretClient
@@ -24,10 +21,11 @@ from renku_data_services.k8s.models import (
     K8sObject,
     K8sObjectFilter,
     K8sObjectMeta,
+    K8sPatch,
+    K8sPatches,
     K8sPriorityClass,
     K8sResourceQuota,
     K8sSecret,
-    sanitizer,
 )
 
 
@@ -57,12 +55,10 @@ class K8sResourceQuotaClient(ResourceQuotaClient):
         async for quota in quotas:
             yield K8sResourceQuota.from_k8s_object(quota)
 
-    async def create_resource_quota(self, body: client.V1ResourceQuota, cluster_id: ClusterId) -> K8sResourceQuota:
+    async def create_resource_quota(self, quota: K8sPatch, cluster_id: ClusterId) -> K8sResourceQuota:
         """Create a resource quota."""
-        namespace = await self.__cluster_namespace(cluster_id)
         res = await self.__client.create(
-            K8sResourceQuota(body.metadata.name, namespace, cluster_id, Box(sanitizer(body))),
-            False,
+            K8sResourceQuota.from_patch(quota, await self.__cluster_namespace(cluster_id), cluster_id), False
         )
         return K8sResourceQuota.from_k8s_object(res)
 
@@ -71,11 +67,8 @@ class K8sResourceQuotaClient(ResourceQuotaClient):
         namespace = await self.__cluster_namespace(cluster_id)
         await self.__client.delete(K8sResourceQuota.meta(name, namespace, cluster_id))
 
-    async def patch_resource_quota(
-        self, name: str, body: client.V1ResourceQuota, cluster_id: ClusterId
-    ) -> K8sResourceQuota:
+    async def patch_resource_quota(self, name: str, patch: K8sPatches, cluster_id: ClusterId) -> K8sResourceQuota:
         """Update a resource quota."""
-        patch = sanitizer(body)
         namespace = await self.__cluster_namespace(cluster_id)
         res = await self.__client.patch(K8sResourceQuota.meta(name, namespace, cluster_id), patch)
         return K8sResourceQuota.from_k8s_object(res)
@@ -97,7 +90,7 @@ class K8sSecretClient(SecretClient):
 
         return K8sSecret.from_k8s_object(await self.__client.create(secret, False))
 
-    async def patch_secret(self, secret: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sSecret:
+    async def patch_secret(self, secret: K8sObjectMeta, patch: K8sPatches) -> K8sSecret:
         """Patch a secret."""
 
         return K8sSecret.from_k8s_object(await self.__client.patch(secret, patch))
@@ -150,7 +143,7 @@ class DummyCoreClient(ResourceQuotaClient, SecretClient):
         """List resource quotas."""
         raise NotImplementedError()
 
-    async def create_resource_quota(self, body: client.V1ResourceQuota, cluster_id: ClusterId) -> K8sResourceQuota:
+    async def create_resource_quota(self, quota: K8sPatch, cluster_id: ClusterId) -> K8sResourceQuota:
         """Create a resource quota."""
         raise NotImplementedError()
 
@@ -158,9 +151,7 @@ class DummyCoreClient(ResourceQuotaClient, SecretClient):
         """Delete a resource quota."""
         raise NotImplementedError()
 
-    async def patch_resource_quota(
-        self, name: str, body: client.V1ResourceQuota, cluster_id: ClusterId
-    ) -> K8sResourceQuota:
+    async def patch_resource_quota(self, name: str, patch: K8sPatches, cluster_id: ClusterId) -> K8sResourceQuota:
         """Update a resource quota."""
         raise NotImplementedError()
 
@@ -172,7 +163,7 @@ class DummyCoreClient(ResourceQuotaClient, SecretClient):
         """Create a secret."""
         raise NotImplementedError()
 
-    async def patch_secret(self, secret: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sSecret:
+    async def patch_secret(self, secret: K8sObjectMeta, patch: K8sPatches) -> K8sSecret:
         """Patch a secret."""
         raise NotImplementedError()
 
@@ -255,7 +246,7 @@ class K8sClusterClient(K8sClient):
             await api_obj.refresh()
         return obj.with_manifest(api_obj.to_dict())
 
-    async def patch(self, meta: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
+    async def patch(self, meta: K8sObjectMeta, patch: K8sPatches) -> K8sObject:
         """Patch a k8s object.
 
         If the patch is a list we assume that we have a rfc6902 json patch like
@@ -320,7 +311,7 @@ class K8sCachedClusterClient(K8sClusterClient):
             raise
         return obj
 
-    async def patch(self, meta: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
+    async def patch(self, meta: K8sObjectMeta, patch: K8sPatches) -> K8sObject:
         """Patch a k8s object."""
         obj = await super().patch(meta, patch)
         if meta.gvk in self.__kinds_to_cache:
@@ -397,7 +388,7 @@ class K8sClusterClientsPool(K8sClient):
         client = await self.__get_client_or_die(obj.cluster)
         return await client.create(obj, refresh)
 
-    async def patch(self, meta: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
+    async def patch(self, meta: K8sObjectMeta, patch: K8sPatches) -> K8sObject:
         """Patch a k8s object."""
         client = await self.__get_client_or_die(meta.cluster)
         return await client.patch(meta, patch)
