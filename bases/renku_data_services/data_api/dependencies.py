@@ -11,6 +11,7 @@ from typing import Any
 from yaml import safe_load
 
 import renku_data_services.base_models as base_models
+import renku_data_services.capacity_reservation
 import renku_data_services.connected_services
 import renku_data_services.crc
 import renku_data_services.data_connectors
@@ -24,6 +25,7 @@ from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.authn.gitlab import EmptyGitlabAuthenticator, GitlabAuthenticator
 from renku_data_services.authn.keycloak import KcUserStore, KeycloakAuthenticator
 from renku_data_services.authz.authz import Authz
+from renku_data_services.capacity_reservation.db import CapacityReservationRepository, OccurrenceRepository
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.connected_services.oauth_http import DefaultOAuthHttpClientFactory, OAuthHttpClientFactory
 from renku_data_services.crc import models as crc_models
@@ -154,6 +156,8 @@ class DependencyManager:
     git_provider_helper: GitProviderHelperProto
     notifications_repo: NotificationsRepository
     oauth_http_client_factory: OAuthHttpClientFactory
+    capacity_reservation_repo: CapacityReservationRepository
+    occurrence_repo: OccurrenceRepository
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
@@ -182,6 +186,7 @@ class DependencyManager:
             renku_data_services.data_connectors.__file__,
             renku_data_services.search.__file__,
             renku_data_services.notifications.__file__,
+            renku_data_services.capacity_reservation.__file__,
         ]
 
         api_specs = []
@@ -407,6 +412,13 @@ class DependencyManager:
             session_maker=config.db.async_session_maker,
             alertmanager_webhook_role=config.alertmanager_webhook_role,
         )
+        capacity_reservation_repo = CapacityReservationRepository(
+            session_maker=config.db.async_session_maker,
+            cluster_repo=cluster_repo,
+        )
+        occurrence_repo = OccurrenceRepository(
+            session_maker=config.db.async_session_maker,
+        )
         return cls(
             config,
             authenticator=authenticator,
@@ -447,4 +459,6 @@ class DependencyManager:
             git_provider_helper=git_provider_helper,
             notifications_repo=notifications_repo,
             oauth_http_client_factory=oauth_http_client_factory,
+            capacity_reservation_repo=capacity_reservation_repo,
+            occurrence_repo=occurrence_repo,
         )
