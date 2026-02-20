@@ -12,9 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from renku_data_services.app_config import logging
 from renku_data_services.resource_usage.model import (
     Credit,
-    ResourceClassCostQuery,
     ResourceClassCostWithPool,
-    ResourceClassRuntimeCost,
     ResourcePoolLimits,
     ResourcesRequest,
     ResourceUsage,
@@ -253,34 +251,3 @@ class ResourceRequestsRepo:
                 mapping["resource_class_cost"] = Credit.from_int(mapping["resource_class_cost"])
                 ru = ResourceUsage(**mapping)
                 yield ru
-
-    async def get_resource_class_usage(self, rq: ResourceClassCostQuery) -> list[ResourceClassRuntimeCost]:
-        """Query the current usage of a resource class."""
-
-        by_user = " and user_id = :user_id " if rq.user_id is not None else ""
-        stmt = f"""
-        select
-          resource_class_id,
-          user_id,
-          greatest(cpu_time, mem_time, gpu_time, '0 second'::interval) as runtime,
-          coalesce(resource_class_cost, 0) as cost
-        from "resource_pools"."resource_requests_view"
-        where phase = 'Running'
-          and capture_date::date >= :from and capture_date::date <= :until
-          and resource_class_id = :class_id {by_user}
-        """  # nosec: B608
-        params = {"from": rq.since, "until": rq.until, "user_id": rq.user_id, "class_id": rq.resource_class_id}
-
-        async with self.session_maker() as session:
-            query = sa.text(stmt)
-            result = await session.execute(query, params)
-            values = result.all()
-            return [
-                ResourceClassRuntimeCost(
-                    resource_class_id=row.resource_class_id,
-                    runtime=row.runtime,
-                    cost=Credit.from_int(row.cost),
-                    user_id=row.user_id,
-                )
-                for row in values
-            ]

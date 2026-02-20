@@ -477,34 +477,6 @@ class ResourceClassCostWithPool:
         return ResourceClassCost(resource_class_id=resource_class_id, cost=Credit.from_int(0))
 
 
-@dataclass(frozen=True)
-class ResourceClassRuntimeCost:
-    """The costs and running time associated to a resource class."""
-
-    resource_class_id: int
-    runtime: timedelta
-    user_id: str
-    cost: Credit
-
-    def to_effective_costs(self) -> float:
-        """Calculate the effective costs for this runtime of the resource_class."""
-        ## impl note: here we have the costs associated to the
-        ## resource class and assume to be the cost for 1 hour for
-        ## runtime
-        hours = self.runtime.total_seconds() / 3600
-        return hours * self.cost.value
-
-
-@dataclass
-class ResourceClassCostQuery:
-    """Query for getting resource class costs."""
-
-    since: date
-    until: date
-    resource_class_id: int
-    user_id: str | None
-
-
 @dataclass
 class ResourcesRequest:
     """Data structure capturing request to resources."""
