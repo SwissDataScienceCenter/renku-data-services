@@ -372,6 +372,7 @@ class RemoteConfigurationRunai:
 
     kind: RemoteConfigurationKind = RemoteConfigurationKind.runai
     base_url: str
+    provider_id: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Self:
@@ -381,6 +382,7 @@ class RemoteConfigurationRunai:
             return cls(
                 kind=RemoteConfigurationKind.runai,
                 base_url=data["base_url"],
+                provider_id=data.get("provider_id") or None,
             )
         raise errors.ValidationError(message=f"Invalid kind for remote configuration: '{kind}'")
 
@@ -415,6 +417,7 @@ class RemoteConfigurationRunaiPatch:
 
     kind: RemoteConfigurationKind | None = None
     base_url: str | None = None
+    provider_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert this instance of RemoteConfigurationPatch into a dictionary."""

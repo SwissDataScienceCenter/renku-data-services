@@ -1822,6 +1822,8 @@ components:
           example: "runai"
         base_url:
           $ref: "#/components/schemas/RemoteConfigurationRunaiApiUrl"
+        provider_id:
+          $ref: "#/components/schemas/RemoteConfigurationFirecrestProviderId"
       required:
         - kind
         - base_url
@@ -1874,6 +1876,8 @@ components:
           example: "runai"
         base_url:
           $ref: "#/components/schemas/RemoteConfigurationRunaiApiUrl"
+        provider_id:
+          $ref: "#/components/schemas/RemoteConfigurationFirecrestProviderId"
     IdleThreshold:
       type: integer
       description: A threshold in seconds after which a session gets hibernated (0 means no threshold)

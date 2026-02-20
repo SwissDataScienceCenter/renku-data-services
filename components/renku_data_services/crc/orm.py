@@ -366,7 +366,9 @@ class ResourcePoolORM(BaseORM):
         if self.remote_json is None:
             return None
         if self.remote_json.get("kind") == models.RemoteConfigurationKind.runai.value:
-            return models.RemoteConfigurationRunai.from_dict(self.remote_json)
+            return models.RemoteConfigurationRunai.from_dict(
+                {**self.remote_json, "provider_id": self.remote_provider_id}
+            )
         return models.RemoteConfigurationFirecrest.from_dict(
             {**self.remote_json, "provider_id": self.remote_provider_id}
         )

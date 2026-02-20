@@ -348,6 +348,7 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
             remote = models.RemoteConfigurationRunai(
                 kind=kind,
                 base_url=base_url,
+                provider_id=update.remote.provider_id,
             )
         elif kind == models.RemoteConfigurationKind.firecrest:
             assert isinstance(update.remote, apispec.RemoteConfigurationFirecrestPatch)
@@ -388,6 +389,9 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
         remote = models.RemoteConfigurationRunai(
             kind=update.remote.kind if update.remote.kind is not None else existing.remote.kind,
             base_url=update.remote.base_url if update.remote.base_url is not None else existing.remote.base_url,
+            provider_id=update.remote.provider_id
+            if update.remote.provider_id is not None
+            else existing.remote.provider_id,
         )
 
     if len(name) > 40:
@@ -493,11 +497,14 @@ def validate_remote(
     if kind != models.RemoteConfigurationKind.firecrest and kind != models.RemoteConfigurationKind.runai:
         raise errors.ValidationError(message=f"The kind '{kind}' of remote configuration is not supported.", quiet=True)
     if kind == models.RemoteConfigurationKind.runai:
+        assert isinstance(body, apispec.RemoteConfigurationRunai)
         validate_runai_base_url(body.base_url)
         return models.RemoteConfigurationRunai(
             kind=kind,
             base_url=body.base_url,
+            provider_id=body.provider_id,
         )
+    assert isinstance(body, apispec.RemoteConfigurationFirecrest)
     validate_firecrest_api_url(body.api_url)
     return models.RemoteConfigurationFirecrest(
         kind=kind,
@@ -519,6 +526,7 @@ def validate_remote_put(
         return models.RemoteConfigurationRunaiPatch(
             kind=remote.kind,
             base_url=remote.base_url,
+            provider_id=body.provider_id,
         )
     assert isinstance(remote, models.RemoteConfigurationFirecrest)
     return models.RemoteConfigurationFirecrestPatch(
@@ -542,12 +550,15 @@ def validate_remote_patch(
     if kind and kind != models.RemoteConfigurationKind.firecrest and kind != models.RemoteConfigurationKind.runai:
         raise errors.ValidationError(message=f"The kind '{kind}' of remote configuration is not supported.", quiet=True)
     if kind == models.RemoteConfigurationKind.runai:
+        assert isinstance(body, apispec.RemoteConfigurationRunaiPatch)
         if body.base_url:
             validate_runai_base_url(body.base_url)
         return models.RemoteConfigurationRunaiPatch(
             kind=kind,
             base_url=body.base_url,
+            provider_id=body.provider_id,
         )
+    assert isinstance(body, apispec.RemoteConfigurationFirecrestPatch)
     if body.api_url:
         validate_firecrest_api_url(body.api_url)
     return models.RemoteConfigurationFirecrestPatch(
