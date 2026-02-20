@@ -60,10 +60,11 @@ class Analyzers:
     """A collection of analyzers."""
 
     text_index: Final[Analyzer] = Analyzer(
-        tokenizer=Tokenizers.uax29UrlEmail,
+        tokenizer=Tokenizers.whitespace,
         filters=[
+            Filters.word,
+            Filters.flattenGraph,
             Filters.lowercase,
-            Filters.stop,
             Filters.english_minimal_stem,
             Filters.ascii_folding,
             Filters.edgeNgram(2, 8, True),
@@ -71,10 +72,9 @@ class Analyzers:
     )
 
     text_query: Final[Analyzer] = Analyzer(
-        tokenizer=Tokenizers.uax29UrlEmail,
+        tokenizer=Tokenizers.whitespace,
         filters=[
             Filters.lowercase,
-            Filters.stop,
             Filters.english_minimal_stem,
             Filters.ascii_folding,
         ],
@@ -187,6 +187,11 @@ all_migrations: Final[list[SchemaMigration]] = [
         commands=[
             ReplaceCommand(Field.of(Fields.keywords, FieldTypes.keyword).make_multi_valued()),
         ],
+        requires_reindex=True,
+    ),
+    SchemaMigration(
+        version=15,
+        commands=[ReplaceCommand(FieldTypes.text), ReplaceCommand(FieldTypes.text_all)],
         requires_reindex=True,
     ),
 ]
