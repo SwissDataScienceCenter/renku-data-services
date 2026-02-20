@@ -85,7 +85,14 @@ class SearchBP(CustomBlueprint):
             logger.debug(f"Running search query: {query}")
 
             result = await core.query(
-                self.authz.client, self.username_resolve, self.solr_config, uq, user, per_page, offset
+                self.authz.client,
+                self.username_resolve,
+                self.solr_config,
+                uq,
+                user,
+                per_page,
+                offset,
+                include_counts=query.include_counts,
             )
             await self.metrics.search_queried(user)
             return json(

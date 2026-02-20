@@ -6,16 +6,12 @@ from renku_data_services.data_connectors.apispec import DataConnector as ApiData
 from renku_data_services.namespace.apispec import GroupResponse as ApiGroup
 from renku_data_services.project.apispec import Project as ApiProject
 from renku_data_services.search.apispec import (
-    Group as SearchGroup,
-)
-from renku_data_services.search.apispec import (
     SearchDataConnector,
     SearchEntity,
+    SearchGroup,
     SearchProject,
     SearchResult,
-)
-from renku_data_services.search.apispec import (
-    User as SearchUser,
+    SearchUser,
 )
 from renku_data_services.solr.entity_documents import EntityType
 from renku_data_services.users.models import UserInfo
