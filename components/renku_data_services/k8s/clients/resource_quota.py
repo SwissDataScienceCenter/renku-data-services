@@ -10,6 +10,7 @@ from box import Box
 from renku_data_services.errors import errors
 from renku_data_services.k8s.clients.core import K8sClusterClientsPool
 from renku_data_services.k8s.constants import ClusterId
+from renku_data_services.k8s.core import ClusterConnection
 from renku_data_services.k8s.models import GVK, K8sObject, K8sObjectFilter, K8sObjectMeta, K8sPatch, K8sPatches
 
 
@@ -32,23 +33,23 @@ class K8sResourceQuota(K8sObject):
         )
 
     @classmethod
-    def meta(cls, name: str, namespace: str, cluster_id: ClusterId) -> K8sObjectMeta:
+    def meta(cls, name: str, cluster: ClusterConnection) -> K8sObjectMeta:
         """Return a K8sObjectMeta describing the named resource quota."""
         return K8sObjectMeta(
             name=name,
-            namespace=namespace,
-            cluster=cluster_id,
+            namespace=cluster.namespace,
+            cluster=cluster.id,
             gvk=GVK(kind="ResourceQuota", version="v1"),
         )
 
     @classmethod
-    def get_filter(cls, label_selector: dict[str, str], namespace: str, cluster_id: ClusterId) -> K8sObjectFilter:
+    def get_filter(cls, label_selector: dict[str, str], cluster: ClusterConnection) -> K8sObjectFilter:
         """Return a filter to list K8s objects."""
         return K8sObjectFilter(
             gvk=GVK(kind="ResourceQuota", version="v1"),
-            namespace=namespace,
+            namespace=cluster.namespace,
             label_selector=label_selector,
-            cluster=cluster_id,
+            cluster=cluster.id,
         )
 
     @classmethod
@@ -64,11 +65,11 @@ class K8sResourceQuota(K8sObject):
         )
 
     @classmethod
-    def from_patch(cls, patch: K8sPatch, namespace: str, cluster_id: ClusterId) -> K8sResourceQuota:
+    def from_patch(cls, patch: K8sPatch, cluster: ClusterConnection) -> K8sResourceQuota:
         """Convert a valid K8sPatch to K8sResourceQuota."""
         name = patch["metadata"]["name"]
-        patch["metadata"]["namespace"] = namespace
-        return K8sResourceQuota(name=name, namespace=namespace, cluster=cluster_id, manifest=Box(patch))
+        patch["metadata"]["namespace"] = cluster.namespace
+        return K8sResourceQuota(name=name, namespace=cluster.namespace, cluster=cluster.id, manifest=Box(patch))
 
 
 class ResourceQuotaClient(Protocol):
@@ -103,42 +104,39 @@ class K8sResourceQuotaClient(ResourceQuotaClient):
     def __init__(self, k8s_client: K8sClusterClientsPool) -> None:
         self.__client = k8s_client
 
-    async def __cluster_namespace(self, cluster_id: ClusterId) -> str:
-        return (await self.__client.cluster_by_id(cluster_id)).namespace
+    async def __cluster_by_id(self, cluster_id: ClusterId) -> ClusterConnection:
+        return await self.__client.cluster_by_id(cluster_id)
 
     async def read_resource_quota(self, name: str, cluster_id: ClusterId) -> K8sResourceQuota:
         """Get a resource quota."""
-        namespace = await self.__cluster_namespace(cluster_id)
-        res = await self.__client.get(K8sResourceQuota.meta(name, namespace, cluster_id))
+        cluster = await self.__cluster_by_id(cluster_id)
+        res = await self.__client.get(K8sResourceQuota.meta(name, cluster))
         if res is None:
-            raise errors.MissingResourceError(message=f"The resource quota {namespace}/{name} cannot be found.")
+            raise errors.MissingResourceError(message=f"The resource quota {cluster.namespace}/{name} cannot be found.")
         return K8sResourceQuota.from_k8s_object(res)
 
     async def list_resource_quota(
         self, label_selector: dict[str, str], cluster_id: ClusterId
     ) -> AsyncIterable[K8sResourceQuota]:
         """List resource quotas."""
-        namespace = await self.__cluster_namespace(cluster_id)
-        quotas = self.__client.list(K8sResourceQuota.get_filter(label_selector, namespace, cluster_id))
+        quotas = self.__client.list(K8sResourceQuota.get_filter(label_selector, await self.__cluster_by_id(cluster_id)))
         async for quota in quotas:
             yield K8sResourceQuota.from_k8s_object(quota)
 
     async def create_resource_quota(self, quota: K8sPatch, cluster_id: ClusterId) -> K8sResourceQuota:
         """Create a resource quota."""
         res = await self.__client.create(
-            K8sResourceQuota.from_patch(quota, await self.__cluster_namespace(cluster_id), cluster_id), False
+            K8sResourceQuota.from_patch(quota, await self.__cluster_by_id(cluster_id)), False
         )
         return K8sResourceQuota.from_k8s_object(res)
 
     async def delete_resource_quota(self, name: str, cluster_id: ClusterId) -> None:
         """Delete a resource quota."""
-        namespace = await self.__cluster_namespace(cluster_id)
-        await self.__client.delete(K8sResourceQuota.meta(name, namespace, cluster_id))
+        await self.__client.delete(K8sResourceQuota.meta(name, await self.__cluster_by_id(cluster_id)))
 
     async def patch_resource_quota(self, name: str, patch: K8sPatches, cluster_id: ClusterId) -> K8sResourceQuota:
         """Update a resource quota."""
-        namespace = await self.__cluster_namespace(cluster_id)
-        res = await self.__client.patch(K8sResourceQuota.meta(name, namespace, cluster_id), patch)
+        res = await self.__client.patch(K8sResourceQuota.meta(name, await self.__cluster_by_id(cluster_id)), patch)
         return K8sResourceQuota.from_k8s_object(res)
 
 
