@@ -161,9 +161,18 @@ def test_resource_data_facade() -> None:
         manifest=load_manifest("pvc.json"),
     )
 
+    node = K8sObject(
+        name="xyz4",
+        namespace="renku",
+        cluster=DEFAULT_K8S_CLUSTER,
+        gvk=GVK(kind="Node", version="v1"),
+        manifest=load_manifest("gpu-A100-20GB.json"),
+    )
+
     pd = ResourceDataFacade(pod)
     ad = ResourceDataFacade(ams)
     pv = ResourceDataFacade(pvc)
+    nd = ResourceDataFacade(node)
     date = datetime.now(UTC)
     interval = timedelta(seconds=600)
 
@@ -261,3 +270,7 @@ def test_resource_data_facade() -> None:
     assert pv.phase == "Bound"
     assert pv.status_storage == DataSize.from_mb(1024)
     assert pv.kind == "PersistentVolumeClaim"
+
+    assert nd.gpu_count == 3
+    assert nd.gpu_product == "NVIDIA-A100-80GB-PCIe-MIG-2g.20gb"
+    assert nd.kind == "Node"

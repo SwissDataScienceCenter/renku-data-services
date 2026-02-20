@@ -493,7 +493,6 @@ class K8sClusterClientsPool(K8sClient):
         """List all k8s objects."""
         await self.__init_clients_if_needed()
         cluster_clients = sorted(list(self.__clients.values()))
-
         for c in cluster_clients:
             async for r in c.list(_filter):
                 yield r
