@@ -7,7 +7,7 @@ import sqlalchemy as sa
 
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.migrations.core import run_migrations_for_app
-from renku_data_services.resource_usage.db import ResourceRequestsRepo
+from renku_data_services.resource_usage.db import ResourceClassCostWithPool, ResourceRequestsRepo
 from renku_data_services.resource_usage.model import (
     ComputeCapacity,
     Credit,
@@ -135,17 +135,20 @@ async def test_resource_class_costs(app_manager_instance: DependencyManager) -> 
 
     costs = ResourceClassCost(class_id, Credit.from_int(50))
     await repo.set_resource_class_costs(costs)
-    costs2 = await repo.find_resource_class_costs(class_id)
-    assert costs2 == costs
+    costs2 = await repo.find_resource_class_costs(pool_id, class_id)
+    assert costs2 == costs.with_pool_id(pool_id)
 
     costs = ResourceClassCost(class_id, Credit.from_int(100))
     await repo.set_resource_class_costs(costs)
-    costs2 = await repo.find_resource_class_costs(class_id)
-    assert costs2 == costs
+    costs2 = await repo.find_resource_class_costs(pool_id, class_id)
+    assert costs2 == costs.with_pool_id(pool_id)
 
     await repo.delete_resource_class_costs(class_id)
-    costs3 = await repo.find_resource_pool_limits(pool_id)
-    assert costs3 is None
+    costs3 = await repo.find_resource_class_costs(pool_id, class_id)
+    assert costs3 == ResourceClassCostWithPool(pool_id, class_id, Credit.zero())
+
+    costs4 = await repo.find_resource_class_costs(-1, class_id)
+    assert costs4 is None
 
 
 @pytest.mark.asyncio

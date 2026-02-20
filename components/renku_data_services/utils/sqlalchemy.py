@@ -3,10 +3,29 @@
 from pathlib import PurePosixPath
 from typing import cast
 
+import asyncpg
 from sqlalchemy import Dialect, types
 from ulid import ULID
 
 from renku_data_services.resource_usage.model import ComputeCapacity, Credit, DataSize
+
+
+def get_postgres_error_code(exception: Exception) -> str | None:
+    """Traverse exceptions to find and return the SQLSTATE error code.
+
+    sqlalchemy hides the underlying database error in multiple layers
+    of exceptions, making it not so straight forward to reach. This
+    method is a helper to retrieve the postgresql error code which
+    exactly defines the error situation.
+    """
+    exc: BaseException | None = exception
+    while exc:
+        if isinstance(exc, asyncpg.PostgresError):
+            # impl note: this attribute is dynamic so there is no way to find it's definition
+            # the documentation shows that it is available.
+            return cast(str | None, exc.sqlstate)
+        exc = exc.__cause__
+    return None
 
 
 class CreditType(types.TypeDecorator):

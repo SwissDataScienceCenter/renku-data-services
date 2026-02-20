@@ -6,12 +6,14 @@ from itertools import islice
 
 import sqlalchemy.sql as sa
 from sqlalchemy import bindparam
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.app_config import logging
 from renku_data_services.resource_usage.model import (
     Credit,
     ResourceClassCostQuery,
+    ResourceClassCostWithPool,
     ResourceClassRuntimeCost,
     ResourcePoolLimits,
     ResourcesRequest,
@@ -24,7 +26,7 @@ from renku_data_services.resource_usage.orm import (
     ResourceRequestsLogORM,
     ResourceRequestsViewORM,
 )
-from renku_data_services.utils.sqlalchemy import CreditType
+from renku_data_services.utils.sqlalchemy import CreditType, get_postgres_error_code
 
 logger = logging.getLogger(__file__)
 
@@ -102,17 +104,27 @@ class ResourceRequestsRepo:
             async for e in result.scalars():
                 yield e
 
-    async def set_resource_class_costs(self, costs: ResourceClassCost) -> None:
+    async def set_resource_class_costs(self, costs: ResourceClassCost) -> bool:
         """Updates (inserts or update) the costs of a resource_class."""
         stmt = sa.text("""
-        insert into resource_pools.resource_class_costs (resource_class_id, cost)
+        insert into "resource_pools"."resource_class_costs" (resource_class_id, cost)
         values (:resource_class_id, :cost)
         on conflict (resource_class_id) do update
         set
           cost = EXCLUDED.cost
         """).bindparams(bindparam("cost", type_=CreditType()))
         async with self.session_maker() as session, session.begin():
-            await session.execute(stmt, costs.__dict__)
+            try:
+                await session.execute(stmt, costs.__dict__)
+                return True
+            except IntegrityError as ie:
+                # impl note: if a resource pool doesn't exist, the sql statement results in a foreign key error
+                # that is postgres error code 23503 (https://www.postgresql.org/docs/current/errcodes-appendix.html)
+                ec = get_postgres_error_code(ie)
+                if ec == "23503":
+                    return False
+                else:
+                    raise
 
     async def delete_resource_class_costs(self, resource_class_id: int) -> None:
         """Remove a cost associated to a resource_class."""
@@ -120,16 +132,37 @@ class ResourceRequestsRepo:
         async with self.session_maker() as session, session.begin():
             await session.execute(stmt, {"id": resource_class_id})
 
-    async def find_resource_class_costs(self, resource_class_id: int) -> ResourceClassCost | None:
-        """Finds the costs of  the given resource class."""
-        stmt = sa.select(ResourceClassCostORM).where(ResourceClassCostORM.id == resource_class_id)
-        async with self.session_maker() as session:
-            result = await session.execute(stmt)
-            data = result.scalar_one_or_none()
-            return data.dump() if data is not None else None
+    async def find_resource_class_costs(
+        self, resource_pool_id: int, resource_class_id: int
+    ) -> ResourceClassCostWithPool | None:
+        """Finds the costs of the given resource class.
 
-    async def set_resource_pool_limits(self, limits: ResourcePoolLimits) -> None:
-        """Updates (insert or update) the limits of the given pool."""
+        If the pool or class doesn't exist, None is returned. If no cost
+        is associated, the cost returned is 0.
+        """
+        stmt = sa.text("""
+        select
+          rc.resource_pool_id,
+          rc.id as resource_class_id,
+          rcc.cost
+        from "resource_pools"."resource_classes" rc
+        left join "resource_pools"."resource_class_costs" rcc on rc.id = rcc.resource_class_id
+        where rc.resource_pool_id = :pool_id and rc.id = :class_id
+        """)
+        async with self.session_maker() as session:
+            result = await session.execute(stmt, {"pool_id": resource_pool_id, "class_id": resource_class_id})
+            data = result.one_or_none()
+            if data:
+                return ResourceClassCostWithPool(
+                    resource_pool_id=data.resource_pool_id,
+                    resource_class_id=data.resource_class_id,
+                    cost=Credit.from_int(data.cost or 0),
+                )
+            else:
+                return None
+
+    async def set_resource_pool_limits(self, limits: ResourcePoolLimits) -> bool:
+        """Updates (insert or update) the limits of the given pool. Return false if the resource pool doesn't exist."""
         stmt = sa.text("""
         insert into resource_pools.resource_requests_limits
           (resource_pool_id, total_limit, user_limit)
@@ -141,7 +174,17 @@ class ResourceRequestsRepo:
           user_limit = EXCLUDED.user_limit
         """).bindparams(bindparam("total_limit", type_=CreditType()), bindparam("user_limit", type_=CreditType()))
         async with self.session_maker() as session, session.begin():
-            await session.execute(stmt, limits.__dict__)
+            try:
+                await session.execute(stmt, limits.__dict__)
+                return True
+            except IntegrityError as ie:
+                # impl note: if a resource pool doesn't exist, the sql statement results in a foreign key error
+                # that is postgres error code 23503 (https://www.postgresql.org/docs/current/errcodes-appendix.html)
+                ec = get_postgres_error_code(ie)
+                if ec == "23503":
+                    return False
+                else:
+                    raise
 
     async def delete_resource_pool_limits(self, pool: int) -> None:
         """Removes limits from the resource pool."""
