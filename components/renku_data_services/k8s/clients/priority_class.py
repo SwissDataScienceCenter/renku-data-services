@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, Self
 
 from box import Box
 
@@ -38,9 +38,9 @@ class K8sPriorityClass(K8sObject):
         preemption_policy: str,
         description: str,
         labels: dict[str, str],
-    ) -> K8sPriorityClass:
+    ) -> Self:
         """Instantiate a K8sPriorityClass."""
-        return K8sPriorityClass(
+        return cls(
             name=name,
             cluster=cluster,
             manifest=Box(
@@ -68,11 +68,11 @@ class K8sPriorityClass(K8sObject):
         )
 
     @classmethod
-    def from_k8s_object(cls, k8s_object: K8sObject) -> K8sPriorityClass:
+    def from_k8s_object(cls, k8s_object: K8sObject) -> Self:
         """Convert a k8s object to a K8sPriorityClass object."""
         assert k8s_object.namespace is None
 
-        return K8sPriorityClass(
+        return cls(
             name=k8s_object.name,
             cluster=k8s_object.cluster,
             manifest=k8s_object.manifest,

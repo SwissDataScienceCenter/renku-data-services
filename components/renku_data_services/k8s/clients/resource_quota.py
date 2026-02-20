@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterable
-from typing import Protocol
+from typing import Protocol, Self
 
 from box import Box
 
@@ -53,11 +53,11 @@ class K8sResourceQuota(K8sObject):
         )
 
     @classmethod
-    def from_k8s_object(cls, k8s_object: K8sObject) -> K8sResourceQuota:
+    def from_k8s_object(cls, k8s_object: K8sObject) -> Self:
         """Convert a k8s object to a K8sResourceQuota object."""
         assert k8s_object.namespace is not None
 
-        return K8sResourceQuota(
+        return cls(
             name=k8s_object.name,
             namespace=k8s_object.namespace,
             cluster=k8s_object.cluster,
@@ -65,11 +65,11 @@ class K8sResourceQuota(K8sObject):
         )
 
     @classmethod
-    def from_patch(cls, patch: K8sPatch, cluster: ClusterConnection) -> K8sResourceQuota:
+    def from_patch(cls, patch: K8sPatch, cluster: ClusterConnection) -> Self:
         """Convert a valid K8sPatch to K8sResourceQuota."""
         name = patch["metadata"]["name"]
         patch["metadata"]["namespace"] = cluster.namespace
-        return K8sResourceQuota(name=name, namespace=cluster.namespace, cluster=cluster.id, manifest=Box(patch))
+        return cls(name=name, namespace=cluster.namespace, cluster=cluster.id, manifest=Box(patch))
 
 
 class ResourceQuotaClient(Protocol):

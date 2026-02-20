@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from base64 import b64encode
-from typing import Any, Protocol
+from typing import Any, Protocol, Self
 
 from box import Box
 from kr8s.objects import Secret
@@ -23,7 +23,6 @@ class K8sSecret(K8sObject):
         name: str,
         namespace: str,
         cluster: ClusterId,
-        gvk: GVK,
         manifest: Box,
         user_id: str | None = None,
     ) -> None:
@@ -31,7 +30,7 @@ class K8sSecret(K8sObject):
             name=name,
             namespace=namespace,
             cluster=cluster,
-            gvk=gvk,
+            gvk=GVK(version=Secret.version, kind="Secret"),
             manifest=manifest,
             user_id=user_id,
         )
@@ -44,28 +43,26 @@ class K8sSecret(K8sObject):
         )
 
     @classmethod
-    def from_k8s_object(cls, k8s_object: K8sObject) -> K8sSecret:
+    def from_k8s_object(cls, k8s_object: K8sObject) -> Self:
         """Convert a k8s object to a K8sSecret object."""
         assert k8s_object.namespace is not None
 
-        return K8sSecret(
+        return cls(
             name=k8s_object.name,
             namespace=k8s_object.namespace,
             cluster=k8s_object.cluster,
-            gvk=k8s_object.gvk,
             manifest=k8s_object.manifest,
         )
 
     @classmethod
-    def from_v1_secret(cls, secret: V1Secret, cluster: ClusterConnection) -> K8sSecret:
+    def from_v1_secret(cls, secret: V1Secret, cluster: ClusterConnection) -> Self:
         """Convert a V1Secret object to a K8sSecret object."""
         assert secret.metadata is not None
 
-        return K8sSecret(
+        return cls(
             name=secret.metadata.name,
             namespace=cluster.namespace,
             cluster=cluster.id,
-            gvk=GVK(version=Secret.version, kind="Secret"),
             manifest=Box(sanitizer(secret)),
         )
 
