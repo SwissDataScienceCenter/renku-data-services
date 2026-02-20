@@ -49,8 +49,11 @@ class ResourceUsageBP(CustomBlueprint):
             _: Request, user: base_models.APIUser, resource_pool_id: int, body: apispec.ResourcePoolLimitPut
         ) -> HTTPResponse:
             limits = validate_resource_pool_limit_put(resource_pool_id, body=body)
-            await self.rr_repo.set_resource_pool_limits(limits)
-            return empty()
+            result = await self.rr_repo.set_resource_pool_limits(limits)
+            if not result:
+                raise errors.MissingResourceError()
+            else:
+                return empty()
 
         return "/resource_usage/pool_limits/<resource_pool_id>", ["PUT"], _put
 
@@ -101,8 +104,11 @@ class ResourceUsageBP(CustomBlueprint):
             body: apispec.ResourceClassCostPut,
         ) -> HTTPResponse:
             costs = validate_resource_class_costs_put(class_id, body=body)
-            await self.rr_repo.set_resource_class_costs(costs)
-            return empty()
+            result = await self.rr_repo.set_resource_class_costs(costs)
+            if not result:
+                raise errors.MissingResourceError()
+            else:
+                return empty()
 
         return "/resource_usage/class_cost/<resource_pool_id>/<class_id>", ["PUT"], _put
 
@@ -113,11 +119,13 @@ class ResourceUsageBP(CustomBlueprint):
         @only_admins
         @validate_db_ids
         async def _get(_: Request, user: base_models.APIUser, resource_pool_id: int, class_id: int) -> JSONResponse:
-            result = await self.rr_repo.find_resource_class_costs(class_id)
+            result = await self.rr_repo.find_resource_class_costs(resource_pool_id, class_id)
             if result:
                 return validated_json(
                     apispec.ResourceClassCost,
-                    apispec.ResourceClassCost(resource_class_id=class_id, cost=result.cost.value),
+                    apispec.ResourceClassCost(
+                        resource_pool_id=resource_pool_id, resource_class_id=class_id, cost=result.cost.value
+                    ),
                 )
             else:
                 raise errors.MissingResourceError()

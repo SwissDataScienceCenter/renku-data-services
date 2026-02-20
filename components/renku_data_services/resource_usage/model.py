@@ -453,6 +453,24 @@ class ResourceClassCost:
     resource_class_id: int
     cost: Credit
 
+    def with_pool_id(self, id: int) -> ResourceClassCostWithPool:
+        """Amend with the pool id."""
+        return ResourceClassCostWithPool(id, self.resource_class_id, self.cost)
+
+    @classmethod
+    def zero(cls, resource_class_id: int) -> ResourceClassCost:
+        """Create an instance with a cost of 0."""
+        return ResourceClassCost(resource_class_id=resource_class_id, cost=Credit.from_int(0))
+
+
+@dataclass(frozen=True)
+class ResourceClassCostWithPool:
+    """The costs associated to a resource class."""
+
+    resource_pool_id: int
+    resource_class_id: int
+    cost: Credit
+
     @classmethod
     def zero(cls, resource_class_id: int) -> ResourceClassCost:
         """Create an instance with a cost of 0."""

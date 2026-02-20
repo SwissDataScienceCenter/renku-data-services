@@ -11,7 +11,7 @@ servers:
 paths:
   /resource_usage/pool_limits/{resource_pool_id}:
     get:
-      summary: Get resource pool limits
+      summary: "Get resource pool limits"
       parameters:
         - in: path
           name: resource_pool_id
@@ -21,13 +21,13 @@ paths:
       requestBody:
       responses:
         "200":
-          description: Return the resource pool limits.
+          description: "Return the resource pool limits."
           content:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ResourcePoolLimits"
         "404":
-          description: The pool does not exist 
+          description: "The pool does not exist."
           content:
             "application/json":
               schema:
@@ -37,7 +37,7 @@ paths:
       tags:
         - resource-usage
     put:
-      summary: Update resource pool limits
+      summary: "Update resource pool limits."
       parameters:
         - in: path
           name: resource_pool_id
@@ -52,9 +52,9 @@ paths:
               $ref: "#/components/schemas/ResourcePoolLimitPut"
       responses:
         "204":
-          description: The limits have been set
+          description: "The limits have been updated."
         "404":
-          description: The pool does not exist 
+          description: "The pool does not exist."
           content:
             "application/json":
               schema:
@@ -64,7 +64,7 @@ paths:
       tags:
         - resource-usage
     delete:
-      summary: Delete resource pool limits
+      summary: "Delete resource pool limits."
       parameters:
         - in: path
           name: resource_pool_id
@@ -74,9 +74,9 @@ paths:
       requestBody:
       responses:
         "204":
-          description: No content on success.
-        "404":
-          description: The pool does not exist 
+          description: "No content on success."
+        "500":
+          description: "There was an internal error."
           content:
             "application/json":
               schema:
@@ -88,7 +88,7 @@ paths:
 
   /resource_usage/class_costs/{resource_pool_id}/{class_id}:
     get:
-      summary: Get resource class costs
+      summary: "Get resource class costs."
       parameters:
         - in: path
           name: resource_pool_id
@@ -103,13 +103,13 @@ paths:
       requestBody:
       responses:
         "200":
-          description: Return the resource class costs.
+          description: "Return the resource class costs."
           content:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ResourceClassCost"
         "404":
-          description: The pool does not exist 
+          description: "The pool/class does not exist"
           content:
             "application/json":
               schema:
@@ -119,7 +119,7 @@ paths:
       tags:
         - resource-usage
     put:
-      summary: Update resource class costs
+      summary: "Update resource class costs."
       parameters:
         - in: path
           name: resource_pool_id
@@ -139,9 +139,9 @@ paths:
               $ref: "#/components/schemas/ResourceClassCostPut"
       responses:
         "204":
-          description: The limits have been set
+          description: "The cost has been set."
         "404":
-          description: The class does not exist 
+          description: "The class does not exist."
           content:
             "application/json":
               schema:
@@ -151,7 +151,7 @@ paths:
       tags:
         - resource-usage
     delete:
-      summary: Delete resource class costs
+      summary: "Delete resource class costs."
       parameters:
         - in: path
           name: resource_pool_id
@@ -166,9 +166,9 @@ paths:
       requestBody:
       responses:
         "204":
-          description: No content on success.
+          description: "No content on success."
         "404":
-          description: The class does not exist 
+          description: "The pool/class does not exist."
           content:
             "application/json":
               schema:
@@ -229,11 +229,14 @@ components:
       type: object
       additionalProperties: false
       properties:
+        resource_pool_id:
+          type: integer
         resource_class_id:
           type: integer
         cost:
           type: integer
       required:
+        - resource_pool_id
         - resource_class_id
         - cost
     ResourcePoolLimits:
