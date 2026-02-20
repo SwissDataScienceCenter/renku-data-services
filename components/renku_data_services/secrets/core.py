@@ -13,9 +13,10 @@ from ulid import ULID
 
 from renku_data_services import base_models, errors
 from renku_data_services.app_config import logging
-from renku_data_services.k8s.client_interfaces import SecretClient
+from renku_data_services.k8s.clients.secret import K8sSecret, SecretClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
-from renku_data_services.k8s.models import GVK, K8sSecret, sanitizer
+from renku_data_services.k8s.core import sanitizer
+from renku_data_services.k8s.models import GVK
 from renku_data_services.secrets import apispec
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo
 from renku_data_services.secrets.models import OwnerReference

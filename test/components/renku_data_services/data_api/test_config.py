@@ -8,7 +8,8 @@ import renku_data_services.data_api.config as conf
 from renku_data_services.authn.dummy import DummyAuthenticator
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.db_config.config import DBConfig
-from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient
+from renku_data_services.k8s.clients.priority_class import DummyPriorityClassClient
+from renku_data_services.k8s.clients.resource_quota import DummyResourceQuotaClient
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 
 
@@ -62,8 +63,8 @@ async def config_no_dummy_fixture(monkeypatch, secrets_key_pair, tmp_path):
     monkeypatch.setenv("KEYCLOAK_CLIENT_SECRET", "data-service-client-secret")
     monkeypatch.setattr(conf, "oidc_discovery", lambda _, __: {"jwks_uri": "localhost"})
     monkeypatch.setattr(conf, "PyJWKClient", lambda _: MagicMock())
-    monkeypatch.setattr(conf, "K8sCoreClient", lambda: DummyCoreClient({}, {}))
-    monkeypatch.setattr(conf, "K8sSchedulingClient", lambda: DummySchedulingClient({}))
+    monkeypatch.setattr(conf, "K8sResourceQuotaClient", lambda: DummyResourceQuotaClient())
+    monkeypatch.setattr(conf, "K8sPriorityClassClient", lambda: DummyPriorityClassClient())
 
     def patch_kc_api(*args, **kwargs):
         return DummyKeycloakAPI()

@@ -9,11 +9,8 @@ from renku_data_services import base_models
 from renku_data_services.authn.dummy import DummyAuthenticator
 from renku_data_services.authn.keycloak import KeycloakAuthenticator
 from renku_data_services.crc.db import ClusterRepository
-from renku_data_services.k8s.client_interfaces import SecretClient
-from renku_data_services.k8s.clients import (
-    K8sClusterClientsPool,
-    K8sSecretClient,
-)
+from renku_data_services.k8s.clients.core import K8sClusterClientsPool
+from renku_data_services.k8s.clients.secret import K8sSecretClient, SecretClient
 from renku_data_services.k8s.config import KubeConfigEnv, get_clusters
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo
 from renku_data_services.secrets_storage_api.config import Config

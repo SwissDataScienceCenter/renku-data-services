@@ -4,7 +4,7 @@ from typing import Any, cast
 
 from kubernetes import client
 
-from renku_data_services.k8s.models import sanitizer
+from renku_data_services.k8s.core import sanitizer
 from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.notebooks.crs import ExtraVolumeMount
 

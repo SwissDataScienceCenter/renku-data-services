@@ -10,10 +10,10 @@ import yaml
 from renku_data_services.app_config import logging
 from renku_data_services.crc.db import ClusterRepository
 from renku_data_services.errors import errors
-from renku_data_services.k8s import models as k8s_models
-from renku_data_services.k8s.clients import K8sCachedClusterClient, K8sClusterClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
+from renku_data_services.k8s.core import ClusterConnection, K8sCachedClusterClient, K8sClusterClient
 from renku_data_services.k8s.db import K8sDbCache
+from renku_data_services.k8s.models import GVK
 
 logger = logging.getLogger(__name__)
 
@@ -100,13 +100,11 @@ async def get_clusters(
     default_kubeconfig: KubeConfig,
     cluster_repo: ClusterRepository,
     cache: K8sDbCache | None = None,
-    kinds_to_cache: list[k8s_models.GVK] | None = None,
+    kinds_to_cache: list[GVK] | None = None,
 ) -> AsyncIterable[K8sClusterClient]:
     """Get all clusters accessible to the application."""
     default_api = await default_kubeconfig.api()
-    cluster_connection = k8s_models.ClusterConnection(
-        id=DEFAULT_K8S_CLUSTER, namespace=default_api.namespace, api=default_api
-    )
+    cluster_connection = ClusterConnection(id=DEFAULT_K8S_CLUSTER, namespace=default_api.namespace, api=default_api)
     if cache is None or kinds_to_cache is None:
         yield K8sClusterClient(cluster_connection)
     else:
@@ -125,7 +123,7 @@ async def get_clusters(
             logger.info(f"Creating API for '{kube_conf_root_dir}/{filename}'")
             k8s_api = await kube_config.api()
             logger.info(f"Creating cluster connection for '{kube_conf_root_dir}/{filename}'")
-            cluster_connection = k8s_models.ClusterConnection(
+            cluster_connection = ClusterConnection(
                 id=cluster_db.id,
                 namespace=k8s_api.namespace,
                 api=await k8s_api,

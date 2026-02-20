@@ -7,9 +7,9 @@ from sentry_sdk.integrations.asyncio import AsyncioIntegration
 from sentry_sdk.integrations.grpc import GRPCIntegration
 
 from renku_data_services.app_config import logging
-from renku_data_services.k8s.clients import K8sClusterClient
 from renku_data_services.k8s.config import KubeConfigEnv, get_clusters
 from renku_data_services.k8s.constants import ClusterId
+from renku_data_services.k8s.core import K8sClusterClient
 from renku_data_services.k8s.watcher import K8sWatcher, k8s_object_handler
 from renku_data_services.k8s_cache.dependencies import DependencyManager
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK

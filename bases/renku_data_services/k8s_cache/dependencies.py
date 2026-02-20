@@ -3,7 +3,8 @@
 from dataclasses import dataclass, field
 
 from renku_data_services.crc.db import ClusterRepository, QuotaRepository, ResourcePoolRepository
-from renku_data_services.k8s.clients import DummyCoreClient, DummySchedulingClient
+from renku_data_services.k8s.clients.priority_class import DummyPriorityClassClient
+from renku_data_services.k8s.clients.resource_quota import DummyResourceQuotaClient
 from renku_data_services.k8s.db import K8sDbCache
 from renku_data_services.k8s_cache.config import Config
 from renku_data_services.metrics.core import StagingMetricsService
@@ -63,7 +64,7 @@ class DependencyManager:
             # NOTE: We only need the QuotaRepository to instantiate the ResourcePoolRepository which is used to get
             # the resource class and pool information for metrics. We don't need quota information for metrics at all
             # so we use the dummy client for quotas here as we don't actually access k8s, just the db.
-            self._quota_repo = QuotaRepository(DummyCoreClient(), DummySchedulingClient())
+            self._quota_repo = QuotaRepository(DummyResourceQuotaClient(), DummyPriorityClassClient())
         return self._quota_repo
 
     @classmethod

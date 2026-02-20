@@ -35,11 +35,9 @@ from renku_data_services.data_connectors.db import (
     DataConnectorSecretRepository,
 )
 from renku_data_services.git.gitlab import DummyGitlabAPI, EmptyGitlabAPI, GitlabAPI
-from renku_data_services.k8s.clients import (
-    K8sClusterClientsPool,
-    K8sResourceQuotaClient,
-    K8sSchedulingClient,
-)
+from renku_data_services.k8s.clients.core import K8sClusterClientsPool
+from renku_data_services.k8s.clients.priority_class import K8sPriorityClassClient
+from renku_data_services.k8s.clients.resource_quota import K8sResourceQuotaClient
 from renku_data_services.k8s.config import KubeConfigEnv
 from renku_data_services.k8s.db import K8sDbCache
 from renku_data_services.message_queue.db import ReprovisioningRepository
@@ -236,7 +234,7 @@ class DependencyManager:
                 kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
             ),
         )
-        quota_repo = QuotaRepository(K8sResourceQuotaClient(client), K8sSchedulingClient(client))
+        quota_repo = QuotaRepository(K8sResourceQuotaClient(client), K8sPriorityClassClient(client))
 
         if config.dummy_stores:
             authenticator = DummyAuthenticator()

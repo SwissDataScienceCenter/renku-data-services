@@ -2,8 +2,9 @@
 
 from ulid import ULID
 
+from renku_data_services.k8s.clients.secret import K8sSecret
 from renku_data_services.k8s.constants import ClusterId
-from renku_data_services.k8s.models import GVK, K8sObject, K8sSecret
+from renku_data_services.k8s.models import GVK, K8sObject
 
 
 def test_k8s_object_not_render_manifest():

@@ -12,8 +12,9 @@ from sanic_testing.testing import SanicASGITestClient
 from ulid import ULID
 
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
+from renku_data_services.k8s.clients.secret import K8sSecret
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
-from renku_data_services.k8s.models import GVK, K8sObjectMeta, K8sSecret
+from renku_data_services.k8s.models import GVK, K8sObjectMeta
 from renku_data_services.secrets.models import Secret, SecretKind
 from renku_data_services.secrets_storage_api.dependencies import DependencyManager
 from renku_data_services.secrets_storage_api.dependencies import DependencyManager as SecretsDependencyManager

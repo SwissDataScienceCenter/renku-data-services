@@ -20,15 +20,12 @@ from kubernetes.client import (
 
 from renku_data_services.crc import models
 from renku_data_services.crc.db import QuotaRepository
-from renku_data_services.k8s.clients import (
-    K8sClusterClient,
-    K8sClusterClientsPool,
-    K8sResourceQuotaClient,
-    K8sSchedulingClient,
-)
+from renku_data_services.k8s.clients.core import K8sClusterClientsPool
+from renku_data_services.k8s.clients.priority_class import K8sPriorityClassClient
+from renku_data_services.k8s.clients.resource_quota import K8sResourceQuotaClient
 from renku_data_services.k8s.config import from_kubeconfig_file
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
-from renku_data_services.k8s.models import ClusterConnection, sanitizer
+from renku_data_services.k8s.core import ClusterConnection, K8sClusterClient, sanitizer
 from renku_data_services.notebooks.api.classes.auth import RenkuTokens
 from renku_data_services.notebooks.api.classes.k8s_client import NotebookK8sClient
 from renku_data_services.notebooks.util.kubernetes_ import find_env_var
@@ -45,9 +42,9 @@ async def get_default_cluster(cluster) -> AsyncIterable[K8sClusterClient]:
 
 @pytest_asyncio.fixture(scope="session")
 async def quota_repo(cluster):
-    clnt = K8sClusterClientsPool(lambda: get_default_cluster(cluster))
-    rc_client = K8sResourceQuotaClient(clnt)
-    pc_client = K8sSchedulingClient(clnt)
+    k8s_client = K8sClusterClientsPool(lambda: get_default_cluster(cluster))
+    rc_client = K8sResourceQuotaClient(k8s_client)
+    pc_client = K8sPriorityClassClient(k8s_client)
     yield QuotaRepository(rc_client, pc_client)
 
 

@@ -9,7 +9,7 @@ from typing import Any, Final, Optional, Protocol, Self
 from kubernetes import client
 from marshmallow import EXCLUDE, Schema, ValidationError, fields, validates_schema
 
-from renku_data_services.k8s.models import sanitizer
+from renku_data_services.k8s.core import sanitizer
 from renku_data_services.notebooks.api.classes.cloud_storage import ICloudStorageRequest
 from renku_data_services.storage.models import CloudStorage
 from renku_data_services.storage.rclone import RCloneValidator
