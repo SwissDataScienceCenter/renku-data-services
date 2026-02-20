@@ -1,3 +1,5 @@
+"""Blueprint for resource usage."""
+
 from dataclasses import dataclass
 
 from sanic import HTTPResponse, Request, empty
