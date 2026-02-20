@@ -9,6 +9,32 @@ info:
 servers:
   - url: /api/data
 paths:
+  /resource_usage/pool/{resource_pool_id}:
+    get:
+      summary: "Get usage and limits of the supplied pool."
+      parameters:
+        - in: path
+          name: resource_pool_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: "Return the pool limits and current usage."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ResourcePoolUsage"
+        "404":
+          description: "The resource pool doesn't exist."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"        
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - resource-usage
   /resource_usage/pool_limits/{resource_pool_id}:
     get:
       summary: "Get resource pool limits"
@@ -18,7 +44,6 @@ paths:
           required: true
           schema:
             type: integer
-      requestBody:
       responses:
         "200":
           description: "Return the resource pool limits."
@@ -71,7 +96,6 @@ paths:
           required: true
           schema:
             type: integer
-      requestBody:
       responses:
         "204":
           description: "No content on success."
@@ -100,7 +124,6 @@ paths:
           required: true
           schema:
             type: integer
-      requestBody:
       responses:
         "200":
           description: "Return the resource class costs."
@@ -163,7 +186,6 @@ paths:
           required: true
           schema:
             type: integer
-      requestBody:
       responses:
         "204":
           description: "No content on success."

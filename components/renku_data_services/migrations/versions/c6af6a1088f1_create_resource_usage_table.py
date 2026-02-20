@@ -13,7 +13,7 @@ from renku_data_services.utils.sqlalchemy import ComputeCapacityType, CreditType
 
 # revision identifiers, used by Alembic.
 revision = "c6af6a1088f1"
-down_revision = "287879848fb3"
+down_revision = "58ad5426c2f3"
 branch_labels = None
 depends_on = None
 
