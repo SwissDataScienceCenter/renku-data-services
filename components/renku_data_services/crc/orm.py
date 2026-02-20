@@ -361,10 +361,12 @@ class ResourcePoolORM(BaseORM):
             platform=self.platform,
         )
 
-    def _dump_remote(self) -> models.RemoteConfigurationFirecrest | None:
+    def _dump_remote(self) -> models.RemoteConfigurationFirecrest | models.RemoteConfigurationRunai | None:
         """Create a remote_configuration model from the corresponding column of the ORM object."""
         if self.remote_json is None:
             return None
+        if self.remote_json.get("kind") == models.RemoteConfigurationKind.runai.value:
+            return models.RemoteConfigurationRunai.from_dict(self.remote_json)
         return models.RemoteConfigurationFirecrest.from_dict(
             {**self.remote_json, "provider_id": self.remote_provider_id}
         )

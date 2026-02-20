@@ -29,6 +29,8 @@ from renku_data_services.crc.models import (
     ClusterSettings,
     GpuKind,
     RemoteConfigurationFirecrest,
+    RemoteConfigurationKind,
+    RemoteConfigurationRunai,
     ResourceClass,
     ResourcePool,
     SessionProtocol,
@@ -800,16 +802,22 @@ def get_remote_secret(
 
 
 def get_remote_env(
-    remote: RemoteConfigurationFirecrest,
+    remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai,
 ) -> list[SessionEnvItem]:
     """Returns env variables used for remote sessions."""
     env = [
         SessionEnvItem(name="RSC_REMOTE_KIND", value=remote.kind.value),
-        SessionEnvItem(name="RSC_FIRECREST_API_URL", value=remote.api_url),
-        SessionEnvItem(name="RSC_FIRECREST_SYSTEM_NAME", value=remote.system_name),
     ]
-    if remote.partition:
-        env.append(SessionEnvItem(name="RSC_FIRECREST_PARTITION", value=remote.partition))
+    if isinstance(remote, RemoteConfigurationRunai):
+        env.append(
+            SessionEnvItem(name="RSC_RUNAI_BASE_URL", value=remote.base_url),
+        )
+    else:
+        env.append(SessionEnvItem(name="RSC_REMOTE_KIND", value=remote.kind.value))
+        env.append(SessionEnvItem(name="RSC_FIRECREST_API_URL", value=remote.api_url))
+        env.append(SessionEnvItem(name="RSC_FIRECREST_SYSTEM_NAME", value=remote.system_name))
+        if remote.partition:
+            env.append(SessionEnvItem(name="RSC_FIRECREST_PARTITION", value=remote.partition))
     return env
 
 
@@ -994,19 +1002,22 @@ async def start_session(
     remote_secret = None
     if session_location == SessionLocation.remote:
         assert resource_pool.remote is not None
-        if resource_pool.remote.provider_id is None:
-            raise errors.ProgrammingError(
-                message=f"The resource pool {resource_pool.id} configuration is not valid (missing field 'remote_provider_id')."  # noqa E501
+        if resource_pool.remote.kind == RemoteConfigurationKind.firecrest:
+            assert isinstance(resource_pool.remote, RemoteConfigurationFirecrest)
+            if resource_pool.remote.provider_id is None:
+                raise errors.ProgrammingError(
+                    message=f"The resource pool {resource_pool.id} configuration is not valid (missing field 'remote_provider_id')."  # noqa E501
+                )
+            # This way of authenticating with the remote session controller is only compatible with Firecrest for now
+            remote_secret = get_remote_secret(
+                user=user,
+                config=nb_config,
+                server_name=server_name,
+                remote_provider_id=resource_pool.remote.provider_id,
+                git_providers=git_providers,
             )
-        remote_secret = get_remote_secret(
-            user=user,
-            config=nb_config,
-            server_name=server_name,
-            remote_provider_id=resource_pool.remote.provider_id,
-            git_providers=git_providers,
-        )
-    if remote_secret is not None:
-        session_extras = session_extras.concat(SessionExtraResources(secrets=[remote_secret]))
+        if remote_secret is not None:
+            session_extras = session_extras.concat(SessionExtraResources(secrets=[remote_secret]))
 
     # Raise an error if there are invalid environment variables in the request body
     verify_launcher_env_variable_overrides(launcher, launch_request)
