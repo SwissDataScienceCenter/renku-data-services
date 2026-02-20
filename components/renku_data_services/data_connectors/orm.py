@@ -193,12 +193,18 @@ class DataConnectorToProjectLinkORM(BaseORM):
         nullable=False,
     )
 
+    project: Mapped["ProjectORM"] = relationship(init=False, repr=False, viewonly=True, lazy="joined")
+    """The project this link points to."""
+
     def dump(self) -> models.DataConnectorToProjectLink:
         """Create a link model from the DataConnectorProjectLinkORM."""
+        project_path = f"{self.project.slug.namespace.slug}/{self.project.slug.slug}"
+
         return models.DataConnectorToProjectLink(
             id=self.id,
             data_connector_id=self.data_connector_id,
             project_id=self.project_id,
+            project_path=project_path,
             created_by=self.created_by_id,
             creation_date=self.creation_date,
             updated_at=self.updated_at,
