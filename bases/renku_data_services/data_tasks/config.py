@@ -42,6 +42,7 @@ class Config:
     posthog: PosthogConfig
     authz: AuthzConfig
     keycloak: KeycloakConfig | None
+    k8s_config_root: str
     dummy_stores: bool
     max_retry_wait_seconds: int
     main_log_interval_seconds: int
@@ -62,7 +63,7 @@ class Config:
         posthog_config = PosthogConfig.from_env()
         tcp_host = os.environ.get("TCP_HOST", "127.0.0.1")
         tcp_port = int(os.environ.get("TCP_PORT", "8001"))
-
+        k8s_config_root = os.environ.get("K8S_CONFIGS_ROOT", "/secrets/kube_configs")
         short_task_period = int(os.environ.get("SHORT_TASK_PERIOD_S", 2 * 60))
         long_task_period = int(os.environ.get("LONG_TASK_PERIOD_S", 3 * 60 * 60))
 
@@ -77,6 +78,7 @@ class Config:
             posthog=posthog_config,
             authz=authz,
             keycloak=keycloak,
+            k8s_config_root=k8s_config_root,
             tcp_host=tcp_host,
             tcp_port=tcp_port,
             short_task_period_s=short_task_period,

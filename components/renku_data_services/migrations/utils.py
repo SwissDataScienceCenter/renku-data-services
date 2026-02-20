@@ -30,7 +30,7 @@ def include_object(
     compare_to: SchemaItem | None,
 ) -> bool:
     """Prevents from alembic migrating the alembic_version tables."""
-    return type_ != "table" or name != "alembic_version"
+    return type_ != "table" or (name != "alembic_version" and name != "resource_requests_view")
 
 
 def combine_version_tables(conn: Connection, metadata_schema: str | None) -> None:
