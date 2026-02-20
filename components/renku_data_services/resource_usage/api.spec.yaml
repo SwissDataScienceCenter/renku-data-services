@@ -30,7 +30,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/ErrorResponse"        
+                $ref: "#/components/schemas/ErrorResponse"
         default:
           $ref: "#/components/responses/Error"
       tags:
