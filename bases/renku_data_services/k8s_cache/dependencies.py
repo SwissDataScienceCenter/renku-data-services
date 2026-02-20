@@ -63,9 +63,7 @@ class DependencyManager:
             # NOTE: We only need the QuotaRepository to instantiate the ResourcePoolRepository which is used to get
             # the resource class and pool information for metrics. We don't need quota information for metrics at all
             # so we use the dummy client for quotas here as we don't actually access k8s, just the db.
-            self._quota_repo = QuotaRepository(
-                DummyCoreClient(), DummySchedulingClient(), namespace=self.config.k8s.renku_namespace
-            )
+            self._quota_repo = QuotaRepository(DummyCoreClient(), DummySchedulingClient())
         return self._quota_repo
 
     @classmethod

@@ -4,6 +4,7 @@ from typing import Any, cast
 
 from kubernetes import client
 
+from renku_data_services.k8s.models import sanitizer
 from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.notebooks.crs import ExtraVolumeMount
 
@@ -58,4 +59,4 @@ def get_certificates_volume_mounts(
     """The list of volume mounts for custom certificates."""
     vol_mounts = get_certificates_volume_mounts_unserialized(config, etc_certs, custom_certs, read_only_etc_certs)
     vol_mounts_ser = __convert_extra_volume_mounts(vol_mounts)
-    return cast(list[dict[str, Any]], client.ApiClient().sanitize_for_serialization(vol_mounts_ser))
+    return cast(list[dict[str, Any]], sanitizer(vol_mounts_ser))

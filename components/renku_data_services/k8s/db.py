@@ -115,7 +115,6 @@ class QuotaRepository:
 
     rq_client: ResourceQuotaClient
     pc_client: PriorityClassClient
-    namespace: str = "default"
     _label_name: str = field(init=False, default="app")
     _label_value: str = field(init=False, default="renku")
 
@@ -166,9 +165,7 @@ class QuotaRepository:
         if not name:
             return None
         try:
-            res_quota = await self.rq_client.read_resource_quota(
-                name=name, namespace=self.namespace, cluster_id=cluster_id
-            )
+            res_quota = await self.rq_client.read_resource_quota(name=name, cluster_id=cluster_id)
         except errors.MissingResourceError:
             return None
         return self._quota_from_manifest(res_quota)
@@ -182,7 +179,6 @@ class QuotaRepository:
             yield quota
             return
         quotas = self.rq_client.list_resource_quota(
-            namespace=self.namespace,
             label_selector={self._label_name: self._label_value},
             cluster_id=cluster_id,
         )
@@ -191,7 +187,7 @@ class QuotaRepository:
 
     async def create_quota(self, new_quota: models.UnsavedQuota, cluster_id: ClusterId) -> models.Quota:
         """Create a resource quota and priority class."""
-        quota_id = str(uuid4())
+        quota_id = str(uuid4()) if new_quota.id is None else new_quota.id
         quota = models.Quota(
             cpu=new_quota.cpu, memory=new_quota.memory, gpu=new_quota.gpu, gpu_kind=new_quota.gpu_kind, id=quota_id
         )
@@ -224,7 +220,7 @@ class QuotaRepository:
                 uid=pc.metadata.uid,
             )
         ]
-        res = await self.rq_client.create_resource_quota(self.namespace, quota_manifest, cluster_id)
+        res = await self.rq_client.create_resource_quota(quota_manifest, cluster_id)
         return self._quota_from_manifest(res)
 
     async def delete_quota(self, name: str, cluster_id: ClusterId) -> None:
@@ -232,12 +228,12 @@ class QuotaRepository:
         await self.pc_client.delete_priority_class(
             name=name, cluster_id=cluster_id, propagation_policy=DeletePropagationPolicy.foreground
         )
-        await self.rq_client.delete_resource_quota(name=name, namespace=self.namespace, cluster_id=cluster_id)
+        await self.rq_client.delete_resource_quota(name=name, cluster_id=cluster_id)
 
     async def update_quota(self, quota: models.Quota, cluster_id: ClusterId) -> models.Quota:
         """Update a specific resource quota."""
         quota_manifest = self._quota_to_manifest(quota)
         patched_quota = await self.rq_client.patch_resource_quota(
-            name=quota.id, namespace=self.namespace, body=quota_manifest, cluster_id=cluster_id
+            name=quota.id, body=quota_manifest, cluster_id=cluster_id
         )
         return self._quota_from_manifest(patched_quota)
