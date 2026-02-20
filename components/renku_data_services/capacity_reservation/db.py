@@ -1,4 +1,4 @@
-"""Adapters for capacity reservation database classes."""
+"""Repositories for capacity reservation database classes."""
 
 import logging
 from collections.abc import Callable
@@ -105,7 +105,7 @@ class CapacityReservationRepository:
         return None
 
 
-class OccurrenceAdapter:
+class OccurrenceRepository:
     """Repository for Occurrences."""
 
     def __init__(self, session_maker: Callable[..., AsyncSession]):

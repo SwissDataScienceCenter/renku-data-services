@@ -8,7 +8,7 @@ from ulid import ULID
 
 from renku_data_services.app_config import logging
 from renku_data_services.capacity_reservation.core import calculate_target_replicas
-from renku_data_services.capacity_reservation.db import CapacityReservationRepository, OccurrenceAdapter
+from renku_data_services.capacity_reservation.db import CapacityReservationRepository, OccurrenceRepository
 from renku_data_services.capacity_reservation.k8s_client import CapacityReservationK8sClient
 from renku_data_services.capacity_reservation.models import (
     CapacityReservation,
@@ -24,7 +24,7 @@ from renku_data_services.k8s.models import K8sObject
 class CapacityReservationTasks:
     """Task definitions for capacity reservations."""
 
-    occurrence_adapter: OccurrenceAdapter
+    occurrence_repo: OccurrenceRepository
     capacity_reservation_repo: CapacityReservationRepository
     k8s_client: CapacityReservationK8sClient
 
@@ -32,7 +32,7 @@ class CapacityReservationTasks:
         """Activate pending capacity reservation occurrences."""
         logger = logging.getLogger(self.__class__.__name__)
 
-        due_pending_occurrences = await self.occurrence_adapter.get_occurrences_due_for_activation()
+        due_pending_occurrences = await self.occurrence_repo.get_occurrences_due_for_activation()
 
         if not due_pending_occurrences:
             logger.debug("No pending capacity reservation occurrences are due for activation.")
@@ -53,7 +53,7 @@ class CapacityReservationTasks:
             reservation = reservations[0]
 
             deployment_name = await self.k8s_client.create_placeholder_deployment(occurrence, reservation)
-            await self.occurrence_adapter.update_occurrence(
+            await self.occurrence_repo.update_occurrence(
                 occurrence.id,
                 OccurrencePatch(status=OccurrenceState.ACTIVE, deployment_name=deployment_name),
             )
@@ -62,7 +62,7 @@ class CapacityReservationTasks:
         """Monitor active capacity reservation occurrences, scaling up/down or deactivating as needed."""
         logger = logging.getLogger(self.__class__.__name__)
 
-        active_occurrences = await self.occurrence_adapter.get_occurrences_by_properties(status=OccurrenceState.ACTIVE)
+        active_occurrences = await self.occurrence_repo.get_occurrences_by_properties(status=OccurrenceState.ACTIVE)
 
         if not active_occurrences:
             logger.debug("No active capacity reservation occurrences to monitor.")
@@ -88,7 +88,7 @@ class CapacityReservationTasks:
                     logger.error(
                         f"Could not find reservation for expired occurrence {expired_occurrence.id}, skipping delete."
                     )
-            await self.occurrence_adapter.update_occurrence(
+            await self.occurrence_repo.update_occurrence(
                 expired_occurrence.id, OccurrencePatch(status=OccurrenceState.COMPLETED)
             )
 
@@ -127,7 +127,7 @@ class CapacityReservationTasks:
         project_template_map: dict[ULID, ULID | None] = {}
         if any(r.project_template_id for _, r in scalable_pairs):
             project_ids = [ULID.from_str(s["project_id"]) for s in session_data if s.get("project_id") is not None]
-            project_template_map = await self.occurrence_adapter.get_project_template_ids(project_ids)
+            project_template_map = await self.occurrence_repo.get_project_template_ids(project_ids)
 
         session_counts = _assign_sessions_to_occurrences(session_data, scalable_pairs, project_template_map)
 
@@ -156,7 +156,7 @@ class CapacityReservationTasks:
         if not occurrence_ids:
             return None
 
-        existing_ids = await self.occurrence_adapter.get_existing_occurrence_ids(occurrence_ids)
+        existing_ids = await self.occurrence_repo.get_existing_occurrence_ids(occurrence_ids)
         orphaned_ids = set(occurrence_ids) - existing_ids
 
         for d in deployments:

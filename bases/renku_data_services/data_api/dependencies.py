@@ -25,7 +25,7 @@ from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.authn.gitlab import EmptyGitlabAuthenticator, GitlabAuthenticator
 from renku_data_services.authn.keycloak import KcUserStore, KeycloakAuthenticator
 from renku_data_services.authz.authz import Authz
-from renku_data_services.capacity_reservation.db import CapacityReservationRepository, OccurrenceAdapter
+from renku_data_services.capacity_reservation.db import CapacityReservationRepository, OccurrenceRepository
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.connected_services.oauth_http import DefaultOAuthHttpClientFactory, OAuthHttpClientFactory
 from renku_data_services.crc import models as crc_models
@@ -155,7 +155,7 @@ class DependencyManager:
     notifications_repo: NotificationsRepository
     oauth_http_client_factory: OAuthHttpClientFactory
     capacity_reservation_repo: CapacityReservationRepository
-    occurrence_adapter: OccurrenceAdapter
+    occurrence_repo: OccurrenceRepository
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
@@ -409,7 +409,7 @@ class DependencyManager:
             session_maker=config.db.async_session_maker,
             cluster_repo=cluster_repo,
         )
-        occurrence_adapter = OccurrenceAdapter(
+        occurrence_repo = OccurrenceRepository(
             session_maker=config.db.async_session_maker,
         )
         return cls(
@@ -452,5 +452,5 @@ class DependencyManager:
             notifications_repo=notifications_repo,
             oauth_http_client_factory=oauth_http_client_factory,
             capacity_reservation_repo=capacity_reservation_repo,
-            occurrence_adapter=occurrence_adapter,
+            occurrence_repo=occurrence_repo,
         )

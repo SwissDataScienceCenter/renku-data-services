@@ -19,7 +19,7 @@ from renku_data_services.capacity_reservation.core import (
     generate_occurrences,
     validate_capacity_reservation,
 )
-from renku_data_services.capacity_reservation.db import CapacityReservationRepository, OccurrenceAdapter
+from renku_data_services.capacity_reservation.db import CapacityReservationRepository, OccurrenceRepository
 
 
 @dataclass(kw_only=True)
@@ -27,7 +27,7 @@ class CapacityReservationBP(CustomBlueprint):
     """Handlers for capacity reservations."""
 
     capacity_reservation_repo: CapacityReservationRepository
-    occurrence_adapter: OccurrenceAdapter
+    occurrence_repo: OccurrenceRepository
     authenticator: base_models.Authenticator
 
     def post(self) -> BlueprintFactoryResponse:
@@ -45,7 +45,7 @@ class CapacityReservationBP(CustomBlueprint):
                 reservation=capacity_reservation,
             )
             if unsaved_occurrences:
-                await self.occurrence_adapter.create_occurrences(occurrences=unsaved_occurrences)
+                await self.occurrence_repo.create_occurrences(occurrences=unsaved_occurrences)
             return validated_json(apispec.CapacityReservation, capacity_reservation, 201)
 
         return "/capacity-reservations", ["POST"], _post
@@ -66,10 +66,10 @@ class CapacityReservationBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_admins
-        async def _delete(_: Request, user: base_models.APIUser, reservation_id: ULID) -> HTTPResponse:
+        async def _delete(_: Request, user: base_models.APIUser, capacity_reservation_id: ULID) -> HTTPResponse:
             await self.capacity_reservation_repo.delete_capacity_reservation(
-                user=user, capacity_reservation_id=reservation_id
+                user=user, capacity_reservation_id=capacity_reservation_id
             )
             return HTTPResponse(status=204)
 
-        return "/capacity-reservations/<reservation_id:ulid>", ["DELETE"], _delete
+        return "/capacity-reservations/<capacity_reservation_id:ulid>", ["DELETE"], _delete

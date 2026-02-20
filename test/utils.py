@@ -19,7 +19,7 @@ from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.authz.authz import Authz
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.base_models.metrics import MetricsService
-from renku_data_services.capacity_reservation.db import CapacityReservationRepository, OccurrenceAdapter
+from renku_data_services.capacity_reservation.db import CapacityReservationRepository, OccurrenceRepository
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.connected_services.oauth_http import DefaultOAuthHttpClientFactory
 from renku_data_services.crc import models as rp_models
@@ -339,7 +339,7 @@ class TestDependencyManager(DependencyManager):
         capacity_reservation_repo = CapacityReservationRepository(
             session_maker=config.db.async_session_maker, cluster_repo=cluster_repo
         )
-        occurrence_adapter = OccurrenceAdapter(session_maker=config.db.async_session_maker)
+        occurrence_repo = OccurrenceRepository(session_maker=config.db.async_session_maker)
         return cls(
             config=config,
             authenticator=authenticator,
@@ -380,7 +380,7 @@ class TestDependencyManager(DependencyManager):
             notifications_repo=notifications_repo,
             oauth_http_client_factory=oauth_client_factory,
             capacity_reservation_repo=capacity_reservation_repo,
-            occurrence_adapter=occurrence_adapter,
+            occurrence_repo=occurrence_repo,
         )
 
     def __post_init__(self) -> None:
