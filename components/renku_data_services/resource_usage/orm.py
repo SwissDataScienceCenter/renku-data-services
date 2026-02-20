@@ -20,9 +20,6 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_co
 from ulid import ULID
 
 from renku_data_services.crc.orm import ResourceClassORM, ResourcePoolORM
-
-# from renku_data_services.crc.orm import metadata_obj
-# from renku_data_services.crc.orm import BaseORM
 from renku_data_services.resource_usage.model import (
     ComputeCapacity,
     Credit,

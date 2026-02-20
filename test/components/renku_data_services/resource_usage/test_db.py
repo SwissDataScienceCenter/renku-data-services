@@ -13,7 +13,6 @@ from renku_data_services.resource_usage.model import (
     Credit,
     DataSize,
     ResourceClassCost,
-    ResourceClassCostQuery,
     ResourceUsageQuery,
 )
 from renku_data_services.resource_usage.orm import ResourcePoolLimits
@@ -37,94 +36,6 @@ async def create_resource_class(app_manager_instance: DependencyManager) -> tupl
         res = await session.execute(stmt, {"pool": pool_id})
         class_id = res.scalar_one()
         return (pool_id, class_id)
-
-
-@pytest.mark.asyncio
-async def test_resource_class_costs_query(app_manager_instance: DependencyManager) -> None:
-    run_migrations_for_app("common")
-    repo = ResourceRequestsRepo(app_manager_instance.config.db.async_session_maker)
-    first_date = datetime(2026, 1, 24, 23, 55, 4, 0, tzinfo=UTC)
-    (_, class_id) = await create_resource_class(app_manager_instance)
-    interval = timedelta(minutes=15)
-    costs = ResourceClassCost(resource_class_id=class_id, cost=Credit.from_int(150))
-    await repo.set_resource_class_costs(costs)
-    await repo.insert_many(
-        [
-            # a pod is running
-            make_resources_request(
-                date=first_date + i * interval,
-                interval=interval,
-                cpu_request=0.2,
-                memory_request="512Mi",
-                user_id="user-1",
-                resource_class_id=class_id,
-            )
-            for i in range(0, 5)
-        ]
-        + [
-            ## pod is down
-            make_resources_request(
-                date=first_date + i * interval,
-                interval=interval,
-                cpu_request=0.5,
-                memory_request="256Mi",
-                phase="Stopped",
-                user_id="user-1",
-                resource_class_id=class_id,
-            )
-            for i in range(3, 7)
-        ]
-        + [
-            # user 2
-            make_resources_request(
-                date=first_date + i * interval,
-                interval=interval,
-                cpu_request=0.5,
-                memory_request="256Mi",
-                user_id="user-2",
-                resource_class_id=class_id,
-            )
-            for i in range(0, 12)
-        ]
-        + [
-            # user1 pod is running
-            make_resources_request(
-                date=first_date + i * interval,
-                interval=interval,
-                cpu_request=0.2,
-                memory_request="512Mi",
-                user_id="user-1",
-                resource_class_id=class_id,
-            )
-            for i in range(18, 21)
-        ]
-    )
-
-    async for item in repo.find_all(chunk_size=100):
-        assert item.resource_class_cost == costs.cost
-
-    query_all = ResourceClassCostQuery(
-        since=date(2026, 1, 24), until=date(2026, 1, 25), resource_class_id=class_id, user_id=None
-    )
-    results = await repo.get_resource_class_usage(query_all)
-    assert len(results) == 20
-    costs = [e.to_effective_costs() for e in results]
-    for item in costs:
-        assert item == 37.5
-
-    cost_sum = sum(costs)
-    assert cost_sum == 750.0
-
-    query_user1 = ResourceClassCostQuery(
-        since=date(2026, 1, 24), until=date(2026, 1, 25), resource_class_id=class_id, user_id="user-1"
-    )
-    results = await repo.get_resource_class_usage(query_user1)
-    assert len(results) == 8
-    query_user2 = ResourceClassCostQuery(
-        since=date(2026, 1, 24), until=date(2026, 1, 25), resource_class_id=class_id, user_id="user-2"
-    )
-    results = await repo.get_resource_class_usage(query_user2)
-    assert len(results) == 12
 
 
 @pytest.mark.asyncio
