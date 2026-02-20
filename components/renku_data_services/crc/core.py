@@ -69,10 +69,14 @@ def validate_resource_class(body: apispec.ResourceClass) -> models.UnsavedResour
 def validate_resource_class_patch_or_put(
     body: apispec.ResourceClassPatch | apispec.ResourceClass, method: Literal["PATCH", "PUT"]
 ) -> models.ResourceClassPatch: ...
+
+
 @overload
 def validate_resource_class_patch_or_put(
     body: apispec.ResourceClassPatchWithId | apispec.ResourceClassWithId, method: Literal["PATCH", "PUT"]
 ) -> models.ResourceClassPatchWithId: ...
+
+
 def validate_resource_class_patch_or_put(
     body: apispec.ResourceClassPatch
     | apispec.ResourceClassPatchWithId
@@ -215,7 +219,11 @@ def validate_resource_pool_put_or_patch(
             remote = validate_remote_patch(body=r)
         case apispec.RemoteConfigurationFirecrestPatch() as r:
             remote = validate_remote_patch(body=r)
+        case apispec.RemoteConfigurationRunaiPatch() as r:
+            remote = validate_remote_patch(body=r)
         case apispec.RemoteConfigurationFirecrest() as r:
+            remote = validate_remote_put(r)
+        case apispec.RemoteConfigurationRunai() as r:
             remote = validate_remote_put(r)
 
     platform = __validate_runtime_platform(body=body.platform) if body.platform else None
@@ -329,7 +337,9 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
 
     default = update.default if update.default is not None else existing.default
     public = update.public if update.public is not None else existing.public
-    remote: models.RemoteConfigurationFirecrest | ResetType = existing.remote if existing.remote else RESET
+    remote: models.RemoteConfigurationFirecrest | models.RemoteConfigurationRunai | ResetType = (
+        existing.remote if existing.remote else RESET
+    )
     if update.remote is RESET:
         remote = RESET
     elif update.remote is not None and existing.remote is None:
@@ -337,23 +347,43 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
         kind = update.remote.kind
         if kind is None:
             raise errors.ValidationError(message="The 'remote.kind' field is required when creating a new remote.")
-        api_url = update.remote.api_url
-        if api_url is None:
-            raise errors.ValidationError(message="The 'remote.api_url' field is required when creating a new remote.")
-        system_name = update.remote.system_name
-        if system_name is None:
-            raise errors.ValidationError(
-                message="The 'remote.system_name' field is required when creating a new remote."
+        if kind != models.RemoteConfigurationKind.firecrest and kind != models.RemoteConfigurationKind.runai:
+            raise errors.ValidationError(message="The 'remote.kind' field must be either 'firecrest' or 'runai'.")
+        if kind == models.RemoteConfigurationKind.runai:
+            assert isinstance(update.remote, models.RemoteConfigurationRunaiPatch)
+            base_url = update.remote.base_url
+            if base_url is None:
+                raise errors.ValidationError(
+                    message="The 'remote.base_url' field is required when creating a new Run:AI remote."
+                )
+            validate_runai_base_url(base_url)
+            remote = models.RemoteConfigurationRunai(
+                kind=kind,
+                base_url=base_url,
+                provider_id=update.remote.provider_id,
             )
-        remote = models.RemoteConfigurationFirecrest(
-            kind=kind,
-            provider_id=update.remote.provider_id,
-            api_url=api_url,
-            system_name=system_name,
-            partition=update.remote.partition,
-        )
+        elif kind == models.RemoteConfigurationKind.firecrest:
+            assert isinstance(update.remote, models.RemoteConfigurationFirecrestPatch)
+            api_url = update.remote.api_url
+            if api_url is None:
+                raise errors.ValidationError(
+                    message="The 'remote.api_url' field is required when creating a new remote."
+                )
+            system_name = update.remote.system_name
+            if system_name is None:
+                raise errors.ValidationError(
+                    message="The 'remote.system_name' field is required when creating a new remote."
+                )
+            remote = models.RemoteConfigurationFirecrest(
+                kind=kind,
+                provider_id=update.remote.provider_id,
+                api_url=api_url,
+                system_name=system_name,
+                partition=update.remote.partition,
+            )
     elif isinstance(update.remote, models.RemoteConfigurationFirecrestPatch):
         assert existing.remote is not None
+        assert isinstance(existing.remote, models.RemoteConfigurationFirecrest)
         remote = models.RemoteConfigurationFirecrest(
             kind=update.remote.kind if update.remote.kind is not None else existing.remote.kind,
             provider_id=update.remote.provider_id
@@ -364,6 +394,16 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
             if update.remote.system_name is not None
             else existing.remote.system_name,
             partition=update.remote.partition if update.remote.partition is not None else existing.remote.partition,
+        )
+    elif isinstance(update.remote, models.RemoteConfigurationRunaiPatch):
+        assert existing.remote is not None
+        assert isinstance(existing.remote, models.RemoteConfigurationRunai)
+        remote = models.RemoteConfigurationRunai(
+            kind=update.remote.kind if update.remote.kind is not None else existing.remote.kind,
+            base_url=update.remote.base_url if update.remote.base_url is not None else existing.remote.base_url,
+            provider_id=update.remote.provider_id
+            if update.remote.provider_id is not None
+            else existing.remote.provider_id,
         )
 
     if len(name) > 40:
@@ -461,11 +501,22 @@ def validate_cluster_patch(patch: apispec.ClusterPatch) -> models.ClusterPatch:
     )
 
 
-def validate_remote(body: apispec.RemoteConfigurationFirecrest) -> models.RemoteConfigurationFirecrest:
+def validate_remote(
+    body: apispec.RemoteConfigurationFirecrest | apispec.RemoteConfigurationRunai,
+) -> models.RemoteConfigurationFirecrest | models.RemoteConfigurationRunai:
     """Validate a remote configuration object."""
     kind = models.RemoteConfigurationKind(body.kind.value)
-    if kind != models.RemoteConfigurationKind.firecrest:
+    if kind != models.RemoteConfigurationKind.firecrest and kind != models.RemoteConfigurationKind.runai:
         raise errors.ValidationError(message=f"The kind '{kind}' of remote configuration is not supported.", quiet=True)
+    if kind == models.RemoteConfigurationKind.runai:
+        assert isinstance(body, apispec.RemoteConfigurationRunai)
+        validate_runai_base_url(body.base_url)
+        return models.RemoteConfigurationRunai(
+            kind=kind,
+            base_url=body.base_url,
+            provider_id=body.provider_id,
+        )
+    assert isinstance(body, apispec.RemoteConfigurationFirecrest)
     validate_firecrest_api_url(body.api_url)
     return models.RemoteConfigurationFirecrest(
         kind=kind,
@@ -477,12 +528,19 @@ def validate_remote(body: apispec.RemoteConfigurationFirecrest) -> models.Remote
 
 
 def validate_remote_put(
-    body: apispec.RemoteConfigurationFirecrest | None,
+    body: apispec.RemoteConfigurationFirecrest | apispec.RemoteConfigurationRunai | None,
 ) -> models.RemoteConfigurationPatch:
     """Validate the PUT update to a remote configuration object."""
     if body is None:
         return RESET
     remote = validate_remote(body=body)
+    if isinstance(remote, models.RemoteConfigurationRunai):
+        return models.RemoteConfigurationRunaiPatch(
+            kind=remote.kind,
+            base_url=remote.base_url,
+            provider_id=body.provider_id,
+        )
+    assert isinstance(remote, models.RemoteConfigurationFirecrest)
     return models.RemoteConfigurationFirecrestPatch(
         kind=remote.kind,
         provider_id=remote.provider_id,
@@ -493,14 +551,26 @@ def validate_remote_put(
 
 
 def validate_remote_patch(
-    body: apispec.RemoteConfigurationPatchReset | apispec.RemoteConfigurationFirecrestPatch,
+    body: apispec.RemoteConfigurationPatchReset
+    | apispec.RemoteConfigurationFirecrestPatch
+    | apispec.RemoteConfigurationRunaiPatch,
 ) -> models.RemoteConfigurationPatch:
     """Validate the patch to a remote configuration object."""
     if isinstance(body, apispec.RemoteConfigurationPatchReset):
         return RESET
     kind = models.RemoteConfigurationKind(body.kind.value) if body.kind else None
-    if kind and kind != models.RemoteConfigurationKind.firecrest:
+    if kind and kind != models.RemoteConfigurationKind.firecrest and kind != models.RemoteConfigurationKind.runai:
         raise errors.ValidationError(message=f"The kind '{kind}' of remote configuration is not supported.", quiet=True)
+    if kind == models.RemoteConfigurationKind.runai:
+        assert isinstance(body, apispec.RemoteConfigurationRunaiPatch)
+        if body.base_url:
+            validate_runai_base_url(body.base_url)
+        return models.RemoteConfigurationRunaiPatch(
+            kind=kind,
+            base_url=body.base_url,
+            provider_id=body.provider_id,
+        )
+    assert isinstance(body, apispec.RemoteConfigurationFirecrestPatch)
     if body.api_url:
         validate_firecrest_api_url(body.api_url)
     return models.RemoteConfigurationFirecrestPatch(
@@ -524,6 +594,22 @@ def validate_firecrest_api_url(url: str) -> None:
     if parsed.scheme not in accepted_schemes:
         raise errors.ValidationError(
             message=f"The scheme for the firecrest api url {url} is not valid, expected one of {accepted_schemes}",
+            quiet=True,
+        )
+
+
+def validate_runai_base_url(url: str) -> None:
+    """Validate the URL to the Run:AI API."""
+    parsed = urlparse(url)
+    if not parsed.netloc:
+        raise errors.ValidationError(
+            message=f"The host for the runai base url {url} is not valid, expected a non-empty value.",
+            quiet=True,
+        )
+    accepted_schemes = ["https"]
+    if parsed.scheme not in accepted_schemes:
+        raise errors.ValidationError(
+            message=f"The scheme for the runai base url {url} is not valid, expected one of {accepted_schemes}",
             quiet=True,
         )
 
