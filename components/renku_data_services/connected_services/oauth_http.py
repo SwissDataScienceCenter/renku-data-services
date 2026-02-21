@@ -8,8 +8,9 @@ from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from enum import StrEnum
 from typing import Any, Protocol
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse, parse_qs
 
+import httpx
 import sqlalchemy as sa
 import sqlalchemy.orm as sao
 from authlib.integrations.base_client import InvalidTokenError, OAuthError
@@ -24,7 +25,7 @@ import renku_data_services.connected_services.orm as schemas
 from renku_data_services.app_config import logging
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.connected_services import models
-from renku_data_services.connected_services.models import OAuth2Client, OAuth2Connection, OAuth2TokenSet
+from renku_data_services.connected_services.models import OAuth2Client, OAuth2Connection, OAuth2TokenSet, ProviderKind
 from renku_data_services.connected_services.orm import OAuth2ConnectionORM
 from renku_data_services.connected_services.provider_adapters import (
     GitHubAdapter,
@@ -535,9 +536,39 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck, _TokenC
                 adapter=adapter,
                 token=None,
             )
-            token = await oauth_client.fetch_token(
-                adapter.token_endpoint_url, authorization_response=raw_url, code_verifier=code_verifier
-            )
+            if client.kind == ProviderKind.zenodo:
+                parsed_url = urlparse(raw_url)
+                q = parse_qs(parsed_url.query)
+                code = next(iter(q.get("code") or []), None)
+                if not code:
+                    raise errors.InvalidTokenError(
+                        message="The callback from zenodo did not contain a code.",
+                        detail="Please retry, if this problem persist contact a Renku administrator.",
+                    )
+                state = next(iter(q.get("state") or []), None)
+                if not state:
+                    raise errors.InvalidTokenError(
+                        message="The callback from zenodo did not contain a state parameter.",
+                        detail="Please retry, if this problem persist contact a Renku administrator.",
+                    )
+                body = {
+                    "client_id": client.client_id,
+                    "client_secret": client_secret,
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": callback_url,
+                    "scope": client.scope,
+                    "state": state,
+                }
+                async with httpx.AsyncClient() as clnt:
+                    res = await clnt.post(adapter.token_endpoint_url, data=body)
+                token = res.json()
+            else:
+                token = await oauth_client.fetch_token(
+                    adapter.token_endpoint_url,
+                    authorization_response=raw_url,
+                    code_verifier=code_verifier,
+                )
 
             logger.info(f"Token for client {client.id} has keys: {', '.join(token.keys())}")
 

@@ -2,7 +2,7 @@
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urljoin, urlparse, urlunparse
 
 from httpx import Client, Response
@@ -257,7 +257,7 @@ class ZenodoAdapter(ProviderAdapter):
     @property
     def api_url(self) -> str:
         """The URL used for API calls on the Resource Server."""
-        return "https://zenodo.org/api"
+        return "https://zenodo.org/api/"
 
     @property
     def api_common_headers(self) -> dict[str, str] | None:
@@ -271,7 +271,11 @@ class ZenodoAdapter(ProviderAdapter):
         """Validates and returns the connected account response from the Resource Server."""
         if response.status_code != 200:
             raise errors.InvalidTokenError(message="Your zenodo credentials are expired or invalid, please reconnect.")
-        return models.ConnectedAccount(username="zenodo-user", web_url="https://zenodo.org")
+        deposits = response.json()
+        username: str = "Zenodo user"
+        if isinstance(deposits, list) and len(deposits) >= 1:
+            username = cast(str, next(iter(deposits), {}).get("owner", "Zenodo user"))
+        return models.ConnectedAccount(username=username, web_url="https://zenodo.org")
 
 
 class GenericOidcAdapter(ProviderAdapter):
