@@ -432,6 +432,7 @@ components:
         - "onedrive"
         - "dropbox"
         - "generic_oidc"
+        - "zenodo"
       example: "gitlab"
     ApplicationSlug:
       description: |

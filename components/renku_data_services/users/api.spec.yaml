@@ -615,10 +615,3 @@ components:
         "application/json":
           schema:
             $ref: "#/components/schemas/ErrorResponse"
-  securitySchemes:
-    oidc:
-      type: openIdConnect
-      openIdConnectUrl: /auth/realms/Renku/.well-known/openid-configuration
-security:
-  - oidc:
-      - openid

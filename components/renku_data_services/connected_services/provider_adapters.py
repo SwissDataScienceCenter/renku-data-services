@@ -2,7 +2,7 @@
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urljoin, urlparse, urlunparse
 
 from httpx import Client, Response
@@ -235,6 +235,49 @@ class DropboxAdapter(ProviderAdapter):
         return external_models.DropboxConnectedAccount.model_validate(response.json()).to_connected_account()
 
 
+class ZenodoAdapter(ProviderAdapter):
+    """Adapter for Zenodo OAuth2 clients."""
+
+    # NOTE: Zenodo does not provide a userinfo or any kind of similar endpoint
+    # So the closest thing is to hit the deposits endpoint which responds with 200
+    # if the user is properly authenticated.
+    user_info_endpoint = "deposit/depositions"
+    user_info_method = "GET"
+
+    @property
+    def authorization_url(self) -> str:
+        """The authorization URL for the OAuth2 protocol."""
+        return "https://zenodo.org/oauth/authorize"
+
+    @property
+    def token_endpoint_url(self) -> str:
+        """The token endpoint URL for the OAuth2 protocol."""
+        return "https://zenodo.org/oauth/token"
+
+    @property
+    def api_url(self) -> str:
+        """The URL used for API calls on the Resource Server."""
+        return "https://zenodo.org/api/"
+
+    @property
+    def api_common_headers(self) -> dict[str, str] | None:
+        """The HTTP headers used for API calls on the Resource Server."""
+        return {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+
+    def api_validate_account_response(self, response: Response) -> models.ConnectedAccount:
+        """Validates and returns the connected account response from the Resource Server."""
+        if response.status_code != 200:
+            raise errors.InvalidTokenError(message="Your zenodo credentials are expired or invalid, please reconnect.")
+        deposits = response.json()
+        username: str = "Zenodo user"
+        if isinstance(deposits, list) and len(deposits) >= 1:
+            username = cast(str, next(iter(deposits), {}).get("owner", "Zenodo user"))
+        return models.ConnectedAccount(username=username, web_url="https://zenodo.org")
+
+
 class GenericOidcAdapter(ProviderAdapter):
     """Adapter for generic OpenID Connect clients."""
 
@@ -320,6 +363,7 @@ _adapter_map: dict[models.ProviderKind, type[ProviderAdapter]] = {
     models.ProviderKind.onedrive: OneDriveAdapter,
     models.ProviderKind.dropbox: DropboxAdapter,
     models.ProviderKind.generic_oidc: GenericOidcAdapter,
+    models.ProviderKind.zenodo: ZenodoAdapter,
 }
 
 

@@ -202,7 +202,7 @@ class OAuth2ConnectionsBP(CustomBlueprint):
             account = await client.get_connected_account()
             match account:
                 case OAuthHttpError() as err:
-                    raise errors.InvalidTokenError(message=f"OAuth error getting the connected accoun: {err}")
+                    raise errors.InvalidTokenError(message=f"OAuth error getting the connected account: {err}")
                 case account:
                     return validated_json(apispec.ConnectedAccount, account)
 

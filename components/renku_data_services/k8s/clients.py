@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import contextlib
 import os
-from collections.abc import AsyncIterable, Callable
+from collections.abc import AsyncIterable, AsyncIterator, Callable
 from copy import deepcopy
-from typing import Any, overload
+from typing import Any, Final, TypeVar, overload
 
+import httpx
 import kr8s
 from box import Box
+from kr8s.asyncio.objects import Pod
 from kubernetes import client
 
+from renku_data_services.base_models import APIUser
 from renku_data_services.errors import errors
 from renku_data_services.k8s.client_interfaces import K8sClient, PriorityClassClient, ResourceQuotaClient, SecretClient
 from renku_data_services.k8s.constants import ClusterId
@@ -271,11 +274,17 @@ class K8sClusterClient(K8sClient):
 
         names = [_filter.name] if _filter.name is not None else []
 
+        label_selectors: dict[str, str] = {}
+        if _filter.label_selector:
+            label_selectors = {**_filter.label_selector}
+        if _filter.user_id:
+            label_selectors["renku.io/safe-username"] = _filter.user_id
+
         try:
             res = self.__cluster.api.async_get(
                 _filter.gvk.kr8s_kind,
                 *names,
-                label_selector=_filter.label_selector,
+                label_selector=label_selectors,
                 namespace=_filter.namespace,
             )
 
@@ -346,6 +355,38 @@ class K8sClusterClient(K8sClient):
         """List all k8s objects."""
         async for r in self.__list(_filter):
             yield r.to_k8s_object()
+
+    async def logs(self, meta: K8sObjectMeta, max_log_lines: int | None = None) -> dict[str, AsyncIterator[str]]:
+        """Return the logs of a specific pod, the key of the dictionary are container names."""
+        pod_obj = await self.__get_api_object(meta.to_filter())
+        if not pod_obj:
+            raise errors.MissingResourceError()
+        pod = Pod(resource=pod_obj.obj, namespace=meta.namespace, api=self.__cluster.api)
+
+        logs: dict[str, AsyncIterator[str]] = {}
+        containers: list[str] = [
+            container.name for container in pod.spec.containers + pod.spec.get("initContainers", [])
+        ]
+        for container in containers:
+            try:
+                # NOTE: calling pod.logs without a container name set crashes the library
+                clogs = pod.logs(container=container, tail_lines=max_log_lines)
+            except (httpx.ResponseNotRead, httpx.HTTPStatusError):
+                # NOTE: This occurs when the container is still starting, but we try to read its logs
+                logs[container] = empty_async_generator()
+            except kr8s.NotFoundError as err:
+                raise errors.MissingResourceError(message=f"The session pod {meta.name} does not exist.") from err
+            except kr8s.ServerError as err:
+                if err.response is not None and err.response.status_code == 400:
+                    # NOTE: This occurs when the target container is not yet running, but we try to read its logs
+                    logs[container] = empty_async_generator()
+                    continue
+                if err.response is not None and err.response.status_code == 404:
+                    raise errors.MissingResourceError(message=f"The session pod {meta.name} does not exist.") from err
+                raise
+            else:
+                logs[container] = clogs
+        return logs
 
 
 class K8sCachedClusterClient(K8sClusterClient):
@@ -424,6 +465,16 @@ class K8sCachedClusterClient(K8sClusterClient):
             yield res
 
 
+T = TypeVar("T")
+
+
+async def empty_async_generator() -> AsyncIterator[T]:
+    """A generic helper that yields nothing but satisfies type checkers."""
+    a = False
+    if a:
+        yield  # type: ignore[misc]
+
+
 class K8sClusterClientsPool(K8sClient):
     """A wrapper around a pool of kr8s k8s clients."""
 
@@ -480,10 +531,64 @@ class K8sClusterClientsPool(K8sClient):
         client = await self.__get_client_or_die(meta.cluster)
         return await client.get(meta)
 
-    async def list(self, _filter: K8sObjectFilter) -> AsyncIterable[K8sObject]:
+    async def list(self, _filter: K8sObjectFilter) -> AsyncIterator[K8sObject]:
         """List all k8s objects."""
         await self.__init_clients_if_needed()
         cluster_clients = sorted(list(self.__clients.values()))
         for c in cluster_clients:
             async for r in c.list(_filter):
                 yield r
+
+    async def logs(self, meta: K8sObjectMeta, max_log_lines: int | None = None) -> dict[str, AsyncIterator[str]]:
+        """Get the logs of a specific container in a specific pod."""
+        client = await self.__get_client_or_die(meta.cluster)
+        return await client.logs(meta, max_log_lines)
+
+
+class DepositUploadJobClient:
+    """Used to handle K8s jobs for uploading data into deposits - like for example Zenodo."""
+
+    def __init__(self, k8s_client: K8sClient) -> None:
+        self.__client = k8s_client
+        self.__gvk = GVK(kind="Job", version="v1", group="batch")
+        self.__converter = client.ApiClient()
+        self.__container_name: Final[str] = "upload"
+
+    def _deserialize(self, data: Box) -> client.V1Job:
+        # NOTE: There is unfortunately no other way around this, this is the only thing that will
+        # properly handle snake case - camel case conversions and a bunch of other things.
+        output = self.__converter._ApiClient__deserialize(data.to_dict(), client.V1Job)
+        if not isinstance(output, client.V1Job):
+            raise errors.ProgrammingError(message="Could not convert the output from kr8s to a Job")
+        return output
+
+    def _serialize(self, manifest: client.V1Job) -> Box:
+        output = Box(self.__converter.sanitize_for_serialization(manifest))
+        return output
+
+    async def list(self, user: APIUser) -> AsyncIterable[client.V1Job]:
+        """Get the list of upload jobs for the user."""
+        async for obj in self.__client.list(K8sObjectFilter(gvk=self.__gvk, user_id=user.id)):
+            yield self._deserialize(obj.manifest)
+
+    async def get(self, meta: K8sObjectMeta) -> client.V1Job | None:
+        """Get a specific job."""
+        job = await self.__client.get(meta)
+        if not job:
+            return None
+        return self._deserialize(job.manifest)
+
+    async def delete(self, meta: K8sObjectMeta) -> None:
+        """Delete a specific job."""
+        await self.__client.delete(meta)
+
+    async def create(self, manifest: K8sObject) -> client.V1Job:
+        """Create a job."""
+        res = await self.__client.create(manifest, True)
+        return self._deserialize(res.manifest)
+
+    async def logs(self, meta: K8sObjectMeta) -> AsyncIterator[str]:
+        """Get the logs for the upload job."""
+        all_logs = await self.__client.logs(meta)
+        clogs = all_logs.get(self.__container_name)
+        return clogs or empty_async_generator()
