@@ -18,3 +18,5 @@ secretsStorage:
   image:
     repository: renku/secrets-storage
     tag:
+logging:
+  logFormatStyle: plain

@@ -69,6 +69,11 @@ def create_app() -> Sanic:
     dependency_manager = DependencyManager.from_env()
     app = Sanic(dependency_manager.app_name, configure_logging=False)
 
+    # NOTE: Put this function in the beginning to make sure logging is configured before anything else.
+    @app.before_server_start
+    async def logging_setup(_: Sanic) -> None:
+        logging.configure_logging(dependency_manager.config.log_cfg)
+
     if "COVERAGE_RUN" in environ:
         app.config.TOUCHUP = False
         # NOTE: in single process mode where we usually run schemathesis to get coverage the db migrations
@@ -81,6 +86,7 @@ def create_app() -> Sanic:
         )
         asyncio.run(dependency_manager.kc_user_repo.initialize(dependency_manager.kc_api))
         asyncio.run(sync_admins_from_keycloak(dependency_manager.kc_api, dependency_manager.authz))
+
     if dependency_manager.config.sentry.enabled:
         logger.info("enabling sentry")
 
@@ -139,6 +145,9 @@ def create_app() -> Sanic:
     @app.on_request
     async def set_request_id(request: Request) -> None:
         logging.set_request_id(str(request.id))
+        span = sentry_sdk.get_current_span()
+        if span and span.trace_id:
+            logging.set_trace_id(span.trace_id)
 
     @app.middleware("response")
     async def set_request_id_header(request: Request, response: BaseHTTPResponse) -> None:
@@ -179,14 +188,6 @@ def create_app() -> Sanic:
         if getattr(app.ctx, "solr_reindex", False):
             logger.info("Creating solr reindex task, as required by migrations.")
             app.add_task(solr_reindex(dependency_manager.search_reprovisioning))
-
-    @app.before_server_start
-    async def logging_setup1(app: Sanic) -> None:
-        logging.configure_logging(dependency_manager.config.log_cfg)
-
-    @app.main_process_ready
-    async def logging_setup2(app: Sanic) -> None:
-        logging.configure_logging(dependency_manager.config.log_cfg)
 
     return app
 

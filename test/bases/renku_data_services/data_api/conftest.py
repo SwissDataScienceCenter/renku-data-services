@@ -5,9 +5,11 @@ from collections.abc import AsyncGenerator, Callable
 from copy import deepcopy
 from datetime import timedelta
 from typing import Any, Protocol
+from unittest.mock import MagicMock
 
 import pytest
 import pytest_asyncio
+import sentry_sdk
 from authzed.api.v1 import Relationship, RelationshipUpdate, SubjectReference, WriteRelationshipsRequest
 from httpx import Response
 from sanic import Sanic
@@ -862,3 +864,11 @@ async def amalthea_session_k8s_watcher(cluster, amalthea_installation, app_manag
     yield
     with contextlib.suppress(TimeoutError):
         await watcher.stop(timeout=timedelta(seconds=1))
+
+
+@pytest.fixture
+def dummy_sentry():
+    client = sentry_sdk.Client(dsn="https://dummy@sentry.dsn/42", transport=MagicMock(), traces_sample_rate=0.0)
+
+    with sentry_sdk.hub.Hub(client):
+        yield

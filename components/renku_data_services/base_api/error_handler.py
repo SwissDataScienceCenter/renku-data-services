@@ -10,6 +10,7 @@ from typing import Any, Optional, Protocol, TypeVar, Union
 
 import httpx
 import jwt
+import sentry_sdk
 from asyncpg import exceptions as postgres_exceptions
 from pydantic import ValidationError as PydanticValidationError
 from sanic import HTTPResponse, Request, SanicException, json
@@ -22,12 +23,13 @@ from renku_data_services import errors
 
 
 class BaseError(Protocol):
-    """Protocol for the error type of an apispec module."""
+    """Protocol for the error type of apispec module."""
 
     code: int
     message: str
     detail: Optional[str]
     quiet: bool
+    trace_id: Optional[str] = None
 
 
 class BaseErrorResponse(Protocol):
@@ -155,6 +157,10 @@ class CustomErrorHandler(ErrorHandler):
         """Overrides the default error handler."""
         formatted_exception = self._get_formatted_exception(request, exception) or errors.BaseError()
 
+        span = sentry_sdk.get_current_span()
+        if span and span.trace_id:
+            formatted_exception.trace_id = formatted_exception.trace_id or span.trace_id
+
         self.log(request, formatted_exception)
         if formatted_exception.status_code == 500 and "PYTEST_CURRENT_TEST" in os.environ:
             # TODO: Figure out how to do logging properly in here, I could not get the sanic logs to show up from here
@@ -168,6 +174,7 @@ class CustomErrorHandler(ErrorHandler):
                     code=formatted_exception.code,
                     message=formatted_exception.message,
                     detail=formatted_exception.detail,
+                    trace_id=formatted_exception.trace_id,
                 )
             ).model_dump(exclude_none=True),
             status=formatted_exception.status_code,
