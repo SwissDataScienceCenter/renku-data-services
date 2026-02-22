@@ -817,6 +817,122 @@ class DataConnectorRepository:
         await session.delete(link_orm)
         return link
 
+    async def get_deposits(
+        self, user: base_models.APIUser, pagination: PaginationRequest | None = None
+    ) -> tuple[AsyncIterator[models.DepositJob], int]:
+        """Get a deposit from the DB."""
+
+        async def _dump(deps: AsyncIterator[schemas.DepositORM]) -> AsyncIterator[models.DepositJob]:
+            async for dep in deps:
+                yield dep.dump()
+
+        if user.id is None or user.is_anonymous:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+        async with self.session_maker() as session, session.begin():
+            stmt = select(schemas.DepositORM).where(schemas.DepositORM.user_id == user.id)
+            if pagination:
+                stmt = stmt.limit(pagination.per_page).offset(pagination.offset)
+            stmt_count = (
+                select(func.count()).select_from(schemas.DepositORM).where(schemas.DepositORM.user_id == user.id)
+            )
+            res = await session.stream_scalars(stmt)
+            res_count = await session.scalar(stmt_count)
+            return _dump(res), res_count or 0
+
+    async def __get_deposit(
+        self, user: base_models.APIUser, deposit_id: ULID, session: AsyncSession
+    ) -> schemas.DepositORM | None:
+        if user.id is None or user.is_anonymous:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+        stmt = await session.scalars(
+            select(schemas.DepositORM)
+            .where(schemas.DepositORM.user_id == user.id)
+            .where(schemas.DepositORM.id == deposit_id)
+        )
+        return stmt.one_or_none()
+
+    async def get_deposit(self, user: base_models.APIUser, deposit_id: ULID) -> models.DepositJob:
+        """Get a deposit from the DB."""
+        if user.id is None or user.is_anonymous:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+        async with self.session_maker() as session, session.begin():
+            res = await self.__get_deposit(user, deposit_id, session)
+            if res is None:
+                raise errors.MissingResourceError(
+                    message=f"The deposit with ID {deposit_id} does not exist or you do not have access to it."
+                )
+            return res.dump()
+
+    async def create_deposit(
+        self,
+        user: base_models.APIUser,
+        deposit_job: models.UnsavedDepositJob,
+    ) -> models.DepositJob:
+        """Create a deposit in the DB."""
+        if user.id is None or user.is_anonymous:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+        deposit = deposit_job.deposit
+        async with self.session_maker() as session, session.begin():
+            status_subq = (
+                select(schemas.DepositStatusORM.id)
+                .where(schemas.DepositStatusORM.status == deposit.status.value)
+                .scalar_subquery()
+            )
+            source_subq = (
+                select(schemas.DepositSourceORM.id)
+                .where(schemas.DepositSourceORM.source == deposit.source.value)
+                .scalar_subquery()
+            )
+            dep = schemas.DepositORM(
+                source_id=source_subq,
+                status_id=status_subq,
+                original_id=deposit.original_id,
+                data_connector_id=deposit.data_connector_id,
+                user_id=user.id,
+                path=deposit.path.as_posix() if deposit.path else None,
+                job_name=deposit_job.name,
+                cluster_id=deposit_job.cluster_id,
+                name=deposit_job.name,
+            )
+            session.add(dep)
+            await session.flush()
+            await session.refresh(dep)
+        return dep.dump()
+
+    async def delete_deposit(self, user: base_models.APIUser, deposit_id: ULID) -> None:
+        """Delete an existing deposit from the database."""
+        async with self.session_maker() as session, session.begin():
+            await session.execute(
+                delete(schemas.DepositORM)
+                .where(schemas.DepositORM.id == deposit_id)
+                .where(schemas.DepositORM.user_id == user.id)
+            )
+
+    async def update_deposit(
+        self, user: base_models.APIUser, deposit_id: ULID, patch: models.DepositPatch
+    ) -> models.DepositJob:
+        """Update an existing deposit from the database."""
+        if user.id is None or user.is_anonymous:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+        async with self.session_maker() as session, session.begin():
+            res = await self.__get_deposit(user, deposit_id, session)
+            if res is None:
+                raise errors.MissingResourceError(
+                    message=f"The deposit with ID {deposit_id} does not exist or you do not have access to it."
+                )
+            if patch.name is not None:
+                res.name = patch.name
+            if patch.status is not None:
+                status_subq = (
+                    select(schemas.DepositStatusORM.id)
+                    .where(schemas.DepositStatusORM.status == patch.status.value)
+                    .scalar_subquery()
+                )
+                res.status_id = status_subq
+            await session.flush()
+            await session.refresh(res)
+        return res.dump()
+
 
 class DataConnectorSecretRepository:
     """Repository for data connector secrets."""
