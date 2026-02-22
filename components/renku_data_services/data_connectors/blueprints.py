@@ -643,7 +643,7 @@ class DataConnectorsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_authenticated
         @paginate
-        async def _get_deposit(
+        async def _get_deposits(
             _: Request, user: base_models.APIUser, pagination: PaginationRequest
         ) -> tuple[list[dict[str, Any]], int]:
             deposits, total_num = await self.data_connector_repo.get_deposits(user, pagination)
@@ -652,4 +652,4 @@ class DataConnectorsBP(CustomBlueprint):
                 output.append(serialize_deposit(dep).model_dump(mode="json"))
             return output, total_num
 
-        return "/deposits/<deposit_id:ulid>", ["GET"], _get_deposit
+        return "/deposits", ["GET"], _get_deposits

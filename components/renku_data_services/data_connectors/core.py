@@ -1,12 +1,14 @@
 """Business logic for data connectors."""
 
+from __future__ import annotations
+
 import contextlib
 import re
 from dataclasses import asdict
 from datetime import datetime
 from html.parser import HTMLParser
 from pathlib import PurePosixPath
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 from pydantic import ValidationError as PydanticValidationError
@@ -20,7 +22,6 @@ from renku_data_services.base_models.core import (
 )
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors.constants import ALLOWED_GLOBAL_DATA_CONNECTOR_PROVIDERS
-from renku_data_services.data_connectors.db import DataConnectorRepository
 from renku_data_services.data_connectors.doi import schema_org
 from renku_data_services.data_connectors.doi.metadata import create_envidat_metadata_url, get_dataset_metadata
 from renku_data_services.data_connectors.doi.models import DOI, SchemaOrgDataset
@@ -28,6 +29,9 @@ from renku_data_services.storage import models as storage_models
 from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER
 from renku_data_services.storage.rclone import RCloneDOIMetadata, RCloneValidator
 from renku_data_services.utils.core import get_openbis_pat
+
+if TYPE_CHECKING:
+    from renku_data_services.data_connectors.db import DataConnectorRepository
 
 
 def dump_storage_with_sensitive_fields(

@@ -18,7 +18,7 @@ from renku_data_services.crc.orm import ClusterORM
 from renku_data_services.data_connectors import models
 from renku_data_services.data_connectors.apispec import Visibility
 from renku_data_services.data_connectors.doi.models import DOI
-from renku_data_services.k8s.constants import ClusterId
+from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.project.orm import ProjectORM
 from renku_data_services.secrets.orm import SecretORM
 from renku_data_services.users.orm import UserORM
@@ -288,33 +288,30 @@ class DepositORM(BaseORM):
     source_id: Mapped[ULID] = mapped_column(
         "source_id", ForeignKey(DepositSourceORM.id, ondelete="CASCADE"), index=True
     )
-    source: Mapped[DepositSourceORM] = relationship(
-        init=False, repr=False, back_populates="deposit_sources", lazy="selectin"
-    )
+    source: Mapped[DepositSourceORM] = relationship(init=False, repr=False, lazy="selectin")
     status_id: Mapped[ULID] = mapped_column(
         "status_id", ForeignKey(DepositStatusORM.id, ondelete="CASCADE"), index=True
     )
-    status: Mapped[DepositStatusORM] = relationship(
-        init=False, repr=False, back_populates="deposit_statuses", lazy="selectin"
-    )
+    status: Mapped[DepositStatusORM] = relationship(init=False, repr=False, lazy="selectin")
     original_id: Mapped[str]
     data_connector_id: Mapped[ULID] = mapped_column(
         "data_connector_id", ForeignKey(DataConnectorORM.id, ondelete="CASCADE"), index=True
     )
-    data_connector: Mapped[DataConnectorORM] = relationship(
-        init=False, repr=False, back_populates="data_connectors", lazy="selectin"
-    )
+    data_connector: Mapped[DataConnectorORM] = relationship(init=False, repr=False, lazy="selectin")
     user_id: Mapped[str] = mapped_column(ForeignKey(UserORM.keycloak_id, ondelete="CASCADE"), primary_key=True)
     path: Mapped[str | None]
     job_name: Mapped[str]
     name: Mapped[str]
-    cluster_id: Mapped[ULID] = mapped_column("cluster_id", ForeignKey(ClusterORM.id, ondelete="CASCADE"), index=True)
+    cluster_id: Mapped[ULID | None] = mapped_column(
+        "cluster_id", ForeignKey(ClusterORM.id, ondelete="CASCADE"), index=True, nullable=True
+    )
+    """ If the cluster ID is none it is assumed that the local cluster is being used."""
 
     def dump(self) -> models.DepositJob:
         """Create a deposit model from the ORM."""
         return models.DepositJob(
             name=self.job_name,
-            cluster_id=ClusterId(self.cluster_id),
+            cluster_id=ClusterId(self.cluster_id) if self.cluster_id else DEFAULT_K8S_CLUSTER,
             deposit=models.Deposit(
                 name=self.name,
                 data_connector_id=self.data_connector_id,

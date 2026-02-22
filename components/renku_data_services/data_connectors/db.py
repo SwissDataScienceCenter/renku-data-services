@@ -31,6 +31,7 @@ from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors import orm as schemas
 from renku_data_services.data_connectors.core import validate_unsaved_global_data_connector
 from renku_data_services.data_connectors.doi.models import DOI
+from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
 from renku_data_services.namespace import orm as ns_schemas
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.namespace.models import ProjectNamespace
@@ -891,7 +892,8 @@ class DataConnectorRepository:
                 user_id=user.id,
                 path=deposit.path.as_posix() if deposit.path else None,
                 job_name=deposit_job.name,
-                cluster_id=deposit_job.cluster_id,
+                # The local cluster ID does not exist in the DB so it cannot be used as a foreign key
+                cluster_id=None if deposit_job.cluster_id == DEFAULT_K8S_CLUSTER else deposit_job.cluster_id,
                 name=deposit_job.name,
             )
             session.add(dep)
