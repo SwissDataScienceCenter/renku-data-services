@@ -440,7 +440,7 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - projects
-  /deposit:
+  /deposits:
     post:
       summary: Create a new data deposit
       requestBody:
@@ -469,7 +469,7 @@ paths:
                 $ref: "#/components/schemas/DepositList"
       tags:
         - deposit
-  /deposit/{deposit_id}:
+  /deposits/{deposit_id}:
     parameters:
       - in: path
         name: deposit_id

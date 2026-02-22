@@ -414,7 +414,7 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck, _TokenC
         async with self._session_maker() as session:
             result = await session.stream_scalars(
                 sa.select(schemas.OAuth2ConnectionORM)
-                .where(schemas.OAuth2ConnectionORM.client.any(schemas.OAuth2ClientORM.kind == provider_kind))
+                .where(schemas.OAuth2ConnectionORM.client.has(schemas.OAuth2ClientORM.kind == provider_kind))
                 .where(schemas.OAuth2ConnectionORM.user_id == user.id)
                 .where(schemas.OAuth2ConnectionORM.token.is_not(None))
                 .where(schemas.OAuth2ConnectionORM.status == models.ConnectionStatus.connected)

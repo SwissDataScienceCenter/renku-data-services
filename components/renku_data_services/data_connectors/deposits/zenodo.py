@@ -29,24 +29,23 @@ class ZenodoAPIClient:
 
     def __init__(self) -> None:
         self.__zenodo_base_url = "https://zenodo.org/api"
-        self.__client: httpx.AsyncClient
+        self.__client = httpx.AsyncClient()
 
     async def create_deposit(self, api_key: str, title: str) -> DepositResponse:
         """Create a zenodo deposit."""
         header = {"Authorization": f"Bearer {api_key}"}
-        res = await self.__client.post(
-            self.__zenodo_base_url + "/deposit/depositions", json={"title": title}, headers=header
-        )
-        return DepositResponse.model_validate_json(res.json())
+        # TODO: Send a patch request to set title
+        res = await self.__client.post(self.__zenodo_base_url + "/deposit/depositions", headers=header, json={})
+        return DepositResponse.model_validate(res.json())
 
     async def get_deposit(self, api_key: str, id: int) -> DepositResponse:
         """Get a specific Zenodo deposit."""
         header = {"Authorization": f"Bearer {api_key}"}
         res = await self.__client.get(self.__zenodo_base_url + f"/deposit/depositions/{id}", headers=header)
-        return DepositResponse.model_validate_json(res.json())
+        return DepositResponse.model_validate(res.json())
 
     async def get_deposits(self, api_key: str) -> DepositResponseList:
         """List Zenodo deposits."""
         header = {"Authorization": f"Bearer {api_key}"}
         res = await self.__client.get(self.__zenodo_base_url + "/deposit/depositions", headers=header)
-        return DepositResponseList.model_validate_json(res.json())
+        return DepositResponseList.model_validate(res.json())
