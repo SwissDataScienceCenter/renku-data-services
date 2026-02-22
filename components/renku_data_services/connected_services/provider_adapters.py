@@ -1,7 +1,7 @@
 """Adapters for each kind of OAuth2 client."""
 
 from abc import ABC, abstractmethod
-from typing import Any, cast
+from typing import Any
 from urllib.parse import urljoin, urlparse, urlunparse
 
 from httpx import Client, Response
