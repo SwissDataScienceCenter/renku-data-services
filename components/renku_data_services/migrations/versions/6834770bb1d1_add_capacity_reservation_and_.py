@@ -67,7 +67,11 @@ def upgrade() -> None:
         sa.Column("activate_at_datetime", sa.DateTime(timezone=True), nullable=False),
         sa.Column("start_datetime", sa.DateTime(timezone=True), nullable=False),
         sa.Column("end_datetime", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("status", postgresql.ENUM("PENDING", "ACTIVE", "COMPLETED", name="occurrence_state", create_type=False), nullable=False),
+        sa.Column(
+            "status",
+            postgresql.ENUM("PENDING", "ACTIVE", "COMPLETED", name="occurrence_state", create_type=False),
+            nullable=False,
+        ),
         sa.Column("deployment_name", sa.String(length=255), nullable=True),
         sa.ForeignKeyConstraint(
             ["reservation_id"], ["capacity_reservation.capacity_reservations.id"], ondelete="CASCADE"

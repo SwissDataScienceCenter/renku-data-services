@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import AsyncGenerator
 
 from renku_data_services import errors
@@ -14,6 +15,24 @@ from renku_data_services.k8s.models import GVK, ClusterConnection, K8sObject, K8
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
 
 DEPLOYMENT_GVK = GVK(kind="Deployment", group="apps", version="v1")
+
+
+def _generate_deployment_name(occurrence: Occurrence, reservation: CapacityReservation) -> str:
+    """Generate a sanitized deployment name for a capacity reservation occurrence."""
+
+    safe_name = reservation.name.lower()
+    safe_name = safe_name.replace(" ", "-").replace("_", "-")
+    safe_name = re.sub(r"[^a-z0-9-]", "", safe_name)
+    safe_name = safe_name.strip("-")
+
+    if not safe_name:
+        safe_name = "reservation"
+
+    safe_name = safe_name[:30]
+
+    short_id = str(occurrence.id)[:8].lower()
+
+    return f"cr-{safe_name}-{short_id}"
 
 
 class CapacityReservationK8sClient:
@@ -40,7 +59,7 @@ class CapacityReservationK8sClient:
             raise errors.MissingResourceError(
                 message=f"Resource class {reservation.resource_class_id} not found for occurrence {occurrence.id}."
             )
-        deployment_name = f"capacity-reservation-{str(occurrence.id).lower()}"
+        deployment_name = _generate_deployment_name(occurrence, reservation)
         manifest = _build_placeholder_deployment_manifest(occurrence, reservation, resource_class)
         meta = K8sObjectMeta(
             name=deployment_name,
@@ -143,7 +162,7 @@ def _build_placeholder_deployment_manifest(
     return {
         "apiVersion": "apps/v1",
         "kind": "Deployment",
-        "metadata": {"name": f"capacity-reservation-{str(occurrence.id).lower()}", "labels": labels},
+        "metadata": {"name": _generate_deployment_name(occurrence, reservation), "labels": labels},
         "spec": {
             "replicas": reservation.provisioning.placeholder_count,
             "selector": {"matchLabels": labels},
