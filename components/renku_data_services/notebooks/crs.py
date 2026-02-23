@@ -301,9 +301,11 @@ class AmaltheaSessionV1Alpha1(_ASModel):
                 message=f"The manifest for a session with name {self.metadata.name} cannot be serialized "
                 "because it is missing the spec.session.resources field"
             )
-        url = "None"
-        if self.base_url is not None:
-            url = self.base_url
+
+        url = self.base_url()
+        if url is None:
+            url = "None"
+
         ready_containers = 0
         total_containers = 0
         if self.status.initContainerCounts is not None:
@@ -363,16 +365,14 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             resource_class_id=self.resource_class_id(),
         )
 
-    @property
     def base_url(self) -> str | None:
         """Get the URL of the session, excluding the default URL from the session launcher."""
         if self.status.url and len(self.status.url) > 0:
             return self.status.url
-        if self.spec is None or self.spec.ingress is None:
+        if self.spec.ingress is None:
             return None
-        scheme = "http"
-        if self.spec.ingress is not None:
-            scheme = self.spec.ingress.scheme()
+
+        scheme = self.spec.ingress.scheme()
         host = self.spec.ingress.host
         path = self.spec.session.urlPath if self.spec.session.urlPath else "/"
         if not path.endswith("/"):
