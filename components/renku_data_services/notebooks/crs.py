@@ -358,7 +358,9 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             return self.status.url
         if self.spec is None or self.spec.ingress is None:
             return None
-        scheme = "https" if self.spec and self.spec.ingress and self.spec.ingress.tlsSecret else "http"
+        scheme = "http"
+        if self.spec.ingress is not None:
+            scheme = self.spec.ingress.scheme()
         host = self.spec.ingress.host
         path = self.spec.session.urlPath if self.spec.session.urlPath else "/"
         if not path.endswith("/"):
@@ -366,7 +368,7 @@ class AmaltheaSessionV1Alpha1(_ASModel):
         params = None
         query = None
         fragment = None
-        url = urlunparse((scheme, host, path, params, query, fragment))
+        url = str(urlunparse((scheme, host, path, params, query, fragment)))
         return url
 
 
