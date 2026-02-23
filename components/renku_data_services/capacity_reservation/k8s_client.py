@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import AsyncGenerator
+from io import StringIO
+
+import yaml
 
 from renku_data_services import errors
 from renku_data_services.capacity_reservation.models import CapacityReservation, Occurrence
@@ -41,6 +45,9 @@ class CapacityReservationK8sClient:
     def __init__(self, client: K8sClusterClientsPool, cluster_repo: ClusterRepository) -> None:
         self.__client = client
         self.__cluster_repo = cluster_repo
+        self.__default_tolerations: list[dict[str, str]] = yaml.safe_load(
+            StringIO(os.environ.get("NB_SESSIONS__TOLERATIONS", "[]"))
+        )
 
     async def _cluster_for_reservation(self, reservation: CapacityReservation) -> ClusterConnection:
         """Resolve the cluster for a reservation, falling back to the default cluster."""
@@ -60,7 +67,9 @@ class CapacityReservationK8sClient:
                 message=f"Resource class {reservation.resource_class_id} not found for occurrence {occurrence.id}."
             )
         deployment_name = _generate_deployment_name(occurrence, reservation)
-        manifest = _build_placeholder_deployment_manifest(occurrence, reservation, resource_class)
+        manifest = _build_placeholder_deployment_manifest(
+            occurrence, reservation, resource_class, self.__default_tolerations
+        )
         meta = K8sObjectMeta(
             name=deployment_name,
             namespace=cluster.namespace,
@@ -121,7 +130,10 @@ class CapacityReservationK8sClient:
 
 
 def _build_placeholder_deployment_manifest(
-    occurrence: Occurrence, reservation: CapacityReservation, resource_class: ResourceClass
+    occurrence: Occurrence,
+    reservation: CapacityReservation,
+    resource_class: ResourceClass,
+    default_tolerations: list[dict[str, str]],
 ) -> dict:
     """Build a placeholder deployment manifest for the given occurrence and reservation."""
     labels = {
@@ -156,8 +168,12 @@ def _build_placeholder_deployment_manifest(
     if resource_class.quota:
         pod_spec["priorityClassName"] = resource_class.quota
 
-    if resource_class.tolerations:
-        pod_spec["tolerations"] = [{"key": k, "operator": "Exists"} for k in resource_class.tolerations]
+    tolerations: list[dict[str, str]] = []
+    tolerations.extend(default_tolerations)
+    for tol_key in resource_class.tolerations:
+        tolerations.append({"key": tol_key, "operator": "Exists"})
+    if tolerations:
+        pod_spec["tolerations"] = tolerations
 
     if resource_class.node_affinities:
         required_affinities = [a for a in resource_class.node_affinities if a.required_during_scheduling]
