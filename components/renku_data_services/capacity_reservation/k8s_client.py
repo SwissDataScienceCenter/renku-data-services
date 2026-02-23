@@ -159,6 +159,34 @@ def _build_placeholder_deployment_manifest(
     if resource_class.tolerations:
         pod_spec["tolerations"] = [{"key": k, "operator": "Exists"} for k in resource_class.tolerations]
 
+    if resource_class.node_affinities:
+        required_affinities = [a for a in resource_class.node_affinities if a.required_during_scheduling]
+        preferred_affinities = [a for a in resource_class.node_affinities if not a.required_during_scheduling]
+
+        node_affinity_spec: dict = {}
+
+        if required_affinities:
+            node_affinity_spec["requiredDuringSchedulingIgnoredDuringExecution"] = {
+                "nodeSelectorTerms": [
+                    {
+                        "matchExpressions": [
+                            {"key": affinity.key, "operator": "Exists"} for affinity in required_affinities
+                        ]
+                    }
+                ]
+            }
+
+        if preferred_affinities:
+            node_affinity_spec["preferredDuringSchedulingIgnoredDuringExecution"] = [
+                {
+                    "weight": 50,
+                    "preference": {"matchExpressions": [{"key": affinity.key, "operator": "Exists"}]},
+                }
+                for affinity in preferred_affinities
+            ]
+
+        pod_spec["affinity"] = {"nodeAffinity": node_affinity_spec}
+
     return {
         "apiVersion": "apps/v1",
         "kind": "Deployment",
