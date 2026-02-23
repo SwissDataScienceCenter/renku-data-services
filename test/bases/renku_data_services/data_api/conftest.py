@@ -22,9 +22,9 @@ from renku_data_services.base_models.core import APIUser, InternalServiceAdmin, 
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_connectors.apispec import DataConnector as ApiDataConnector
+from renku_data_services.k8s.clients import K8sClusterClient
 from renku_data_services.k8s.config import from_kubeconfig_file, get_clusters
 from renku_data_services.k8s.constants import ClusterId
-from renku_data_services.k8s.core import K8sClusterClient
 from renku_data_services.k8s.watcher import K8sWatcher, k8s_object_handler
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.namespace.apispec import GroupResponse as ApiGroup

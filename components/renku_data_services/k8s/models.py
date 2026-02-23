@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+from base64 import b64encode
 from dataclasses import dataclass
-from typing import Any, Final, Self
+from enum import StrEnum
+from typing import Any, Final, Self, cast
 
+import kubernetes
 from box import Box
-from kr8s import APIObject
 from kr8s._api import Api
+from kr8s.asyncio.objects import APIObject
+from kr8s.objects import Secret
+from kubernetes.client import V1Secret
 
-from renku_data_services.k8s.constants import ClusterId
+from renku_data_services.errors import ProgrammingError, errors
+from renku_data_services.k8s.constants import DUMMY_TASK_RUN_USER_ID, ClusterId
 
+sanitizer = kubernetes.client.ApiClient().sanitize_for_serialization
 K8sPatch = dict[str, Any]
 K8sPatches = K8sPatch | list[K8sPatch]
 
@@ -100,6 +107,231 @@ class K8sObject(K8sObjectMeta):
         return _APIObj(resource=self.manifest, namespace=self.namespace, api=api)
 
 
+class K8sSecret(K8sObject):
+    """Represents a secret in k8s."""
+
+    def __init__(
+        self,
+        name: str,
+        namespace: str,
+        cluster: ClusterId,
+        manifest: Box,
+        user_id: str | None = None,
+    ) -> None:
+        super().__init__(
+            name=name,
+            namespace=namespace,
+            cluster=cluster,
+            gvk=GVK(version=Secret.version, kind="Secret"),
+            manifest=manifest,
+            user_id=user_id,
+        )
+
+    def __repr__(self) -> str:
+        # We hide the manifest to prevent leaking secrets
+        return (
+            f"{self.__class__.__name__}(name={self.name}, namespace={self.namespace}, cluster={self.cluster}, "
+            f"gvk={self.gvk}, user_id={self.user_id})"
+        )
+
+    @classmethod
+    def from_k8s_object(cls, k8s_object: K8sObject) -> Self:
+        """Convert a k8s object to a K8sSecret object."""
+        assert k8s_object.namespace is not None
+
+        return cls(
+            name=k8s_object.name,
+            namespace=k8s_object.namespace,
+            cluster=k8s_object.cluster,
+            manifest=k8s_object.manifest,
+        )
+
+    @classmethod
+    def from_v1_secret(cls, secret: V1Secret, cluster: ClusterConnection) -> Self:
+        """Convert a V1Secret object to a K8sSecret object."""
+        assert secret.metadata is not None
+
+        return cls(
+            name=secret.metadata.name,
+            namespace=cluster.namespace,
+            cluster=cluster.id,
+            manifest=Box(sanitizer(secret)),
+        )
+
+    def to_v1_secret(self) -> V1Secret:
+        """Convert a K8sSecret to a V1Secret object."""
+        return V1Secret(
+            metadata=self.manifest.metadata,
+            data=self.manifest.get("data", {}),
+            string_data=self.manifest.get("stringData", {}),
+            type=self.manifest.get("type"),
+        )
+
+    @staticmethod
+    def __b64encode_values(string_data: dict[str, Any], new_data: dict[str, str]) -> None:
+        for k, v in string_data.items():
+            if k in new_data:
+                raise ProgrammingError(
+                    message=f"Patching a secret with both stringData and data and conflicting key {k}."
+                )
+            new_data[k] = b64encode(str(v).encode("utf-8")).decode("utf-8")
+
+    def to_patch(self) -> K8sPatches:
+        """Create a rfc6902 patch that would take an existing secret and patch it to this state."""
+        secret_data = self.manifest.get("data") or {}
+        string_data = self.manifest.get("stringData")
+        if string_data:
+            secret_data = secret_data.copy()
+            self.__b64encode_values(string_data, secret_data)
+
+        patch = [
+            {"op": "replace", "path": "/data", "value": secret_data},
+            {"op": "replace", "path": "/type", "value": self.manifest.get("type", "Opaque")},
+        ]
+        if "metadata" not in self.manifest:
+            return patch
+        if "labels" in self.manifest.metadata:
+            patch.append(
+                {"op": "replace", "path": "/metadata/labels", "value": self.manifest.metadata.labels},
+            )
+        if "annotations" in self.manifest.metadata:
+            patch.append(
+                {"op": "replace", "path": "/metadata/annotations", "value": self.manifest.metadata.annotations},
+            )
+        if "ownerReferences" in self.manifest.metadata:
+            patch.append(
+                {"op": "replace", "path": "/metadata/ownerReferences", "value": self.manifest.metadata.ownerReferences},
+            )
+        # We never create 'finalizers' nor 'managedFields', so we do not patch them.
+        return patch
+
+
+class K8sResourceQuota(K8sObject):
+    """Represents a ResourceQuota in k8s."""
+
+    def __init__(
+        self,
+        name: str,
+        namespace: str,
+        cluster: ClusterId,
+        manifest: Box,
+    ) -> None:
+        super().__init__(
+            name=name,
+            namespace=namespace,
+            cluster=cluster,
+            gvk=GVK(kind="ResourceQuota", version="v1"),
+            manifest=manifest,
+        )
+
+    @classmethod
+    def meta(cls, name: str, cluster: ClusterConnection) -> K8sObjectMeta:
+        """Return a K8sObjectMeta describing the named resource quota."""
+        return K8sObjectMeta(
+            name=name,
+            namespace=cluster.namespace,
+            cluster=cluster.id,
+            gvk=GVK(kind="ResourceQuota", version="v1"),
+        )
+
+    @classmethod
+    def get_filter(cls, label_selector: dict[str, str], cluster: ClusterConnection) -> K8sObjectFilter:
+        """Return a filter to list K8s objects."""
+        return K8sObjectFilter(
+            gvk=GVK(kind="ResourceQuota", version="v1"),
+            namespace=cluster.namespace,
+            label_selector=label_selector,
+            cluster=cluster.id,
+        )
+
+    @classmethod
+    def from_k8s_object(cls, k8s_object: K8sObject) -> Self:
+        """Convert a k8s object to a K8sResourceQuota object."""
+        assert k8s_object.namespace is not None
+
+        return cls(
+            name=k8s_object.name,
+            namespace=k8s_object.namespace,
+            cluster=k8s_object.cluster,
+            manifest=k8s_object.manifest,
+        )
+
+    @classmethod
+    def from_patch(cls, patch: K8sPatch, cluster: ClusterConnection) -> Self:
+        """Convert a valid K8sPatch to K8sResourceQuota."""
+        name = patch["metadata"]["name"]
+        patch["metadata"]["namespace"] = cluster.namespace
+        return cls(name=name, namespace=cluster.namespace, cluster=cluster.id, manifest=Box(patch))
+
+
+class K8sPriorityClass(K8sObject):
+    """Represents a PriorityClass in k8s."""
+
+    def __init__(
+        self,
+        name: str,
+        cluster: ClusterId,
+        manifest: Box,
+    ) -> None:
+        super().__init__(
+            name=name,
+            namespace=None,
+            cluster=cluster,
+            gvk=GVK(kind="PriorityClass", version="v1", group="scheduling.k8s.io"),
+            manifest=manifest,
+        )
+
+    @classmethod
+    def new(
+        cls,
+        name: str,
+        cluster: ClusterId,
+        global_default: bool,
+        value: int,
+        preemption_policy: str,
+        description: str,
+        labels: dict[str, str],
+    ) -> Self:
+        """Instantiate a K8sPriorityClass."""
+        return cls(
+            name=name,
+            cluster=cluster,
+            manifest=Box(
+                {
+                    "metadata": {
+                        "name": name,
+                        "labels": labels,
+                    },
+                    "description": description,
+                    "globalDefault": global_default,
+                    "preemptionPolicy": preemption_policy,
+                    "value": value,
+                }
+            ),
+        )
+
+    @classmethod
+    def meta(cls, name: str, cluster_id: ClusterId) -> K8sObjectMeta:
+        """Return a K8sObjectMeta describing the named resource quota."""
+        return K8sObjectMeta(
+            name=name,
+            namespace=None,
+            cluster=cluster_id,
+            gvk=GVK(kind="PriorityClass", version="v1", group="scheduling.k8s.io"),
+        )
+
+    @classmethod
+    def from_k8s_object(cls, k8s_object: K8sObject) -> Self:
+        """Convert a k8s object to a K8sPriorityClass object."""
+        assert k8s_object.namespace is None
+
+        return cls(
+            name=k8s_object.name,
+            cluster=k8s_object.cluster,
+            manifest=k8s_object.manifest,
+        )
+
+
 @dataclass
 class K8sObjectFilter:
     """Parameters used when filtering resources from the cache or k8s."""
@@ -110,6 +342,19 @@ class K8sObjectFilter:
     cluster: ClusterId | None = None
     label_selector: dict[str, str] | None = None
     user_id: str | None = None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ClusterConnection:
+    """K8s Cluster wrapper."""
+
+    id: ClusterId
+    namespace: str
+    api: Api
+
+    def with_api_object(self, obj: APIObject) -> APIObjectInCluster:
+        """Create an API object associated with the cluster."""
+        return APIObjectInCluster(obj, self.id)
 
 
 GVK_CORE_GROUP: Final[str] = "core"
@@ -159,3 +404,67 @@ class GVK:
             group=grp,
             version=version,
         )
+
+
+@dataclass
+class APIObjectInCluster:
+    """A kr8s k8s object from a specific cluster."""
+
+    obj: APIObject
+    cluster: ClusterId
+
+    @property
+    def user_id(self) -> str | None:
+        """Extract the user id from annotations."""
+        labels = cast(dict[str, str], self.obj.metadata.get("labels", {}))
+        match self.obj.singular:
+            case "jupyterserver":
+                return labels.get("renku.io/userId", None)
+            case "amaltheasession":
+                return labels.get("renku.io/safe-username", None)
+            case "buildrun":
+                return labels.get("renku.io/safe-username", None)
+            case "taskrun":
+                return DUMMY_TASK_RUN_USER_ID
+            case _:
+                return None
+
+    @property
+    def meta(self) -> K8sObjectMeta:
+        """Extract the metadata from an api object."""
+        return K8sObjectMeta(
+            name=self.obj.name,
+            namespace=self.obj.namespace or "default",
+            cluster=self.cluster,
+            gvk=GVK.from_kr8s_object(self.obj),
+            user_id=self.user_id,
+        )
+
+    def to_k8s_object(self) -> K8sObject:
+        """Convert the api object to a regular k8s object."""
+        if self.obj.name is None or self.obj.namespace is None:
+            raise errors.ProgrammingError()
+        return K8sObject(
+            name=self.obj.name,
+            namespace=self.obj.namespace,
+            gvk=GVK.from_kr8s_object(self.obj),
+            manifest=Box(self.obj.to_dict()),
+            cluster=self.cluster,
+            user_id=self.user_id,
+        )
+
+    @classmethod
+    def from_k8s_object(cls, obj: K8sObject, api: Api) -> Self:
+        """Convert a regular k8s object to an api object."""
+
+        return cls(
+            obj=obj.to_api_object(api),
+            cluster=obj.cluster,
+        )
+
+
+class DeletePropagationPolicy(StrEnum):
+    """Propagation policy when deleting objects in K8s."""
+
+    foreground = "Foreground"
+    background = "Background"

@@ -30,10 +30,9 @@ from renku_data_services.crc import orm as schemas
 from renku_data_services.crc.core import validate_resource_class_update, validate_resource_pool_update
 from renku_data_services.crc.models import ClusterPatch, ClusterSettings, SavedClusterSettings, SessionProtocol
 from renku_data_services.crc.orm import ClusterORM
-from renku_data_services.k8s.clients.priority_class import K8sPriorityClass, PriorityClassClient
-from renku_data_services.k8s.clients.resource_quota import ResourceQuotaClient
+from renku_data_services.k8s.client_interfaces import PriorityClassClient, ResourceQuotaClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
-from renku_data_services.k8s.core import DeletePropagationPolicy
+from renku_data_services.k8s.models import DeletePropagationPolicy, K8sPriorityClass
 from renku_data_services.users.db import UserRepo
 
 

@@ -10,7 +10,11 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from renku_data_services.errors import errors
-from renku_data_services.k8s.models import K8sObject, K8sObjectFilter, K8sObjectMeta
+from renku_data_services.k8s.models import (
+    K8sObject,
+    K8sObjectFilter,
+    K8sObjectMeta,
+)
 from renku_data_services.k8s.orm import K8sObjectORM
 
 

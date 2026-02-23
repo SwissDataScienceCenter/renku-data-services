@@ -11,9 +11,8 @@ from kubernetes.utils import parse_quantity
 
 from renku_data_services import errors
 from renku_data_services.base_models import ResetType
-from renku_data_services.k8s.clients.resource_quota import K8sResourceQuota
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
-from renku_data_services.k8s.models import K8sPatch
+from renku_data_services.k8s.models import K8sPatch, K8sResourceQuota
 
 
 class ResourcesProtocol(Protocol):

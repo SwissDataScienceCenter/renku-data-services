@@ -1,0 +1,414 @@
+"""Different implementations of k8s clients."""
+
+from __future__ import annotations
+
+import contextlib
+import os
+from collections.abc import AsyncIterable, Callable
+from copy import deepcopy
+
+import kr8s
+
+from renku_data_services.errors import errors
+from renku_data_services.k8s.client_interfaces import K8sClient, PriorityClassClient, ResourceQuotaClient, SecretClient
+from renku_data_services.k8s.constants import ClusterId
+from renku_data_services.k8s.db import K8sDbCache
+from renku_data_services.k8s.models import (
+    GVK,
+    APIObjectInCluster,
+    ClusterConnection,
+    DeletePropagationPolicy,
+    K8sObject,
+    K8sObjectFilter,
+    K8sObjectMeta,
+    K8sPatch,
+    K8sPatches,
+    K8sPriorityClass,
+    K8sResourceQuota,
+    K8sSecret,
+)
+
+
+class K8sResourceQuotaClient(ResourceQuotaClient):
+    """Real k8s core API client that exposes the required functions."""
+
+    def __init__(self, k8s_client: K8sClusterClientsPool) -> None:
+        self.__client = k8s_client
+
+    async def __cluster_by_id(self, cluster_id: ClusterId) -> ClusterConnection:
+        return await self.__client.cluster_by_id(cluster_id)
+
+    async def read_resource_quota(self, name: str, cluster_id: ClusterId) -> K8sResourceQuota:
+        """Get a resource quota."""
+        cluster = await self.__cluster_by_id(cluster_id)
+        res = await self.__client.get(K8sResourceQuota.meta(name, cluster))
+        if res is None:
+            raise errors.MissingResourceError(message=f"The resource quota {cluster.namespace}/{name} cannot be found.")
+        return K8sResourceQuota.from_k8s_object(res)
+
+    async def list_resource_quota(
+        self, label_selector: dict[str, str], cluster_id: ClusterId
+    ) -> AsyncIterable[K8sResourceQuota]:
+        """List resource quotas."""
+        quotas = self.__client.list(K8sResourceQuota.get_filter(label_selector, await self.__cluster_by_id(cluster_id)))
+        async for quota in quotas:
+            yield K8sResourceQuota.from_k8s_object(quota)
+
+    async def create_resource_quota(self, quota: K8sPatch, cluster_id: ClusterId) -> K8sResourceQuota:
+        """Create a resource quota."""
+        res = await self.__client.create(
+            K8sResourceQuota.from_patch(quota, await self.__cluster_by_id(cluster_id)), False
+        )
+        return K8sResourceQuota.from_k8s_object(res)
+
+    async def delete_resource_quota(self, name: str, cluster_id: ClusterId) -> None:
+        """Delete a resource quota."""
+        await self.__client.delete(K8sResourceQuota.meta(name, await self.__cluster_by_id(cluster_id)))
+
+    async def patch_resource_quota(self, name: str, patch: K8sPatches, cluster_id: ClusterId) -> K8sResourceQuota:
+        """Update a resource quota."""
+        res = await self.__client.patch(K8sResourceQuota.meta(name, await self.__cluster_by_id(cluster_id)), patch)
+        return K8sResourceQuota.from_k8s_object(res)
+
+
+class K8sSecretClient(SecretClient):
+    """A wrapper around a kr8s k8s client, acts on Secrets."""
+
+    def __init__(self, client: K8sClient) -> None:
+        self.__client = client
+
+    async def get_secret(self, secret: K8sObjectMeta) -> K8sSecret | None:
+        """Get a secret."""
+        res = await self.__client.get(secret)
+        return K8sSecret.from_k8s_object(res) if res is not None else None
+
+    async def create_secret(self, secret: K8sSecret) -> K8sSecret:
+        """Create a secret."""
+        return K8sSecret.from_k8s_object(await self.__client.create(secret, False))
+
+    async def patch_secret(self, secret: K8sObjectMeta, patch: K8sPatches) -> K8sSecret:
+        """Patch a secret."""
+        return K8sSecret.from_k8s_object(await self.__client.patch(secret, patch))
+
+    async def delete_secret(self, secret: K8sObjectMeta) -> None:
+        """Delete a secret."""
+        await self.__client.delete(secret)
+
+
+class K8sPriorityClassClient(PriorityClassClient):
+    """Real k8s scheduling API client that exposes the required functions."""
+
+    def __init__(self, client: K8sClient) -> None:
+        self.__client = client
+
+    async def create_priority_class(self, priority_class: K8sPriorityClass) -> K8sPriorityClass:
+        """Create a priority class."""
+        return K8sPriorityClass.from_k8s_object(await self.__client.create(priority_class, refresh=True))
+
+    async def delete_priority_class(
+        self,
+        meta: K8sObjectMeta,
+        propagation_policy: DeletePropagationPolicy = DeletePropagationPolicy.foreground,
+    ) -> None:
+        """Delete a priority class."""
+        await self.__client.delete(meta, propagation_policy)
+
+    async def read_priority_class(self, meta: K8sObjectMeta) -> K8sPriorityClass | None:
+        """Get a priority class."""
+        output = await self.__client.get(meta)
+        if output is None:
+            return None
+        return K8sPriorityClass.from_k8s_object(output)
+
+
+class DummyResourceQuotaClient(ResourceQuotaClient):
+    """Dummy k8s core API client that does not require a k8s cluster.
+
+    Not suitable for production - to be used only for testing and development.
+    """
+
+    async def read_resource_quota(self, name: str, cluster_id: ClusterId) -> K8sResourceQuota:
+        """Get a resource quota."""
+        raise NotImplementedError()
+
+    def list_resource_quota(
+        self, label_selector: dict[str, str], cluster_id: ClusterId
+    ) -> AsyncIterable[K8sResourceQuota]:
+        """List resource quotas."""
+        raise NotImplementedError()
+
+    async def create_resource_quota(self, quota: K8sPatch, cluster_id: ClusterId) -> K8sResourceQuota:
+        """Create a resource quota."""
+        raise NotImplementedError()
+
+    async def delete_resource_quota(self, name: str, cluster_id: ClusterId) -> None:
+        """Delete a resource quota."""
+        raise NotImplementedError()
+
+    async def patch_resource_quota(self, name: str, patch: K8sPatches, cluster_id: ClusterId) -> K8sResourceQuota:
+        """Update a resource quota."""
+        raise NotImplementedError()
+
+
+class DummySecretClient(SecretClient):
+    """Dummy k8s core API client that does not require a k8s cluster.
+
+    Not suitable for production - to be used only for testing and development.
+    """
+
+    async def get_secret(self, secret: K8sObjectMeta) -> K8sSecret | None:
+        """Get a secret."""
+        raise NotImplementedError()
+
+    async def create_secret(self, secret: K8sSecret) -> K8sSecret:
+        """Create a secret."""
+        raise NotImplementedError()
+
+    async def patch_secret(self, secret: K8sObjectMeta, patch: K8sPatches) -> K8sSecret:
+        """Patch a secret."""
+        raise NotImplementedError()
+
+    async def delete_secret(self, secret: K8sObjectMeta) -> None:
+        """Delete a secret."""
+        raise NotImplementedError()
+
+
+class DummyPriorityClassClient(PriorityClassClient):
+    """Dummy k8s scheduling API client that does not require a k8s cluster.
+
+    Not suitable for production - to be used only for testing and development.
+    """
+
+    async def create_priority_class(self, priority_class: K8sPriorityClass) -> K8sPriorityClass:
+        """Create a priority class."""
+        raise NotImplementedError()
+
+    async def read_priority_class(self, meta: K8sObjectMeta) -> K8sPriorityClass | None:
+        """Get a priority class."""
+        raise NotImplementedError()
+
+    async def delete_priority_class(
+        self,
+        meta: K8sObjectMeta,
+        propagation_policy: DeletePropagationPolicy = DeletePropagationPolicy.foreground,
+    ) -> None:
+        """Delete a priority class."""
+        raise NotImplementedError()
+
+
+class K8sClusterClient(K8sClient):
+    """A wrapper around a kr8s k8s client, acts on all resources of a cluster."""
+
+    def __init__(self, cluster: ClusterConnection) -> None:
+        self.__cluster = cluster
+        assert self.__cluster.api is not None
+
+    def __lt__(self, other: K8sClusterClient) -> bool:
+        """Allows for sorting."""
+        return self.__cluster.id < other.__cluster.id and self.__cluster.namespace < other.__cluster.namespace
+
+    def get_cluster(self) -> ClusterConnection:
+        """Return a cluster object."""
+        return self.__cluster
+
+    async def __list(self, _filter: K8sObjectFilter) -> AsyncIterable[APIObjectInCluster]:
+        if _filter.cluster is not None and _filter.cluster != self.__cluster.id:
+            return
+
+        names = [_filter.name] if _filter.name is not None else []
+
+        try:
+            res = self.__cluster.api.async_get(
+                _filter.gvk.kr8s_kind,
+                *names,
+                label_selector=_filter.label_selector,
+                namespace=_filter.namespace,
+            )
+
+            async for r in res:
+                yield APIObjectInCluster(r, self.__cluster.id)
+
+        except (kr8s.ServerError, kr8s.APITimeoutError, ValueError) as _e:
+            # ValueError is generated when the kind does not exist on the cluster
+            return
+
+    async def __get_api_object(self, meta: K8sObjectFilter) -> APIObjectInCluster | None:
+        return await anext(aiter(self.__list(meta)), None)
+
+    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject:
+        """Create the k8s object, scoped or not."""
+        api_obj = obj.to_api_object(self.__cluster.api)
+        await api_obj.create()
+
+        # In some cases the service account does not have read rights, in which case we cannot call get(), and refresh()
+        if refresh:
+            # if refresh isn't called, status and timestamp will be blank
+            await api_obj.refresh()
+        return obj.with_manifest(api_obj.to_dict())
+
+    async def patch(self, meta: K8sObjectMeta, patch: K8sPatches) -> K8sObject:
+        """Patch a k8s object.
+
+        If the patch is a list we assume that we have a rfc6902 json patch like
+        `[{ "op": "add", "path": "/a/b/c", "value": [ "foo", "bar" ] }]`.
+        If the patch is a dictionary then it is considered to be a rfc7386 json merge patch.
+        """
+        obj = await self.__get_api_object(meta.to_filter())
+        if obj is None:
+            raise errors.MissingResourceError(message=f"The k8s resource with metadata {meta} cannot be found.")
+        patch_type = "json" if isinstance(patch, list) else None
+        await obj.obj.patch(patch, type=patch_type)
+        await obj.obj.refresh()
+
+        return meta.with_manifest(obj.obj.to_dict())
+
+    async def delete(
+        self, meta: K8sObjectMeta, propagation_policy: DeletePropagationPolicy = DeletePropagationPolicy.foreground
+    ) -> None:
+        """Delete a k8s object."""
+        obj = await self.__get_api_object(meta.to_filter())
+        if obj is None:
+            return
+        with contextlib.suppress(kr8s.NotFoundError):
+            await obj.obj.delete(propagation_policy=propagation_policy.value)
+
+    async def get(self, meta: K8sObjectMeta) -> K8sObject | None:
+        """Get a specific k8s object, None is returned if the object does not exist."""
+        obj = await self.__get_api_object(meta.to_filter())
+        if obj is None:
+            return None
+        return meta.with_manifest(obj.obj.to_dict())
+
+    async def list(self, _filter: K8sObjectFilter) -> AsyncIterable[K8sObject]:
+        """List all k8s objects."""
+        async for r in self.__list(_filter):
+            yield r.to_k8s_object()
+
+
+class K8sCachedClusterClient(K8sClusterClient):
+    """A wrapper around a kr8s k8s client.
+
+    Provides access to a cache for listing and reading resources but fallback to the cluster for other operations.
+    """
+
+    def __init__(self, cluster: ClusterConnection, cache: K8sDbCache, kinds_to_cache: list[GVK]) -> None:
+        super().__init__(cluster)
+        self.__cache = cache
+        self.__kinds_to_cache = set(kinds_to_cache)
+
+    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject:
+        """Create the k8s object."""
+        if obj.gvk in self.__kinds_to_cache:
+            if not obj.namespaced():
+                raise NotImplementedError("Caching of cluster scoped K8s resources is not supported")
+            await self.__cache.upsert(obj)
+        try:
+            obj = await super().create(obj, refresh)
+        except:
+            # if there was an error creating the k8s object, we delete it from the db again to not have ghost entries
+            if obj.gvk in self.__kinds_to_cache:
+                await self.__cache.delete(obj)
+            raise
+        return obj
+
+    async def patch(self, meta: K8sObjectMeta, patch: K8sPatches) -> K8sObject:
+        """Patch a k8s object."""
+        obj = await super().patch(meta, patch)
+        if meta.gvk in self.__kinds_to_cache:
+            await self.__cache.upsert(obj)
+        return obj
+
+    async def delete(
+        self, meta: K8sObjectMeta, propagation_policy: DeletePropagationPolicy = DeletePropagationPolicy.foreground
+    ) -> None:
+        """Delete a k8s object."""
+        await super().delete(meta, propagation_policy)
+        # NOTE: We use foreground deletion in the k8s client.
+        # This means that the parent resource is usually not deleted immediately and will
+        # wait for its children to be deleted before it is deleted.
+        # To avoid premature purging of resources from the cache we do not delete the resource here
+        # from the cache, rather we expect that the cache will sync itself properly and quickly purge
+        # stale resources.
+
+    async def get(self, meta: K8sObjectMeta) -> K8sObject | None:
+        """Get a specific k8s object, None is returned if the object does not exist."""
+        if meta.gvk in self.__kinds_to_cache:
+            res = await self.__cache.get(meta)
+        else:
+            res = await super().get(meta)
+
+        return res
+
+    async def list(self, _filter: K8sObjectFilter) -> AsyncIterable[K8sObject]:
+        """List all k8s objects."""
+
+        # Don't even go to the DB or Kubernetes if the cluster id is set and does not match our cluster.
+        if _filter.cluster is not None and _filter.cluster != self.get_cluster().id:
+            return
+
+        filter2 = deepcopy(_filter)
+        if filter2.cluster is None:
+            filter2.cluster = self.get_cluster().id
+
+        results = self.__cache.list(filter2) if _filter.gvk in self.__kinds_to_cache else super().list(filter2)
+        async for res in results:
+            yield res
+
+
+class K8sClusterClientsPool(K8sClient):
+    """A wrapper around a pool of kr8s k8s clients."""
+
+    def __init__(self, clusters: Callable[[], AsyncIterable[K8sClusterClient]]) -> None:
+        self.__clusters = clusters
+        self.__clients: dict[ClusterId, K8sClusterClient] = {}
+
+    async def __init_clients_if_needed(self) -> None:
+        if len(self.__clients) > 0 and os.environ.get("ALWAYS_READ_CLUSTERS") is None:
+            return
+        async for cluster in self.__clusters():
+            self.__clients[cluster.get_cluster().id] = cluster
+
+    async def __get_client_or_die(self, cluster_id: ClusterId) -> K8sClusterClient:
+        await self.__init_clients_if_needed()
+        cluster_client = self.__clients.get(cluster_id)
+
+        if cluster_client is None:
+            raise errors.MissingResourceError(
+                message=f"Could not find cluster with id {cluster_id} in the list of clusters."
+            )
+        return cluster_client
+
+    async def cluster_by_id(self, cluster_id: ClusterId) -> ClusterConnection:
+        """Return a cluster by its id."""
+        client = await self.__get_client_or_die(cluster_id)
+        return client.get_cluster()
+
+    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject:
+        """Create the k8s object."""
+        client = await self.__get_client_or_die(obj.cluster)
+        return await client.create(obj, refresh)
+
+    async def patch(self, meta: K8sObjectMeta, patch: K8sPatches) -> K8sObject:
+        """Patch a k8s object."""
+        client = await self.__get_client_or_die(meta.cluster)
+        return await client.patch(meta, patch)
+
+    async def delete(
+        self, meta: K8sObjectMeta, propagation_policy: DeletePropagationPolicy = DeletePropagationPolicy.foreground
+    ) -> None:
+        """Delete a k8s object."""
+        client = await self.__get_client_or_die(meta.cluster)
+        await client.delete(meta, propagation_policy)
+
+    async def get(self, meta: K8sObjectMeta) -> K8sObject | None:
+        """Get a specific k8s object, None is returned if the object does not exist."""
+        client = await self.__get_client_or_die(meta.cluster)
+        return await client.get(meta)
+
+    async def list(self, _filter: K8sObjectFilter) -> AsyncIterable[K8sObject]:
+        """List all k8s objects."""
+        await self.__init_clients_if_needed()
+        cluster_clients = sorted(list(self.__clients.values()))
+        for c in cluster_clients:
+            async for r in c.list(_filter):
+                yield r

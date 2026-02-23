@@ -8,8 +8,10 @@ import renku_data_services.data_api.config as conf
 from renku_data_services.authn.dummy import DummyAuthenticator
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.db_config.config import DBConfig
-from renku_data_services.k8s.clients.priority_class import DummyPriorityClassClient
-from renku_data_services.k8s.clients.resource_quota import DummyResourceQuotaClient
+from renku_data_services.k8s.clients import (
+    DummyPriorityClassClient,
+    DummyResourceQuotaClient,
+)
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 
 

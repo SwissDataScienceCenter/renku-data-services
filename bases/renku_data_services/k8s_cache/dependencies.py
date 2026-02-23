@@ -3,8 +3,7 @@
 from dataclasses import dataclass, field
 
 from renku_data_services.crc.db import ClusterRepository, QuotaRepository, ResourcePoolRepository
-from renku_data_services.k8s.clients.priority_class import DummyPriorityClassClient
-from renku_data_services.k8s.clients.resource_quota import DummyResourceQuotaClient
+from renku_data_services.k8s.clients import DummyPriorityClassClient, DummyResourceQuotaClient
 from renku_data_services.k8s.db import K8sDbCache
 from renku_data_services.k8s_cache.config import Config
 from renku_data_services.metrics.core import StagingMetricsService

@@ -12,10 +12,12 @@ from renku_data_services.crc.db import ClusterRepository, QuotaRepository, Resou
 from renku_data_services.crc.models import ClusterSettings, ResourceClass, SessionProtocol
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.errors import errors
-from renku_data_services.k8s.clients.core import K8sClusterClientsPool
-from renku_data_services.k8s.clients.priority_class import K8sPriorityClassClient
-from renku_data_services.k8s.clients.resource_quota import K8sResourceQuotaClient
-from renku_data_services.k8s.clients.secret import K8sSecretClient
+from renku_data_services.k8s.clients import (
+    K8sClusterClientsPool,
+    K8sPriorityClassClient,
+    K8sResourceQuotaClient,
+    K8sSecretClient,
+)
 from renku_data_services.k8s.config import KubeConfig, KubeConfigEnv, get_clusters
 from renku_data_services.k8s.db import K8sDbCache
 from renku_data_services.notebooks.api.classes.data_service import (

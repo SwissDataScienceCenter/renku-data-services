@@ -10,7 +10,7 @@ from sanic_ext import validate
 from renku_data_services import base_models
 from renku_data_services.base_api.auth import authenticate, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
-from renku_data_services.k8s.clients.secret import SecretClient
+from renku_data_services.k8s.client_interfaces import SecretClient
 from renku_data_services.secrets import apispec
 from renku_data_services.secrets.core import create_or_patch_secret, validate_secret
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo

@@ -15,10 +15,10 @@ from renku_data_services.app_config import logging
 from renku_data_services.base_models.core import APIUser, InternalServiceAdmin, ServiceAdminId
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.crc.db import ResourcePoolRepository
+from renku_data_services.k8s.clients import K8sClusterClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
-from renku_data_services.k8s.core import APIObjectInCluster, K8sClusterClient
 from renku_data_services.k8s.db import K8sDbCache
-from renku_data_services.k8s.models import GVK, K8sObject, K8sObjectFilter
+from renku_data_services.k8s.models import GVK, APIObjectInCluster, K8sObject, K8sObjectFilter
 from renku_data_services.notebooks.crs import State
 
 logger = logging.getLogger(__name__)

@@ -15,11 +15,18 @@ from renku_data_services.app_config import logging
 from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.errors import errors
-from renku_data_services.k8s.clients.core import K8sClusterClientsPool
-from renku_data_services.k8s.clients.secret import K8sSecret, SecretClient
+from renku_data_services.k8s.client_interfaces import SecretClient
+from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
-from renku_data_services.k8s.core import ClusterConnection
-from renku_data_services.k8s.models import GVK, K8sObject, K8sObjectFilter, K8sObjectMeta, K8sPatches
+from renku_data_services.k8s.models import (
+    GVK,
+    ClusterConnection,
+    K8sObject,
+    K8sObjectFilter,
+    K8sObjectMeta,
+    K8sPatches,
+    K8sSecret,
+)
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1
 from renku_data_services.notebooks.util.kubernetes_ import find_env_var

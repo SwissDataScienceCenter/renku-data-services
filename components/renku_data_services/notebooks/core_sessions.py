@@ -38,8 +38,7 @@ from renku_data_services.data_connectors.db import (
 )
 from renku_data_services.data_connectors.models import DataConnectorSecret, DataConnectorWithSecrets
 from renku_data_services.errors import ValidationError, errors
-from renku_data_services.k8s.clients.secret import K8sSecret
-from renku_data_services.k8s.core import ClusterConnection, sanitizer
+from renku_data_services.k8s.models import ClusterConnection, K8sSecret, sanitizer
 from renku_data_services.notebooks import apispec, core
 from renku_data_services.notebooks.api.amalthea_patches import git_proxy, init_containers
 from renku_data_services.notebooks.api.amalthea_patches.init_containers import user_secrets_extras
