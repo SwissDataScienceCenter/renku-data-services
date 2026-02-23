@@ -29,7 +29,6 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     ExtraVolumeMount,
     ImagePullPolicy,
     ImagePullSecret,
-    Ingress,
     InitContainer,
     MatchExpression,
     NodeAffinity,
@@ -54,6 +53,7 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     Culling as _ASCulling,
 )
 from renku_data_services.notebooks.cr_amalthea_session import EnvItem2 as SessionEnvItem
+from renku_data_services.notebooks.cr_amalthea_session import Ingress as _Ingress
 from renku_data_services.notebooks.cr_amalthea_session import Item4 as SecretAsVolumeItem
 from renku_data_services.notebooks.cr_amalthea_session import Limits6 as _Limits
 from renku_data_services.notebooks.cr_amalthea_session import Limits7 as LimitsStr
@@ -218,11 +218,23 @@ class Session(_ASSession):
     remoteSecretRef: SecretRef | None = None
 
 
+class Ingress(_Ingress):
+    """Amalthea spec.ingress schema."""
+
+    def scheme(self) -> str:
+        """Returns the URL scheme to use for the session."""
+        if self.tlsSecret is not None or self.useDefaultClusterTLSCert:
+            return "https"
+        else:
+            return "http"
+
+
 class AmaltheaSessionSpec(_ASSpec):
     """Amalthea session specification."""
 
     session: Session
     culling: Culling | None = None
+    ingress: Ingress | None = None
 
 
 class AmaltheaSessionV1Alpha1(_ASModel):

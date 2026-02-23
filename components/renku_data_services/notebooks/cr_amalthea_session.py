@@ -2836,11 +2836,6 @@ class Ingress(BaseCRD):
         description="If set to `true` it will set the `tls` field in the Ingress to `{}` which\nis used to indicate to certain ingress controllers and on Openshift that the\ndefault cluster TLS certificate should be used. This value is only take into\naccount if `TLSSecret` above is left unset, if the `TLSSecret` field is set\nthen that value will take precedence and this boolean flag will be ignored.",
     )
 
-    def scheme(self) -> str:
-        if self.tlsSecret is not None or self.useDefaultClusterTLSCert:
-            return "https"
-        else:
-            return "http"
 
 class Divisor6(RootModel[int]):
     root: int = Field(
