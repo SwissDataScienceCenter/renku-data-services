@@ -6,6 +6,7 @@ import os
 import re
 from collections.abc import AsyncGenerator
 from io import StringIO
+from typing import Any
 
 import yaml
 
@@ -48,6 +49,12 @@ class CapacityReservationK8sClient:
         self.__default_tolerations: list[dict[str, str]] = yaml.safe_load(
             StringIO(os.environ.get("NB_SESSIONS__TOLERATIONS", "[]"))
         )
+        self.__default_node_selector: dict[str, str] = yaml.safe_load(
+            StringIO(os.environ.get("NB_SESSIONS__NODE_SELECTOR", "{}"))
+        )
+        self.__default_affinity: dict[str, Any] = yaml.safe_load(
+            StringIO(os.environ.get("NB_SESSIONS__AFFINITY", "{}"))
+        )
 
     async def _cluster_for_reservation(self, reservation: CapacityReservation) -> ClusterConnection:
         """Resolve the cluster for a reservation, falling back to the default cluster."""
@@ -68,7 +75,12 @@ class CapacityReservationK8sClient:
             )
         deployment_name = _generate_deployment_name(occurrence, reservation)
         manifest = _build_placeholder_deployment_manifest(
-            occurrence, reservation, resource_class, self.__default_tolerations
+            occurrence,
+            reservation,
+            resource_class,
+            self.__default_tolerations,
+            self.__default_node_selector,
+            self.__default_affinity,
         )
         meta = K8sObjectMeta(
             name=deployment_name,
@@ -134,6 +146,8 @@ def _build_placeholder_deployment_manifest(
     reservation: CapacityReservation,
     resource_class: ResourceClass,
     default_tolerations: list[dict[str, str]],
+    default_node_selector: dict[str, str],
+    default_affinity: dict[str, Any],
 ) -> dict:
     """Build a placeholder deployment manifest for the given occurrence and reservation."""
     labels = {
@@ -168,6 +182,9 @@ def _build_placeholder_deployment_manifest(
     if resource_class.quota:
         pod_spec["priorityClassName"] = resource_class.quota
 
+    if default_node_selector:
+        pod_spec["nodeSelector"] = default_node_selector
+
     tolerations: list[dict[str, str]] = []
     tolerations.extend(default_tolerations)
     for tol_key in resource_class.tolerations:
@@ -175,14 +192,18 @@ def _build_placeholder_deployment_manifest(
     if tolerations:
         pod_spec["tolerations"] = tolerations
 
-    if resource_class.node_affinities:
+    affinity_spec: dict[str, Any] = {}
+    if default_affinity:
+        affinity_spec = default_affinity.copy()
+
+    if resource_class.node_affinities or default_affinity.get("nodeAffinity"):
         required_affinities = [a for a in resource_class.node_affinities if a.required_during_scheduling]
         preferred_affinities = [a for a in resource_class.node_affinities if not a.required_during_scheduling]
 
-        node_affinity_spec: dict = {}
+        node_affinity_spec: dict[str, Any] = affinity_spec.get("nodeAffinity", {})
 
         if required_affinities:
-            node_affinity_spec["requiredDuringSchedulingIgnoredDuringExecution"] = {
+            rc_required = {
                 "nodeSelectorTerms": [
                     {
                         "matchExpressions": [
@@ -191,17 +212,30 @@ def _build_placeholder_deployment_manifest(
                     }
                 ]
             }
+            if "requiredDuringSchedulingIgnoredDuringExecution" in node_affinity_spec:
+                existing_terms = node_affinity_spec["requiredDuringSchedulingIgnoredDuringExecution"].get(
+                    "nodeSelectorTerms", []
+                )
+                rc_required["nodeSelectorTerms"].extend(existing_terms)
+            node_affinity_spec["requiredDuringSchedulingIgnoredDuringExecution"] = rc_required
 
         if preferred_affinities:
-            node_affinity_spec["preferredDuringSchedulingIgnoredDuringExecution"] = [
+            rc_preferred = [
                 {
                     "weight": 50,
                     "preference": {"matchExpressions": [{"key": affinity.key, "operator": "Exists"}]},
                 }
                 for affinity in preferred_affinities
             ]
+            if "preferredDuringSchedulingIgnoredDuringExecution" in node_affinity_spec:
+                rc_preferred.extend(node_affinity_spec["preferredDuringSchedulingIgnoredDuringExecution"])
+            node_affinity_spec["preferredDuringSchedulingIgnoredDuringExecution"] = rc_preferred
 
-        pod_spec["affinity"] = {"nodeAffinity": node_affinity_spec}
+        if node_affinity_spec:
+            affinity_spec["nodeAffinity"] = node_affinity_spec
+
+    if affinity_spec:
+        pod_spec["affinity"] = affinity_spec
 
     return {
         "apiVersion": "apps/v1",
