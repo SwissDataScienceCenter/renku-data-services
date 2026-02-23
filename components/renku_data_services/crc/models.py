@@ -149,7 +149,6 @@ class UnsavedQuota(ResourcesCompareMixin):
     memory: int
     gpu: int
     gpu_kind: GpuKind = GpuKind.NVIDIA
-    id: str | None = None
 
     def is_resource_class_compatible(self, rc: ResourceClass | UnsavedResourceClass) -> bool:
         """Determine if a resource class is compatible with the quota."""
@@ -157,13 +156,9 @@ class UnsavedQuota(ResourcesCompareMixin):
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class Quota(ResourcesCompareMixin):
+class Quota(UnsavedQuota):
     """Quota model."""
 
-    cpu: float
-    memory: int
-    gpu: int
-    gpu_kind: GpuKind = GpuKind.NVIDIA
     id: str
 
     @classmethod

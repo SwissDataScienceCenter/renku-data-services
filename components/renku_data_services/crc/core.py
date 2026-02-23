@@ -12,12 +12,19 @@ from renku_data_services.errors import errors
 
 def validate_quota(body: apispec.QuotaWithOptionalId) -> models.UnsavedQuota:
     """Validate a quota object."""
-    return models.UnsavedQuota(
-        cpu=body.cpu,
-        memory=body.memory,
-        gpu=body.gpu,
-        id=body.id,
-    )
+    if body.id is None:
+        return models.UnsavedQuota(
+            cpu=body.cpu,
+            memory=body.memory,
+            gpu=body.gpu,
+        )
+    else:
+        return models.Quota(
+            cpu=body.cpu,
+            memory=body.memory,
+            gpu=body.gpu,
+            id=body.id,
+        )
 
 
 def validate_quota_put_patch(body: apispec.QuotaWithId | apispec.QuotaPatch) -> models.QuotaPatch:

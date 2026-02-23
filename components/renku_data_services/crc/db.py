@@ -1140,7 +1140,7 @@ class QuotaRepository:
             memory=new_quota.memory,
             gpu=new_quota.gpu,
             gpu_kind=new_quota.gpu_kind,
-            id=str(uuid4()) if new_quota.id is None else new_quota.id,
+            id=new_quota.id if isinstance(new_quota, models.Quota) else str(uuid4()),
         )
         labels = {self._label_name: self._label_value}
 
