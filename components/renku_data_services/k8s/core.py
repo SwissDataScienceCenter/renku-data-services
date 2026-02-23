@@ -10,17 +10,17 @@ from enum import StrEnum
 from typing import Protocol, Self, cast
 
 import kr8s
-import kubernetes
 from box import Box
 from kr8s import APIObject
 from kr8s._api import Api
+from kubernetes import client
 
 from renku_data_services.errors import errors
 from renku_data_services.k8s.constants import DUMMY_TASK_RUN_USER_ID, ClusterId
 from renku_data_services.k8s.db import K8sDbCache
 from renku_data_services.k8s.models import GVK, K8sObject, K8sObjectFilter, K8sObjectMeta, K8sPatches
 
-_kubernetes_client = kubernetes.client.ApiClient()
+_kubernetes_client = client.ApiClient()
 sanitizer = _kubernetes_client.sanitize_for_serialization
 
 
