@@ -41,7 +41,7 @@ class ResourceRequestsFetch(ResourceRequestsFetchProto):
         date = datetime.now(UTC).replace(microsecond=0)
         result: dict[str, ResourcesRequest] = {}
 
-        pod_filter = K8sObjectFilter(gvk=GVK(kind="pod", version="v1"))
+        pod_filter = K8sObjectFilter(gvk=GVK(kind="Pod", version="v1"))
         pvc_filter = K8sObjectFilter(gvk=GVK(kind="PersistentVolumeClaim", version="v1"))
 
         node_cache: dict[str, ResourceDataFacade] = {}
