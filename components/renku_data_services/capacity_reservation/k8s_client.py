@@ -33,11 +33,11 @@ def _generate_deployment_name(occurrence: Occurrence, reservation: CapacityReser
     if not safe_name:
         safe_name = "reservation"
 
-    safe_name = safe_name[:30]
+    safe_name = safe_name[:26]
 
     short_id = str(occurrence.id)[:8].lower()
 
-    return f"cr-{safe_name}-{short_id}"
+    return f"cr-{safe_name}-{short_id}-{reservation.resource_class_id}"
 
 
 class CapacityReservationK8sClient:
@@ -152,7 +152,7 @@ def _build_placeholder_deployment_manifest(
     """Build a placeholder deployment manifest for the given occurrence and reservation."""
     labels = {
         "app": "capacity-placeholder",
-        "renku.io/reservation-id": str(reservation.id),
+        "renku.io/capacity-reservation-id": str(reservation.id),
         "renku.io/occurrence-id": str(occurrence.id),
     }
 
