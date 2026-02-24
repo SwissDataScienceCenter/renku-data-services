@@ -55,6 +55,9 @@ class CapacityReservationK8sClient:
         self.__default_affinity: dict[str, Any] = yaml.safe_load(
             StringIO(os.environ.get("NB_SESSIONS__AFFINITY", "{}"))
         )
+        self.__placeholder_priority_class: str | None = os.environ.get(
+            "NB_SESSIONS__PLACEHOLDER_PRIORITY_CLASS"
+        ) or None
 
     async def _cluster_for_reservation(self, reservation: CapacityReservation) -> ClusterConnection:
         """Resolve the cluster for a reservation, falling back to the default cluster."""
@@ -81,6 +84,7 @@ class CapacityReservationK8sClient:
             self.__default_tolerations,
             self.__default_node_selector,
             self.__default_affinity,
+            self.__placeholder_priority_class,
         )
         meta = K8sObjectMeta(
             name=deployment_name,
@@ -148,12 +152,14 @@ def _build_placeholder_deployment_manifest(
     default_tolerations: list[dict[str, str]],
     default_node_selector: dict[str, str],
     default_affinity: dict[str, Any],
+    placeholder_priority_class: str | None,
 ) -> dict:
     """Build a placeholder deployment manifest for the given occurrence and reservation."""
     labels = {
         "app": "capacity-placeholder",
         "renku.io/capacity-reservation-id": str(reservation.id),
         "renku.io/occurrence-id": str(occurrence.id),
+        "renku.io/resource_class_id": str(reservation.resource_class_id),
     }
 
     cpu_str = f"{round(resource_class.cpu * 1000)}m"
@@ -179,8 +185,8 @@ def _build_placeholder_deployment_manifest(
         ],
     }
 
-    if resource_class.quota:
-        pod_spec["priorityClassName"] = resource_class.quota
+    if placeholder_priority_class:
+        pod_spec["priorityClassName"] = placeholder_priority_class
 
     if default_node_selector:
         pod_spec["nodeSelector"] = default_node_selector
