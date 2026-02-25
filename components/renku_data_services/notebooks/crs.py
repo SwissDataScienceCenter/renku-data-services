@@ -29,7 +29,6 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     ExtraVolumeMount,
     ImagePullPolicy,
     ImagePullSecret,
-    Ingress,
     InitContainer,
     MatchExpression,
     NodeAffinity,
@@ -54,6 +53,7 @@ from renku_data_services.notebooks.cr_amalthea_session import (
     Culling as _ASCulling,
 )
 from renku_data_services.notebooks.cr_amalthea_session import EnvItem2 as SessionEnvItem
+from renku_data_services.notebooks.cr_amalthea_session import Ingress as _Ingress
 from renku_data_services.notebooks.cr_amalthea_session import Item4 as SecretAsVolumeItem
 from renku_data_services.notebooks.cr_amalthea_session import Limits6 as _Limits
 from renku_data_services.notebooks.cr_amalthea_session import Limits7 as LimitsStr
@@ -218,11 +218,23 @@ class Session(_ASSession):
     remoteSecretRef: SecretRef | None = None
 
 
+class Ingress(_Ingress):
+    """Amalthea spec.ingress schema."""
+
+    def scheme(self) -> str:
+        """Returns the URL scheme to use for the session."""
+        if self.tlsSecret is not None or self.useDefaultClusterTLSCert:
+            return "https"
+        else:
+            return "http"
+
+
 class AmaltheaSessionSpec(_ASSpec):
     """Amalthea session specification."""
 
     session: Session
     culling: Culling | None = None
+    ingress: Ingress | None = None
 
 
 class AmaltheaSessionV1Alpha1(_ASModel):
@@ -289,9 +301,11 @@ class AmaltheaSessionV1Alpha1(_ASModel):
                 message=f"The manifest for a session with name {self.metadata.name} cannot be serialized "
                 "because it is missing the spec.session.resources field"
             )
-        url = "None"
-        if self.base_url is not None:
-            url = self.base_url
+
+        url = self.base_url()
+        if url is None:
+            url = "None"
+
         ready_containers = 0
         total_containers = 0
         if self.status.initContainerCounts is not None:
@@ -351,14 +365,14 @@ class AmaltheaSessionV1Alpha1(_ASModel):
             resource_class_id=self.resource_class_id(),
         )
 
-    @property
     def base_url(self) -> str | None:
         """Get the URL of the session, excluding the default URL from the session launcher."""
         if self.status.url and len(self.status.url) > 0:
             return self.status.url
-        if self.spec is None or self.spec.ingress is None:
+        if self.spec.ingress is None:
             return None
-        scheme = "https" if self.spec and self.spec.ingress and self.spec.ingress.tlsSecret else "http"
+
+        scheme = self.spec.ingress.scheme()
         host = self.spec.ingress.host
         path = self.spec.session.urlPath if self.spec.session.urlPath else "/"
         if not path.endswith("/"):
@@ -366,7 +380,7 @@ class AmaltheaSessionV1Alpha1(_ASModel):
         params = None
         query = None
         fragment = None
-        url = urlunparse((scheme, host, path, params, query, fragment))
+        url = str(urlunparse((scheme, host, path, params, query, fragment)))
         return url
 
 

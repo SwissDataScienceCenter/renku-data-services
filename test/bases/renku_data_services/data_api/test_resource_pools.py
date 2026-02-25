@@ -72,8 +72,7 @@ async def test_resource_pool_creation(
     cluster: KindCluster,
 ) -> None:
     payload = deepcopy(payload)
-    if "cluster_id" in payload:
-        payload["cluster_id"] = None
+    payload.pop("cluster_id", None)
 
     _, res = await create_rp(payload, sanic_client)
     assert res.status_code == expected_status_code, res.text
@@ -148,8 +147,7 @@ async def test_resource_pool_creation_with_remote(
     assert res.status_code == 201, res.text
 
     payload = deepcopy(payload)
-    if "cluster_id" in payload:
-        payload["cluster_id"] = None
+    payload.pop("cluster_id", None)
     payload["default"] = False
     payload["public"] = False
     payload["remote"] = {
@@ -162,7 +160,7 @@ async def test_resource_pool_creation_with_remote(
     _, res = await create_rp(payload, sanic_client)
     assert res.status_code == expected_status_code, res.text
 
-    if res.status_code >= 200 and res.status_code < 400:
+    if 200 <= res.status_code < 400:
         assert res.json is not None
         rp = res.json
         assert rp.get("remote") == {
@@ -187,8 +185,7 @@ async def test_resource_pool_creation_with_platform(
     cluster: KindCluster,
 ) -> None:
     payload = deepcopy(payload)
-    if "cluster_id" in payload:
-        payload["cluster_id"] = None
+    payload.pop("cluster_id", None)
     payload["default"] = False
     payload["public"] = False
     payload["platform"] = "linux/arm64"
@@ -196,7 +193,7 @@ async def test_resource_pool_creation_with_platform(
     _, res = await create_rp(payload, sanic_client)
     assert res.status_code == expected_status_code, res.text
 
-    if res.status_code >= 200 and res.status_code < 400:
+    if 200 <= res.status_code < 400:
         assert res.json is not None
         rp = res.json
         assert rp.get("platform") == "linux/arm64"
@@ -411,9 +408,7 @@ async def test_patch_quota(
 ) -> None:
     _, res = await create_rp(valid_resource_pool_payload, sanic_client)
     assert res.status_code == 201
-    _, res = await sanic_client.patch(
-        "/api/data/resource_pools/1/quota", headers=admin_headers, data=json.dumps({"cpu": 1000})
-    )
+    _, res = await sanic_client.patch("/api/data/resource_pools/1/quota", headers=admin_headers, json={"cpu": 1000})
     assert res.status_code == 200
     assert res.json.get("cpu") == 1000
 
@@ -435,7 +430,7 @@ async def test_put_quota(
     assert res.status_code == 200
     quota = res.json
     quota = {**quota, "cpu": 1000, "memory": 1000, "gpu": 1000}
-    _, res = await sanic_client.put("/api/data/resource_pools/1/quota", headers=admin_headers, data=json.dumps(quota))
+    _, res = await sanic_client.put("/api/data/resource_pools/1/quota", headers=admin_headers, json=quota)
     assert res.status_code == 200
     assert res.json == quota
 
@@ -450,9 +445,7 @@ async def test_patch_resource_class(
 ) -> None:
     _, res = await create_rp(valid_resource_pool_payload, sanic_client)
     assert res.status_code == 201
-    _, res = await sanic_client.patch(
-        "/api/data/resource_pools/1/classes/1", headers=admin_headers, data=json.dumps({"cpu": 5.0})
-    )
+    _, res = await sanic_client.patch("/api/data/resource_pools/1/classes/1", headers=admin_headers, json={"cpu": 5.0})
     assert res.status_code == 200
     assert res.json.get("cpu") == 5.0
 
@@ -474,7 +467,7 @@ async def test_put_resource_class(
     _, res = await sanic_client.put(
         "/api/data/resource_pools/1/classes/1",
         headers=admin_headers,
-        data=json.dumps(res_cls_payload),
+        json=res_cls_payload,
     )
     assert res.status_code == 200
     assert res.json == res_cls_expected_response
@@ -593,7 +586,7 @@ async def test_restricted_default_resource_pool_access_changes(
     _, res = await sanic_client.post(
         f"/api/data/resource_pools/{rp_default['id']}/users",
         headers=admin_headers,
-        data=json.dumps([{"id": no_default_user_id}]),
+        json=[{"id": no_default_user_id}],
     )
     assert res.status_code == 201
     # Ensure that the user can now see the default pool
@@ -634,7 +627,7 @@ async def test_private_resource_pool_access(
     _, res = await sanic_client.post(
         f"/api/data/resource_pools/{rp_private['id']}/users",
         headers=admin_headers,
-        data=json.dumps(user_payload),
+        json=user_payload,
     )
     assert res.status_code == 201
     # Ensure non-authenticated users cannot see the private pool
@@ -686,7 +679,7 @@ async def test_remove_resource_pool_users(
     _, res = await sanic_client.post(
         f"/api/data/resource_pools/{rp_private['id']}/users",
         headers=admin_headers,
-        data=json.dumps(user_payload),
+        json=user_payload,
     )
     assert res.status_code == 201
     # Ensure that the user we added to the private pool can see the pool
@@ -872,7 +865,7 @@ async def test_patch_tolerations(
     _, res = await sanic_client.patch(
         f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
         headers=admin_headers,
-        data=json.dumps({"tolerations": ["toleration1", "toleration2"]}),
+        json={"tolerations": ["toleration1", "toleration2"]},
     )
     assert res.status_code == 200
     assert "toleration2" in res.json["tolerations"]
@@ -880,7 +873,7 @@ async def test_patch_tolerations(
     _, res = await sanic_client.patch(
         f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
         headers=admin_headers,
-        data=json.dumps({"tolerations": ["toleration1", "toleration2", "toleration1"]}),
+        json={"tolerations": ["toleration1", "toleration2", "toleration1"]},
     )
     assert res.status_code == 200
     assert len(res.json["tolerations"]) == 2
@@ -918,7 +911,7 @@ async def test_patch_affinities(
     _, res = await sanic_client.patch(
         f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
         headers=admin_headers,
-        data=json.dumps({"node_affinities": res_class["node_affinities"] + [new_affinity]}),
+        json={"node_affinities": res_class["node_affinities"] + [new_affinity]},
     )
     assert res.status_code == 200
     assert len(res.json["node_affinities"]) == 2
@@ -929,7 +922,7 @@ async def test_patch_affinities(
     _, res = await sanic_client.patch(
         f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
         headers=admin_headers,
-        data=json.dumps({"node_affinities": res_class["node_affinities"] + [new_affinity, new_affinity]}),
+        json={"node_affinities": res_class["node_affinities"] + [new_affinity, new_affinity]},
     )
     assert res.status_code == 200
     assert len(res.json["node_affinities"]) == 2
@@ -938,7 +931,7 @@ async def test_patch_affinities(
     _, res = await sanic_client.patch(
         f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
         headers=admin_headers,
-        data=json.dumps({"node_affinities": res_class["node_affinities"] + [new_affinity]}),
+        json={"node_affinities": res_class["node_affinities"] + [new_affinity]},
     )
     assert res.status_code == 200
     assert len(res.json["node_affinities"]) == 2
@@ -977,7 +970,7 @@ async def test_remove_all_tolerations_put(
     _, res = await sanic_client.put(
         f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
         headers=admin_headers,
-        data=json.dumps(new_class),
+        json=new_class,
     )
     assert res.status_code == 200
     assert not res.json.get("tolerations")
@@ -1013,7 +1006,7 @@ async def test_remove_all_affinities_put(
     _, res = await sanic_client.put(
         f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
         headers=admin_headers,
-        data=json.dumps(new_class),
+        json=new_class,
     )
     assert res.status_code == 200
     assert not res.json.get("node_affinities")
@@ -1049,7 +1042,7 @@ async def test_put_tolerations(
     _, res = await sanic_client.put(
         f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
         headers=admin_headers,
-        data=json.dumps(new_class),
+        json=new_class,
     )
     assert res.status_code == 200, res.text
     assert res.json["tolerations"] == ["toleration2", "toleration3"]
@@ -1085,7 +1078,7 @@ async def test_put_affinities(
     _, res = await sanic_client.put(
         f"/api/data/resource_pools/{rp_id}/classes/{res_class_id}",
         headers=admin_headers,
-        data=json.dumps(new_class),
+        json=new_class,
     )
     assert res.status_code == 200
     assert res.json["node_affinities"] == [
@@ -1402,8 +1395,7 @@ async def test_resource_pool_patch_remote(
 
     # First, create a non-remote resource pool
     payload = deepcopy(resource_pool_payload_2)
-    if "cluster_id" in payload:
-        payload["cluster_id"] = None
+    payload.pop("cluster_id", None)
 
     _, res = await create_rp(payload, sanic_client)
     assert res.status_code == 201, res.text
@@ -1451,8 +1443,7 @@ async def test_resource_pool_patch_platform(
 ) -> None:
     # First, create a resource pool with the default runtime platform
     payload = deepcopy(resource_pool_payload_2)
-    if "cluster_id" in payload:
-        payload["cluster_id"] = None
+    payload.pop("cluster_id", None)
 
     _, res = await create_rp(payload, sanic_client)
     assert res.status_code == 201, res.text
@@ -1491,8 +1482,7 @@ async def test_resource_pool_empty_patch_noop(
 ) -> None:
     # First, create a resource pool
     payload = deepcopy(resource_pool_payload_2)
-    if "cluster_id" in payload:
-        payload["cluster_id"] = None
+    payload.pop("cluster_id", None)
     payload["public"] = True
 
     _, res = await create_rp(payload, sanic_client)
@@ -1519,8 +1509,7 @@ async def test_resource_class_empty_patch_noop(
 ) -> None:
     # First, create a resource pool
     payload = deepcopy(resource_pool_payload_2)
-    if "cluster_id" in payload:
-        payload["cluster_id"] = None
+    payload.pop("cluster_id", None)
     payload["public"] = True
 
     _, res = await create_rp(payload, sanic_client)

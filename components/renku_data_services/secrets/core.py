@@ -7,7 +7,6 @@ from base64 import b64encode
 import kr8s
 from box import Box
 from cryptography.hazmat.primitives.asymmetric import rsa
-from kr8s.objects import Secret
 from kubernetes import client as k8s_client
 from ulid import ULID
 
@@ -15,7 +14,7 @@ from renku_data_services import base_models, errors
 from renku_data_services.app_config import logging
 from renku_data_services.k8s.client_interfaces import SecretClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
-from renku_data_services.k8s.models import GVK, K8sSecret, sanitizer
+from renku_data_services.k8s.models import K8sSecret, sanitizer
 from renku_data_services.secrets import apispec
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo
 from renku_data_services.secrets.models import OwnerReference
@@ -106,7 +105,6 @@ async def validate_secret(
         name=v1_secret.metadata.name,
         namespace=v1_secret.metadata.namespace,
         cluster=cluster_id,
-        gvk=GVK(version=Secret.version, kind="Secret"),
         manifest=Box(sanitizer(v1_secret)),
     )
 
