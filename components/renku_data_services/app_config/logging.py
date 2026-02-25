@@ -19,11 +19,11 @@ making sure the logger name is prefixed correctly.
 
 Additionally, with `set_request_id` a request id can be provided that
 will be injected into every log record. This id is managed by a
-ContextVar to be retained correctly in async contexts.
+ContextVar to be retained correctly in async contexts. The same applies
+to `set_trace_id`.
 
 Before accessing loggers, run the `configure_logging()` method to
 configure loggers appropriately.
-
 """
 
 from __future__ import annotations
@@ -35,17 +35,21 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from logging import Logger
 from typing import Final, cast, final
 
 from renku_data_services.errors.errors import ConfigurationError
 
+# Re-exports to be used in other modules
+ERROR = logging.ERROR
+Logger = logging.Logger
+
 __app_root_logger: Final[str] = "renku_data_services"
 
-_request_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_id")
+_request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_id")
+_trace_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("trace_id")
 
 
-def getLogger(name: str) -> Logger:
+def getLogger(name: str) -> logging.Logger:
     """Return a logger with the name prefixed with our app name, if not already done."""
     if name.startswith(__app_root_logger + "."):
         return logging.getLogger(name)
@@ -53,15 +57,23 @@ def getLogger(name: str) -> Logger:
         return logging.getLogger(f"{__app_root_logger}.{name}")
 
 
-def set_request_id(rid: str | None) -> None:
-    """Provide the request_id as a context sensitiv global variable.
+def set_request_id(request_id: str | None) -> None:
+    """Provide the request_id as a context-sensitive global variable.
 
     The id will be used in subsequent logging statements.
     """
-    if rid is None:
-        _request_var.set("")
+    if request_id is None:
+        _request_id_var.set("")
     else:
-        _request_var.set(rid)
+        _request_id_var.set(request_id)
+
+
+def set_trace_id(trace_id: str | None) -> None:
+    """Set a trace id for the current context that will be logged in subsequent logging statements."""
+    if trace_id is None:
+        _trace_id_var.set("")
+    else:
+        _trace_id_var.set(trace_id)
 
 
 class _RenkuLogFormatter(logging.Formatter):
@@ -75,13 +87,13 @@ class _RenkuLogFormatter(logging.Formatter):
         super().__init__(
             fmt=(
                 "%(asctime)s [%(levelname)s] %(process)d/%(threadName)s "
-                "%(name)s (%(filename)s:%(lineno)d) [%(request_id)s] - %(message)s"
+                "%(name)s (%(filename)s:%(lineno)d) [%(request_id)s][%(trace_id)s] - %(message)s"
             ),
             datefmt="%Y-%m-%dT%H:%M:%S.%f%z",
         )
 
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
-        """Overriden to format the time string for %(asctime) interpolator."""
+        """Overridden to format the time string for %(asctime) interpolator."""
         ct = datetime.fromtimestamp(record.created)
         return ct.strftime(cast(str, self.datefmt))
 
@@ -89,22 +101,13 @@ class _RenkuLogFormatter(logging.Formatter):
 class _RenkuJsonFormatter(_RenkuLogFormatter):
     """Formatter to produce json log messages."""
 
-    fields: Final[set[str]] = set(
-        [
-            "name",
-            "levelno",
-            "pathname",
-            "module",
-            "filename",
-            "lineno",
-        ]
-    )
-    default_fields: Final[set[str]] = set(fields).union(set(["exc_info", "stack_info", "asctime", "message", "msg"]))
+    fields: Final[set[str]] = {"name", "levelno", "pathname", "module", "filename", "lineno"}
+    default_fields: Final[set[str]] = fields.union({"exc_info", "stack_info", "asctime", "message", "msg"})
 
     def format(self, record: logging.LogRecord) -> str:
         """Format the log record."""
         super().format(record)
-        return json.dumps(self._to_dict(record))
+        return json.dumps(self._to_dict(record), default=str)
 
     def _to_dict(self, record: logging.LogRecord) -> dict:
         base = {field: getattr(record, field, None) for field in self.fields}
@@ -202,8 +205,7 @@ class Config:
 
     def update_override_levels(self, others: dict[int, set[str]]) -> None:
         """Applies the given override levels to this config."""
-        other_loggers = set()
-        [other_loggers := other_loggers.union(x) for x in others.values()]
+        other_loggers = {e for s in others.values() for e in s}
         self.remove_override_loggers(other_loggers)
         for level, names in others.items():
             cur_names = self.override_levels.get(level) or set()
@@ -223,16 +225,10 @@ class Config:
     def from_env(cls, prefix: str = "") -> Config:
         """Return a config obtained from environment variables."""
         default = cls()
-        match os.environ.get(f"{prefix}LOG_ROOT_LEVEL"):
-            case None:
-                root_level = default.root_level
-            case lvl:
-                root_level = _Utils.get_numeric_level(lvl)
-        match os.environ.get(f"{prefix}LOG_APP_LEVEL"):
-            case None:
-                app_level = default.app_level
-            case lvl:
-                app_level = _Utils.get_numeric_level(lvl)
+        root_level_var = os.environ.get(f"{prefix}LOG_ROOT_LEVEL")
+        root_level = _Utils.get_numeric_level(root_level_var) if root_level_var else default.root_level
+        app_level_var = os.environ.get(f"{prefix}LOG_APP_LEVEL")
+        app_level = _Utils.get_numeric_level(app_level_var) if app_level_var else default.app_level
         format_style = LogFormatStyle.from_env(prefix, default.format_style.value)
         levels = _Utils.logger_levels_from_env(prefix)
         return Config(format_style, root_level, app_level, levels)
@@ -242,8 +238,10 @@ class _RequestIdFilter(logging.Filter):
     """Hack the request id into the log record."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        rid = _request_var.get(None) or "-"
-        record.request_id = rid
+        request_id = _request_id_var.get("-")
+        record.request_id = request_id
+        trace_id = _trace_id_var.get("-")
+        record.trace_id = trace_id
         return True
 
 
@@ -255,7 +253,7 @@ def configure_logging(cfg: Config | None = None) -> None:
     identified by the app root logger `renku_data_services`. All our
     loggers should therefore be children of this logger.
 
-    Level for individual loggers can be overriden using the
+    Level for individual loggers can be overridden using the
     `override_levels` argument. It is a map from logging level to a
     list of logger names. The default reads it from environment
     variables like `DEBUG_LOGGING=logger.name.one,logger.name.two`.
@@ -267,14 +265,17 @@ def configure_logging(cfg: Config | None = None) -> None:
     if cfg is None:
         cfg = Config.from_env()
 
+    # NOTE: Capture warning logs from Sanic or other modules by our logger to format them as JSON
+    logging.captureWarnings(True)
+
     # To have a uniform format *everywhere*, there is only one
     # handler. It is added to the root logger. However, imported
     # modules may change this configuration at any time (and they do).
-    # This tries to remove all existing handlers as an best effort.
-    for ll in _Utils.get_all_loggers():
-        ll.setLevel(logging.NOTSET)
-        for hdl in ll.handlers:
-            ll.removeHandler(hdl)
+    # This tries to remove all existing handlers as the best effort.
+    for logger in _Utils.get_all_loggers():
+        logger.setLevel(logging.NOTSET)
+        for hdl in logger.handlers:
+            logger.removeHandler(hdl)
 
     handler = logging.StreamHandler()
     handler.setFormatter(cfg.format_style.to_formatter())
@@ -316,11 +317,11 @@ def print_logger_setting(msg: str | None = None, show_all: bool = False) -> None
         f" * {l_root} (self.level={logging.getLevelName(l_root.level)}, handlers={len(logging.Logger.root.handlers)})"
     )
     for name in logging.Logger.manager.loggerDict:
-        ll = logging.Logger.manager.loggerDict[name]
-        match ll:
-            case logging.Logger() as logger:
+        logger = logging.Logger.manager.loggerDict[name]
+        match logger:
+            case logging.Logger():
                 level_name = logging.getLevelName(logger.level)
-                eff_level_name = logging.getLevelName(ll.getEffectiveLevel())
+                eff_level_name = logging.getLevelName(logger.getEffectiveLevel())
                 show_item = logger.level != logging.NOTSET
                 handlers = logger.handlers
             case logging.PlaceHolder():

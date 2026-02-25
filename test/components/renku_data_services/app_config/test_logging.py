@@ -1,8 +1,7 @@
 """Tests for the app_config.logging module."""
 
 import json
-import logging as ll
-from logging import LogRecord
+import logging
 
 from renku_data_services.app_config.logging import (
     Config,
@@ -11,13 +10,14 @@ from renku_data_services.app_config.logging import (
     _RenkuLogFormatter,
     _RequestIdFilter,
     set_request_id,
+    set_trace_id,
 )
 
-logger = ll.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
-sample_record = LogRecord(
+sample_record = logging.LogRecord(
     name="a.b.c",
-    level=ll.INFO,
+    level=logging.INFO,
     lineno=23,
     msg="this is a msg",
     pathname="a/b.py",
@@ -27,9 +27,9 @@ sample_record = LogRecord(
 _RequestIdFilter().filter(sample_record)
 
 
-class TestHandler(ll.Handler):
+class TestHandler(logging.Handler):
     def __init__(self) -> None:
-        ll.Handler.__init__(self)
+        logging.Handler.__init__(self)
         self.records = []
 
     def emit(self, record) -> None:
@@ -39,8 +39,8 @@ class TestHandler(ll.Handler):
         self.records = []
 
 
-def make_logger(name: str, level: int) -> tuple[ll.Logger, TestHandler]:
-    logger = ll.Logger(name, level)
+def make_logger(name: str, level: int) -> tuple[logging.Logger, TestHandler]:
+    logger = logging.Logger(name, level)
     hdl = TestHandler()
     logger.addHandler(hdl)
     logger.addFilter(_RequestIdFilter())
@@ -68,18 +68,18 @@ def test_plain_formatter() -> None:
 
 
 def test_default_config(monkeysession) -> None:
-    for level in ll._nameToLevel:
+    for level in logging._nameToLevel:
         monkeysession.setenv(f"{level}_LOGGING", "")
 
     cfg = Config.from_env()
-    assert cfg.app_level == ll.INFO
-    assert cfg.root_level == ll.WARNING
+    assert cfg.app_level == logging.INFO
+    assert cfg.root_level == logging.WARNING
     assert cfg.format_style == LogFormatStyle.plain
     assert cfg.override_levels == {}
 
 
 def test_config_from_env(monkeysession) -> None:
-    for level in ll._nameToLevel:
+    for level in logging._nameToLevel:
         monkeysession.setenv(f"{level}_LOGGING", "")
 
     monkeysession.setenv("DEBUG_LOGGING", "renku_data_services.test")
@@ -87,14 +87,14 @@ def test_config_from_env(monkeysession) -> None:
     monkeysession.setenv("LOG_FORMAT_STYLE", "Json")
 
     cfg = Config.from_env()
-    assert cfg.app_level == ll.WARNING
-    assert cfg.root_level == ll.WARNING
+    assert cfg.app_level == logging.WARNING
+    assert cfg.root_level == logging.WARNING
     assert cfg.format_style == LogFormatStyle.json
-    assert cfg.override_levels == {10: set(["renku_data_services.test"])}
+    assert cfg.override_levels == {10: {"renku_data_services.test"}}
 
 
 def test_log_with_request_id() -> None:
-    logger, hdl = make_logger("test.logger", ll.INFO)
+    logger, hdl = make_logger("test.logger", logging.INFO)
     set_request_id("req_id_1")
     logger.info("hello world")
     assert len(hdl.records) == 1
@@ -103,8 +103,18 @@ def test_log_with_request_id() -> None:
     assert record.getMessage() == "hello world"
 
 
+def test_log_with_trace_id() -> None:
+    logger, hdl = make_logger("test.logger", logging.INFO)
+    trace_id = "trace_id"
+    set_trace_id(trace_id)
+    logger.info("hello world")
+    assert len(hdl.records) == 1
+    record = hdl.records[0]
+    assert record.trace_id == trace_id
+
+
 def test_log_request_id_json() -> None:
-    logger, hdl = make_logger("test.logger", ll.INFO)
+    logger, hdl = make_logger("test.logger", logging.INFO)
     set_request_id("test_req_2")
     logger.info("hello world")
     assert len(hdl.records) == 1
@@ -113,7 +123,18 @@ def test_log_request_id_json() -> None:
     assert js["request_id"] == "test_req_2"
 
 
+def test_log_trace_id_json() -> None:
+    logger, hdl = make_logger("test.logger", logging.INFO)
+    trace_id = "trace_id"
+    set_trace_id(trace_id)
+    logger.info("hello world")
+    assert len(hdl.records) == 1
+    record = hdl.records[0]
+    js = json.loads(_RenkuJsonFormatter().format(record))
+    assert js["trace_id"] == trace_id
+
+
 def test_config_update_levels() -> None:
-    cfg1 = Config(override_levels={10: set(["a", "b"]), 20: set(["c"])})
-    cfg1.update_override_levels({10: set(["c"]), 20: set(["b"])})
-    assert cfg1.override_levels == {10: set(["a", "c"]), 20: set(["b"])}
+    cfg1 = Config(override_levels={10: {"a", "b"}, 20: {"c"}})
+    cfg1.update_override_levels({10: {"c"}, 20: {"b"}})
+    assert cfg1.override_levels == {10: {"a", "c"}, 20: {"b"}}
