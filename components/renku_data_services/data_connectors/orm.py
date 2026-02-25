@@ -307,6 +307,13 @@ class DepositORM(BaseORM):
     )
     """ If the cluster ID is none it is assumed that the local cluster is being used."""
 
+    creation_date: Mapped[datetime] = mapped_column(
+        "creation_date", DateTime(timezone=True), server_default=func.now(), nullable=False, init=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        "updated_at", DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), init=False
+    )
+
     def dump(self) -> models.DepositJob:
         """Create a deposit model from the ORM."""
         return models.DepositJob(
@@ -320,5 +327,7 @@ class DepositORM(BaseORM):
                 path=PurePosixPath(self.path) if self.path else None,
                 status=self.status.dump(),
                 id=self.id,
+                creation_date=self.creation_date,
+                updated_at=self.updated_at,
             ),
         )

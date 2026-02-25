@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Any
 
-from sanic import Request, json
+from sanic import Request
 from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
 from ulid import ULID
@@ -576,7 +576,7 @@ class DataConnectorsBP(CustomBlueprint):
             zenodo_dep = await self.zenodo_client.create_deposit(token, body.name)
             # Create the deposit in the DB
             dep = await validate_deposit(user, body, str(zenodo_dep.id), self.data_connector_repo)
-            job_name = "deposit-" + str(ULID())
+            job_name = "deposit-" + str(ULID()).lower()
             dep_job = models.UnsavedDepositJob(
                 deposit=dep,
                 name=job_name,
@@ -584,17 +584,7 @@ class DataConnectorsBP(CustomBlueprint):
             )
             saved_dep = await self.data_connector_repo.create_deposit(user, dep_job)
             # TODO: Create a job in k8s
-            return json(
-                apispec.Deposit(
-                    name=saved_dep.deposit.name,
-                    provider=apispec.DepositProvider.zenodo,
-                    data_connector_id=str(saved_dep.deposit.data_connector_id),
-                    path=saved_dep.deposit.path.as_posix() if saved_dep.deposit.path else "/",
-                    id=str(saved_dep.deposit.id),
-                    status=apispec.DepositStatus(saved_dep.deposit.status.value),
-                    external_url="https://zenodo.org",
-                ).model_dump(mode="json")
-            )
+            return validated_json(apispec.Deposit, serialize_deposit(saved_dep))
 
         return "/deposits", ["POST"], _post_deposit
 
@@ -605,7 +595,7 @@ class DataConnectorsBP(CustomBlueprint):
         @only_authenticated
         async def _get_deposit(_: Request, user: base_models.APIUser, deposit_id: ULID) -> JSONResponse:
             saved_dep = await self.data_connector_repo.get_deposit(user, deposit_id)
-            return json(serialize_deposit(saved_dep).model_dump(mode="json"))
+            return validated_json(apispec.Deposit, serialize_deposit(saved_dep))
 
         return "/deposits/<deposit_id:ulid>", ["GET"], _get_deposit
 
@@ -621,7 +611,7 @@ class DataConnectorsBP(CustomBlueprint):
             patch = validate_deposit_patch(body)
             saved_dep = await self.data_connector_repo.update_deposit(user, deposit_id, patch)
             # TODO: When the deposit is completed create a new data connector
-            return json(serialize_deposit(saved_dep).model_dump(mode="json"))
+            return validated_json(apispec.Deposit, serialize_deposit(saved_dep))
 
         return "/deposits/<deposit_id:ulid>", ["PATCH"], _patch_deposit
 
@@ -646,10 +636,23 @@ class DataConnectorsBP(CustomBlueprint):
         async def _get_deposits(
             _: Request, user: base_models.APIUser, pagination: PaginationRequest
         ) -> tuple[list[dict[str, Any]], int]:
-            deposits, total_num = await self.data_connector_repo.get_deposits(user, pagination)
-            output: list[dict[str, Any]] = []
-            async for dep in deposits:
-                output.append(serialize_deposit(dep).model_dump(mode="json"))
-            return output, total_num
+            deposits, total_num = await self.data_connector_repo.get_deposits(
+                user, data_connector_id=None, pagination=pagination
+            )
+            return [validate_and_dump(apispec.Deposit, serialize_deposit(i)) for i in deposits], total_num
 
         return "/deposits", ["GET"], _get_deposits
+
+    def get_dc_deposits(self) -> BlueprintFactoryResponse:
+        """Get a specific deposit."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        @paginate
+        async def _get_dc_deposits(
+            _: Request, user: base_models.APIUser, data_connector_id: ULID, pagination: PaginationRequest
+        ) -> tuple[list[dict[str, Any]], int]:
+            deposits, total_num = await self.data_connector_repo.get_deposits(user, data_connector_id, pagination)
+            return [validate_and_dump(apispec.Deposit, serialize_deposit(i)) for i in deposits], total_num
+
+        return "/data_connectors/<data_connector_id:ulid>/deposits", ["GET"], _get_dc_deposits

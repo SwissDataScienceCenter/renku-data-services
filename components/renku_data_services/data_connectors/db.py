@@ -819,26 +819,32 @@ class DataConnectorRepository:
         return link
 
     async def get_deposits(
-        self, user: base_models.APIUser, pagination: PaginationRequest | None = None
-    ) -> tuple[AsyncIterator[models.DepositJob], int]:
+        self,
+        user: base_models.APIUser,
+        data_connector_id: ULID | None = None,
+        pagination: PaginationRequest | None = None,
+    ) -> tuple[list[models.DepositJob], int]:
         """Get a deposit from the DB."""
-
-        async def _dump(deps: AsyncIterator[schemas.DepositORM]) -> AsyncIterator[models.DepositJob]:
-            async for dep in deps:
-                yield dep.dump()
 
         if user.id is None or user.is_anonymous:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
         async with self.session_maker() as session, session.begin():
-            stmt = select(schemas.DepositORM).where(schemas.DepositORM.user_id == user.id)
-            if pagination:
-                stmt = stmt.limit(pagination.per_page).offset(pagination.offset)
+            stmt = (
+                select(schemas.DepositORM)
+                .where(schemas.DepositORM.user_id == user.id)
+                .order_by(schemas.DepositORM.creation_date.desc())
+            )
             stmt_count = (
                 select(func.count()).select_from(schemas.DepositORM).where(schemas.DepositORM.user_id == user.id)
             )
-            res = await session.stream_scalars(stmt)
+            if data_connector_id:
+                stmt = stmt.where(schemas.DepositORM.data_connector_id == data_connector_id)
+                stmt_count.where(schemas.DepositORM.data_connector_id == data_connector_id)
+            if pagination:
+                stmt = stmt.limit(pagination.per_page).offset(pagination.offset)
+            res = await session.scalars(stmt)
             res_count = await session.scalar(stmt_count)
-            return _dump(res), res_count or 0
+            return [i.dump() for i in res], res_count or 0
 
     async def __get_deposit(
         self, user: base_models.APIUser, deposit_id: ULID, session: AsyncSession
@@ -894,7 +900,7 @@ class DataConnectorRepository:
                 job_name=deposit_job.name,
                 # The local cluster ID does not exist in the DB so it cannot be used as a foreign key
                 cluster_id=None if deposit_job.cluster_id == DEFAULT_K8S_CLUSTER else deposit_job.cluster_id,
-                name=deposit_job.name,
+                name=deposit_job.deposit.name,
             )
             session.add(dep)
             await session.flush()
