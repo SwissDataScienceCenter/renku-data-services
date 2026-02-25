@@ -52,6 +52,7 @@ class Config:
     short_task_period_s: int
     long_task_period_s: int
     k8s_config_root: str
+    enable_resource_request_tracking: bool
 
     @classmethod
     def from_env(cls) -> Config:
@@ -72,6 +73,7 @@ class Config:
 
         k8s_config_root = os.environ.get("K8S_CONFIG_ROOT", "/secrets/kube_configs")
 
+        enable_resource_request_tracking = os.environ.get("ENABLE_RESOURCE_REQUEST_TRACKING", "true").lower() == "true"
         authz = AuthzConfig.from_env()
 
         keycloak = None if dummy_stores else KeycloakConfig.from_env()
@@ -90,4 +92,5 @@ class Config:
             short_task_period_s=short_task_period,
             long_task_period_s=long_task_period,
             dummy_stores=dummy_stores,
+            enable_resource_request_tracking=enable_resource_request_tracking,
         )

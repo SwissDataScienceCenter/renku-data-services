@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 
+from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import Authz
 from renku_data_services.capacity_reservation.db import CapacityReservationRepository, OccurrenceRepository
 from renku_data_services.capacity_reservation.k8s_client import CapacityReservationK8sClient
@@ -16,7 +17,12 @@ from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
 from renku_data_services.project.db import ProjectRepository
-from renku_data_services.resource_usage.core import ResourceRequestsFetch, ResourcesRequestRecorder
+from renku_data_services.resource_usage.core import (
+    DefaultResourcesRequestRecorder,
+    NoopResourcesRequestRecorder,
+    ResourceRequestsFetch,
+    ResourcesRequestRecorder,
+)
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.session.db import SessionRepository
@@ -25,6 +31,8 @@ from renku_data_services.users.db import UserRepo, UsersSync
 from renku_data_services.users.dummy_kc_api import DummyKeycloakAPI
 from renku_data_services.users.kc_api import IKeycloakAPI, KeycloakAPI
 from renku_data_services.users.models import UnsavedUserInfo
+
+logger = logging.getLogger(__file__)
 
 
 @dataclass
@@ -103,9 +111,16 @@ class DependencyManager:
             ),
             k8s_client=cr_k8s_client,
         )
-        resource_requests_recorder = ResourcesRequestRecorder(
-            repo=ResourceRequestsRepo(cfg.db.async_session_maker), fetch=ResourceRequestsFetch(k8s_client)
-        )
+
+        resource_requests_recorder: ResourcesRequestRecorder
+        if cfg.enable_resource_request_tracking:
+            resource_requests_recorder = DefaultResourcesRequestRecorder(
+                repo=ResourceRequestsRepo(cfg.db.async_session_maker), fetch=ResourceRequestsFetch(k8s_client)
+            )
+        else:
+            logger.warning("Resource request tracking is disabled!")
+            resource_requests_recorder = NoopResourcesRequestRecorder()
+
         kc_api: IKeycloakAPI
         if cfg.dummy_stores:
             dummy_users = [

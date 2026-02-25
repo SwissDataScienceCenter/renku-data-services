@@ -117,7 +117,23 @@ class ResourceRequestsFetch(ResourceRequestsFetchProto):
                     rreq.resource_pool_id = amsObj.resource_pool_id
 
 
-class ResourcesRequestRecorder:
+class ResourcesRequestRecorder(Protocol):
+    """Methods for recording resource requests."""
+
+    async def record_resource_requests(self, interval: timedelta) -> None:
+        """Fetches all resource requests in the given namespace and stores them."""
+        ...
+
+
+class NoopResourcesRequestRecorder(ResourcesRequestRecorder):
+    """No-op resource request recorder."""
+
+    async def record_resource_requests(self, interval: timedelta) -> None:
+        """Fetches all resource requests in the given namespace and stores them."""
+        return None
+
+
+class DefaultResourcesRequestRecorder(ResourcesRequestRecorder):
     """Methods for recording resource requests."""
 
     def __init__(self, repo: ResourceRequestsRepo, fetch: ResourceRequestsFetchProto) -> None:
