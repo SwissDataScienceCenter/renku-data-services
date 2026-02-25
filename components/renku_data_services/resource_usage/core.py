@@ -111,6 +111,10 @@ class ResourceRequestsFetch(ResourceRequestsFetchProto):
                 rreq.user_id = rreq.user_id or amsObj.user_id
                 rreq.project_id = rreq.project_id or amsObj.project_id
                 rreq.launcher_id = rreq.launcher_id or amsObj.launcher_id
+                if not rreq.resource_class_id:
+                    rreq.resource_class_id = amsObj.resource_class_id
+                if not rreq.resource_pool_id:
+                    rreq.resource_pool_id = amsObj.resource_pool_id
 
 
 class ResourcesRequestRecorder:
