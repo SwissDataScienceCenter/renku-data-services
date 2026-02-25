@@ -55,7 +55,7 @@ class ResourceUsageBP(CustomBlueprint):
             else:
                 return empty()
 
-        return "/resource_usage/pool_limits/<resource_pool_id>", ["PUT"], _put
+        return "/resource_pools/<resource_pool_id>/limits", ["PUT"], _put
 
     def get_pool_limits(self) -> BlueprintFactoryResponse:
         """Get resource pool limits."""
@@ -75,7 +75,7 @@ class ResourceUsageBP(CustomBlueprint):
             else:
                 raise errors.MissingResourceError()
 
-        return "/resource_usage/pool_limits/<resource_pool_id>", ["GET"], _get
+        return "/resource_pools/<resource_pool_id>/limits", ["GET"], _get
 
     def delete_pool_limits(self) -> BlueprintFactoryResponse:
         """Delete defined pool limits."""
@@ -87,7 +87,7 @@ class ResourceUsageBP(CustomBlueprint):
             await self.rr_repo.delete_resource_pool_limits(resource_pool_id)
             return empty()
 
-        return "/resource_usage/pool_limits/<resource_pool_id>", ["DELETE"], _delete
+        return "/resource_pools/<resource_pool_id>/limits", ["DELETE"], _delete
 
     def put_class_costs(self) -> BlueprintFactoryResponse:
         """Set resource class cost."""
@@ -110,7 +110,7 @@ class ResourceUsageBP(CustomBlueprint):
             else:
                 return empty()
 
-        return "/resource_usage/class_cost/<resource_pool_id>/<class_id>", ["PUT"], _put
+        return "/resource_pools/<resource_pool_id>/classes/<class_id>/cost", ["PUT"], _put
 
     def get_class_cost(self) -> BlueprintFactoryResponse:
         """Get resource class costs."""
@@ -130,7 +130,7 @@ class ResourceUsageBP(CustomBlueprint):
             else:
                 raise errors.MissingResourceError()
 
-        return "/resource_usage/class_cost/<resource_pool_id>/<class_id>", ["GET"], _get
+        return "/resource_pools/<resource_pool_id>/classes/<class_id>/cost", ["GET"], _get
 
     def delete_class_cost(self) -> BlueprintFactoryResponse:
         """Delete resource class costs limits."""
@@ -142,13 +142,12 @@ class ResourceUsageBP(CustomBlueprint):
             await self.rr_repo.delete_resource_class_costs(class_id)
             return empty()
 
-        return "/resource_usage/class_cost/<resource_pool_id>/<class_id>", ["DELETE"], _delete
+        return "/resource_pools/<resource_pool_id>/classes/<class_id>/cost", ["DELETE"], _delete
 
     def get_pool_usage(self) -> BlueprintFactoryResponse:
         """Get usage of a pool."""
 
         @authenticate(self.authenticator)
-        @only_admins
         @validate_db_ids
         async def _get(_: Request, user: base_models.APIUser, resource_pool_id: int) -> HTTPResponse:
             result = await self.rr_svc.get_running_week(resource_pool_id, user.id or "")
@@ -173,4 +172,4 @@ class ResourceUsageBP(CustomBlueprint):
             else:
                 raise errors.MissingResourceError()
 
-        return "/resource_usage/pool/<resource_pool_id>", ["GET"], _get
+        return "/resource_pools/<resource_pool_id>/usage", ["GET"], _get

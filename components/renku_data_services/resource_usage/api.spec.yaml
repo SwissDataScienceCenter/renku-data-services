@@ -9,7 +9,7 @@ info:
 servers:
   - url: /api/data
 paths:
-  /resource_usage/pool/{resource_pool_id}:
+  /resource_pools/{resource_pool_id}/usage:
     get:
       summary: "Get usage and limits of the supplied pool."
       parameters:
@@ -35,7 +35,7 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - resource-usage
-  /resource_usage/pool_limits/{resource_pool_id}:
+  /resource_pools/{resource_pool_id}/limits:
     get:
       summary: "Get resource pool limits"
       parameters:
@@ -110,7 +110,7 @@ paths:
       tags:
         - resource-usage
 
-  /resource_usage/class_costs/{resource_pool_id}/{class_id}:
+  /resource_pools/{resource_pool_id}/classes/{class_id}/cost:
     get:
       summary: "Get resource class costs."
       parameters:
