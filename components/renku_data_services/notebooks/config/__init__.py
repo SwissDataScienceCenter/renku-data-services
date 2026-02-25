@@ -8,18 +8,18 @@ from typing import Any, Protocol, Self
 import kr8s
 
 from renku_data_services.base_models import APIUser
-from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
+from renku_data_services.crc.db import ClusterRepository, QuotaRepository, ResourcePoolRepository
 from renku_data_services.crc.models import ClusterSettings, ResourceClass, SessionProtocol
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.errors import errors
 from renku_data_services.k8s.clients import (
     K8sClusterClientsPool,
+    K8sPriorityClassClient,
     K8sResourceQuotaClient,
-    K8sSchedulingClient,
     K8sSecretClient,
 )
 from renku_data_services.k8s.config import KubeConfig, KubeConfigEnv, get_clusters
-from renku_data_services.k8s.db import K8sDbCache, QuotaRepository
+from renku_data_services.k8s.db import K8sDbCache
 from renku_data_services.notebooks.api.classes.data_service import (
     CRCValidator,
 )
@@ -156,7 +156,6 @@ class NotebooksConfig:
         default_kubeconfig = KubeConfigEnv()
         data_service_url = os.environ.get("NB_DATA_SERVICE_URL", "http://127.0.0.1:8000")
         crc_validator: CRCValidatorProto
-        k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
         kube_config_root = os.environ.get("K8S_CONFIGS_ROOT", "/secrets/kube_configs")
         v1_sessions_enabled = _parse_str_as_bool(os.environ.get("V1_SESSIONS_ENABLED", False))
 
@@ -183,9 +182,7 @@ class NotebooksConfig:
         )
         secrets_client = K8sSecretClient(client)
 
-        quota_repo = QuotaRepository(
-            K8sResourceQuotaClient(client), K8sSchedulingClient(client), namespace=k8s_namespace
-        )
+        quota_repo = QuotaRepository(K8sResourceQuotaClient(client), K8sPriorityClassClient(client))
         rp_repo = ResourcePoolRepository(db_config.async_session_maker, quota_repo)
         crc_validator = CRCValidator(rp_repo)
         k8s_v2_client = NotebookK8sClient(

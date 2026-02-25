@@ -7,9 +7,12 @@ from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from typing import Any, Optional, Protocol, Self
 
+from kubernetes.utils import parse_quantity
+
 from renku_data_services import errors
 from renku_data_services.base_models import ResetType
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
+from renku_data_services.k8s.models import K8sPatch, K8sResourceQuota
 
 
 class ResourcesProtocol(Protocol):
@@ -152,14 +155,64 @@ class UnsavedQuota(ResourcesCompareMixin):
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
-class Quota(ResourcesCompareMixin):
+class Quota(UnsavedQuota):
     """Quota model."""
 
-    cpu: float
-    memory: int
-    gpu: int
-    gpu_kind: GpuKind = GpuKind.NVIDIA
     id: str
+
+    @classmethod
+    def from_k8s_resource_quota(cls, quota: K8sResourceQuota) -> Quota:
+        """Convert a K8s Resource Quota."""
+
+        def require_key(manifest: dict, key: str, prefix: str = "") -> Any:
+            try:
+                return manifest.get(key)
+            except Exception:
+                raise errors.ValidationError(
+                    message=f"Kubernetes resource quota with missing {prefix}{key} is not supported"
+                ) from None
+
+        spec = require_key(quota.manifest.to_dict(), "spec", "")
+        hard = require_key(spec, "hard", "spec.")
+
+        gpu = 0
+        gpu_kind = GpuKind.NVIDIA
+        for igpu_kind in GpuKind:
+            key = f"requests.{igpu_kind}/gpu"
+            if key in hard:
+                gpu = int(parse_quantity(hard.get(key)))
+                gpu_kind = igpu_kind
+                break
+
+        memory_raw = require_key(hard, "requests.memory", "hard.")
+        cpu_raw = require_key(hard, "requests.cpu", "hard.")
+        return cls(
+            cpu=float(parse_quantity(cpu_raw)) / 1_000_000_000,
+            memory=round(parse_quantity(memory_raw) / 1_000_000_000),
+            gpu=gpu,
+            gpu_kind=gpu_kind,
+            id=quota.name,
+        )
+
+    def to_patch(self, labels: dict[str, str]) -> K8sPatch:
+        """Convert to a manifest."""
+
+        return {
+            "metadata": {
+                "name": self.id,
+                "labels": labels,
+            },
+            "spec": {
+                "hard": {
+                    "requests.cpu": str(round(self.cpu * 1_000_000_000)),
+                    "requests.memory": str(self.memory * 1_000_000_000),
+                    f"requests.{self.gpu_kind}/gpu": self.gpu,
+                },
+                "scopeSelector": {
+                    "matchExpressions": [{"operator": "In", "scopeName": "PriorityClass", "values": [self.id]}]
+                },
+            },
+        }
 
     def is_resource_class_compatible(self, rc: ResourceClass | UnsavedResourceClass) -> bool:
         """Determine if a resource class is compatible with the quota."""

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
-from typing import Any, cast
+from typing import cast
 
 import httpx
 from box import Box
@@ -18,7 +18,15 @@ from renku_data_services.errors import errors
 from renku_data_services.k8s.client_interfaces import SecretClient
 from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
-from renku_data_services.k8s.models import GVK, ClusterConnection, K8sObject, K8sObjectFilter, K8sObjectMeta, K8sSecret
+from renku_data_services.k8s.models import (
+    GVK,
+    ClusterConnection,
+    K8sObject,
+    K8sObjectFilter,
+    K8sObjectMeta,
+    K8sPatches,
+    K8sSecret,
+)
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1
 from renku_data_services.notebooks.util.kubernetes_ import find_env_var
@@ -234,9 +242,7 @@ class NotebookK8sClient(SecretClient):
 
         return self.__session_type.model_validate(session.manifest)
 
-    async def patch_session(
-        self, session_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
-    ) -> AmaltheaSessionV1Alpha1:
+    async def patch_session(self, session_name: str, safe_username: str, patch: K8sPatches) -> AmaltheaSessionV1Alpha1:
         """Patch a session."""
         session = await self._get(session_name, self.__session_gvk, safe_username)
         if session is None:
@@ -265,9 +271,7 @@ class NotebookK8sClient(SecretClient):
             resource=statefulset.to_api_object(cluster.api), namespace=statefulset.namespace, api=cluster.api
         )
 
-    async def patch_statefulset(
-        self, session_name: str, safe_username: str, patch: dict[str, Any] | list[dict[str, Any]]
-    ) -> StatefulSet | None:
+    async def patch_statefulset(self, session_name: str, safe_username: str, patch: K8sPatches) -> StatefulSet | None:
         """Patch a statefulset."""
         sts = await self.get_statefulset(session_name, safe_username)
         if sts is None:
@@ -395,7 +399,7 @@ class NotebookK8sClient(SecretClient):
 
         return await self.__secrets_client.create_secret(secret)
 
-    async def patch_secret(self, secret: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sSecret:
+    async def patch_secret(self, secret: K8sObjectMeta, patch: K8sPatches) -> K8sSecret:
         """Patch a secret."""
 
         return await self.__secrets_client.patch_secret(secret, patch)

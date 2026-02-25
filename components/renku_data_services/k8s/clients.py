@@ -6,11 +6,8 @@ import contextlib
 import os
 from collections.abc import AsyncIterable, Callable
 from copy import deepcopy
-from typing import Any, overload
 
 import kr8s
-from box import Box
-from kubernetes import client
 
 from renku_data_services.errors import errors
 from renku_data_services.k8s.client_interfaces import K8sClient, PriorityClassClient, ResourceQuotaClient, SecretClient
@@ -20,11 +17,14 @@ from renku_data_services.k8s.models import (
     GVK,
     APIObjectInCluster,
     ClusterConnection,
-    ClusterScopedK8sObject,
     DeletePropagationPolicy,
     K8sObject,
     K8sObjectFilter,
     K8sObjectMeta,
+    K8sPatch,
+    K8sPatches,
+    K8sPriorityClass,
+    K8sResourceQuota,
     K8sSecret,
 )
 
@@ -32,73 +32,43 @@ from renku_data_services.k8s.models import (
 class K8sResourceQuotaClient(ResourceQuotaClient):
     """Real k8s core API client that exposes the required functions."""
 
-    def __init__(self, k8s_client: K8sClient) -> None:
+    def __init__(self, k8s_client: K8sClusterClientsPool) -> None:
         self.__client = k8s_client
-        self.__quota_gvk = GVK(kind="ResourceQuota", version="v1")
-        self.__converter = client.ApiClient()
 
-    def _meta(self, name: str, namespace: str, cluster_id: ClusterId) -> K8sObjectMeta:
-        return K8sObjectMeta(
-            name=name,
-            namespace=namespace,
-            gvk=self.__quota_gvk,
-            cluster=cluster_id,
-        )
+    async def __cluster_by_id(self, cluster_id: ClusterId) -> ClusterConnection:
+        return await self.__client.cluster_by_id(cluster_id)
 
-    def _convert(self, data: Box) -> client.V1ResourceQuota:
-        # NOTE: There is unfortunately no other way around this, this is the only thing that will
-        # properly handle snake case - camel case conversions and a bunch of other things.
-        output = self.__converter._ApiClient__deserialize(data.to_dict(), client.V1ResourceQuota)
-        if not isinstance(output, client.V1ResourceQuota):
-            raise errors.ProgrammingError(message="Could not convert the output from kr8s to a ResourceQuota")
-        return output
-
-    async def read_resource_quota(self, name: str, namespace: str, cluster_id: ClusterId) -> client.V1ResourceQuota:
+    async def read_resource_quota(self, name: str, cluster_id: ClusterId) -> K8sResourceQuota:
         """Get a resource quota."""
-        res = await self.__client.get(self._meta(name, namespace, cluster_id))
+        cluster = await self.__cluster_by_id(cluster_id)
+        res = await self.__client.get(K8sResourceQuota.meta(name, cluster))
         if res is None:
-            raise errors.MissingResourceError(message=f"The resource quota {namespace}/{name} cannot be found.")
-        return self._convert(res.manifest)
+            raise errors.MissingResourceError(message=f"The resource quota {cluster.namespace}/{name} cannot be found.")
+        return K8sResourceQuota.from_k8s_object(res)
 
     async def list_resource_quota(
-        self, namespace: str, label_selector: dict[str, str], cluster_id: ClusterId
-    ) -> AsyncIterable[client.V1ResourceQuota]:
+        self, label_selector: dict[str, str], cluster_id: ClusterId
+    ) -> AsyncIterable[K8sResourceQuota]:
         """List resource quotas."""
-        filter = K8sObjectFilter(
-            gvk=self.__quota_gvk,
-            namespace=namespace,
-            label_selector=label_selector,
-            cluster=cluster_id,
-        )
-        quotas = self.__client.list(filter)
+        quotas = self.__client.list(K8sResourceQuota.get_filter(label_selector, await self.__cluster_by_id(cluster_id)))
         async for quota in quotas:
-            yield self._convert(quota.manifest)
+            yield K8sResourceQuota.from_k8s_object(quota)
 
-    async def create_resource_quota(
-        self, namespace: str, body: client.V1ResourceQuota, cluster_id: ClusterId
-    ) -> client.V1ResourceQuota:
+    async def create_resource_quota(self, quota: K8sPatch, cluster_id: ClusterId) -> K8sResourceQuota:
         """Create a resource quota."""
-        obj = K8sObject(
-            name=body.metadata.name,
-            namespace=namespace,
-            gvk=self.__quota_gvk,
-            manifest=Box(self.__converter.sanitize_for_serialization(body)),
-            cluster=cluster_id,
+        res = await self.__client.create(
+            K8sResourceQuota.from_patch(quota, await self.__cluster_by_id(cluster_id)), False
         )
-        res = await self.__client.create(obj, False)
-        return self._convert(res.manifest)
+        return K8sResourceQuota.from_k8s_object(res)
 
-    async def delete_resource_quota(self, name: str, namespace: str, cluster_id: ClusterId) -> None:
+    async def delete_resource_quota(self, name: str, cluster_id: ClusterId) -> None:
         """Delete a resource quota."""
-        await self.__client.delete(self._meta(name, namespace, cluster_id))
+        await self.__client.delete(K8sResourceQuota.meta(name, await self.__cluster_by_id(cluster_id)))
 
-    async def patch_resource_quota(
-        self, name: str, namespace: str, body: client.V1ResourceQuota, cluster_id: ClusterId
-    ) -> client.V1ResourceQuota:
+    async def patch_resource_quota(self, name: str, patch: K8sPatches, cluster_id: ClusterId) -> K8sResourceQuota:
         """Update a resource quota."""
-        patch = self.__converter.sanitize_for_serialization(body)
-        res = await self.__client.patch(self._meta(name, namespace, cluster_id), patch)
-        return self._convert(res.manifest)
+        res = await self.__client.patch(K8sResourceQuota.meta(name, await self.__cluster_by_id(cluster_id)), patch)
+        return K8sResourceQuota.from_k8s_object(res)
 
 
 class K8sSecretClient(SecretClient):
@@ -114,107 +84,77 @@ class K8sSecretClient(SecretClient):
 
     async def create_secret(self, secret: K8sSecret) -> K8sSecret:
         """Create a secret."""
-
         return K8sSecret.from_k8s_object(await self.__client.create(secret, False))
 
-    async def patch_secret(self, secret: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sSecret:
+    async def patch_secret(self, secret: K8sObjectMeta, patch: K8sPatches) -> K8sSecret:
         """Patch a secret."""
-
         return K8sSecret.from_k8s_object(await self.__client.patch(secret, patch))
 
     async def delete_secret(self, secret: K8sObjectMeta) -> None:
         """Delete a secret."""
-
         await self.__client.delete(secret)
 
 
-class K8sSchedulingClient(PriorityClassClient):
+class K8sPriorityClassClient(PriorityClassClient):
     """Real k8s scheduling API client that exposes the required functions."""
 
-    def __init__(self, k8s_client: K8sClient) -> None:
-        self.__client = k8s_client
-        self.__pc_gvk = GVK(kind="PriorityClass", version="v1", group="scheduling.k8s.io")
-        self.__converter = client.ApiClient()
+    def __init__(self, client: K8sClient) -> None:
+        self.__client = client
 
-    def _meta(self, name: str, cluster_id: ClusterId) -> K8sObjectMeta:
-        return K8sObjectMeta(
-            name=name,
-            namespace=None,
-            gvk=self.__pc_gvk,
-            cluster=cluster_id,
-        )
-
-    def _convert(self, data: Box) -> client.V1PriorityClass:
-        # NOTE: There is unfortunately no other way around this, this is the only thing that will
-        # properly handle snake case - camel case conversions and a bunch of other things.
-        output = self.__converter._ApiClient__deserialize(data.to_dict(), client.V1PriorityClass)
-        if not isinstance(output, client.V1PriorityClass):
-            raise errors.ProgrammingError(message="Could not convert the output from kr8s to a PriorityClass")
-        return output
-
-    async def create_priority_class(
-        self, body: client.V1PriorityClass, cluster_id: ClusterId
-    ) -> client.V1PriorityClass:
+    async def create_priority_class(self, priority_class: K8sPriorityClass) -> K8sPriorityClass:
         """Create a priority class."""
-        obj = ClusterScopedK8sObject(
-            name=body.metadata.name,
-            gvk=self.__pc_gvk,
-            manifest=Box(self.__converter.sanitize_for_serialization(body)),
-            cluster=cluster_id,
-        )
-        output = await self.__client.create(obj, refresh=True)
-        return self._convert(output.manifest)
+        return K8sPriorityClass.from_k8s_object(await self.__client.create(priority_class, refresh=True))
 
     async def delete_priority_class(
         self,
-        name: str,
-        cluster_id: ClusterId,
+        meta: K8sObjectMeta,
         propagation_policy: DeletePropagationPolicy = DeletePropagationPolicy.foreground,
     ) -> None:
         """Delete a priority class."""
-        metadata = self._meta(name, cluster_id)
-        await self.__client.delete(metadata, propagation_policy)
+        await self.__client.delete(meta, propagation_policy)
 
-    async def read_priority_class(self, name: str, cluster_id: ClusterId) -> client.V1PriorityClass | None:
+    async def read_priority_class(self, meta: K8sObjectMeta) -> K8sPriorityClass | None:
         """Get a priority class."""
-        metadata = self._meta(name, cluster_id)
-        output = await self.__client.get(metadata)
-        if not output:
+        output = await self.__client.get(meta)
+        if output is None:
             return None
-        return self._convert(output.manifest)
+        return K8sPriorityClass.from_k8s_object(output)
 
 
-class DummyCoreClient(ResourceQuotaClient, SecretClient):
+class DummyResourceQuotaClient(ResourceQuotaClient):
     """Dummy k8s core API client that does not require a k8s cluster.
 
     Not suitable for production - to be used only for testing and development.
     """
 
-    async def read_resource_quota(self, name: str, namespace: str, cluster_id: ClusterId) -> client.V1ResourceQuota:
+    async def read_resource_quota(self, name: str, cluster_id: ClusterId) -> K8sResourceQuota:
         """Get a resource quota."""
         raise NotImplementedError()
 
     def list_resource_quota(
-        self, namespace: str, label_selector: dict[str, str], cluster_id: ClusterId
-    ) -> AsyncIterable[client.V1ResourceQuota]:
+        self, label_selector: dict[str, str], cluster_id: ClusterId
+    ) -> AsyncIterable[K8sResourceQuota]:
         """List resource quotas."""
         raise NotImplementedError()
 
-    async def create_resource_quota(
-        self, namespace: str, body: client.V1ResourceQuota, cluster_id: ClusterId
-    ) -> client.V1ResourceQuota:
+    async def create_resource_quota(self, quota: K8sPatch, cluster_id: ClusterId) -> K8sResourceQuota:
         """Create a resource quota."""
         raise NotImplementedError()
 
-    async def delete_resource_quota(self, name: str, namespace: str, cluster_id: ClusterId) -> None:
+    async def delete_resource_quota(self, name: str, cluster_id: ClusterId) -> None:
         """Delete a resource quota."""
         raise NotImplementedError()
 
-    async def patch_resource_quota(
-        self, name: str, namespace: str, body: client.V1ResourceQuota, cluster_id: ClusterId
-    ) -> client.V1ResourceQuota:
+    async def patch_resource_quota(self, name: str, patch: K8sPatches, cluster_id: ClusterId) -> K8sResourceQuota:
         """Update a resource quota."""
         raise NotImplementedError()
+
+
+class DummySecretClient(SecretClient):
+    """Dummy k8s core API client that does not require a k8s cluster.
+
+    Not suitable for production - to be used only for testing and development.
+    """
 
     async def get_secret(self, secret: K8sObjectMeta) -> K8sSecret | None:
         """Get a secret."""
@@ -224,7 +164,7 @@ class DummyCoreClient(ResourceQuotaClient, SecretClient):
         """Create a secret."""
         raise NotImplementedError()
 
-    async def patch_secret(self, secret: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sSecret:
+    async def patch_secret(self, secret: K8sObjectMeta, patch: K8sPatches) -> K8sSecret:
         """Patch a secret."""
         raise NotImplementedError()
 
@@ -233,26 +173,23 @@ class DummyCoreClient(ResourceQuotaClient, SecretClient):
         raise NotImplementedError()
 
 
-class DummySchedulingClient(PriorityClassClient):
+class DummyPriorityClassClient(PriorityClassClient):
     """Dummy k8s scheduling API client that does not require a k8s cluster.
 
     Not suitable for production - to be used only for testing and development.
     """
 
-    async def create_priority_class(
-        self, body: client.V1PriorityClass, cluster_id: ClusterId
-    ) -> client.V1PriorityClass:
+    async def create_priority_class(self, priority_class: K8sPriorityClass) -> K8sPriorityClass:
         """Create a priority class."""
         raise NotImplementedError()
 
-    async def read_priority_class(self, name: str, cluster_id: ClusterId) -> client.V1PriorityClass | None:
+    async def read_priority_class(self, meta: K8sObjectMeta) -> K8sPriorityClass | None:
         """Get a priority class."""
         raise NotImplementedError()
 
     async def delete_priority_class(
         self,
-        name: str,
-        cluster_id: ClusterId,
+        meta: K8sObjectMeta,
         propagation_policy: DeletePropagationPolicy = DeletePropagationPolicy.foreground,
     ) -> None:
         """Delete a priority class."""
@@ -298,15 +235,8 @@ class K8sClusterClient(K8sClient):
     async def __get_api_object(self, meta: K8sObjectFilter) -> APIObjectInCluster | None:
         return await anext(aiter(self.__list(meta)), None)
 
-    @overload
-    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject: ...
-    @overload
-    async def create(self, obj: ClusterScopedK8sObject, refresh: bool) -> ClusterScopedK8sObject: ...
-    async def create(
-        self, obj: K8sObject | ClusterScopedK8sObject, refresh: bool
-    ) -> K8sObject | ClusterScopedK8sObject:
-        """Create the k8s object."""
-
+    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject:
+        """Create the k8s object, scoped or not."""
         api_obj = obj.to_api_object(self.__cluster.api)
         await api_obj.create()
 
@@ -314,11 +244,9 @@ class K8sClusterClient(K8sClient):
         if refresh:
             # if refresh isn't called, status and timestamp will be blank
             await api_obj.refresh()
-        if isinstance(obj, ClusterScopedK8sObject):
-            return obj.with_cluster_scoped_manifest(api_obj.to_dict())
         return obj.with_manifest(api_obj.to_dict())
 
-    async def patch(self, meta: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
+    async def patch(self, meta: K8sObjectMeta, patch: K8sPatches) -> K8sObject:
         """Patch a k8s object.
 
         If the patch is a list we assume that we have a rfc6902 json patch like
@@ -368,16 +296,10 @@ class K8sCachedClusterClient(K8sClusterClient):
         self.__cache = cache
         self.__kinds_to_cache = set(kinds_to_cache)
 
-    @overload
-    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject: ...
-    @overload
-    async def create(self, obj: ClusterScopedK8sObject, refresh: bool) -> ClusterScopedK8sObject: ...
-    async def create(
-        self, obj: K8sObject | ClusterScopedK8sObject, refresh: bool
-    ) -> K8sObject | ClusterScopedK8sObject:
+    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject:
         """Create the k8s object."""
         if obj.gvk in self.__kinds_to_cache:
-            if isinstance(obj, ClusterScopedK8sObject):
+            if not obj.namespaced():
                 raise NotImplementedError("Caching of cluster scoped K8s resources is not supported")
             await self.__cache.upsert(obj)
         try:
@@ -389,7 +311,7 @@ class K8sCachedClusterClient(K8sClusterClient):
             raise
         return obj
 
-    async def patch(self, meta: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
+    async def patch(self, meta: K8sObjectMeta, patch: K8sPatches) -> K8sObject:
         """Patch a k8s object."""
         obj = await super().patch(meta, patch)
         if meta.gvk in self.__kinds_to_cache:
@@ -461,18 +383,12 @@ class K8sClusterClientsPool(K8sClient):
         client = await self.__get_client_or_die(cluster_id)
         return client.get_cluster()
 
-    @overload
-    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject: ...
-    @overload
-    async def create(self, obj: ClusterScopedK8sObject, refresh: bool) -> ClusterScopedK8sObject: ...
-    async def create(
-        self, obj: K8sObject | ClusterScopedK8sObject, refresh: bool
-    ) -> K8sObject | ClusterScopedK8sObject:
+    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject:
         """Create the k8s object."""
         client = await self.__get_client_or_die(obj.cluster)
         return await client.create(obj, refresh)
 
-    async def patch(self, meta: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
+    async def patch(self, meta: K8sObjectMeta, patch: K8sPatches) -> K8sObject:
         """Patch a k8s object."""
         client = await self.__get_client_or_die(meta.cluster)
         return await client.patch(meta, patch)
