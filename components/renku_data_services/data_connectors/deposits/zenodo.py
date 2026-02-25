@@ -35,7 +35,8 @@ class ZenodoAPIClient:
         """Create a zenodo deposit."""
         header = {"Authorization": f"Bearer {api_key}"}
         # TODO: Send a patch request to set title
-        res = await self.__client.post(self.__zenodo_base_url + "/deposit/depositions", headers=header, json={})
+        payload = {"metadata": {"title": title, "upload_type": "dataset"}}
+        res = await self.__client.post(self.__zenodo_base_url + "/deposit/depositions", headers=header, json=payload)
         return DepositResponse.model_validate(res.json())
 
     async def get_deposit(self, api_key: str, id: int) -> DepositResponse:

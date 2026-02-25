@@ -67,6 +67,8 @@ def upgrade() -> None:
         sa.Column("job_name", sa.String(), nullable=False),
         sa.Column("name", sa.String(), nullable=False),
         sa.Column("cluster_id", ULIDType(), nullable=True),
+        sa.Column("creation_date", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.ForeignKeyConstraint(["cluster_id"], ["resource_pools.clusters.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["data_connector_id"], ["storage.data_connectors.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["source_id"], ["storage.deposit_sources.id"], ondelete="CASCADE"),

@@ -250,6 +250,8 @@ class Deposit(UnsavedDeposit):
     """A data deposit at a data repository like Zenodo."""
 
     id: ULID
+    creation_date: datetime
+    updated_at: datetime
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

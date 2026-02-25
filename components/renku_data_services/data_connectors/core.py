@@ -560,14 +560,16 @@ def validate_deposit_patch(body: apispec.DepositPatch) -> models.DepositPatch:
     return models.DepositPatch(name=body.name, status=status)
 
 
-def serialize_deposit(deposit: models.DepositJob) -> apispec.Deposit:
+def serialize_deposit(deposit: models.DepositJob) -> dict[str, Any]:
     """Create an apispec Deposit from the internal model."""
-    return apispec.Deposit(
+    return dict(
         name=deposit.deposit.name,
-        provider=apispec.DepositProvider.zenodo,
+        provider=deposit.deposit.source.value,
         data_connector_id=str(deposit.deposit.data_connector_id),
         path=deposit.deposit.path.as_posix() if deposit.deposit.path else "/",
         id=str(deposit.deposit.id),
-        status=apispec.DepositStatus(deposit.deposit.status.value),
-        external_url="https://zenodo.org",
+        status=deposit.deposit.status.value,
+        external_url=f"https://zenodo.org/uploads/{deposit.deposit.original_id}",
+        creation_date=deposit.deposit.creation_date,
+        updated_at=deposit.deposit.updated_at,
     )

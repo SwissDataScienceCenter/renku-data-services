@@ -76,6 +76,14 @@ class RCloneOption(BaseAPISpec):
     )
 
 
+class UpdatedAt(RootModel[datetime]):
+    root: datetime = Field(
+        ...,
+        description="The date and time the resource was updated (in UTC and ISO-8601 format)",
+        examples=["2023-11-01T17:32:28Z"],
+    )
+
+
 class Visibility(Enum):
     private = "private"
     public = "public"
@@ -179,6 +187,16 @@ class Deposit(DepositPost):
     external_url: str = Field(
         ..., description="The URL from the provider where the deposit can be accessed"
     )
+    creation_date: datetime = Field(
+        ...,
+        description="The date and time the resource was created (in UTC and ISO-8601 format)",
+        examples=["2023-11-01T17:32:28Z"],
+    )
+    updated_at: datetime = Field(
+        ...,
+        description="The date and time the resource was created (in UTC and ISO-8601 format)",
+        examples=["2023-11-01T17:32:28Z"],
+    )
     name: str = Field(
         ...,
         description="Renku data connector name",
@@ -214,6 +232,14 @@ class DepositPatch(BaseAPISpec):
 
 class DepositList(RootModel[List[Deposit]]):
     root: List[Deposit]
+
+
+class DataConnectorsDataConnectorIdDepositsGetParametersQuery(BaseAPISpec):
+    params: Optional[PaginationRequest] = None
+
+
+class DepositsGetParametersQuery(BaseAPISpec):
+    params: Optional[PaginationRequest] = None
 
 
 class CloudStorageCore(BaseAPISpec):
