@@ -11,13 +11,25 @@ servers:
 paths:
   /resource_pools/{resource_pool_id}/usage:
     get:
-      summary: "Get usage and limits of the supplied pool."
+      summary: "Get usage and limits of the supplied pool. If a `start_date` is not given, the usage of the current week is returned."
       parameters:
         - in: path
           name: resource_pool_id
           required: true
           schema:
             type: integer
+        - in: query
+          name: start_date
+          required: false
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: end_date
+          required: false
+          schema:
+            type: string
+            format: date
       responses:
         "200":
           description: "Return the pool limits and current usage."
@@ -35,6 +47,7 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - resource-usage
+
   /resource_pools/{resource_pool_id}/limits:
     get:
       summary: "Get resource pool limits"

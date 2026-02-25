@@ -1,6 +1,7 @@
 """Blueprint for resource usage."""
 
 from dataclasses import dataclass
+from datetime import date, datetime
 
 from sanic import HTTPResponse, Request, empty
 from sanic.response import JSONResponse
@@ -147,10 +148,20 @@ class ResourceUsageBP(CustomBlueprint):
     def get_pool_usage(self) -> BlueprintFactoryResponse:
         """Get usage of a pool."""
 
+        def extract_date(req: Request, name: str) -> date | None:
+            datestr = req.args.get(name)
+            return datetime.strptime(datestr, "%Y-%m-%d") if datestr is not None else None
+
         @authenticate(self.authenticator)
         @validate_db_ids
-        async def _get(_: Request, user: base_models.APIUser, resource_pool_id: int) -> HTTPResponse:
-            result = await self.rr_svc.get_running_week(resource_pool_id, user.id or "")
+        async def _get(req: Request, user: base_models.APIUser, resource_pool_id: int) -> HTTPResponse:
+            start_date = extract_date(req, "start_date")
+            end_date = extract_date(req, "end_date")
+            result: model.ResourcePoolUsage | None = None
+            if start_date:
+                result = await self.rr_svc.get_for_date(resource_pool_id, user.id or "", start_date, end_date)
+            else:
+                result = await self.rr_svc.get_running_week(resource_pool_id, user.id or "")
             if result:
                 output = apispec.ResourcePoolUsage(
                     total_usage=apispec.ResourceUsageSummary(

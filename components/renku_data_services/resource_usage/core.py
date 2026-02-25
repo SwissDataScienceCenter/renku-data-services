@@ -1,6 +1,6 @@
 """Core functions for resource usage."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Protocol
 
 from renku_data_services.app_config import logging
@@ -160,6 +160,18 @@ class ResourceUsageService:
 
         return result
 
+    async def usage_of_timespan(
+        self, resource_pool_id: int, user_id: str | None, start_date: date, end_date: date | None
+    ) -> ResourceUsageSummary:
+        """Return the resource usage for the given pool of the given timespan."""
+        until = end_date or datetime.now(UTC).date()
+        query = ResourceUsageQuery(since=start_date, until=until, user_id=user_id, resource_pool_id=resource_pool_id)
+        result = ResourceUsageSummary.empty()
+        async for item in self._repo.find_usage(query):
+            result = result.add(item)
+
+        return result
+
     async def get_running_week(
         self, resource_pool_id: int, user_id: str, current_time: datetime | None = None
     ) -> ResourcePoolUsage | None:
@@ -170,6 +182,19 @@ class ResourceUsageService:
         if limits:
             user_usage = await self.usage_of_running_week(resource_pool_id, user_id, current_time)
             total_usage = await self.usage_of_running_week(resource_pool_id, None, current_time)
+            return ResourcePoolUsage(total_usage, user_usage, limits)
+        else:
+            return None
+
+    async def get_for_date(
+        self, resource_pool_id: int, user_id: str, start_date: date, end_date: date | None
+    ) -> ResourcePoolUsage | None:
+        """Get resource pool usage given a time span."""
+
+        limits = await self._repo.find_resource_pool_limits(resource_pool_id)
+        if limits:
+            user_usage = await self.usage_of_timespan(resource_pool_id, user_id, start_date, end_date)
+            total_usage = await self.usage_of_timespan(resource_pool_id, None, start_date, end_date)
             return ResourcePoolUsage(total_usage, user_usage, limits)
         else:
             return None
