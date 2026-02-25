@@ -308,20 +308,43 @@ class DataConnectorsBP(CustomBlueprint):
 
         return "/data_connectors/<data_connector_id:ulid>/permissions", ["GET"], _get_permissions
 
+    def get_one_by_doi(self) -> BlueprintFactoryResponse:
+        """Get data connector by DOI."""
+
+        @authenticate(self.authenticator)
+        @validate(query=apispec.DataConnectorsSearchGetParametersQuery)
+        async def _get_one_by_doi(
+            _: Request,
+            user: base_models.APIUser,
+            query: apispec.DataConnectorsSearchGetParametersQuery,
+            validator: RCloneValidator,
+        ) -> JSONResponse:
+            data_connector = await self.data_connector_repo.get_data_connector_by_doi(user=user, doi=query.doi)
+            return validated_json(
+                apispec.DataConnector,
+                self._dump_data_connector(data_connector, validator=validator),
+            )
+
+        return "/data_connectors/search", ["GET"], _get_one_by_doi
+
     def get_all_project_links(self) -> BlueprintFactoryResponse:
         """List all links from a given data connector to projects."""
 
         @authenticate(self.authenticator)
+        @paginate
         async def _get_all_project_links(
             _: Request,
             user: base_models.APIUser,
             data_connector_id: ULID,
-        ) -> JSONResponse:
-            links = await self.data_connector_repo.get_links_from(user=user, data_connector_id=data_connector_id)
-            return validated_json(
-                apispec.DataConnectorToProjectLinksList,
-                [self._dump_data_connector_to_project_link(link) for link in links],
+            pagination: PaginationRequest,
+        ) -> tuple[list[dict[str, Any]], int]:
+            links, total_num = await self.data_connector_repo.get_links_from(
+                user=user, data_connector_id=data_connector_id, pagination=pagination
             )
+            return [
+                validate_and_dump(apispec.DataConnectorToProjectLink, self._dump_data_connector_to_project_link(link))
+                for link in links
+            ], total_num
 
         return "/data_connectors/<data_connector_id:ulid>/project_links", ["GET"], _get_all_project_links
 
@@ -529,6 +552,7 @@ class DataConnectorsBP(CustomBlueprint):
             id=str(link.id),
             data_connector_id=str(link.data_connector_id),
             project_id=str(link.project_id),
+            project_path=link.project_path,
             creation_date=link.creation_date,
             created_by=link.created_by,
         )
