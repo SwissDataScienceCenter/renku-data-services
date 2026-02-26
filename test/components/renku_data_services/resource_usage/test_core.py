@@ -9,9 +9,9 @@ from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
 from renku_data_services.migrations.core import run_migrations_for_app
 from renku_data_services.resource_usage.core import (
+    DefaultResourcesRequestRecorder,
     ResourceRequestsFetchProto,
     ResourceRequestsRepo,
-    ResourcesRequestRecorder,
 )
 from renku_data_services.resource_usage.model import (
     ComputeCapacity,
@@ -42,7 +42,7 @@ async def test_record_empty_resource_requests(app_manager_instance: DependencyMa
 
     fetch = TestResourceRequestsFetch([])
     repo = ResourceRequestsRepo(app_manager_instance.config.db.async_session_maker)
-    recorder = ResourcesRequestRecorder(repo, fetch)
+    recorder = DefaultResourcesRequestRecorder(repo, fetch)
     await recorder.record_resource_requests(interval)
     all = [item async for item in repo.find_all()]
     assert len(all) == 0
@@ -117,7 +117,7 @@ async def test_record_resource_requests(app_manager_instance: DependencyManager)
     ]
 
     fetch = TestResourceRequestsFetch(data)
-    recorder = ResourcesRequestRecorder(repo, fetch)
+    recorder = DefaultResourcesRequestRecorder(repo, fetch)
     await recorder.record_resource_requests(interval)
     all = [item async for item in repo.find_all()]
     assert len(all) == 2
