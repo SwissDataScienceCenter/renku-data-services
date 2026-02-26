@@ -69,6 +69,9 @@ def create_app() -> Sanic:
     dependency_manager = DependencyManager.from_env()
     app = Sanic(dependency_manager.app_name, configure_logging=False)
 
+    # NOTE: Sanic deprecation warnings corrupt JSON logs so we ignore them
+    app.config.DEPRECATION_FILTER = "ignore"
+
     # NOTE: Put this function in the beginning to make sure logging is configured before anything else.
     @app.before_server_start
     async def logging_setup(_: Sanic) -> None:
