@@ -26,6 +26,7 @@ class BaseORM(MappedAsDataclass, DeclarativeBase):
 def _recurrence_to_dict(recurrence: models.RecurrenceConfig) -> dict[str, Any]:
     """Serialize a RecurrenceConfig to a dict for JSONB storage."""
     return {
+        "version": 1,
         "type": recurrence.type.value,
         "start_date": recurrence.start_date.isoformat(),
         "end_date": recurrence.end_date.isoformat(),
@@ -40,8 +41,8 @@ def _recurrence_to_dict(recurrence: models.RecurrenceConfig) -> dict[str, Any]:
     }
 
 
-def _recurrence_from_dict(data: dict[str, Any]) -> models.RecurrenceConfig:
-    """Deserialize a RecurrenceConfig from a JSONB dict."""
+def _recurrence_from_dict_v1(data: dict[str, Any]) -> models.RecurrenceConfig:
+    """Deserialize a version 1 RecurrenceConfig from a JSONB dict."""
     return models.RecurrenceConfig(
         type=models.RecurrenceType(data["type"]),
         start_date=date.fromisoformat(data["start_date"]),
@@ -57,22 +58,39 @@ def _recurrence_from_dict(data: dict[str, Any]) -> models.RecurrenceConfig:
     )
 
 
+def _recurrence_from_dict(data: dict[str, Any]) -> models.RecurrenceConfig:
+    """Deserialize a RecurrenceConfig from a JSONB dict, dispatching by version."""
+    version = data.get("version", 1)
+    if version == 1:
+        return _recurrence_from_dict_v1(data)
+    raise ValueError(f"Unknown recurrence schema version: {version}")
+
+
 def _provisioning_to_dict(provisioning: models.ProvisioningConfig) -> dict[str, Any]:
     """Serialize a ProvisioningConfig to a dict for JSONB storage."""
     return {
+        "version": 1,
         "placeholder_count": provisioning.placeholder_count,
         "lead_time_minutes": provisioning.lead_time_minutes,
         "scale_down_behavior": provisioning.scale_down_behavior.value,
     }
 
 
-def _provisioning_from_dict(data: dict[str, Any]) -> models.ProvisioningConfig:
-    """Deserialize a ProvisioningConfig from a JSONB dict."""
+def _provisioning_from_dict_v1(data: dict[str, Any]) -> models.ProvisioningConfig:
+    """Deserialize a version 1 ProvisioningConfig from a JSONB dict."""
     return models.ProvisioningConfig(
         placeholder_count=data["placeholder_count"],
         lead_time_minutes=data["lead_time_minutes"],
         scale_down_behavior=models.ScaleDownBehavior(data["scale_down_behavior"]),
     )
+
+
+def _provisioning_from_dict(data: dict[str, Any]) -> models.ProvisioningConfig:
+    """Deserialize a ProvisioningConfig from a JSONB dict, dispatching by version."""
+    version = data.get("version", 1)
+    if version == 1:
+        return _provisioning_from_dict_v1(data)
+    raise ValueError(f"Unknown provisioning schema version: {version}")
 
 
 class CapacityReservationORM(BaseORM):
