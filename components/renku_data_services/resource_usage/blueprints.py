@@ -13,22 +13,12 @@ from renku_data_services.base_api.blueprint import CustomBlueprint
 from renku_data_services.base_api.misc import BlueprintFactoryResponse, validate_db_ids
 from renku_data_services.base_models.validation import validated_json
 from renku_data_services.resource_usage import apispec, model
-from renku_data_services.resource_usage.core import ResourceUsageService
+from renku_data_services.resource_usage.core import (
+    ResourceUsageService,
+    validate_resource_class_costs_put,
+    validate_resource_pool_limit_put,
+)
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
-
-
-def validate_resource_pool_limit_put(id: int, body: apispec.ResourcePoolLimitPut) -> model.ResourcePoolLimits:
-    """Validate resource pool limit."""
-    if body.user_limit > body.total_limit:
-        raise errors.ValidationError(
-            message=f"The user_limit '{body.user_limit}' must be lower than total_limit '{body.total_limit}'.",
-        )
-    return model.ResourcePoolLimits(id, model.Credit.from_int(body.total_limit), model.Credit.from_int(body.user_limit))
-
-
-def validate_resource_class_costs_put(class_id: int, body: apispec.ResourceClassCostPut) -> model.ResourceClassCost:
-    """Validate the resource class cost data."""
-    return model.ResourceClassCost(resource_class_id=class_id, cost=model.Credit.from_int(body.cost))
 
 
 @dataclass(kw_only=True)
@@ -54,7 +44,7 @@ class ResourceUsageBP(CustomBlueprint):
             if not result:
                 raise errors.MissingResourceError()
             else:
-                return empty()
+                return validated_json(apispec.ResourcePoolLimitPut, body)
 
         return "/resource_pools/<resource_pool_id>/limits", ["PUT"], _put
 
@@ -109,7 +99,7 @@ class ResourceUsageBP(CustomBlueprint):
             if not result:
                 raise errors.MissingResourceError()
             else:
-                return empty()
+                return validated_json(apispec.ResourceClassCostPut, body)
 
         return "/resource_pools/<resource_pool_id>/classes/<class_id>/cost", ["PUT"], _put
 

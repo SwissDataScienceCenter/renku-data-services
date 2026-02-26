@@ -3,13 +3,18 @@
 from datetime import UTC, date, datetime, timedelta
 from typing import Protocol
 
+from renku_data_services import errors
 from renku_data_services.app_config import logging
 from renku_data_services.k8s.client_interfaces import K8sClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import GVK, K8sObjectFilter, K8sObjectMeta
+from renku_data_services.resource_usage import apispec
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.resource_usage.model import (
+    Credit,
+    ResourceClassCost,
     ResourceDataFacade,
+    ResourcePoolLimits,
     ResourcePoolUsage,
     ResourcesRequest,
     ResourceUsageQuery,
@@ -17,6 +22,20 @@ from renku_data_services.resource_usage.model import (
 )
 
 logger = logging.getLogger(__file__)
+
+
+def validate_resource_pool_limit_put(id: int, body: apispec.ResourcePoolLimitPut) -> ResourcePoolLimits:
+    """Validate resource pool limit."""
+    if body.user_limit > body.total_limit:
+        raise errors.ValidationError(
+            message=f"The user_limit '{body.user_limit}' must be lower than total_limit '{body.total_limit}'.",
+        )
+    return ResourcePoolLimits(id, Credit.from_int(body.total_limit), Credit.from_int(body.user_limit))
+
+
+def validate_resource_class_costs_put(class_id: int, body: apispec.ResourceClassCostPut) -> ResourceClassCost:
+    """Validate the resource class cost data."""
+    return ResourceClassCost(resource_class_id=class_id, cost=Credit.from_int(body.cost))
 
 
 class ResourceRequestsFetchProto(Protocol):

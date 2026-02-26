@@ -89,8 +89,12 @@ paths:
             schema:
               $ref: "#/components/schemas/ResourcePoolLimitPut"
       responses:
-        "204":
-          description: "The limits have been updated."
+        "200":
+          description: "The input limits have been updated."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ResourcePoolLimitPut"
         "404":
           description: "The pool does not exist."
           content:
@@ -174,8 +178,12 @@ paths:
             schema:
               $ref: "#/components/schemas/ResourceClassCostPut"
       responses:
-        "204":
-          description: "The cost has been set."
+        "200":
+          description: "The input cost that has been set."
+          content:
+            "application/json":
+              schema:
+              $ref: "#/components/schemas/ResourceClassCostPut"
         "404":
           description: "The class does not exist."
           content:
@@ -258,6 +266,10 @@ components:
       properties:
         cost:
           type: integer
+          description: |
+            The cost of a resource class is an integer that specifies
+            the effective cost of a session using this class running
+            for one hour.
       required:
         - cost
     ResourceClassCost:

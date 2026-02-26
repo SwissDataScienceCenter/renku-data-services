@@ -79,7 +79,7 @@ class DataSize:
         if isinstance(other, DataSize):
             return DataSize(self.value + other.value)
         else:
-            raise Exception("")
+            raise TypeError(f"Both values must be of type DataSize, but got: {type(other)}")
 
 
 @dataclass(frozen=True)
