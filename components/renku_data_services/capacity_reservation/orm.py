@@ -145,11 +145,11 @@ class OccurrenceORM(BaseORM):
         ULIDType,
         ForeignKey("capacity_reservation.capacity_reservations.id", ondelete="CASCADE"),
     )
-    activate_at_datetime: Mapped[datetime] = mapped_column("activate_at_datetime", DateTime(timezone=True))
-    start_datetime: Mapped[datetime] = mapped_column("start_datetime", DateTime(timezone=True))
-    end_datetime: Mapped[datetime] = mapped_column("end_datetime", DateTime(timezone=True))
+    activate_at_datetime: Mapped[datetime] = mapped_column("activate_at_datetime", DateTime(timezone=True), index=True)
+    start_datetime: Mapped[datetime] = mapped_column("start_datetime", DateTime(timezone=True), index=True)
+    end_datetime: Mapped[datetime] = mapped_column("end_datetime", DateTime(timezone=True), index=True)
     status: Mapped[models.OccurrenceState] = mapped_column(
-        "status", Enum(models.OccurrenceState, name="occurrence_state")
+        "status", Enum(models.OccurrenceState, name="occurrence_state", index=True)
     )
     deployment_name: Mapped[Optional[str]] = mapped_column("deployment_name", String(255), nullable=True, default=None)
 

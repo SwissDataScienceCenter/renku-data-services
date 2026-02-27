@@ -28,12 +28,8 @@ def validate_recurrence_config(recurrence: apispec.RecurrenceConfig) -> models.R
     if recurrence.type is None:
         raise errors.ValidationError(message="Recurrence type is required")
 
-    if recurrence.type == apispec.RecurrenceType.once:
-        if recurrence.start_date > recurrence.end_date:
-            raise errors.ValidationError(message="Recurrence end date must be on or after start date")
-    else:
-        if recurrence.start_date >= recurrence.end_date:
-            raise errors.ValidationError(message="Recurrence end date must be after start date")
+    if recurrence.start_date > recurrence.end_date:
+        raise errors.ValidationError(message="Recurrence end date must be on or after start date")
 
     if recurrence.start_date < date.today():
         raise errors.ValidationError(message="Recurrence start date must not be in the past")
@@ -188,7 +184,7 @@ def calculate_target_replicas(
     provisioning = reservation.provisioning
 
     if provisioning.scale_down_behavior == models.ScaleDownBehavior.NONE:
-        raise ValueError("calculate_target_replicas called for NONE scale down behavior")
+        return provisioning.placeholder_count
 
     if provisioning.scale_down_behavior == models.ScaleDownBehavior.MAINTAIN:
         return max(provisioning.placeholder_count - active_sessions, 0)

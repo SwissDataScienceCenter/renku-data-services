@@ -3,6 +3,7 @@ info:
   title: Renku Data Services API
   description: |
     A service that allows admins to reserve capacity for Renku sessions.
+    A capacity reservation defines a recurring schedule and resources to reserve for that schedule. The service will then provision the reserved resources ahead of time according to the defined schedule using placeholder pods, and deprovision them when they are no longer needed.
   version: v1
 servers:
   - url: /api/data

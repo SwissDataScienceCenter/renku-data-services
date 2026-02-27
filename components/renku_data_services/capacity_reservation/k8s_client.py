@@ -55,9 +55,9 @@ class CapacityReservationK8sClient:
         self.__default_affinity: dict[str, Any] = yaml.safe_load(
             StringIO(os.environ.get("NB_SESSIONS__AFFINITY", "{}"))
         )
-        self.__placeholder_priority_class: str | None = os.environ.get(
-            "NB_SESSIONS__PLACEHOLDER_PRIORITY_CLASS"
-        ) or None
+        self.__placeholder_priority_class: str | None = (
+            os.environ.get("NB_SESSIONS__PLACEHOLDER_PRIORITY_CLASS") or None
+        )
 
     async def _cluster_for_reservation(self, reservation: CapacityReservation) -> ClusterConnection:
         """Resolve the cluster for a reservation, falling back to the default cluster."""
@@ -167,6 +167,7 @@ def _build_placeholder_deployment_manifest(
     requests: dict[str, str | int] = {"cpu": cpu_str, "memory": memory_str}
     limits: dict[str, str | int] = {"memory": memory_str}
 
+    # TODO: Add support for AMD GPUs
     if resource_class.gpu > 0:
         gpu_resource = "nvidia.com/gpu"
         requests[gpu_resource] = resource_class.gpu
@@ -204,7 +205,6 @@ def _build_placeholder_deployment_manifest(
 
     if resource_class.node_affinities or default_affinity.get("nodeAffinity"):
         required_affinities = [a for a in resource_class.node_affinities if a.required_during_scheduling]
-        preferred_affinities = [a for a in resource_class.node_affinities if not a.required_during_scheduling]
 
         node_affinity_spec: dict[str, Any] = affinity_spec.get("nodeAffinity", {})
 
@@ -224,18 +224,6 @@ def _build_placeholder_deployment_manifest(
                 )
                 rc_required["nodeSelectorTerms"].extend(existing_terms)
             node_affinity_spec["requiredDuringSchedulingIgnoredDuringExecution"] = rc_required
-
-        if preferred_affinities:
-            rc_preferred = [
-                {
-                    "weight": 50,
-                    "preference": {"matchExpressions": [{"key": affinity.key, "operator": "Exists"}]},
-                }
-                for affinity in preferred_affinities
-            ]
-            if "preferredDuringSchedulingIgnoredDuringExecution" in node_affinity_spec:
-                rc_preferred.extend(node_affinity_spec["preferredDuringSchedulingIgnoredDuringExecution"])
-            node_affinity_spec["preferredDuringSchedulingIgnoredDuringExecution"] = rc_preferred
 
         if node_affinity_spec:
             affinity_spec["nodeAffinity"] = node_affinity_spec

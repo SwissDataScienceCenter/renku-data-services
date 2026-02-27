@@ -19,6 +19,8 @@ from renku_data_services.capacity_reservation.models import (
 )
 from renku_data_services.k8s.models import K8sObject
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass(kw_only=True)
 class CapacityReservationTasks:
@@ -30,7 +32,6 @@ class CapacityReservationTasks:
 
     async def activate_pending_occurrences_task(self) -> None:
         """Activate pending capacity reservation occurrences."""
-        logger = logging.getLogger(self.__class__.__name__)
 
         due_pending_occurrences = await self.occurrence_repo.get_occurrences_due_for_activation()
 
@@ -60,7 +61,6 @@ class CapacityReservationTasks:
 
     async def monitor_active_occurrences_task(self) -> None:
         """Monitor active capacity reservation occurrences, scaling up/down or deactivating as needed."""
-        logger = logging.getLogger(self.__class__.__name__)
 
         active_occurrences = await self.occurrence_repo.get_occurrences_by_properties(status=OccurrenceState.ACTIVE)
 
@@ -142,7 +142,6 @@ class CapacityReservationTasks:
 
     async def cleanup_orphaned_deployments_task(self) -> None:
         """Delete capacity reservation deployments whose occurrences no longer exist in the database."""
-        logger = logging.getLogger(self.__class__.__name__)
 
         deployments: list[K8sObject] = []
         occurrence_ids: list[ULID] = []
@@ -202,7 +201,6 @@ def _assign_sessions_to_occurrences(
                 counts[candidates[0][0].id] += 1
                 unmatched_sessions.remove(session)
             elif len(candidates) > 1:
-                logger = logging.getLogger(__name__)
                 logger.warning(
                     f"Session with project_id {session.get('project_id')} and "
                     f"resource_class_id {rc_id} matches multiple occurrences. Picking occurrence at random."

@@ -85,17 +85,6 @@ class CapacityReservationRepository:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
         async with self.session_maker() as session, session.begin():
-            result = await session.execute(
-                select(schemas.CapacityReservationORM).where(
-                    schemas.CapacityReservationORM.id == capacity_reservation_id
-                )
-            )
-
-            capacity_reservation = result.scalar_one_or_none()
-
-            if capacity_reservation is None:
-                return None
-
             await session.execute(
                 delete(schemas.CapacityReservationORM).where(
                     schemas.CapacityReservationORM.id == capacity_reservation_id
