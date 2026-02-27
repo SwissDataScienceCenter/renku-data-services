@@ -51,6 +51,7 @@ class BuilderVariant(StrEnum):
     """The type of environment builder."""
 
     python = "python"
+    r = "r"
 
 
 class FrontendVariant(StrEnum):
@@ -59,6 +60,7 @@ class FrontendVariant(StrEnum):
     vscodium = "vscodium"
     jupyterlab = "jupyterlab"
     ttyd = "ttyd"
+    rstudio = "rstudio"
 
 
 @dataclass(kw_only=True, frozen=True, eq=True)
