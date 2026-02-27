@@ -11,6 +11,7 @@ from dateutil.parser import parse as parse_datetime
 from kubernetes.utils.quantity import parse_quantity
 from ulid import ULID
 
+from renku_data_services.crc.models import GpuKind
 from renku_data_services.k8s.constants import ClusterId
 from renku_data_services.k8s.models import K8sObject
 
@@ -232,12 +233,12 @@ class ResourceDataFacade:
     @property
     def kind(self) -> str:
         """Return the kind."""
-        return cast(str, self.obj.manifest.kind)
+        return self.obj.gvk.kind
 
     @property
     def api_version(self) -> str:
         """Return the apiVersion field."""
-        return cast(str, self.obj.manifest.get("apiVersion"))
+        return self.obj.gvk.version
 
     @property
     def resource_request_storage(self) -> DataSize | None:
@@ -346,13 +347,22 @@ class ResourceDataFacade:
     @property
     def gpu_product(self) -> str | None:
         """Return the gpu product available on a node."""
-        value = self.obj.manifest.get("metadata", {}).get("labels", {}).get("nvidia.com/gpu.product")
-        return str(value) if value is not None else None
+        labels = self.obj.manifest.get("metadata", {}).get("labels", {})
+        value: str | None = None
+        for gpk in GpuKind:
+            if value is None:
+                value = labels.get(f"{gpk.value}/gpu.product")
+
+        return value
 
     @property
     def gpu_count(self) -> int | None:
         """Return the gpu count label available on a node."""
-        value = self.obj.manifest.get("metadata", {}).get("labels", {}).get("nvidia.com/gpu.count")
+        labels = self.obj.manifest.get("metadata", {}).get("labels", {})
+        value: str | None = None
+        for gpk in GpuKind:
+            if value is None:
+                value = labels.get(f"{gpk.value}/gpu.count")
         try:
             return int(value) if value is not None else None
         except ValueError:
@@ -500,37 +510,15 @@ class ResourcesRequest:
     gpu_product: str | None
     data: RequestData
 
-    @property
-    def id(self) -> str:
-        """Return an identifier string."""
-        cid = self.cluster_id or "default-cluster"
-        return (
-            f"{cid}/{self.namespace}/"
-            f"{self.uid}/"
-            f"{self.name}/"
-            f"{self.kind}/"
-            f"{self.api_version}/"
-            f"{self.phase}/"
-            f"{self.user_id}/"
-            f"{self.project_id}/"
-            f"{self.launcher_id}/"
-            f"{self.resource_class_id}/"
-            f"{self.resource_pool_id}/"
-            f"{self.since}/"
-            f"{self.gpu_slice}/"
-            f"{self.gpu_product}/"
-            f"@{self.capture_date}/{self.capture_interval}"
-        )
-
     def to_empty(self) -> ResourcesRequest:
         """Return a new value with all numbers set to None."""
         return ResourcesRequest(
             namespace=self.namespace,
             name=self.name,
             uid=self.uid,
-            phase=self.phase,
             kind=self.kind,
             api_version=self.api_version,
+            phase=self.phase,
             capture_date=self.capture_date,
             capture_interval=self.capture_interval,
             cluster_id=self.cluster_id,
@@ -545,34 +533,8 @@ class ResourcesRequest:
             data=RequestData.empty(),
         )
 
-    def add(self, other: ResourcesRequest) -> ResourcesRequest:
-        """Adds the values of other to this returning a new value. Returns this if both ids do not match."""
-        if other.id == self.id:
-            return ResourcesRequest(
-                namespace=self.namespace,
-                name=self.name,
-                uid=self.uid,
-                kind=self.kind,
-                api_version=self.api_version,
-                phase=self.phase,
-                capture_date=self.capture_date,
-                capture_interval=self.capture_interval,
-                cluster_id=self.cluster_id,
-                user_id=self.user_id,
-                project_id=self.project_id,
-                launcher_id=self.launcher_id,
-                resource_class_id=self.resource_class_id,
-                resource_pool_id=self.resource_pool_id,
-                since=self.since,
-                gpu_slice=self.gpu_slice,
-                gpu_product=self.gpu_product,
-                data=self.data + other.data,
-            )
-        else:
-            return self
-
     def __str__(self) -> str:
-        return f"{self.id}: {self.data}"
+        return f"{self.uid}/{self.name}/{self.kind}: {self.data}"
 
     @classmethod
     def from_pvc(

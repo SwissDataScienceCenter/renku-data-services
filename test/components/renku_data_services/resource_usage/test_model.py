@@ -142,7 +142,7 @@ def test_resource_data_facade() -> None:
         name="xyz",
         namespace="renku",
         cluster=DEFAULT_K8S_CLUSTER,
-        gvk=GVK(kind="Pod", version="v1"),
+        gvk=GVK(kind="AmaltheaSession", version="v1"),
         manifest=load_manifest("ams.json"),
     )
     pod = K8sObject(

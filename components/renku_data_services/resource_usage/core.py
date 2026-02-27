@@ -1,5 +1,6 @@
 """Core functions for resource usage."""
 
+from collections.abc import AsyncIterator
 from datetime import UTC, date, datetime, timedelta
 from typing import Protocol
 
@@ -41,8 +42,8 @@ def validate_resource_class_costs_put(class_id: int, body: apispec.ResourceClass
 class ResourceRequestsFetchProto(Protocol):
     """Protocol defining methods for getting resource requests."""
 
-    async def get_resources_requests(self, capture_interval: timedelta) -> dict[str, ResourcesRequest]:
-        """Return the resources requests of all pods and pvcs."""
+    def get_resources_requests_iter(self, capture_interval: timedelta) -> AsyncIterator[ResourcesRequest]:
+        """Iterating through resource requests."""
         ...
 
 
@@ -52,66 +53,54 @@ class ResourceRequestsFetch(ResourceRequestsFetchProto):
     def __init__(self, k8s_client: K8sClient) -> None:
         self._client = k8s_client
 
-    async def get_resources_requests(self, capture_interval: timedelta) -> dict[str, ResourcesRequest]:
-        """Return the resources requests of all pods and pvcs."""
+    async def _get_node(
+        self, node_name: str | None, pod: K8sObject, node_cache: dict[str, ResourceDataFacade]
+    ) -> ResourceDataFacade | None:
+        if node_name:
+            node_obj = node_cache.get(node_name)
+            if node_obj is not None:
+                return node_obj
+            else:
+                pod_node = await self._client.get(
+                    K8sObjectMeta(
+                        name=node_name, namespace=pod.namespace, cluster=pod.cluster, gvk=GVK(kind="node", version="v1")
+                    )
+                )
+                if pod_node:
+                    node_obj = ResourceDataFacade(pod_node)
+                    node_cache[node_name] = node_obj
+                    return node_obj
+        return None
+
+    async def get_resources_requests_iter(self, capture_interval: timedelta) -> AsyncIterator[ResourcesRequest]:
+        """Iterating through resource requests."""
 
         logger.debug("Get pods and pvc from all clusters")
 
         date = datetime.now(UTC).replace(microsecond=0)
-        result: dict[str, ResourcesRequest] = {}
-
         pod_filter = K8sObjectFilter(
             gvk=GVK(kind="Pod", version="v1"), label_selector={"app.kubernetes.io/name": "AmaltheaSession"}
         )
         pvc_filter = K8sObjectFilter(gvk=GVK(kind="PersistentVolumeClaim", version="v1"))
-
         node_cache: dict[str, ResourceDataFacade] = {}
-
-        async def get_node(name: str | None) -> ResourceDataFacade | None:
-            if name:
-                node_obj = node_cache.get(name)
-                if node_obj is not None:
-                    return node_obj
-                else:
-                    pod_node = await self._client.get(
-                        K8sObjectMeta(
-                            name=name, namespace=pod.namespace, cluster=pod.cluster, gvk=GVK(kind="node", version="v1")
-                        )
-                    )
-                    if pod_node:
-                        node_obj = ResourceDataFacade(pod_node)
-                        node_cache[name] = node_obj
-                        return node_obj
-            return None
-
         async for pod in self._client.list(pod_filter):
             obj = ResourceDataFacade(obj=pod)
             node_obj: ResourceDataFacade | None = None
             try:
-                node_obj = await get_node(obj.node_name)
+                node_obj = await self._get_node(obj.node_name, pod, node_cache)
             except Exception as ex:
                 logger.debug(f"Cannot get node (ignoring): {ex}", exc_info=ex)
                 node_obj = None
 
             rreq = ResourcesRequest.from_pod_and_node(obj, node_obj, pod.cluster, date, capture_interval)
             await self._amend_session_fallback(pod.cluster, obj, rreq)
-            nreq = rreq.add(result.get(rreq.id, rreq.to_empty()))
-            result.update({nreq.id: nreq})
-
-        if result == {}:
-            logger.warning("Empty list returned when listing pods!")
+            yield rreq
 
         async for pvc in self._client.list(pvc_filter):
             obj = ResourceDataFacade(obj=pvc)
             rreq = ResourcesRequest.from_pvc(obj, pvc.cluster, date, capture_interval)
             await self._amend_session_fallback(pvc.cluster, obj, rreq)
-            nreq = rreq.add(result.get(rreq.id, rreq.to_empty()))
-            result.update({nreq.id: nreq})
-
-        if result == {}:
-            logger.warning("Empty list returned when listing pvcs!")
-
-        return result
+            yield rreq
 
     async def _amend_session_fallback(
         self, cluster_id: ClusterId | None, obj: ResourceDataFacade, rreq: ResourcesRequest
@@ -163,13 +152,15 @@ class DefaultResourcesRequestRecorder(ResourcesRequestRecorder):
 
     async def record_resource_requests(self, interval: timedelta) -> None:
         """Fetches all resource requests in the given namespace and stores them."""
-        result = await self._fetch.get_resources_requests(interval)
+        result: list[ResourcesRequest] = []  # await self._fetch.get_resources_requests(interval)
+        async for item in self._fetch.get_resources_requests_iter(interval):
+            result.append(item)
         size = len(result)
         if size == 0:
             logger.warning("No pod or pvc was found!")
         else:
             logger.info(f"Inserting {size} resource request records.")
-        await self._repo.insert_many(result.values())
+        await self._repo.insert_many(result)
 
 
 class ResourceUsageService:

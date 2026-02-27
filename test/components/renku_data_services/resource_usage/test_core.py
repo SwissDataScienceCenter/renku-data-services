@@ -1,5 +1,6 @@
 """Test core functions."""
 
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -34,6 +35,11 @@ class TestResourceRequestsFetch(ResourceRequestsFetchProto):
     async def get_resources_requests(self, capture_interval: timedelta) -> dict[str, ResourcesRequest]:
         """Return the resources requests of all pods."""
         return {e.id: e for e in self.data}
+
+    async def get_resources_requests_iter(self, capture_interval: timedelta) -> AsyncIterator[ResourcesRequest]:
+        """Iterating through resource requests."""
+        for item in self.data:
+            yield item
 
 
 @pytest.mark.asyncio
