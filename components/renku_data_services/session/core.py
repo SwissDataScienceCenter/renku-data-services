@@ -66,11 +66,15 @@ def validate_unsaved_build_parameters(
 
     platforms = __validate_build_parameters_platforms(environment.platforms)
 
+    builder_variant, frontend_variant = __validate_builder_frontend_combination(
+        environment.builder_variant, environment.frontend_variant
+    )
+
     return models.UnsavedBuildParameters(
         repository=environment.repository,
         platforms=platforms,
-        builder_variant=environment.builder_variant,
-        frontend_variant=environment.frontend_variant,
+        builder_variant=builder_variant,
+        frontend_variant=frontend_variant,
         repository_revision=environment.repository_revision if environment.repository_revision else None,
         context_dir=environment.context_dir if environment.context_dir else None,
     )
@@ -97,11 +101,16 @@ def validate_build_parameters_patch(environment: apispec.BuildParametersPatch) -
     if environment.platforms is not None:
         platforms = __validate_build_parameters_platforms(environment.platforms)
 
+    if environment.builder_variant is not None and environment.frontend_variant is not None:
+        builder_variant, frontend_variant = __validate_builder_frontend_combination(
+            environment.builder_variant, environment.frontend_variant
+        )
+
     return models.BuildParametersPatch(
         repository=environment.repository,
         platforms=platforms,
-        builder_variant=environment.builder_variant,
-        frontend_variant=environment.frontend_variant,
+        builder_variant=builder_variant,
+        frontend_variant=frontend_variant,
         repository_revision=environment.repository_revision,
         context_dir=environment.context_dir,
     )
@@ -374,3 +383,14 @@ def __validate_build_parameters_platforms(platforms: list[apispec.BuildPlatform]
                 )
             )
     return [models.Platform(item) for item in platforms_str_list]
+
+
+def __validate_builder_frontend_combination(builder_variant: str, frontend_variant: str) -> tuple[str, str]:
+    """Validate the combination of builder and frontend variants."""
+    combo = (models.BuilderVariant(builder_variant), models.FrontendVariant(frontend_variant))
+    if combo not in models.VALID_BUILDER_FRONTEND_COMBINATIONS:
+        raise errors.ValidationError(
+            message=f"Invalid combination: builder '{builder_variant}' is not compatible with"
+            "frontend '{frontend_variant}'"
+        )
+    return builder_variant, frontend_variant

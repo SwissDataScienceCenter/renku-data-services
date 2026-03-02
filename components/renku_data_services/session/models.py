@@ -63,6 +63,14 @@ class FrontendVariant(StrEnum):
     rstudio = "rstudio"
 
 
+VALID_BUILDER_FRONTEND_COMBINATIONS: typing.Final[set[tuple[BuilderVariant, FrontendVariant]]] = {
+    (BuilderVariant.r, FrontendVariant.rstudio),
+    (BuilderVariant.python, FrontendVariant.vscodium),
+    (BuilderVariant.python, FrontendVariant.jupyterlab),
+    (BuilderVariant.python, FrontendVariant.ttyd),
+}
+
+
 @dataclass(kw_only=True, frozen=True, eq=True)
 class UnsavedBuildParameters:
     """The parameters of a build."""
