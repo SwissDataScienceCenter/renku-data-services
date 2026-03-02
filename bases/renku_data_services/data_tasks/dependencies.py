@@ -10,6 +10,8 @@ from renku_data_services.crc.db import ClusterRepository
 from renku_data_services.data_tasks.config import Config
 from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.config import KubeConfigEnv
+from renku_data_services.k8s.db import K8sDbCache
+from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
 from renku_data_services.metrics.core import StagingMetricsService
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
@@ -80,11 +82,14 @@ class DependencyManager:
         )
         session_tasks = SessionTasks(session_environment_repo=session_environment_repo)
         cluster_repo = ClusterRepository(session_maker=cfg.db.async_session_maker)
+        k8s_db_cache = K8sDbCache(cfg.db.async_session_maker)
         k8s_client = K8sClusterClientsPool(
             lambda: get_clusters(
                 kube_conf_root_dir=cfg.k8s_config_root,
                 default_kubeconfig=KubeConfigEnv(),
                 cluster_repo=cluster_repo,
+                cache=k8s_db_cache,
+                kinds_to_cache=[AMALTHEA_SESSION_GVK],
             )
         )
         cr_k8s_client = CapacityReservationK8sClient(client=k8s_client, cluster_repo=cluster_repo)

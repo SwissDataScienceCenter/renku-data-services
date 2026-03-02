@@ -76,27 +76,26 @@ class CapacityReservationTasks:
 
         for expired_occurrence in expired_occurrences:
             logger.info(f"Deactivating occurrence {expired_occurrence.id} as its end time has passed.")
-            if expired_occurrence.deployment_name is None:
-                logger.warning(f"Expired occurrence {expired_occurrence.id} has no deployment name, skipping delete.")
-            else:
-                reservations = await self.capacity_reservation_repo.get_capacity_reservations_by_ids(
-                    [expired_occurrence.reservation_id]
-                )
-                if reservations:
-                    await self.k8s_client.delete_deployment(expired_occurrence.deployment_name, reservations[0])
-                else:
-                    logger.error(
-                        f"Could not find reservation for expired occurrence {expired_occurrence.id}, skipping delete."
-                    )
             await self.occurrence_repo.update_occurrence(
                 expired_occurrence.id, OccurrencePatch(status=OccurrenceState.COMPLETED)
             )
+            if expired_occurrence.deployment_name is None:
+                logger.warning(f"Expired occurrence {expired_occurrence.id} has no deployment name, skipping delete.")
+                continue
+            reservations = await self.capacity_reservation_repo.get_capacity_reservations_by_ids(
+                [expired_occurrence.reservation_id]
+            )
+            if not reservations:
+                logger.error(
+                    f"Could not find reservation for expired occurrence {expired_occurrence.id}, skipping delete."
+                )
+                continue
+            await self.k8s_client.delete_deployment(expired_occurrence.deployment_name, reservations[0])
 
         if not still_active_occurrences:
             logger.debug("No active capacity reservation occurrences to scale.")
             return None
 
-        # Build (occurrence, reservation) pairs for all still-active occurrences.
         active_pairs: list[tuple[Occurrence, CapacityReservation]] = []
         for occurrence in still_active_occurrences:
             reservations = await self.capacity_reservation_repo.get_capacity_reservations_by_ids(
@@ -110,8 +109,6 @@ class CapacityReservationTasks:
                 continue
             active_pairs.append((occurrence, reservations[0]))
 
-        # Occurrences with NONE scale-down behavior are left alone — the deployment was created
-        # at activation with placeholder_count replicas and remains fixed until expiry.
         scalable_pairs = [
             (o, r) for o, r in active_pairs if r.provisioning.scale_down_behavior != ScaleDownBehavior.NONE
         ]
@@ -177,7 +174,6 @@ def _assign_sessions_to_occurrences(
     counts = {occurrence.id: 0 for occurrence, _ in scalable_pairs}
     unmatched_sessions = session_data.copy()
 
-    # Pass 1: match by project_template_id (session's project → template → reservation with that template)
     for session in list(unmatched_sessions):
         if session.get("project_id"):
             project_id = ULID.from_str(session["project_id"])
@@ -192,7 +188,6 @@ def _assign_sessions_to_occurrences(
                     counts[candidates[0][0].id] += 1
                     unmatched_sessions.remove(session)
 
-    # Pass 2: match by resource_class_id
     for session in list(unmatched_sessions):
         rc_id = session.get("resource_class_id")
         if rc_id is not None:

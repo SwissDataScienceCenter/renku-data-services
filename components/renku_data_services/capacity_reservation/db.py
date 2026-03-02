@@ -9,10 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ulid import ULID
 
 from renku_data_services import base_models, errors
+from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.capacity_reservation import models
 from renku_data_services.capacity_reservation import orm as schemas
 from renku_data_services.crc.db import ClusterRepository
 from renku_data_services.project.orm import ProjectORM
+
+_internal_admin = InternalServiceAdmin(id=ServiceAdminId.capacity_reservation)
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +36,9 @@ class CapacityReservationRepository:
         if not user.is_admin:
             raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
-        resource_class = await self.cluster_repo.get_resource_class_by_id(capacity_reservation.resource_class_id)
+        resource_class = await self.cluster_repo.get_resource_class_by_id(
+            _internal_admin, capacity_reservation.resource_class_id
+        )
         if resource_class is None:
             raise errors.MissingResourceError(
                 message=f"Resource class with ID {capacity_reservation.resource_class_id} does not exist."

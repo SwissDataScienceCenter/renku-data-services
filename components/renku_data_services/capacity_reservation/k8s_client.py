@@ -11,8 +11,11 @@ from typing import Any
 import yaml
 
 from renku_data_services import errors
+from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.capacity_reservation.models import CapacityReservation, Occurrence
 from renku_data_services.crc.db import ClusterRepository
+
+_internal_admin = InternalServiceAdmin(id=ServiceAdminId.capacity_reservation)
 from renku_data_services.crc.models import ResourceClass
 from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
@@ -71,7 +74,9 @@ class CapacityReservationK8sClient:
     async def create_placeholder_deployment(self, occurrence: Occurrence, reservation: CapacityReservation) -> str:
         """Create a placeholder deployment for the given occurrence. Returns the deployment name."""
         cluster = await self._cluster_for_reservation(reservation)
-        resource_class = await self.__cluster_repo.get_resource_class_by_id(reservation.resource_class_id)
+        resource_class = await self.__cluster_repo.get_resource_class_by_id(
+            _internal_admin, reservation.resource_class_id
+        )
         if resource_class is None:
             raise errors.MissingResourceError(
                 message=f"Resource class {reservation.resource_class_id} not found for occurrence {occurrence.id}."

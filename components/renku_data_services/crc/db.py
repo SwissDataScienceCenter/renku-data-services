@@ -1115,7 +1115,10 @@ class ClusterRepository:
                 return None
             return ClusterId(result)
 
-    async def get_resource_class_by_id(self, class_id: int) -> models.ResourceClass | None:
+    @_only_admins
+    async def get_resource_class_by_id(
+        self, api_user: base_models.APIUser, class_id: int
+    ) -> models.ResourceClass | None:
         """Return the resource class with the given ID, including quota from the parent resource pool."""
         async with self.session_maker() as session:
             stmt = select(schemas.ResourceClassORM).where(schemas.ResourceClassORM.id == class_id)
