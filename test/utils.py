@@ -23,7 +23,7 @@ from renku_data_services.capacity_reservation.db import CapacityReservationRepos
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.connected_services.oauth_http import DefaultOAuthHttpClientFactory
 from renku_data_services.crc import models as rp_models
-from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository, UserRepository
+from renku_data_services.crc.db import ClusterRepository, QuotaRepository, ResourcePoolRepository, UserRepository
 from renku_data_services.data_api.config import Config
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_connectors.db import DataConnectorRepository, DataConnectorSecretRepository
@@ -31,16 +31,17 @@ from renku_data_services.db_config.config import DBConfig
 from renku_data_services.git.gitlab import DummyGitlabAPI
 from renku_data_services.k8s.clients import (
     K8sClusterClientsPool,
+    K8sPriorityClassClient,
     K8sResourceQuotaClient,
-    K8sSchedulingClient,
 )
 from renku_data_services.k8s.config import KubeConfigEnv, get_clusters
-from renku_data_services.k8s.db import K8sDbCache, QuotaRepository
+from renku_data_services.k8s.db import K8sDbCache
 from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.notebooks.api.classes.data_service import GitProviderHelper
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
+from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.notebooks.image_check import ImageCheckRepository
 from renku_data_services.notifications.db import NotificationsRepository
 from renku_data_services.platform.db import PlatformRepository, UrlRedirectRepository
@@ -188,7 +189,6 @@ class TestDependencyManager(DependencyManager):
         authenticator: base_models.Authenticator
         gitlab_authenticator: base_models.Authenticator
         gitlab_client: base_models.GitlabAPIProtocol
-        k8s_namespace = os.environ.get("K8S_NAMESPACE", "default")
         config.authz_config = AuthzConfigStack.from_env()
         kc_api: IKeycloakAPI
 
@@ -204,9 +204,7 @@ class TestDependencyManager(DependencyManager):
                 kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
             ),
         )
-        quota_repo = QuotaRepository(
-            K8sResourceQuotaClient(client), K8sSchedulingClient(client), namespace=k8s_namespace
-        )
+        quota_repo = QuotaRepository(K8sResourceQuotaClient(client), K8sPriorityClassClient(client))
 
         authenticator = DummyAuthenticator()
         gitlab_authenticator = DummyAuthenticator()
@@ -328,6 +326,11 @@ class TestDependencyManager(DependencyManager):
             project_repo=project_repo,
             data_connector_repo=data_connector_repo,
         )
+        data_source_repo = DataSourceRepository(
+            nb_config=config.nb_config,
+            connected_services_repo=connected_services_repo,
+            oauth_client_factory=oauth_client_factory,
+        )
         image_check_repo = ImageCheckRepository(
             nb_config=config.nb_config,
             connected_services_repo=connected_services_repo,
@@ -369,6 +372,7 @@ class TestDependencyManager(DependencyManager):
             data_connector_repo=data_connector_repo,
             data_connector_secret_repo=data_connector_secret_repo,
             cluster_repo=cluster_repo,
+            data_source_repo=data_source_repo,
             image_check_repo=image_check_repo,
             metrics_repo=metrics_repo,
             metrics=metrics_mock,

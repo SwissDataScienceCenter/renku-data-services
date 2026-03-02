@@ -63,6 +63,7 @@ async def main_container(
     ]
     container = client.V1Container(
         image=config.sessions.git_proxy.image,
+        args=config.sessions.git_proxy.args,
         security_context={
             "runAsGroup": 1000,
             "runAsUser": 1000,

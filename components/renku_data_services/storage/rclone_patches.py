@@ -1,54 +1,10 @@
 """Patches to apply to phe rclone storage schema."""
 
-from collections.abc import Callable
 from copy import deepcopy
-from typing import Any, Final, cast
+from typing import Any, cast
 
 from renku_data_services import errors
-
-BANNED_STORAGE: Final[set[str]] = {
-    "alias",
-    "crypt",
-    "cache",
-    "chunker",
-    "combine",
-    "compress",
-    "hasher",
-    "local",
-    "memory",
-    "union",
-}
-
-OAUTH_PROVIDERS: Final[set[str]] = {
-    "box",
-    "drive",
-    "dropbox",
-    "gcs",
-    "gphotos",
-    "hidrive",
-    "jottacloud",
-    "mailru",
-    "onedrive",
-    "pcloud",
-    "pikpak",
-    "premiumizeme",
-    "putio",
-    "sharefile",
-    "yandex",
-    "zoho",
-}
-
-BANNED_OPTIONS: Final[dict[str, set[str]]] = {
-    "sftp": {
-        "key_file",  # path to a local file
-        "pubkey_file",  # path to a local file
-        "known_hosts_file",  # path to a local file
-        "ssh",  # arbitrary command to be executed
-    },
-    "webdav": {
-        "bearer_token_command",  # arbitrary command to be executed
-    },
-}
+from renku_data_services.storage.constants import STORAGE_CONFIG
 
 
 def find_storage(spec: list[dict[str, Any]], prefix: str) -> dict[str, Any]:
@@ -62,11 +18,22 @@ def find_storage(spec: list[dict[str, Any]], prefix: str) -> dict[str, Any]:
     return storage
 
 
-def __patch_schema_remove_unsafe(spec: list[dict[str, Any]]) -> None:
-    """Remove storages that aren't safe to use in the service."""
-    indices = [i for i, v in enumerate(spec) if v["Prefix"] in BANNED_STORAGE]
-    for i in sorted(indices, reverse=True):
-        spec.pop(i)
+def __patch_schema_allow_storage_types_and_options(spec: list[dict[str, Any]]) -> None:
+    """Apply the allowed list of storage types and options."""
+    spec_copy = spec.copy()
+    spec.clear()
+    for storage in spec_copy:
+        storage_type = cast(str, storage["Prefix"])
+        config = STORAGE_CONFIG[storage_type]
+        if not config.allowed:
+            continue
+        options_config = config.options or dict()
+        options: list[Any] = []
+        for option in storage["Options"]:
+            if options_config[option["Name"]]:
+                options.append(option)
+        storage["Options"] = options
+        spec.append(storage)
 
 
 def __patch_schema_sensitive(spec: list[dict[str, Any]]) -> None:
@@ -133,17 +100,6 @@ def __patch_schema_add_switch_provider(spec: list[dict[str, Any]]) -> None:
         o for o in s3["Options"] if o["Name"] == "endpoint" and o["Provider"].startswith("!AWS,")
     )
     existing_endpoint_spec["Provider"] += ",Switch"
-
-
-def __patch_schema_remove_oauth_propeties(spec: list[dict[str, Any]]) -> None:
-    """Removes OAuth2 fields since we can't do an oauth flow in the rclone CSI."""
-    for storage in spec:
-        if storage["Prefix"] in OAUTH_PROVIDERS:
-            options = []
-            for option in storage["Options"]:
-                if option["Name"] not in ["client_id", "client_secret"]:
-                    options.append(option)
-            storage["Options"] = options
 
 
 def add_webdav_based_storage(
@@ -257,17 +213,6 @@ def __patch_switchdrive_storage(spec: list[dict[str, Any]]) -> None:
     )
 
 
-def __patch_schema_remove_banned_options(spec: list[dict[str, Any]]) -> None:
-    """Remove unsafe options."""
-    for storage_type, banned in BANNED_OPTIONS.items():
-        storage = find_storage(spec, storage_type)
-        options = []
-        for option in storage["Options"]:
-            if option["Name"] not in banned:
-                options.append(option)
-        storage["Options"] = options
-
-
 def __patch_schema_add_openbis_type(spec: list[dict[str, Any]]) -> None:
     """Adds a fake type to help with setting up openBIS storage."""
     spec.append(
@@ -328,39 +273,15 @@ def __patch_schema_add_openbis_type(spec: list[dict[str, Any]]) -> None:
     )
 
 
-def __add_custom_doi_s3_provider(name: str, description: str, prefix: str) -> Callable[[list[dict[str, Any]]], None]:
-    """This is used to add envidata and scicat as providers.
-
-    However this is not a real provider in Rclone. The data service has to intercept the request
-    and convert this provider to the proper S3 configuration where the data can be found.
-    """
-
-    def __patch(spec: list[dict[str, Any]]) -> None:
-        doi_original = find_storage(spec, "doi")
-        doi_new = deepcopy(doi_original)
-        doi_new["Description"] = description
-        doi_new["Name"] = name
-        doi_new["Prefix"] = prefix
-        doi_new_options = cast(list[dict[str, Any]], doi_new.get("Options", []))
-        provider_ind = next((i for i, opt in enumerate(doi_new_options) if opt.get("Name") == "provider"), None)
-        if provider_ind is not None:
-            doi_new_options.pop(provider_ind)
-        spec.append(doi_new)
-
-    return __patch
-
-
 def apply_patches(spec: list[dict[str, Any]]) -> None:
     """Apply patches to RClone schema."""
     patches = [
-        __patch_schema_remove_unsafe,
+        __patch_schema_allow_storage_types_and_options,
         __patch_schema_sensitive,
         __patch_schema_s3_endpoint_required,
         __patch_schema_add_switch_provider,
-        __patch_schema_remove_oauth_propeties,
         __patch_polybox_storage,
         __patch_switchdrive_storage,
-        __patch_schema_remove_banned_options,
         __patch_schema_add_openbis_type,
     ]
 

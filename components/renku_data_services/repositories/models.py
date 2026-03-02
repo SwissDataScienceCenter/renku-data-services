@@ -27,6 +27,15 @@ class RepositoryPermissions:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
+class RepositoryProviderData:
+    """Repository provider match data."""
+
+    provider: ProviderData
+    connection: ProviderConnection | None
+    repository_metadata: RepositoryMetadata | None
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
 class RepositoryMetadata:
     """Repository metadata."""
 
@@ -34,6 +43,7 @@ class RepositoryMetadata:
     git_http_url: str
     web_url: str
     permissions: RepositoryPermissions
+    visibility: RepositoryVisibility
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -73,13 +83,15 @@ class ProviderData:
         return ProviderData(id=e.id, name=e.display_name, url=e.url)
 
 
-@dataclass(frozen=True, eq=True, kw_only=True)
-class RepositoryProviderData:
-    """Repository provider match data."""
+class RepositoryVisibility(StrEnum):
+    """The visibility of a repository.
 
-    provider: ProviderData
-    connection: ProviderConnection | None
-    repository_metadata: RepositoryMetadata | None
+    public: the repository can be pulled without credentials
+    private: the repository requires credentials to be pulled
+    """
+
+    public = "public"
+    private = "private"
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -91,6 +103,7 @@ class Metadata:
     web_url: str | None = None
     pull_permission: bool
     push_permission: bool | None = None
+    visibility: RepositoryVisibility = RepositoryVisibility.private
 
     @classmethod
     def fromRepoMeta(cls, rm: RepositoryMetadata) -> Metadata:
@@ -101,6 +114,7 @@ class Metadata:
             web_url=rm.web_url,
             pull_permission=rm.permissions.pull,
             push_permission=rm.permissions.push,
+            visibility=rm.visibility,
         )
 
 

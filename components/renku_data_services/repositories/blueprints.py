@@ -75,6 +75,7 @@ class RepositoriesBP(CustomBlueprint):
                 web_url=r.metadata.web_url,
                 pull_permission=r.metadata.pull_permission,
                 push_permission=r.metadata.push_permission,
+                visibility=apispec.RepositoryVisibility(r.metadata.visibility.value),
             )
             if r.metadata and r.metadata != "Unmodified"
             else None

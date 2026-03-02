@@ -81,6 +81,11 @@ class GitLabRepository(BaseModel):
                 if self.permissions is not None
                 else default_permissions or models.RepositoryPermissions.default()
             ),
+            visibility=(
+                models.RepositoryVisibility.public
+                if self.visibility == GitLabVisibility.public.value
+                else models.RepositoryVisibility.private
+            ),
         )
 
 
@@ -126,5 +131,10 @@ class GitHubRepository(BaseModel):
                 self.permissions.to_permissions(visibility=self.visibility)
                 if self.permissions is not None
                 else default_permissions or models.RepositoryPermissions.default()
+            ),
+            visibility=(
+                models.RepositoryVisibility.public
+                if self.visibility == GitHubVisibility.public.value
+                else models.RepositoryVisibility.private
             ),
         )

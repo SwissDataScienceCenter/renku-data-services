@@ -30,7 +30,7 @@ from renku_data_services.connected_services.db import ConnectedServicesRepositor
 from renku_data_services.connected_services.oauth_http import DefaultOAuthHttpClientFactory, OAuthHttpClientFactory
 from renku_data_services.crc import models as crc_models
 from renku_data_services.crc.constants import DEFAULT_RUNTIME_PLATFORM
-from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository, UserRepository
+from renku_data_services.crc.db import ClusterRepository, QuotaRepository, ResourcePoolRepository, UserRepository
 from renku_data_services.data_api.config import Config
 from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
@@ -39,11 +39,11 @@ from renku_data_services.data_connectors.db import (
 from renku_data_services.git.gitlab import DummyGitlabAPI, EmptyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.clients import (
     K8sClusterClientsPool,
+    K8sPriorityClassClient,
     K8sResourceQuotaClient,
-    K8sSchedulingClient,
 )
 from renku_data_services.k8s.config import KubeConfigEnv
-from renku_data_services.k8s.db import K8sDbCache, QuotaRepository
+from renku_data_services.k8s.db import K8sDbCache
 from renku_data_services.message_queue.db import ReprovisioningRepository
 from renku_data_services.metrics.core import StagingMetricsService
 from renku_data_services.metrics.db import MetricsRepository
@@ -51,6 +51,7 @@ from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.notebooks.api.classes.data_service import DummyGitProviderHelper, GitProviderHelper
 from renku_data_services.notebooks.config import GitProviderHelperProto, get_clusters
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK
+from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.notebooks.image_check import ImageCheckRepository
 from renku_data_services.notifications.db import NotificationsRepository
 from renku_data_services.platform.db import PlatformRepository, UrlRedirectRepository
@@ -146,6 +147,7 @@ class DependencyManager:
     data_connector_repo: DataConnectorRepository
     data_connector_secret_repo: DataConnectorSecretRepository
     cluster_repo: ClusterRepository
+    data_source_repo: DataSourceRepository
     image_check_repo: ImageCheckRepository
     metrics_repo: MetricsRepository
     metrics: StagingMetricsService
@@ -239,9 +241,7 @@ class DependencyManager:
                 kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
             ),
         )
-        quota_repo = QuotaRepository(
-            K8sResourceQuotaClient(client), K8sSchedulingClient(client), namespace=config.k8s_namespace
-        )
+        quota_repo = QuotaRepository(K8sResourceQuotaClient(client), K8sPriorityClassClient(client))
 
         if config.dummy_stores:
             authenticator = DummyAuthenticator()
@@ -387,6 +387,11 @@ class DependencyManager:
             secret_service_public_key=config.secrets.public_key,
             authz=authz,
         )
+        data_source_repo = DataSourceRepository(
+            nb_config=config.nb_config,
+            connected_services_repo=connected_services_repo,
+            oauth_client_factory=oauth_http_client_factory,
+        )
         image_check_repo = ImageCheckRepository(
             nb_config=config.nb_config,
             connected_services_repo=connected_services_repo,
@@ -441,6 +446,7 @@ class DependencyManager:
             data_connector_repo=data_connector_repo,
             data_connector_secret_repo=data_connector_secret_repo,
             cluster_repo=cluster_repo,
+            data_source_repo=data_source_repo,
             image_check_repo=image_check_repo,
             metrics_repo=metrics_repo,
             metrics=metrics,

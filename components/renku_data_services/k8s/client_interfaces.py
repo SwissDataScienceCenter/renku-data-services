@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterable
-from typing import Any, Protocol, overload
-
-from kubernetes.client import V1PriorityClass, V1ResourceQuota
+from typing import Protocol
 
 from renku_data_services.k8s.constants import ClusterId
 from renku_data_services.k8s.models import (
-    ClusterScopedK8sObject,
     DeletePropagationPolicy,
     K8sObject,
     K8sObjectFilter,
     K8sObjectMeta,
+    K8sPatch,
+    K8sPatches,
+    K8sPriorityClass,
+    K8sResourceQuota,
     K8sSecret,
 )
 
@@ -22,28 +23,24 @@ class ResourceQuotaClient(Protocol):
     """Methods to manipulate ResourceQuota kubernetes resources."""
 
     def list_resource_quota(
-        self, namespace: str, label_selector: dict[str, str], cluster_id: ClusterId
-    ) -> AsyncIterable[V1ResourceQuota]:
+        self, label_selector: dict[str, str], cluster_id: ClusterId
+    ) -> AsyncIterable[K8sResourceQuota]:
         """List resource quotas."""
         ...
 
-    async def read_resource_quota(self, name: str, namespace: str, cluster_id: ClusterId) -> V1ResourceQuota:
+    async def read_resource_quota(self, name: str, cluster_id: ClusterId) -> K8sResourceQuota:
         """Get a resource quota."""
         ...
 
-    async def create_resource_quota(
-        self, namespace: str, body: V1ResourceQuota, cluster_id: ClusterId
-    ) -> V1ResourceQuota:
+    async def create_resource_quota(self, quota: K8sPatch, cluster_id: ClusterId) -> K8sResourceQuota:
         """Create a resource quota."""
         ...
 
-    async def delete_resource_quota(self, name: str, namespace: str, cluster_id: ClusterId) -> None:
+    async def delete_resource_quota(self, name: str, cluster_id: ClusterId) -> None:
         """Delete a resource quota."""
         ...
 
-    async def patch_resource_quota(
-        self, name: str, namespace: str, body: V1ResourceQuota, cluster_id: ClusterId
-    ) -> V1ResourceQuota:
+    async def patch_resource_quota(self, name: str, patch: K8sPatches, cluster_id: ClusterId) -> K8sResourceQuota:
         """Update a resource quota."""
         ...
 
@@ -51,11 +48,15 @@ class ResourceQuotaClient(Protocol):
 class SecretClient(Protocol):
     """Methods to manipulate Secret kubernetes resources."""
 
+    async def get_secret(self, secret: K8sObjectMeta) -> K8sSecret | None:
+        """Get a secret."""
+        ...
+
     async def create_secret(self, secret: K8sSecret) -> K8sSecret:
         """Create a secret."""
         ...
 
-    async def patch_secret(self, secret: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sSecret:
+    async def patch_secret(self, secret: K8sObjectMeta, patch: K8sPatches) -> K8sSecret:
         """Patch an existing secret."""
         ...
 
@@ -67,18 +68,17 @@ class SecretClient(Protocol):
 class PriorityClassClient(Protocol):
     """Methods to manipulate kubernetes Priority Class resources."""
 
-    async def create_priority_class(self, body: V1PriorityClass, cluster_id: ClusterId) -> V1PriorityClass:
+    async def create_priority_class(self, priority_class: K8sPriorityClass) -> K8sPriorityClass:
         """Create a priority class."""
         ...
 
-    async def read_priority_class(self, name: str, cluster_id: ClusterId) -> V1PriorityClass | None:
+    async def read_priority_class(self, meta: K8sObjectMeta) -> K8sPriorityClass | None:
         """Retrieve a priority class."""
         ...
 
     async def delete_priority_class(
         self,
-        name: str,
-        cluster_id: ClusterId,
+        meta: K8sObjectMeta,
         propagation_policy: DeletePropagationPolicy = DeletePropagationPolicy.foreground,
     ) -> None:
         """Delete a priority class."""
@@ -88,17 +88,11 @@ class PriorityClassClient(Protocol):
 class K8sClient(Protocol):
     """Methods to manipulate resources on a Kubernetes cluster."""
 
-    @overload
-    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject: ...
-    @overload
-    async def create(self, obj: ClusterScopedK8sObject, refresh: bool) -> ClusterScopedK8sObject: ...
-    async def create(
-        self, obj: K8sObject | ClusterScopedK8sObject, refresh: bool
-    ) -> K8sObject | ClusterScopedK8sObject:
+    async def create(self, obj: K8sObject, refresh: bool) -> K8sObject:
         """Create the k8s object."""
         ...
 
-    async def patch(self, meta: K8sObjectMeta, patch: dict[str, Any] | list[dict[str, Any]]) -> K8sObject:
+    async def patch(self, meta: K8sObjectMeta, patch: K8sPatches) -> K8sObject:
         """Patch a k8s object.
 
         If the patch is a list we assume that we have a rfc6902 json patch like

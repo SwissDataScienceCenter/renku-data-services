@@ -36,10 +36,7 @@ from renku_data_services.data_connectors.core import (
     validate_data_connector_secrets_patch,
     validate_unsaved_data_connector,
 )
-from renku_data_services.data_connectors.db import (
-    DataConnectorRepository,
-    DataConnectorSecretRepository,
-)
+from renku_data_services.data_connectors.db import DataConnectorRepository, DataConnectorSecretRepository
 from renku_data_services.storage.rclone import RCloneValidator
 
 
@@ -78,6 +75,7 @@ class DataConnectorsBP(CustomBlueprint):
                     message="Got an unexpected number of path segments for the data connector namespace"
                     " in the request query parameter, expected 0, 1 or 2"
                 )
+
             data_connectors, total_num = await self.data_connector_repo.get_data_connectors(
                 user=user, pagination=pagination, namespace=ns
             )

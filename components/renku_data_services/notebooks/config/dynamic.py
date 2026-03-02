@@ -1,7 +1,9 @@
 """Dynamic configuration."""
 
+import contextlib
 import json
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from io import StringIO
@@ -77,6 +79,7 @@ class _GitProxyConfig:
     port: int = 65480
     health_port: int = 65481
     image: str = f"renku/git-https-proxy:{latest_version}"
+    args: Sequence[str] | None = None
     renku_client_id: str = "renku"
 
     @classmethod
@@ -88,7 +91,23 @@ class _GitProxyConfig:
             port=_parse_value_as_int(os.environ.get("NB_SESSIONS__GIT_PROXY__PORT", 65480)),
             health_port=_parse_value_as_int(os.environ.get("NB_SESSIONS__GIT_PROXY__HEALTH_PORT", 65481)),
             image=os.environ.get("NB_SESSIONS__GIT_PROXY__IMAGE", f"renku/git-https-proxy:{latest_version}"),
+            args=cls._parse_args(os.environ.get("NB_SESSIONS__GIT_PROXY__ARGS", "null")),
         )
+
+    @staticmethod
+    def _parse_args(raw_args: str) -> Sequence[str] | None:
+        """Parse the args list."""
+        result: list[str] | None = None
+        with contextlib.suppress(json.decoder.JSONDecodeError):
+            parsed = json.loads(raw_args)
+            if parsed is None or not isinstance(parsed, list):
+                return None
+            result = []
+            for item in parsed:
+                if not isinstance(item, str):
+                    return None
+                result.append(item)
+        return result
 
 
 @dataclass
