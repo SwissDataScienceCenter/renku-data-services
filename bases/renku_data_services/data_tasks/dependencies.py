@@ -11,11 +11,11 @@ from renku_data_services.data_tasks.config import Config
 from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.config import KubeConfigEnv
 from renku_data_services.k8s.db import K8sDbCache
-from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
 from renku_data_services.metrics.core import StagingMetricsService
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.notebooks.config import get_clusters
+from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.session.db import SessionRepository

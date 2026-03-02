@@ -14,13 +14,13 @@ from renku_data_services import errors
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
 from renku_data_services.capacity_reservation.models import CapacityReservation, Occurrence
 from renku_data_services.crc.db import ClusterRepository
-
-_internal_admin = InternalServiceAdmin(id=ServiceAdminId.capacity_reservation)
 from renku_data_services.crc.models import ResourceClass
 from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import GVK, ClusterConnection, K8sObject, K8sObjectFilter, K8sObjectMeta
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
+
+_internal_admin = InternalServiceAdmin(id=ServiceAdminId.capacity_reservation)
 
 DEPLOYMENT_GVK = GVK(kind="Deployment", group="apps", version="v1")
 
