@@ -9,6 +9,7 @@ from io import StringIO
 from typing import Any
 
 import yaml
+from ulid import ULID
 
 from renku_data_services import errors
 from renku_data_services.base_models.core import InternalServiceAdmin, ServiceAdminId
@@ -19,6 +20,7 @@ from renku_data_services.k8s.clients import K8sClusterClientsPool
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import GVK, ClusterConnection, K8sObject, K8sObjectFilter, K8sObjectMeta
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
+from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1
 
 _internal_admin = InternalServiceAdmin(id=ServiceAdminId.capacity_reservation)
 
@@ -138,15 +140,22 @@ class CapacityReservationK8sClient:
             yield obj
 
     async def list_sessions(self) -> AsyncGenerator[dict, None]:
-        """List all AmaltheaSession objects across all clusters, yielding relevant fields as dicts."""
+        """List all non-hibernated AmaltheaSession objects across all clusters, yielding relevant fields as dicts."""
         async for s in self.__client.list(K8sObjectFilter(gvk=AMALTHEA_SESSION_GVK)):
-            annotations = s.manifest["metadata"]["annotations"]
-            resource_class_id_str = annotations.get("renku.io/resource_class_id")
-            if resource_class_id_str is None:
+            session = AmaltheaSessionV1Alpha1.model_validate(s.manifest)
+            if session.spec.hibernated:
                 continue
+            try:
+                resource_class_id = session.resource_class_id()
+            except errors.ProgrammingError:
+                continue
+            try:
+                project_id: ULID | None = session.project_id
+            except errors.ProgrammingError:
+                project_id = None
             yield {
-                "resource_class_id": int(resource_class_id_str),
-                "project_id": annotations.get("renku.io/project_id"),
+                "resource_class_id": resource_class_id,
+                "project_id": str(project_id) if project_id is not None else None,
             }
 
 
