@@ -32,7 +32,6 @@ from renku_data_services.crc.models import ClusterPatch, ClusterSettings, SavedC
 from renku_data_services.crc.orm import ClusterORM
 from renku_data_services.k8s.client_interfaces import PriorityClassClient, ResourceQuotaClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
-from renku_data_services.k8s.db import QuotaRepository
 from renku_data_services.k8s.models import DeletePropagationPolicy, K8sPriorityClass
 from renku_data_services.users.db import UserRepo
 
