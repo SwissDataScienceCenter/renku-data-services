@@ -101,10 +101,14 @@ def validate_build_parameters_patch(environment: apispec.BuildParametersPatch) -
     if environment.platforms is not None:
         platforms = __validate_build_parameters_platforms(environment.platforms)
 
+    builder_variant: str | None = None
+    frontend_variant: str | None = None
     if environment.builder_variant is not None and environment.frontend_variant is not None:
         builder_variant, frontend_variant = __validate_builder_frontend_combination(
             environment.builder_variant, environment.frontend_variant
         )
+    else:
+        builder_variant, frontend_variant = environment.builder_variant, environment.frontend_variant
 
     return models.BuildParametersPatch(
         repository=environment.repository,
