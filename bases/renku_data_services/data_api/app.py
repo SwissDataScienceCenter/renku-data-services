@@ -12,6 +12,7 @@ from renku_data_services import errors
 from renku_data_services.base_api.error_handler import CustomErrorHandler
 from renku_data_services.base_api.misc import MiscBP
 from renku_data_services.base_models.core import Slug
+from renku_data_services.capacity_reservation.blueprints import CapacityReservationBP
 from renku_data_services.connected_services.blueprints import OAuth2ClientsBP, OAuth2ConnectionsBP
 from renku_data_services.crc import apispec
 from renku_data_services.crc.blueprints import (
@@ -265,6 +266,13 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         authenticator=dm.authenticator,
         alertmanager_webhook_role=dm.config.alertmanager_webhook_role,
     )
+    capacity_reservation = CapacityReservationBP(
+        name="capacity_reservation",
+        url_prefix=url_prefix,
+        capacity_reservation_repo=dm.capacity_reservation_repo,
+        occurrence_repo=dm.occurrence_repo,
+        authenticator=dm.authenticator,
+    )
     app.blueprint(
         [
             resource_pools.blueprint(),
@@ -293,6 +301,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
             data_connectors.blueprint(),
             platform_redirects.blueprint(),
             notifications.blueprint(),
+            capacity_reservation.blueprint(),
         ]
     )
     if builds is not None:

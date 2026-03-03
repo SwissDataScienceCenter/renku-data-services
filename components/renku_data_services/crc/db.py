@@ -1102,6 +1102,34 @@ class ClusterRepository:
 
             return saved_cluster.dump()
 
+    async def get_cluster_id_for_resource_class(self, class_id: int) -> ClusterId | None:
+        """Return the cluster ID for the resource pool containing the given resource class.
+
+        Returns None if the resource pool uses the default cluster.
+        """
+        async with self.session_maker() as session:
+            stmt = (
+                select(schemas.ResourcePoolORM.cluster_id)
+                .join(schemas.ResourceClassORM, schemas.ResourceClassORM.resource_pool_id == schemas.ResourcePoolORM.id)
+                .where(schemas.ResourceClassORM.id == class_id)
+            )
+            result = await session.scalar(stmt)
+            if result is None:
+                return None
+            return ClusterId(result)
+
+    @_only_admins
+    async def get_resource_class_by_id(
+        self, api_user: base_models.APIUser, class_id: int
+    ) -> models.ResourceClass | None:
+        """Return the resource class with the given ID, including quota from the parent resource pool."""
+        async with self.session_maker() as session:
+            stmt = select(schemas.ResourceClassORM).where(schemas.ResourceClassORM.id == class_id)
+            result = await session.scalar(stmt)
+            if result is None:
+                return None
+            return result.dump()
+
     @_only_admins
     async def delete(self, api_user: base_models.APIUser, cluster_id: ULID) -> None:
         """Get cluster configurations from the database."""
