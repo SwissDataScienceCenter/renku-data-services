@@ -1,7 +1,7 @@
 """add capacity reservation and occurrences tables
 
 Revision ID: 6834770bb1d1
-Revises: 287879848fb3
+Revises: 58ad5426c2f3
 Create Date: 2026-02-18 11:19:11.197547
 
 """
@@ -14,7 +14,7 @@ from renku_data_services.utils.sqlalchemy import ULIDType
 
 # revision identifiers, used by Alembic.
 revision = "6834770bb1d1"
-down_revision = "287879848fb3"
+down_revision = "58ad5426c2f3"
 branch_labels = None
 depends_on = None
 
