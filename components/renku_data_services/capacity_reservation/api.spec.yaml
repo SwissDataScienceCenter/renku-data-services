@@ -222,6 +222,10 @@ components:
             message:
               type: string
               example: Something went wrong - please try again later
+            trace_id:
+              description: Sentry trace ID for linking to corresponding log entries
+              example: ac93950e9e114a55c67fb8e5ef519bbe
+              type: string
           required:
             - code
             - message
