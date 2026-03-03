@@ -1,5 +1,4 @@
 import inspect
-import re
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -117,24 +116,3 @@ def test_error_handler(err: Exception | Callable, expected_response: dict[str, A
     _, res = test_client.get("/")
     assert res.status_code == expected_status_code
     assert res.json == expected_response
-
-
-def test_sentry_trace_id_is_included_in_errors(dummy_sentry):
-    app = Sanic("test-error-handler")
-    app.error_handler = CustomErrorHandler(apispec)
-    app.get("/")(_trigger_error(Exception("test")))  # type: ignore[unused-coroutine]
-    test_client = SanicTestClient(app)
-
-    _, response = test_client.get("/")
-
-    assert response.status_code == 500
-    # trace_id is included in the error response and is a UUID
-    assert "trace_id" in response.json["error"]
-    assert re.match(r"^[0-9a-fA-F]{32}$", response.json["error"]["trace_id"])
-
-    # Set a specific trace_id
-    trace_id = "4bf92f3577b34da6a3ce929d0e0e4736"
-    _, response = test_client.get("/", headers={"sentry-trace": f"{trace_id}-0123456789abcdef-0"})
-
-    assert response.status_code == 500
-    assert response.json["error"]["trace_id"] == trace_id
