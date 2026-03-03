@@ -1,5 +1,6 @@
 """Data connectors blueprint."""
 
+import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -30,6 +31,7 @@ from renku_data_services.connected_services.db import ConnectedServicesRepositor
 from renku_data_services.connected_services.models import ProviderKind
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors.core import (
+    create_deposit_upload,
     dump_storage_with_sensitive_fields,
     prevalidate_unsaved_global_data_connector,
     serialize_deposit,
@@ -46,6 +48,7 @@ from renku_data_services.data_connectors.db import (
     DataConnectorSecretRepository,
 )
 from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
+from renku_data_services.k8s.client_interfaces import SecretClient
 from renku_data_services.k8s.clients import DepositUploadJobClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
 from renku_data_services.storage.rclone import RCloneValidator
@@ -60,6 +63,7 @@ class DataConnectorsBP(CustomBlueprint):
     authenticator: base_models.Authenticator
     metrics: MetricsService
     job_client: DepositUploadJobClient
+    secret_client: SecretClient
     zenodo_client: ZenodoAPIClient
     connected_services_repo: ConnectedServicesRepository
 
@@ -585,7 +589,7 @@ class DataConnectorsBP(CustomBlueprint):
         @validate(json=apispec.DepositPost)
         async def _post_deposit(
             _: Request,
-            user: base_models.APIUser,
+            user: base_models.AuthenticatedAPIUser,
             body: apispec.DepositPost,
         ) -> JSONResponse:
             # Get token for Zenodo
@@ -601,7 +605,16 @@ class DataConnectorsBP(CustomBlueprint):
                 cluster_id=DEFAULT_K8S_CLUSTER,
             )
             saved_dep = await self.data_connector_repo.create_deposit(user, dep_job)
-            # TODO: Create a job in k8s
+            namespace = os.environ.get("K8S_NAMESPACE", "default")
+            # Create the job in kubernetes
+            await create_deposit_upload(
+                user_id=user.id,
+                deposit_job=saved_dep,
+                api_key=token,
+                namespace=namespace,
+                secret_client=self.secret_client,
+                job_client=self.job_client,
+            )
             return validated_json(apispec.Deposit, serialize_deposit(saved_dep))
 
         return "/deposits", ["POST"], _post_deposit

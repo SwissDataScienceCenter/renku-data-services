@@ -262,6 +262,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         zenodo_client=dm.zenodo_client,
         connected_services_repo=dm.connected_services_repo,
         job_client=dm.job_client,
+        secret_client=dm.secret_client,
     )
     notifications = NotificationsBP(
         name="notifications",

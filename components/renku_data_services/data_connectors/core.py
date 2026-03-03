@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import re
 from dataclasses import asdict
@@ -11,6 +12,23 @@ from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 import httpx
+import kubernetes
+from box import Box
+from kubernetes.client import (
+    V1Affinity,
+    V1Capabilities,
+    V1Container,
+    V1EnvFromSource,
+    V1Job,
+    V1JobSpec,
+    V1ObjectMeta,
+    V1OwnerReference,
+    V1PodSpec,
+    V1PodTemplateSpec,
+    V1Secret,
+    V1SecretEnvSource,
+    V1SecurityContext,
+)
 from pydantic import ValidationError as PydanticValidationError
 from ulid import ULID
 
@@ -25,6 +43,10 @@ from renku_data_services.data_connectors.constants import ALLOWED_GLOBAL_DATA_CO
 from renku_data_services.data_connectors.doi import schema_org
 from renku_data_services.data_connectors.doi.metadata import create_envidat_metadata_url, get_dataset_metadata
 from renku_data_services.data_connectors.doi.models import DOI, SchemaOrgDataset
+from renku_data_services.k8s.client_interfaces import SecretClient
+from renku_data_services.k8s.clients import DepositUploadJobClient
+from renku_data_services.k8s.constants import ClusterId
+from renku_data_services.k8s.models import GVK, K8sObject, K8sSecret
 from renku_data_services.storage import models as storage_models
 from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER
 from renku_data_services.storage.rclone import RCloneDOIMetadata, RCloneValidator
@@ -32,6 +54,8 @@ from renku_data_services.utils.core import get_openbis_pat
 
 if TYPE_CHECKING:
     from renku_data_services.data_connectors.db import DataConnectorRepository
+
+sanitizer = kubernetes.client.ApiClient().sanitize_for_serialization
 
 
 def dump_storage_with_sensitive_fields(
@@ -573,3 +597,108 @@ def serialize_deposit(deposit: models.DepositJob) -> dict[str, Any]:
         creation_date=deposit.deposit.creation_date,
         updated_at=deposit.deposit.updated_at,
     )
+
+
+def _create_deposit_upload_job(
+    user_id: str, namespace: str, deposit_job: models.DepositJob, secret_name: str, affinity: V1Affinity | None = None
+) -> K8sObject:
+    manifest = Box(
+        sanitizer(
+            V1Job(
+                metadata=V1ObjectMeta(
+                    name=deposit_job.name,
+                    labels={
+                        "renku.io/deposit_id": str(deposit_job.deposit.id),
+                    },
+                ),
+                spec=V1JobSpec(
+                    template=V1PodTemplateSpec(
+                        spec=V1PodSpec(
+                            affinity=affinity,
+                            containers=[
+                                V1Container(
+                                    security_context=V1SecurityContext(
+                                        privileged=False,
+                                        run_as_non_root=True,
+                                        capabilities=V1Capabilities(drop="ALL"),
+                                        run_as_user=1000,
+                                        run_as_group=1000,
+                                    ),
+                                    name="upload-deposit",
+                                    image="olevski90/renku-cli:0.0.2",
+                                    env_from=[V1EnvFromSource(secret_ref=V1SecretEnvSource(name=secret_name))],
+                                    args=[
+                                        "dataset",
+                                        "deposit",
+                                        "cp",
+                                        deposit_job.deposit.path,
+                                        deposit_job.deposit.original_id,
+                                    ],
+                                )
+                            ],
+                        )
+                    )
+                ),
+            )
+        )
+    )
+    return K8sObject(
+        name=deposit_job.name,
+        namespace=namespace,
+        cluster=deposit_job.cluster_id,
+        gvk=GVK(kind="Job", version="v1", group="batch"),
+        manifest=manifest,
+        user_id=user_id,
+    )
+
+
+def _create_deposit_upload_secret(
+    user_id: str, name: str, namespace: str, cluster_id: ClusterId, deposit_id: ULID, api_key: str
+) -> K8sSecret:
+    manifest = sanitizer(
+        V1Secret(
+            metadata=V1ObjectMeta(
+                name=name, labels={"renku.io/deposit_id": str(deposit_id), "renku.io/deposit_secret": "true"}
+            ),
+            type="Opaque",
+            data={"ZENODO_API_KEY": base64.b64encode(api_key.encode()).decode()},
+        )
+    )
+    return K8sSecret(name=name, namespace=namespace, user_id=user_id, manifest=Box(manifest), cluster=cluster_id)
+
+
+async def create_deposit_upload(
+    user_id: str,
+    deposit_job: models.DepositJob,
+    namespace: str,
+    api_key: str,
+    secret_client: SecretClient,
+    job_client: DepositUploadJobClient,
+) -> None:
+    """Create a deposit upload job and secret."""
+    secret = _create_deposit_upload_secret(
+        user_id=user_id,
+        name=deposit_job.name,
+        namespace=namespace,
+        cluster_id=deposit_job.cluster_id,
+        api_key=api_key,
+        deposit_id=deposit_job.deposit.id,
+    )
+    job = _create_deposit_upload_job(
+        user_id=user_id, namespace=namespace, deposit_job=deposit_job, secret_name=deposit_job.name
+    )
+    await secret_client.create_secret(secret)
+    created_job = await job_client.create(job)
+    if not isinstance(created_job.metadata, V1ObjectMeta):
+        raise errors.ProgrammingError(
+            message="The metadata of the job created to upload a data to a data deposit is unexpectedly empty",
+            detail="Please contact a Renku administrator with this message.",
+        )
+    owner_ref = V1OwnerReference(
+        api_version=created_job.api_version,
+        block_owner_deletion=False,
+        controller=False,
+        uid=created_job.metadata.uid,
+        kind=created_job.kind,
+    )
+    await secret_client.patch_secret(secret, {"metadata": {"ownerReferences": [sanitizer(owner_ref)]}})

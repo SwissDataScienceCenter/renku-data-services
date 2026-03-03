@@ -44,6 +44,7 @@ from renku_data_services.k8s.clients import (
     K8sClusterClientsPool,
     K8sPriorityClassClient,
     K8sResourceQuotaClient,
+    K8sSecretClient,
 )
 from renku_data_services.k8s.config import KubeConfigEnv
 from renku_data_services.k8s.db import K8sDbCache
@@ -168,6 +169,7 @@ class DependencyManager:
     resource_usage_service: ResourceUsageService
     zenodo_client: ZenodoAPIClient
     job_client: DepositUploadJobClient
+    secret_client: K8sSecretClient
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
@@ -254,6 +256,7 @@ class DependencyManager:
         )
         quota_repo = QuotaRepository(K8sResourceQuotaClient(client), K8sPriorityClassClient(client))
         job_client = DepositUploadJobClient(client)
+        secret_client = K8sSecretClient(client)
 
         if config.dummy_stores:
             authenticator = DummyAuthenticator()
@@ -480,4 +483,5 @@ class DependencyManager:
             resource_usage_service=resource_usage_service,
             zenodo_client=ZenodoAPIClient(),
             job_client=job_client,
+            secret_client=secret_client,
         )
