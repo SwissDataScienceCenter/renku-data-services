@@ -51,6 +51,7 @@ class BuilderVariant(StrEnum):
     """The type of environment builder."""
 
     python = "python"
+    r = "r"
 
 
 class FrontendVariant(StrEnum):
@@ -59,6 +60,15 @@ class FrontendVariant(StrEnum):
     vscodium = "vscodium"
     jupyterlab = "jupyterlab"
     ttyd = "ttyd"
+    rstudio = "rstudio"
+
+
+VALID_BUILDER_FRONTEND_COMBINATIONS: typing.Final[set[tuple[BuilderVariant, FrontendVariant]]] = {
+    (BuilderVariant.r, FrontendVariant.rstudio),
+    (BuilderVariant.python, FrontendVariant.vscodium),
+    (BuilderVariant.python, FrontendVariant.jupyterlab),
+    (BuilderVariant.python, FrontendVariant.ttyd),
+}
 
 
 @dataclass(kw_only=True, frozen=True, eq=True)
