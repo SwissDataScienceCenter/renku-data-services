@@ -400,6 +400,39 @@ async def initialize_session_environments(dm: DependencyManager) -> None:
     await dm.session_tasks.initialize_session_environments_task(requested_by=api_user)
 
 
+async def activate_capacity_reservations(dm: DependencyManager) -> None:
+    """Activate pending capacity reservation occurrences."""
+    while True:
+        try:
+            await dm.capacity_reservation_tasks.activate_pending_occurrences_task()
+        except (asyncio.CancelledError, KeyboardInterrupt) as e:
+            logger.warning(f"Exiting: {e}")
+        else:
+            await asyncio.sleep(dm.config.x_short_task_period_s)
+
+
+async def monitor_capacity_reservations(dm: DependencyManager) -> None:
+    """Monitor active capacity reservation occurrences."""
+    while True:
+        try:
+            await dm.capacity_reservation_tasks.monitor_active_occurrences_task()
+        except (asyncio.CancelledError, KeyboardInterrupt) as e:
+            logger.warning(f"Exiting: {e}")
+        else:
+            await asyncio.sleep(dm.config.x_short_task_period_s)
+
+
+async def cleanup_orphaned_capacity_reservations(dm: DependencyManager) -> None:
+    """Clean up capacity reservation deployments whose occurrences no longer exist."""
+    while True:
+        try:
+            await dm.capacity_reservation_tasks.cleanup_orphaned_deployments_task()
+        except (asyncio.CancelledError, KeyboardInterrupt) as e:
+            logger.warning(f"Exiting: {e}")
+        else:
+            await asyncio.sleep(dm.config.x_short_task_period_s)
+
+
 def all_tasks(dm: DependencyManager) -> TaskDefininions:
     """A dict of task factories to be managed in main."""
     # Impl. note: We pass the entire config to the coroutines, because
@@ -421,5 +454,8 @@ def all_tasks(dm: DependencyManager) -> TaskDefininions:
             "users_sync": lambda: users_sync(dm),
             "sync_admins_from_keycloak": lambda: sync_admins_from_keycloak(dm),
             "initialize_session_environments": lambda: initialize_session_environments(dm),
+            "activate_capacity_reservations": lambda: activate_capacity_reservations(dm),
+            "monitor_capacity_reservations": lambda: monitor_capacity_reservations(dm),
+            "cleanup_orphaned_capacity_reservations": lambda: cleanup_orphaned_capacity_reservations(dm),
         }
     )

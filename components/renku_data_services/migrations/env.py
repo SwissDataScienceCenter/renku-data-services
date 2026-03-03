@@ -1,6 +1,7 @@
 """Database migrations for Alembic."""
 
 from renku_data_services.authz.orm import BaseORM as authz
+from renku_data_services.capacity_reservation.orm import BaseORM as capacity_reservation
 from renku_data_services.connected_services.orm import BaseORM as connected_services
 from renku_data_services.crc.orm import BaseORM as crc
 from renku_data_services.data_connectors.orm import BaseORM as data_connectors
@@ -20,6 +21,7 @@ from renku_data_services.users.orm import BaseORM as users
 
 all_metadata = [
     authz.metadata,
+    capacity_reservation.metadata,
     connected_services.metadata,
     crc.metadata,
     data_connectors.metadata,

@@ -86,6 +86,7 @@ class ServiceAdminId(StrEnum):
     secrets_rotation = "secrets_rotation"
     k8s_watcher = "k8s_watcher"
     search_reprovision = "search_reprovision"
+    capacity_reservation = "capacity_reservation"
 
 
 @dataclass(kw_only=True, frozen=True)
