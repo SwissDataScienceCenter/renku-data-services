@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterable, AsyncIterator
-from typing import Any, Protocol, overload
-
-from kubernetes.client import V1PriorityClass, V1ResourceQuota
+from typing import Protocol
 
 from renku_data_services.k8s.constants import ClusterId
 from renku_data_services.k8s.models import (

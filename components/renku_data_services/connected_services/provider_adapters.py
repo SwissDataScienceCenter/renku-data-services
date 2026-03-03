@@ -1,7 +1,7 @@
 """Adapters for each kind of OAuth2 client."""
 
 from abc import ABC, abstractmethod
-from typing import Any, cast
+from typing import Any
 from urllib.parse import urljoin, urlparse, urlunparse
 
 from httpx import Client, Response
@@ -9,6 +9,7 @@ from httpx import Client, Response
 from renku_data_services import errors
 from renku_data_services.connected_services import external_models, models
 from renku_data_services.connected_services import orm as schemas
+from renku_data_services.data_connectors.deposits.zenodo import DepositResponseList
 
 
 class ProviderAdapter(ABC):
@@ -268,10 +269,10 @@ class ZenodoAdapter(ProviderAdapter):
         """Validates and returns the connected account response from the Resource Server."""
         if response.status_code != 200:
             raise errors.InvalidTokenError(message="Your zenodo credentials are expired or invalid, please reconnect.")
-        deposits = response.json()
+        deposits = DepositResponseList.model_validate(response.json())
         username: str = "Zenodo user"
-        if isinstance(deposits, list) and len(deposits) >= 1:
-            username = cast(str, next(iter(deposits), {}).get("owner", "Zenodo user"))
+        if len(deposits.root) >= 1:
+            username = "Zenodo user ID: " + str(deposits.root[0].owner)
         return models.ConnectedAccount(username=username, web_url="https://zenodo.org")
 
 
