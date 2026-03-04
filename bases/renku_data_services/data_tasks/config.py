@@ -72,7 +72,7 @@ class Config:
 
         k8s_config_root = os.environ.get("K8S_CONFIG_ROOT", "/secrets/kube_configs")
 
-        enable_resource_request_tracking = os.environ.get("ENABLE_RESOURCE_REQUEST_TRACKING", "true").lower() == "true"
+        enable_resource_request_tracking = os.environ.get("ENABLE_RESOURCE_REQUEST_TRACKING", "false").lower() == "true"
         authz = AuthzConfig.from_env()
 
         keycloak = None if dummy_stores else KeycloakConfig.from_env()
