@@ -183,7 +183,7 @@ paths:
           content:
             "application/json":
               schema:
-              $ref: "#/components/schemas/ResourceClassCostPut"
+                $ref: "#/components/schemas/ResourceClassCostPut"
         "404":
           description: "The class does not exist."
           content:
