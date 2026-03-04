@@ -51,7 +51,6 @@ class Config:
     x_short_task_period_s: int
     short_task_period_s: int
     long_task_period_s: int
-    k8s_config_root: str
     enable_resource_request_tracking: bool
 
     @classmethod

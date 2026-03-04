@@ -8,7 +8,7 @@ from renku_data_services import errors
 from renku_data_services.app_config import logging
 from renku_data_services.k8s.client_interfaces import K8sClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
-from renku_data_services.k8s.models import GVK, K8sObjectFilter, K8sObjectMeta
+from renku_data_services.k8s.models import GVK, K8sObject, K8sObjectFilter, K8sObjectMeta
 from renku_data_services.resource_usage import apispec
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.resource_usage.model import (
