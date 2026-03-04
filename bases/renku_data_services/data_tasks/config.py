@@ -42,6 +42,7 @@ class Config:
     posthog: PosthogConfig
     authz: AuthzConfig
     keycloak: KeycloakConfig | None
+    k8s_config_root: str
     dummy_stores: bool
     max_retry_wait_seconds: int
     main_log_interval_seconds: int
@@ -50,7 +51,7 @@ class Config:
     x_short_task_period_s: int
     short_task_period_s: int
     long_task_period_s: int
-    k8s_config_root: str
+    enable_resource_request_tracking: bool
 
     @classmethod
     def from_env(cls) -> Config:
@@ -71,6 +72,7 @@ class Config:
 
         k8s_config_root = os.environ.get("K8S_CONFIG_ROOT", "/secrets/kube_configs")
 
+        enable_resource_request_tracking = os.environ.get("ENABLE_RESOURCE_REQUEST_TRACKING", "false").lower() == "true"
         authz = AuthzConfig.from_env()
 
         keycloak = None if dummy_stores else KeycloakConfig.from_env()
@@ -82,11 +84,12 @@ class Config:
             posthog=posthog_config,
             authz=authz,
             keycloak=keycloak,
+            k8s_config_root=k8s_config_root,
             tcp_host=tcp_host,
             tcp_port=tcp_port,
             x_short_task_period_s=x_short_task_period,
             short_task_period_s=short_task_period,
             long_task_period_s=long_task_period,
-            k8s_config_root=k8s_config_root,
             dummy_stores=dummy_stores,
+            enable_resource_request_tracking=enable_resource_request_tracking,
         )

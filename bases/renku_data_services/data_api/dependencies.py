@@ -37,6 +37,7 @@ from renku_data_services.data_connectors.db import (
     DataConnectorSecretRepository,
 )
 from renku_data_services.git.gitlab import DummyGitlabAPI, EmptyGitlabAPI, GitlabAPI
+from renku_data_services.k8s.client_interfaces import K8sClient
 from renku_data_services.k8s.clients import (
     K8sClusterClientsPool,
     K8sPriorityClassClient,
@@ -62,6 +63,8 @@ from renku_data_services.project.db import (
     ProjectSessionSecretRepository,
 )
 from renku_data_services.repositories.db import GitRepositoriesRepository
+from renku_data_services.resource_usage.core import ResourceUsageService
+from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.search import query_manual
 from renku_data_services.search.db import SearchUpdatesRepo
 from renku_data_services.search.reprovision import SearchReprovision
@@ -118,6 +121,7 @@ class DependencyManager:
 
     config: Config
 
+    k8s_client: K8sClient
     user_store: base_models.UserStore
     authenticator: base_models.Authenticator
     gitlab_authenticator: base_models.Authenticator
@@ -158,6 +162,8 @@ class DependencyManager:
     oauth_http_client_factory: OAuthHttpClientFactory
     capacity_reservation_repo: CapacityReservationRepository
     occurrence_repo: OccurrenceRepository
+    resource_requests_repo: ResourceRequestsRepo
+    resource_usage_service: ResourceUsageService
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
@@ -187,6 +193,7 @@ class DependencyManager:
             renku_data_services.search.__file__,
             renku_data_services.notifications.__file__,
             renku_data_services.capacity_reservation.__file__,
+            renku_data_services.resource_usage.__file__,
         ]
 
         api_specs = []
@@ -417,8 +424,13 @@ class DependencyManager:
         occurrence_repo = OccurrenceRepository(
             session_maker=config.db.async_session_maker,
         )
+        resource_requests_repo = ResourceRequestsRepo(
+            session_maker=config.db.async_session_maker,
+        )
+        resource_usage_service = ResourceUsageService(repo=resource_requests_repo)
         return cls(
             config,
+            k8s_client=client,
             authenticator=authenticator,
             gitlab_authenticator=gitlab_authenticator,
             gitlab_client=gitlab_client,
@@ -459,4 +471,6 @@ class DependencyManager:
             oauth_http_client_factory=oauth_http_client_factory,
             capacity_reservation_repo=capacity_reservation_repo,
             occurrence_repo=occurrence_repo,
+            resource_requests_repo=resource_requests_repo,
+            resource_usage_service=resource_usage_service,
         )
