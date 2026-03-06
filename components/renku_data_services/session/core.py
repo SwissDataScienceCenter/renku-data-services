@@ -394,7 +394,7 @@ def __validate_builder_frontend_combination(builder_variant: str, frontend_varia
     combo = (models.BuilderVariant(builder_variant), models.FrontendVariant(frontend_variant))
     if combo not in models.VALID_BUILDER_FRONTEND_COMBINATIONS:
         raise errors.ValidationError(
-            message=f"Invalid combination: builder '{builder_variant}' is not compatible with"
-            "frontend '{frontend_variant}'"
+            message=f"Invalid combination: builder '{builder_variant}' is not compatible with "
+            f"frontend '{frontend_variant}'"
         )
     return builder_variant, frontend_variant
