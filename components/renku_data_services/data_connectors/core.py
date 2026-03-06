@@ -30,6 +30,7 @@ from kubernetes.client import (
     V1Secret,
     V1SecretEnvSource,
     V1SecurityContext,
+    V1Toleration,
     V1Volume,
     V1VolumeMount,
     V1VolumeResourceRequirements,
@@ -616,6 +617,8 @@ async def create_deposit_upload(
     deposit_job: models.DepositJob,
     job_client: DepositUploadJobClient,
     deposit_api_key: str,
+    deposit_job_affinity: V1Affinity,
+    deposit_job_tolerations: list[V1Toleration],
 ) -> None:
     """Create the resources required to upload data to a deposit."""
 
@@ -669,8 +672,9 @@ async def create_deposit_upload(
         api_key_secret_name: str,
         work_dir: PurePosixPath,
         pvc_name: str,
+        deposit_job_affinity: V1Affinity,
+        deposit_job_tolerations: list[V1Toleration],
         labels: dict[str, str] | None = None,
-        affinity: V1Affinity | None = None,
         suspended: bool = False,
     ) -> V1Job:
         mount_path = PurePosixPath("/" + pvc_name)
@@ -690,7 +694,8 @@ async def create_deposit_upload(
                 template=V1PodTemplateSpec(
                     spec=V1PodSpec(
                         restart_policy="Never",
-                        affinity=affinity,
+                        affinity=deposit_job_affinity,
+                        tolerations=deposit_job_tolerations,
                         containers=[
                             V1Container(
                                 security_context=V1SecurityContext(
@@ -796,6 +801,8 @@ async def create_deposit_upload(
         suspended=True,
         labels=labels,
         pvc_name=pvc_name,
+        deposit_job_tolerations=deposit_job_tolerations,
+        deposit_job_affinity=deposit_job_affinity,
     )
     created_job = await job_client.create(_convert_to_k8s_object(job, cluster_id=cluster_id, user_id=user.id))
     owner_reference = _get_owner_reference(created_job)

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Any
 
+from kubernetes.client import V1Affinity, V1Toleration
 from sanic import Request
 from sanic.response import HTTPResponse, JSONResponse
 from sanic_ext import validate
@@ -74,6 +75,8 @@ class DataConnectorsBP(CustomBlueprint):
     dc_storage_class: str
     data_service_base_url: str
     k8s_client: K8sClient
+    deposit_job_affinity: V1Affinity
+    deposit_job_tolerations: list[V1Toleration]
 
     def get_all(self) -> BlueprintFactoryResponse:
         """List data connectors."""
@@ -644,6 +647,8 @@ class DataConnectorsBP(CustomBlueprint):
                 deposit_job=saved_dep,
                 job_client=self.job_client,
                 deposit_api_key=token,
+                deposit_job_tolerations=self.deposit_job_tolerations,
+                deposit_job_affinity=self.deposit_job_affinity,
             )
             return validated_json(apispec.Deposit, serialize_deposit(saved_dep))
 
