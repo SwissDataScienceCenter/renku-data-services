@@ -263,6 +263,10 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         connected_services_repo=dm.connected_services_repo,
         job_client=dm.job_client,
         secret_client=dm.secret_client,
+        data_source_repo=dm.data_source_repo,
+        dc_storage_class=dm.config.nb_config.cloud_storage.storage_class,
+        data_service_base_url=dm.config.nb_config.data_service_url,
+        k8s_client=dm.k8s_client,
     )
     notifications = NotificationsBP(
         name="notifications",

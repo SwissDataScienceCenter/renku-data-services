@@ -1,5 +1,7 @@
 """Models for data connectors."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -70,6 +72,10 @@ class DataConnector(BaseDataConnector):
         """The full path (i.e. sequence of slugs) for the data connector including group or user and/or project."""
         return self.namespace.path / DataConnectorSlug(self.slug)
 
+    def with_secrets(self, secrets: list[DataConnectorSecret]) -> DataConnectorWithSecrets:
+        """Create a data connector with secrets."""
+        return DataConnectorWithSecrets(data_connector=self, secrets=secrets)
+
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedDataConnector(BaseDataConnector):
@@ -98,6 +104,10 @@ class GlobalDataConnector(BaseDataConnector):
     def etag(self) -> str:
         """Entity tag value for this data connector object."""
         return compute_etag_from_fields(self.updated_at)
+
+    def with_secrets(self, secrets: list[DataConnectorSecret]) -> DataConnectorWithSecrets:
+        """Create a data connector with secrets."""
+        return DataConnectorWithSecrets(data_connector=self, secrets=secrets)
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
@@ -153,7 +163,7 @@ class DataConnectorPatch:
 class CloudStorageCoreWithSensitiveFields(CloudStorageCore):
     """Remote storage configuration model with sensitive fields."""
 
-    sensitive_fields: list["RCloneOption"]
+    sensitive_fields: list[RCloneOption]
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

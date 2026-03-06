@@ -1,7 +1,9 @@
 """Data connectors blueprint."""
 
 import os
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 from typing import Any
 
 from sanic import Request
@@ -48,9 +50,10 @@ from renku_data_services.data_connectors.db import (
     DataConnectorSecretRepository,
 )
 from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
-from renku_data_services.k8s.client_interfaces import SecretClient
+from renku_data_services.k8s.client_interfaces import K8sClient, SecretClient
 from renku_data_services.k8s.clients import DepositUploadJobClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
+from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.storage.rclone import RCloneValidator
 
 
@@ -66,6 +69,11 @@ class DataConnectorsBP(CustomBlueprint):
     secret_client: SecretClient
     zenodo_client: ZenodoAPIClient
     connected_services_repo: ConnectedServicesRepository
+    oauth_http_client_factory: OAuthHttpClientFactory
+    data_source_repo: DataSourceRepository
+    dc_storage_class: str
+    data_service_base_url: str
+    k8s_client: K8sClient
 
     def get_all(self) -> BlueprintFactoryResponse:
         """List data connectors."""
@@ -588,7 +596,7 @@ class DataConnectorsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.DepositPost)
         async def _post_deposit(
-            _: Request,
+            request: Request,
             user: base_models.AuthenticatedAPIUser,
             body: apispec.DepositPost,
         ) -> JSONResponse:
@@ -607,13 +615,35 @@ class DataConnectorsBP(CustomBlueprint):
             saved_dep = await self.data_connector_repo.create_deposit(user, dep_job)
             namespace = os.environ.get("K8S_NAMESPACE", "default")
             # Create the job in kubernetes
-            await create_deposit_upload(
-                user_id=user.id,
-                deposit_job=saved_dep,
-                api_key=token,
+            dc = await self.data_connector_repo.get_data_connector(
+                user=user, data_connector_id=ULID.from_str(body.data_connector_id)
+            )
+            secrets = await self.data_connector_secret_repo.get_data_connector_secrets(user, dc.id)
+
+            async def dc_iter() -> AsyncIterator[models.DataConnectorWithSecrets]:
+                yield dc.with_secrets(secrets)
+
+            extras = await self.data_source_repo.get_data_sources(
+                request=request,
+                user=user,
+                base_name=saved_dep.name,
+                data_connectors_stream=dc_iter(),
+                work_dir=PurePosixPath(),
+                data_connectors_overrides=[],
                 namespace=namespace,
-                secret_client=self.secret_client,
+                storage_class=self.dc_storage_class,
+            )
+            await create_deposit_upload(
+                user=user,
+                extras=extras,
+                storage_class=self.dc_storage_class,
+                namespace=namespace,
+                cluster_id=saved_dep.cluster_id,
+                k8s_client=self.k8s_client,
+                data_service_base_url=self.data_service_base_url,
+                deposit_job=saved_dep,
                 job_client=self.job_client,
+                deposit_api_key=token,
             )
             return validated_json(apispec.Deposit, serialize_deposit(saved_dep))
 

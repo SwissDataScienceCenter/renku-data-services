@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 import kubernetes
-from box import Box
 from kubernetes.client import (
     V1Affinity,
     V1Capabilities,
@@ -23,11 +22,17 @@ from kubernetes.client import (
     V1JobSpec,
     V1ObjectMeta,
     V1OwnerReference,
+    V1PersistentVolumeClaim,
+    V1PersistentVolumeClaimSpec,
+    V1PersistentVolumeClaimVolumeSource,
     V1PodSpec,
     V1PodTemplateSpec,
     V1Secret,
     V1SecretEnvSource,
     V1SecurityContext,
+    V1Volume,
+    V1VolumeMount,
+    V1VolumeResourceRequirements,
 )
 from pydantic import ValidationError as PydanticValidationError
 from ulid import ULID
@@ -43,10 +48,11 @@ from renku_data_services.data_connectors.constants import ALLOWED_GLOBAL_DATA_CO
 from renku_data_services.data_connectors.doi import schema_org
 from renku_data_services.data_connectors.doi.metadata import create_envidat_metadata_url, get_dataset_metadata
 from renku_data_services.data_connectors.doi.models import DOI, SchemaOrgDataset
-from renku_data_services.k8s.client_interfaces import SecretClient
+from renku_data_services.k8s.client_interfaces import K8sClient
 from renku_data_services.k8s.clients import DepositUploadJobClient
 from renku_data_services.k8s.constants import ClusterId
-from renku_data_services.k8s.models import GVK, K8sObject, K8sSecret
+from renku_data_services.k8s.models import GVK, K8sObject, K8sObjectMeta
+from renku_data_services.notebooks.models import SessionExtraResources
 from renku_data_services.storage import models as storage_models
 from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER
 from renku_data_services.storage.rclone import RCloneDOIMetadata, RCloneValidator
@@ -599,106 +605,274 @@ def serialize_deposit(deposit: models.DepositJob) -> dict[str, Any]:
     )
 
 
-def _create_deposit_upload_job(
-    user_id: str, namespace: str, deposit_job: models.DepositJob, secret_name: str, affinity: V1Affinity | None = None
-) -> K8sObject:
-    manifest = Box(
-        sanitizer(
-            V1Job(
-                metadata=V1ObjectMeta(
-                    name=deposit_job.name,
-                    labels={
-                        "renku.io/deposit_id": str(deposit_job.deposit.id),
-                    },
-                ),
-                spec=V1JobSpec(
-                    template=V1PodTemplateSpec(
-                        spec=V1PodSpec(
-                            affinity=affinity,
-                            containers=[
-                                V1Container(
-                                    security_context=V1SecurityContext(
-                                        privileged=False,
-                                        run_as_non_root=True,
-                                        capabilities=V1Capabilities(drop="ALL"),
-                                        run_as_user=1000,
-                                        run_as_group=1000,
-                                    ),
-                                    name="upload-deposit",
-                                    image="olevski90/renku-cli:0.0.2",
-                                    env_from=[V1EnvFromSource(secret_ref=V1SecretEnvSource(name=secret_name))],
-                                    args=[
-                                        "dataset",
-                                        "deposit",
-                                        "cp",
-                                        deposit_job.deposit.path,
-                                        deposit_job.deposit.original_id,
-                                    ],
-                                )
-                            ],
-                        )
-                    )
-                ),
-            )
+async def create_deposit_upload(
+    user: base_models.AuthenticatedAPIUser,
+    extras: SessionExtraResources,
+    storage_class: str,
+    namespace: str,
+    cluster_id: ClusterId,
+    k8s_client: K8sClient,
+    data_service_base_url: str,
+    deposit_job: models.DepositJob,
+    job_client: DepositUploadJobClient,
+    deposit_api_key: str,
+) -> None:
+    """Create the resources required to upload data to a deposit."""
+
+    def _convert_to_k8s_object(
+        input: V1Job | V1Secret | V1PersistentVolumeClaim, cluster_id: ClusterId, user_id: str
+    ) -> K8sObject:
+        if not isinstance(input.metadata, V1ObjectMeta):
+            raise errors.ProgrammingError(message="Cannot convert a k8s object that is missing metadata.")
+        match input:
+            case V1Job():
+                gvk = GVK(kind="Job", version="v1", group="batch")
+            case V1Secret():
+                gvk = GVK(kind="Secret", version="v1")
+            case V1PersistentVolumeClaim():
+                gvk = GVK(kind="PersistentVolumeClaim", version="v1")
+            case x:
+                raise errors.ProgrammingError(
+                    message=f"Unexpected reosurce type {x.api_version}-{x.kind} when creating converting k8s object"
+                )
+
+        return K8sObject(
+            name=input.metadata.name,
+            namespace=input.metadata.namespace,
+            cluster=cluster_id,
+            gvk=gvk,
+            manifest=sanitizer(input),
+            user_id=user_id,
         )
-    )
-    return K8sObject(
-        name=deposit_job.name,
-        namespace=namespace,
-        cluster=deposit_job.cluster_id,
-        gvk=GVK(kind="Job", version="v1", group="batch"),
-        manifest=manifest,
-        user_id=user_id,
-    )
 
-
-def _create_deposit_upload_secret(
-    user_id: str, name: str, namespace: str, cluster_id: ClusterId, deposit_id: ULID, api_key: str
-) -> K8sSecret:
-    manifest = sanitizer(
-        V1Secret(
+    def _create_secret(
+        name: str,
+        namespace: str,
+        data: dict[str, str],
+        owner_ref: V1OwnerReference | None = None,
+        labels: dict[str, str] | None = None,
+    ) -> V1Secret:
+        return V1Secret(
             metadata=V1ObjectMeta(
-                name=name, labels={"renku.io/deposit_id": str(deposit_id), "renku.io/deposit_secret": "true"}
+                name=name,
+                namespace=namespace,
+                labels=labels,
+                owner_references=[owner_ref] if owner_ref else None,
             ),
             type="Opaque",
-            data={"ZENODO_API_KEY": base64.b64encode(api_key.encode()).decode()},
+            data={k: base64.b64encode(v.encode()).decode() for k, v in data.items()},
         )
-    )
-    return K8sSecret(name=name, namespace=namespace, user_id=user_id, manifest=Box(manifest), cluster=cluster_id)
 
+    def _create_deposit_upload_job(
+        namespace: str,
+        deposit_job: models.DepositJob,
+        api_key_secret_name: str,
+        work_dir: PurePosixPath,
+        pvc_name: str,
+        labels: dict[str, str] | None = None,
+        affinity: V1Affinity | None = None,
+        suspended: bool = False,
+    ) -> V1Job:
+        mount_path = PurePosixPath("/" + pvc_name)
+        copy_source = mount_path
+        if deposit_job.deposit.path is not None:
+            copy_source = mount_path / deposit_job.deposit.path
+        return V1Job(
+            metadata=V1ObjectMeta(
+                name=deposit_job.name,
+                namespace=namespace,
+                labels=labels,
+            ),
+            spec=V1JobSpec(
+                backoff_limit=0,  # create only 1 pod, dont keep creating new pods on failure
+                ttl_seconds_after_finished=3600 * 6,  # will clean itself up after 6 hrs, also will cleanup all children
+                suspend=suspended,
+                template=V1PodTemplateSpec(
+                    spec=V1PodSpec(
+                        restart_policy="Never",
+                        affinity=affinity,
+                        containers=[
+                            V1Container(
+                                security_context=V1SecurityContext(
+                                    privileged=False,
+                                    run_as_non_root=True,
+                                    capabilities=V1Capabilities(drop=["ALL"]),
+                                    run_as_user=1000,
+                                    run_as_group=1000,
+                                ),
+                                name="upload-deposit",
+                                image="olevski90/renku-cli:0.0.2",
+                                env_from=[V1EnvFromSource(secret_ref=V1SecretEnvSource(name=api_key_secret_name))],
+                                args=[
+                                    "dataset",
+                                    "deposit",
+                                    "cp",
+                                    copy_source.as_posix(),
+                                    deposit_job.deposit.original_id,
+                                ],
+                                working_dir=work_dir.as_posix(),
+                                volume_mounts=[
+                                    V1VolumeMount(mount_path=mount_path.as_posix(), read_only=True, name=pvc_name)
+                                ],
+                            )
+                        ],
+                        volumes=[
+                            V1Volume(
+                                name=pvc_name,
+                                persistent_volume_claim=V1PersistentVolumeClaimVolumeSource(
+                                    claim_name=pvc_name,
+                                    read_only=True,
+                                ),
+                            )
+                        ],
+                    )
+                ),
+            ),
+        )
 
-async def create_deposit_upload(
-    user_id: str,
-    deposit_job: models.DepositJob,
-    namespace: str,
-    api_key: str,
-    secret_client: SecretClient,
-    job_client: DepositUploadJobClient,
-) -> None:
-    """Create a deposit upload job and secret."""
-    secret = _create_deposit_upload_secret(
-        user_id=user_id,
-        name=deposit_job.name,
-        namespace=namespace,
-        cluster_id=deposit_job.cluster_id,
-        api_key=api_key,
-        deposit_id=deposit_job.deposit.id,
-    )
+    def _create_pvc(
+        name: str,
+        namespace: str,
+        storage_class: str,
+        access_mode: str,
+        owner_ref: V1OwnerReference,
+        credentials_secret_name: str | None,
+        labels: dict[str, str] | None = None,
+    ) -> V1PersistentVolumeClaim:
+        annotations = {}
+        if credentials_secret_name:
+            annotations["csi-rclone.dev/secretName"] = credentials_secret_name
+        return V1PersistentVolumeClaim(
+            metadata=V1ObjectMeta(
+                name=name,
+                namespace=namespace,
+                labels=labels,
+                annotations=annotations,
+                owner_references=[owner_ref],
+            ),
+            spec=V1PersistentVolumeClaimSpec(
+                access_modes=[access_mode],
+                storage_class_name=storage_class,
+                resources=V1VolumeResourceRequirements(requests={"storage": "1Gi"}),
+            ),
+        )
+
+    def _get_owner_reference(job: V1Job) -> V1OwnerReference:
+        if not isinstance(job.metadata, V1ObjectMeta):
+            raise errors.ProgrammingError()
+        return V1OwnerReference(
+            name=job.metadata.name,
+            api_version=job.api_version,
+            block_owner_deletion=False,
+            controller=False,
+            uid=job.metadata.uid,
+            kind=job.kind,
+        )
+
+    assert len(extras.containers) == 0
+    assert len(extras.init_containers) == 0
+    assert len(extras.volume_mounts) == 0
+    assert len(extras.volumes) == 0
+    # If the data connector has a saved credential then the credentials are in a secret in data_connector_secrets
+    assert len(extras.data_connector_secrets) <= 1
+    # The regular non-secret rclone config is in secrets
+    assert len(extras.secrets) == 1
+    assert len(extras.data_sources) == 1
+    data_src = extras.data_sources[0]
+
+    base_name = deposit_job.name
+    pvc_name = deposit_job.name + "-ds"
+    # NOTE: The user id label is important - that is how authorization is enforced
+    # TODO: Cleanup user-id authorization - add it in the k8s client
+    labels = {"renku.io/deposit_id": str(deposit_job.deposit.id), "renku.io/safe-username": user.id}
+
+    work_dir = PurePosixPath("/work")
+
     job = _create_deposit_upload_job(
-        user_id=user_id, namespace=namespace, deposit_job=deposit_job, secret_name=deposit_job.name
+        namespace=namespace,
+        deposit_job=deposit_job,
+        api_key_secret_name=base_name,
+        work_dir=work_dir,
+        suspended=True,
+        labels=labels,
+        pvc_name=pvc_name,
     )
-    await secret_client.create_secret(secret)
-    created_job = await job_client.create(job)
-    if not isinstance(created_job.metadata, V1ObjectMeta):
-        raise errors.ProgrammingError(
-            message="The metadata of the job created to upload a data to a data deposit is unexpectedly empty",
-            detail="Please contact a Renku administrator with this message.",
+    created_job = await job_client.create(_convert_to_k8s_object(job, cluster_id=cluster_id, user_id=user.id))
+    owner_reference = _get_owner_reference(created_job)
+
+    job_secret = _create_secret(
+        name=base_name,
+        namespace=namespace,
+        data={"ZENODO_API_KEY": deposit_api_key},
+        labels=labels,
+        owner_ref=owner_reference,
+    )
+    await k8s_client.create(_convert_to_k8s_object(job_secret, cluster_id=cluster_id, user_id=user.id), True)
+
+    pvc = _create_pvc(
+        name=pvc_name,
+        namespace=namespace,
+        storage_class=storage_class,
+        access_mode=data_src.accessMode,
+        owner_ref=owner_reference,
+        credentials_secret_name=pvc_name,
+        labels=labels,
+    )
+    await k8s_client.create(_convert_to_k8s_object(pvc, cluster_id=cluster_id, user_id=user.id), True)
+
+    # Request the creation of saved encrypted secrets (if any are present)
+    secrets_url = data_service_base_url + "/api/secrets/kubernetes"
+    headers = {"Authorization": f"bearer {user.access_token}"}
+    dc_secrets = list(extras.data_connector_secrets.items())
+    if len(dc_secrets) > 0:
+        s_id, secrets = dc_secrets[0]
+    else:
+        s_id = None
+        secrets = None
+    if s_id is not None and secrets is not None and len(secrets) > 0:
+        # NOTE: The name of this secret has to be the PVC name + "-secrets"
+        # That is what CSI rclone expects
+        secret_name = f"{pvc_name}-secrets"
+        request_data = {
+            "name": secret_name,
+            "namespace": namespace,
+            "secret_ids": [str(secret.secret_id) for secret in secrets],
+            "owner_references": [sanitizer(owner_reference)],
+            "key_mapping": {str(secret.secret_id): secret.name for secret in secrets},
+            "cluster_id": str(cluster_id),
+        }
+        async with httpx.AsyncClient(timeout=10) as client:
+            res = await client.post(secrets_url, headers=headers, json=request_data)
+            if res.status_code >= 300 or res.status_code < 200:
+                raise errors.ProgrammingError(
+                    message=f"The secret for data connector with {s_id} could not be "
+                    f"successfully created, the status code was {res.status_code}."
+                    "Please contact a Renku administrator.",
+                    detail=res.text,
+                )
+        await k8s_client.patch(
+            K8sObjectMeta(
+                name=secret_name, namespace=namespace, cluster=cluster_id, gvk=GVK(kind="Secret", version="v1")
+            ),
+            {"metadata": {"ownerReferences": [sanitizer(owner_reference)]}},
         )
-    owner_ref = V1OwnerReference(
-        api_version=created_job.api_version,
-        block_owner_deletion=False,
-        controller=False,
-        uid=created_job.metadata.uid,
-        kind=created_job.kind,
+
+    # Create the secret that contains the unencrypted rclone config
+    secret = extras.secrets[0]
+    manifest = sanitizer(secret.secret)
+    manifest["metadata"]["ownerReferences"] = [sanitizer(owner_reference)]
+    manifest["metadata"]["name"] = pvc_name
+    manifest["metadata"]["labels"] = labels
+    await k8s_client.create(
+        K8sObject(
+            name=pvc_name,
+            namespace=namespace,
+            cluster=cluster_id,
+            gvk=GVK(kind="Secret", version="v1"),
+            manifest=manifest,
+        ),
+        True,
     )
-    await secret_client.patch_secret(secret, {"metadata": {"ownerReferences": [sanitizer(owner_ref)]}})
+
+    # Start the actual job
+    await k8s_client.patch(_convert_to_k8s_object(created_job, cluster_id, user.id), {"spec": {"suspend": False}})

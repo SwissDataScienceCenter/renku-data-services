@@ -403,7 +403,7 @@ class DependencyManager:
             authz=authz,
         )
         data_source_repo = DataSourceRepository(
-            nb_config=config.nb_config,
+            user_repo=kc_user_repo,
             connected_services_repo=connected_services_repo,
             oauth_client_factory=oauth_http_client_factory,
         )
