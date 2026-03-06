@@ -555,6 +555,25 @@ paths:
           description: The data deposit was deleted
       tags:
         - deposit
+  /deposits/{deposit_id}/logs:
+    parameters:
+      - in: path
+        name: deposit_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+        description: the ID of the data deposit
+    get:
+      summary: Get the logs of a data deposit
+      responses:
+        "200":
+          description: The data deposit logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepositLogs"
+      tags:
+        - deposit
 components:
   schemas:
     DataConnectorsList:
@@ -1152,6 +1171,13 @@ components:
       type: array
       items:
         $ref: "#/components/schemas/Deposit"
+    DepositLogs:
+      type: object
+      additionalProperties:
+        type: string
+      example:
+        "container-A": "Log line 1\nLog line 2"
+        "container-B": "Log line 1\nLog line 2"
 
   responses:
     Error:

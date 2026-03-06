@@ -54,6 +54,7 @@ from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
 from renku_data_services.k8s.client_interfaces import K8sClient, SecretClient
 from renku_data_services.k8s.clients import DepositUploadJobClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
+from renku_data_services.k8s.models import GVK, K8sObjectMeta
 from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.storage.rclone import RCloneValidator
 
@@ -722,3 +723,31 @@ class DataConnectorsBP(CustomBlueprint):
             return [validate_and_dump(apispec.Deposit, serialize_deposit(i)) for i in deposits], total_num
 
         return "/data_connectors/<data_connector_id:ulid>/deposits", ["GET"], _get_dc_deposits
+
+    def get_dc_deposit_logs(self) -> BlueprintFactoryResponse:
+        """Get logs of a specific deposit."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _get_dc_deposit_logs(_: Request, user: base_models.APIUser, deposit_id: ULID) -> JSONResponse:
+            saved_dep = await self.data_connector_repo.get_deposit(user, deposit_id)
+            namespace = os.environ.get("K8S_NAMESPACE", "default")
+            meta = K8sObjectMeta(
+                name=saved_dep.name,
+                namespace=namespace,
+                cluster=saved_dep.cluster_id,
+                gvk=GVK(kind="Job", version="v1", group="batch"),
+                user_id=user.id,
+            )
+            all_logs = await self.job_client.logs(meta)
+            output: dict[str, str] = {}
+            containers = sorted(all_logs.keys())
+            for container in containers:
+                logs_iter = all_logs[container]
+                logs: list[str] = []
+                async for log in logs_iter:
+                    logs.append(log)
+                output[container] = "\n".join(logs)
+            return validated_json(apispec.DepositLogs, output)
+
+        return "/deposits/<deposit_id:ulid>/logs", ["GET"], _get_dc_deposit_logs

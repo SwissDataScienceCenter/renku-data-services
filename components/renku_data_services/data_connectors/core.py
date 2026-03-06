@@ -680,7 +680,11 @@ async def create_deposit_upload(
         mount_path = PurePosixPath("/" + pvc_name)
         copy_source = mount_path
         if deposit_job.deposit.path is not None:
-            copy_source = mount_path / deposit_job.deposit.path
+            copy_source = mount_path / (
+                deposit_job.deposit.path.relative_to("/")
+                if deposit_job.deposit.path.is_absolute()
+                else deposit_job.deposit.path
+            )
         return V1Job(
             metadata=V1ObjectMeta(
                 name=deposit_job.name,
@@ -692,6 +696,7 @@ async def create_deposit_upload(
                 ttl_seconds_after_finished=3600 * 6,  # will clean itself up after 6 hrs, also will cleanup all children
                 suspend=suspended,
                 template=V1PodTemplateSpec(
+                    metadata=V1ObjectMeta(labels=labels),
                     spec=V1PodSpec(
                         restart_policy="Never",
                         affinity=deposit_job_affinity,
@@ -730,7 +735,7 @@ async def create_deposit_upload(
                                 ),
                             )
                         ],
-                    )
+                    ),
                 ),
             ),
         )

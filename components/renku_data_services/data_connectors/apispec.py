@@ -234,6 +234,10 @@ class DepositList(RootModel[List[Deposit]]):
     root: List[Deposit]
 
 
+class DepositLogs(RootModel[Optional[Dict[str, str]]]):
+    root: Optional[Dict[str, str]] = None
+
+
 class DataConnectorsDataConnectorIdDepositsGetParametersQuery(BaseAPISpec):
     params: Optional[PaginationRequest] = None
 
