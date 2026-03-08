@@ -1,9 +1,7 @@
 """Data connectors blueprint."""
 
 import os
-from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from pathlib import PurePosixPath
 from typing import Any
 
 from kubernetes.client import V1Affinity, V1Toleration
@@ -46,6 +44,7 @@ from renku_data_services.data_connectors.core import (
     validate_data_connector_secrets_patch,
     validate_deposit,
     validate_deposit_patch,
+    validate_deposit_status_change,
     validate_unsaved_data_connector,
 )
 from renku_data_services.data_connectors.db import (
@@ -606,6 +605,14 @@ class DataConnectorsBP(CustomBlueprint):
             user: base_models.AuthenticatedAPIUser,
             body: apispec.DepositPost,
         ) -> JSONResponse:
+            existing_deposits, _ = await self.data_connector_repo.get_deposits(
+                user, ULID.from_str(body.data_connector_id)
+            )
+            if len(existing_deposits) != 0:
+                raise errors.ValidationError(
+                    message="Cannot have more than 1 deposit for the same user and data connector.",
+                    detail="Please delete your existing deposit and make a new one afterward.",
+                )
             # Get token for Zenodo
             token = await self.__get_zenodo_access_token(user)
             # Create deposit in Zenodo
@@ -621,27 +628,9 @@ class DataConnectorsBP(CustomBlueprint):
             saved_dep = await self.data_connector_repo.create_deposit(user, dep_job)
             namespace = os.environ.get("K8S_NAMESPACE", "default")
             # Create the job in kubernetes
-            dc = await self.data_connector_repo.get_data_connector(
-                user=user, data_connector_id=ULID.from_str(body.data_connector_id)
-            )
-            secrets = await self.data_connector_secret_repo.get_data_connector_secrets(user, dc.id)
-
-            async def dc_iter() -> AsyncIterator[models.DataConnectorWithSecrets]:
-                yield dc.with_secrets(secrets)
-
-            extras = await self.data_source_repo.get_data_sources(
+            await create_deposit_upload(
                 request=request,
                 user=user,
-                base_name=saved_dep.name,
-                data_connectors_stream=dc_iter(),
-                work_dir=PurePosixPath(),
-                data_connectors_overrides=[],
-                namespace=namespace,
-                storage_class=self.dc_storage_class,
-            )
-            await create_deposit_upload(
-                user=user,
-                extras=extras,
                 storage_class=self.dc_storage_class,
                 namespace=namespace,
                 cluster_id=saved_dep.cluster_id,
@@ -652,6 +641,9 @@ class DataConnectorsBP(CustomBlueprint):
                 deposit_api_key=token,
                 deposit_job_tolerations=self.deposit_job_tolerations,
                 deposit_job_affinity=self.deposit_job_affinity,
+                data_source_repo=self.data_source_repo,
+                data_connector_repo=self.data_connector_repo,
+                data_connector_secret_repo=self.data_connector_secret_repo,
             )
             return validated_json(apispec.Deposit, serialize_deposit(saved_dep))
 
@@ -688,6 +680,8 @@ class DataConnectorsBP(CustomBlueprint):
             namespace = os.environ.get("K8S_NAMESPACE", "default")
             patch = validate_deposit_patch(body)
             saved_dep = await self.data_connector_repo.update_deposit(user, deposit_id, patch)
+            if patch.status:
+                validate_deposit_status_change(saved_dep.deposit.status, patch.status)
             saved_dep = await update_deposit_status(
                 user=user,
                 deposit_job=saved_dep,
@@ -695,10 +689,65 @@ class DataConnectorsBP(CustomBlueprint):
                 job_client=self.job_client,
                 namespace=namespace,
             )
-            # TODO: When the deposit is completed create a new data connector
+            if patch.status == models.DepositStatus.complete:
+                # If the deposit is being completed then we delete it
+                # We leave it to the user to create a new data connector and link it
+                await self.data_connector_repo.delete_deposit(user, saved_dep.deposit.id)
             return validated_json(apispec.Deposit, serialize_deposit(saved_dep))
 
         return "/deposits/<deposit_id:ulid>", ["PATCH"], _patch_deposit
+
+    def post_deposit_job(self) -> BlueprintFactoryResponse:
+        """Rerun a deposit job."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _post_deposit_job(
+            request: Request, user: base_models.AuthenticatedAPIUser, deposit_id: ULID
+        ) -> HTTPResponse:
+            tokens = self.oauth_http_client_factory.for_user_provider_access_token(user, ProviderKind.zenodo)
+            provider_id_token = await anext(tokens, None)
+            if not provider_id_token:
+                raise errors.UnauthorizedError(
+                    message="You need to connect and autheticate with the zenodo provider to do this"
+                )
+            _provider_id, token = provider_id_token
+            namespace = os.environ.get("K8S_NAMESPACE", "default")
+            saved_dep = await self.data_connector_repo.get_deposit(user, deposit_id)
+            saved_dep = await update_deposit_status(
+                user,
+                deposit_job=saved_dep,
+                dc_repo=self.data_connector_repo,
+                job_client=self.job_client,
+                namespace=namespace,
+            )
+            await self.job_client.delete(saved_dep.to_meta(user.id, namespace))
+            new_job_name = "deposit-" + str(ULID()).lower()
+            saved_dep = await self.data_connector_repo.update_deposit(
+                user,
+                saved_dep.deposit.id,
+                models.DepositPatch(job_name=new_job_name, status=models.DepositStatus.in_progress),
+            )
+            await create_deposit_upload(
+                request=request,
+                user=user,
+                storage_class=self.dc_storage_class,
+                namespace=namespace,
+                cluster_id=saved_dep.cluster_id,
+                k8s_client=self.k8s_client,
+                data_service_base_url=self.data_service_base_url,
+                deposit_job=saved_dep,
+                job_client=self.job_client,
+                deposit_api_key=token,
+                deposit_job_tolerations=self.deposit_job_tolerations,
+                deposit_job_affinity=self.deposit_job_affinity,
+                data_source_repo=self.data_source_repo,
+                data_connector_repo=self.data_connector_repo,
+                data_connector_secret_repo=self.data_connector_secret_repo,
+            )
+            return HTTPResponse(status=201)
+
+        return "/deposits/<deposit_id:ulid>/job", ["POST"], _post_deposit_job
 
     def delete_deposit(self) -> BlueprintFactoryResponse:
         """Delete a specific deposit."""

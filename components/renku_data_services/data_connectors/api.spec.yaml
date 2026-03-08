@@ -574,6 +574,21 @@ paths:
                 $ref: "#/components/schemas/DepositLogs"
       tags:
         - deposit
+  /deposits/{deposit_id}/job:
+    parameters:
+      - in: path
+        name: deposit_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+        description: the ID of the data deposit
+    post:
+      summary: Rerun a deposit job
+      responses:
+        "201":
+          description: The data deposit job has been recreated
+      tags:
+        - deposit
 components:
   schemas:
     DataConnectorsList:
@@ -1114,6 +1129,7 @@ components:
         - complete
         - in_progress
         - failed
+        - upload_complete
     DepositSourcePath:
       type: string
       example: /some/path
@@ -1167,6 +1183,8 @@ components:
           $ref: "#/components/schemas/DataConnectorName"
         status:
           $ref: "#/components/schemas/DepositStatus"
+        path:
+          $ref: "#/components/schemas/DepositSourcePath"
     DepositList:
       type: array
       items:

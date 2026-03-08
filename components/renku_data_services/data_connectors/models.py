@@ -20,6 +20,7 @@ from renku_data_services.base_models.core import (
 )
 from renku_data_services.data_connectors.doi.models import DOI
 from renku_data_services.k8s.constants import ClusterId
+from renku_data_services.k8s.models import GVK, K8sObjectMeta
 from renku_data_services.namespace.models import GroupNamespace, ProjectNamespace, UserNamespace
 from renku_data_services.storage.rclone import RCloneDOIMetadata
 from renku_data_services.utils.etag import compute_etag_from_fields
@@ -273,6 +274,16 @@ class DepositJob:
     cluster_id: ClusterId
     deposit: Deposit
 
+    def to_meta(self, user_id: str, namespace: str) -> K8sObjectMeta:
+        """Return the Kubernetes meta object to represent the Job for the deposit."""
+        return K8sObjectMeta(
+            name=self.name,
+            namespace=namespace,
+            cluster=self.cluster_id,
+            gvk=GVK(kind="Job", version="v1", group="batch"),
+            user_id=user_id,
+        )
+
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class UnsavedDepositJob:
@@ -289,3 +300,5 @@ class DepositPatch:
 
     name: str | None = None
     status: DepositStatus | None = None
+    job_name: str | None = None
+    path: PurePosixPath | None = None

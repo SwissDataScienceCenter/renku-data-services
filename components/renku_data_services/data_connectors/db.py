@@ -930,6 +930,8 @@ class DataConnectorRepository:
                 )
             if patch.name is not None:
                 res.name = patch.name
+            if patch.job_name is not None:
+                res.job_name = patch.job_name
             if patch.status is not None:
                 status_subq = (
                     select(schemas.DepositStatusORM.id)
@@ -937,6 +939,8 @@ class DataConnectorRepository:
                     .scalar_subquery()
                 )
                 res.status_id = status_subq
+            if patch.path is not None:
+                res.path = patch.path.as_posix()
             await session.flush()
             await session.refresh(res)
         return res.dump()

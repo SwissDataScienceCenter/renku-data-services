@@ -150,6 +150,7 @@ class DepositStatus(Enum):
     complete = "complete"
     in_progress = "in_progress"
     failed = "failed"
+    upload_complete = "upload_complete"
 
 
 class DepositPost(BaseAPISpec):
@@ -228,6 +229,11 @@ class DepositPatch(BaseAPISpec):
         min_length=1,
     )
     status: Optional[DepositStatus] = None
+    path: Optional[str] = Field(
+        None,
+        description="The path from the data connector that should be uploaded in the deposit",
+        examples=["/some/path"],
+    )
 
 
 class DepositList(RootModel[List[Deposit]]):

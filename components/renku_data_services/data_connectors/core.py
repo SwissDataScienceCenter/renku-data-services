@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import contextlib
 import re
+from collections.abc import AsyncIterator
 from dataclasses import asdict
 from datetime import datetime
 from html.parser import HTMLParser
@@ -38,6 +39,7 @@ from kubernetes.client import (
     V1VolumeResourceRequirements,
 )
 from pydantic import ValidationError as PydanticValidationError
+from sanic import Request
 from ulid import ULID
 
 from renku_data_services import base_models, errors
@@ -55,14 +57,14 @@ from renku_data_services.k8s.client_interfaces import K8sClient
 from renku_data_services.k8s.clients import DepositUploadJobClient
 from renku_data_services.k8s.constants import ClusterId
 from renku_data_services.k8s.models import GVK, K8sObject, K8sObjectMeta
-from renku_data_services.notebooks.models import SessionExtraResources
+from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.storage import models as storage_models
 from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER
 from renku_data_services.storage.rclone import RCloneDOIMetadata, RCloneValidator
 from renku_data_services.utils.core import get_openbis_pat
 
 if TYPE_CHECKING:
-    from renku_data_services.data_connectors.db import DataConnectorRepository
+    from renku_data_services.data_connectors.db import DataConnectorRepository, DataConnectorSecretRepository
 
 sanitizer = kubernetes.client.ApiClient().sanitize_for_serialization
 
@@ -590,7 +592,9 @@ def validate_deposit_patch(body: apispec.DepositPatch) -> models.DepositPatch:
     status: models.DepositStatus | None = None
     if body.status:
         status = models.DepositStatus(body.status.value)
-    return models.DepositPatch(name=body.name, status=status)
+    return models.DepositPatch(
+        name=body.name, status=status, path=PurePosixPath(body.path) if body.path is not None else None
+    )
 
 
 def serialize_deposit(deposit: models.DepositJob) -> dict[str, Any]:
@@ -609,8 +613,8 @@ def serialize_deposit(deposit: models.DepositJob) -> dict[str, Any]:
 
 
 async def create_deposit_upload(
+    request: Request,
     user: base_models.AuthenticatedAPIUser,
-    extras: SessionExtraResources,
     storage_class: str,
     namespace: str,
     cluster_id: ClusterId,
@@ -621,6 +625,9 @@ async def create_deposit_upload(
     deposit_api_key: str,
     deposit_job_affinity: V1Affinity,
     deposit_job_tolerations: list[V1Toleration],
+    data_source_repo: DataSourceRepository,
+    data_connector_repo: DataConnectorRepository,
+    data_connector_secret_repo: DataConnectorSecretRepository,
 ) -> None:
     """Create the resources required to upload data to a deposit."""
 
@@ -715,7 +722,6 @@ async def create_deposit_upload(
                                 name="upload-deposit",
                                 image="olevski90/renku-cli:0.0.2",
                                 env_from=[V1EnvFromSource(secret_ref=V1SecretEnvSource(name=api_key_secret_name))],
-                                # /tools/trackhub/hg38
                                 env=[V1EnvVar(name="RUST_LOG", value="debug")],
                                 args=[
                                     "dataset",
@@ -782,6 +788,25 @@ async def create_deposit_upload(
             uid=job.metadata.uid,
             kind=job.kind,
         )
+
+    dc = await data_connector_repo.get_data_connector(
+        user=user, data_connector_id=deposit_job.deposit.data_connector_id
+    )
+    dc_config_secrets = await data_connector_secret_repo.get_data_connector_secrets(user, dc.id)
+
+    async def dc_iter() -> AsyncIterator[models.DataConnectorWithSecrets]:
+        yield dc.with_secrets(dc_config_secrets)
+
+    extras = await data_source_repo.get_data_sources(
+        request=request,
+        user=user,
+        base_name=deposit_job.name,
+        data_connectors_stream=dc_iter(),
+        work_dir=PurePosixPath(),
+        data_connectors_overrides=[],
+        namespace=namespace,
+        storage_class=storage_class,
+    )
 
     assert len(extras.containers) == 0
     assert len(extras.init_containers) == 0
@@ -903,7 +928,7 @@ def _get_deposit_job_status(job: V1Job) -> models.DepositStatus:
     if (job.status.active or 0) > 0:
         return models.DepositStatus.in_progress
     elif any(c.type == "Complete" and c.status == "True" for c in conditions):
-        return models.DepositStatus.complete
+        return models.DepositStatus.upload_complete
     elif any(c.type == "Failed" and c.status == "True" for c in conditions):
         return models.DepositStatus.failed
     else:
@@ -952,3 +977,14 @@ async def update_deposits_statuses(
         )
         output.append(dj)
     return output
+
+
+def validate_deposit_status_change(current: models.DepositStatus, new: models.DepositStatus) -> None:
+    """Validate deposit status changes for the API."""
+    match current, new:
+        case models.DepositStatus.upload_complete, models.DepositStatus.complete:
+            pass
+        case _x, _y:
+            raise errors.ValidationError(
+                message="The only allowed status change is from 'upload_complete' to 'complete'."
+            )
