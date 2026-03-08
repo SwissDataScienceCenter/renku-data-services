@@ -40,6 +40,8 @@ from renku_data_services.data_connectors.core import (
     serialize_deposit,
     transform_secrets_for_back_end,
     transform_secrets_for_front_end,
+    update_deposit_status,
+    update_deposits_statuses,
     validate_data_connector_patch,
     validate_data_connector_secrets_patch,
     validate_deposit,
@@ -660,8 +662,16 @@ class DataConnectorsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _get_deposit(_: Request, user: base_models.APIUser, deposit_id: ULID) -> JSONResponse:
+        async def _get_deposit(_: Request, user: base_models.AuthenticatedAPIUser, deposit_id: ULID) -> JSONResponse:
+            namespace = os.environ.get("K8S_NAMESPACE", "default")
             saved_dep = await self.data_connector_repo.get_deposit(user, deposit_id)
+            saved_dep = await update_deposit_status(
+                user=user,
+                deposit_job=saved_dep,
+                dc_repo=self.data_connector_repo,
+                job_client=self.job_client,
+                namespace=namespace,
+            )
             return validated_json(apispec.Deposit, serialize_deposit(saved_dep))
 
         return "/deposits/<deposit_id:ulid>", ["GET"], _get_deposit
@@ -673,10 +683,18 @@ class DataConnectorsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.DepositPatch)
         async def _patch_deposit(
-            _: Request, user: base_models.APIUser, body: apispec.DepositPatch, deposit_id: ULID
+            _: Request, user: base_models.AuthenticatedAPIUser, body: apispec.DepositPatch, deposit_id: ULID
         ) -> JSONResponse:
+            namespace = os.environ.get("K8S_NAMESPACE", "default")
             patch = validate_deposit_patch(body)
             saved_dep = await self.data_connector_repo.update_deposit(user, deposit_id, patch)
+            saved_dep = await update_deposit_status(
+                user=user,
+                deposit_job=saved_dep,
+                dc_repo=self.data_connector_repo,
+                job_client=self.job_client,
+                namespace=namespace,
+            )
             # TODO: When the deposit is completed create a new data connector
             return validated_json(apispec.Deposit, serialize_deposit(saved_dep))
 
@@ -687,7 +705,7 @@ class DataConnectorsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _delete_deposit(_: Request, user: base_models.APIUser, deposit_id: ULID) -> HTTPResponse:
+        async def _delete_deposit(_: Request, user: base_models.AuthenticatedAPIUser, deposit_id: ULID) -> HTTPResponse:
             await self.data_connector_repo.delete_deposit(user, deposit_id)
             # TODO: Delete any jobs from k8s
             return HTTPResponse(status=204)
@@ -701,10 +719,18 @@ class DataConnectorsBP(CustomBlueprint):
         @only_authenticated
         @paginate
         async def _get_deposits(
-            _: Request, user: base_models.APIUser, pagination: PaginationRequest
+            _: Request, user: base_models.AuthenticatedAPIUser, pagination: PaginationRequest
         ) -> tuple[list[dict[str, Any]], int]:
+            namespace = os.environ.get("K8S_NAMESPACE", "default")
             deposits, total_num = await self.data_connector_repo.get_deposits(
                 user, data_connector_id=None, pagination=pagination
+            )
+            deposits = await update_deposits_statuses(
+                user=user,
+                deposit_jobs=deposits,
+                dc_repo=self.data_connector_repo,
+                job_client=self.job_client,
+                namespace=namespace,
             )
             return [validate_and_dump(apispec.Deposit, serialize_deposit(i)) for i in deposits], total_num
 
@@ -717,9 +743,17 @@ class DataConnectorsBP(CustomBlueprint):
         @only_authenticated
         @paginate
         async def _get_dc_deposits(
-            _: Request, user: base_models.APIUser, data_connector_id: ULID, pagination: PaginationRequest
+            _: Request, user: base_models.AuthenticatedAPIUser, data_connector_id: ULID, pagination: PaginationRequest
         ) -> tuple[list[dict[str, Any]], int]:
+            namespace = os.environ.get("K8S_NAMESPACE", "default")
             deposits, total_num = await self.data_connector_repo.get_deposits(user, data_connector_id, pagination)
+            deposits = await update_deposits_statuses(
+                user=user,
+                deposit_jobs=deposits,
+                dc_repo=self.data_connector_repo,
+                job_client=self.job_client,
+                namespace=namespace,
+            )
             return [validate_and_dump(apispec.Deposit, serialize_deposit(i)) for i in deposits], total_num
 
         return "/data_connectors/<data_connector_id:ulid>/deposits", ["GET"], _get_dc_deposits
@@ -729,9 +763,18 @@ class DataConnectorsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _get_dc_deposit_logs(_: Request, user: base_models.APIUser, deposit_id: ULID) -> JSONResponse:
-            saved_dep = await self.data_connector_repo.get_deposit(user, deposit_id)
+        async def _get_dc_deposit_logs(
+            _: Request, user: base_models.AuthenticatedAPIUser, deposit_id: ULID
+        ) -> JSONResponse:
             namespace = os.environ.get("K8S_NAMESPACE", "default")
+            saved_dep = await self.data_connector_repo.get_deposit(user, deposit_id)
+            saved_dep = await update_deposit_status(
+                user,
+                deposit_job=saved_dep,
+                dc_repo=self.data_connector_repo,
+                job_client=self.job_client,
+                namespace=namespace,
+            )
             meta = K8sObjectMeta(
                 name=saved_dep.name,
                 namespace=namespace,

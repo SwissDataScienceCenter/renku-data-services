@@ -237,9 +237,10 @@ class DepositSource(StrEnum):
 class DepositStatus(StrEnum):
     """The stautus of a data deposit at a data repository like Zenodo."""
 
+    upload_complete = "upload_complete"
     complete = "complete"
     in_progress = "in_progress"
-    unknown = "unknown"
+    failed = "failed"
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

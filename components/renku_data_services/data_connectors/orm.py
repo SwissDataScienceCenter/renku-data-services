@@ -253,10 +253,7 @@ class DepositStatusORM(BaseORM):
 
     def dump(self) -> models.DepositStatus:
         """Convert to a model status."""
-        try:
-            return models.DepositStatus(self.status.lower())
-        except ValueError:
-            return models.DepositStatus.unknown
+        return models.DepositStatus(self.status.lower())
 
 
 class DepositSourceORM(BaseORM):

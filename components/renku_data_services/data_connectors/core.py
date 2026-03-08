@@ -18,8 +18,10 @@ from kubernetes.client import (
     V1Capabilities,
     V1Container,
     V1EnvFromSource,
+    V1EnvVar,
     V1Job,
     V1JobSpec,
+    V1JobStatus,
     V1ObjectMeta,
     V1OwnerReference,
     V1PersistentVolumeClaim,
@@ -713,6 +715,8 @@ async def create_deposit_upload(
                                 name="upload-deposit",
                                 image="olevski90/renku-cli:0.0.2",
                                 env_from=[V1EnvFromSource(secret_ref=V1SecretEnvSource(name=api_key_secret_name))],
+                                # /tools/trackhub/hg38
+                                env=[V1EnvVar(name="RUST_LOG", value="debug")],
                                 args=[
                                     "dataset",
                                     "deposit",
@@ -888,3 +892,63 @@ async def create_deposit_upload(
 
     # Start the actual job
     await k8s_client.patch(_convert_to_k8s_object(created_job, cluster_id, user.id), {"spec": {"suspend": False}})
+
+
+def _get_deposit_job_status(job: V1Job) -> models.DepositStatus:
+    if not isinstance(job.status, V1JobStatus):
+        raise errors.ProgrammingError(
+            message="Cannot get the status of a deposit job if the status property is fully missing."
+        )
+    conditions = job.status.conditions or []
+    if (job.status.active or 0) > 0:
+        return models.DepositStatus.in_progress
+    elif any(c.type == "Complete" and c.status == "True" for c in conditions):
+        return models.DepositStatus.complete
+    elif any(c.type == "Failed" and c.status == "True" for c in conditions):
+        return models.DepositStatus.failed
+    else:
+        return models.DepositStatus.in_progress
+
+
+async def update_deposit_status(
+    user: base_models.AuthenticatedAPIUser,
+    deposit_job: models.DepositJob,
+    dc_repo: DataConnectorRepository,
+    job_client: DepositUploadJobClient,
+    namespace: str,
+) -> models.DepositJob:
+    """Gets the deposit, the corresponding job and updates the status in the DB."""
+    dep_k8s_job = await job_client.get(
+        K8sObjectMeta(
+            name=deposit_job.name,
+            namespace=namespace,
+            cluster=deposit_job.cluster_id,
+            gvk=GVK(kind="Job", version="v1", group="batch"),
+            user_id=user.id,
+        )
+    )
+    if dep_k8s_job is None or dep_k8s_job.status is None:
+        return deposit_job
+    latest_status = _get_deposit_job_status(dep_k8s_job)
+    if latest_status != deposit_job.deposit.status:
+        deposit_job = await dc_repo.update_deposit(
+            user, deposit_job.deposit.id, models.DepositPatch(status=latest_status)
+        )
+    return deposit_job
+
+
+async def update_deposits_statuses(
+    user: base_models.AuthenticatedAPIUser,
+    deposit_jobs: list[models.DepositJob],
+    dc_repo: DataConnectorRepository,
+    job_client: DepositUploadJobClient,
+    namespace: str,
+) -> list[models.DepositJob]:
+    """Gets the deposits, the corresponding jobs and updates the status in the DB."""
+    output = []
+    for deposit_job in deposit_jobs:
+        dj = await update_deposit_status(
+            user=user, deposit_job=deposit_job, dc_repo=dc_repo, job_client=job_client, namespace=namespace
+        )
+        output.append(dj)
+    return output
