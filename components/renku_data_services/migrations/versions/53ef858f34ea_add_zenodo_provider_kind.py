@@ -1,7 +1,7 @@
 """add zenodo provider kind
 
 Revision ID: 53ef858f34ea
-Revises: 287879848fb3
+Revises: c6af6a1088f1
 Create Date: 2026-02-20 16:45:47.200173
 
 """
@@ -10,7 +10,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "53ef858f34ea"
-down_revision = "287879848fb3"
+down_revision = "c6af6a1088f1"
 branch_labels = None
 depends_on = None
 
