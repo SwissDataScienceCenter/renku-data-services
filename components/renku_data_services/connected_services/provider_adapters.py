@@ -272,7 +272,7 @@ class ZenodoAdapter(ProviderAdapter):
         username: str = "Zenodo user"
         if isinstance(deposits, list) and len(deposits) >= 1:
             username = next(iter(deposits), {}).get("owner", "Zenodo user")
-        return models.ConnectedAccount(username=username, web_url="https://zenodo.org")
+        return models.ConnectedAccount(username=username, web_url="")
 
 
 class GenericOidcAdapter(ProviderAdapter):

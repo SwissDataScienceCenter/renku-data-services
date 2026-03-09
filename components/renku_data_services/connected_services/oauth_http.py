@@ -544,6 +544,8 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck, _TokenC
                 token=None,
             )
             if client.kind == ProviderKind.zenodo:
+                # NOTE: Getting the token from the oauth_client.fetch_token method did not work
+                # with Zenodo. Probably because Zenodo is very sensitive to the encoding.
                 parsed_url = urlparse(raw_url)
                 q = parse_qs(parsed_url.query)
                 code = next(iter(q.get("code") or []), None)

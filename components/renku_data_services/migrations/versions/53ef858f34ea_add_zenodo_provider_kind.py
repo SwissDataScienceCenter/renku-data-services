@@ -23,7 +23,7 @@ def downgrade() -> None:
     # NOTE: Postgres does not allow removing values from an enum
     op.execute("DELETE FROM connected_services.oauth2_clients WHERE kind = 'zenodo'")
     op.execute("ALTER TYPE providerkind RENAME TO providerkind_old;")
-    op.execute("CREATE TYPE providerkind AS ENUM ('gitlab', 'github', 'drive', 'onedrive', 'dropbox', 'generic_oidc')")
+    op.execute("CREATE TYPE providerkind AS ENUM ('dropbox', 'generic_oidc', 'github', 'gitlab', 'google')")
     op.execute(
         "ALTER TABLE connected_services.oauth2_clients ALTER COLUMN kind SET DATA TYPE providerkind USING kind::text::providerkind"
     )
