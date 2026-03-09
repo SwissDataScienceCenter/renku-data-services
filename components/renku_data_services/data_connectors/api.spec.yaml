@@ -1046,8 +1046,7 @@ components:
       enum:
         - complete
         - in_progress
-        - cancelled
-        - missing
+        - failed
     DepositSourcePath:
       type: string
       example: /some/path
