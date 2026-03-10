@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from enum import StrEnum
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any, Final
 
 from ulid import ULID
@@ -15,6 +17,7 @@ from renku_data_services.base_models.core import (
     ProjectPath,
 )
 from renku_data_services.data_connectors.doi.models import DOI
+from renku_data_services.k8s.constants import ClusterId
 from renku_data_services.namespace.models import GroupNamespace, ProjectNamespace, UserNamespace
 from renku_data_services.storage.rclone import RCloneDOIMetadata
 from renku_data_services.utils.etag import compute_etag_from_fields
@@ -212,3 +215,66 @@ class DataConnectorWithSecrets:
 
     data_connector: DataConnector | GlobalDataConnector
     secrets: list[DataConnectorSecret] = field(default_factory=list)
+
+
+class DepositSource(StrEnum):
+    """The source of a data deposit at a data repository like Zenodo."""
+
+    zenodo = "zenodo"
+    unknown = "unknown"
+
+
+class DepositStatus(StrEnum):
+    """The stautus of a data deposit at a data repository like Zenodo."""
+
+    complete = "complete"
+    in_progress = "in_progress"
+    unknown = "unknown"
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedDeposit:
+    """A data deposit at a data repository like Zenodo."""
+
+    name: str
+    data_connector_id: ULID
+    original_id: str
+    source: DepositSource
+    path: PurePosixPath | None
+    """The path from the data connector that should be included in the deposit."""
+    status: DepositStatus = DepositStatus.in_progress
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class Deposit(UnsavedDeposit):
+    """A data deposit at a data repository like Zenodo."""
+
+    id: ULID
+    creation_date: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class DepositJob:
+    """An upload job for a data deposit."""
+
+    name: str
+    cluster_id: ClusterId
+    deposit: Deposit
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class UnsavedDepositJob:
+    """An unsaved upload job for a data deposit."""
+
+    name: str
+    cluster_id: ClusterId
+    deposit: UnsavedDeposit
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class DepositPatch:
+    """Update to a data deposit."""
+
+    name: str | None = None
+    status: DepositStatus | None = None

@@ -1,9 +1,12 @@
 """SQLAlchemy schemas for the data connectors database."""
 
+from __future__ import annotations
+
 from datetime import datetime
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, MetaData, String, func
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, MetaData, String, func, text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column, relationship
 from sqlalchemy.schema import Index, UniqueConstraint
@@ -11,9 +14,11 @@ from ulid import ULID
 
 from renku_data_services.authz import models as authz_models
 from renku_data_services.base_orm.registry import COMMON_ORM_REGISTRY
+from renku_data_services.crc.orm import ClusterORM
 from renku_data_services.data_connectors import models
 from renku_data_services.data_connectors.apispec import Visibility
 from renku_data_services.data_connectors.doi.models import DOI
+from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.project.orm import ProjectORM
 from renku_data_services.secrets.orm import SecretORM
 from renku_data_services.users.orm import UserORM
@@ -67,7 +72,7 @@ class DataConnectorORM(BaseORM):
     keywords: Mapped[list[str] | None] = mapped_column("keywords", ARRAY(String(99)), nullable=True)
     """Keywords for the data connector."""
 
-    slug: Mapped["EntitySlugORM | None"] = relationship(
+    slug: Mapped[EntitySlugORM | None] = relationship(
         lazy="joined", init=False, repr=False, viewonly=True, back_populates="data_connector"
     )
     """Slug of the data connector."""
@@ -89,9 +94,9 @@ class DataConnectorORM(BaseORM):
         onupdate=func.now(),
         nullable=False,
     )
-    project_links: Mapped[list["DataConnectorToProjectLinkORM"]] = relationship(init=False, viewonly=True)
+    project_links: Mapped[list[DataConnectorToProjectLinkORM]] = relationship(init=False, viewonly=True)
 
-    old_slugs: Mapped[list["EntitySlugOldORM"]] = relationship(
+    old_slugs: Mapped[list[EntitySlugOldORM]] = relationship(
         back_populates="data_connector",
         default_factory=list,
         repr=False,
@@ -233,4 +238,96 @@ class DataConnectorSecretORM(BaseORM):
             user_id=self.user_id,
             data_connector_id=self.data_connector_id,
             secret_id=self.secret_id,
+        )
+
+
+class DepositStatusORM(BaseORM):
+    """Deposit statuses."""
+
+    __tablename__ = "deposit_statuses"
+
+    id: Mapped[ULID] = mapped_column(
+        "id", ULIDType, primary_key=True, server_default=text("generate_ulid()"), init=False
+    )
+    status: Mapped[str] = mapped_column("status", String(100), unique=True, index=True)
+
+    def dump(self) -> models.DepositStatus:
+        """Convert to a model status."""
+        try:
+            return models.DepositStatus(self.status.lower())
+        except ValueError:
+            return models.DepositStatus.unknown
+
+
+class DepositSourceORM(BaseORM):
+    """Deposit sources, like Zenodo for example."""
+
+    __tablename__ = "deposit_sources"
+
+    id: Mapped[ULID] = mapped_column(
+        "id", ULIDType, primary_key=True, server_default=text("generate_ulid()"), init=False
+    )
+    source: Mapped[str] = mapped_column("source", String(100), unique=True, index=True)
+
+    def dump(self) -> models.DepositSource:
+        """Convert to a model source."""
+        try:
+            return models.DepositSource(self.source.lower())
+        except ValueError:
+            return models.DepositSource.unknown
+
+
+class DepositORM(BaseORM):
+    """The record of a data deposit connected with a data provider (like Zenodo)."""
+
+    __tablename__ = "deposits"
+
+    id: Mapped[ULID] = mapped_column(
+        "id", ULIDType, primary_key=True, server_default=text("generate_ulid()"), init=False
+    )
+    source_id: Mapped[ULID] = mapped_column(
+        "source_id", ForeignKey(DepositSourceORM.id, ondelete="CASCADE"), index=True
+    )
+    source: Mapped[DepositSourceORM] = relationship(init=False, repr=False, lazy="selectin")
+    status_id: Mapped[ULID] = mapped_column(
+        "status_id", ForeignKey(DepositStatusORM.id, ondelete="CASCADE"), index=True
+    )
+    status: Mapped[DepositStatusORM] = relationship(init=False, repr=False, lazy="selectin")
+    original_id: Mapped[str]
+    data_connector_id: Mapped[ULID] = mapped_column(
+        "data_connector_id", ForeignKey(DataConnectorORM.id, ondelete="CASCADE"), index=True
+    )
+    data_connector: Mapped[DataConnectorORM] = relationship(init=False, repr=False, lazy="selectin")
+    user_id: Mapped[str] = mapped_column(ForeignKey(UserORM.keycloak_id, ondelete="CASCADE"), primary_key=True)
+    path: Mapped[str | None]
+    job_name: Mapped[str]
+    name: Mapped[str]
+    cluster_id: Mapped[ULID | None] = mapped_column(
+        "cluster_id", ForeignKey(ClusterORM.id, ondelete="CASCADE"), index=True, nullable=True
+    )
+    """ If the cluster ID is none it is assumed that the local cluster is being used."""
+
+    creation_date: Mapped[datetime] = mapped_column(
+        "creation_date", DateTime(timezone=True), server_default=func.now(), nullable=False, init=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        "updated_at", DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), init=False
+    )
+
+    def dump(self) -> models.DepositJob:
+        """Create a deposit model from the ORM."""
+        return models.DepositJob(
+            name=self.job_name,
+            cluster_id=ClusterId(self.cluster_id) if self.cluster_id else DEFAULT_K8S_CLUSTER,
+            deposit=models.Deposit(
+                name=self.name,
+                data_connector_id=self.data_connector_id,
+                original_id=self.original_id,
+                source=self.source.dump(),
+                path=PurePosixPath(self.path) if self.path else None,
+                status=self.status.dump(),
+                id=self.id,
+                creation_date=self.creation_date,
+                updated_at=self.updated_at,
+            ),
         )
