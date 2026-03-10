@@ -1,14 +1,18 @@
 """Business logic for data connectors."""
 
+from __future__ import annotations
+
 import contextlib
 import re
 from dataclasses import asdict
 from datetime import datetime
 from html.parser import HTMLParser
-from typing import Any
+from pathlib import PurePosixPath
+from typing import TYPE_CHECKING, Any
 
 import httpx
 from pydantic import ValidationError as PydanticValidationError
+from ulid import ULID
 
 from renku_data_services import base_models, errors
 from renku_data_services.authz.models import Visibility
@@ -25,6 +29,9 @@ from renku_data_services.storage import models as storage_models
 from renku_data_services.storage.constants import ENVIDAT_V1_PROVIDER
 from renku_data_services.storage.rclone import RCloneDOIMetadata, RCloneValidator
 from renku_data_services.utils.core import get_openbis_pat
+
+if TYPE_CHECKING:
+    from renku_data_services.data_connectors.db import DataConnectorRepository
 
 
 def dump_storage_with_sensitive_fields(
@@ -521,3 +528,48 @@ async def convert_envidat_v1_data_connector_to_s3(
     new_config.source_path = s3_config.path
     new_config.storage_type = "s3"
     return new_config
+
+
+async def validate_deposit(
+    user: base_models.APIUser,
+    body: apispec.DepositPost,
+    original_id: str,
+    dc_repo: DataConnectorRepository,
+) -> models.UnsavedDeposit:
+    """Validate the payload to creation of a deposit."""
+    dc_id = ULID.from_str(body.data_connector_id)
+    dc = await dc_repo.get_data_connector(user, dc_id)
+    if isinstance(dc, models.GlobalDataConnector):
+        raise errors.ValidationError(message="Deposits cannot be created from global data connectors.")
+    dep = models.UnsavedDeposit(
+        data_connector_id=dc_id,
+        original_id=original_id,
+        source=models.DepositSource(body.provider.value),
+        path=PurePosixPath(body.path) if body.path else None,
+        status=models.DepositStatus.in_progress,
+        name=body.name,
+    )
+    return dep
+
+
+def validate_deposit_patch(body: apispec.DepositPatch) -> models.DepositPatch:
+    """Validate the payload to patching of a deposit."""
+    status: models.DepositStatus | None = None
+    if body.status:
+        status = models.DepositStatus(body.status.value)
+    return models.DepositPatch(name=body.name, status=status)
+
+
+def serialize_deposit(deposit: models.DepositJob) -> dict[str, Any]:
+    """Create an apispec Deposit from the internal model."""
+    return dict(
+        name=deposit.deposit.name,
+        provider=deposit.deposit.source.value,
+        data_connector_id=str(deposit.deposit.data_connector_id),
+        path=deposit.deposit.path.as_posix() if deposit.deposit.path else "/",
+        id=str(deposit.deposit.id),
+        status=deposit.deposit.status.value,
+        external_url=f"https://zenodo.org/uploads/{deposit.deposit.original_id}",
+        creation_date=deposit.deposit.creation_date,
+        updated_at=deposit.deposit.updated_at,
+    )

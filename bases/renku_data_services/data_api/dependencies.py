@@ -36,9 +36,11 @@ from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
     DataConnectorSecretRepository,
 )
+from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
 from renku_data_services.git.gitlab import DummyGitlabAPI, EmptyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.client_interfaces import K8sClient
 from renku_data_services.k8s.clients import (
+    DepositUploadJobClient,
     K8sClusterClientsPool,
     K8sPriorityClassClient,
     K8sResourceQuotaClient,
@@ -164,6 +166,8 @@ class DependencyManager:
     occurrence_repo: OccurrenceRepository
     resource_requests_repo: ResourceRequestsRepo
     resource_usage_service: ResourceUsageService
+    zenodo_client: ZenodoAPIClient
+    job_client: DepositUploadJobClient
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
@@ -249,6 +253,7 @@ class DependencyManager:
             ),
         )
         quota_repo = QuotaRepository(K8sResourceQuotaClient(client), K8sPriorityClassClient(client))
+        job_client = DepositUploadJobClient(client)
 
         if config.dummy_stores:
             authenticator = DummyAuthenticator()
@@ -473,4 +478,6 @@ class DependencyManager:
             occurrence_repo=occurrence_repo,
             resource_requests_repo=resource_requests_repo,
             resource_usage_service=resource_usage_service,
+            zenodo_client=ZenodoAPIClient(),
+            job_client=job_client,
         )
