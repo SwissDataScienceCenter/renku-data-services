@@ -547,12 +547,19 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck, _TokenC
                 # with Zenodo. Probably because Zenodo is very sensitive to the encoding.
                 parsed_url = urlparse(raw_url)
                 q = parse_qs(parsed_url.query)
-                code: str | None = next(iter(q.get("code") or []), None)
+                code = next(iter(q.get("code") or []), None)
                 if not code:
                     raise errors.InvalidTokenError(
                         message="The callback from zenodo did not contain a code.",
                         detail="Please retry, if this problem persist contact a Renku administrator.",
                     )
+                state_from_query = next(iter(q.get("state") or []), None)
+                if not state_from_query:
+                    raise errors.InvalidTokenError(
+                        message="The callback from zenodo did not contain a state parameter.",
+                        detail="Please retry, if this problem persist contact a Renku administrator.",
+                    )
+                state = state_from_query
                 body = {
                     "client_id": client.client_id,
                     "client_secret": client_secret,

@@ -555,7 +555,11 @@ class DataConnectorsBP(CustomBlueprint):
 
     async def __get_zenodo_access_token(self, user: base_models.APIUser) -> str:
         provider = await self.connected_services_repo.get_provider_for_kind(user, ProviderKind.zenodo)
-        if not provider or not provider.connected_user:
+        if not provider:
+            raise errors.UnauthorizedError(
+                message="The zenodo provider does not exist, please contact your administrator to set this up."
+            )
+        if not provider.connected_user:
             raise errors.UnauthorizedError(
                 message="You need to connect and autheticate with the zenodo provider to do this"
             )

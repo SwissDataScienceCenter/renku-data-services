@@ -272,8 +272,8 @@ class ZenodoAdapter(ProviderAdapter):
         deposits = DepositResponseList.model_validate(response.json())
         username: str = "Zenodo user"
         if len(deposits.root) >= 1:
-            username = "Zenodo user ID: " + str(deposits.root[0].owner)
-        return models.ConnectedAccount(username=username, web_url="https://zenodo.org")
+            username = f"Zenodo user ID: {str(deposits.root[0].owner)}"
+        return models.ConnectedAccount(username=username, web_url="")
 
 
 class GenericOidcAdapter(ProviderAdapter):

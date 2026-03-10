@@ -832,7 +832,7 @@ class DataConnectorRepository:
             stmt = (
                 select(schemas.DepositORM)
                 .where(schemas.DepositORM.user_id == user.id)
-                .order_by(schemas.DepositORM.creation_date.desc())
+                .order_by(schemas.DepositORM.id.desc())
             )
             stmt_count = (
                 select(func.count()).select_from(schemas.DepositORM).where(schemas.DepositORM.user_id == user.id)
