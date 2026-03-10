@@ -26,7 +26,7 @@ from renku_data_services.app_config import logging
 from renku_data_services.base_api.pagination import PaginationRequest
 from renku_data_services.connected_services import models
 from renku_data_services.connected_services.models import OAuth2Client, OAuth2Connection, OAuth2TokenSet, ProviderKind
-from renku_data_services.connected_services.orm import OAuth2ConnectionORM
+from renku_data_services.connected_services.orm import OAuth2ClientORM, OAuth2ConnectionORM
 from renku_data_services.connected_services.provider_adapters import (
     GitHubAdapter,
     ProviderAdapter,
@@ -38,7 +38,6 @@ from renku_data_services.connected_services.utils import (
     get_github_provider_type,
 )
 from renku_data_services.errors import SecretDecryptionError, errors
-from renku_data_services.repositories.models import OAuth2ClientORM
 from renku_data_services.users.db import APIUser
 from renku_data_services.utils import cryptography as crypt
 

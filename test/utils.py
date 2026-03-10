@@ -27,9 +27,11 @@ from renku_data_services.crc.db import ClusterRepository, QuotaRepository, Resou
 from renku_data_services.data_api.config import Config
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_connectors.db import DataConnectorRepository, DataConnectorSecretRepository
+from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.git.gitlab import DummyGitlabAPI
 from renku_data_services.k8s.clients import (
+    DepositUploadJobClient,
     K8sClusterClientsPool,
     K8sPriorityClassClient,
     K8sResourceQuotaClient,
@@ -207,6 +209,7 @@ class TestDependencyManager(DependencyManager):
                 kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
             ),
         )
+        job_client = DepositUploadJobClient(client)
         quota_repo = QuotaRepository(K8sResourceQuotaClient(client), K8sPriorityClassClient(client))
 
         authenticator = DummyAuthenticator()
@@ -393,6 +396,8 @@ class TestDependencyManager(DependencyManager):
             occurrence_repo=occurrence_repo,
             resource_requests_repo=resource_requests_repo,
             resource_usage_service=resource_usage_service,
+            zenodo_client=ZenodoAPIClient(),
+            job_client=job_client,
         )
 
     def __post_init__(self) -> None:
