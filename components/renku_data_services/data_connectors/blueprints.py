@@ -72,7 +72,6 @@ class DataConnectorsBP(CustomBlueprint):
     secret_client: SecretClient
     zenodo_client: ZenodoAPIClient
     connected_services_repo: ConnectedServicesRepository
-    oauth_http_client_factory: OAuthHttpClientFactory
     data_source_repo: DataSourceRepository
     dc_storage_class: str
     data_service_base_url: str
@@ -705,13 +704,7 @@ class DataConnectorsBP(CustomBlueprint):
         async def _post_deposit_job(
             request: Request, user: base_models.AuthenticatedAPIUser, deposit_id: ULID
         ) -> HTTPResponse:
-            tokens = self.oauth_http_client_factory.for_user_provider_access_token(user, ProviderKind.zenodo)
-            provider_id_token = await anext(tokens, None)
-            if not provider_id_token:
-                raise errors.UnauthorizedError(
-                    message="You need to connect and autheticate with the zenodo provider to do this"
-                )
-            _provider_id, token = provider_id_token
+            token = await self.__get_zenodo_access_token(user)
             namespace = os.environ.get("K8S_NAMESPACE", "default")
             saved_dep = await self.data_connector_repo.get_deposit(user, deposit_id)
             saved_dep = await update_deposit_status(

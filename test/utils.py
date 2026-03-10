@@ -35,6 +35,7 @@ from renku_data_services.k8s.clients import (
     K8sClusterClientsPool,
     K8sPriorityClassClient,
     K8sResourceQuotaClient,
+    K8sSecretClient,
 )
 from renku_data_services.k8s.config import KubeConfigEnv, get_clusters
 from renku_data_services.k8s.db import K8sDbCache
@@ -210,6 +211,7 @@ class TestDependencyManager(DependencyManager):
             ),
         )
         job_client = DepositUploadJobClient(client)
+        secret_client = K8sSecretClient(client)
         quota_repo = QuotaRepository(K8sResourceQuotaClient(client), K8sPriorityClassClient(client))
 
         authenticator = DummyAuthenticator()
@@ -333,9 +335,9 @@ class TestDependencyManager(DependencyManager):
             data_connector_repo=data_connector_repo,
         )
         data_source_repo = DataSourceRepository(
-            nb_config=config.nb_config,
             connected_services_repo=connected_services_repo,
             oauth_client_factory=oauth_client_factory,
+            user_repo=kc_user_repo,
         )
         image_check_repo = ImageCheckRepository(
             nb_config=config.nb_config,
@@ -398,6 +400,7 @@ class TestDependencyManager(DependencyManager):
             resource_usage_service=resource_usage_service,
             zenodo_client=ZenodoAPIClient(),
             job_client=job_client,
+            secret_client=secret_client,
         )
 
     def __post_init__(self) -> None:
