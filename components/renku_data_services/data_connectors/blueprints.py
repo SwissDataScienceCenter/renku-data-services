@@ -26,8 +26,8 @@ from renku_data_services.base_models.core import (
 )
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.base_models.validation import validate_and_dump, validated_json
+from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.connected_services.models import ProviderKind
-from renku_data_services.connected_services.oauth_http import OAuthHttpClientFactory
 from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors.core import (
     dump_storage_with_sensitive_fields,
@@ -61,7 +61,7 @@ class DataConnectorsBP(CustomBlueprint):
     metrics: MetricsService
     job_client: DepositUploadJobClient
     zenodo_client: ZenodoAPIClient
-    oauth_http_client_factory: OAuthHttpClientFactory
+    connected_services_repo: ConnectedServicesRepository
 
     def get_all(self) -> BlueprintFactoryResponse:
         """List data connectors."""
@@ -553,6 +553,26 @@ class DataConnectorsBP(CustomBlueprint):
             secret_id=str(secret.secret_id),
         )
 
+    async def __get_zenodo_access_token(self, user: base_models.APIUser) -> str:
+        provider = await self.connected_services_repo.get_provider_for_kind(user, ProviderKind.zenodo)
+        if not provider or not provider.connected_user:
+            raise errors.UnauthorizedError(
+                message="You need to connect and autheticate with the zenodo provider to do this"
+            )
+        token_set = await self.connected_services_repo.get_token_set(
+            user=user, connection_id=provider.connected_user.connection.id
+        )
+        if not token_set:
+            raise errors.UnauthorizedError(
+                message="You need to connect and autheticate with the zenodo provider to do this"
+            )
+        access_token = token_set.access_token
+        if not access_token:
+            raise errors.UnauthorizedError(
+                message="You need to connect and autheticate with the zenodo provider to do this"
+            )
+        return access_token
+
     def post_deposit(self) -> BlueprintFactoryResponse:
         """Create a deposit."""
 
@@ -565,13 +585,7 @@ class DataConnectorsBP(CustomBlueprint):
             body: apispec.DepositPost,
         ) -> JSONResponse:
             # Get token for Zenodo
-            tokens = self.oauth_http_client_factory.for_user_provider_access_token(user, ProviderKind.zenodo)
-            provider_id_token = await anext(tokens, None)
-            if not provider_id_token:
-                raise errors.UnauthorizedError(
-                    message="You need to connect and autheticate with the zenodo provider to do this"
-                )
-            _provider_id, token = provider_id_token
+            token = await self.__get_zenodo_access_token(user)
             # Create deposit in Zenodo
             zenodo_dep = await self.zenodo_client.create_deposit(token, body.name)
             # Create the deposit in the DB
