@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from base64 import b64decode, b64encode
-from collections.abc import AsyncGenerator, AsyncIterator, Callable
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from enum import StrEnum
 from typing import Any, Protocol
@@ -104,12 +104,6 @@ class OAuthHttpClientFactory(Protocol):
     async def for_user_connection_raise(self, user: APIUser, connection_id: ULID) -> OAuthHttpClient:
         """Same as `for_user_connection` but throws on error."""
         ...
-
-    async def for_user_provider_access_token(
-        self, user: APIUser, provider_kind: ProviderKind
-    ) -> AsyncIterator[tuple[ULID, str]]:
-        """Get all connection IDs and access token for active connections for a specific user and provider kind."""
-        yield ULID(), ""  # Keeps mypy happy
 
     async def initiate_oauth_flow(
         self, user: APIUser, provider_id: str, callback_url: str, next_url: str | None = None
@@ -400,39 +394,6 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck, _TokenC
             case _:
                 return client
 
-    async def for_user_provider_access_token(
-        self, user: APIUser, provider_kind: ProviderKind
-    ) -> AsyncIterator[tuple[ULID, str]]:
-        """Get a tuple of connection id and access token for a specific user and provider kind.
-
-        There may be more than one connection for some provider kinds.
-        Only active, connected connections are returned.
-        """
-        if not user.is_authenticated or user.id is None:
-            return
-
-        async with self._session_maker() as session:
-            result = await session.stream_scalars(
-                sa.select(schemas.OAuth2ConnectionORM)
-                .where(schemas.OAuth2ConnectionORM.client.has(schemas.OAuth2ClientORM.kind == provider_kind))
-                .where(schemas.OAuth2ConnectionORM.user_id == user.id)
-                .where(schemas.OAuth2ConnectionORM.token.is_not(None))
-                .where(schemas.OAuth2ConnectionORM.status == models.ConnectionStatus.connected)
-                .options(sao.selectinload(schemas.OAuth2ConnectionORM.client))
-            )
-            async for connection in result:
-                if connection.token is None:
-                    continue
-                try:
-                    token = self.decrypt_token_set(token=connection.token, user_id=user.id)
-                except InvalidToken as e:
-                    raise SecretDecryptionError(
-                        message="Token decryption failed. Please reconnect to the provider to obtain a new one."
-                    ) from e
-                if token.access_token is None:
-                    continue
-                yield connection.id, token.access_token
-
     async def for_user_connection(self, user: APIUser, connection_id: ULID) -> OAuthHttpFactoryError | OAuthHttpClient:
         """Create an oauth-http client for the given user and connection."""
         if not user.is_authenticated or user.id is None:
@@ -586,7 +547,7 @@ class DefaultOAuthHttpClientFactory(OAuthHttpClientFactory, _TokenCheck, _TokenC
                 # with Zenodo. Probably because Zenodo is very sensitive to the encoding.
                 parsed_url = urlparse(raw_url)
                 q = parse_qs(parsed_url.query)
-                code: str | None = next(iter(q.get("code") or []), None)
+                code = next(iter(q.get("code") or []), None)
                 if not code:
                     raise errors.InvalidTokenError(
                         message="The callback from zenodo did not contain a code.",
