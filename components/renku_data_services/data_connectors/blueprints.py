@@ -55,7 +55,6 @@ from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
 from renku_data_services.k8s.client_interfaces import K8sClient, SecretClient
 from renku_data_services.k8s.clients import DepositUploadJobClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
-from renku_data_services.k8s.models import GVK, K8sObjectMeta
 from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.storage.rclone import RCloneValidator
 
@@ -655,10 +654,9 @@ class DataConnectorsBP(CustomBlueprint):
         @only_authenticated
         async def _get_deposit(_: Request, user: base_models.AuthenticatedAPIUser, deposit_id: ULID) -> JSONResponse:
             namespace = os.environ.get("K8S_NAMESPACE", "default")
-            saved_dep = await self.data_connector_repo.get_deposit(user, deposit_id)
             saved_dep = await update_deposit_status(
                 user=user,
-                deposit_job=saved_dep,
+                job=deposit_id,
                 dc_repo=self.data_connector_repo,
                 job_client=self.job_client,
                 namespace=namespace,
@@ -677,17 +675,17 @@ class DataConnectorsBP(CustomBlueprint):
             _: Request, user: base_models.AuthenticatedAPIUser, body: apispec.DepositPatch, deposit_id: ULID
         ) -> JSONResponse:
             namespace = os.environ.get("K8S_NAMESPACE", "default")
-            patch = validate_deposit_patch(body)
-            saved_dep = await self.data_connector_repo.update_deposit(user, deposit_id, patch)
-            if patch.status:
-                validate_deposit_status_change(saved_dep.deposit.status, patch.status)
             saved_dep = await update_deposit_status(
                 user=user,
-                deposit_job=saved_dep,
+                job=deposit_id,
                 dc_repo=self.data_connector_repo,
                 job_client=self.job_client,
                 namespace=namespace,
             )
+            patch = validate_deposit_patch(body)
+            if patch.status:
+                validate_deposit_status_change(saved_dep.deposit.status, patch.status)
+            saved_dep = await self.data_connector_repo.update_deposit(user, deposit_id, patch)
             if patch.status == models.DepositStatus.complete:
                 # If the deposit is being completed then we delete it
                 # We leave it to the user to create a new data connector and link it
@@ -706,10 +704,9 @@ class DataConnectorsBP(CustomBlueprint):
         ) -> HTTPResponse:
             token = await self.__get_zenodo_access_token(user)
             namespace = os.environ.get("K8S_NAMESPACE", "default")
-            saved_dep = await self.data_connector_repo.get_deposit(user, deposit_id)
             saved_dep = await update_deposit_status(
                 user,
-                deposit_job=saved_dep,
+                job=deposit_id,
                 dc_repo=self.data_connector_repo,
                 job_client=self.job_client,
                 namespace=namespace,
@@ -748,8 +745,12 @@ class DataConnectorsBP(CustomBlueprint):
         @authenticate(self.authenticator)
         @only_authenticated
         async def _delete_deposit(_: Request, user: base_models.AuthenticatedAPIUser, deposit_id: ULID) -> HTTPResponse:
+            namespace = os.environ.get("K8S_NAMESPACE", "default")
+            deposit_job = await update_deposit_status(
+                user, job=deposit_id, dc_repo=self.data_connector_repo, job_client=self.job_client, namespace=namespace
+            )
             await self.data_connector_repo.delete_deposit(user, deposit_id)
-            # TODO: Delete any jobs from k8s
+            await self.job_client.delete(deposit_job.to_meta(user_id=user.id, namespace=namespace))
             return HTTPResponse(status=204)
 
         return "/deposits/<deposit_id:ulid>", ["DELETE"], _delete_deposit
@@ -809,22 +810,14 @@ class DataConnectorsBP(CustomBlueprint):
             _: Request, user: base_models.AuthenticatedAPIUser, deposit_id: ULID
         ) -> JSONResponse:
             namespace = os.environ.get("K8S_NAMESPACE", "default")
-            saved_dep = await self.data_connector_repo.get_deposit(user, deposit_id)
             saved_dep = await update_deposit_status(
-                user,
-                deposit_job=saved_dep,
+                user=user,
+                job=deposit_id,
                 dc_repo=self.data_connector_repo,
                 job_client=self.job_client,
                 namespace=namespace,
             )
-            meta = K8sObjectMeta(
-                name=saved_dep.name,
-                namespace=namespace,
-                cluster=saved_dep.cluster_id,
-                gvk=GVK(kind="Job", version="v1", group="batch"),
-                user_id=user.id,
-            )
-            all_logs = await self.job_client.logs(meta)
+            all_logs = await self.job_client.logs(saved_dep.to_meta(user_id=user.id, namespace=namespace))
             output: dict[str, str] = {}
             containers = sorted(all_logs.keys())
             for container in containers:

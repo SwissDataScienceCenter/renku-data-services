@@ -937,21 +937,17 @@ def _get_deposit_job_status(job: V1Job) -> models.DepositStatus:
 
 async def update_deposit_status(
     user: base_models.AuthenticatedAPIUser,
-    deposit_job: models.DepositJob,
+    job: models.DepositJob | ULID,
     dc_repo: DataConnectorRepository,
     job_client: DepositUploadJobClient,
     namespace: str,
 ) -> models.DepositJob:
     """Gets the deposit, the corresponding job and updates the status in the DB."""
-    dep_k8s_job = await job_client.get(
-        K8sObjectMeta(
-            name=deposit_job.name,
-            namespace=namespace,
-            cluster=deposit_job.cluster_id,
-            gvk=GVK(kind="Job", version="v1", group="batch"),
-            user_id=user.id,
-        )
-    )
+    if isinstance(job, ULID):
+        deposit_job = await dc_repo.get_deposit(user, job)
+    else:
+        deposit_job = job
+    dep_k8s_job = await job_client.get(deposit_job.to_meta(user_id=user.id, namespace=namespace))
     if dep_k8s_job is None or dep_k8s_job.status is None:
         return deposit_job
     latest_status = _get_deposit_job_status(dep_k8s_job)
@@ -973,7 +969,7 @@ async def update_deposits_statuses(
     output = []
     for deposit_job in deposit_jobs:
         dj = await update_deposit_status(
-            user=user, deposit_job=deposit_job, dc_repo=dc_repo, job_client=job_client, namespace=namespace
+            user=user, job=deposit_job, dc_repo=dc_repo, job_client=job_client, namespace=namespace
         )
         output.append(dj)
     return output
