@@ -135,18 +135,18 @@ class ResourceUsageBP(CustomBlueprint):
 
         return "/resource_pools/<resource_pool_id>/classes/<class_id>/cost", ["DELETE"], _delete
 
+    def _extract_date(self, req: Request, name: str) -> date | None:
+        datestr = req.args.get(name)
+        return datetime.strptime(datestr, "%Y-%m-%d") if datestr is not None else None
+
     def get_pool_usage(self) -> BlueprintFactoryResponse:
         """Get usage of a pool."""
-
-        def extract_date(req: Request, name: str) -> date | None:
-            datestr = req.args.get(name)
-            return datetime.strptime(datestr, "%Y-%m-%d") if datestr is not None else None
 
         @authenticate(self.authenticator)
         @validate_db_ids
         async def _get(req: Request, user: base_models.APIUser, resource_pool_id: int) -> HTTPResponse:
-            start_date = extract_date(req, "start_date")
-            end_date = extract_date(req, "end_date")
+            start_date = self._extract_date(req, "start_date")
+            end_date = self._extract_date(req, "end_date")
             result: model.ResourcePoolUsage | None = None
             if start_date:
                 result = await self.rr_svc.get_for_date(resource_pool_id, user.id or "", start_date, end_date)
@@ -174,3 +174,42 @@ class ResourceUsageBP(CustomBlueprint):
                 raise errors.MissingResourceError()
 
         return "/resource_pools/<resource_pool_id>/usage", ["GET"], _get
+
+    def get_admin_pool_usage(self) -> BlueprintFactoryResponse:
+        """Get usage of a pool."""
+
+        @authenticate(self.authenticator)
+        @only_admins
+        @validate_db_ids
+        async def _get(req: Request, user: base_models.APIUser, resource_pool_id: int) -> HTTPResponse:
+            start_date = self._extract_date(req, "start_date")
+            end_date = self._extract_date(req, "end_date")
+            user_id = req.args.get("user_id")
+            uid = str(user_id) if user_id else user.id or ""
+            result: model.ResourcePoolUsage | None = None
+            if start_date:
+                result = await self.rr_svc.get_for_date(resource_pool_id, uid, start_date, end_date)
+            else:
+                result = await self.rr_svc.get_running_week(resource_pool_id, uid)
+            if result:
+                output = apispec.ResourcePoolUsage(
+                    total_usage=apispec.ResourceUsageSummary(
+                        runtime=result.total_usage.runtime_hours, cost=result.total_usage.cost.value
+                    ),
+                    pool_limits=apispec.ResourcePoolLimits(
+                        pool_id=result.pool_limits.pool_id,
+                        total_limit=result.pool_limits.total_limit.value,
+                        user_limit=result.pool_limits.user_limit.value,
+                    ),
+                    user_usage=apispec.ResourceUsageSummary(
+                        runtime=result.user_usage.runtime_hours, cost=result.user_usage.cost.value
+                    ),
+                )
+                return validated_json(
+                    apispec.ResourcePoolUsage,
+                    output,
+                )
+            else:
+                raise errors.MissingResourceError()
+
+        return "/resource_pools/<resource_pool_id>/admin_usage", ["GET"], _get
