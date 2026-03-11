@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
+from math import ceil
 from typing import Any, Optional, Protocol, Self
 
 from kubernetes.utils import parse_quantity
@@ -187,7 +188,7 @@ class Quota(UnsavedQuota):
         memory_raw = require_key(hard, "requests.memory", "hard.")
         cpu_raw = require_key(hard, "requests.cpu", "hard.")
         return cls(
-            cpu=float(parse_quantity(cpu_raw)) / 1_000_000_000,
+            cpu=float(parse_quantity(cpu_raw)),
             memory=round(parse_quantity(memory_raw) / 1_000_000_000),
             gpu=gpu,
             gpu_kind=gpu_kind,
@@ -204,7 +205,7 @@ class Quota(UnsavedQuota):
             },
             "spec": {
                 "hard": {
-                    "requests.cpu": str(round(self.cpu * 1_000_000_000)),
+                    "requests.cpu": str(ceil(self.cpu)),
                     "requests.memory": str(self.memory * 1_000_000_000),
                     f"requests.{self.gpu_kind}/gpu": self.gpu,
                 },
