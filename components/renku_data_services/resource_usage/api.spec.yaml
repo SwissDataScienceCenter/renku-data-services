@@ -48,6 +48,54 @@ paths:
       tags:
         - resource-usage
 
+  /resource_pools/{resource_pool_id}/admin_usage:
+    get:
+      summary: |
+        Get usage and limits of the supplied pool. If a `start_date`
+        is not given, the usage of the current week is returned. This
+        endpoint is only available to admins and it allows to specify
+        a user_id query parameter to check usages for any user.
+      parameters:
+        - in: path
+          name: resource_pool_id
+          required: true
+          schema:
+            type: integer
+        - in: query
+          name: start_date
+          required: false
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: end_date
+          required: false
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: user_id
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: "Return the pool limits and current usage."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ResourcePoolUsage"
+        "404":
+          description: "The resource pool doesn't exist."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - resource-usage
+
   /resource_pools/{resource_pool_id}/limits:
     get:
       summary: "Get resource pool limits"
