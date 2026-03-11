@@ -267,8 +267,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         dc_storage_class=dm.config.nb_config.cloud_storage.storage_class,
         data_service_base_url=dm.config.nb_config.data_service_url,
         k8s_client=dm.k8s_client,
-        deposit_job_tolerations=dm.config.nb_config.sessions.v1_tolerations,
-        deposit_job_affinity=dm.config.nb_config.sessions.v1_affinity,
+        deposit_config=dm.config.deposit_config,
     )
     notifications = NotificationsBP(
         name="notifications",

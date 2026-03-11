@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING, Any
 import httpx
 import kubernetes
 from kubernetes.client import (
-    V1Affinity,
     V1Capabilities,
     V1Container,
     V1EnvFromSource,
@@ -23,6 +22,7 @@ from kubernetes.client import (
     V1Job,
     V1JobSpec,
     V1JobStatus,
+    V1NodeSelector,
     V1ObjectMeta,
     V1OwnerReference,
     V1PersistentVolumeClaim,
@@ -623,8 +623,8 @@ async def create_deposit_upload(
     deposit_job: models.DepositJob,
     job_client: DepositUploadJobClient,
     deposit_api_key: str,
-    deposit_job_affinity: V1Affinity,
-    deposit_job_tolerations: list[V1Toleration],
+    deposit_job_node_selector: V1NodeSelector,
+    deposit_job_tolerations: list[V1Toleration] | None,
     data_source_repo: DataSourceRepository,
     data_connector_repo: DataConnectorRepository,
     data_connector_secret_repo: DataConnectorSecretRepository,
@@ -681,8 +681,8 @@ async def create_deposit_upload(
         api_key_secret_name: str,
         work_dir: PurePosixPath,
         pvc_name: str,
-        deposit_job_affinity: V1Affinity,
-        deposit_job_tolerations: list[V1Toleration],
+        deposit_job_node_selector: V1NodeSelector,
+        deposit_job_tolerations: list[V1Toleration] | None,
         labels: dict[str, str] | None = None,
         suspended: bool = False,
     ) -> V1Job:
@@ -708,8 +708,8 @@ async def create_deposit_upload(
                     metadata=V1ObjectMeta(labels=labels),
                     spec=V1PodSpec(
                         restart_policy="Never",
-                        affinity=deposit_job_affinity,
                         tolerations=deposit_job_tolerations,
+                        node_selector=deposit_job_node_selector,
                         containers=[
                             V1Container(
                                 security_context=V1SecurityContext(
@@ -836,7 +836,7 @@ async def create_deposit_upload(
         labels=labels,
         pvc_name=pvc_name,
         deposit_job_tolerations=deposit_job_tolerations,
-        deposit_job_affinity=deposit_job_affinity,
+        deposit_job_node_selector=deposit_job_node_selector,
     )
     created_job = await job_client.create(_convert_to_k8s_object(job, cluster_id=cluster_id, user_id=user.id))
     owner_reference = _get_owner_reference(created_job)
