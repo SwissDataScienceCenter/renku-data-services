@@ -53,7 +53,6 @@ from renku_data_services.data_connectors.db import (
 from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
 from renku_data_services.k8s.client_interfaces import K8sClient, SecretClient
 from renku_data_services.k8s.clients import DepositUploadJobClient
-from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
 from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.storage.rclone import RCloneValidator
 
@@ -609,37 +608,32 @@ class DataConnectorsBP(CustomBlueprint):
                     message="Cannot have more than 1 deposit for the same user and data connector.",
                     detail="Please delete your existing deposit and make a new one afterward.",
                 )
-            # Get token for Zenodo
             token = await self.__get_zenodo_access_token(user)
-            # Create deposit in Zenodo
+
+            # The closure below allows us to tie the creation of the db entry to the successful
+            # creation of the job in kubernetes. I.e. if the k8s creation fails nothing is saved
+            # in the database.
+            async def in_transaction_ops(
+                saved_dep: models.DepositJob,
+            ) -> None:
+                await create_deposit_upload(
+                    request=request,
+                    user=user,
+                    deposit_job=saved_dep,
+                    data_connector_repo=self.data_connector_repo,
+                    storage_class=self.dc_storage_class,
+                    data_service_base_url=self.data_service_base_url,
+                    k8s_client=self.k8s_client,
+                    deposit_config=self.deposit_config,
+                    job_client=self.job_client,
+                    data_connector_secret_repo=self.data_connector_secret_repo,
+                    data_source_repo=self.data_source_repo,
+                    deposit_api_key=token,
+                )
+
             zenodo_dep = await self.zenodo_client.create_deposit(token, body.name)
-            # Create the deposit in the DB
-            dep = await validate_deposit(user, body, str(zenodo_dep.id), self.data_connector_repo)
-            job_name = "deposit-" + str(ULID()).lower()
-            dep_job = models.UnsavedDepositJob(
-                deposit=dep,
-                name=job_name,
-                cluster_id=DEFAULT_K8S_CLUSTER,
-            )
-            saved_dep = await self.data_connector_repo.create_deposit(user, dep_job)
-            # Create the job in kubernetes
-            await create_deposit_upload(
-                request=request,
-                user=user,
-                storage_class=self.dc_storage_class,
-                namespace=self.deposit_config.namespace,
-                cluster_id=saved_dep.cluster_id,
-                k8s_client=self.k8s_client,
-                data_service_base_url=self.data_service_base_url,
-                deposit_job=saved_dep,
-                job_client=self.job_client,
-                deposit_api_key=token,
-                deposit_job_tolerations=self.deposit_config.tolerations,
-                deposit_job_node_selector=self.deposit_config.node_selector,
-                data_source_repo=self.data_source_repo,
-                data_connector_repo=self.data_connector_repo,
-                data_connector_secret_repo=self.data_connector_secret_repo,
-            )
+            unsaved_dep = validate_deposit(body, str(zenodo_dep.id))
+            saved_dep = await self.data_connector_repo.create_deposit(user, unsaved_dep, in_transaction_ops)
             return validated_json(apispec.Deposit, serialize_deposit(saved_dep))
 
         return "/deposits", ["POST"], _post_deposit
@@ -716,18 +710,15 @@ class DataConnectorsBP(CustomBlueprint):
                 request=request,
                 user=user,
                 storage_class=self.dc_storage_class,
-                namespace=self.deposit_config.namespace,
-                cluster_id=saved_dep.cluster_id,
                 k8s_client=self.k8s_client,
                 data_service_base_url=self.data_service_base_url,
                 deposit_job=saved_dep,
                 job_client=self.job_client,
                 deposit_api_key=token,
-                deposit_job_tolerations=self.deposit_config.tolerations,
-                deposit_job_node_selector=self.deposit_config.node_selector,
                 data_source_repo=self.data_source_repo,
                 data_connector_repo=self.data_connector_repo,
                 data_connector_secret_repo=self.data_connector_secret_repo,
+                deposit_config=self.deposit_config,
             )
             return HTTPResponse(status=201)
 

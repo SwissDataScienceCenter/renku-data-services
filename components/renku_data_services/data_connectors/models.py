@@ -251,6 +251,7 @@ class UnsavedDeposit:
     name: str
     data_connector_id: ULID
     original_id: str
+    """The ID of the deposit from the dataset provider."""
     source: DepositSource
     path: PurePosixPath | None
     """The path from the data connector that should be included in the deposit."""

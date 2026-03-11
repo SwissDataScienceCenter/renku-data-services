@@ -5,10 +5,12 @@ from __future__ import annotations
 import os
 from collections import namedtuple
 from dataclasses import dataclass
+from typing import Final
 
 from kubernetes.client import ApiClient, V1NodeSelector, V1Toleration
 
 from renku_data_services.app_config import logging
+from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +24,7 @@ class DepositConfig:
     renku_url: str
     node_selector: V1NodeSelector | None = None
     tolerations: list[V1Toleration] | None = None
+    cluster_id: Final[ClusterId] = DEFAULT_K8S_CLUSTER
 
     @classmethod
     def from_env(cls) -> DepositConfig:
@@ -57,4 +60,5 @@ class DepositConfig:
             tolerations=tolerations,
             node_selector=node_selector,
             namespace=os.environ["KUBERNETES_NAMESPACE"],
+            cluster_id=DEFAULT_K8S_CLUSTER,
         )

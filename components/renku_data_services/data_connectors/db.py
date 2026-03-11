@@ -2,7 +2,7 @@
 
 import random
 import string
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from typing import TypeVar
@@ -874,12 +874,25 @@ class DataConnectorRepository:
         self,
         user: base_models.APIUser,
         deposit_job: models.UnsavedDepositJob,
+        in_transaction_ops: Callable[[models.DepositJob], Awaitable[None]],
     ) -> models.DepositJob:
         """Create a deposit in the DB."""
         if user.id is None or user.is_anonymous:
             raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
         deposit = deposit_job.deposit
         async with self.session_maker() as session, session.begin():
+            existing_stmt = (
+                select(schemas.DepositORM)
+                .where(schemas.DepositORM.data_connector_id == deposit.data_connector_id)
+                .where(schemas.DepositORM.user_id == user.id)
+            )
+            existing_dep = await session.scalar(existing_stmt)
+            if existing_dep is not None:
+                raise errors.ConflictError(
+                    message="Cannot create a new deposit when there is already an existing deposit "
+                    f"for the data connector with ID {deposit.data_connector_id}",
+                    detail="Please delete the existing deposit and then create a new one or edit the existing deposit",
+                )
             status_subq = (
                 select(schemas.DepositStatusORM.id)
                 .where(schemas.DepositStatusORM.status == deposit.status.value)
@@ -905,7 +918,9 @@ class DataConnectorRepository:
             session.add(dep)
             await session.flush()
             await session.refresh(dep)
-        return dep.dump()
+            output = dep.dump()
+            await in_transaction_ops(output)
+        return output
 
     async def delete_deposit(self, user: base_models.APIUser, deposit_id: ULID) -> None:
         """Delete an existing deposit from the database."""
