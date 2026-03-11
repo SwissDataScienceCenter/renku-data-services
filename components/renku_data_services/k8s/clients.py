@@ -6,7 +6,7 @@ import contextlib
 import os
 from collections.abc import AsyncIterable, AsyncIterator, Callable
 from copy import deepcopy
-from typing import Final, TypeVar
+from typing import TypeVar
 
 import httpx
 import kr8s
@@ -480,7 +480,6 @@ class DepositUploadJobClient:
         self.__client = k8s_client
         self.__gvk = GVK(kind="Job", version="v1", group="batch")
         self.__converter = client.ApiClient()
-        self.__container_name: Final[str] = "upload"
 
     def _deserialize(self, data: Box) -> client.V1Job:
         # NOTE: There is unfortunately no other way around this, this is the only thing that will
@@ -515,8 +514,19 @@ class DepositUploadJobClient:
         res = await self.__client.create(manifest, True)
         return self._deserialize(res.manifest)
 
-    async def logs(self, meta: K8sObjectMeta) -> AsyncIterator[str]:
+    async def logs(self, job_meta: K8sObjectMeta) -> dict[str, AsyncIterator[str]]:
         """Get the logs for the upload job."""
-        all_logs = await self.__client.logs(meta)
-        clogs = all_logs.get(self.__container_name)
-        return clogs or empty_async_generator()
+        # We have to find the pod for the job
+        pod_filter = K8sObjectFilter(
+            gvk=GVK(kind="Pod", version="v1"),
+            namespace=job_meta.namespace,
+            cluster=job_meta.cluster,
+            user_id=job_meta.user_id,
+            # K8s adds this label automatically to all pods of a job
+            label_selector={"job-name": job_meta.name},
+        )
+        pods = self.__client.list(pod_filter)
+        pod = await anext(aiter(pods), None)
+        if not pod:
+            raise errors.MissingResourceError(message="Could not find the logs for the deposit job")
+        return await self.__client.logs(pod)

@@ -10,6 +10,8 @@ from io import StringIO
 from typing import Any, ClassVar, Self, Union
 
 import yaml
+from kubernetes import client
+from kubernetes.client import ApiClient, V1Affinity, V1Toleration
 
 from renku_data_services.notebooks.crs import Affinity, Toleration
 
@@ -380,6 +382,7 @@ class _SessionConfig:
             "git-clone",
         ]
     )
+    __converter: ApiClient = field(init=False, repr=False, default=client.ApiClient())
 
     @classmethod
     def from_env(cls) -> Self:
@@ -438,6 +441,14 @@ class _SessionConfig:
     @property
     def tolerations_model(self) -> list[Toleration]:
         return [Toleration.model_validate(tol) for tol in self.tolerations]
+
+    @property
+    def v1_affinity(self) -> V1Affinity:
+        return self.__converter._ApiClient__deserialize(self.affinity, V1Affinity)
+
+    @property
+    def v1_tolerations(self) -> list[V1Toleration]:
+        return [self.__converter._ApiClient__deserialize(i, V1Toleration) for i in self.tolerations]
 
 
 @dataclass
