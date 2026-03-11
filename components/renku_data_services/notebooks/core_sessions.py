@@ -1035,6 +1035,9 @@ async def start_session(
 
     labels = {"renku.io/safe-username": user.id}
 
+    if user.is_anonymous:
+        labels["renku.io/anonymous-session"] = "true"
+
     session = AmaltheaSessionV1Alpha1(
         metadata=Metadata(name=server_name, annotations=annotations),
         spec=AmaltheaSessionSpec(
