@@ -135,23 +135,28 @@ class ResourceUsageBP(CustomBlueprint):
 
         return "/resource_pools/<resource_pool_id>/classes/<class_id>/cost", ["DELETE"], _delete
 
+    def _extract_date(self, req: Request, name: str) -> date | None:
+        datestr = req.args.get(name)
+        return datetime.strptime(datestr, "%Y-%m-%d") if datestr is not None else None
+
     def get_pool_usage(self) -> BlueprintFactoryResponse:
         """Get usage of a pool."""
-
-        def extract_date(req: Request, name: str) -> date | None:
-            datestr = req.args.get(name)
-            return datetime.strptime(datestr, "%Y-%m-%d") if datestr is not None else None
 
         @authenticate(self.authenticator)
         @validate_db_ids
         async def _get(req: Request, user: base_models.APIUser, resource_pool_id: int) -> HTTPResponse:
-            start_date = extract_date(req, "start_date")
-            end_date = extract_date(req, "end_date")
+            start_date = self._extract_date(req, "start_date")
+            end_date = self._extract_date(req, "end_date")
+            user_id = req.args.get("user_id")
+            user_id = str(user_id) if user_id else user.id
+            if user_id != user.id and (user.access_token is None or not user.is_admin):
+                raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
+
             result: model.ResourcePoolUsage | None = None
             if start_date:
-                result = await self.rr_svc.get_for_date(resource_pool_id, user.id or "", start_date, end_date)
+                result = await self.rr_svc.get_for_date(resource_pool_id, user_id or "", start_date, end_date)
             else:
-                result = await self.rr_svc.get_running_week(resource_pool_id, user.id or "")
+                result = await self.rr_svc.get_running_week(resource_pool_id, user_id or "")
             if result:
                 output = apispec.ResourcePoolUsage(
                     total_usage=apispec.ResourceUsageSummary(
