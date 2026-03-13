@@ -1229,6 +1229,8 @@ components:
           $ref: "#/components/schemas/K8sLabelList"
         node_affinities:
           $ref: "#/components/schemas/NodeAffinityList"
+        user_available_h:
+          $ref: "#/components/schemas/ResourceAvailableHours"
       required: ["cpu", "memory", "gpu", "max_storage", "name", "id", "default", "default_storage"]
       example:
         name: "resource class"
@@ -1530,6 +1532,8 @@ components:
           $ref: "#/components/schemas/Ulid"
         platform:
           $ref: "#/components/schemas/RuntimePlatform"
+        user_used:
+          $ref: "#/components/schemas/ResourceUsage"
       required: ["classes", "name", "id", "public", "default", "platform"]
       example:
         quota:
@@ -1695,6 +1699,20 @@ components:
       minimum: 0
       # Max value for int64 in postgres
       maximum: 9223372036854775807
+    ResourceAvailableHours:
+      type: number
+      format: double
+      description: Amount of a resource available (in hours)
+      example: 3.141
+      exclusiveMinimum: true
+      minimum: 0
+    ResourceUsage:
+      type: number
+      format: double
+      description: Amount of a resource used (in credits)
+      example: 3.141
+      exclusiveMinimum: true
+      minimum: 0
     Storage:
       type: integer
       description: Number of gigabytes of storage
