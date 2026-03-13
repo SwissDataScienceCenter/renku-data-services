@@ -799,6 +799,12 @@ class ResourceClassWithIdFiltered(BaseAPISpec):
         examples=[[{"key": "test-label-1", "required_during_scheduling": False}]],
         min_length=0,
     )
+    user_available_h: Optional[float] = Field(
+        None,
+        description="Amount of a resource available (in hours)",
+        examples=[3.141],
+        gt=0.0,
+    )
 
 
 class ResourceClassesWithIdResponse(RootModel[List[ResourceClassWithId]]):
@@ -1154,6 +1160,12 @@ class ResourcePoolWithIdFiltered(BaseAPISpec):
         pattern="^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
     )
     platform: RuntimePlatform
+    user_used: Optional[float] = Field(
+        None,
+        description="Amount of a resource used (in credits)",
+        examples=[3.141],
+        gt=0.0,
+    )
 
 
 class ResourcePoolsWithId(RootModel[List[ResourcePoolWithId]]):
