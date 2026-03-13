@@ -339,7 +339,20 @@ paths:
           $ref: "#/components/responses/Error"
       tags:
         - user_preferences
-
+  /user/quotas/resource_pools:
+    get:
+      summary: Get quota information for the currently logged in user
+      responses:
+        "200":
+          description: The user resource pool quotas
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/UserResourcePoolsQuotaResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - user_quotas
 components:
   schemas:
     UserWithId:
@@ -612,6 +625,29 @@ components:
               description: Sentry trace ID for linking to corresponding log entries
           required: ["code", "message"]
       required: ["error"]
+    UserResourcePoolsQuotaResponse:
+      type: array
+      items:
+        $ref: "#/components/schemas/UserResourcePoolQuotaResponse"
+    UserResourcePoolQuotaResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        resource_pool_id:
+          type: integer
+        resource_pool_name:
+          type: string
+        user_runtime_used:
+          type: number
+          format: double
+        runtime_available:
+          type: number
+          format: double
+      required:
+        - resource_pool_id
+        - resource_pool_name
+        - user_runtime_used
+        - runtime_available
   responses:
     Error:
       description: The schema for all 4xx and 5xx responses
