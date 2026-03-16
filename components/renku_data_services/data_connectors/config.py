@@ -23,6 +23,7 @@ class DepositConfig:
     image: str
     namespace: str
     renku_url: str
+    zenodo_url: str
     node_selector: dict[str, str] | None = None
     tolerations: list[V1Toleration] | None = None
     cluster_id: Final[ClusterId] = DEFAULT_K8S_CLUSTER
@@ -62,4 +63,5 @@ class DepositConfig:
             node_selector=node_selector,
             namespace=os.environ["KUBERNETES_NAMESPACE"],
             cluster_id=DEFAULT_K8S_CLUSTER,
+            zenodo_url=os.environ.get("ZENODO_URL", "https://zenodo.org").rstrip("/"),
         )

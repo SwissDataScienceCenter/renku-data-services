@@ -32,7 +32,6 @@ from kubernetes.client import (
     V1Secret,
     V1SecretEnvSource,
     V1SecurityContext,
-    V1Toleration,
     V1Volume,
     V1VolumeMount,
     V1VolumeResourceRequirements,
@@ -670,13 +669,11 @@ async def create_deposit_upload(
         )
 
     def _create_deposit_upload_job_manifest(
-        namespace: str,
+        deposit_config: DepositConfig,
         deposit_job: models.DepositJob,
         api_key_secret_name: str,
         work_dir: PurePosixPath,
         pvc_name: str,
-        deposit_job_node_selector: dict[str, str] | None,
-        deposit_job_tolerations: list[V1Toleration] | None,
         labels: dict[str, str] | None = None,
         suspended: bool = False,
     ) -> V1Job:
@@ -691,7 +688,7 @@ async def create_deposit_upload(
         return V1Job(
             metadata=V1ObjectMeta(
                 name=deposit_job.name,
-                namespace=namespace,
+                namespace=deposit_config.namespace,
                 labels=labels,
             ),
             spec=V1JobSpec(
@@ -702,8 +699,8 @@ async def create_deposit_upload(
                     metadata=V1ObjectMeta(labels=labels),
                     spec=V1PodSpec(
                         restart_policy="Never",
-                        tolerations=deposit_job_tolerations,
-                        node_selector=deposit_job_node_selector,
+                        tolerations=deposit_config.tolerations,
+                        node_selector=deposit_config.node_selector,
                         containers=[
                             V1Container(
                                 security_context=V1SecurityContext(
@@ -714,11 +711,12 @@ async def create_deposit_upload(
                                     run_as_group=1000,
                                 ),
                                 name="upload-deposit",
-                                image="olevski90/renku-cli:0.0.2",
+                                image=deposit_config.image,
                                 env_from=[V1EnvFromSource(secret_ref=V1SecretEnvSource(name=api_key_secret_name))],
                                 env=[
                                     V1EnvVar(name="RUST_LOG", value="info"),
                                     V1EnvVar(name="RENKU_CLI_RENKU_URL", value=deposit_config.renku_url),
+                                    V1EnvVar(name="ZENODO_URL", value=deposit_config.zenodo_url),
                                 ],
                                 args=[
                                     "dataset",
@@ -891,15 +889,13 @@ async def create_deposit_upload(
     work_dir = PurePosixPath("/work")
 
     job = _create_deposit_upload_job_manifest(
-        namespace=deposit_config.namespace,
+        deposit_config=deposit_config,
         deposit_job=deposit_job,
         api_key_secret_name=base_name,
         work_dir=work_dir,
         suspended=True,
         labels=labels,
         pvc_name=pvc_name,
-        deposit_job_tolerations=deposit_config.tolerations,
-        deposit_job_node_selector=deposit_config.node_selector,
     )
     created_job = await job_client.create(
         _convert_to_k8s_object(job, cluster_id=deposit_config.cluster_id, user_id=user.id)
