@@ -717,7 +717,10 @@ async def create_deposit_upload(
                                 name="upload-deposit",
                                 image="olevski90/renku-cli:0.0.2",
                                 env_from=[V1EnvFromSource(secret_ref=V1SecretEnvSource(name=api_key_secret_name))],
-                                env=[V1EnvVar(name="RUST_LOG", value="info")],
+                                env=[
+                                    V1EnvVar(name="RUST_LOG", value="info"),
+                                    V1EnvVar(name="RENKU_CLI_RENKU_URL", value=deposit_config.renku_url),
+                                ],
                                 args=[
                                     "dataset",
                                     "deposit",
