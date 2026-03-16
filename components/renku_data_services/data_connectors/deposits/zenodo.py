@@ -46,10 +46,12 @@ class ZenodoAPIClient:
             )
         return DepositResponse.model_validate(res.json())
 
-    async def get_deposit(self, api_key: str, id: int) -> DepositResponse:
+    async def get_deposit(self, api_key: str, id: int | str) -> DepositResponse | None:
         """Get a specific Zenodo deposit."""
         header = {"Authorization": f"Bearer {api_key}"}
         res = await self.__client.get(self.__zenodo_base_url + f"/deposit/depositions/{id}", headers=header)
+        if res.status_code == 404:
+            return None
         if res.status_code >= 300 or res.status_code < 200:
             raise errors.ThirdPartyAPIError(
                 message=f"Received unexpected status code {res.status_code} when trying to get zenodo deposit.",

@@ -674,6 +674,18 @@ class DataConnectorsBP(CustomBlueprint):
             patch = validate_deposit_patch(body)
             if patch.status:
                 validate_deposit_status_change(saved_dep.deposit.status, patch.status)
+            if patch.status == models.DepositStatus.complete:
+                token = await self.__get_zenodo_access_token(user)
+                zenodo_dep = await self.zenodo_client.get_deposit(token, saved_dep.deposit.original_id)
+                if not zenodo_dep:
+                    raise errors.MissingResourceError(
+                        message=f"The deposit with id {saved_dep.deposit.original_id} "
+                        "cannot be found from the provider."
+                    )
+                if not zenodo_dep.submitted:
+                    raise errors.ValidationError(
+                        message="The deposit needs to be completed and published first before being completed."
+                    )
             saved_dep = await self.data_connector_repo.update_deposit(user, deposit_id, patch)
             if patch.status == models.DepositStatus.complete:
                 # If the deposit is being completed then we delete it
