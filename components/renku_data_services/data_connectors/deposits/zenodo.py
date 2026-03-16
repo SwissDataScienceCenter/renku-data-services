@@ -1,5 +1,6 @@
 """Client for the Zenodo API."""
 
+import os
 from datetime import datetime
 
 import httpx
@@ -28,13 +29,12 @@ class ZenodoAPIClient:
     """Client to deal with Zenodo datasets."""
 
     def __init__(self) -> None:
-        self.__zenodo_base_url = "https://zenodo.org/api"
+        self.__zenodo_base_url = os.environ.get("ZENODO_URL") or "https://zenodo.org/api"
         self.__client = httpx.AsyncClient()
 
     async def create_deposit(self, api_key: str, title: str) -> DepositResponse:
         """Create a zenodo deposit."""
         header = {"Authorization": f"Bearer {api_key}"}
-        # TODO: Send a patch request to set title
         payload = {"metadata": {"title": title, "upload_type": "dataset"}}
         res = await self.__client.post(self.__zenodo_base_url + "/deposit/depositions", headers=header, json=payload)
         return DepositResponse.model_validate(res.json())
