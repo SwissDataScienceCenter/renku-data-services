@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import os
 from collections import namedtuple
 from dataclasses import dataclass
 from typing import Final
 
-from kubernetes.client import ApiClient, V1NodeSelector, V1Toleration
+from kubernetes.client import ApiClient, V1Toleration
 
 from renku_data_services.app_config import logging
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
@@ -22,7 +23,7 @@ class DepositConfig:
     image: str
     namespace: str
     renku_url: str
-    node_selector: V1NodeSelector | None = None
+    node_selector: dict[str, str] | None = None
     tolerations: list[V1Toleration] | None = None
     cluster_id: Final[ClusterId] = DEFAULT_K8S_CLUSTER
 
@@ -33,11 +34,11 @@ class DepositConfig:
         # a `data` property on the object passed into the deserializer.
         DeserializerPayload = namedtuple("DeserializerPayload", ["data"])
         deserializer = ApiClient().deserialize
-        node_selector: V1NodeSelector | None = None
+        node_selector: dict[str, str] | None = None
         node_selector_str = os.environ.get("DATA_DEPOSITS_NODE_SELECTOR")
         if node_selector_str:
             try:
-                node_selector = V1NodeSelector(**deserializer(DeserializerPayload(node_selector_str), "V1NodeSelector"))
+                node_selector = json.loads(node_selector_str)
             except (ValueError, TypeError, AttributeError):
                 logger.error(
                     "Could not validate DATA_DEPOSITS_NODE_SELECTOR. Will not use node selector for data upload jobs."
