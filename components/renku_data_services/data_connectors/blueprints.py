@@ -760,9 +760,13 @@ class DataConnectorsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
+        @validate_query(apispec.PaginationRequest)
         @paginate
         async def _get_deposits(
-            _: Request, user: base_models.AuthenticatedAPIUser, pagination: PaginationRequest
+            _: Request,
+            user: base_models.AuthenticatedAPIUser,
+            pagination: PaginationRequest,
+            query: apispec.PaginationRequest,
         ) -> tuple[list[dict[str, Any]], int]:
             deposits, total_num = await self.data_connector_repo.get_deposits(
                 user, data_connector_id=None, pagination=pagination

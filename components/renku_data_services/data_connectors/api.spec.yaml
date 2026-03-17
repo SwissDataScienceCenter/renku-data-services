@@ -491,6 +491,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Deposit"
+        default:
+          $ref: "#/components/responses/Error"
       tags:
         - deposit
     get:
@@ -510,6 +512,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DepositList"
+        default:
+          $ref: "#/components/responses/Error"
       tags:
         - deposit
   /deposits/{deposit_id}:
@@ -529,6 +533,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Deposit"
+        default:
+          $ref: "#/components/responses/Error"
       tags:
         - deposit
     patch:
@@ -546,6 +552,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Deposit"
+        default:
+          $ref: "#/components/responses/Error"
       tags:
         - deposit
     delete:
@@ -553,6 +561,8 @@ paths:
       responses:
         "204":
           description: The data deposit was deleted
+        default:
+          $ref: "#/components/responses/Error"
       tags:
         - deposit
   /deposits/{deposit_id}/logs:
@@ -572,6 +582,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DepositLogs"
+        default:
+          $ref: "#/components/responses/Error"
       tags:
         - deposit
   /deposits/{deposit_id}/job:
@@ -587,6 +599,8 @@ paths:
       responses:
         "201":
           description: The data deposit job has been recreated
+        default:
+          $ref: "#/components/responses/Error"
       tags:
         - deposit
 components:
