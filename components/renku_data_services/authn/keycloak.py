@@ -9,7 +9,7 @@ from typing import Any, Optional, cast
 
 import httpx
 import jwt
-from jwt import PyJWKClient
+from jwt import PyJWKClient, PyJWKClientError
 from sanic import Request
 from tenacity import retry, stop_after_attempt, stop_after_delay, wait_fixed
 from ulid import ULID
@@ -99,7 +99,10 @@ class KeycloakAuthenticator(Authenticator):
             # NOTE: the above errors are subclasses of `InvalidToken` below but they will result from keycloak
             # misconfiguration most often rather than from the user having done something so we surface them.
             raise
-        except jwt.InvalidTokenError as err:
+        except (jwt.InvalidTokenError, PyJWKClientError) as err:
+            # NOTE: PyJWKClientError occurs when the JWK from keycloak change and get_signing_key_from_jwt is called.
+            # Then the kid from the JWT does not match any of the public keys from keycloak.
+            # In this case we should consider that the credentials are invalid and ask the user to log in again.
             raise errors.InvalidTokenError(
                 message="Your credentials are invalid or expired, please log in again."
             ) from err
