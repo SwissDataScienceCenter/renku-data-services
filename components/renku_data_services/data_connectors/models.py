@@ -266,6 +266,11 @@ class Deposit(UnsavedDeposit):
     creation_date: datetime
     updated_at: datetime
 
+    @property
+    def etag(self) -> str:
+        """Entity tag value for this project object."""
+        return compute_etag_from_fields(self.updated_at, str(self.id))
+
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class DepositJob:
@@ -274,6 +279,11 @@ class DepositJob:
     name: str
     cluster_id: ClusterId
     deposit: Deposit
+
+    @property
+    def etag(self) -> str:
+        """Entity tag value for this project object."""
+        return compute_etag_from_fields(self.deposit.updated_at, self.name, str(self.cluster_id), self.deposit.etag)
 
     def to_meta(self, user_id: str, namespace: str) -> K8sObjectMeta:
         """Return the Kubernetes meta object to represent the Job for the deposit."""

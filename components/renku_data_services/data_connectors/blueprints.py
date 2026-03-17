@@ -643,7 +643,10 @@ class DataConnectorsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _get_deposit(_: Request, user: base_models.AuthenticatedAPIUser, deposit_id: ULID) -> JSONResponse:
+        @extract_if_none_match
+        async def _get_deposit(
+            _: Request, user: base_models.AuthenticatedAPIUser, deposit_id: ULID, etag: str | None
+        ) -> HTTPResponse:
             saved_dep = await update_deposit_status(
                 user=user,
                 job=deposit_id,
@@ -651,7 +654,11 @@ class DataConnectorsBP(CustomBlueprint):
                 job_client=self.job_client,
                 namespace=self.deposit_config.namespace,
             )
-            return validated_json(apispec.Deposit, serialize_deposit(saved_dep))
+            if saved_dep.etag == etag:
+                return HTTPResponse(status=304)
+
+            headers = {"ETag": saved_dep.etag}
+            return validated_json(apispec.Deposit, serialize_deposit(saved_dep), headers=headers)
 
         return "/deposits/<deposit_id:ulid>", ["GET"], _get_deposit
 
@@ -660,6 +667,7 @@ class DataConnectorsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
+        @if_match_required
         @validate(json=apispec.DepositPatch)
         async def _patch_deposit(
             _: Request, user: base_models.AuthenticatedAPIUser, body: apispec.DepositPatch, deposit_id: ULID
