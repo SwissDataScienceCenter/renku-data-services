@@ -402,15 +402,12 @@ class RemoteConfigurationFirecrest:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Self:
         """Convert a dict object into a RemoteConfiguration instance."""
-        kind = data.get("kind")
-        if kind == RemoteConfigurationKind.firecrest.value:
-            return cls(
-                provider_id=data.get("provider_id") or None,
-                api_url=data["api_url"],
-                system_name=data["system_name"],
-                partition=data.get("partition") or None,
-            )
-        raise errors.ValidationError(message=f"Invalid kind for remote configuration: '{kind}'")
+        return cls(
+            provider_id=data.get("provider_id") or None,
+            api_url=data["api_url"],
+            system_name=data["system_name"],
+            partition=data.get("partition") or None,
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert this instance of RemoteConfiguration into a dictionary."""
@@ -430,13 +427,10 @@ class RemoteConfigurationRunai:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Self:
         """Convert a dict object into a RemoteConfiguration instance."""
-        kind = data.get("kind")
-        if kind == RemoteConfigurationKind.runai.value:
-            return cls(
-                base_url=data["base_url"],
-                provider_id=data.get("provider_id") or None,
-            )
-        raise errors.ValidationError(message=f"Invalid kind for remote configuration: '{kind}'")
+        return cls(
+            base_url=data["base_url"],
+            provider_id=data.get("provider_id") or None,
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert this instance of RemoteConfiguration into a dictionary."""
@@ -449,6 +443,7 @@ class RemoteConfigurationRunai:
 class RemoteConfigurationFirecrestPatch:
     """Model for remote configurations using the FirecREST API."""
 
+    kind: Final[RemoteConfigurationKind] = field(init=False, default=RemoteConfigurationKind.firecrest)
     provider_id: str | None = None
     api_url: str | None = None
     system_name: str | None = None
@@ -457,6 +452,7 @@ class RemoteConfigurationFirecrestPatch:
     def to_dict(self) -> dict[str, Any]:
         """Convert this instance of RemoteConfigurationPatch into a dictionary."""
         res = asdict(self)
+        res["kind"] = self.kind.value
         return res
 
 
@@ -464,12 +460,14 @@ class RemoteConfigurationFirecrestPatch:
 class RemoteConfigurationRunaiPatch:
     """Model for remote configurations using the Run:AI API."""
 
+    kind: Final[RemoteConfigurationKind] = field(init=False, default=RemoteConfigurationKind.runai)
     base_url: str | None = None
     provider_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert this instance of RemoteConfigurationPatch into a dictionary."""
         res = asdict(self)
+        res["kind"] = self.kind.value
         return res
 
 
