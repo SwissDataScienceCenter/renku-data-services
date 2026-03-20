@@ -371,7 +371,6 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
             )
         case (models.RemoteConfigurationFirecrest(), models.RemoteConfigurationFirecrestPatch()):
             remote = models.RemoteConfigurationFirecrest(
-                kind=update.remote.kind if update.remote.kind is not None else existing.remote.kind,
                 provider_id=update.remote.provider_id
                 if update.remote.provider_id is not None
                 else existing.remote.provider_id,
@@ -383,7 +382,6 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
             )
         case (models.RemoteConfigurationRunai(), models.RemoteConfigurationRunaiPatch()):
             remote = models.RemoteConfigurationRunai(
-                kind=update.remote.kind if update.remote.kind is not None else existing.remote.kind,
                 base_url=update.remote.base_url if update.remote.base_url is not None else existing.remote.base_url,
                 provider_id=update.remote.provider_id
                 if update.remote.provider_id is not None
@@ -507,7 +505,6 @@ def validate_remote(
         case (apispec.RemoteConfigurationFirecrest(), models.RemoteConfigurationKind.firecrest):
             validate_firecrest_api_url(body.api_url)
             return models.RemoteConfigurationFirecrest(
-                kind=kind,
                 provider_id=body.provider_id,
                 api_url=body.api_url,
                 system_name=body.system_name,
@@ -516,7 +513,6 @@ def validate_remote(
         case (apispec.RemoteConfigurationRunai(), models.RemoteConfigurationKind.runai):
             validate_runai_base_url(body.base_url)
             return models.RemoteConfigurationRunai(
-                kind=kind,
                 base_url=body.base_url,
                 provider_id=body.provider_id,
             )
