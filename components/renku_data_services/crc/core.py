@@ -395,6 +395,8 @@ def validate_resource_pool_update(existing: models.ResourcePool, update: models.
             raise errors.ValidationError(
                 message="Cannot convert a Firecrest remote into a RunAI one. Please create a brand new pool."
             )
+        case (None, None):
+            remote = RESET
         case _:
             raise errors.ValidationError(
                 message="Received an unexpected patch for the remove configuration of the resource pool. "
