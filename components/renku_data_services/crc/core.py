@@ -532,7 +532,6 @@ def validate_remote_put(
         case apispec.RemoteConfigurationFirecrest():
             remote = validate_remote(body=body)
             return models.RemoteConfigurationFirecrestPatch(
-                kind=remote.kind,
                 provider_id=remote.provider_id,
                 api_url=body.api_url,
                 system_name=body.system_name,
@@ -541,7 +540,6 @@ def validate_remote_put(
         case apispec.RemoteConfigurationRunai():
             remote = validate_remote(body=body)
             return models.RemoteConfigurationRunaiPatch(
-                kind=remote.kind,
                 base_url=body.base_url,
                 provider_id=remote.provider_id,
             )
@@ -563,7 +561,6 @@ def validate_remote_patch(
         case (apispec.RemoteConfigurationFirecrestPatch(), models.RemoteConfigurationKind.firecrest):
             validate_firecrest_api_url(body.api_url)
             return models.RemoteConfigurationFirecrestPatch(
-                kind=kind,
                 provider_id=body.provider_id,
                 api_url=body.api_url,
                 system_name=body.system_name,
@@ -572,7 +569,6 @@ def validate_remote_patch(
         case (apispec.RemoteConfigurationRunaiPatch(), models.RemoteConfigurationKind.runai):
             validate_runai_base_url(body.base_url)
             return models.RemoteConfigurationRunaiPatch(
-                kind=kind,
                 base_url=body.base_url,
                 provider_id=body.provider_id,
             )

@@ -449,7 +449,6 @@ class RemoteConfigurationRunai:
 class RemoteConfigurationFirecrestPatch:
     """Model for remote configurations using the FirecREST API."""
 
-    kind: RemoteConfigurationKind | None = None
     provider_id: str | None = None
     api_url: str | None = None
     system_name: str | None = None
@@ -458,8 +457,6 @@ class RemoteConfigurationFirecrestPatch:
     def to_dict(self) -> dict[str, Any]:
         """Convert this instance of RemoteConfigurationPatch into a dictionary."""
         res = asdict(self)
-        if self.kind:
-            res["kind"] = self.kind.value
         return res
 
 
@@ -467,15 +464,12 @@ class RemoteConfigurationFirecrestPatch:
 class RemoteConfigurationRunaiPatch:
     """Model for remote configurations using the Run:AI API."""
 
-    kind: RemoteConfigurationKind | None = None
     base_url: str | None = None
     provider_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert this instance of RemoteConfigurationPatch into a dictionary."""
         res = asdict(self)
-        if self.kind:
-            res["kind"] = self.kind.value
         return res
 
 
