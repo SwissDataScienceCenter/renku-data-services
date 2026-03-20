@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from math import ceil
-from typing import Any, Optional, Protocol, Self
+from typing import Any, Final, Optional, Protocol, Self
 
 from kubernetes.utils import parse_quantity
 
@@ -322,7 +322,7 @@ class UnsavedResourcePool:
     hibernation_warning_period: int | None = None
     default: bool = False
     public: bool = False
-    remote: RemoteConfigurationFirecrest | None = None
+    remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai | None = None
     cluster_id: ClusterId | None = None
     platform: RuntimePlatform
 
@@ -340,7 +340,7 @@ class ResourcePool:
     hibernation_warning_period: int | None = None
     default: bool = False
     public: bool = False
-    remote: RemoteConfigurationFirecrest | None = None
+    remote: RemoteConfigurationFirecrest | RemoteConfigurationRunai | None = None
     cluster: SavedClusterSettings | None = None
     platform: RuntimePlatform
 
@@ -386,13 +386,14 @@ class RemoteConfigurationKind(StrEnum):
     """Remote resource pool kinds."""
 
     firecrest = "firecrest"
+    runai = "runai"
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
 class RemoteConfigurationFirecrest:
     """Model for remote configurations using the FirecREST API."""
 
-    kind: RemoteConfigurationKind = RemoteConfigurationKind.firecrest
+    kind: Final[RemoteConfigurationKind] = field(init=False, default=RemoteConfigurationKind.firecrest)
     provider_id: str | None = None
     api_url: str
     system_name: str
@@ -401,16 +402,35 @@ class RemoteConfigurationFirecrest:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Self:
         """Convert a dict object into a RemoteConfiguration instance."""
-        kind = data.get("kind")
-        if kind == RemoteConfigurationKind.firecrest.value:
-            return cls(
-                kind=RemoteConfigurationKind.firecrest,
-                provider_id=data.get("provider_id") or None,
-                api_url=data["api_url"],
-                system_name=data["system_name"],
-                partition=data.get("partition") or None,
-            )
-        raise errors.ValidationError(message=f"Invalid kind for remote configuration: '{kind}'")
+        return cls(
+            provider_id=data.get("provider_id") or None,
+            api_url=data["api_url"],
+            system_name=data["system_name"],
+            partition=data.get("partition") or None,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert this instance of RemoteConfiguration into a dictionary."""
+        res = asdict(self)
+        res["kind"] = self.kind.value
+        return res
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class RemoteConfigurationRunai:
+    """Model for remote configurations using the Run:AI API."""
+
+    kind: Final[RemoteConfigurationKind] = field(init=False, default=RemoteConfigurationKind.runai)
+    base_url: str
+    provider_id: str | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Self:
+        """Convert a dict object into a RemoteConfiguration instance."""
+        return cls(
+            base_url=data["base_url"],
+            provider_id=data.get("provider_id") or None,
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert this instance of RemoteConfiguration into a dictionary."""
@@ -423,7 +443,7 @@ class RemoteConfigurationFirecrest:
 class RemoteConfigurationFirecrestPatch:
     """Model for remote configurations using the FirecREST API."""
 
-    kind: RemoteConfigurationKind | None = None
+    kind: Final[RemoteConfigurationKind] = field(init=False, default=RemoteConfigurationKind.firecrest)
     provider_id: str | None = None
     api_url: str | None = None
     system_name: str | None = None
@@ -432,9 +452,23 @@ class RemoteConfigurationFirecrestPatch:
     def to_dict(self) -> dict[str, Any]:
         """Convert this instance of RemoteConfigurationPatch into a dictionary."""
         res = asdict(self)
-        if self.kind:
-            res["kind"] = self.kind.value
+        res["kind"] = self.kind.value
         return res
 
 
-RemoteConfigurationPatch = ResetType | RemoteConfigurationFirecrestPatch
+@dataclass(frozen=True, eq=True, kw_only=True)
+class RemoteConfigurationRunaiPatch:
+    """Model for remote configurations using the Run:AI API."""
+
+    kind: Final[RemoteConfigurationKind] = field(init=False, default=RemoteConfigurationKind.runai)
+    base_url: str | None = None
+    provider_id: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert this instance of RemoteConfigurationPatch into a dictionary."""
+        res = asdict(self)
+        res["kind"] = self.kind.value
+        return res
+
+
+RemoteConfigurationPatch = ResetType | RemoteConfigurationFirecrestPatch | RemoteConfigurationRunaiPatch
