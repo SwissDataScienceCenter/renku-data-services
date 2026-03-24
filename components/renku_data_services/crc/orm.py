@@ -59,7 +59,7 @@ class UserORM(BaseORM):
 
     Used in combination with the `resource_pool_users` table this table provides information
     about which user ID (based on Keycloak IDs) has access to which resource pools.
-    In addition this table stores the indication of whether a specific user is expressly
+    In addition, this table stores the indication of whether a specific user is expressly
     prohibited from accessing the default resource pool. If a user cannot access the default
     resource pool, the no_default_access field in this table for the specific user is set to true.
     """
@@ -109,7 +109,7 @@ class ResourceClassORM(BaseORM):
         cascade="save-update, merge, delete",
         lazy="selectin",
     )
-    node_affinities: Mapped[list[NodeAffintyORM]] = relationship(
+    node_affinities: Mapped[list[NodeAffinityORM]] = relationship(
         back_populates="resource_class",
         default_factory=list,
         cascade="save-update, merge, delete",
@@ -120,9 +120,9 @@ class ResourceClassORM(BaseORM):
     def from_unsaved_model(
         cls, new_resource_class: models.UnsavedResourceClass, resource_pool_id: int | None
     ) -> ResourceClassORM:
-        """Create a new ORM object from an usaved resource class model."""
+        """Create a new ORM object from an unsaved resource class model."""
         node_affinities = [
-            NodeAffintyORM(
+            NodeAffinityORM(
                 key=affinity.key,
                 required_during_scheduling=affinity.required_during_scheduling,
             )
@@ -143,7 +143,9 @@ class ResourceClassORM(BaseORM):
         )
 
     def dump(
-        self, matching_criteria: models.ResourceClass | models.UnsavedResourceClass | None = None
+        self,
+        matching_criteria: models.ResourceClass | models.UnsavedResourceClass | None = None,
+        resource_available: float | None = None,
     ) -> models.ResourceClass:
         """Create a resource class model from the ORM object."""
         matching: bool | None = None
@@ -167,6 +169,7 @@ class ResourceClassORM(BaseORM):
             tolerations=[toleration.key for toleration in self.tolerations],
             matching=matching,
             quota=self.resource_pool.quota if self.resource_pool else None,
+            resource_available=resource_available,
         )
 
 
@@ -177,7 +180,7 @@ class ClusterORM(BaseORM):
     __table_args__ = (
         CheckConstraint(
             # The tls secret and default tls can be either: ignored if http, OR
-            # with https one of them can be set
+            # with https one of them can be set,
             # but we cannot have both the secret set and the default tls flag set to true.
             "(session_protocol='https' AND (session_tls_secret_name IS NOT NULL <> session_ingress_use_default_cluster_tls_cert)) "  # noqa: E501
             "OR session_protocol='http'",
@@ -227,7 +230,7 @@ class ClusterORM(BaseORM):
             raise errors.ValidationError(
                 message="Specifying both a tls secret and using the default cluster tls cert is not allowed. "
                 "The two configurations are mutually exclusive, if you want to use the default cluster tls cert, "
-                "do not specify a tls secret name or vice-versa."
+                "do not specify a tls secret name or vice versa."
             )
         return ClusterORM(
             name=cluster.name,
@@ -300,7 +303,7 @@ class ResourcePoolORM(BaseORM):
         quota: models.Quota | None,
         cluster: models.SavedClusterSettings | None,
     ) -> ResourcePoolORM:
-        """Create a new ORM object from an usaved resource pool model."""
+        """Create a new ORM object from an unsaved resource pool model."""
         classes = [
             ResourceClassORM.from_unsaved_model(new_resource_class=rc, resource_pool_id=None)
             for rc in new_resource_pool.classes
@@ -330,6 +333,7 @@ class ResourcePoolORM(BaseORM):
         self,
         quota: models.Quota | None,
         class_match_criteria: models.ResourceClass | models.UnsavedResourceClass | None = None,
+        resource_usage: float | None = None,
     ) -> models.ResourcePool:
         """Create a resource pool model from the ORM object and a quota."""
         classes: list[ResourceClassORM] = self.classes
@@ -359,6 +363,7 @@ class ResourcePoolORM(BaseORM):
             remote=remote,
             cluster=cluster,
             platform=self.platform,
+            resource_usage=resource_usage,
         )
 
     def _dump_remote(self) -> models.RemoteConfigurationFirecrest | models.RemoteConfigurationRunai | None:
@@ -394,7 +399,7 @@ class TolerationORM(BaseORM):
     id: Mapped[int] = mapped_column("id", Integer, Identity(always=True), primary_key=True, default=None, init=False)
 
 
-class NodeAffintyORM(BaseORM):
+class NodeAffinityORM(BaseORM):
     """The key for a K8s node label used to schedule loads specific nodes."""
 
     __tablename__ = "node_affinities"

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from asyncio import gather
 from collections.abc import AsyncGenerator, Callable, Collection, Coroutine, Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from functools import wraps
 from typing import Any, Concatenate, Optional, ParamSpec, TypeVar
 from uuid import uuid4
@@ -27,12 +27,18 @@ from renku_data_services.base_models import RESET
 from renku_data_services.base_models.core import ResetType
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
-from renku_data_services.crc.core import validate_resource_class_update, validate_resource_pool_update
+from renku_data_services.crc.core import (
+    calculate_available_resources,
+    validate_resource_class_update,
+    validate_resource_pool_update,
+)
 from renku_data_services.crc.models import ClusterPatch, ClusterSettings, SavedClusterSettings, SessionProtocol
 from renku_data_services.crc.orm import ClusterORM
 from renku_data_services.k8s.client_interfaces import PriorityClassClient, ResourceQuotaClient
 from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER, ClusterId
 from renku_data_services.k8s.models import DeletePropagationPolicy, K8sPriorityClass
+from renku_data_services.resource_usage.core import ResourceUsageService
+from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.users.db import UserRepo
 
 
@@ -155,9 +161,17 @@ def _only_admins(
 class ResourcePoolRepository(_Base):
     """The adapter used for accessing resource pools with SQLAlchemy."""
 
-    def __init__(self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository):
+    def __init__(
+        self,
+        session_maker: Callable[..., AsyncSession],
+        quotas_repo: QuotaRepository,
+        resource_usage_service: ResourceUsageService | None = None,
+        resource_requests_repo: ResourceRequestsRepo | None = None,
+    ):
         super().__init__(session_maker, quotas_repo)
         self.__cluster_repo = ClusterRepository(session_maker=self.session_maker)
+        self.resource_usage_service = resource_usage_service
+        self.resource_requests_repo = resource_requests_repo
 
     async def initialize(self, async_connection_url: str, rp: models.UnsavedResourcePool) -> None:
         """Add the default resource pool if it does not already exist."""
@@ -286,7 +300,30 @@ class ResourcePoolRepository(_Base):
             output: list[models.ResourcePool] = []
             for rp in res.scalars().all():
                 quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id())
-                output.append(rp.dump(quota, criteria))
+
+                # TODO: Do we need to calculate usage/remaining for admins!?
+                resource_usage = None
+                if self.resource_usage_service and api_user.is_authenticated:
+                    usage_summary = await self.resource_usage_service.usage_of_running_week(rp.id, api_user.id)
+                    if not usage_summary.is_empty():
+                        # TODO: Should we use the cost_raw and runtime_hours here instead?
+                        # TODO: Should we calculate usage for individual entries?
+                        resource_usage = usage_summary.cost.value
+
+                rp_model = rp.dump(quota, criteria, resource_usage)
+
+                if self.resource_requests_repo:
+                    updated_classes = []
+                    for resource_class in rp_model.classes:
+                        resource_available = await calculate_available_resources(
+                            self.resource_requests_repo, rp.id, resource_class.id, resource_usage
+                        )
+                        updated_class = replace(resource_class, resource_available=resource_available)
+                        updated_classes.append(updated_class)
+
+                    rp_model = replace(rp_model, classes=updated_classes)
+
+                output.append(rp_model)
             return output
 
     @_only_admins
@@ -582,9 +619,9 @@ class ResourcePoolRepository(_Base):
                 cls.default_storage = update.default_storage
 
             if update.node_affinities is not None:
-                existing_affinities: dict[str, schemas.NodeAffintyORM] = {i.key: i for i in cls.node_affinities}
-                new_affinities: dict[str, schemas.NodeAffintyORM] = {
-                    i.key: schemas.NodeAffintyORM(
+                existing_affinities: dict[str, schemas.NodeAffinityORM] = {i.key: i for i in cls.node_affinities}
+                new_affinities: dict[str, schemas.NodeAffinityORM] = {
+                    i.key: schemas.NodeAffinityORM(
                         key=i.key,
                         required_during_scheduling=i.required_during_scheduling,
                     )
@@ -597,7 +634,7 @@ class ResourcePoolRepository(_Base):
                         if new_affinity.required_during_scheduling != existing_affinity.required_during_scheduling:
                             existing_affinity.required_during_scheduling = new_affinity.required_during_scheduling
                     else:
-                        # CREATE a brand new affinity
+                        # CREATE a brand-new affinity
                         cls.node_affinities.append(new_affinity)
                 # REMOVE an affinity
                 for existing_affinity_key, existing_affinity in existing_affinities.items():
@@ -611,7 +648,7 @@ class ResourcePoolRepository(_Base):
                 }
                 for new_tol_key, new_tol in new_tolerations.items():
                     if new_tol_key not in existing_tolerations:
-                        # CREATE a brand new toleration
+                        # CREATE a brand-new toleration
                         cls.tolerations.append(new_tol)
                 # REMOVE a toleration
                 for existing_tol_key, existing_tol in existing_tolerations.items():
@@ -680,7 +717,7 @@ class ResourcePoolRepository(_Base):
                     message=f"The resource pool with ID {resource_pool_id} or the resource "
                     f"class with ID {class_id} do not exist, or they are not related."
                 )
-            stmt = select(schemas.NodeAffintyORM).where(schemas.NodeAffintyORM.resource_class_id == class_id)
+            stmt = select(schemas.NodeAffinityORM).where(schemas.NodeAffinityORM.resource_class_id == class_id)
             res = await session.execute(stmt)
             return [i.dump() for i in res.scalars().all()]
 
@@ -694,7 +731,7 @@ class ResourcePoolRepository(_Base):
                     message=f"The resource pool with ID {resource_pool_id} or the resource "
                     f"class with ID {class_id} do not exist, or they are not related."
                 )
-            stmt = delete(schemas.NodeAffintyORM).where(schemas.NodeAffintyORM.resource_class_id == class_id)
+            stmt = delete(schemas.NodeAffinityORM).where(schemas.NodeAffinityORM.resource_class_id == class_id)
             await session.execute(stmt)
 
     async def get_quota(self, api_user: base_models.APIUser, resource_pool_id: int) -> models.Quota:
@@ -747,7 +784,7 @@ class ResourcePoolRepository(_Base):
 
 
 @dataclass
-class Respository2Users:
+class Repository2Users:
     """Information about which users can access a specific resource pool."""
 
     resource_pool_id: int
@@ -771,7 +808,7 @@ class UserRepository(_Base):
         api_user: base_models.APIUser,
         resource_pool_id: int,
         keycloak_id: Optional[str] = None,
-    ) -> Respository2Users:
+    ) -> Repository2Users:
         """Get users of a specific resource pool from the database."""
         async with self.session_maker() as session, session.begin():
             stmt = (
@@ -812,7 +849,7 @@ class UserRepository(_Base):
                     allowed = [specific_user]
             elif not rp.public and not rp.default:
                 allowed = [user.dump() for user in rp.users]
-            return Respository2Users(rp.id, allowed, disallowed)
+            return Repository2Users(rp.id, allowed, disallowed)
 
     async def get_user_resource_pools(
         self,
@@ -1066,14 +1103,14 @@ class ClusterRepository:
                         message=f"You are patching cluster {saved_cluster.id} which uses or will use https but"
                         "you are using or will use both the TLS secret name and the flag "
                         "that indicates that the cluster default TLS secret should be used.",
-                        detail="Please only use only one of the two configuration options.",
+                        detail="Please use only one of the two configuration options.",
                     )
                 case ("https", ResetType.Reset, False) | ("https", "", False):
                     raise errors.ValidationError(
                         message=f"You are patching cluster {saved_cluster.id} which uses or will use https but"
                         "you are also removing both the TLS secret name and the flag "
                         "that indicates that the cluster default TLS secret should be used.",
-                        detail="Please only use only one of the two configuration options.",
+                        detail="Please use only one of the two configuration options.",
                     )
 
             for key, value in asdict(cluster).items():
