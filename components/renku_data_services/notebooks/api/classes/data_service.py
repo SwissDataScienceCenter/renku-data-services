@@ -61,12 +61,6 @@ class CRCValidator:
         """Get the default resource class from the default resource pool."""
         return await self.rp_repo.get_default_resource_class()
 
-    async def _get_resource_pools(
-        self,
-        user: APIUser,
-    ) -> list[ResourcePool]:
-        return await self.rp_repo.filter_resource_pools(user)
-
 
 @dataclass
 class DummyCRCValidator:
