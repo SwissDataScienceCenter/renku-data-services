@@ -341,8 +341,16 @@ class DependencyManager:
             user_repo=kc_user_repo,
             authz=authz,
         )
+        resource_requests_repo = ResourceRequestsRepo(
+            session_maker=config.db.async_session_maker,
+        )
+        resource_usage_service = ResourceUsageService(repo=resource_requests_repo)
         rp_repo = ResourcePoolRepository(
-            session_maker=config.db.async_session_maker, quotas_repo=quota_repo, authz=authz
+            session_maker=config.db.async_session_maker,
+            quotas_repo=quota_repo,
+            authz=authz,
+            resource_usage_service=resource_usage_service,
+            resource_requests_repo=resource_requests_repo,
         )
         storage_repo = StorageRepository(
             session_maker=config.db.async_session_maker,
@@ -451,10 +459,6 @@ class DependencyManager:
         occurrence_repo = OccurrenceRepository(
             session_maker=config.db.async_session_maker,
         )
-        resource_requests_repo = ResourceRequestsRepo(
-            session_maker=config.db.async_session_maker,
-        )
-        resource_usage_service = ResourceUsageService(repo=resource_requests_repo)
         return cls(
             config,
             k8s_client=client,
