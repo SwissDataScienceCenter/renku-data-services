@@ -30,6 +30,7 @@ class BuildsConfig:
 
     enabled: bool = False
     build_output_image_prefix: str | None = None
+    build_output_private_image_prefix: str | None = None
     build_builder_image: str | None = None
     build_run_image: str | None = None
     build_strategy_name: str | None = None
@@ -46,6 +47,7 @@ class BuildsConfig:
         """Create a config from environment variables."""
         enabled = os.environ.get("IMAGE_BUILDERS_ENABLED", "false").lower() == "true"
         build_output_image_prefix = os.environ.get("BUILD_OUTPUT_IMAGE_PREFIX")
+        build_output_private_image_prefix = os.environ.get("BUILD_OUTPUT_PRIVATE_IMAGE_PREFIX")
         build_builder_image = os.environ.get("BUILD_BUILDER_IMAGE")
         build_run_image = os.environ.get("BUILD_RUN_IMAGE")
         build_strategy_name = os.environ.get("BUILD_STRATEGY_NAME")
@@ -116,6 +118,7 @@ class BuildsConfig:
         return cls(
             enabled=enabled or False,
             build_output_image_prefix=build_output_image_prefix or None,
+            build_output_private_image_prefix=build_output_private_image_prefix or None,
             build_builder_image=build_builder_image,
             build_run_image=build_run_image,
             build_strategy_name=build_strategy_name or None,
