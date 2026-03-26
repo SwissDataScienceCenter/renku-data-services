@@ -303,3 +303,18 @@ async def test_start_server(
     _, res = await sanic_client.delete(f"/api/data/sessions/{server_name}", headers=authenticated_user_headers)
 
     assert res.status_code == 204, res.text
+
+
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
+@pytest.mark.sessions
+@pytest.mark.asyncio
+async def test_not_found_server(
+    sanic_client: SanicASGITestClient,
+    authenticated_user_headers: dict[str, str],
+    notebooks_fixtures,
+):
+    server_name = "unknown_server"
+
+    _, res = await sanic_client.get(f"/api/data/sessions/{server_name}", headers=authenticated_user_headers)
+
+    assert res.status_code == 404, res.text
