@@ -224,6 +224,12 @@ components:
           $ref: "#/components/schemas/SessionDataConnectorsOverrideList"
         env_variable_overrides:
           $ref: "#/components/schemas/EnvVariableOverrides"
+        session_type:
+          nullable: true
+          type: string
+          enum:
+            - interactive
+            - non-interactive
       required:
         - launcher_id
       type: object
