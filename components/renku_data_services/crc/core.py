@@ -646,9 +646,12 @@ async def calculate_available_resources(
         return None
 
     # NOTE: Calculate quota based on user limit if it exists, otherwise use total limit
+    # NOTE: A value of 0 for the limit means that there is no limit, so we return None (instead of 0) to inform the
+    # caller that there is no limit.
+    # TODO: Are we sure that total limit is GE user limit?
     available_quota = limits.user_limit.value or limits.total_limit.value
     if available_quota <= 0:
-        return 0.0
+        return None
 
     resource_usage = resource_usage or 0
     remaining_quota = available_quota - resource_usage
