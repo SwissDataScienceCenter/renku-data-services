@@ -144,19 +144,25 @@ class ResourceUsageBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @validate_db_ids
-        async def _get(req: Request, user: base_models.APIUser, resource_pool_id: int) -> HTTPResponse:
-            start_date = self._extract_date(req, "start_date")
-            end_date = self._extract_date(req, "end_date")
-            user_id = req.args.get("user_id")
-            user_id = str(user_id) if user_id else user.id
-            if user_id != user.id and (user.access_token is None or not user.is_admin):
+        @validate(query=apispec.ResourcePoolsResourcePoolIdUsageGetParametersQuery)
+        async def _get(
+            req: Request,
+            user: base_models.APIUser,
+            resource_pool_id: int,
+            query: apispec.ResourcePoolsResourcePoolIdUsageGetParametersQuery,
+        ) -> HTTPResponse:
+            start_date = query.start_date
+            end_date = query.end_date
+            requested_by = query.user_id
+            requested_by = str(requested_by) if requested_by else user.id
+            if requested_by != user.id and (user.access_token is None or not user.is_admin):
                 raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
             result: model.ResourcePoolUsage | None = None
             if start_date:
-                result = await self.rr_svc.get_for_date(resource_pool_id, user_id or "", start_date, end_date)
+                result = await self.rr_svc.get_for_date(resource_pool_id, requested_by or "", start_date, end_date)
             else:
-                result = await self.rr_svc.get_running_week(resource_pool_id, user_id or "")
+                result = await self.rr_svc.get_running_week(resource_pool_id, requested_by or "")
             if result:
                 output = apispec.ResourcePoolUsage(
                     total_usage=apispec.ResourceUsageSummary(
