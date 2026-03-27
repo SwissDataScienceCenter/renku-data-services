@@ -279,8 +279,8 @@
             SOLR_URL = "http://localhost:18983";
             SOLR_CORE = "renku-search-dev";
 
-            AMALTHEA_SESSIONS_VERSION = "refs/heads/eikek/feat-prove-active-session";
-            AMALTHEA_JS_VERSION = "refs/heads/eikek/feat-prove-active-session";
+            AMALTHEA_SESSIONS_VERSION = "refs/heads/eikek/non-interactive-session";
+
           });
 
         cnt = let
