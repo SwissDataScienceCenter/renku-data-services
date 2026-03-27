@@ -813,6 +813,9 @@ async def start_session(
     if session_location == SessionLocation.remote and not user.is_authenticated:
         raise errors.ValidationError(message="Anonymous users cannot start remote sessions.")
 
+    if session_location == SessionLocation.remote and launch_request.non_interactive:
+        raise errors.ValidationError(message="Non-Interactive sessions are not possible for remote sessions")
+
     environment = launcher.environment
     image = environment.container_image
     work_dir = environment.working_directory
@@ -1355,6 +1358,7 @@ def validate_session_post_request(body: apispec.SessionPostRequest) -> SessionLa
         resource_class_id=body.resource_class_id,
         data_connectors_overrides=data_connectors_overrides,
         env_variable_overrides=env_variable_overrides,
+        non_interactive=body.session_type == apispec.SessionType.non_interactive,
     )
 
 

@@ -194,3 +194,4 @@ class SessionLaunchRequest:
     resource_class_id: int | None
     data_connectors_overrides: list[SessionDataConnectorOverride] | None
     env_variable_overrides: list[SessionEnvVar] | None
+    non_interactive: bool
