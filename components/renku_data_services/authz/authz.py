@@ -137,6 +137,8 @@ class _Relation(StrEnum):
     data_connector_platform = "data_connector_platform"
     data_connector_namespace = "data_connector_namespace"
     linked_to = "linked_to"
+    member = "member"
+    prohibited = "prohibited"
 
     @classmethod
     def from_role(cls, role: Role) -> "_Relation":
@@ -157,6 +159,10 @@ class _Relation(StrEnum):
                 return Role.EDITOR
             case _Relation.viewer:
                 return Role.VIEWER
+            case _Relation.member:
+                return Role.VIEWER
+            case _Relation.prohibited:
+                raise errors.ProgrammingError(message="Cannot map prohibited relation to a role")
         raise errors.ProgrammingError(message=f"Cannot map relation {self} to any role")
 
 
