@@ -8,9 +8,6 @@ Create Date: 2026-03-26 15:30:31.073961
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.sql import text
-
-
 from authzed.api.v1 import (
     ObjectReference,
     Relationship,
@@ -18,7 +15,7 @@ from authzed.api.v1 import (
     SubjectReference,
     WriteRelationshipsRequest,
 )
-
+from sqlalchemy.sql import text
 
 from renku_data_services.app_config import logging
 from renku_data_services.authz.authz import _AuthzConverter
@@ -57,7 +54,7 @@ def upgrade() -> None:
     user_wildcard = SubjectReference(object=ObjectReference(object_type="user", object_id="*"))
     anon_wildcard = SubjectReference(object=ObjectReference(object_type="anonymous_user", object_id="*"))
 
-    pools = conn.execute(text("SELECT id, public, \"default\" FROM resource_pools.resource_pools")).fetchall()
+    pools = conn.execute(text('SELECT id, public, "default" FROM resource_pools.resource_pools')).fetchall()
 
     if not pools:
         logger.info("No resource pools found, skipping data migration")
@@ -113,9 +110,7 @@ def upgrade() -> None:
         updates.append(
             RelationshipUpdate(
                 operation=RelationshipUpdate.OPERATION_TOUCH,
-                relationship=Relationship(
-                    relationship=Relationship(resource=pool_ref, relation="member", subject=user_ref),
-                ),
+                relationship=Relationship(resource=pool_ref, relation="member", subject=user_ref),
             )
         )
 
@@ -129,9 +124,7 @@ def upgrade() -> None:
 
         default_pool_ref = _AuthzConverter.resource_pool(default_pool_id)
         for user_row in no_access_users:
-            user_ref = SubjectReference(
-                object=ObjectReference(object_type="user", object_id=user_row[0])
-            )
+            user_ref = SubjectReference(object=ObjectReference(object_type="user", object_id=user_row[0]))
             updates.append(
                 RelationshipUpdate(
                     operation=RelationshipUpdate.OPERATION_TOUCH,
