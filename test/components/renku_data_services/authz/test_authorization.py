@@ -30,7 +30,6 @@ regular_user3 = APIUser(is_admin=False, id="user3-id", access_token="some-token3
 POOL_ID = 9001
 
 
-
 def _pool_updates(pool_id: int, *, public: bool) -> list[RelationshipUpdate]:
     """Build all relationship updates needed to create a resource pool in Authzed."""
     pool_ref = _AuthzConverter.resource_pool(pool_id)
@@ -59,7 +58,9 @@ def _pool_updates(pool_id: int, *, public: bool) -> list[RelationshipUpdate]:
     return updates
 
 
-def _rel(pool_id: int, relation: str, user_id: str, *, op: int = RelationshipUpdate.OPERATION_TOUCH) -> RelationshipUpdate:
+def _rel(
+    pool_id: int, relation: str, user_id: str, *, op: int = RelationshipUpdate.OPERATION_TOUCH
+) -> RelationshipUpdate:
     return RelationshipUpdate(
         operation=op,
         relationship=Relationship(
@@ -417,7 +418,6 @@ async def test_listing_non_public_projects(app_manager_instance: DependencyManag
     assert public_project_id_str not in set(ids_user2)
 
 
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize("public_pool", [True, False])
 async def test_resource_pool_base_access(
@@ -425,9 +425,7 @@ async def test_resource_pool_base_access(
 ) -> None:
     """Base access: public pools are open to everyone; private pools block non-members."""
     authz = app_manager_instance.authz
-    await authz.client.WriteRelationships(
-        WriteRelationshipsRequest(updates=_pool_updates(POOL_ID, public=public_pool))
-    )
+    await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=_pool_updates(POOL_ID, public=public_pool)))
 
     # Admin can always use and write
     assert await authz.has_permission(admin_user, ResourceType.resource_pool, POOL_ID, Scope.USE)
@@ -487,14 +485,10 @@ async def test_resource_pool_admin_bypasses_prohibited(
 
 
 @pytest.mark.asyncio
-async def test_resource_pool_add_remove_member(
-    app_manager_instance: DependencyManager, bootstrap_admins
-) -> None:
+async def test_resource_pool_add_remove_member(app_manager_instance: DependencyManager, bootstrap_admins) -> None:
     """Adding and removing a member dynamically grants and revokes access."""
     authz = app_manager_instance.authz
-    await authz.client.WriteRelationships(
-        WriteRelationshipsRequest(updates=_pool_updates(POOL_ID, public=False))
-    )
+    await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=_pool_updates(POOL_ID, public=False)))
 
     assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.USE)
 
@@ -512,14 +506,10 @@ async def test_resource_pool_add_remove_member(
 
 
 @pytest.mark.asyncio
-async def test_resource_pool_add_remove_prohibited(
-    app_manager_instance: DependencyManager, bootstrap_admins
-) -> None:
+async def test_resource_pool_add_remove_prohibited(app_manager_instance: DependencyManager, bootstrap_admins) -> None:
     """Adding and removing a prohibited relation dynamically blocks and restores access."""
     authz = app_manager_instance.authz
-    await authz.client.WriteRelationships(
-        WriteRelationshipsRequest(updates=_pool_updates(POOL_ID, public=True))
-    )
+    await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=_pool_updates(POOL_ID, public=True)))
 
     assert await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.USE)
 
@@ -537,9 +527,7 @@ async def test_resource_pool_add_remove_prohibited(
 
 
 @pytest.mark.asyncio
-async def test_resource_pool_isolation(
-    app_manager_instance: DependencyManager, bootstrap_admins
-) -> None:
+async def test_resource_pool_isolation(app_manager_instance: DependencyManager, bootstrap_admins) -> None:
     """Membership and prohibition on one pool do not leak to another."""
     pool_a, pool_b = 9001, 9002
     authz = app_manager_instance.authz
@@ -556,4 +544,3 @@ async def test_resource_pool_isolation(
 
     assert await authz.has_permission(regular_user1, ResourceType.resource_pool, pool_a, Scope.USE)
     assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, pool_b, Scope.USE)
-
