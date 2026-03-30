@@ -46,6 +46,7 @@ from renku_data_services.authz.models import (
     Visibility,
 )
 from renku_data_services.base_models.core import InternalServiceAdmin, ResourceType
+from renku_data_services.crc.models import ResourcePool
 from renku_data_services.data_connectors.models import (
     DataConnector,
     DataConnectorToProjectLink,
@@ -217,7 +218,13 @@ class _AuthzConverter:
         return ObjectReference(object_type=ResourceType.data_connector.value, object_id=str(id))
 
     @staticmethod
+    def resource_pool(id: int) -> ObjectReference:
+        """The id should be the id of the ResourcePoolORM object in the DB."""
+        return ObjectReference(object_type=ResourceType.resource_pool.value, object_id=str(id))
+
+    @staticmethod
     def to_object(resource_type: ResourceType, resource_id: str | ULID | int) -> ObjectReference:
+        """Convert a resource type and ID to an Authzed ObjectReference."""
         match (resource_type, resource_id):
             case (ResourceType.project, sid) if isinstance(sid, ULID):
                 return _AuthzConverter.project(sid)
@@ -231,6 +238,8 @@ class _AuthzConverter:
                 return _AuthzConverter.group(rid)
             case (ResourceType.data_connector, dcid) if isinstance(dcid, ULID):
                 return _AuthzConverter.data_connector(dcid)
+            case (ResourceType.resource_pool, rid) if isinstance(rid, int):
+                return _AuthzConverter.resource_pool(rid)
             case (ResourceType.platform, _):
                 return _AuthzConverter.platform()
         raise errors.ProgrammingError(
@@ -274,6 +283,7 @@ def _is_allowed_on_resource(
                 | DataConnector
                 | GlobalDataConnector
                 | DeletedDataConnector
+                | ResourcePool
                 | None
             ) = None
             match resource_type:
@@ -286,6 +296,8 @@ def _is_allowed_on_resource(
                 case ResourceType.data_connector if isinstance(
                     potential_resource, (DataConnector, GlobalDataConnector, DeletedDataConnector)
                 ):
+                    resource = potential_resource
+                case ResourceType.resource_pool if isinstance(potential_resource, ResourcePool):
                     resource = potential_resource
                 case _:
                     raise errors.ProgrammingError(
@@ -307,7 +319,7 @@ def _is_allowed_on_resource(
     return decorator
 
 
-_ID = TypeVar("_ID", str, ULID)
+_ID = TypeVar("_ID", str, ULID, int)
 
 
 def _is_allowed(
@@ -362,7 +374,7 @@ class Authz:
         return self._client
 
     async def _has_permission(
-        self, user: base_models.APIUser, resource_type: ResourceType, resource_id: str | ULID | None, scope: Scope
+        self, user: base_models.APIUser, resource_type: ResourceType, resource_id: str | ULID | int | None, scope: Scope
     ) -> tuple[bool, ZedToken | None]:
         """Checks whether the provided user has a specific permission on the specific resource."""
         if not resource_id:
@@ -385,7 +397,7 @@ class Authz:
         return response.permissionship == CheckPermissionResponse.PERMISSIONSHIP_HAS_PERMISSION, response.checked_at
 
     async def has_permission(
-        self, user: base_models.APIUser, resource_type: ResourceType, resource_id: str | ULID, scope: Scope
+        self, user: base_models.APIUser, resource_type: ResourceType, resource_id: str | ULID | int, scope: Scope
     ) -> bool:
         """Checks whether the provided user has a specific permission on the specific resource."""
         res, _ = await self._has_permission(user, resource_type, resource_id, scope)
