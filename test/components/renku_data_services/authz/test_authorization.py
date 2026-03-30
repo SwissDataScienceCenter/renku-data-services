@@ -1,6 +1,7 @@
 import pytest
 import pytest_asyncio
 from authzed.api.v1 import (
+    ObjectReference,
     Relationship,
     RelationshipUpdate,
     SubjectReference,
@@ -23,6 +24,50 @@ admin_user = APIUser(is_admin=True, id="admin-id", access_token="some-token", fu
 anon_user = APIUser(is_admin=False)
 regular_user1 = APIUser(is_admin=False, id="user1-id", access_token="some-token1", full_name="some-user1")  # nosec B106
 regular_user2 = APIUser(is_admin=False, id="user2-id", access_token="some-token2", full_name="some-user2")  # nosec B106
+regular_user3 = APIUser(is_admin=False, id="user3-id", access_token="some-token3", full_name="some-user3")  # nosec B106
+
+
+POOL_ID = 9001
+
+
+
+def _pool_updates(pool_id: int, *, public: bool) -> list[RelationshipUpdate]:
+    """Build all relationship updates needed to create a resource pool in Authzed."""
+    pool_ref = _AuthzConverter.resource_pool(pool_id)
+    updates = [
+        RelationshipUpdate(
+            operation=RelationshipUpdate.OPERATION_TOUCH,
+            relationship=Relationship(
+                resource=pool_ref,
+                relation="resource_pool_platform",
+                subject=SubjectReference(object=_AuthzConverter.platform()),
+            ),
+        ),
+    ]
+    if public:
+        for obj_type in ("user", "anonymous_user"):
+            updates.append(
+                RelationshipUpdate(
+                    operation=RelationshipUpdate.OPERATION_TOUCH,
+                    relationship=Relationship(
+                        resource=pool_ref,
+                        relation="public_user",
+                        subject=SubjectReference(object=ObjectReference(object_type=obj_type, object_id="*")),
+                    ),
+                )
+            )
+    return updates
+
+
+def _rel(pool_id: int, relation: str, user_id: str, *, op: int = RelationshipUpdate.OPERATION_TOUCH) -> RelationshipUpdate:
+    return RelationshipUpdate(
+        operation=op,
+        relationship=Relationship(
+            resource=_AuthzConverter.resource_pool(pool_id),
+            relation=relation,
+            subject=SubjectReference(object=_AuthzConverter.user(user_id)),
+        ),
+    )
 
 
 @pytest_asyncio.fixture
@@ -370,3 +415,145 @@ async def test_listing_non_public_projects(app_manager_instance: DependencyManag
     assert private_project_id2_str in set(ids_user2)
     assert private_project_id1_str not in set(ids_user2)
     assert public_project_id_str not in set(ids_user2)
+
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("public_pool", [True, False])
+async def test_resource_pool_base_access(
+    app_manager_instance: DependencyManager, bootstrap_admins, public_pool: bool
+) -> None:
+    """Base access: public pools are open to everyone; private pools block non-members."""
+    authz = app_manager_instance.authz
+    await authz.client.WriteRelationships(
+        WriteRelationshipsRequest(updates=_pool_updates(POOL_ID, public=public_pool))
+    )
+
+    # Admin can always use and write
+    assert await authz.has_permission(admin_user, ResourceType.resource_pool, POOL_ID, Scope.USE)
+    assert await authz.has_permission(admin_user, ResourceType.resource_pool, POOL_ID, Scope.WRITE)
+
+    # Regular user and anon: use depends on public, write is always denied
+    assert public_pool == await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.USE)
+    assert public_pool == await authz.has_permission(anon_user, ResourceType.resource_pool, POOL_ID, Scope.USE)
+    assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.WRITE)
+    assert not await authz.has_permission(anon_user, ResourceType.resource_pool, POOL_ID, Scope.WRITE)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("public_pool", [True, False])
+async def test_resource_pool_member_access(
+    app_manager_instance: DependencyManager, bootstrap_admins, public_pool: bool
+) -> None:
+    """An explicit member can use a pool regardless of visibility; non-members still follow public rules."""
+    authz = app_manager_instance.authz
+    updates = _pool_updates(POOL_ID, public=public_pool) + [_rel(POOL_ID, "member", regular_user1.id)]
+    await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=updates))
+
+    # Member can always use
+    assert await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.USE)
+    # Member still cannot write
+    assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.WRITE)
+    # Non-member follows public rules
+    assert public_pool == await authz.has_permission(regular_user2, ResourceType.resource_pool, POOL_ID, Scope.USE)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("public_pool", [True, False])
+@pytest.mark.parametrize("is_member", [True, False])
+async def test_resource_pool_prohibited_blocks_access(
+    app_manager_instance: DependencyManager, bootstrap_admins, public_pool: bool, is_member: bool
+) -> None:
+    """A prohibited user is blocked regardless of public visibility or membership."""
+    authz = app_manager_instance.authz
+    updates = _pool_updates(POOL_ID, public=public_pool) + [_rel(POOL_ID, "prohibited", regular_user1.id)]
+    if is_member:
+        updates.append(_rel(POOL_ID, "member", regular_user1.id))
+    await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=updates))
+
+    assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.USE)
+
+
+@pytest.mark.asyncio
+async def test_resource_pool_admin_bypasses_prohibited(
+    app_manager_instance: DependencyManager, bootstrap_admins
+) -> None:
+    """Admin bypasses the prohibited flag via the platform->is_admin union."""
+    authz = app_manager_instance.authz
+    updates = _pool_updates(POOL_ID, public=True) + [_rel(POOL_ID, "prohibited", admin_user.id)]
+    await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=updates))
+
+    assert await authz.has_permission(admin_user, ResourceType.resource_pool, POOL_ID, Scope.USE)
+
+
+@pytest.mark.asyncio
+async def test_resource_pool_add_remove_member(
+    app_manager_instance: DependencyManager, bootstrap_admins
+) -> None:
+    """Adding and removing a member dynamically grants and revokes access."""
+    authz = app_manager_instance.authz
+    await authz.client.WriteRelationships(
+        WriteRelationshipsRequest(updates=_pool_updates(POOL_ID, public=False))
+    )
+
+    assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.USE)
+
+    await authz.client.WriteRelationships(
+        WriteRelationshipsRequest(updates=[_rel(POOL_ID, "member", regular_user1.id)])
+    )
+    assert await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.USE)
+
+    await authz.client.WriteRelationships(
+        WriteRelationshipsRequest(
+            updates=[_rel(POOL_ID, "member", regular_user1.id, op=RelationshipUpdate.OPERATION_DELETE)]
+        )
+    )
+    assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.USE)
+
+
+@pytest.mark.asyncio
+async def test_resource_pool_add_remove_prohibited(
+    app_manager_instance: DependencyManager, bootstrap_admins
+) -> None:
+    """Adding and removing a prohibited relation dynamically blocks and restores access."""
+    authz = app_manager_instance.authz
+    await authz.client.WriteRelationships(
+        WriteRelationshipsRequest(updates=_pool_updates(POOL_ID, public=True))
+    )
+
+    assert await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.USE)
+
+    await authz.client.WriteRelationships(
+        WriteRelationshipsRequest(updates=[_rel(POOL_ID, "prohibited", regular_user1.id)])
+    )
+    assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.USE)
+
+    await authz.client.WriteRelationships(
+        WriteRelationshipsRequest(
+            updates=[_rel(POOL_ID, "prohibited", regular_user1.id, op=RelationshipUpdate.OPERATION_DELETE)]
+        )
+    )
+    assert await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.USE)
+
+
+@pytest.mark.asyncio
+async def test_resource_pool_isolation(
+    app_manager_instance: DependencyManager, bootstrap_admins
+) -> None:
+    """Membership and prohibition on one pool do not leak to another."""
+    pool_a, pool_b = 9001, 9002
+    authz = app_manager_instance.authz
+    await authz.client.WriteRelationships(
+        WriteRelationshipsRequest(
+            updates=_pool_updates(pool_a, public=False)
+            + _pool_updates(pool_b, public=True)
+            + [
+                _rel(pool_a, "member", regular_user1.id),
+                _rel(pool_b, "prohibited", regular_user1.id),
+            ]
+        )
+    )
+
+    assert await authz.has_permission(regular_user1, ResourceType.resource_pool, pool_a, Scope.USE)
+    assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, pool_b, Scope.USE)
+
