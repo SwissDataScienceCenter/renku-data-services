@@ -636,14 +636,14 @@ async def calculate_available_resources(
     resource_pool_id: int,
     resource_class_id: int,
     resource_usage: float | None,
-) -> float | None:
-    """Calculate available hours for a resource class in a pool.
+) -> tuple[float | None, float | None]:
+    """Calculate available hours and percentage for a resource class in a pool.
 
-    Return available hours based on remaining quota, or None if no limits are set
+    Return available hours and its percentage based on remaining quota, or (None, None) if no limits are set
     """
     limits = await resource_requests_repo.find_resource_pool_limits(resource_pool_id)
     if not limits:
-        return None
+        return None, None
 
     # NOTE: Calculate quota based on user limit if it exists, otherwise use total limit
     # NOTE: A value of 0 for the limit means that there is no limit, so we return None (instead of 0) to inform the
@@ -651,19 +651,20 @@ async def calculate_available_resources(
     # TODO: Are we sure that total limit is GE user limit?
     available_quota = limits.user_limit.value or limits.total_limit.value
     if available_quota <= 0:
-        return None
+        return None, None
 
     resource_usage = resource_usage or 0
     remaining_quota = available_quota - resource_usage
 
     if remaining_quota <= 0:
-        return 0.0
+        return 0.0, 0.0
 
     resource_class_cost = await resource_requests_repo.find_resource_class_costs(resource_pool_id, resource_class_id)
 
     if not resource_class_cost or resource_class_cost.cost.value == 0:
         # NOTE: No cost is defined, so we cannot calculate remaining hours
-        return None
+        return None, None
 
     remaining_hours = remaining_quota / resource_class_cost.cost.value
-    return remaining_hours
+    remaining_percentage = (remaining_quota / available_quota) * 100.0
+    return remaining_hours, remaining_percentage
