@@ -280,7 +280,7 @@
             SOLR_CORE = "renku-search-dev";
 
             AMALTHEA_SESSIONS_VERSION = "refs/heads/eikek/non-interactive-session";
-            RENKU_ENV = "default";
+            RENKU_ENV = "renku-ci-ds-1246";
             K8S_NAMESPACE = "default";
           });
 
