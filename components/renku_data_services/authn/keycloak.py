@@ -85,15 +85,12 @@ class KeycloakAuthenticator(Authenticator):
     def _validate(self, token: str) -> dict[str, Any]:
         try:
             sk = self.jwks.get_signing_key_from_jwt(token)
-            return cast(
-                dict[str, Any],
-                jwt.decode(
-                    token,
-                    key=sk.key,
-                    algorithms=self.algorithms,
-                    audience=["renku", "renku-ui", "renku-cli", "swagger"],
-                    verify=True,
-                ),
+            return jwt.decode(
+                token,
+                key=sk.key,
+                algorithms=self.algorithms,
+                audience=["renku", "renku-ui", "renku-cli", "swagger"],
+                verify=True,
             )
         except (jwt.InvalidSignatureError, jwt.MissingRequiredClaimError):
             # NOTE: the above errors are subclasses of `InvalidToken` below but they will result from keycloak
