@@ -9,6 +9,7 @@ from sanic_ext.extras.validation.validators import VALIDATION_ERROR
 from ulid import ULID
 
 from renku_data_services import errors
+from renku_data_services.authn.api.blueprints import InternalAuthenticationBP
 from renku_data_services.base_api.error_handler import CustomErrorHandler
 from renku_data_services.base_api.misc import MiscBP
 from renku_data_services.base_models.core import Slug
@@ -281,6 +282,10 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
         rr_svc=dm.resource_usage_service,
         authenticator=dm.authenticator,
     )
+    internal_authentication = InternalAuthenticationBP(
+        name="internal_authentication",
+        url_prefix=url_prefix,
+    )
     app.blueprint(
         [
             resource_pools.blueprint(),
@@ -311,6 +316,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
             notifications.blueprint(),
             capacity_reservation.blueprint(),
             resource_usage.blueprint(),
+            internal_authentication.blueprint(),
         ]
     )
     if builds is not None:
