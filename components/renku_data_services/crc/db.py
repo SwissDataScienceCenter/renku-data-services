@@ -278,10 +278,14 @@ class ResourcePoolQueryRepository:
                 if self.resource_requests_repo:
                     updated_classes = []
                     for resource_class in rp_model.classes:
-                        resource_available = await calculate_available_resources(
+                        resource_available, resource_available_percentage = await calculate_available_resources(
                             self.resource_requests_repo, rp.id, resource_class.id, resource_usage
                         )
-                        updated_class = replace(resource_class, resource_available=resource_available)
+                        updated_class = replace(
+                            resource_class,
+                            resource_available=resource_available,
+                            resource_available_percentage=resource_available_percentage,
+                        )
                         updated_classes.append(updated_class)
 
                     rp_model = replace(rp_model, classes=updated_classes)
