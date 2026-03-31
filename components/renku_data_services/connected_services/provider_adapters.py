@@ -1,5 +1,6 @@
 """Adapters for each kind of OAuth2 client."""
 
+import os
 from abc import ABC, abstractmethod
 from typing import Any
 from urllib.parse import urljoin, urlparse, urlunparse
@@ -241,21 +242,22 @@ class ZenodoAdapter(ProviderAdapter):
     # if the user is properly authenticated.
     user_info_endpoint = "deposit/depositions"
     user_info_method = "GET"
+    zenodo_url = os.environ.get("ZENODO_URL", "https://zenodo.org").rstrip("/")
 
     @property
     def authorization_url(self) -> str:
         """The authorization URL for the OAuth2 protocol."""
-        return "https://zenodo.org/oauth/authorize"
+        return f"{self.zenodo_url}/oauth/authorize"
 
     @property
     def token_endpoint_url(self) -> str:
         """The token endpoint URL for the OAuth2 protocol."""
-        return "https://zenodo.org/oauth/token"
+        return f"{self.zenodo_url}/oauth/token"
 
     @property
     def api_url(self) -> str:
         """The URL used for API calls on the Resource Server."""
-        return "https://zenodo.org/api/"
+        return f"{self.zenodo_url}/api/"
 
     @property
     def api_common_headers(self) -> dict[str, str] | None:

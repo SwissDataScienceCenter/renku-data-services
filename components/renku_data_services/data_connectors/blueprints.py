@@ -29,16 +29,21 @@ from renku_data_services.base_models.validation import validate_and_dump, valida
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.connected_services.models import ProviderKind
 from renku_data_services.data_connectors import apispec, models
+from renku_data_services.data_connectors.config import DepositConfig
 from renku_data_services.data_connectors.core import (
+    create_deposit_upload,
     dump_storage_with_sensitive_fields,
     prevalidate_unsaved_global_data_connector,
     serialize_deposit,
     transform_secrets_for_back_end,
     transform_secrets_for_front_end,
+    update_deposit_status,
+    update_deposits_statuses,
     validate_data_connector_patch,
     validate_data_connector_secrets_patch,
     validate_deposit,
     validate_deposit_patch,
+    validate_deposit_status_change,
     validate_unsaved_data_connector,
 )
 from renku_data_services.data_connectors.db import (
@@ -46,8 +51,9 @@ from renku_data_services.data_connectors.db import (
     DataConnectorSecretRepository,
 )
 from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
+from renku_data_services.k8s.client_interfaces import K8sClient, SecretClient
 from renku_data_services.k8s.clients import DepositUploadJobClient
-from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
+from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.storage.rclone import RCloneValidator
 
 
@@ -60,8 +66,14 @@ class DataConnectorsBP(CustomBlueprint):
     authenticator: base_models.Authenticator
     metrics: MetricsService
     job_client: DepositUploadJobClient
+    secret_client: SecretClient
     zenodo_client: ZenodoAPIClient
     connected_services_repo: ConnectedServicesRepository
+    data_source_repo: DataSourceRepository
+    dc_storage_class: str
+    data_service_base_url: str
+    k8s_client: K8sClient
+    deposit_config: DepositConfig
 
     def get_all(self) -> BlueprintFactoryResponse:
         """List data connectors."""
@@ -584,24 +596,44 @@ class DataConnectorsBP(CustomBlueprint):
         @only_authenticated
         @validate(json=apispec.DepositPost)
         async def _post_deposit(
-            _: Request,
-            user: base_models.APIUser,
+            request: Request,
+            user: base_models.AuthenticatedAPIUser,
             body: apispec.DepositPost,
         ) -> JSONResponse:
-            # Get token for Zenodo
-            token = await self.__get_zenodo_access_token(user)
-            # Create deposit in Zenodo
-            zenodo_dep = await self.zenodo_client.create_deposit(token, body.name)
-            # Create the deposit in the DB
-            dep = await validate_deposit(user, body, str(zenodo_dep.id), self.data_connector_repo)
-            job_name = "deposit-" + str(ULID()).lower()
-            dep_job = models.UnsavedDepositJob(
-                deposit=dep,
-                name=job_name,
-                cluster_id=DEFAULT_K8S_CLUSTER,
+            existing_deposits, _ = await self.data_connector_repo.get_deposits(
+                user, ULID.from_str(body.data_connector_id)
             )
-            saved_dep = await self.data_connector_repo.create_deposit(user, dep_job)
-            # TODO: Create a job in k8s
+            if len(existing_deposits) != 0:
+                raise errors.ValidationError(
+                    message="Cannot have more than 1 deposit for the same user and data connector.",
+                    detail="Please delete your existing deposit and make a new one afterward.",
+                )
+            token = await self.__get_zenodo_access_token(user)
+
+            # The closure below allows us to tie the creation of the db entry to the successful
+            # creation of the job in kubernetes. I.e. if the k8s creation fails nothing is saved
+            # in the database.
+            async def in_transaction_ops(
+                saved_dep: models.DepositJob,
+            ) -> None:
+                await create_deposit_upload(
+                    request=request,
+                    user=user,
+                    deposit_job=saved_dep,
+                    data_connector_repo=self.data_connector_repo,
+                    storage_class=self.dc_storage_class,
+                    data_service_base_url=self.data_service_base_url,
+                    k8s_client=self.k8s_client,
+                    deposit_config=self.deposit_config,
+                    job_client=self.job_client,
+                    data_connector_secret_repo=self.data_connector_secret_repo,
+                    data_source_repo=self.data_source_repo,
+                    deposit_api_key=token,
+                )
+
+            zenodo_dep = await self.zenodo_client.create_deposit(token, body.name)
+            unsaved_dep = validate_deposit(body, str(zenodo_dep.id))
+            saved_dep = await self.data_connector_repo.create_deposit(user, unsaved_dep, in_transaction_ops)
             return validated_json(apispec.Deposit, serialize_deposit(saved_dep))
 
         return "/deposits", ["POST"], _post_deposit
@@ -611,9 +643,22 @@ class DataConnectorsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _get_deposit(_: Request, user: base_models.APIUser, deposit_id: ULID) -> JSONResponse:
-            saved_dep = await self.data_connector_repo.get_deposit(user, deposit_id)
-            return validated_json(apispec.Deposit, serialize_deposit(saved_dep))
+        @extract_if_none_match
+        async def _get_deposit(
+            _: Request, user: base_models.AuthenticatedAPIUser, deposit_id: ULID, etag: str | None
+        ) -> HTTPResponse:
+            saved_dep = await update_deposit_status(
+                user=user,
+                job=deposit_id,
+                dc_repo=self.data_connector_repo,
+                job_client=self.job_client,
+                namespace=self.deposit_config.namespace,
+            )
+            if saved_dep.etag == etag:
+                return HTTPResponse(status=304)
+
+            headers = {"ETag": saved_dep.etag}
+            return validated_json(apispec.Deposit, serialize_deposit(saved_dep), headers=headers)
 
         return "/deposits/<deposit_id:ulid>", ["GET"], _get_deposit
 
@@ -622,25 +667,98 @@ class DataConnectorsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
+        @if_match_required
         @validate(json=apispec.DepositPatch)
         async def _patch_deposit(
-            _: Request, user: base_models.APIUser, body: apispec.DepositPatch, deposit_id: ULID
+            _: Request, user: base_models.AuthenticatedAPIUser, body: apispec.DepositPatch, deposit_id: ULID
         ) -> JSONResponse:
+            saved_dep = await update_deposit_status(
+                user=user,
+                job=deposit_id,
+                dc_repo=self.data_connector_repo,
+                job_client=self.job_client,
+                namespace=self.deposit_config.namespace,
+            )
             patch = validate_deposit_patch(body)
+            if patch.status:
+                validate_deposit_status_change(saved_dep.deposit.status, patch.status)
+            if patch.status == models.DepositStatus.complete:
+                token = await self.__get_zenodo_access_token(user)
+                zenodo_dep = await self.zenodo_client.get_deposit(token, saved_dep.deposit.original_id)
+                if not zenodo_dep:
+                    raise errors.MissingResourceError(
+                        message=f"The deposit with id {saved_dep.deposit.original_id} "
+                        "cannot be found from the provider."
+                    )
+                if not zenodo_dep.submitted:
+                    raise errors.ValidationError(
+                        message="The deposit needs to be completed and published first before being completed."
+                    )
             saved_dep = await self.data_connector_repo.update_deposit(user, deposit_id, patch)
-            # TODO: When the deposit is completed create a new data connector
+            if patch.status == models.DepositStatus.complete:
+                # If the deposit is being completed then we delete it
+                # We leave it to the user to create a new data connector and link it
+                await self.data_connector_repo.delete_deposit(user, saved_dep.deposit.id)
             return validated_json(apispec.Deposit, serialize_deposit(saved_dep))
 
         return "/deposits/<deposit_id:ulid>", ["PATCH"], _patch_deposit
+
+    def post_deposit_job(self) -> BlueprintFactoryResponse:
+        """Rerun a deposit job."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _post_deposit_job(
+            request: Request, user: base_models.AuthenticatedAPIUser, deposit_id: ULID
+        ) -> HTTPResponse:
+            token = await self.__get_zenodo_access_token(user)
+            saved_dep = await update_deposit_status(
+                user,
+                job=deposit_id,
+                dc_repo=self.data_connector_repo,
+                job_client=self.job_client,
+                namespace=self.deposit_config.namespace,
+            )
+            await self.job_client.delete(saved_dep.to_meta(user.id, self.deposit_config.namespace))
+            new_job_name = "deposit-" + str(ULID()).lower()
+            saved_dep = await self.data_connector_repo.update_deposit(
+                user,
+                saved_dep.deposit.id,
+                models.DepositPatch(job_name=new_job_name, status=models.DepositStatus.in_progress),
+            )
+            await create_deposit_upload(
+                request=request,
+                user=user,
+                storage_class=self.dc_storage_class,
+                k8s_client=self.k8s_client,
+                data_service_base_url=self.data_service_base_url,
+                deposit_job=saved_dep,
+                job_client=self.job_client,
+                deposit_api_key=token,
+                data_source_repo=self.data_source_repo,
+                data_connector_repo=self.data_connector_repo,
+                data_connector_secret_repo=self.data_connector_secret_repo,
+                deposit_config=self.deposit_config,
+            )
+            return HTTPResponse(status=201)
+
+        return "/deposits/<deposit_id:ulid>/job", ["POST"], _post_deposit_job
 
     def delete_deposit(self) -> BlueprintFactoryResponse:
         """Delete a specific deposit."""
 
         @authenticate(self.authenticator)
         @only_authenticated
-        async def _delete_deposit(_: Request, user: base_models.APIUser, deposit_id: ULID) -> HTTPResponse:
+        async def _delete_deposit(_: Request, user: base_models.AuthenticatedAPIUser, deposit_id: ULID) -> HTTPResponse:
+            deposit_job = await update_deposit_status(
+                user,
+                job=deposit_id,
+                dc_repo=self.data_connector_repo,
+                job_client=self.job_client,
+                namespace=self.deposit_config.namespace,
+            )
             await self.data_connector_repo.delete_deposit(user, deposit_id)
-            # TODO: Delete any jobs from k8s
+            await self.job_client.delete(deposit_job.to_meta(user_id=user.id, namespace=self.deposit_config.namespace))
             return HTTPResponse(status=204)
 
         return "/deposits/<deposit_id:ulid>", ["DELETE"], _delete_deposit
@@ -650,12 +768,23 @@ class DataConnectorsBP(CustomBlueprint):
 
         @authenticate(self.authenticator)
         @only_authenticated
+        @validate_query(apispec.PaginationRequest)
         @paginate
         async def _get_deposits(
-            _: Request, user: base_models.APIUser, pagination: PaginationRequest
+            _: Request,
+            user: base_models.AuthenticatedAPIUser,
+            pagination: PaginationRequest,
+            query: apispec.PaginationRequest,
         ) -> tuple[list[dict[str, Any]], int]:
             deposits, total_num = await self.data_connector_repo.get_deposits(
                 user, data_connector_id=None, pagination=pagination
+            )
+            deposits = await update_deposits_statuses(
+                user=user,
+                deposit_jobs=deposits,
+                dc_repo=self.data_connector_repo,
+                job_client=self.job_client,
+                namespace=self.deposit_config.namespace,
             )
             return [validate_and_dump(apispec.Deposit, serialize_deposit(i)) for i in deposits], total_num
 
@@ -668,9 +797,46 @@ class DataConnectorsBP(CustomBlueprint):
         @only_authenticated
         @paginate
         async def _get_dc_deposits(
-            _: Request, user: base_models.APIUser, data_connector_id: ULID, pagination: PaginationRequest
+            _: Request, user: base_models.AuthenticatedAPIUser, data_connector_id: ULID, pagination: PaginationRequest
         ) -> tuple[list[dict[str, Any]], int]:
             deposits, total_num = await self.data_connector_repo.get_deposits(user, data_connector_id, pagination)
+            deposits = await update_deposits_statuses(
+                user=user,
+                deposit_jobs=deposits,
+                dc_repo=self.data_connector_repo,
+                job_client=self.job_client,
+                namespace=self.deposit_config.namespace,
+            )
             return [validate_and_dump(apispec.Deposit, serialize_deposit(i)) for i in deposits], total_num
 
         return "/data_connectors/<data_connector_id:ulid>/deposits", ["GET"], _get_dc_deposits
+
+    def get_dc_deposit_logs(self) -> BlueprintFactoryResponse:
+        """Get logs of a specific deposit."""
+
+        @authenticate(self.authenticator)
+        @only_authenticated
+        async def _get_dc_deposit_logs(
+            _: Request, user: base_models.AuthenticatedAPIUser, deposit_id: ULID
+        ) -> JSONResponse:
+            saved_dep = await update_deposit_status(
+                user=user,
+                job=deposit_id,
+                dc_repo=self.data_connector_repo,
+                job_client=self.job_client,
+                namespace=self.deposit_config.namespace,
+            )
+            all_logs = await self.job_client.logs(
+                saved_dep.to_meta(user_id=user.id, namespace=self.deposit_config.namespace)
+            )
+            output: dict[str, str] = {}
+            containers = sorted(all_logs.keys())
+            for container in containers:
+                logs_iter = all_logs[container]
+                logs: list[str] = []
+                async for log in logs_iter:
+                    logs.append(log)
+                output[container] = "\n".join(logs)
+            return validated_json(apispec.DepositLogs, output)
+
+        return "/deposits/<deposit_id:ulid>/logs", ["GET"], _get_dc_deposit_logs

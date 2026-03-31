@@ -491,6 +491,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Deposit"
+        default:
+          $ref: "#/components/responses/Error"
       tags:
         - deposit
     get:
@@ -510,6 +512,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DepositList"
+        default:
+          $ref: "#/components/responses/Error"
       tags:
         - deposit
   /deposits/{deposit_id}:
@@ -529,6 +533,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Deposit"
+        default:
+          $ref: "#/components/responses/Error"
       tags:
         - deposit
     patch:
@@ -546,6 +552,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Deposit"
+        default:
+          $ref: "#/components/responses/Error"
       tags:
         - deposit
     delete:
@@ -553,6 +561,46 @@ paths:
       responses:
         "204":
           description: The data deposit was deleted
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - deposit
+  /deposits/{deposit_id}/logs:
+    parameters:
+      - in: path
+        name: deposit_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+        description: the ID of the data deposit
+    get:
+      summary: Get the logs of a data deposit
+      responses:
+        "200":
+          description: The data deposit logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepositLogs"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - deposit
+  /deposits/{deposit_id}/job:
+    parameters:
+      - in: path
+        name: deposit_id
+        required: true
+        schema:
+          $ref: "#/components/schemas/Ulid"
+        description: the ID of the data deposit
+    post:
+      summary: Rerun a deposit job
+      responses:
+        "201":
+          description: The data deposit job has been recreated
+        default:
+          $ref: "#/components/responses/Error"
       tags:
         - deposit
 components:
@@ -1095,6 +1143,7 @@ components:
         - complete
         - in_progress
         - failed
+        - upload_complete
     DepositSourcePath:
       type: string
       example: /some/path
@@ -1148,10 +1197,19 @@ components:
           $ref: "#/components/schemas/DataConnectorName"
         status:
           $ref: "#/components/schemas/DepositStatus"
+        path:
+          $ref: "#/components/schemas/DepositSourcePath"
     DepositList:
       type: array
       items:
         $ref: "#/components/schemas/Deposit"
+    DepositLogs:
+      type: object
+      additionalProperties:
+        type: string
+      example:
+        "container-A": "Log line 1\nLog line 2"
+        "container-B": "Log line 1\nLog line 2"
 
   responses:
     Error:

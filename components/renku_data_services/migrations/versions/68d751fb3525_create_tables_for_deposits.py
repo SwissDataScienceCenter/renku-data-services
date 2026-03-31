@@ -84,7 +84,9 @@ def upgrade() -> None:
     op.create_index(op.f("ix_storage_deposits_source_id"), "deposits", ["source_id"], unique=False, schema="storage")
     op.create_index(op.f("ix_storage_deposits_status_id"), "deposits", ["status_id"], unique=False, schema="storage")
     # ### end Alembic commands ###
-    op.execute("INSERT INTO storage.deposit_statuses (status) VALUES ('in_progress'), ('complete')")
+    op.execute(
+        "INSERT INTO storage.deposit_statuses (status) VALUES ('in_progress'), ('complete'), ('failed'), ('upload_complete')"
+    )
     op.execute("INSERT INTO storage.deposit_sources (source) VALUES ('zenodo')")
 
 

@@ -8,6 +8,7 @@ from renku_data_services import errors
 from renku_data_services.app_config.config import KeycloakConfig, PosthogConfig, SentryConfig, TrustedProxiesConfig
 from renku_data_services.app_config.logging import Config as LoggingConfig
 from renku_data_services.authz.config import AuthzConfig
+from renku_data_services.data_connectors.config import DepositConfig
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.notebooks.config import NotebooksConfig
 from renku_data_services.secrets.config import PublicSecretsConfig
@@ -39,6 +40,7 @@ class Config:
     log_cfg: LoggingConfig
     version: str
     alertmanager_webhook_role: str
+    deposit_config: DepositConfig
 
     @classmethod
     def from_env(cls, db: DBConfig | None = None) -> Self:
@@ -81,4 +83,5 @@ class Config:
             gitlab_url=gitlab_url,
             log_cfg=LoggingConfig.from_env(),
             alertmanager_webhook_role=os.environ.get("ALERTMANAGER_WEBHOOK_ROLE", "alertmanager-webhook"),
+            deposit_config=DepositConfig.from_env(),
         )
