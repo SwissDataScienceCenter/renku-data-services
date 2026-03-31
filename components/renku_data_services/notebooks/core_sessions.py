@@ -1014,7 +1014,7 @@ async def start_session(
             hibernated=False,
             reconcileStrategy=ReconcileStrategy.whenFailedOrHibernated,
             priorityClassName=resource_class.quota,
-            sessionType="non-interactive" if launch_request.non_interactive else "interactive",
+            sessionType="NonInteractive" if launch_request.non_interactive else "Interactive",
             session=Session(
                 image=image,
                 imagePullPolicy=ImagePullPolicy.Always,
