@@ -1,7 +1,6 @@
 """Blueprint for resource usage."""
 
 from dataclasses import dataclass
-from datetime import date, datetime
 
 from sanic import HTTPResponse, Request, empty
 from sanic.response import JSONResponse
@@ -134,10 +133,6 @@ class ResourceUsageBP(CustomBlueprint):
             return empty()
 
         return "/resource_pools/<resource_pool_id>/classes/<class_id>/cost", ["DELETE"], _delete
-
-    def _extract_date(self, req: Request, name: str) -> date | None:
-        datestr = req.args.get(name)
-        return datetime.strptime(datestr, "%Y-%m-%d") if datestr is not None else None
 
     def get_pool_usage(self) -> BlueprintFactoryResponse:
         """Get usage of a pool."""
