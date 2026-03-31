@@ -137,7 +137,7 @@ class DataSourceRepository:
         configuration = dict(items)
         if configuration.get("type") != data_connector.storage.configuration.get("type"):
             logger.warning(
-                f"Data connector type changed to {data_connector.storage.configuration.get('type')}, skipping!"
+                f"Data connector type changed to {data_connector.storage.configuration.get("type")}, skipping!"
             )
             return None
 
@@ -212,7 +212,7 @@ class DataSourceRepository:
         if provider is None:
             logger.info(
                 f"Skipping data connector {str(data_connector.id)} of type "
-                f"{data_connector.storage.configuration['type']} "
+                f"{data_connector.storage.configuration["type"]} "
                 f"because no provider of kind {provider_kind.value} was found."
             )
             return None
@@ -220,7 +220,7 @@ class DataSourceRepository:
         if connection is None:
             logger.info(
                 f"Skipping data connector {str(data_connector.id)} of type "
-                f"{data_connector.storage.configuration['type']} "
+                f"{data_connector.storage.configuration["type"]} "
                 f"because no active connection was found; user needs to connect with {provider.provider.id}."
             )
             return None
@@ -228,7 +228,7 @@ class DataSourceRepository:
         if not token_set or not token_set.access_token:
             logger.info(
                 f"Skipping data connector {str(data_connector.id)} of type "
-                f"{data_connector.storage.configuration['type']} "
+                f"{data_connector.storage.configuration["type"]} "
                 f"because the connection is not active; user needs to re-connect with {provider.provider.id}."
             )
             return None
