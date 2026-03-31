@@ -194,6 +194,7 @@ class DependencyManager:
             renku_data_services.notifications.__file__,
             renku_data_services.capacity_reservation.__file__,
             renku_data_services.resource_usage.__file__,
+            renku_data_services.authn.api.__file__,
         ]
 
         api_specs = []

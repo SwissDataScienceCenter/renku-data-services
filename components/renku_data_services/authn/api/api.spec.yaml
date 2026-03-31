@@ -1,0 +1,97 @@
+openapi: 3.0.2
+info:
+  title: Renku Data Services API
+  description: |
+    This service is the main backend for Renku. It provides information about users, projects,
+    cloud storage, access to compute resources and many other things.
+  version: v1
+servers:
+  - url: /api/data
+paths:
+  /internal/authentication/token:
+    post:
+      summary: Obtain a fresh internal token
+      description: |
+        Obtain a fresh internal token by passing in an existing internal token.
+      responses:
+        "200":
+          description: A new internal token was generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalPostTokenResponse"
+        default:
+          $ref: "#/components/responses/Error"
+      tags:
+        - internal_authentication
+components:
+  schemas:
+    InternalPostTokenResponse:
+      description: An internal token and its associated metadata
+      type: object
+      additionalProperties: false
+      properties:
+        access_token:
+          $ref: "#/components/schemas/InternalToken"
+        token_type:
+          $ref: "#/components/schemas/InternalTokenType"
+        expires_in:
+          $ref: "#/components/schemas/InternalTokenExpiresIn"
+      required:
+        - access_token
+        - token_type
+        - expires_in
+    InternalToken:
+      description: An internal token used for authentication
+      type: string
+      example: "some-internal-token"
+    InternalTokenType:
+      description: The type of an internal token
+      type: string
+      enum:
+        - "Bearer"
+    InternalTokenExpiresIn:
+      description: Expiration time in seconds
+      type: integer
+      minimum: 0
+      example: 3600
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: integer
+              minimum: 0
+              exclusiveMinimum: true
+              example: 1404
+            detail:
+              type: string
+              example: "A more detailed optional message showing what the problem was"
+            message:
+              type: string
+              example: "Something went wrong - please try again later"
+            trace_id:
+              type: string
+              example: "ac93950e9e114a55c67fb8e5ef519bbe"
+              description: Sentry trace ID for linking to corresponding log entries
+          required: ["code", "message"]
+      required: ["error"]
+
+  responses:
+    Error:
+      description: The schema for all 4xx and 5xx responses
+      content:
+        "application/json":
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  securitySchemes:
+    oidc:
+      type: openIdConnect
+      openIdConnectUrl: /auth/realms/Renku/.well-known/openid-configuration
+security:
+  - oidc:
+      - openid
