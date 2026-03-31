@@ -1057,6 +1057,7 @@ async def start_session(
             template=Template(metadata=AmaltheaMetadata(annotations=annotations, labels=labels)),
         ),
     )
+    logger.info(f"Push Session: {session}")
     secrets_to_create = session_extras.secrets or []
     for s in secrets_to_create:
         logger.debug(f"Creating {len(secrets_to_create)} session secrets")
