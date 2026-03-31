@@ -1231,6 +1231,8 @@ components:
           $ref: "#/components/schemas/NodeAffinityList"
         resource_available:
           $ref: "#/components/schemas/ResourceAvailable"
+        resource_available_percentage:
+          $ref: "#/components/schemas/ResourceAvailablePercentage"
       required: ["cpu", "memory", "gpu", "max_storage", "name", "id", "default", "default_storage"]
       example:
         name: "resource class"
@@ -1705,6 +1707,14 @@ components:
       description: Amount of a resource available (in hours)
       example: 3.141
       minimum: 0
+    ResourceAvailablePercentage:
+      type: number
+      format: float
+      description: Percentage of available resources based on quota
+      example: 75.5
+      minimum: 0
+      maximum: 100
+      default: null
     ResourceUsage:
       type: number
       format: double
