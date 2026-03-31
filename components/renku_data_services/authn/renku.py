@@ -5,15 +5,20 @@ This authenticator can mint and verify its own tokens.
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Final
+from typing import TYPE_CHECKING, Final, Self
 
+import jwt
 from sanic import Request
 from ulid import ULID
 
+from renku_data_services.app_config.config import InternalAuthenticationConfig
 from renku_data_services.base_models.core import APIUser, Authenticator
 from renku_data_services.errors import errors
 
-# _strict_jwt = jwt.PyJWT({"enforce_minimum_key_length": True})
+if TYPE_CHECKING:
+    from renku_data_services.app_config.config import InternalAuthenticationConfig
+
+_strict_jwt = jwt.PyJWT({"enforce_minimum_key_length": True})
 
 # TODO: make these configurable (from usual config)
 _EXPIRATION: Final[timedelta] = timedelta(minutes=5)
@@ -44,6 +49,61 @@ class RenkuSelfAuthenticator(Authenticator[APIUser]):
         """Generate the payload for a new token."""
         result: dict[str, str | int] = dict()
         user_claims = RenkuSelfAuthenticator._make_user_claims(user=user)
+        result.update(user_claims)
+        token_id = ULID()
+        now = datetime.now(UTC)
+        result["exp"] = int((now + _EXPIRATION).timestamp())
+        result["iat"] = int(now.timestamp())
+        result["nbf"] = result["iat"]
+        result["iss"] = _ISSUER
+        result["aud"] = _AUDIENCE
+        result["jti"] = str(token_id)
+        if scope:
+            result["scope"] = scope
+        return result
+
+    @staticmethod
+    def _make_user_claims(user: APIUser) -> dict[str, str]:
+        """Generate user claims from a user instance."""
+        if not user.is_authenticated or not user.id or not user.email:
+            raise errors.ProgrammingError(message="Cannot make user claims if not authenticated.")
+        result: dict[str, str] = dict()
+        result["sub"] = user.id
+        result["email"] = user.email
+        if user.full_name:
+            result["name"] = user.full_name
+        if user.first_name:
+            result["given_name"] = user.first_name
+        if user.last_name:
+            result["family_name"] = user.last_name
+        return result
+
+
+@dataclass(frozen=True, kw_only=True)
+class RenkuSelfTokenMint:
+    """Renku data services token mint.
+
+    Creates internal tokens for authentication. Internal tokens are used by sessions and their sidecar services.
+    """
+
+    secret_key: bytes = field(repr=False)
+    algorithm: str = "HS512"
+
+    @classmethod
+    def from_config(cls, config: "InternalAuthenticationConfig") -> Self:
+        """Create an instance from a configuration object."""
+        return cls(secret_key=config.secret_key)
+
+    def create_token(self, user: APIUser, scope: str | None = None) -> str:
+        """Create a new internal token for a given user."""
+        payload = self._make_payload(user=user, scope=scope)
+        return _strict_jwt.encode(payload, key=self.secret_key, algorithm=self.algorithm)
+
+    @staticmethod
+    def _make_payload(user: APIUser, scope: str | None = None) -> dict[str, str | int]:
+        """Generate the payload for a new token."""
+        result: dict[str, str | int] = dict()
+        user_claims = RenkuSelfTokenMint._make_user_claims(user=user)
         result.update(user_claims)
         token_id = ULID()
         now = datetime.now(UTC)

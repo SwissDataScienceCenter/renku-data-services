@@ -7,6 +7,7 @@ from dataclasses import asdict
 
 from kubernetes import client
 
+from renku_data_services.authn.renku import RenkuSelfTokenMint
 from renku_data_services.base_models.core import AnonymousAPIUser, AuthenticatedAPIUser
 from renku_data_services.notebooks.api.amalthea_patches.utils import get_certificates_volume_mounts
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
@@ -14,10 +15,12 @@ from renku_data_services.notebooks.config import NotebooksConfig
 
 
 async def main_container(
+    server_name: str,
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     config: NotebooksConfig,
     repositories: list[Repository],
     git_providers: list[GitProvider],
+    internal_token_mint: RenkuSelfTokenMint,
 ) -> client.V1Container | None:
     """The patch that adds the git proxy container to a session statefulset."""
     if not user.is_authenticated or not repositories or user.access_token is None or user.refresh_token is None:
@@ -29,6 +32,9 @@ async def main_container(
         etc_certs=True,
         read_only_etc_certs=True,
     )
+
+    internal_token_scope = f"session:{server_name}"
+    internal_token = internal_token_mint.create_token(user=user, scope=internal_token_scope)
 
     prefix = "GIT_PROXY_"
     env = [
@@ -59,6 +65,11 @@ async def main_container(
             value=json.dumps(
                 [dict(id=provider.id, access_token_url=provider.access_token_url) for provider in git_providers]
             ),
+        ),
+        # TODO: internal token
+        client.V1EnvVar(
+            name=f"{prefix}RENKU_SELF_TOKEN",
+            value=internal_token,
         ),
     ]
     container = client.V1Container(

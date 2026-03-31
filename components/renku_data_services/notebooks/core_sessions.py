@@ -22,6 +22,7 @@ from ulid import ULID
 from yaml import safe_dump
 
 from renku_data_services.app_config import logging
+from renku_data_services.authn.renku import RenkuSelfTokenMint
 from renku_data_services.base_models import RESET, AnonymousAPIUser, APIUser, AuthenticatedAPIUser, ResetType
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.crc.db import ClusterRepository, ResourcePoolRepository
@@ -150,14 +151,21 @@ async def get_extra_init_containers(
 
 async def get_extra_containers(
     nb_config: NotebooksConfig,
+    server_name: str,
     user: AnonymousAPIUser | AuthenticatedAPIUser,
     repositories: list[Repository],
     git_providers: list[GitProvider],
+    internal_token_mint: RenkuSelfTokenMint,
 ) -> SessionExtraResources:
     """Get the extra containers added to amalthea sessions."""
     conts: list[ExtraContainer] = []
     git_proxy_container = await git_proxy.main_container(
-        user=user, config=nb_config, repositories=repositories, git_providers=git_providers
+        server_name=server_name,
+        user=user,
+        config=nb_config,
+        repositories=repositories,
+        git_providers=git_providers,
+        internal_token_mint=internal_token_mint,
     )
     if git_proxy_container:
         conts.append(ExtraContainer.model_validate(sanitizer(git_proxy_container)))
@@ -838,6 +846,7 @@ async def start_session(
     metrics: MetricsService,
     image_check_repo: ImageCheckRepository,
     data_source_repo: DataSourceRepository,
+    internal_token_mint: RenkuSelfTokenMint,
 ) -> tuple[AmaltheaSessionV1Alpha1, bool]:
     """Start an Amalthea session.
 
@@ -941,7 +950,9 @@ async def start_session(
     )
 
     # Extra containers
-    session_extras = session_extras.concat(await get_extra_containers(nb_config, user, repositories, git_providers))
+    session_extras = session_extras.concat(
+        await get_extra_containers(nb_config, server_name, user, repositories, git_providers, internal_token_mint)
+    )
 
     # Cluster settings (ingress, storage class, etc)
     cluster_settings: ClusterSettings
@@ -1150,6 +1161,7 @@ async def patch_session(
     image_check_repo: ImageCheckRepository,
     data_source_repo: DataSourceRepository,
     metrics: MetricsService,
+    internal_token_mint: RenkuSelfTokenMint,
 ) -> AmaltheaSessionV1Alpha1:
     """Patch an Amalthea session."""
     session = await nb_config.k8s_v2_client.get_session(session_id, user.id)
@@ -1290,7 +1302,9 @@ async def patch_session(
     )
 
     # Extra containers
-    session_extras = session_extras.concat(await get_extra_containers(nb_config, user, repositories, git_providers))
+    session_extras = session_extras.concat(
+        await get_extra_containers(nb_config, server_name, user, repositories, git_providers, internal_token_mint)
+    )
 
     # Patching the image pull secret
     image = session.spec.session.image

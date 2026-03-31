@@ -11,8 +11,10 @@ instantiated multiple times without creating multiple database connections.
 
 from __future__ import annotations
 
+import base64
 import os
-from dataclasses import dataclass
+import random
+from dataclasses import dataclass, field
 
 from renku_data_services import errors
 
@@ -99,3 +101,28 @@ class TrustedProxiesConfig:
         proxies_count = int(os.environ.get("PROXIES_COUNT") or "0")
         real_ip_header = os.environ.get("REAL_IP_HEADER")
         return cls(proxies_count=proxies_count or None, real_ip_header=real_ip_header or None)
+
+
+@dataclass
+class InternalAuthenticationConfig:
+    """Configuration for internal authentication.
+
+    Internal authentication tokens are injected in sessions.
+    """
+
+    secret_key: bytes = field(repr=False)
+
+    @classmethod
+    def from_env(cls) -> InternalAuthenticationConfig:
+        """Create a config from environment variables."""
+        dummy_stores = os.environ.get("DUMMY_STORES", "false").lower() == "true"
+        if dummy_stores:
+            rand = random.SystemRandom()
+            secret_key = rand.randbytes(64)
+            return cls(secret_key=secret_key)
+
+        secret_key_str = os.environ.get("INTERNAL_AUTHN_SECRET_KEY")
+        if secret_key_str is None:
+            raise errors.ConfigurationError(message="The secret key for internal authentication has to be specified.")
+        secret_key = base64.urlsafe_b64decode(secret_key_str)
+        return cls(secret_key=secret_key)
