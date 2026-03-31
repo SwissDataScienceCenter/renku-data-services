@@ -11,10 +11,10 @@ instantiated multiple times without creating multiple database connections.
 
 from __future__ import annotations
 
-import base64
 import os
 import random
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from renku_data_services import errors
 
@@ -121,8 +121,8 @@ class InternalAuthenticationConfig:
             secret_key = rand.randbytes(64)
             return cls(secret_key=secret_key)
 
-        secret_key_str = os.environ.get("INTERNAL_AUTHN_SECRET_KEY")
-        if secret_key_str is None:
+        secret_key_path = os.environ.get("INTERNAL_AUTHN_SECRET_KEY_PATH")
+        if secret_key_path is None:
             raise errors.ConfigurationError(message="The secret key for internal authentication has to be specified.")
-        secret_key = base64.urlsafe_b64decode(secret_key_str)
+        secret_key = Path(secret_key_path).read_bytes()
         return cls(secret_key=secret_key)
