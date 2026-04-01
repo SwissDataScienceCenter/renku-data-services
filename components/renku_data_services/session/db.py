@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, nullcontext
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,7 +19,7 @@ from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import RESET
 from renku_data_services.crc.db import ResourcePoolRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
-from renku_data_services.repositories.models import RepositoryVisibility
+from renku_data_services.repositories.models import Metadata, RepositoryVisibility
 from renku_data_services.session import constants, models
 from renku_data_services.session import orm as schemas
 from renku_data_services.session.k8s_client import ShipwrightClient
@@ -1142,11 +1142,17 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             self.builds_config.build_output_image_prefix or constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
         )
 
-        if result.metadata.visibility.value == RepositoryVisibility.private:
-            token = await self.git_repositories_repo.get_token(repository_url=git_repository, user=user)
+        visibility: RepositoryVisibility = RepositoryVisibility.public
+        if isinstance(result.metadata, Metadata):
+            visibility = result.metadata.visibility
+
+        if visibility == RepositoryVisibility.private:
+            token: dict[str, Any] | None = await self.git_repositories_repo.get_token(
+                repository_url=git_repository, user=user
+            )
             authentication_secret = models.AuthenticationSecret(
                 username="token",
-                password=token.get("access_token", None),
+                password=token.get("access_token", "") if token is not None else "",
             )
 
             output_image_prefix = (
