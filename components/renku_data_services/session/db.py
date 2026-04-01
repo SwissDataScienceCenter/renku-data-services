@@ -18,6 +18,8 @@ from renku_data_services.authz.authz import Authz, ResourceType
 from renku_data_services.authz.models import Scope
 from renku_data_services.base_models.core import RESET
 from renku_data_services.crc.db import ResourcePoolRepository
+from renku_data_services.repositories.db import GitRepositoriesRepository
+from renku_data_services.repositories.models import RepositoryVisibility
 from renku_data_services.session import constants, models
 from renku_data_services.session import orm as schemas
 from renku_data_services.session.k8s_client import ShipwrightClient
@@ -52,12 +54,14 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         resource_pools: ResourcePoolRepository,
         shipwright_client: ShipwrightClient | None,
         builds_config: BuildsConfig,
+        git_repositories_repo: GitRepositoriesRepository,
     ) -> None:
         self.session_maker = session_maker
         self.project_authz: Authz = project_authz
         self.resource_pools: ResourcePoolRepository = resource_pools
         self.shipwright_client = shipwright_client
         self.builds_config = builds_config
+        self.git_repositories_repo = git_repositories_repo
 
     async def get_environments(self, include_archived: bool = False) -> list[models.Environment]:
         """Get all global session environments from the database."""
@@ -937,7 +941,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         launcher = launcher_orm.dump() if launcher_orm is not None else None
 
         if self.shipwright_client is not None:
-            params = self._get_buildrun_params(
+            params = await self._get_buildrun_params(
                 user=user, build=result, build_parameters=build_parameters, launcher=launcher
             )
             await self.shipwright_client.create_image_build(params=params, user_id=user.id)
@@ -1078,7 +1082,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         await session.flush()
         await session.refresh(build)
 
-    def _get_buildrun_params(
+    async def _get_buildrun_params(
         self,
         user: base_models.APIUser,
         build: models.Build,
@@ -1130,6 +1134,24 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             annotations["renku.io/launcher_id"] = str(launcher.id)
             annotations["renku.io/project_id"] = str(launcher.project_id)
 
+        result = await self.git_repositories_repo.get_repository(
+            repository_url=git_repository,
+            user=user,
+            etag=None,
+            internal_gitlab_user=base_models.APIUser(),
+        )
+
+        if result.is_error:
+            raise errors.CannotStartBuildError(message=str(result.error))
+
+        authentication_secret: models.AuthenticationSecret | None = None
+        if result.metadata.visibility.value == RepositoryVisibility.private:
+            token = await self.git_repositories_repo.get_token(repository_url=git_repository, user=user)
+            authentication_secret = models.AuthenticationSecret(
+                username="token",
+                password=token.get("access_token", None),
+            )
+
         params = models.ShipwrightBuildRunParams(
             name=build.k8s_name,
             git_repository=git_repository,
@@ -1138,6 +1160,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             output_image=output_image,
             build_strategy_name=build_strategy_name,
             push_secret_name=push_secret_name,
+            authentication_secret=authentication_secret,
             retention_after_failed=retention_after_failed,
             retention_after_succeeded=retention_after_succeeded,
             build_timeout=build_timeout,
