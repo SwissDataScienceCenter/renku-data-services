@@ -1,6 +1,8 @@
 """Basic models for amalthea sessions."""
 
+from __future__ import annotations
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, cast
 
@@ -155,7 +157,7 @@ class SessionExtraResources:
     volume_mounts: list[ExtraVolumeMount] = field(default_factory=list)
     volumes: list[ExtraVolume] = field(default_factory=list)
 
-    def concat(self, added_extras: "SessionExtraResources | None") -> "SessionExtraResources":
+    def concat(self, added_extras: SessionExtraResources | None) -> SessionExtraResources:
         """Concatenates these session extras with more session extras."""
         if added_extras is None:
             return self
@@ -185,6 +187,29 @@ class SessionDataConnectorOverride(RCloneStorageRequestOverride):
     readonly: bool | None
 
 
+class SessionMode(StrEnum):
+    """The session mode."""
+
+    interactive = "interactive"
+    non_interactive = "non_interactive"
+
+    def to_amalthea_name(self) -> str:
+        """Return the value for the amalthea spec."""
+        match self:
+            case SessionMode.interactive:
+                return "Interactive"
+            case SessionMode.non_interactive:
+                return "NonInteractive"
+
+    @classmethod
+    def from_amalthea_name(cls, name: str | None) -> SessionMode:
+        """Select a value based on the amalthea name. Returns interactive if the value is unknown."""
+        if name and name.lower() == "noninteractive":
+            return SessionMode.non_interactive
+        else:
+            return SessionMode.interactive
+
+
 @dataclass(frozen=True, eq=True, kw_only=True)
 class SessionLaunchRequest:
     """Model for requesting a session launch."""
@@ -194,4 +219,9 @@ class SessionLaunchRequest:
     resource_class_id: int | None
     data_connectors_overrides: list[SessionDataConnectorOverride] | None
     env_variable_overrides: list[SessionEnvVar] | None
-    non_interactive: bool
+    session_mode: SessionMode
+
+    @property
+    def is_non_interactive(self) -> bool:
+        """Whether this is a request to a non-interactive session."""
+        return self.session_mode == SessionMode.non_interactive

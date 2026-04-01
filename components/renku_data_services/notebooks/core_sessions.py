@@ -93,6 +93,7 @@ from renku_data_services.notebooks.models import (
     SessionEnvVar,
     SessionExtraResources,
     SessionLaunchRequest,
+    SessionMode,
 )
 from renku_data_services.notebooks.util.kubernetes_ import (
     renku_2_make_server_name,
@@ -529,8 +530,10 @@ async def repositories_from_session(
     return repositories_from_project(project, git_providers)
 
 
-def get_culling(
-    user: AuthenticatedAPIUser | AnonymousAPIUser, resource_pool: ResourcePool, nb_config: NotebooksConfig
+def _get_interactive_culling(
+    user: AuthenticatedAPIUser | AnonymousAPIUser,
+    resource_pool: ResourcePool,
+    nb_config: NotebooksConfig,
 ) -> Culling:
     """Create the culling specification for an AmaltheaSession."""
     hibernation_threshold: timedelta | None = None
@@ -567,11 +570,56 @@ def get_culling(
     )
 
 
+def _get_non_interactive_culling(
+    user: AuthenticatedAPIUser | AnonymousAPIUser,
+    resource_pool: ResourcePool,
+    nb_config: NotebooksConfig,
+) -> Culling:
+    hibernation_threshold: timedelta | None = timedelta(hours=1)
+
+    match (user.is_anonymous, resource_pool.hibernation_threshold):
+        case True, _:
+            hibernation_threshold = timedelta(hours=1)
+        case False, int():
+            hibernation_threshold = timedelta(seconds=resource_pool.hibernation_threshold)
+        case False, None:
+            hibernation_threshold = timedelta(seconds=nb_config.sessions.culling.registered.hibernated_seconds)
+
+
+
+    max_age: timedelta = timedelta(seconds=nb_config.sessions.culling.registered.max_age_seconds)
+    if max_age < timedelta(hours=5):
+        max_age = timedelta(hours=5)
+
+    return Culling(
+        maxAge=max_age,
+        maxFailedDuration=timedelta(seconds=nb_config.sessions.culling.registered.failed_seconds),
+        maxHibernatedDuration=hibernation_threshold,
+        maxIdleDuration=None,
+        maxStartingDuration=timedelta(seconds=nb_config.sessions.culling.registered.pending_seconds),
+    )
+
+
+def get_culling(
+    user: AuthenticatedAPIUser | AnonymousAPIUser,
+    resource_pool: ResourcePool,
+    nb_config: NotebooksConfig,
+    session_mode: SessionMode,
+) -> Culling:
+    """Create the culling specification for an AmaltheaSession."""
+
+    if session_mode == SessionMode.non_interactive:
+        return _get_non_interactive_culling(user, resource_pool, nb_config)
+    else:
+        return _get_interactive_culling(user, resource_pool, nb_config)
+
+
 def get_culling_patch(
     user: AuthenticatedAPIUser | AnonymousAPIUser,
     resource_pool: ResourcePool | None,
     nb_config: NotebooksConfig,
     lastInteraction: datetime | apispec.CurrentTime | None,
+    session_mode: SessionMode,
 ) -> CullingPatch:
     """Get the patch for the culling durations of a session."""
     lastInteractionDT: datetime | None = None
@@ -590,7 +638,7 @@ def get_culling_patch(
             # only update lastInteraction
             return CullingPatch(lastInteraction=lastInteractionDT or RESET)
         case rp:
-            culling = get_culling(user, rp, nb_config) if resource_pool else Culling()
+            culling = get_culling(user, rp, nb_config, session_mode) if resource_pool else Culling()
             return CullingPatch(
                 maxAge=culling.maxAge or RESET,
                 maxFailedDuration=culling.maxFailedDuration or RESET,
@@ -813,7 +861,7 @@ async def start_session(
     if session_location == SessionLocation.remote and not user.is_authenticated:
         raise errors.ValidationError(message="Anonymous users cannot start remote sessions.")
 
-    if session_location == SessionLocation.remote and launch_request.non_interactive:
+    if session_location == SessionLocation.remote and launch_request.is_non_interactive:
         raise errors.ValidationError(message="Non-Interactive sessions are not possible for remote sessions")
 
     environment = launcher.environment
@@ -1014,7 +1062,7 @@ async def start_session(
             hibernated=False,
             reconcileStrategy=ReconcileStrategy.whenFailedOrHibernated,
             priorityClassName=resource_class.quota,
-            sessionType="NonInteractive" if launch_request.non_interactive else "Interactive",
+            sessionType=launch_request.session_mode.to_amalthea_name(),
             session=Session(
                 image=image,
                 imagePullPolicy=ImagePullPolicy.Always,
@@ -1041,7 +1089,7 @@ async def start_session(
             extraContainers=session_extras.containers,
             initContainers=session_extras.init_containers,
             extraVolumes=session_extras.volumes,
-            culling=get_culling(user, resource_pool, nb_config),
+            culling=get_culling(user, resource_pool, nb_config, launch_request.session_mode),
             authentication=Authentication(
                 enabled=True,
                 type=AuthenticationType.oauth2proxy
@@ -1182,7 +1230,9 @@ async def patch_session(
                 rp.cluster.service_account_name if rp.cluster.service_account_name is not None else RESET
             )
 
-    patch.spec.culling = get_culling_patch(user, rp, nb_config, body.lastInteraction)
+    patch.spec.culling = get_culling_patch(
+        user, rp, nb_config, body.lastInteraction, SessionMode.from_amalthea_name(session.spec.sessionType)
+    )
 
     # If the session is being hibernated we do not need to patch anything else that is
     # not specifically called for in the request body, we can refresh things when the user resumes.
@@ -1360,7 +1410,9 @@ def validate_session_post_request(body: apispec.SessionPostRequest) -> SessionLa
         resource_class_id=body.resource_class_id,
         data_connectors_overrides=data_connectors_overrides,
         env_variable_overrides=env_variable_overrides,
-        non_interactive=body.session_type == apispec.SessionType.non_interactive,
+        session_mode=SessionMode.non_interactive
+        if body.session_type == apispec.SessionType.non_interactive
+        else SessionMode.interactive,
     )
 
 
