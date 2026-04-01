@@ -11,6 +11,7 @@ instantiated multiple times without creating multiple database connections.
 
 from __future__ import annotations
 
+import base64
 import os
 import random
 from dataclasses import dataclass, field
@@ -124,5 +125,5 @@ class InternalAuthenticationConfig:
         secret_key_path = os.environ.get("INTERNAL_AUTHN_SECRET_KEY_PATH")
         if secret_key_path is None:
             raise errors.ConfigurationError(message="The secret key for internal authentication has to be specified.")
-        secret_key = Path(secret_key_path).read_bytes()
+        secret_key = base64.urlsafe_b64decode(Path(secret_key_path).read_bytes())
         return cls(secret_key=secret_key)
