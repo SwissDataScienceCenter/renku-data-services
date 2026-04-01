@@ -11,6 +11,9 @@ from renku_data_services.k8s.models import GVK
 BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX: Final[str] = "harbor.dev.renku.ch/renku-builds/"
 """The default container image prefix for Renku builds."""
 
+BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX: Final[str] = "harbor.dev.renku.ch/renku-builds-private/"
+"""The default container image prefix for Renku private builds."""
+
 BUILD_OUTPUT_IMAGE_NAME: Final[str] = "renku-build"
 """The container image name created from Renku builds."""
 

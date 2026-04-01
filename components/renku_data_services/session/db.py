@@ -1100,13 +1100,6 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         builder_image = self.builds_config.build_builder_image or constants.BUILD_DEFAULT_BUILDER_IMAGE
         run_image = self.builds_config.build_run_image or constants.BUILD_DEFAULT_RUN_IMAGE
 
-        output_image_prefix = (
-            self.builds_config.build_output_image_prefix or constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
-        )
-        output_image_name = constants.BUILD_OUTPUT_IMAGE_NAME
-        output_image_tag = build.k8s_name
-        output_image = f"{output_image_prefix}{output_image_name}:{output_image_tag}"
-
         # TODO: define the build strategy from `build_parameters`
         build_strategy_name = self.builds_config.build_strategy_name or constants.BUILD_DEFAULT_BUILD_STRATEGY_NAME
         push_secret_name = self.builds_config.push_secret_name or constants.BUILD_DEFAULT_PUSH_SECRET_NAME
@@ -1145,12 +1138,25 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             raise errors.CannotStartBuildError(message=str(result.error))
 
         authentication_secret: models.AuthenticationSecret | None = None
+        output_image_prefix = (
+            self.builds_config.build_output_image_prefix or constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
+        )
+
         if result.metadata.visibility.value == RepositoryVisibility.private:
             token = await self.git_repositories_repo.get_token(repository_url=git_repository, user=user)
             authentication_secret = models.AuthenticationSecret(
                 username="token",
                 password=token.get("access_token", None),
             )
+
+            output_image_prefix = (
+                self.builds_config.build_output_private_image_prefix
+                or constants.BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX
+            )
+
+        output_image_name = constants.BUILD_OUTPUT_IMAGE_NAME
+        output_image_tag = build.k8s_name
+        output_image = f"{output_image_prefix}{output_image_name}:{output_image_tag}"
 
         params = models.ShipwrightBuildRunParams(
             name=build.k8s_name,
