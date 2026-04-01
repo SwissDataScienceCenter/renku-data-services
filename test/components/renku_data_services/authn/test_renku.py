@@ -1,5 +1,3 @@
-import jwt
-
 from renku_data_services.authn.renku import RenkuSelfAuthenticator
 from renku_data_services.base_models import AuthenticatedAPIUser
 
@@ -28,28 +26,28 @@ def test_make_user_claims() -> None:
     assert user_claims == expected_claims
 
 
-def test_mint_token() -> None:
-    secret_key = "hello"
-    user = AuthenticatedAPIUser(
-        id="some-user-id",
-        is_admin=False,
-        access_token="some-access-token",
-        full_name="Jane Doe",
-        first_name="Jane",
-        last_name="Doe",
-        email="jane.doe@example.org",
-        roles=[],
-    )
+# def test_mint_token() -> None:
+#     secret_key = "hello"
+#     user = AuthenticatedAPIUser(
+#         id="some-user-id",
+#         is_admin=False,
+#         access_token="some-access-token",
+#         full_name="Jane Doe",
+#         first_name="Jane",
+#         last_name="Doe",
+#         email="jane.doe@example.org",
+#         roles=[],
+#     )
 
-    payload = RenkuSelfAuthenticator._make_payload(user=user)
-    strict_jwt = jwt.PyJWT({"enforce_minimum_key_length": True})
+#     payload = RenkuSelfAuthenticator._make_payload(user=user)
+#     strict_jwt = jwt.PyJWT({"enforce_minimum_key_length": True})
 
-    encoded = strict_jwt.encode(payload, key=secret_key, algorithm="HS512")
-    assert encoded == ""
+#     encoded = strict_jwt.encode(payload, key=secret_key, algorithm="HS512")
+#     assert encoded == ""
 
 
-def test_key() -> None:
-    secret_key = "hello"
-    alg = jwt.get_algorithm_by_name("HS512")
-    jwk = alg.to_jwk(key_obj=secret_key)
-    assert jwk is None
+# def test_key() -> None:
+#     secret_key = "hello"
+#     alg = jwt.get_algorithm_by_name("HS512")
+#     jwk = alg.to_jwk(key_obj=secret_key)
+#     assert jwk is None

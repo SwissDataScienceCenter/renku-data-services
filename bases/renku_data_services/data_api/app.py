@@ -286,6 +286,7 @@ def register_all_handlers(app: Sanic, dm: DependencyManager) -> Sanic:
     internal_authentication = InternalAuthenticationBP(
         name="internal_authentication",
         url_prefix=url_prefix,
+        authenticator=dm.internal_authenticator,
     )
     app.blueprint(
         [
