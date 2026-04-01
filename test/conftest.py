@@ -214,9 +214,18 @@ async def dummy_users():
     ]
 
 
+def pytest_addoption(parser):
+    parser.addoption("--enable-builds", action="store_true", default=False, help="Enable builds")
+
+
+@pytest.fixture(scope="session")
+def builds_enabled(request):
+    return request.config.getoption("--enable-builds")
+
+
 @pytest_asyncio.fixture(scope="session")
 async def app_manager(
-    authz_setup, monkeysession, worker_id, secrets_key_pair, dummy_users, kubeconfig_path: Path
+    authz_setup, monkeysession, worker_id, secrets_key_pair, dummy_users, kubeconfig_path: Path, builds_enabled
 ) -> AsyncGenerator[DependencyManager, None]:
     monkeysession.setenv("DUMMY_STORES", "true")
     monkeysession.setenv("MAX_PINNED_PROJECTS", "5")
@@ -227,6 +236,7 @@ async def app_manager(
     monkeysession.setenv("DATA_DEPOSITS_JOB_IMAGE", "test-deposit-image")
     monkeysession.setenv("RENKU_URL", "http://test-renku-url.io")
     monkeysession.setenv("KUBERNETES_NAMESPACE", "default")
+    monkeysession.setenv("CREATE_BUILDS_CLIENT", str(builds_enabled))
 
     dm = TestDependencyManager.from_env(dummy_users)
 
@@ -524,5 +534,6 @@ def cluster(cluster_name, kubeconfig_path: Path, monkeysession, disable_cluster_
         cluster_name,
         kubeconfig=str(kubeconfig_path),
         create_cluster=not disable_cluster_creation,
+        setup_shipwright=builds_enabled,
     ) as cluster:
         yield cluster

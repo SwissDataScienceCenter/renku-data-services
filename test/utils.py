@@ -1,15 +1,23 @@
 from __future__ import annotations
 
+import base64
+import json
 import os
 import subprocess
 import typing
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any, Self
 from unittest.mock import MagicMock
 
+import yaml
 from authzed.api.v1 import AsyncClient, SyncClient
+from kubernetes import client as k8s_client
+from kubernetes import config as k8s_config
+from kubernetes import watch
+from kubernetes.client import V1ObjectMeta
 from sanic import Request
 from sanic_testing.testing import ASGI_HOST, ASGI_PORT, SanicASGITestClient, TestingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -545,6 +553,113 @@ async def create_user_preferences(
     return user_preferences
 
 
+def setup_shipwright(cluster: KindCluster) -> None:
+    """Setup shipwright and dependencies"""
+
+    shipwright_version = "v0.19.2"
+
+    root = Path(__file__).parents[1]
+
+    k8s_config.load_kube_config_from_dict(yaml.safe_load(cluster.config_yaml()))
+
+    core_api = k8s_client.CoreV1Api()
+
+    cmds = [
+        [
+            "curl",
+            "--silent",
+            "--location",
+            f"https://raw.githubusercontent.com/shipwright-io/build/{shipwright_version}/hack/install-tekton.sh",
+            "-O",
+        ],
+        ["bash", "install-tekton.sh"],
+        [
+            "kubectl",
+            "apply",
+            "--filename",
+            f"https://github.com/shipwright-io/build/releases/download/{shipwright_version}/release.yaml",
+            "--server-side",
+        ],
+        [
+            "kubectl",
+            "apply",
+            "--filename",
+            f"https://github.com/shipwright-io/build/releases/download/{shipwright_version}/sample-strategies.yaml",
+            "--server-side",
+        ],
+        [
+            "curl",
+            "--silent",
+            "--location",
+            f"https://raw.githubusercontent.com/shipwright-io/build/{shipwright_version}/hack/setup-webhook-cert.sh",
+            "-O",
+        ],
+        ["bash", "setup-webhook-cert.sh"],
+        [
+            "curl",
+            "--silent",
+            "--location",
+            "https://raw.githubusercontent.com/shipwright-io/build/main/hack/storage-version-migration.sh",
+            "-O",
+        ],
+        ["bash", "storage-version-migration.sh"],
+        [
+            "kubectl",
+            "apply",
+            "--filename",
+            str(root / "components/renku_pack_builder/manifests/buildstrategy.yaml"),
+            "--server-side",
+        ],
+    ]
+
+    # Setup tekton and shipwright
+    for cmd in cmds[0:-1]:
+        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=cluster.env, check=True)
+
+    watcher = watch.Watch()
+
+    for event in watcher.stream(
+        core_api.list_namespaced_pod,
+        label_selector="name=shipwright-build",
+        namespace="shipwright-build",
+        timeout_seconds=3 * 60,
+    ):
+        if event["object"].status.phase == "Running":
+            watcher.stop()
+            break
+    else:
+        raise AssertionError("Timeout waiting on shipwright to run") from None
+
+    for event in watcher.stream(
+        core_api.list_namespaced_pod,
+        label_selector="name=shp-build-webhook",
+        namespace="shipwright-build",
+        timeout_seconds=3 * 60,
+    ):
+        if event["object"].status.phase == "Running":
+            watcher.stop()
+            break
+    else:
+        raise AssertionError("Timeout waiting on shp-build-webhook to run") from None
+
+    # Add our build strategy
+    subprocess.run(cmds[-1], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=cluster.env, check=True)
+
+    # Create a dummy secret to push to registry (we wont in the tests, it's for the BuildRun registration)
+    docker_config = {
+        "auths": {
+            "https://registry.localhost/": {
+                "username": "test",
+                "password": "test",
+                "auth": base64.b64encode(b"test:test").decode(),
+            }
+        }
+    }
+    secret_data = {".dockerconfigjson": base64.b64encode(json.dumps(docker_config).encode()).decode()}
+    secret = k8s_client.V1Secret(metadata=V1ObjectMeta(name="renku-build-secret"), data=secret_data)
+    core_api.create_namespaced_secret(namespace="default", body=secret)
+
+
 class KindCluster(AbstractContextManager):
     """Context manager that will create and tear down a k3s cluster"""
 
@@ -554,6 +669,7 @@ class KindCluster(AbstractContextManager):
         kubeconfig=".kind-kubeconfig.yaml",
         extra_images: list[str] | None = None,
         create_cluster: bool = True,
+        setup_shipwright: bool = False,
     ):
         self.cluster_name = cluster_name
         if extra_images is None:
@@ -563,6 +679,7 @@ class KindCluster(AbstractContextManager):
         self.env = os.environ.copy()
         self.env["KUBECONFIG"] = self.kubeconfig
         self.create_cluster = create_cluster
+        self.setup_shipwright = setup_shipwright
 
     def __enter__(self):
         """create kind cluster"""
@@ -588,6 +705,9 @@ class KindCluster(AbstractContextManager):
             else:
                 print(err)
             raise
+
+        if self.setup_shipwright:
+            setup_shipwright(self)
 
         return self
 
