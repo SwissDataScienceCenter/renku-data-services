@@ -3,7 +3,9 @@
 from asyncio import AbstractEventLoop
 from typing import Any
 
+import kr8s
 import pytest
+from kr8s.objects import new_class
 from pytest import FixtureRequest
 from sanic_testing.testing import SanicASGITestClient, TestingResponse
 from syrupy.filters import props
@@ -11,9 +13,16 @@ from syrupy.filters import props
 from renku_data_services import errors
 from renku_data_services.crc.apispec import ResourcePool
 from renku_data_services.data_api.dependencies import DependencyManager
+from renku_data_services.session.constants import BUILD_RUN_GVK
 from renku_data_services.session.models import EnvVar
 from renku_data_services.users.models import UserInfo
 from test.utils import KindCluster
+
+BuildRun = new_class(
+    kind=BUILD_RUN_GVK.kind,
+    version=BUILD_RUN_GVK.group_version,
+    namespaced=True,
+)
 
 
 @pytest.fixture
@@ -459,28 +468,33 @@ async def test_post_session_launcher(
 
 
 @pytest.mark.parametrize(
-    "expected_status_code,git_repo",
+    "expected_status_code,git_repo,is_private",
     [
         (
             201,
             "https://github.com/SwissDataScienceCenter/renku",
+            False,
         ),
         (
             201,
             "https://github.com/SwissDataScienceCenter/private",
+            True,
         ),
-        (500, "https://github.com/some/repo"),
+        (500, "https://github.com/some/repo", False),
     ],
 )
 @pytest.mark.asyncio
 async def test_post_session_launcher_with_environment_build(
+    app_manager: DependencyManager,
     sanic_client,
-    admin_headers,
+    user_headers,
     create_project,
     create_resource_pool,
     expected_status_code,
     git_repo,
+    is_private,
     builds_enabled,
+    cluster,
 ) -> None:
     project = await create_project(sanic_client, "Some project")
 
@@ -496,7 +510,7 @@ async def test_post_session_launcher_with_environment_build(
         },
     }
 
-    _, response = await sanic_client.post("/api/data/session_launchers", headers=admin_headers, json=payload)
+    _, response = await sanic_client.post("/api/data/session_launchers", headers=user_headers, json=payload)
 
     if not builds_enabled:
         expected_status_code = 201
@@ -508,7 +522,8 @@ async def test_post_session_launcher_with_environment_build(
         assert response.json.get("project_id") == project["id"]
         assert response.json.get("description") == "A session launcher."
         environment = response.json.get("environment", {})
-        assert environment.get("id") is not None
+        environment_id = environment.get("id")
+        assert environment_id is not None
         assert environment.get("name") == "Launcher 1"
         assert environment.get("environment_kind") == "CUSTOM"
         assert environment.get("build_parameters") == {
@@ -519,6 +534,26 @@ async def test_post_session_launcher_with_environment_build(
         }
         assert environment.get("environment_image_source") == "build"
         assert environment.get("container_image") == "image:unknown-at-the-moment"
+
+        _, response = await sanic_client.get(
+            f"/api/data/environments/{environment_id}/builds",
+            headers=user_headers,
+        )
+        assert response.status_code == 200, response.text
+        build = response.json[0]
+        build_id = build["id"]
+
+        api = kr8s.api(kubeconfig=cluster.kubeconfig)
+        build_run = BuildRun.get(name=f"renku-{build_id.lower()}", api=api)
+
+        build_spec = build_run.spec.build.spec
+        if is_private:
+            assert build_spec.source.git.get("cloneSecret") is not None
+            assert build_spec.output.image.startswith(app_manager.config.builds.build_output_private_image_prefix)
+        else:
+            assert build_spec.source.git.get("cloneSecret") is None
+            assert build_spec.output.image.startswith(app_manager.config.builds.build_output_image_prefix)
+
     elif expected_status_code == 500:
         assert response.json is not None
         error = response.json.get("error")
@@ -526,27 +561,32 @@ async def test_post_session_launcher_with_environment_build(
 
 
 @pytest.mark.parametrize(
-    "expected_status_code,git_repo",
+    "expected_status_code,git_repo,is_private",
     [
         (
             201,
             "https://github.com/SwissDataScienceCenter/renku",
+            False,
         ),
         (
             201,
             "https://github.com/SwissDataScienceCenter/private",
+            True,
         ),
-        (500, "https://github.com/some/repo"),
+        (500, "https://github.com/some/repo", False),
     ],
 )
 @pytest.mark.asyncio
 async def test_post_session_launcher_with_advanced_environment_build(
+    app_manager: DependencyManager,
     sanic_client: SanicASGITestClient,
     user_headers: dict[str, str],
     create_project,
     expected_status_code,
     git_repo,
+    is_private,
     builds_enabled,
+    cluster,
 ) -> None:
     project = await create_project(sanic_client, "Some project")
 
@@ -576,7 +616,8 @@ async def test_post_session_launcher_with_advanced_environment_build(
         assert response.json.get("project_id") == project["id"]
         assert response.json.get("description") == "A session launcher."
         environment = response.json.get("environment", {})
-        assert environment.get("id") is not None
+        environment_id = environment.get("id")
+        assert environment_id is not None
         assert environment.get("name") == "Launcher 1"
         assert environment.get("environment_kind") == "CUSTOM"
         assert environment.get("build_parameters") == {
@@ -589,6 +630,26 @@ async def test_post_session_launcher_with_advanced_environment_build(
         }
         assert environment.get("environment_image_source") == "build"
         assert environment.get("container_image") == "image:unknown-at-the-moment"
+
+        _, response = await sanic_client.get(
+            f"/api/data/environments/{environment_id}/builds",
+            headers=user_headers,
+        )
+        assert response.status_code == 200, response.text
+        build = response.json[0]
+        build_id = build["id"]
+
+        api = kr8s.api(kubeconfig=cluster.kubeconfig)
+        build_run = BuildRun.get(name=f"renku-{build_id.lower()}", api=api)
+
+        build_spec = build_run.spec.build.spec
+        if is_private:
+            assert build_spec.source.git.get("cloneSecret") is not None
+            assert build_spec.output.image.startswith(app_manager.config.builds.build_output_private_image_prefix)
+        else:
+            assert build_spec.source.git.get("cloneSecret") is None
+            assert build_spec.output.image.startswith(app_manager.config.builds.build_output_image_prefix)
+
     elif expected_status_code == 500:
         assert response.json is not None
         error = response.json.get("error")

@@ -31,6 +31,7 @@ from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_connectors.doi.models import DOIMetadata, SchemaOrgDataset
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.secrets_storage_api.dependencies import DependencyManager as SecretsDependencyManager
+from renku_data_services.session import constants
 from renku_data_services.solr import entity_schema
 from renku_data_services.solr.solr_client import SolrClientConfig
 from renku_data_services.solr.solr_migrate import SchemaMigrator
@@ -236,7 +237,11 @@ async def app_manager(
     monkeysession.setenv("DATA_DEPOSITS_JOB_IMAGE", "test-deposit-image")
     monkeysession.setenv("RENKU_URL", "http://test-renku-url.io")
     monkeysession.setenv("KUBERNETES_NAMESPACE", "default")
+
     monkeysession.setenv("CREATE_BUILDS_CLIENT", str(builds_enabled))
+    if builds_enabled:
+        monkeysession.setenv("BUILD_OUTPUT_IMAGE_PREFIX", constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX)
+        monkeysession.setenv("BUILD_OUTPUT_PRIVATE_IMAGE_PREFIX", constants.BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX)
 
     dm = TestDependencyManager.from_env(dummy_users)
 
