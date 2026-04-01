@@ -553,6 +553,7 @@ class KindCluster(AbstractContextManager):
         cluster_name: str,
         kubeconfig=".kind-kubeconfig.yaml",
         extra_images: list[str] | None = None,
+        create_cluster: bool = True,
     ):
         self.cluster_name = cluster_name
         if extra_images is None:
@@ -561,9 +562,13 @@ class KindCluster(AbstractContextManager):
         self.kubeconfig = kubeconfig
         self.env = os.environ.copy()
         self.env["KUBECONFIG"] = self.kubeconfig
+        self.create_cluster = create_cluster
 
     def __enter__(self):
         """create kind cluster"""
+
+        if not self.create_cluster:
+            return self
 
         create_cluster = [
             "kind",
@@ -589,7 +594,8 @@ class KindCluster(AbstractContextManager):
     def __exit__(self, exc_type, exc_val, exc_tb):
         """delete kind cluster"""
 
-        self._delete_cluster()
+        if self.create_cluster:
+            self._delete_cluster()
         return False
 
     def _delete_cluster(self):

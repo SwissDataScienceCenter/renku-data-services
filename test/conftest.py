@@ -509,16 +509,20 @@ def cluster_name():
 
 
 @pytest.fixture(scope="session")
-def kubeconfig_path(monkeysession):
-    kconf = ".kind-kubeconfig.yaml"
+def kubeconfig_path(monkeysession, disable_cluster_creation):
+    kconf = str(Path("~/.kube/config").expanduser()) if disable_cluster_creation else ".kind-kubeconfig.yaml"
     monkeysession.setenv("KUBECONFIG", kconf)
     return Path(kconf)
 
 
 @pytest.fixture(scope="session")
-def cluster(cluster_name, kubeconfig_path: Path, monkeysession):
+def cluster(cluster_name, kubeconfig_path: Path, monkeysession, disable_cluster_creation, builds_enabled):
     # NOTE: The config_name of the cluster has to match the name of the
     # kubeconfig file in the K8S_CONFIGS_ROOT folder
     monkeysession.setenv("K8S_CONFIGS_ROOT", kubeconfig_path.parent.absolute().as_posix())
-    with KindCluster(cluster_name, kubeconfig=str(kubeconfig_path)) as cluster:
+    with KindCluster(
+        cluster_name,
+        kubeconfig=str(kubeconfig_path),
+        create_cluster=not disable_cluster_creation,
+    ) as cluster:
         yield cluster
