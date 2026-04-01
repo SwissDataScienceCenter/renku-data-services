@@ -27,7 +27,7 @@ BUILD_URL_PATH_MAP: Final[dict[str, str]] = {
     "jupyterlab": "/lab",
 }
 
-BUILD_DEFAULT_BUILD_STRATEGY_NAME: Final[str] = "renku-buildpacks-v2"
+BUILD_DEFAULT_BUILD_STRATEGY_NAME: Final[str] = "renku-buildpacks-v3"
 """The name of the default build strategy."""
 
 BUILD_DEFAULT_PUSH_SECRET_NAME: Final[str] = "renku-build-secret"
