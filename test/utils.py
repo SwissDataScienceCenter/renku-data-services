@@ -62,7 +62,9 @@ from renku_data_services.project.db import (
     ProjectRepository,
     ProjectSessionSecretRepository,
 )
+from renku_data_services.repositories import models as repositories_models
 from renku_data_services.repositories.db import GitRepositoriesRepository
+from renku_data_services.repositories.git_url import GitUrl, GitUrlError
 from renku_data_services.resource_usage.core import ResourceUsageService
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.search.db import SearchUpdatesRepo
@@ -70,6 +72,7 @@ from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsRepo
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
+from renku_data_services.session.k8s_client import ShipwrightClient
 from renku_data_services.storage import models as storage_models
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users import models as user_preferences_models
@@ -187,6 +190,52 @@ class NonCachingAuthz(Authz):
         return self.authz_config.authz_async_client()
 
 
+class FakeGitRepositoriesRepository(GitRepositoriesRepository):
+    """Test class to simulate repository visibility checks and token retrieval"""
+
+    async def get_token(self, repository_url, user) -> dict[str, Any] | None:
+        """Get token for repository provider."""
+        return {"access_token": "dummy token"}
+
+    async def get_repository(
+        self,
+        repository_url,
+        user,
+        etag,
+        internal_gitlab_user,
+    ) -> repositories_models.RepositoryDataResult:
+        """Get metadata about one repository."""
+
+        match GitUrl.parse(repository_url):
+            case GitUrlError() as err:
+                return repositories_models.RepositoryDataResult(error=err)
+            case url:
+                valid_url = url
+                result = repositories_models.RepositoryDataResult()
+
+        match valid_url.parsed_url.path:
+            case "/SwissDataScienceCenter/renku":
+                result = result.with_metadata(
+                    repositories_models.Metadata(
+                        git_url=valid_url.render(),
+                        pull_permission=True,
+                        visibility=repositories_models.RepositoryVisibility.public,
+                    )
+                )
+            case "/SwissDataScienceCenter/private":
+                result = result.with_metadata(
+                    repositories_models.Metadata(
+                        git_url=valid_url.render(),
+                        pull_permission=True,
+                        visibility=repositories_models.RepositoryVisibility.private,
+                    )
+                )
+            case _:
+                result = result.with_error(f"Invalid path {valid_url.parsed_url.path}")
+
+        return result
+
+
 @dataclass
 class TestDependencyManager(DependencyManager):
     """Test class that can handle isolated dbs and authz instances."""
@@ -218,8 +267,26 @@ class TestDependencyManager(DependencyManager):
                 kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
             ),
         )
+
         job_client = DepositUploadJobClient(client)
         secret_client = K8sSecretClient(client)
+
+        shipwright_client = None
+
+        if os.environ.get("CREATE_BUILDS_CLIENT", "false").lower() == "true":
+            shipwright_client = ShipwrightClient(
+                client=K8sClusterClientsPool(
+                    lambda: get_clusters(
+                        kube_conf_root_dir=config.k8s_config_root,
+                        default_kubeconfig=default_kubeconfig,
+                        cluster_repo=cluster_repo,
+                        cache=k8s_db_cache,
+                        kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
+                    ),
+                ),
+                namespace=config.k8s_namespace,
+            )
+
         quota_repo = QuotaRepository(K8sResourceQuotaClient(client), K8sPriorityClassClient(client))
 
         authenticator = DummyAuthenticator()
@@ -268,12 +335,26 @@ class TestDependencyManager(DependencyManager):
             group_repo=group_repo,
             search_updates_repo=search_updates_repo,
         )
+
+        if config.builds.enabled:
+            gitrepositoriesrepository_class = FakeGitRepositoriesRepository
+        else:
+            gitrepositoriesrepository_class = GitRepositoriesRepository
+
+        git_repositories_repo = gitrepositoriesrepository_class(
+            session_maker=config.db.async_session_maker,
+            internal_gitlab_url=config.gitlab_url,
+            enable_internal_gitlab=config.enable_internal_gitlab,
+            oauth_client_factory=oauth_client_factory,
+        )
+
         session_repo = SessionRepository(
             session_maker=config.db.async_session_maker,
             project_authz=authz,
             resource_pools=rp_repo,
-            shipwright_client=None,
+            shipwright_client=shipwright_client,
             builds_config=config.builds,
+            git_repositories_repo=git_repositories_repo,
         )
         project_migration_repo = ProjectMigrationRepository(
             session_maker=config.db.async_session_maker,
@@ -307,12 +388,6 @@ class TestDependencyManager(DependencyManager):
         connected_services_repo = ConnectedServicesRepository(
             session_maker=config.db.async_session_maker,
             encryption_key=config.secrets.encryption_key,
-            oauth_client_factory=oauth_client_factory,
-        )
-        git_repositories_repo = GitRepositoriesRepository(
-            session_maker=config.db.async_session_maker,
-            internal_gitlab_url=config.gitlab_url,
-            enable_internal_gitlab=config.enable_internal_gitlab,
             oauth_client_factory=oauth_client_factory,
         )
         platform_repo = PlatformRepository(
@@ -361,6 +436,7 @@ class TestDependencyManager(DependencyManager):
         occurrence_repo = OccurrenceRepository(session_maker=config.db.async_session_maker)
         resource_requests_repo = ResourceRequestsRepo(session_maker=config.db.async_session_maker)
         resource_usage_service = ResourceUsageService(resource_requests_repo)
+
         return cls(
             config=config,
             k8s_client=client,
@@ -395,7 +471,7 @@ class TestDependencyManager(DependencyManager):
             image_check_repo=image_check_repo,
             metrics_repo=metrics_repo,
             metrics=metrics_mock,
-            shipwright_client=None,
+            shipwright_client=shipwright_client,
             authz=authz,
             low_level_user_secrets_repo=low_level_user_secrets_repo,
             url_redirect_repo=url_redirect_repo,
