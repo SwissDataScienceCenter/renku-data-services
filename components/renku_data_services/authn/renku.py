@@ -73,7 +73,9 @@ class RenkuSelfAuthenticator(Authenticator[APIUser]):
                 access_token_expires_at=datetime.fromtimestamp(exp) if exp is not None else None,
                 roles=[],
             )
-        if user is not None:
+            request.ctx.renku_authenticator = f"{self.__class__.__module__}.{self.__class__.__qualname__}"
+            request.ctx.renku_user = user
+            request.ctx.renku_parsed_access_token = parsed
             return user
 
         # Try to get an anonymous user ID if the validation of keycloak credentials failed
@@ -115,6 +117,10 @@ class RenkuSelfTokenMint:
         """Create a new internal token for a given user."""
         payload = self._make_payload(user=user, scope=scope)
         return _strict_jwt.encode(payload, key=self.secret_key, algorithm=self.algorithm)
+
+    def get_expires_in(self) -> int:
+        """Get the value in seconds for the 'expires_in' claim."""
+        return int(_EXPIRATION.total_seconds())
 
     @staticmethod
     def _make_payload(user: APIUser, scope: str | None = None) -> dict[str, str | int]:
