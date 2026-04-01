@@ -742,7 +742,7 @@ async def create_session_secret_slot(sanic_client: SanicASGITestClient, user_hea
 
 
 @pytest_asyncio.fixture
-async def create_resource_pool(sanic_client, user_headers, admin_headers, valid_resource_pool_payload):
+async def create_resource_pool(cluster, sanic_client, user_headers, admin_headers, valid_resource_pool_payload):
     async def create_resource_pool_helper(admin: bool = False, **payload) -> dict[str, Any]:
         headers = admin_headers if admin else user_headers
         valid_resource_pool_payload.update(payload)
