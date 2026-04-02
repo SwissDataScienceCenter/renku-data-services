@@ -230,8 +230,10 @@ class FakeGitRepositoriesRepository(GitRepositoriesRepository):
                         visibility=repositories_models.RepositoryVisibility.private,
                     )
                 )
+            case "/some/repo":
+                result = result.with_error(GitUrlError.no_git_repo)
             case _:
-                result = result.with_error(f"Invalid path {valid_url.parsed_url.path}")
+                result = await super().get_repository(repository_url, user, etag, internal_gitlab_user)
 
         return result
 

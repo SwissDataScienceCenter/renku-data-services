@@ -557,7 +557,7 @@ async def test_post_session_launcher_with_environment_build(
     elif expected_status_code == 500:
         assert response.json is not None
         error = response.json.get("error")
-        assert error.get("message") == "Invalid path /some/repo"
+        assert error.get("message") == "no_git_repo"
 
 
 @pytest.mark.parametrize(
@@ -653,7 +653,7 @@ async def test_post_session_launcher_with_advanced_environment_build(
     elif expected_status_code == 500:
         assert response.json is not None
         error = response.json.get("error")
-        assert error.get("message") == "Invalid path /some/repo"
+        assert error.get("message") == "no_git_repo"
 
 
 @pytest.mark.asyncio
