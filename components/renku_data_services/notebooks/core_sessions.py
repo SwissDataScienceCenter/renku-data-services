@@ -946,7 +946,11 @@ async def start_session(
     storage_class = cluster_settings.get_storage_class()
     service_account_name = cluster_settings.service_account_name
 
-    ui_path = f"{ingress_config.url_path}/{environment.default_url.lstrip('/')}"
+    ui_path = (
+        f"{ingress_config.url_path}/{environment.default_url.lstrip('/')}"
+        if launch_request.session_mode.is_non_interactive()
+        else ""
+    )
 
     # Annotations
     annotations: dict[str, str] = {
@@ -954,7 +958,7 @@ async def start_session(
         "renku.io/launcher_id": str(launcher_id),
         "renku.io/resource_class_id": str(resource_class.id),
         "renku.io/resource_pool_id": str(resource_pool.id),
-        "renku.io/session_type": str(launch_request.session_mode)
+        "renku.io/session_type": str(launch_request.session_mode),
     }
 
     # Authentication
