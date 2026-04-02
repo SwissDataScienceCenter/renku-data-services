@@ -176,6 +176,7 @@ class ShipwrightClient:
                 "metadata": {
                     "name": metadata.name,
                     "labels": metadata.labels,
+                    "annotations": {"build.shipwright.io/referenced.secret": "true"},
                 },
                 "stringData": params.authentication_secret.to_string_data(),
             }
