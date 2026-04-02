@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 _strict_jwt = jwt.PyJWT({"enforce_minimum_key_length": True})
 
 # TODO: make these configurable (from usual config)
-_EXPIRATION: Final[timedelta] = timedelta(minutes=5)
+_EXPIRATION: Final[timedelta] = timedelta(minutes=15)
 _ISSUER: Final[str] = "renku-self"
 _AUDIENCE: Final[str] = "renku-self"
 

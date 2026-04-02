@@ -12,6 +12,7 @@ from ulid import ULID
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.app_config import logging
+from renku_data_services.authn.chained import ChainedAuthenticator
 from renku_data_services.base_api.auth import authenticate, only_admins, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_query
@@ -163,7 +164,8 @@ class OAuth2ConnectionsBP(CustomBlueprint):
 
     connected_services_repo: ConnectedServicesRepository
     oauth_client_factory: OAuthHttpClientFactory
-    authenticator: base_models.Authenticator
+    authenticator: base_models.Authenticator[base_models.APIUser]
+    internal_authenticator: base_models.Authenticator[base_models.APIUser]
     nb_config: NotebooksConfig
 
     def get_all(self) -> BlueprintFactoryResponse:
@@ -217,7 +219,8 @@ class OAuth2ConnectionsBP(CustomBlueprint):
     def get_token(self) -> BlueprintFactoryResponse:
         """Get the access token for a specific OAuth2 connection."""
 
-        @authenticate(self.authenticator)
+        # @authenticate(self.authenticator)
+        @authenticate(ChainedAuthenticator(chain=[self.internal_authenticator, self.authenticator]))
         async def _get_token(_: Request, user: base_models.APIUser, connection_id: ULID) -> JSONResponse:
             client = await self.oauth_client_factory.for_user_connection_raise(user, connection_id)
             token = await client.get_token()
