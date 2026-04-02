@@ -1217,14 +1217,15 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         project_authz: Authz,
     ) -> SessionEnvironmentRepositoryProtocol:
         """Create an instance of SessionEnvironmentRepositoryProtocol."""
-        # NOTE: resource_pools, shipwright_client and builds_config are set to None
-        # because the SessionEnvironmentRepositoryProtocol only exposes database
-        # operations for session environments.
+        # NOTE: resource_pools, shipwright_client, builds_config and git_repositories_repo
+        # are set to None because the SessionEnvironmentRepositoryProtocol only
+        # exposes database operations for session environments.
         instance = cls(
             session_maker,
             project_authz=project_authz,
             resource_pools=None,  # type: ignore
             shipwright_client=None,
             builds_config=None,  # type: ignore
+            git_repositories_repo=None,  # type: ignore
         )
         return instance
