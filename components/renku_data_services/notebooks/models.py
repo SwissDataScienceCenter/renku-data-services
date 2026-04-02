@@ -1,6 +1,7 @@
 """Basic models for amalthea sessions."""
 
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path

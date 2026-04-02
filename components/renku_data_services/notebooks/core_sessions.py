@@ -573,25 +573,14 @@ def _get_interactive_culling(
 
 
 def _get_non_interactive_culling(
-    user: AuthenticatedAPIUser | AnonymousAPIUser,
     resource_pool: ResourcePool,
     nb_config: NotebooksConfig,
 ) -> Culling:
-    hibernation_threshold: timedelta | None = timedelta(hours=1)
+    hibernation_threshold: timedelta = timedelta(hours=1)
+    if resource_pool.hibernation_threshold:
+        hibernation_threshold = timedelta(seconds=resource_pool.hibernation_threshold)
 
-    match (user.is_anonymous, resource_pool.hibernation_threshold):
-        case True, _:
-            hibernation_threshold = timedelta(hours=1)
-        case False, int():
-            hibernation_threshold = timedelta(seconds=resource_pool.hibernation_threshold)
-        case False, None:
-            hibernation_threshold = timedelta(seconds=nb_config.sessions.culling.registered.hibernated_seconds)
-
-
-
-    max_age: timedelta = timedelta(seconds=nb_config.sessions.culling.registered.max_age_seconds)
-    if max_age < timedelta(hours=5):
-        max_age = timedelta(hours=5)
+    max_age: timedelta = timedelta(hours=5)  ## TODO this will be a new field on resource pool
 
     return Culling(
         maxAge=max_age,
@@ -611,7 +600,7 @@ def get_culling(
     """Create the culling specification for an AmaltheaSession."""
 
     if session_mode == SessionMode.non_interactive:
-        return _get_non_interactive_culling(user, resource_pool, nb_config)
+        return _get_non_interactive_culling(resource_pool, nb_config)
     else:
         return _get_interactive_culling(user, resource_pool, nb_config)
 
