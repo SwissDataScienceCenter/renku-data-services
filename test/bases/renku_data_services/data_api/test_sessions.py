@@ -535,24 +535,25 @@ async def test_post_session_launcher_with_environment_build(
         assert environment.get("environment_image_source") == "build"
         assert environment.get("container_image") == "image:unknown-at-the-moment"
 
-        _, response = await sanic_client.get(
-            f"/api/data/environments/{environment_id}/builds",
-            headers=user_headers,
-        )
-        assert response.status_code == 200, response.text
-        build = response.json[0]
-        build_id = build["id"]
+        if builds_enabled:
+            _, response = await sanic_client.get(
+                f"/api/data/environments/{environment_id}/builds",
+                headers=user_headers,
+            )
+            assert response.status_code == 200, response.text
+            build = response.json[0]
+            build_id = build["id"]
 
-        api = kr8s.api(kubeconfig=cluster.kubeconfig)
-        build_run = BuildRun.get(name=f"renku-{build_id.lower()}", api=api)
+            api = kr8s.api(kubeconfig=cluster.kubeconfig)
+            build_run = BuildRun.get(name=f"renku-{build_id.lower()}", api=api)
 
-        build_spec = build_run.spec.build.spec
-        if is_private:
-            assert build_spec.source.git.get("cloneSecret") is not None
-            assert build_spec.output.image.startswith(app_manager.config.builds.build_output_private_image_prefix)
-        else:
-            assert build_spec.source.git.get("cloneSecret") is None
-            assert build_spec.output.image.startswith(app_manager.config.builds.build_output_image_prefix)
+            build_spec = build_run.spec.build.spec
+            if is_private:
+                assert build_spec.source.git.get("cloneSecret") is not None
+                assert build_spec.output.image.startswith(app_manager.config.builds.build_output_private_image_prefix)
+            else:
+                assert build_spec.source.git.get("cloneSecret") is None
+                assert build_spec.output.image.startswith(app_manager.config.builds.build_output_image_prefix)
 
     elif expected_status_code == 500:
         assert response.json is not None
@@ -631,24 +632,25 @@ async def test_post_session_launcher_with_advanced_environment_build(
         assert environment.get("environment_image_source") == "build"
         assert environment.get("container_image") == "image:unknown-at-the-moment"
 
-        _, response = await sanic_client.get(
-            f"/api/data/environments/{environment_id}/builds",
-            headers=user_headers,
-        )
-        assert response.status_code == 200, response.text
-        build = response.json[0]
-        build_id = build["id"]
+        if builds_enabled:
+            _, response = await sanic_client.get(
+                f"/api/data/environments/{environment_id}/builds",
+                headers=user_headers,
+            )
+            assert response.status_code == 200, response.text
+            build = response.json[0]
+            build_id = build["id"]
 
-        api = kr8s.api(kubeconfig=cluster.kubeconfig)
-        build_run = BuildRun.get(name=f"renku-{build_id.lower()}", api=api)
+            api = kr8s.api(kubeconfig=cluster.kubeconfig)
+            build_run = BuildRun.get(name=f"renku-{build_id.lower()}", api=api)
 
-        build_spec = build_run.spec.build.spec
-        if is_private:
-            assert build_spec.source.git.get("cloneSecret") is not None
-            assert build_spec.output.image.startswith(app_manager.config.builds.build_output_private_image_prefix)
-        else:
-            assert build_spec.source.git.get("cloneSecret") is None
-            assert build_spec.output.image.startswith(app_manager.config.builds.build_output_image_prefix)
+            build_spec = build_run.spec.build.spec
+            if is_private:
+                assert build_spec.source.git.get("cloneSecret") is not None
+                assert build_spec.output.image.startswith(app_manager.config.builds.build_output_private_image_prefix)
+            else:
+                assert build_spec.source.git.get("cloneSecret") is None
+                assert build_spec.output.image.startswith(app_manager.config.builds.build_output_image_prefix)
 
     elif expected_status_code == 500:
         assert response.json is not None
