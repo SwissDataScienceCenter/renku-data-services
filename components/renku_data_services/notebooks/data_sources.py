@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING, Any
 from sanic import Request
 
 from renku_data_services.app_config import logging
+from renku_data_services.authn.renku import RenkuSelfTokenMint
 from renku_data_services.base_models.core import APIUser
-from renku_data_services.connected_services.apispec_extras import RenkuTokens
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.connected_services.models import ProviderKind
 from renku_data_services.connected_services.oauth_http import (
@@ -48,13 +48,15 @@ class DataSourceRepository:
         nb_config: NotebooksConfig,
         connected_services_repo: ConnectedServicesRepository,
         oauth_client_factory: OAuthHttpClientFactory,
+        internal_token_mint: RenkuSelfTokenMint,
     ) -> None:
         self.nb_config = nb_config
         self.connected_services_repo = connected_services_repo
         self.oauth_client_factory = oauth_client_factory
+        self.internal_token_mint = internal_token_mint
 
     async def handle_configuration(
-        self, request: Request, user: APIUser, data_connector: DataConnector | GlobalDataConnector
+        self, request: Request, user: APIUser, data_connector: DataConnector | GlobalDataConnector, scope: str | None
     ) -> dict[str, Any] | None:
         """Ajusts the configuration of the input data connector if it requires an OAuth2 connection.
 
@@ -69,7 +71,7 @@ class DataSourceRepository:
             return data_connector.storage.configuration
 
         oauth2_part = await self._get_oauth2_configuration_part(
-            request=request, user=user, data_connector=data_connector
+            request=request, user=user, data_connector=data_connector, scope=scope
         )
         if oauth2_part is None:
             return None
@@ -96,6 +98,7 @@ class DataSourceRepository:
         user: APIUser,
         data_connector: DataConnector | GlobalDataConnector,
         rclone_ini_config: str,
+        scope: str | None,
     ) -> str | None:
         """Handles patching the rclone configuration of a data connector when a session is resumed.
 
@@ -126,7 +129,7 @@ class DataSourceRepository:
             return None
 
         oauth2_part = await self._get_oauth2_configuration_part(
-            request=request, user=user, data_connector=data_connector
+            request=request, user=user, data_connector=data_connector, scope=scope
         )
         if oauth2_part is None:
             return None
@@ -185,7 +188,11 @@ class DataSourceRepository:
                 return None
 
     async def _get_oauth2_configuration_part(
-        self, request: Request, user: APIUser, data_connector: DataConnector
+        self,
+        request: Request,
+        user: APIUser,
+        data_connector: DataConnector,
+        scope: str | None,
     ) -> _OAuth2ConfigPartial | None:
         """Get the OAuth2 configuration fields."""
         provider_kind = self._get_oauth2_provider_kind(data_connector=data_connector)
@@ -220,12 +227,17 @@ class DataSourceRepository:
             "access_token": token_set.access_token,
             "token_type": "Bearer",
         }
-        if user.access_token and user.refresh_token:
-            renku_tokens = RenkuTokens(
-                access_token=user.access_token,
-                refresh_token=user.refresh_token,
-            )
-            token_config["refresh_token"] = renku_tokens.encode()
+        # if user.access_token and user.refresh_token:
+        #     renku_tokens = RenkuTokens(
+        #         access_token=user.access_token,
+        #         refresh_token=user.refresh_token,
+        #     )
+        #     token_config["refresh_token"] = renku_tokens.encode()
+
+        # TODO: scope
+        renku_token = self.internal_token_mint.create_token(user=user, scope=scope)
+        token_config["refresh_token"] = renku_token
+
         if token_set.expires_at_iso:
             token_config["expiry"] = token_set.expires_at_iso
         token = json.dumps(token_config)

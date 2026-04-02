@@ -289,9 +289,13 @@ async def get_data_sources(
     dcs: dict[str, RCloneStorage] = {}
     dcs_secrets: dict[str, list[DataConnectorSecret]] = {}
     user_secret_key: str | None = None
+    internal_token_scope = f"session:{server_name}"
     async for dc in data_connectors_stream:
         configuration = await data_source_repo.handle_configuration(
-            request=request, user=user, data_connector=dc.data_connector
+            request=request,
+            user=user,
+            data_connector=dc.data_connector,
+            scope=internal_token_scope,
         )
         if configuration is None:
             continue
@@ -422,8 +426,13 @@ async def patch_data_sources(
         except Exception as err:
             logger.warning(f"Error decoding 'configData' for data connector {str(dc_id)}, skipping! {err}")
             continue
+        internal_token_scope = f"session:{server_name}"
         new_config_data = await data_source_repo.handle_patching_configuration(
-            request=request, user=user, data_connector=dc.data_connector, rclone_ini_config=existing_config_data
+            request=request,
+            user=user,
+            data_connector=dc.data_connector,
+            rclone_ini_config=existing_config_data,
+            scope=internal_token_scope,
         )
         if not new_config_data:
             continue

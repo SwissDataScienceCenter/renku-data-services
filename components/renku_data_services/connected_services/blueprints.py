@@ -13,6 +13,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.app_config import logging
 from renku_data_services.authn.chained import ChainedAuthenticator
+from renku_data_services.authn.renku import RenkuSelfTokenMint
 from renku_data_services.base_api.auth import authenticate, only_admins, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_query
@@ -166,6 +167,7 @@ class OAuth2ConnectionsBP(CustomBlueprint):
     oauth_client_factory: OAuthHttpClientFactory
     authenticator: base_models.Authenticator[base_models.APIUser]
     internal_authenticator: base_models.Authenticator[base_models.APIUser]
+    internal_token_mint: RenkuSelfTokenMint
     nb_config: NotebooksConfig
 
     def get_all(self) -> BlueprintFactoryResponse:
@@ -276,7 +278,9 @@ class OAuth2ConnectionsBP(CustomBlueprint):
                 body=body,
                 connection_id=connection_id,
                 oauth_client_factory=self.oauth_client_factory,
-                authenticator=self.authenticator,
+                # authenticator=self.authenticator,
+                authenticator=ChainedAuthenticator(chain=[self.internal_authenticator, self.authenticator]),
+                internal_token_mint=self.internal_token_mint,
                 nb_config=self.nb_config,
             )
 

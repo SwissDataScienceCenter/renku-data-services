@@ -303,6 +303,7 @@ class DependencyManager:
 
         authz = Authz(config.authz_config)
         internal_authenticator = RenkuSelfAuthenticator.from_config(config=config.internal_authn_config)
+        internal_token_mint = RenkuSelfTokenMint.from_config(config=config.internal_authn_config)
         search_updates_repo = SearchUpdatesRepo(session_maker=config.db.async_session_maker)
         metrics_repo = MetricsRepository(session_maker=config.db.async_session_maker)
         metrics = StagingMetricsService(enabled=config.posthog.enabled, metrics_repo=metrics_repo)
@@ -403,6 +404,7 @@ class DependencyManager:
             nb_config=config.nb_config,
             connected_services_repo=connected_services_repo,
             oauth_client_factory=oauth_http_client_factory,
+            internal_token_mint=internal_token_mint,
         )
         image_check_repo = ImageCheckRepository(
             nb_config=config.nb_config,
@@ -433,7 +435,6 @@ class DependencyManager:
             session_maker=config.db.async_session_maker,
         )
         resource_usage_service = ResourceUsageService(repo=resource_requests_repo)
-        internal_token_mint = RenkuSelfTokenMint.from_config(config=config.internal_authn_config)
         return cls(
             config,
             k8s_client=client,
