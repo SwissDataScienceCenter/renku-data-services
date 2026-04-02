@@ -274,6 +274,7 @@ class TestDependencyManager(DependencyManager):
         secret_client = K8sSecretClient(client)
 
         shipwright_client = None
+        gitrepositoriesrepository_class = GitRepositoriesRepository
 
         if os.environ.get("CREATE_BUILDS_CLIENT", "false").lower() == "true":
             shipwright_client = ShipwrightClient(
@@ -288,6 +289,8 @@ class TestDependencyManager(DependencyManager):
                 ),
                 namespace=config.k8s_namespace,
             )
+
+            gitrepositoriesrepository_class = FakeGitRepositoriesRepository
 
         quota_repo = QuotaRepository(K8sResourceQuotaClient(client), K8sPriorityClassClient(client))
 
@@ -337,11 +340,6 @@ class TestDependencyManager(DependencyManager):
             group_repo=group_repo,
             search_updates_repo=search_updates_repo,
         )
-
-        if config.builds.enabled:
-            gitrepositoriesrepository_class = FakeGitRepositoriesRepository
-        else:
-            gitrepositoriesrepository_class = GitRepositoriesRepository
 
         git_repositories_repo = gitrepositoriesrepository_class(
             session_maker=config.db.async_session_maker,
