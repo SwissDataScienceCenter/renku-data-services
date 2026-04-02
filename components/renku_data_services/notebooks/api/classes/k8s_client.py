@@ -190,7 +190,10 @@ class NotebookK8sClient(SecretClient):
                 K8sObjectFilter(
                     gvk=self.__session_gvk,
                     user_id=safe_username,
-                    label_selector={self.__username_label: safe_username},
+                    label_selector={
+                        self.__username_label: safe_username,
+                        "app.kubernetes.io/session-type": "Interactive",
+                    },
                 )
             )
         ]

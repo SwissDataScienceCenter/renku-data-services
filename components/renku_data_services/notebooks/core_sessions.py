@@ -954,6 +954,7 @@ async def start_session(
         "renku.io/launcher_id": str(launcher_id),
         "renku.io/resource_class_id": str(resource_class.id),
         "renku.io/resource_pool_id": str(resource_pool.id),
+        "renku.io/session_type": str(launch_request.session_mode)
     }
 
     # Authentication
