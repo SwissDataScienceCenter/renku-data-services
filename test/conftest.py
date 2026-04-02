@@ -216,12 +216,18 @@ async def dummy_users():
 
 
 def pytest_addoption(parser):
+    parser.addoption("--disable-cluster-creation", action="store_true", default=False, help="Disable cluster creation")
     parser.addoption("--enable-builds", action="store_true", default=False, help="Enable builds")
 
 
 @pytest.fixture(scope="session")
 def builds_enabled(request):
     return request.config.getoption("--enable-builds")
+
+
+@pytest_asyncio.fixture(scope="session")
+def disable_cluster_creation(request):
+    return request.config.getoption("--disable-cluster-creation")
 
 
 @pytest_asyncio.fixture(scope="session")

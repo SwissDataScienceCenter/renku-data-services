@@ -809,15 +809,6 @@ async def secrets_sanic_client(
         yield client
 
 
-def pytest_addoption(parser):
-    parser.addoption("--disable-cluster-creation", action="store_true", default=False, help="Disable cluster creation")
-
-
-@pytest_asyncio.fixture(scope="session")
-def disable_cluster_creation(request):
-    return request.config.getoption("--disable-cluster-creation")
-
-
 def __make_headers(user: UserInfo, admin: bool = False) -> dict[str, str]:
     access_token = json.dumps(
         {
