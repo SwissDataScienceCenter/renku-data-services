@@ -1,8 +1,10 @@
 """Handling of data sources which require an OAuth2 connection."""
 
 import json
+import math
 from configparser import ConfigParser
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from io import StringIO
 from typing import TYPE_CHECKING, Any
 
@@ -233,13 +235,18 @@ class DataSourceRepository:
         #         refresh_token=user.refresh_token,
         #     )
         #     token_config["refresh_token"] = renku_tokens.encode()
-
         # TODO: scope
         renku_token = self.internal_token_mint.create_token(user=user, scope=scope)
         token_config["refresh_token"] = renku_token
 
-        if token_set.expires_at_iso:
-            token_config["expiry"] = token_set.expires_at_iso
+        expires_in = self.internal_token_mint.get_expires_in()
+        if token_set.expires_at:
+            exp = datetime.fromtimestamp(token_set.expires_at, UTC)
+            expires_in_token_set = math.floor((exp - datetime.now(UTC)).total_seconds())
+            expires_in = min(expires_in, expires_in_token_set)
+
+        token_config["expiry"] = (datetime.now(UTC) + timedelta(seconds=expires_in)).isoformat()
+
         token = json.dumps(token_config)
         token_url = request.url_for("oauth2_connections.post_token_endpoint", connection_id=connection.id)
         return _OAuth2ConfigPartial(token=token, token_url=token_url)
