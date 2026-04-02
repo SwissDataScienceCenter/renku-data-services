@@ -530,9 +530,13 @@ def cluster_name():
 
 
 @pytest.fixture(scope="session")
-def kubeconfig_path(monkeysession, disable_cluster_creation):
-    kconf = str(Path("~/.kube/config").expanduser()) if disable_cluster_creation else ".kind-kubeconfig.yaml"
-    monkeysession.setenv("KUBECONFIG", kconf)
+def kubeconfig_path(monkeysession, disable_cluster_creation, tmpdir_factory):
+    if disable_cluster_creation:
+        kconf = Path("~/.kube/config").expanduser()
+    else:
+        tmp_path = tmpdir_factory.mktemp("kube")
+        kconf = tmp_path / ".kind-kubeconfig.yaml"
+    monkeysession.setenv("KUBECONFIG", str(kconf))
     return Path(kconf)
 
 
