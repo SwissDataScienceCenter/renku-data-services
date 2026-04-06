@@ -16,12 +16,14 @@ from renku_data_services.metrics.core import StagingMetricsService
 from renku_data_services.metrics.db import MetricsRepository
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.notebooks.constants import AMALTHEA_SESSION_GVK
+from renku_data_services.notifications.db import NotificationsRepository
 from renku_data_services.project.db import ProjectRepository
 from renku_data_services.resource_usage.core import (
     DefaultResourcesRequestRecorder,
     NoopResourcesRequestRecorder,
     ResourceRequestsFetch,
     ResourcesRequestRecorder,
+    ResourceUsageService,
 )
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.search.db import SearchUpdatesRepo
@@ -50,6 +52,10 @@ class DependencyManager:
     session_tasks: SessionTasks
     capacity_reservation_tasks: CapacityReservationTasks
     resource_requests_recorder: ResourcesRequestRecorder
+    k8s_client: K8sClusterClientsPool
+    notifications_repo: NotificationsRepository
+    resource_usage_service: ResourceUsageService
+    resource_requests_repo: ResourceRequestsRepo
 
     @classmethod
     def from_env(cls, cfg: Config | None = None) -> "DependencyManager":
@@ -112,14 +118,22 @@ class DependencyManager:
             k8s_client=cr_k8s_client,
         )
 
+        resource_requests_repo = ResourceRequestsRepo(cfg.db.async_session_maker)
+        resource_usage_service = ResourceUsageService(repo=resource_requests_repo)
+
         resource_requests_recorder: ResourcesRequestRecorder
         if cfg.enable_resource_request_tracking:
             resource_requests_recorder = DefaultResourcesRequestRecorder(
-                repo=ResourceRequestsRepo(cfg.db.async_session_maker), fetch=ResourceRequestsFetch(k8s_client)
+                repo=resource_requests_repo, fetch=ResourceRequestsFetch(k8s_client)
             )
         else:
             logger.warning("Resource request tracking is disabled!")
             resource_requests_recorder = NoopResourcesRequestRecorder()
+
+        notifications_repo = NotificationsRepository(
+            session_maker=cfg.db.async_session_maker,
+            alertmanager_webhook_role=cfg.alertmanager_webhook_role,
+        )
 
         kc_api: IKeycloakAPI
         if cfg.dummy_stores:
@@ -149,4 +163,8 @@ class DependencyManager:
             session_tasks=session_tasks,
             capacity_reservation_tasks=capacity_reservation_tasks,
             resource_requests_recorder=resource_requests_recorder,
+            k8s_client=k8s_client,
+            notifications_repo=notifications_repo,
+            resource_usage_service=resource_usage_service,
+            resource_requests_repo=resource_requests_repo,
         )

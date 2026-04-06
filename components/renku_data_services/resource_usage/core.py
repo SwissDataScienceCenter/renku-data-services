@@ -175,7 +175,7 @@ class ResourceUsageService:
         """Return the resource usage for the given pool of the currently running week.
 
         The week start is Monday 0:00 UTC. Resource usage is returned in 'credits'. When a user_id
-        is given, the results represent the usage of only that user. Otherwise the overall pool usage
+        is given, the results represent the usage of only that user. Otherwise, the overall pool usage
         is returned. The running week is calculated from the `current_time` argument, which is the current
         time if not specified.
         """
