@@ -794,6 +794,7 @@ def get_remote_secret(
     server_name: str,
     remote_provider_id: str,
     git_providers: list[GitProvider],
+    internal_token_mint: RenkuSelfTokenMint,
 ) -> ExtraSecret | None:
     """Returns the secret containing the configuration for the remote session controller."""
     if not user.is_authenticated or user.access_token is None or user.refresh_token is None:
@@ -801,17 +802,23 @@ def get_remote_secret(
     remote_provider = next(filter(lambda p: p.id == remote_provider_id, git_providers), None)
     if not remote_provider:
         return None
-    renku_base_url = "https://" + config.sessions.ingress.host
-    renku_base_url = renku_base_url.rstrip("/")
-    renku_auth_token_uri = f"{renku_base_url}/auth/realms/{config.keycloak_realm}/protocol/openid-connect/token"
+    # renku_base_url = "https://" + config.sessions.ingress.host
+    # renku_base_url = renku_base_url.rstrip("/")
+    # renku_auth_token_uri = f"{renku_base_url}/auth/realms/{config.keycloak_realm}/protocol/openid-connect/token"
+    internal_token_scope = f"session:{server_name}"
+    internal_token = internal_token_mint.create_token(user=user, scope=internal_token_scope)
     secret_data = {
-        "RSC_AUTH_KIND": "renku",
+        "RSC_AUTH_KIND": "renku_v2",
         "RSC_AUTH_TOKEN_URI": remote_provider.access_token_url,
-        "RSC_AUTH_RENKU_ACCESS_TOKEN": user.access_token,
-        "RSC_AUTH_RENKU_REFRESH_TOKEN": user.refresh_token,
-        "RSC_AUTH_RENKU_TOKEN_URI": renku_auth_token_uri,
-        "RSC_AUTH_RENKU_CLIENT_ID": config.sessions.git_proxy.renku_client_id,
-        "RSC_AUTH_RENKU_CLIENT_SECRET": config.sessions.git_proxy.renku_client_secret,
+        # "RSC_AUTH_RENKU_ACCESS_TOKEN": user.access_token,
+        # "RSC_AUTH_RENKU_REFRESH_TOKEN": user.refresh_token,
+        # "RSC_AUTH_RENKU_TOKEN_URI": renku_auth_token_uri,
+        # "RSC_AUTH_RENKU_CLIENT_ID": config.sessions.git_proxy.renku_client_id,
+        # "RSC_AUTH_RENKU_CLIENT_SECRET": config.sessions.git_proxy.renku_client_secret,
+        "RSC_AUTH_RENKU_TOKEN_URI": "https://"
+        + config.sessions.ingress.host
+        + "/api/data/internal/authentication/token",
+        "RSC_AUTH_RENKU_ACCESS_TOKEN": internal_token,
     }
     secret_name = f"{server_name}-remote-secret"
     secret = V1Secret(metadata=V1ObjectMeta(name=secret_name), string_data=secret_data)
@@ -1035,6 +1042,7 @@ async def start_session(
                 server_name=server_name,
                 remote_provider_id=resource_pool.remote.provider_id,
                 git_providers=git_providers,
+                internal_token_mint=internal_token_mint,
             )
         if remote_secret is not None:
             session_extras = session_extras.concat(SessionExtraResources(secrets=[remote_secret]))

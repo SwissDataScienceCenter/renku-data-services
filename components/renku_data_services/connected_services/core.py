@@ -173,7 +173,7 @@ async def handle_oauth2_token_refresh(
         refresh_exp: int | None = refresh_decoded.get("exp")
         if refresh_exp is not None and refresh_exp > 0:
             exp = datetime.fromtimestamp(refresh_exp, UTC)
-            expires_in = (exp - datetime.now(UTC)) - timedelta()
+            expires_in = exp - datetime.now(UTC)
             result["expires_in"] = math.floor(expires_in.total_seconds())
     except Exception as err:
         logger.error(f"Could not parse Renku refresh token; cannot determine its expiration: {err.__class__}.")
