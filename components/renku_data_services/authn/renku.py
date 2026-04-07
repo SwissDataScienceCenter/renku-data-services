@@ -113,9 +113,9 @@ class RenkuSelfTokenMint:
         """Create an instance from a configuration object."""
         return cls(secret_key=config.secret_key)
 
-    def create_token(self, user: APIUser, scope: str | None = None) -> str:
+    def create_token(self, user: APIUser, scope: str | None = None, expires_in: timedelta | None = None) -> str:
         """Create a new internal token for a given user."""
-        payload = self._make_payload(user=user, scope=scope)
+        payload = self._make_payload(user=user, scope=scope, expires_in=expires_in)
         return _strict_jwt.encode(payload, key=self.secret_key, algorithm=self.algorithm)
 
     def get_expires_in(self) -> int:
@@ -123,14 +123,17 @@ class RenkuSelfTokenMint:
         return int(_EXPIRATION.total_seconds())
 
     @staticmethod
-    def _make_payload(user: APIUser, scope: str | None = None) -> dict[str, str | int]:
+    def _make_payload(
+        user: APIUser, scope: str | None = None, expires_in: timedelta | None = None
+    ) -> dict[str, str | int]:
         """Generate the payload for a new token."""
+        expires_in = expires_in if expires_in is not None else _EXPIRATION
         result: dict[str, str | int] = dict()
         user_claims = RenkuSelfTokenMint._make_user_claims(user=user)
         result.update(user_claims)
         token_id = ULID()
         now = datetime.now(UTC)
-        result["exp"] = int((now + _EXPIRATION).timestamp())
+        result["exp"] = int((now + expires_in).timestamp())
         result["iat"] = int(now.timestamp())
         result["nbf"] = int(now.timestamp()) - 1
         result["iss"] = _ISSUER

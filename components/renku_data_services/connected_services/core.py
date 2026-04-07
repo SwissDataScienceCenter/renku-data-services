@@ -1,7 +1,7 @@
 """Business logic for connected services."""
 
 import math
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from urllib.parse import urlparse
 
@@ -156,7 +156,7 @@ async def handle_oauth2_token_refresh(
     if access_token is None:
         raise errors.ProgrammingError(message="Unexpected error: access token not present.")
     # TODO: scope
-    new_renku_token = internal_token_mint.create_token(user=user)
+    new_renku_token = internal_token_mint.create_token(user=user, expires_in=timedelta(hours=24))
     result: dict[str, str | int] = {
         "access_token": access_token,
         "token_type": str(oauth_token.get("token_type")) or "Bearer",
@@ -173,8 +173,8 @@ async def handle_oauth2_token_refresh(
         refresh_exp: int | None = refresh_decoded.get("exp")
         if refresh_exp is not None and refresh_exp > 0:
             exp = datetime.fromtimestamp(refresh_exp, UTC)
-            expires_in = exp - datetime.now(UTC)
-            result["expires_in"] = math.ceil(expires_in.total_seconds())
+            expires_in = (exp - datetime.now(UTC)) - timedelta()
+            result["expires_in"] = math.floor(expires_in.total_seconds())
     except Exception as err:
         logger.error(f"Could not parse Renku refresh token; cannot determine its expiration: {err.__class__}.")
     if oauth_token.expires_at:
@@ -182,8 +182,8 @@ async def handle_oauth2_token_refresh(
         expires_in = exp - datetime.now(UTC)
         result_expires_in = result.get("expires_in")
         if isinstance(result_expires_in, int) and result_expires_in > 0:
-            result["expires_in"] = min(result_expires_in, math.ceil(expires_in.total_seconds()))
+            result["expires_in"] = min(result_expires_in, math.floor(expires_in.total_seconds()))
         else:
-            result["expires_in"] = math.ceil(expires_in.total_seconds())
+            result["expires_in"] = math.floor(expires_in.total_seconds())
 
     return result
