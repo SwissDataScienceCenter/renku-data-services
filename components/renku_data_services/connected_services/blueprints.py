@@ -273,6 +273,11 @@ class OAuth2ConnectionsBP(CustomBlueprint):
         async def _post_token_endpoint(
             request: Request, body: apispec.PostTokenRequest, connection_id: ULID
         ) -> JSONResponse:
+            # NOTE: inject the access token in the headers so that we can use `self.authenticator`
+            request.headers[self.internal_authenticator.token_field] = body.refresh_token
+            request.headers[self.authenticator.token_field] = body.refresh_token
+            # request.headers[authenticator.token_field] = body.refresh_token
+
             result = await handle_oauth2_token_refresh(
                 request=request,
                 body=body,

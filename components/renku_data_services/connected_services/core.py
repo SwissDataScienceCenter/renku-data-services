@@ -133,7 +133,7 @@ async def handle_oauth2_token_refresh(
     # renku_tokens = apispec_extras.RenkuTokens.decode(body.refresh_token)
     # NOTE: inject the access token in the headers so that we can use `self.authenticator`
     # request.headers[authenticator.token_field] = renku_tokens.access_token
-    request.headers[authenticator.token_field] = body.refresh_token
+    # request.headers[authenticator.token_field] = body.refresh_token
 
     user: base_models.APIUser | None = None
     try:
