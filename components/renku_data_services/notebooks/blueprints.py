@@ -115,7 +115,9 @@ class NotebooksNewBP(CustomBlueprint):
         async def _handler(_: Request, user: AuthenticatedAPIUser | AnonymousAPIUser, session_id: str) -> HTTPResponse:
             session = await self.nb_config.k8s_v2_client.get_session(session_id, user.id)
             if session is None:
-                raise errors.ValidationError(message=f"The session with ID {session_id} does not exist.", quiet=True)
+                raise errors.MissingResourceError(
+                    message=f"The session with ID {session_id} does not exist.", quiet=True
+                )
             return json(session.as_apispec().model_dump(exclude_none=True, mode="json"))
 
         return "/sessions/<session_id>", ["GET"], _handler
