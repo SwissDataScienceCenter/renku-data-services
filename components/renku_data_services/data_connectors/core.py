@@ -605,6 +605,7 @@ def serialize_deposit(deposit: models.DepositJob) -> dict[str, Any]:
         external_url=f"https://zenodo.org/uploads/{deposit.deposit.original_id}",
         creation_date=deposit.deposit.creation_date,
         updated_at=deposit.deposit.updated_at,
+        etag=deposit.etag,
     )
 
 
@@ -1016,7 +1017,10 @@ async def update_deposit_status(
     latest_status = _get_deposit_job_status(dep_k8s_job)
     if latest_status != deposit_job.deposit.status:
         deposit_job = await dc_repo.update_deposit(
-            user, deposit_job.deposit.id, models.DepositPatch(status=latest_status)
+            user,
+            deposit_job.deposit.id,
+            models.DepositPatch(status=latest_status),
+            etag=deposit_job.etag,
         )
     return deposit_job
 

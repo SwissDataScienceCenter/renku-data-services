@@ -932,7 +932,11 @@ class DataConnectorRepository:
             )
 
     async def update_deposit(
-        self, user: base_models.APIUser, deposit_id: ULID, patch: models.DepositPatch
+        self,
+        user: base_models.APIUser,
+        deposit_id: ULID,
+        patch: models.DepositPatch,
+        etag: str,
     ) -> models.DepositJob:
         """Update an existing deposit from the database."""
         if user.id is None or user.is_anonymous:
@@ -943,6 +947,11 @@ class DataConnectorRepository:
                 raise errors.MissingResourceError(
                     message=f"The deposit with ID {deposit_id} does not exist or you do not have access to it."
                 )
+
+            current_etag = res.dump().etag
+            if current_etag != etag:
+                raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
+
             if patch.name is not None:
                 res.name = patch.name
             if patch.job_name is not None:

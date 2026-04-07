@@ -670,7 +670,11 @@ class DataConnectorsBP(CustomBlueprint):
         @if_match_required
         @validate(json=apispec.DepositPatch)
         async def _patch_deposit(
-            _: Request, user: base_models.AuthenticatedAPIUser, body: apispec.DepositPatch, deposit_id: ULID
+            _: Request,
+            user: base_models.AuthenticatedAPIUser,
+            body: apispec.DepositPatch,
+            deposit_id: ULID,
+            etag: str,
         ) -> JSONResponse:
             saved_dep = await update_deposit_status(
                 user=user,
@@ -694,7 +698,7 @@ class DataConnectorsBP(CustomBlueprint):
                     raise errors.ValidationError(
                         message="The deposit needs to be completed and published first before being completed."
                     )
-            saved_dep = await self.data_connector_repo.update_deposit(user, deposit_id, patch)
+            saved_dep = await self.data_connector_repo.update_deposit(user, deposit_id, patch, etag=etag)
             if patch.status == models.DepositStatus.complete:
                 # If the deposit is being completed then we delete it
                 # We leave it to the user to create a new data connector and link it
@@ -725,6 +729,7 @@ class DataConnectorsBP(CustomBlueprint):
                 user,
                 saved_dep.deposit.id,
                 models.DepositPatch(job_name=new_job_name, status=models.DepositStatus.in_progress),
+                etag=saved_dep.etag,
             )
             await create_deposit_upload(
                 request=request,

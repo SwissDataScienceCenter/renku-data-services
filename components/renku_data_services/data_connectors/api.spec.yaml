@@ -539,6 +539,8 @@ paths:
         - deposit
     patch:
       summary: Modify an existing data deposit
+      parameters:
+        - $ref: "#/components/parameters/If-Match"
       requestBody:
         required: true
         content:
@@ -1180,6 +1182,8 @@ components:
               $ref: "#/components/schemas/CreationDate"
             updated_at:
               $ref: "#/components/schemas/CreationDate"
+            etag:
+              $ref: "#/components/schemas/ETag"
       required:
         - id
         - name
@@ -1190,6 +1194,7 @@ components:
         - external_url
         - creation_date
         - updated_at
+        - etag
     DepositPatch:
       type: object
       properties:
