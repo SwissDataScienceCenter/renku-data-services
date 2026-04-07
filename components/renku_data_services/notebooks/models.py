@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from kubernetes.client import V1ObjectMeta, V1Secret
-from pydantic import AliasGenerator, BaseModel, Field, Json
+from pydantic import AliasGenerator, BaseModel, ConfigDict, Field, Json
 from ulid import ULID
 
 from renku_data_services.data_connectors.models import DataConnectorSecret
@@ -40,11 +40,12 @@ class SessionUserSecrets:
 
 
 class _AmaltheaSessionAnnotations(BaseModel):
-    class Config:
-        extra = "allow"
-        alias_generator = AliasGenerator(
+    model_config = ConfigDict(
+        extra="allow",
+        alias_generator=AliasGenerator(
             alias=lambda field_name: f"renku.io/{field_name}",
-        )
+        ),
+    )
 
     session_launcher_id: str | None = None
     project_id: str | None = None
@@ -54,8 +55,7 @@ class _AmaltheaSessionAnnotations(BaseModel):
 
 
 class _MetadataValidation(BaseModel):
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
     name: str
     annotations: _AmaltheaSessionAnnotations
