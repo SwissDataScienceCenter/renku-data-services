@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import unquote, urlparse, urlunparse
+from urllib.parse import parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 from sanic import HTTPResponse, Request, empty, json, redirect
 from sanic.response import JSONResponse
@@ -130,8 +130,19 @@ class OAuth2ClientsBP(CustomBlueprint):
 
         async def _callback(request: Request) -> HTTPResponse:
             params = CallbackParams.model_validate(dict(request.query_args))
+            callback_query = dict(request.query_args)
 
             callback_url = self._get_callback_url(request)
+
+            if callback_query.get("error"):
+                next_url = await self.connected_services_repo.get_oauth2_connection_next_url_by_state(params.state)
+                if next_url:
+                    return redirect(to=self._append_query_params(next_url, callback_query))
+                logger.info(
+                    "OAuth callback returned an error but no pending connection next_url was found "
+                    f"for state={params.state!r}"
+                )
+                raise errors.ForbiddenError(message="You do not have the required permissions for this operation.")
 
             client = await self.oauth_http_client_factory.fetch_token(
                 state=params.state, raw_url=request.url, callback_url=callback_url
@@ -155,6 +166,17 @@ class OAuth2ClientsBP(CustomBlueprint):
         if https_callback_url != callback_url:
             logger.warning("Forcing the callback URL to use https. Trusted proxies configuration may be incorrect.")
         return https_callback_url
+
+    @staticmethod
+    def _append_query_params(url: str, query: dict[str, str]) -> str:
+        allowed_keys = ("error", "error_description", "state", "error_uri", "code", "iss")
+        params = [(k, v) for k, v in query.items() if k in allowed_keys and v]
+        if not params:
+            return url
+        parsed = urlparse(url)
+        existing_params = parse_qsl(parsed.query, keep_blank_values=True)
+        merged_query = urlencode([*existing_params, *params])
+        return urlunparse(parsed._replace(query=merged_query))
 
 
 @dataclass(kw_only=True)

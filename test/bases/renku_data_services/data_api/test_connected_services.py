@@ -366,6 +366,72 @@ async def test_callback_oauth2_authorization_flow(
 
 
 @pytest.mark.asyncio
+async def test_callback_oauth2_authorization_flow_error_redirects_to_next_url(
+    oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_provider
+):
+    provider = await create_oauth2_provider("provider_1")
+    provider_id = provider["id"]
+
+    next_url = "https://example.org/my-ui/callback"
+    qs = f"next_url={quote(next_url)}"
+
+    _, res = await oauth2_test_client.get(
+        f"/api/data/oauth2/providers/{provider_id}/authorize?{qs}", headers=user_headers
+    )
+    assert res.status_code == 302, res.text
+    location = urlparse(res.headers["location"])
+    state = parse_qs(location.query).get("state", [None])[0]
+    assert state
+
+    callback_qs = f"state={quote(state)}&error=access_denied&error_description={quote('User canceled')}"
+    _, res = await oauth2_test_client.get(f"/api/data/oauth2/callback?{callback_qs}")
+
+    assert res.status_code == 302, res.text
+    redirect_location = urlparse(res.headers["location"])
+    assert f"{redirect_location.scheme}://{redirect_location.netloc}{redirect_location.path}" == next_url
+    redirected_query = parse_qs(redirect_location.query)
+    assert redirected_query.get("error", [None])[0] == "access_denied"
+    assert redirected_query.get("error_description", [None])[0] == "User canceled"
+    assert redirected_query.get("state", [None])[0] == state
+
+
+@pytest.mark.asyncio
+async def test_callback_oauth2_authorization_flow_error_preserves_next_url_query(
+    oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_provider
+):
+    provider = await create_oauth2_provider("provider_1")
+    provider_id = provider["id"]
+
+    next_url = "https://example.org/my-ui/callback?existing=1"
+    qs = f"next_url={quote(next_url)}"
+
+    _, res = await oauth2_test_client.get(
+        f"/api/data/oauth2/providers/{provider_id}/authorize?{qs}", headers=user_headers
+    )
+    assert res.status_code == 302, res.text
+    location = urlparse(res.headers["location"])
+    state = parse_qs(location.query).get("state", [None])[0]
+    assert state
+
+    callback_qs = (
+        f"state={quote(state)}"
+        "&error=access_denied"
+        f"&error_description={quote('User canceled')}"
+        f"&error_uri={quote('https://example.org/oauth/errors/access_denied')}"
+    )
+    _, res = await oauth2_test_client.get(f"/api/data/oauth2/callback?{callback_qs}")
+
+    assert res.status_code == 302, res.text
+    redirect_location = urlparse(res.headers["location"])
+    redirected_query = parse_qs(redirect_location.query)
+    assert redirected_query.get("existing", [None])[0] == "1"
+    assert redirected_query.get("error", [None])[0] == "access_denied"
+    assert redirected_query.get("error_description", [None])[0] == "User canceled"
+    assert redirected_query.get("error_uri", [None])[0] == "https://example.org/oauth/errors/access_denied"
+    assert redirected_query.get("state", [None])[0] == state
+
+
+@pytest.mark.asyncio
 async def test_get_account(oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_connection):
     connection = await create_oauth2_connection("provider_1")
     connection_id = connection["id"]
