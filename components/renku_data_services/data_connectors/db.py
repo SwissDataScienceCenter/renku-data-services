@@ -2,7 +2,7 @@
 
 import random
 import string
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from typing import TypeVar
@@ -31,6 +31,7 @@ from renku_data_services.data_connectors import apispec, models
 from renku_data_services.data_connectors import orm as schemas
 from renku_data_services.data_connectors.core import validate_unsaved_global_data_connector
 from renku_data_services.data_connectors.doi.models import DOI
+from renku_data_services.k8s.constants import DEFAULT_K8S_CLUSTER
 from renku_data_services.namespace import orm as ns_schemas
 from renku_data_services.namespace.db import GroupRepository
 from renku_data_services.namespace.models import ProjectNamespace
@@ -816,6 +817,157 @@ class DataConnectorRepository:
         link = link_orm.dump()
         await session.delete(link_orm)
         return link
+
+    async def get_deposits(
+        self,
+        user: base_models.APIUser,
+        data_connector_id: ULID | None = None,
+        pagination: PaginationRequest | None = None,
+    ) -> tuple[list[models.DepositJob], int]:
+        """Get a deposit from the DB."""
+
+        if user.id is None or user.is_anonymous:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+        async with self.session_maker() as session, session.begin():
+            stmt = (
+                select(schemas.DepositORM)
+                .where(schemas.DepositORM.user_id == user.id)
+                .order_by(schemas.DepositORM.id.desc())
+            )
+            stmt_count = (
+                select(func.count()).select_from(schemas.DepositORM).where(schemas.DepositORM.user_id == user.id)
+            )
+            if data_connector_id:
+                stmt = stmt.where(schemas.DepositORM.data_connector_id == data_connector_id)
+                stmt_count.where(schemas.DepositORM.data_connector_id == data_connector_id)
+            if pagination:
+                stmt = stmt.limit(pagination.per_page).offset(pagination.offset)
+            res = await session.scalars(stmt)
+            res_count = await session.scalar(stmt_count)
+            return [i.dump() for i in res], res_count or 0
+
+    async def __get_deposit(
+        self, user: base_models.APIUser, deposit_id: ULID, session: AsyncSession
+    ) -> schemas.DepositORM | None:
+        if user.id is None or user.is_anonymous:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+        stmt = await session.scalars(
+            select(schemas.DepositORM)
+            .where(schemas.DepositORM.user_id == user.id)
+            .where(schemas.DepositORM.id == deposit_id)
+        )
+        return stmt.one_or_none()
+
+    async def get_deposit(self, user: base_models.APIUser, deposit_id: ULID) -> models.DepositJob:
+        """Get a deposit from the DB."""
+        if user.id is None or user.is_anonymous:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+        async with self.session_maker() as session, session.begin():
+            res = await self.__get_deposit(user, deposit_id, session)
+            if res is None:
+                raise errors.MissingResourceError(
+                    message=f"The deposit with ID {deposit_id} does not exist or you do not have access to it."
+                )
+            return res.dump()
+
+    async def create_deposit(
+        self,
+        user: base_models.APIUser,
+        deposit_job: models.UnsavedDepositJob,
+        in_transaction_ops: Callable[[models.DepositJob], Awaitable[None]],
+    ) -> models.DepositJob:
+        """Create a deposit in the DB."""
+        if user.id is None or user.is_anonymous:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+        deposit = deposit_job.deposit
+        async with self.session_maker() as session, session.begin():
+            existing_stmt = (
+                select(schemas.DepositORM)
+                .where(schemas.DepositORM.data_connector_id == deposit.data_connector_id)
+                .where(schemas.DepositORM.user_id == user.id)
+            )
+            existing_dep = await session.scalar(existing_stmt)
+            if existing_dep is not None:
+                raise errors.ConflictError(
+                    message="Cannot create a new deposit when there is already an existing deposit "
+                    f"for the data connector with ID {deposit.data_connector_id}",
+                    detail="Please delete the existing deposit and then create a new one or edit the existing deposit",
+                )
+            status_subq = (
+                select(schemas.DepositStatusORM.id)
+                .where(schemas.DepositStatusORM.status == deposit.status.value)
+                .scalar_subquery()
+            )
+            source_subq = (
+                select(schemas.DepositSourceORM.id)
+                .where(schemas.DepositSourceORM.source == deposit.source.value)
+                .scalar_subquery()
+            )
+            dep = schemas.DepositORM(
+                source_id=source_subq,
+                status_id=status_subq,
+                original_id=deposit.original_id,
+                data_connector_id=deposit.data_connector_id,
+                user_id=user.id,
+                path=deposit.path.as_posix() if deposit.path else None,
+                job_name=deposit_job.name,
+                # The local cluster ID does not exist in the DB so it cannot be used as a foreign key
+                cluster_id=None if deposit_job.cluster_id == DEFAULT_K8S_CLUSTER else deposit_job.cluster_id,
+                name=deposit_job.deposit.name,
+            )
+            session.add(dep)
+            await session.flush()
+            await session.refresh(dep)
+            output = dep.dump()
+            await in_transaction_ops(output)
+        return output
+
+    async def delete_deposit(self, user: base_models.APIUser, deposit_id: ULID) -> None:
+        """Delete an existing deposit from the database."""
+        async with self.session_maker() as session, session.begin():
+            await session.execute(
+                delete(schemas.DepositORM)
+                .where(schemas.DepositORM.id == deposit_id)
+                .where(schemas.DepositORM.user_id == user.id)
+            )
+
+    async def update_deposit(
+        self,
+        user: base_models.APIUser,
+        deposit_id: ULID,
+        patch: models.DepositPatch,
+        etag: str,
+    ) -> models.DepositJob:
+        """Update an existing deposit from the database."""
+        if user.id is None or user.is_anonymous:
+            raise errors.UnauthorizedError(message="You do not have the required permissions for this operation.")
+        async with self.session_maker() as session, session.begin():
+            res = await self.__get_deposit(user, deposit_id, session)
+            if res is None:
+                raise errors.MissingResourceError(
+                    message=f"The deposit with ID {deposit_id} does not exist or you do not have access to it."
+                )
+
+            current_etag = res.dump().etag
+            if current_etag != etag:
+                raise errors.ConflictError(message=f"Current ETag is {current_etag}, not {etag}.")
+
+            if patch.name is not None:
+                res.name = patch.name
+            if patch.job_name is not None:
+                res.job_name = patch.job_name
+            if patch.status is not None:
+                status_subq = (
+                    select(schemas.DepositStatusORM.id)
+                    .where(schemas.DepositStatusORM.status == patch.status.value)
+                    .scalar_subquery()
+                )
+                res.status_id = status_subq
+            if patch.path is not None:
+                res.path = patch.path.as_posix()
+            await session.flush()
+            await session.refresh(res)
+        return res.dump()
 
 
 class DataConnectorSecretRepository:

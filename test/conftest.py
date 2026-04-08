@@ -224,6 +224,9 @@ async def app_manager(
     monkeysession.setenv("NB_SERVER_OPTIONS__UI_CHOICES_PATH", "server_options.json")
     monkeysession.setenv("V1_SESSIONS_ENABLED", "true")
     monkeysession.setenv("K8S_CONFIGS_ROOT", kubeconfig_path.parent.absolute().as_posix())
+    monkeysession.setenv("DATA_DEPOSITS_JOB_IMAGE", "test-deposit-image")
+    monkeysession.setenv("RENKU_URL", "http://test-renku-url.io")
+    monkeysession.setenv("KUBERNETES_NAMESPACE", "default")
 
     dm = TestDependencyManager.from_env(dummy_users)
 
