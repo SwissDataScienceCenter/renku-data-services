@@ -154,7 +154,7 @@ class GitProviderHelper:
         return GitProviderHelper(
             connected_services_repo=csr,
             service_url=data_service_url,
-            renku_url=f"http://{sessions_config.ingress.host}",
+            renku_url=sessions_config.ingress.renku_url,
             internal_gitlab_url=git_config.url,
             enable_internal_gitlab=enable_internal_gitlab,
         )

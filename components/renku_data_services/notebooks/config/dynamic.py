@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from io import StringIO
-from typing import Any, ClassVar, Self, Union
+from typing import Any, ClassVar, Literal, Self, Union
 
 import yaml
 from kubernetes import client
@@ -255,6 +255,16 @@ class _SessionIngress:
             class_name=os.environ.get("NB_SESSIONS__INGRESS__CLASS_NAME", None),
             annotations=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__INGRESS__ANNOTATIONS", "{}"))),
         )
+
+    @property
+    def scheme(self) -> Literal["https"] | Literal["http"]:
+        if self.tls_secret or self.use_default_cluster_tls_cert:
+            return "https"
+        return "http"
+
+    @property
+    def renku_url(self) -> str:
+        return f"{self.scheme}::{self.host}"
 
 
 @dataclass
