@@ -1462,10 +1462,22 @@ async def test_starting_session_anonymous(
             False,
         ),
         (
+            201,
+            "https://github.com/SwissDataScienceCenter/private",
+            "https://github.com/SwissDataScienceCenter/private",
+            True,
+        ),
+        (
             422,
             "https://github.com/SwissDataScienceCenter/renku",
             "https://github.com/SwissDataScienceCenter/not-the same",
             False,
+        ),
+        (
+            422,
+            "https://github.com/SwissDataScienceCenter/other-private",
+            "https://github.com/SwissDataScienceCenter/other-private",
+            True,
         ),
     ],
 )
@@ -1484,7 +1496,11 @@ async def test_starting_session_with_built_environment(
     build_git_repo,
     request_git_repo,
     is_private,
+    builds_enabled,
 ) -> None:
+    if not builds_enabled and is_private:
+        expected_status_code = 422
+
     project: dict[str, Any] = await create_project(
         sanic_client,
         "Some project",

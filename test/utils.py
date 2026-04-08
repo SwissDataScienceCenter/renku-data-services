@@ -230,6 +230,14 @@ class FakeGitRepositoriesRepository(GitRepositoriesRepository):
                         visibility=repositories_models.RepositoryVisibility.private,
                     )
                 )
+            case "/SwissDataScienceCenter/other-private":
+                result = result.with_metadata(
+                    repositories_models.Metadata(
+                        git_url=valid_url.render(),
+                        pull_permission=False,
+                        visibility=repositories_models.RepositoryVisibility.private,
+                    )
+                )
             case "/some/repo":
                 result = result.with_error(GitUrlError.no_git_repo)
             case _:
