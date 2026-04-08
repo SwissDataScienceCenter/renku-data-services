@@ -15,6 +15,7 @@ import base64
 import os
 import random
 from dataclasses import dataclass, field
+from datetime import timedelta
 from pathlib import Path
 
 from renku_data_services import errors
@@ -112,18 +113,49 @@ class InternalAuthenticationConfig:
     """
 
     secret_key: bytes = field(repr=False)
+    default_token_expiration: timedelta
+    refresh_token_expiration: timedelta
+    issuer: str
+    audience: str
 
     @classmethod
     def from_env(cls) -> InternalAuthenticationConfig:
         """Create a config from environment variables."""
+        default_token_expiration_str = os.environ.get("INTERNAL_AUTHN_DEFAULT_TOKEN_EXPIRATION_SECONDS")
+        default_token_expiration = (
+            timedelta(seconds=int(default_token_expiration_str))
+            if default_token_expiration_str
+            else timedelta(minutes=15)
+        )
+        refresh_token_expiration_str = os.environ.get("INTERNAL_AUTHN_REFRESH_TOKEN_EXPIRATION_SECONDS")
+        refresh_token_expiration = (
+            timedelta(seconds=int(refresh_token_expiration_str))
+            if refresh_token_expiration_str
+            else timedelta(hours=24)
+        )
+        issuer = os.environ.get("INTERNAL_AUTHN_ISSUER") or "renku-self"
+        audience = os.environ.get("INTERNAL_AUTHN_AUDIENCE") or "renku-self"
+
         dummy_stores = os.environ.get("DUMMY_STORES", "false").lower() == "true"
         if dummy_stores:
             rand = random.SystemRandom()
             secret_key = rand.randbytes(64)
-            return cls(secret_key=secret_key)
+            return cls(
+                secret_key=secret_key,
+                default_token_expiration=default_token_expiration,
+                refresh_token_expiration=refresh_token_expiration,
+                issuer=issuer,
+                audience=audience,
+            )
 
         secret_key_path = os.environ.get("INTERNAL_AUTHN_SECRET_KEY_PATH")
         if secret_key_path is None:
             raise errors.ConfigurationError(message="The secret key for internal authentication has to be specified.")
         secret_key = base64.urlsafe_b64decode(Path(secret_key_path).read_bytes())
-        return cls(secret_key=secret_key)
+        return cls(
+            secret_key=secret_key,
+            default_token_expiration=default_token_expiration,
+            refresh_token_expiration=refresh_token_expiration,
+            issuer=issuer,
+            audience=audience,
+        )

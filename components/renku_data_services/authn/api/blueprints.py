@@ -59,7 +59,7 @@ class InternalAuthenticationBP(CustomBlueprint):
                 {
                     "access_token": new_token,
                     "token_type": apispec.InternalTokenType.Bearer,
-                    "expires_in": self.internal_token_mint.get_expires_in(),
+                    "expires_in": int(self.internal_token_mint.default_token_expiration.total_seconds()),
                 },
             )
 

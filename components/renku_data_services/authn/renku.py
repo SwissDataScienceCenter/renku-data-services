@@ -6,7 +6,7 @@ This authenticator can mint and verify its own tokens.
 from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, Final, Self
+from typing import TYPE_CHECKING, Any, Self
 
 import jwt
 from sanic import Request
@@ -22,9 +22,9 @@ if TYPE_CHECKING:
 _strict_jwt = jwt.PyJWT({"enforce_minimum_key_length": True})
 
 # TODO: make these configurable (from usual config)
-_EXPIRATION: Final[timedelta] = timedelta(minutes=15)
-_ISSUER: Final[str] = "renku-self"
-_AUDIENCE: Final[str] = "renku-self"
+# _EXPIRATION: Final[timedelta] = timedelta(minutes=15)
+# _ISSUER: Final[str] = "renku-self"
+# _AUDIENCE: Final[str] = "renku-self"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -35,6 +35,8 @@ class RenkuSelfAuthenticator(Authenticator[APIUser]):
     """
 
     secret_key: bytes = field(repr=False)
+    issuer: str
+    audience: str
     algorithm: str = "HS512"
     token_field: str = "Authorization"
     anon_id_header_key: str = "Renku-Auth-Anon-Id"
@@ -43,7 +45,11 @@ class RenkuSelfAuthenticator(Authenticator[APIUser]):
     @classmethod
     def from_config(cls, config: "InternalAuthenticationConfig") -> Self:
         """Create an instance from a configuration object."""
-        return cls(secret_key=config.secret_key)
+        return cls(
+            secret_key=config.secret_key,
+            issuer=config.issuer,
+            audience=config.audience,
+        )
 
     async def authenticate(self, access_token: str, request: Request) -> APIUser:
         """Authenticate using internal tokens."""
@@ -93,8 +99,8 @@ class RenkuSelfAuthenticator(Authenticator[APIUser]):
             token,
             key=self.secret_key,
             algorithms=[self.algorithm],
-            issuer=_ISSUER,
-            audience=_AUDIENCE,
+            issuer=self.issuer,
+            audience=self.audience,
         )
 
 
@@ -106,28 +112,37 @@ class RenkuSelfTokenMint:
     """
 
     secret_key: bytes = field(repr=False)
+    default_token_expiration: timedelta
+    refresh_token_expiration: timedelta
+    issuer: str
+    audience: str
     algorithm: str = "HS512"
 
     @classmethod
     def from_config(cls, config: "InternalAuthenticationConfig") -> Self:
         """Create an instance from a configuration object."""
-        return cls(secret_key=config.secret_key)
+        return cls(
+            secret_key=config.secret_key,
+            default_token_expiration=config.default_token_expiration,
+            refresh_token_expiration=config.refresh_token_expiration,
+            issuer=config.issuer,
+            audience=config.audience,
+        )
 
     def create_token(self, user: APIUser, scope: str | None = None, expires_in: timedelta | None = None) -> str:
         """Create a new internal token for a given user."""
         payload = self._make_payload(user=user, scope=scope, expires_in=expires_in)
         return _strict_jwt.encode(payload, key=self.secret_key, algorithm=self.algorithm)
 
-    def get_expires_in(self) -> int:
-        """Get the value in seconds for the 'expires_in' claim."""
-        return int(_EXPIRATION.total_seconds())
+    # def get_expires_in(self) -> int:
+    #     """Get the value in seconds for the 'expires_in' claim."""
+    #     return int(_EXPIRATION.total_seconds())
 
-    @staticmethod
     def _make_payload(
-        user: APIUser, scope: str | None = None, expires_in: timedelta | None = None
+        self, user: APIUser, scope: str | None = None, expires_in: timedelta | None = None
     ) -> dict[str, str | int]:
         """Generate the payload for a new token."""
-        expires_in = expires_in if expires_in is not None else _EXPIRATION
+        expires_in = expires_in if expires_in is not None else self.default_token_expiration
         result: dict[str, str | int] = dict()
         user_claims = RenkuSelfTokenMint._make_user_claims(user=user)
         result.update(user_claims)
@@ -136,8 +151,8 @@ class RenkuSelfTokenMint:
         result["exp"] = int((now + expires_in).timestamp())
         result["iat"] = int(now.timestamp())
         result["nbf"] = int(now.timestamp()) - 1
-        result["iss"] = _ISSUER
-        result["aud"] = _AUDIENCE
+        result["iss"] = self.issuer
+        result["aud"] = self.audience
         result["jti"] = str(token_id)
         if scope:
             result["scope"] = scope
