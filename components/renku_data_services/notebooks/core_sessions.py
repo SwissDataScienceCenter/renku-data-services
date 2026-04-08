@@ -798,6 +798,11 @@ async def start_session(
     git_providers = await git_provider_helper.get_providers(user=user)
     repositories = repositories_from_project(project, git_providers)
 
+    if environment.build_parameters is not None:
+        build_repository = environment.build_parameters.repository
+        if build_repository not in [repository.url for repository in repositories]:
+            raise errors.ValidationError(message="Image was not built from a repository in this project")
+
     # User secrets
     session_extras = SessionExtraResources()
     session_extras = session_extras.concat(
