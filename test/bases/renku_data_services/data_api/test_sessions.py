@@ -11,7 +11,6 @@ from sanic_testing.testing import SanicASGITestClient, TestingResponse
 from syrupy.filters import props
 
 from renku_data_services import errors
-from renku_data_services.crc.apispec import ResourcePool
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.session.constants import BUILD_RUN_GVK
 from renku_data_services.session.models import EnvVar
@@ -36,10 +35,10 @@ def launch_session(
     cluster: KindCluster,
 ):
     async def launch_session_helper(
-        payload: dict, headers: dict = None, user: UserInfo = regular_user
+        payload: dict, headers: dict = None, user: UserInfo = regular_user, cookies: dict = None
     ) -> TestingResponse:
         headers = headers or user_headers
-        _, res = await sanic_client.post("/api/data/sessions", headers=headers, json=payload)
+        _, res = await sanic_client.post("/api/data/sessions", headers=headers, json=payload, cookies=cookies)
         assert res.status_code == 201, res.text
         assert res.json is not None
         assert "name" in res.json
@@ -1400,11 +1399,11 @@ def anonymous_user_headers() -> dict[str, str]:
 
 
 @pytest.mark.asyncio
-@pytest.mark.skip(reason="Setup for testing sessions is not done yet.")  # TODO: enable in followup PR
 @pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
 async def test_starting_session_anonymous(
     sanic_client: SanicASGITestClient,
     create_project,
+    create_resource_pool,
     create_session_launcher,
     user_headers,
     app_manager: DependencyManager,
@@ -1412,44 +1411,118 @@ async def test_starting_session_anonymous(
     launch_session,
     anonymous_user_headers,
 ) -> None:
-    _, res = await sanic_client.post(
-        "/api/data/resource_pools",
-        json=ResourcePool.model_validate(app_manager.default_resource_pool, from_attributes=True).model_dump(
-            mode="json", exclude_none=True
-        ),
-        headers=admin_headers,
-    )
-    assert res.status_code == 201, res.text
     project: dict[str, Any] = await create_project(
         sanic_client,
         "Some project",
         visibility="public",
         repositories=["https://github.com/SwissDataScienceCenter/renku-data-services"],
     )
+    resource_pool = await create_resource_pool(admin=True)
     launcher: dict[str, Any] = await create_session_launcher(
-        "Launcher 1",
+        name="Launcher 1",
         project_id=project["id"],
+        description="A session launcher",
+        resource_class_id=resource_pool["classes"][0]["id"],
+        disk_storage=42,
         environment={
             "container_image": "renku/renkulab-py:3.10-0.23.0-amalthea-sessions-3",
             "environment_kind": "CUSTOM",
             "name": "test",
             "port": 8888,
+            "environment_image_source": "image",
         },
         env_variables=[
             {"name": "TEST_ENV_VAR", "value": "some-random-value-1234"},
         ],
     )
+
     launcher_id = launcher["id"]
     project_id = project["id"]
     payload = {"project_id": project_id, "launcher_id": launcher_id}
-    session_res = await launch_session(payload, headers=anonymous_user_headers)
-    _, res = await sanic_client.get(f"/api/data/sessions/{session_res.json['name']}", headers=anonymous_user_headers)
+    cookies = {"_renku_session": "some content"}
+    session_res = await launch_session(payload, headers=anonymous_user_headers, cookies=cookies)
+    _, res = await sanic_client.get(
+        f"/api/data/sessions/{session_res.json['name']}", headers=anonymous_user_headers, cookies=cookies
+    )
     assert res.status_code == 200, res.text
     assert res.json["name"] == session_res.json["name"]
-    _, res = await sanic_client.get("/api/data/sessions", headers=anonymous_user_headers)
+    _, res = await sanic_client.get("/api/data/sessions", headers=anonymous_user_headers, cookies=cookies)
     assert res.status_code == 200, res.text
     assert len(res.json) > 0
     assert session_res.json["name"] in [i["name"] for i in res.json]
+
+
+@pytest.mark.parametrize(
+    "expected_status_code,build_git_repo,request_git_repo, is_private",
+    [
+        (
+            201,
+            "https://github.com/SwissDataScienceCenter/renku",
+            "https://github.com/SwissDataScienceCenter/renku",
+            False,
+        ),
+        (
+            422,
+            "https://github.com/SwissDataScienceCenter/renku",
+            "https://github.com/SwissDataScienceCenter/not-the same",
+            False,
+        ),
+    ],
+)
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")  # Needs to run on the same worker as the rest of the sessions tests
+async def test_starting_session_with_built_environment(
+    sanic_client: SanicASGITestClient,
+    create_project,
+    create_resource_pool,
+    create_session_launcher,
+    user_headers,
+    app_manager: DependencyManager,
+    admin_headers,
+    launch_session,
+    expected_status_code,
+    build_git_repo,
+    request_git_repo,
+    is_private,
+) -> None:
+    project: dict[str, Any] = await create_project(
+        sanic_client,
+        "Some project",
+        visibility="public",
+        repositories=[request_git_repo],
+    )
+    resource_pool = await create_resource_pool(admin=True)
+    launcher: dict[str, Any] = await create_session_launcher(
+        name="Launcher 1",
+        project_id=project["id"],
+        description="A session launcher",
+        resource_class_id=resource_pool["classes"][0]["id"],
+        environment={
+            "repository": build_git_repo,
+            "builder_variant": "python",
+            "frontend_variant": "vscodium",
+            "environment_image_source": "build",
+        },
+        env_variables=[
+            {"name": "TEST_ENV_VAR", "value": "some-random-value-1234"},
+        ],
+    )
+
+    launcher_id = launcher["id"]
+    project_id = project["id"]
+    payload = {"project_id": project_id, "launcher_id": launcher_id}
+
+    _, session_res = await sanic_client.post("/api/data/sessions", headers=user_headers, json=payload)
+    assert session_res.status_code == expected_status_code
+
+    if expected_status_code == 201:
+        _, res = await sanic_client.get(f"/api/data/sessions/{session_res.json['name']}", headers=user_headers)
+        assert res.status_code == 200, res.text
+        assert res.json["name"] == session_res.json["name"]
+        _, res = await sanic_client.get("/api/data/sessions", headers=user_headers)
+        assert res.status_code == 200, res.text
+        assert len(res.json) > 0
+        assert session_res.json["name"] in [i["name"] for i in res.json]
 
 
 @pytest.mark.asyncio
