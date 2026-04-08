@@ -551,9 +551,11 @@ async def test_post_session_launcher_with_environment_build(
             if is_private:
                 assert build_spec.source.git.get("cloneSecret") is not None
                 assert build_spec.output.image.startswith(app_manager.config.builds.build_output_private_image_prefix)
+                assert build_spec.output.pushSecret == app_manager.config.builds.push_private_secret_name
             else:
                 assert build_spec.source.git.get("cloneSecret") is None
                 assert build_spec.output.image.startswith(app_manager.config.builds.build_output_image_prefix)
+                assert build_spec.output.pushSecret == app_manager.config.builds.push_secret_name
 
     elif expected_status_code == 500:
         assert response.json is not None
@@ -648,9 +650,11 @@ async def test_post_session_launcher_with_advanced_environment_build(
             if is_private:
                 assert build_spec.source.git.get("cloneSecret") is not None
                 assert build_spec.output.image.startswith(app_manager.config.builds.build_output_private_image_prefix)
+                assert build_spec.output.pushSecret == app_manager.config.builds.push_private_secret_name
             else:
                 assert build_spec.source.git.get("cloneSecret") is None
                 assert build_spec.output.image.startswith(app_manager.config.builds.build_output_image_prefix)
+                assert build_spec.output.pushSecret == app_manager.config.builds.push_secret_name
 
     elif expected_status_code == 500:
         assert response.json is not None

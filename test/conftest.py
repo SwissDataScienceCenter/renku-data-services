@@ -243,11 +243,14 @@ async def app_manager(
     monkeysession.setenv("DATA_DEPOSITS_JOB_IMAGE", "test-deposit-image")
     monkeysession.setenv("RENKU_URL", "http://test-renku-url.io")
     monkeysession.setenv("KUBERNETES_NAMESPACE", "default")
+    monkeysession.setenv("BUILD_PUSH_SECRET_NAME", constants.BUILD_DEFAULT_PUSH_SECRET_NAME)
 
     monkeysession.setenv("CREATE_BUILDS_CLIENT", str(builds_enabled))
     if builds_enabled:
         monkeysession.setenv("BUILD_OUTPUT_IMAGE_PREFIX", constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX)
         monkeysession.setenv("BUILD_OUTPUT_PRIVATE_IMAGE_PREFIX", constants.BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX)
+        monkeysession.setenv("BUILD_OUTPUT_PRIVATE_IMAGE_PREFIX", constants.BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX)
+        monkeysession.setenv("BUILD_PUSH_PRIVATE_SECRET_NAME", constants.BUILD_DEFAULT_PUSH_PRIVATE_SECRET_NAME)
 
     dm = TestDependencyManager.from_env(dummy_users)
 

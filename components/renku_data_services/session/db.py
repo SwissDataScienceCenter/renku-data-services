@@ -1102,7 +1102,6 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
 
         # TODO: define the build strategy from `build_parameters`
         build_strategy_name = self.builds_config.build_strategy_name or constants.BUILD_DEFAULT_BUILD_STRATEGY_NAME
-        push_secret_name = self.builds_config.push_secret_name or constants.BUILD_DEFAULT_PUSH_SECRET_NAME
 
         node_selector = self.builds_config.node_selector
         tolerations = self.builds_config.tolerations
@@ -1141,6 +1140,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
         output_image_prefix = (
             self.builds_config.build_output_image_prefix or constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX
         )
+        push_secret_name = self.builds_config.push_secret_name or constants.BUILD_DEFAULT_PUSH_SECRET_NAME
 
         visibility: RepositoryVisibility = RepositoryVisibility.public
         if isinstance(result.metadata, Metadata):
@@ -1158,6 +1158,10 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             output_image_prefix = (
                 self.builds_config.build_output_private_image_prefix
                 or constants.BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX
+            )
+
+            push_secret_name = (
+                self.builds_config.push_private_secret_name or constants.BUILD_DEFAULT_PUSH_PRIVATE_SECRET_NAME
             )
 
         output_image_name = constants.BUILD_OUTPUT_IMAGE_NAME

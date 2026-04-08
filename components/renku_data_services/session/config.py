@@ -36,6 +36,7 @@ class BuildsConfig:
     build_strategy_name: str | None = None
     build_platform_overrides: dict[str, BuildPlatformOverrides] | None = None
     push_secret_name: str | None = None
+    push_private_secret_name: str | None = None
     buildrun_retention_after_failed: timedelta | None = None
     buildrun_retention_after_succeeded: timedelta | None = None
     buildrun_build_timeout: timedelta | None = None
@@ -52,6 +53,7 @@ class BuildsConfig:
         build_run_image = os.environ.get("BUILD_RUN_IMAGE")
         build_strategy_name = os.environ.get("BUILD_STRATEGY_NAME")
         push_secret_name = os.environ.get("BUILD_PUSH_SECRET_NAME")
+        push_private_secret_name = os.environ.get("BUILD_PUSH_PRIVATE_SECRET_NAME")
         buildrun_retention_after_failed_seconds = int(os.environ.get("BUILD_RUN_RETENTION_AFTER_FAILED_SECONDS") or "0")
         buildrun_retention_after_failed = (
             timedelta(seconds=buildrun_retention_after_failed_seconds)
@@ -124,6 +126,7 @@ class BuildsConfig:
             build_strategy_name=build_strategy_name or None,
             build_platform_overrides=build_platform_overrides,
             push_secret_name=push_secret_name or None,
+            push_private_secret_name=push_private_secret_name or None,
             buildrun_retention_after_failed=buildrun_retention_after_failed,
             buildrun_retention_after_succeeded=buildrun_retention_after_succeeded,
             buildrun_build_timeout=buildrun_build_timeout,

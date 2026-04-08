@@ -734,6 +734,8 @@ def setup_shipwright(cluster: KindCluster) -> None:
     secret_data = {".dockerconfigjson": base64.b64encode(json.dumps(docker_config).encode()).decode()}
     secret = k8s_client.V1Secret(metadata=V1ObjectMeta(name="renku-build-secret"), data=secret_data)
     core_api.create_namespaced_secret(namespace="default", body=secret)
+    secret = k8s_client.V1Secret(metadata=V1ObjectMeta(name="renku-build-private-secret"), data=secret_data)
+    core_api.create_namespaced_secret(namespace="default", body=secret)
 
 
 class KindCluster(AbstractContextManager):
