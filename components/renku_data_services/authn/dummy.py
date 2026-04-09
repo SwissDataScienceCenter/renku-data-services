@@ -46,6 +46,7 @@ class DummyAuthenticator:
     async def authenticate(self, access_token: str, request: Request) -> base_models.APIUser:
         """Indicates whether the user has successfully logged in."""
         access_token = request.headers.get(self.token_field) or ""
+
         if not access_token or len(access_token) == 0:
             # Try to get an anonymous user ID if the validation of keycloak credentials failed
             anon_id = request.headers.get(self.anon_id_header_key)
@@ -60,23 +61,17 @@ class DummyAuthenticator:
         with contextlib.suppress(Exception):
             user_props = json.loads(access_token)
 
-        is_set = bool(
-            user_props.get("id")
-            or user_props.get("full_name")
-            or user_props.get("is_admin") is not None
-            or user_props.get("first_name")
-            or user_props.get("last_name")
-            or user_props.get("email")
-        )
+        if user_props.get("id") is None:
+            return base_models.APIUser()
 
         return base_models.AuthenticatedAPIUser(
             is_admin=user_props.get("is_admin", False),
-            id=user_props.get("id", "some-id") if is_set else "",
+            id=user_props.get("id", ""),
             access_token=access_token,
-            first_name=user_props.get("first_name", "John") if is_set else None,
-            last_name=user_props.get("last_name", "Doe") if is_set else None,
-            email=user_props.get("email", "john.doe@gmail.com") if is_set else "",
-            full_name=user_props.get("full_name", "John Doe") if is_set else None,
+            first_name=user_props.get("first_name"),
+            last_name=user_props.get("last_name"),
+            email=user_props.get("email", ""),
+            full_name=user_props.get("full_name"),
             refresh_token=request.headers.get("Renku-Auth-Refresh-Token"),
             roles=user_props.get("roles", []),
         )
