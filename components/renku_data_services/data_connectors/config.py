@@ -57,7 +57,7 @@ class DepositConfig:
                     "Could not validate DATA_DEPOSITS_NODE_TOLERATIONS. Will not use tolerations for data upload jobs."
                 )
         return cls(
-            image=os.environ["DATA_DEPOSITS_JOB_IMAGE"],
+            image=os.environ.get("DATA_DEPOSITS_JOB_IMAGE", "ghcr.io/swissdatasciencecenter/renku-cli"),
             renku_url=os.environ["RENKU_URL"],
             tolerations=tolerations,
             node_selector=node_selector,
