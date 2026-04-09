@@ -24,6 +24,7 @@ import renku_data_services.users
 from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
 from renku_data_services.authn.gitlab import EmptyGitlabAuthenticator, GitlabAuthenticator
 from renku_data_services.authn.keycloak import KcUserStore, KeycloakAuthenticator
+from renku_data_services.authn.renku import RenkuSelfAuthenticator, RenkuSelfTokenMint
 from renku_data_services.authz.authz import Authz
 from renku_data_services.capacity_reservation.db import CapacityReservationRepository, OccurrenceRepository
 from renku_data_services.connected_services.db import ConnectedServicesRepository
@@ -128,6 +129,7 @@ class DependencyManager:
     user_store: base_models.UserStore
     authenticator: base_models.Authenticator
     gitlab_authenticator: base_models.Authenticator
+    internal_authenticator: base_models.Authenticator[base_models.APIUser]
     quota_repo: QuotaRepository
     gitlab_client: base_models.GitlabAPIProtocol
     kc_api: IKeycloakAPI
@@ -170,6 +172,7 @@ class DependencyManager:
     zenodo_client: ZenodoAPIClient
     job_client: DepositUploadJobClient
     secret_client: K8sSecretClient
+    internal_token_mint: RenkuSelfTokenMint
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
     app_name: str = "renku_data_services"
@@ -200,6 +203,7 @@ class DependencyManager:
             renku_data_services.notifications.__file__,
             renku_data_services.capacity_reservation.__file__,
             renku_data_services.resource_usage.__file__,
+            renku_data_services.authn.api.__file__,
         ]
 
         api_specs = []
@@ -306,6 +310,8 @@ class DependencyManager:
                 )
 
         authz = Authz(config.authz_config)
+        internal_authenticator = RenkuSelfAuthenticator.from_config(config=config.internal_authn_config)
+        internal_token_mint = RenkuSelfTokenMint.from_config(config=config.internal_authn_config)
         search_updates_repo = SearchUpdatesRepo(session_maker=config.db.async_session_maker)
         metrics_repo = MetricsRepository(session_maker=config.db.async_session_maker)
         metrics = StagingMetricsService(enabled=config.posthog.enabled, metrics_repo=metrics_repo)
@@ -441,6 +447,7 @@ class DependencyManager:
             k8s_client=client,
             authenticator=authenticator,
             gitlab_authenticator=gitlab_authenticator,
+            internal_authenticator=internal_authenticator,
             gitlab_client=gitlab_client,
             user_store=user_store,
             quota_repo=quota_repo,
@@ -484,4 +491,5 @@ class DependencyManager:
             zenodo_client=ZenodoAPIClient(),
             job_client=job_client,
             secret_client=secret_client,
+            internal_token_mint=internal_token_mint,
         )
