@@ -52,7 +52,7 @@ def create_dummy_oauth_client(
 async def create_rp(payload: dict[str, Any], test_client: SanicASGITestClient) -> tuple[Request, TestingResponse]:
     return await test_client.post(
         "/api/data/resource_pools",
-        headers={"Authorization": 'Bearer {"is_admin": true}'},
+        headers={"Authorization": 'Bearer {"id": "admin", "is_admin": true}'},
         data=json.dumps(payload),
     )
 
