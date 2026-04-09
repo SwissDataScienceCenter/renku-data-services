@@ -29,7 +29,7 @@ class DepositConfig:
     cluster_id: Final[ClusterId] = DEFAULT_K8S_CLUSTER
 
     @classmethod
-    def from_env(cls) -> DepositConfig:
+    def from_env(cls, renku_url: str) -> DepositConfig:
         """Create a data deposit configuration from environment variables."""
         # NOTE: The deserialize method from the K8s API client needs the json payload to be in
         # a `data` property on the object passed into the deserializer.
@@ -58,7 +58,7 @@ class DepositConfig:
                 )
         return cls(
             image=os.environ.get("DATA_DEPOSITS_JOB_IMAGE", "ghcr.io/swissdatasciencecenter/renku-cli"),
-            renku_url=os.environ["RENKU_URL"],
+            renku_url=renku_url,
             tolerations=tolerations,
             node_selector=node_selector,
             namespace=os.environ["KUBERNETES_NAMESPACE"],
