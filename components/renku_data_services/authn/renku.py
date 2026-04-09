@@ -52,7 +52,6 @@ class RenkuSelfAuthenticator(Authenticator[APIUser]):
 
     async def authenticate(self, access_token: str, request: Request) -> APIUser:
         """Authenticate using internal tokens."""
-
         header_value = str(request.headers.get(self.token_field)) or ""
         user: AuthenticatedAPIUser | AnonymousAPIUser | None = None
 
@@ -66,6 +65,10 @@ class RenkuSelfAuthenticator(Authenticator[APIUser]):
                 raise errors.UnauthorizedError(
                     message="Your credentials are invalid or expired, please log in again."
                 ) from None
+
+            token_type = parsed.get("typ")
+            if str(token_type).lower() != "bearer":
+                raise errors.UnauthorizedError() from None
 
             user = AuthenticatedAPIUser(
                 is_admin=False,
@@ -101,6 +104,26 @@ class RenkuSelfAuthenticator(Authenticator[APIUser]):
             issuer=self.issuer,
             audience=self.audience,
         )
+
+    async def verify_refresh_token(self, refresh_token: str) -> dict[str, Any] | None:
+        """Verify the given refresh token.
+
+        Returns parsed token claims if successful and None if the token is invalid.
+        """
+        with suppress(errors.UnauthorizedError, jwt.InvalidTokenError):
+            parsed = self._validate(refresh_token)
+            id = parsed.get("sub")
+            email = parsed.get("email")
+            if id is None or email is None:
+                raise errors.UnauthorizedError(
+                    message="Your credentials are invalid or expired, please log in again."
+                ) from None
+            token_type = parsed.get("typ")
+            if str(token_type).lower() != "refresh":
+                raise errors.UnauthorizedError() from None
+            return parsed
+
+        return None
 
 
 @dataclass(frozen=True, kw_only=True)

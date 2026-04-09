@@ -10,52 +10,65 @@ servers:
 paths:
   /internal/authentication/token:
     post:
-      summary: Obtain a fresh internal token
+      summary: Token endpoint for internal authentication
       description: |
-        Obtain a fresh internal token by passing in an existing internal token.
+        Supports refreshing internal authentication tokens.
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/PostTokenRequest"
       responses:
         "200":
-          description: A new internal token was generated
+          description: A new internal access token was generated
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/InternalPostTokenResponse"
+                $ref: "#/components/schemas/PostTokenResponse"
         default:
           $ref: "#/components/responses/Error"
       tags:
         - internal_authentication
 components:
   schemas:
-    InternalPostTokenResponse:
-      description: An internal token and its associated metadata
+    PostTokenRequest:
       type: object
-      additionalProperties: false
+      additionalProperties: true
+      properties:
+        grant_type:
+          $ref: "#/components/schemas/PostTokenGrantType"
+        refresh_token:
+          type: string
+      required:
+        - grant_type
+        - refresh_token
+    PostTokenResponse:
+      type: object
+      additionalProperties: true
       properties:
         access_token:
-          $ref: "#/components/schemas/InternalToken"
+          type: string
         token_type:
-          $ref: "#/components/schemas/InternalTokenType"
+          type: string
         expires_in:
-          $ref: "#/components/schemas/InternalTokenExpiresIn"
+          type: integer
+        refresh_token:
+          type: string
+        refresh_expires_in:
+          type: integer
+        scope:
+          type: string
       required:
         - access_token
         - token_type
         - expires_in
-    InternalToken:
-      description: An internal token used for authentication
+        - refresh_token
+    PostTokenGrantType:
       type: string
-      example: "some-internal-token"
-    InternalTokenType:
-      description: The type of an internal token
-      type: string
+      description: A grant type for OAuth 2.0 (see RFC 6749)
       enum:
-        - "Bearer"
-    InternalTokenExpiresIn:
-      description: Expiration time in seconds
-      type: integer
-      minimum: 0
-      example: 3600
-
+        - refresh_token
     ErrorResponse:
       type: object
       properties:

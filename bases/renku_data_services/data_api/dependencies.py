@@ -129,7 +129,7 @@ class DependencyManager:
     user_store: base_models.UserStore
     authenticator: base_models.Authenticator
     gitlab_authenticator: base_models.Authenticator
-    internal_authenticator: base_models.Authenticator[base_models.APIUser]
+    internal_authenticator: RenkuSelfAuthenticator
     quota_repo: QuotaRepository
     gitlab_client: base_models.GitlabAPIProtocol
     kc_api: IKeycloakAPI
