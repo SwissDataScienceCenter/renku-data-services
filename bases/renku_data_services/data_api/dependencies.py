@@ -37,12 +37,15 @@ from renku_data_services.data_connectors.db import (
     DataConnectorRepository,
     DataConnectorSecretRepository,
 )
+from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
 from renku_data_services.git.gitlab import DummyGitlabAPI, EmptyGitlabAPI, GitlabAPI
 from renku_data_services.k8s.client_interfaces import K8sClient
 from renku_data_services.k8s.clients import (
+    DepositUploadJobClient,
     K8sClusterClientsPool,
     K8sPriorityClassClient,
     K8sResourceQuotaClient,
+    K8sSecretClient,
 )
 from renku_data_services.k8s.config import KubeConfigEnv
 from renku_data_services.k8s.db import K8sDbCache
@@ -166,6 +169,9 @@ class DependencyManager:
     occurrence_repo: OccurrenceRepository
     resource_requests_repo: ResourceRequestsRepo
     resource_usage_service: ResourceUsageService
+    zenodo_client: ZenodoAPIClient
+    job_client: DepositUploadJobClient
+    secret_client: K8sSecretClient
     internal_token_mint: RenkuSelfTokenMint
 
     spec: dict[str, Any] = field(init=False, repr=False, default_factory=dict)
@@ -253,6 +259,8 @@ class DependencyManager:
             ),
         )
         quota_repo = QuotaRepository(K8sResourceQuotaClient(client), K8sPriorityClassClient(client))
+        job_client = DepositUploadJobClient(client)
+        secret_client = K8sSecretClient(client)
 
         if config.dummy_stores:
             authenticator = DummyAuthenticator()
@@ -401,7 +409,7 @@ class DependencyManager:
             authz=authz,
         )
         data_source_repo = DataSourceRepository(
-            nb_config=config.nb_config,
+            user_repo=kc_user_repo,
             connected_services_repo=connected_services_repo,
             oauth_client_factory=oauth_http_client_factory,
             internal_token_mint=internal_token_mint,
@@ -481,5 +489,8 @@ class DependencyManager:
             occurrence_repo=occurrence_repo,
             resource_requests_repo=resource_requests_repo,
             resource_usage_service=resource_usage_service,
+            zenodo_client=ZenodoAPIClient(),
+            job_client=job_client,
+            secret_client=secret_client,
             internal_token_mint=internal_token_mint,
         )

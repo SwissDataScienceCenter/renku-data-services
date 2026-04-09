@@ -2,24 +2,40 @@
 
 import json
 import math
+import random
+import string
+from collections.abc import AsyncIterator
 from configparser import ConfigParser
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from io import StringIO
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 from sanic import Request
+from ulid import ULID
 
 from renku_data_services.app_config import logging
 from renku_data_services.authn.renku import RenkuSelfTokenMint
+from renku_data_services.base_models import AnonymousAPIUser, AuthenticatedAPIUser
 from renku_data_services.base_models.core import APIUser
 from renku_data_services.connected_services.db import ConnectedServicesRepository
 from renku_data_services.connected_services.models import ProviderKind
 from renku_data_services.connected_services.oauth_http import (
     OAuthHttpClientFactory,
 )
-from renku_data_services.data_connectors.models import DataConnector, GlobalDataConnector
-from renku_data_services.notebooks.config import NotebooksConfig
+from renku_data_services.data_connectors.models import (
+    DataConnector,
+    DataConnectorSecret,
+    DataConnectorWithSecrets,
+    GlobalDataConnector,
+)
+from renku_data_services.errors import errors
+from renku_data_services.notebooks.api.schemas.cloud_storage import RCloneStorage
+from renku_data_services.notebooks.crs import DataSource
+from renku_data_services.notebooks.models import ExtraSecret, SessionDataConnectorOverride, SessionExtraResources
+from renku_data_services.users.db import UserRepo
+from renku_data_services.utils.cryptography import get_encryption_key
 
 if TYPE_CHECKING:
     from renku_data_services.storage.models import RCloneConfig
@@ -47,14 +63,14 @@ class DataSourceRepository:
 
     def __init__(
         self,
-        nb_config: NotebooksConfig,
         connected_services_repo: ConnectedServicesRepository,
         oauth_client_factory: OAuthHttpClientFactory,
+        user_repo: UserRepo,
         internal_token_mint: RenkuSelfTokenMint,
     ) -> None:
-        self.nb_config = nb_config
         self.connected_services_repo = connected_services_repo
         self.oauth_client_factory = oauth_client_factory
+        self.user_repo = user_repo
         self.internal_token_mint = internal_token_mint
 
     async def handle_configuration(
@@ -251,3 +267,156 @@ class DataSourceRepository:
         token = json.dumps(token_config)
         token_url = request.url_for("oauth2_connections.post_token_endpoint", connection_id=connection.id)
         return _OAuth2ConfigPartial(token=token, token_url=token_url)
+
+    async def get_data_sources(
+        self,
+        request: Request,
+        user: AnonymousAPIUser | AuthenticatedAPIUser,
+        base_name: str,
+        data_connectors_stream: AsyncIterator[DataConnectorWithSecrets],
+        work_dir: PurePosixPath,
+        data_connectors_overrides: list[SessionDataConnectorOverride],
+        namespace: str,
+        storage_class: str,
+    ) -> SessionExtraResources:
+        """Generate cloud storage related resources."""
+        data_sources: list[DataSource] = []
+        secrets: list[ExtraSecret] = []
+        dcs: dict[str, RCloneStorage] = {}
+        dcs_secrets: dict[str, list[DataConnectorSecret]] = {}
+        user_secret_key: str | None = None
+        internal_token_scope = f"session:{base_name}"  # TODO: handle session vs job
+        async for dc in data_connectors_stream:
+            configuration = await self.handle_configuration(
+                request=request,
+                user=user,
+                data_connector=dc.data_connector,
+                scope=internal_token_scope,
+            )
+            if configuration is None:
+                continue
+            mount_folder = (
+                dc.data_connector.storage.target_path
+                if PurePosixPath(dc.data_connector.storage.target_path).is_absolute()
+                else (work_dir / dc.data_connector.storage.target_path).as_posix()
+            )
+            dcs[str(dc.data_connector.id)] = RCloneStorage(
+                source_path=dc.data_connector.storage.source_path,
+                mount_folder=mount_folder,
+                configuration=configuration,
+                readonly=dc.data_connector.storage.readonly,
+                name=dc.data_connector.name,
+                secrets={str(secret.secret_id): secret.name for secret in dc.secrets},
+                storage_class=storage_class,
+            )
+            if len(dc.secrets) > 0:
+                dcs_secrets[str(dc.data_connector.id)] = dc.secrets
+        if isinstance(user, AuthenticatedAPIUser) and len(dcs_secrets) > 0:
+            secret_key = await self.user_repo.get_or_create_user_secret_key(user)
+            user_secret_key = get_encryption_key(secret_key.encode(), user.id.encode()).decode("utf-8")
+        # NOTE: Check the cloud storage overrides from the request body and if any match
+        # then overwrite the projects cloud storages
+        # NOTE: Cloud storages in the session launch request body that are not from the DB will cause a 404 error
+        # TODO: Is the below statement correct?
+        # NOTE: Overriding the configuration when a saved secret is there will cause a 422 error
+        for dco in data_connectors_overrides:
+            dc_id = str(dco.data_connector_id)
+            if dc_id not in dcs:
+                raise errors.MissingResourceError(
+                    message=f"You have requested a data connector with ID {dc_id} which does not exist "
+                    "or you don't have access to."
+                )
+            # NOTE: if 'skip' is true, we do not mount that data connector
+            if dco.skip:
+                del dcs[dc_id]
+                continue
+            if dco.target_path is not None and not PurePosixPath(dco.target_path).is_absolute():
+                dco.target_path = (work_dir / dco.target_path).as_posix()
+            dcs[dc_id] = dcs[dc_id].with_override(dco)
+
+        # Handle potential duplicate target_path
+        dcs = _deduplicate_target_paths(dcs)
+
+        for cs_id, cs in dcs.items():
+            secret_name = f"{base_name}-ds-{cs_id.lower()}"
+            secret_key_needed = len(dcs_secrets.get(cs_id, [])) > 0
+            if secret_key_needed and user_secret_key is None:
+                raise errors.ProgrammingError(
+                    message=f"You have saved storage secrets for data connector {cs_id} "
+                    f"associated with your user ID {user.id} but no key to decrypt them, "
+                    "therefore we cannot mount the requested data connector. "
+                    "Please report this to the renku administrators."
+                )
+            secret = ExtraSecret(
+                cs.secret(
+                    secret_name,
+                    namespace,
+                    user_secret_key=user_secret_key if secret_key_needed else None,
+                )
+            )
+            secrets.append(secret)
+            data_sources.append(
+                DataSource(
+                    mountPath=cs.mount_folder,
+                    secretRef=secret.ref(),
+                    accessMode="ReadOnlyMany" if cs.readonly else "ReadWriteOnce",
+                )
+            )
+        return SessionExtraResources(
+            data_sources=data_sources,
+            secrets=secrets,
+            data_connector_secrets=dcs_secrets,
+        )
+
+
+def _deduplicate_target_paths(dcs: dict[str, RCloneStorage]) -> dict[str, RCloneStorage]:
+    """Ensures that the target paths for all storages are unique.
+
+    This method will attempt to de-duplicate the target_path for all items passed in,
+    and raise an error if it fails to generate unique target_path.
+    """
+    result_dcs: dict[str, RCloneStorage] = {}
+    mount_folders: dict[str, list[str]] = {}
+
+    def _find_mount_folder(dc: RCloneStorage) -> str:
+        mount_folder = dc.mount_folder
+        if mount_folder not in mount_folders:
+            return mount_folder
+        # 1. Try with a "-1", "-2", etc. suffix
+        mount_folder_try = f"{mount_folder}-{len(mount_folders[mount_folder])}"
+        if mount_folder_try not in mount_folders:
+            return mount_folder_try
+        # 2. Try with a random suffix
+        suffix = "".join([random.choice(string.ascii_lowercase + string.digits) for _ in range(4)])  # nosec B311
+        mount_folder_try = f"{mount_folder}-{suffix}"
+        if mount_folder_try not in mount_folders:
+            return mount_folder_try
+        raise errors.ValidationError(
+            message=f"Could not start session because two or more data connectors ({', '.join(mount_folders[mount_folder])}) share the same mount point '{mount_folder}'"  # noqa E501
+        )
+
+    for dc_id, dc in dcs.items():
+        original_mount_folder = dc.mount_folder
+        new_mount_folder = _find_mount_folder(dc)
+        # Keep track of the original mount folder here
+        if new_mount_folder != original_mount_folder:
+            logger.warning(f"Re-assigning data connector {dc_id} to mount point '{new_mount_folder}'")
+            dc_ids = mount_folders.get(original_mount_folder, [])
+            dc_ids.append(dc_id)
+            mount_folders[original_mount_folder] = dc_ids
+        # Keep track of the assigned mount folder here
+        dc_ids = mount_folders.get(new_mount_folder, [])
+        dc_ids.append(dc_id)
+        mount_folders[new_mount_folder] = dc_ids
+        result_dcs[dc_id] = dc.with_override(
+            override=SessionDataConnectorOverride(
+                skip=False,
+                data_connector_id=ULID.from_str(dc_id),
+                target_path=new_mount_folder,
+                configuration=None,
+                source_path=None,
+                readonly=None,
+            )
+        )
+
+    return result_dcs

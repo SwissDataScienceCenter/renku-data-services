@@ -27,12 +27,15 @@ from renku_data_services.crc.db import ClusterRepository, QuotaRepository, Resou
 from renku_data_services.data_api.config import Config
 from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_connectors.db import DataConnectorRepository, DataConnectorSecretRepository
+from renku_data_services.data_connectors.deposits.zenodo import ZenodoAPIClient
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.git.gitlab import DummyGitlabAPI
 from renku_data_services.k8s.clients import (
+    DepositUploadJobClient,
     K8sClusterClientsPool,
     K8sPriorityClassClient,
     K8sResourceQuotaClient,
+    K8sSecretClient,
 )
 from renku_data_services.k8s.config import KubeConfigEnv, get_clusters
 from renku_data_services.k8s.db import K8sDbCache
@@ -207,6 +210,8 @@ class TestDependencyManager(DependencyManager):
                 kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
             ),
         )
+        job_client = DepositUploadJobClient(client)
+        secret_client = K8sSecretClient(client)
         quota_repo = QuotaRepository(K8sResourceQuotaClient(client), K8sPriorityClassClient(client))
 
         authenticator = DummyAuthenticator()
@@ -330,9 +335,9 @@ class TestDependencyManager(DependencyManager):
             data_connector_repo=data_connector_repo,
         )
         data_source_repo = DataSourceRepository(
-            nb_config=config.nb_config,
             connected_services_repo=connected_services_repo,
             oauth_client_factory=oauth_client_factory,
+            user_repo=kc_user_repo,
         )
         image_check_repo = ImageCheckRepository(
             nb_config=config.nb_config,
@@ -393,6 +398,9 @@ class TestDependencyManager(DependencyManager):
             occurrence_repo=occurrence_repo,
             resource_requests_repo=resource_requests_repo,
             resource_usage_service=resource_usage_service,
+            zenodo_client=ZenodoAPIClient(),
+            job_client=job_client,
+            secret_client=secret_client,
         )
 
     def __post_init__(self) -> None:
