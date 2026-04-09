@@ -37,7 +37,7 @@ class InternalAuthenticationBP(CustomBlueprint):
 
             user = base_models.AuthenticatedAPIUser(
                 is_admin=False,
-                id=parsed_token["id"],
+                id=parsed_token["sub"],
                 access_token="",  # nosec B106
                 full_name=parsed_token.get("name"),
                 first_name=parsed_token.get("given_name"),

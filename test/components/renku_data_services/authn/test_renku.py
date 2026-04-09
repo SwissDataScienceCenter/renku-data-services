@@ -210,13 +210,13 @@ async def shared_sanic_client(
 @pytest.mark.asyncio
 async def test_authenticator_anonymous(shared_sanic_client: SanicReusableASGITestClient) -> None:
     headers = {"Renku-Auth-Anon-Id": "anon-my-user-id"}
-    _, res = await shared_sanic_client.get("/test", headers=headers)
+    _, response = await shared_sanic_client.get("/test", headers=headers)
 
-    assert res.status_code == 200, res.text
-    assert res.json is not None
-    assert isinstance(res.json.get("is_authenticated"), bool)
-    assert not res.json["is_authenticated"], "user should not be authenticated"
-    assert res.json.get("id") == "anon-my-user-id"
+    assert response.status_code == 200, response.text
+    assert isinstance(response.json, dict)
+    assert isinstance(response.json.get("is_authenticated"), bool)
+    assert not response.json["is_authenticated"], "user should not be authenticated"
+    assert response.json.get("id") == "anon-my-user-id"
 
 
 @pytest.mark.asyncio
@@ -236,11 +236,11 @@ async def test_authenticator_valid_access_token(
     access_token = shared_internal_token_mint.create_access_token(user=user)
 
     headers = {"Authorization": f"Bearer {access_token}"}
-    _, res = await shared_sanic_client.get("/test", headers=headers)
+    _, response = await shared_sanic_client.get("/test", headers=headers)
 
-    assert res.status_code == 200, res.text
-    assert res.json is not None
-    assert isinstance(res.json.get("is_authenticated"), bool)
-    assert res.json["is_authenticated"], "user should be authenticated"
-    assert res.json.get("id") == "some-user-id"
-    assert res.json.get("email") == "jane.doe@example.org"
+    assert response.status_code == 200, response.text
+    assert isinstance(response.json, dict)
+    assert isinstance(response.json.get("is_authenticated"), bool)
+    assert response.json["is_authenticated"], "user should be authenticated"
+    assert response.json.get("id") == "some-user-id"
+    assert response.json.get("email") == "jane.doe@example.org"
