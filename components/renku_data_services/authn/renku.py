@@ -83,7 +83,7 @@ class RenkuSelfAuthenticator(Authenticator[APIUser]):
             )
             return user
 
-        # Try to get an anonymous user ID if the validation of keycloak credentials failed
+        # Try to get an anonymous user ID from headers
         anon_id = request.headers.get(self.anon_id_header_key)
         if anon_id is None:
             anon_id = request.cookies.get(self.anon_id_cookie_name)
