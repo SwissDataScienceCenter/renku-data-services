@@ -133,7 +133,6 @@ class _Relation(StrEnum):
     viewer = "viewer"
     public_viewer = "public_viewer"
     admin = "admin"
-    public_user = "public_user"
     project_platform = "project_platform"
     group_platform = "group_platform"
     user_namespace_platform = "user_namespace_platform"
@@ -1313,17 +1312,17 @@ class Authz:
         )
         relationships = [resource_pool_in_platform]
         if resource_pool.public:
-            all_users_are_public_users = Relationship(
+            all_users_are_public_viewers = Relationship(
                 resource=resource_pool_res,
-                relation=_Relation.public_user.value,
+                relation=_Relation.public_viewer.value,
                 subject=all_users,
             )
-            all_anon_users_are_public_users = Relationship(
+            all_anon_users_are_public_viewers = Relationship(
                 resource=resource_pool_res,
-                relation=_Relation.public_user.value,
+                relation=_Relation.public_viewer.value,
                 subject=all_anon_users,
             )
-            relationships.extend([all_users_are_public_users, all_anon_users_are_public_users])
+            relationships.extend([all_users_are_public_viewers, all_anon_users_are_public_viewers])
         apply = WriteRelationshipsRequest(
             updates=[
                 RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=i) for i in relationships
@@ -1365,15 +1364,15 @@ class Authz:
     async def _update_resource_pool_visibility(
         self, user: base_models.APIUser, resource_pool: ResourcePool, *, zed_token: ZedToken | None = None
     ) -> _AuthzChange:
-        """Update public_user wildcard relationships when public flag changes."""
+        """Update public_viewer wildcard relationships when public flag changes."""
         consistency = Consistency(at_least_as_fresh=zed_token) if zed_token else Consistency(fully_consistent=True)
         pool_res = _AuthzConverter.resource_pool(resource_pool.id)
 
-        # Read existing public_user relationships
+        # Read existing public_viewer relationships
         rel_filter = RelationshipFilter(
             resource_type=ResourceType.resource_pool.value,
             optional_resource_id=str(resource_pool.id),
-            optional_relation=_Relation.public_user.value,
+            optional_relation=_Relation.public_viewer.value,
         )
         responses = self.client.ReadRelationships(
             ReadRelationshipsRequest(consistency=consistency, relationship_filter=rel_filter)
@@ -1386,12 +1385,12 @@ class Authz:
         anon_users_sub = SubjectReference(object=_AuthzConverter.anonymous_users())
         all_users_are_public = Relationship(
             resource=pool_res,
-            relation=_Relation.public_user.value,
+            relation=_Relation.public_viewer.value,
             subject=all_users_sub,
         )
         anon_users_are_public = Relationship(
             resource=pool_res,
-            relation=_Relation.public_user.value,
+            relation=_Relation.public_viewer.value,
             subject=anon_users_sub,
         )
 
@@ -1399,7 +1398,7 @@ class Authz:
         undo_updates: list[RelationshipUpdate] = []
 
         if resource_pool.public:
-            # Ensure public_user wildcards exist (operation is idempotent)
+            # Ensure public_viewer wildcards exist (operation is idempotent)
             apply_updates.extend(
                 [
                     RelationshipUpdate(
@@ -1434,7 +1433,7 @@ class Authz:
                     )
                 )
         else:
-            # Remove public_user wildcards
+            # Remove public_viewer wildcards
             for existing_rel in existing_rels:
                 apply_updates.append(
                     RelationshipUpdate(
@@ -1464,7 +1463,7 @@ class Authz:
         rels = [
             Relationship(
                 resource=_AuthzConverter.resource_pool(resource_pool_id),
-                relation=_Relation.member.value,
+                relation=_Relation.viewer.value,
                 subject=_AuthzConverter.user_subject(uid),
             )
             for uid in user_ids
@@ -1482,7 +1481,7 @@ class Authz:
         rels = [
             Relationship(
                 resource=_AuthzConverter.resource_pool(resource_pool_id),
-                relation=_Relation.member.value,
+                relation=_Relation.viewer.value,
                 subject=_AuthzConverter.user_subject(uid),
             )
             for uid in user_ids
@@ -1496,7 +1495,7 @@ class Authz:
         return _AuthzChange(apply=apply, undo=undo)
 
     async def _add_resource_pool_prohibited(self, resource_pool_id: int, user_ids: Collection[str]) -> _AuthzChange:
-        """Mark users as prohibited from accessing a resource pool (overrides public_user wildcard)."""
+        """Mark users as prohibited from accessing a resource pool (overrides public_viewer wildcard)."""
         rels = [
             Relationship(
                 resource=_AuthzConverter.resource_pool(resource_pool_id),

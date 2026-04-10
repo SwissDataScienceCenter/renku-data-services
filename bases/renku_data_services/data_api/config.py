@@ -65,7 +65,7 @@ class Config:
             else:
                 gitlab_url = None
 
-        nb_config=NotebooksConfig.from_env(db, authz_config, enable_internal_gitlab=enable_internal_gitlab)
+        nb_config = NotebooksConfig.from_env(db, authz_config, enable_internal_gitlab=enable_internal_gitlab)
         return cls(
             enable_internal_gitlab=enable_internal_gitlab,
             version=os.environ.get("VERSION", "0.0.1"),
