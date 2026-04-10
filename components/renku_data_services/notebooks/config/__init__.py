@@ -7,6 +7,8 @@ from typing import Any, Protocol, Self
 
 import kr8s
 
+from renku_data_services.authz.authz import Authz
+from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.base_models import APIUser
 from renku_data_services.crc.db import ClusterRepository, QuotaRepository, ResourcePoolRepository
 from renku_data_services.crc.models import ClusterSettings, ResourceClass, SessionProtocol
@@ -147,7 +149,7 @@ class NotebooksConfig:
     local_cluster_session_service_account: str | None = None
 
     @classmethod
-    def from_env(cls, db_config: DBConfig, enable_internal_gitlab: bool) -> Self:
+    def from_env(cls, db_config: DBConfig, authz_config: AuthzConfig, enable_internal_gitlab: bool) -> Self:
         """Create a configuration object from environment variables."""
         enable_internal_gitlab = os.getenv("ENABLE_INTERNAL_GITLAB", "false").lower() == "true"
         dummy_stores = _parse_str_as_bool(os.environ.get("DUMMY_STORES", False))
@@ -182,8 +184,9 @@ class NotebooksConfig:
         )
         secrets_client = K8sSecretClient(client)
 
+        authz = Authz(authz_config)
         quota_repo = QuotaRepository(K8sResourceQuotaClient(client), K8sPriorityClassClient(client))
-        rp_repo = ResourcePoolRepository(db_config.async_session_maker, quota_repo)
+        rp_repo = ResourcePoolRepository(db_config.async_session_maker, quota_repo, authz=authz)
         crc_validator = CRCValidator(rp_repo)
         k8s_v2_client = NotebookK8sClient(
             client=client,
