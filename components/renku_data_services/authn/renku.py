@@ -1,12 +1,13 @@
-"""Renku data services self authenticator.
+"""Renku data services self authentication.
 
-This authenticator can mint and verify its own tokens.
+Instances of `RenkuSelfTokenMint` can create internal access and refresh tokens
+and instances of `RenkuSelfAuthenticator` can validate those tokens.
 """
 
 from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any, Literal, Self
 
 import jwt
 from sanic import Request
@@ -19,19 +20,17 @@ from renku_data_services.errors import errors
 if TYPE_CHECKING:
     from renku_data_services.app_config.config import InternalAuthenticationConfig
 
-_strict_jwt = jwt.PyJWT({"enforce_minimum_key_length": True})
+TokenType = Literal["Bearer", "Refresh"]
 
-# TODO: make these configurable (from usual config)
-# _EXPIRATION: Final[timedelta] = timedelta(minutes=15)
-# _ISSUER: Final[str] = "renku-self"
-# _AUDIENCE: Final[str] = "renku-self"
+_strict_jwt = jwt.PyJWT({"enforce_minimum_key_length": True})
+"""Makes sure we use an appropriate secret key."""
 
 
 @dataclass(frozen=True, kw_only=True)
 class RenkuSelfAuthenticator(Authenticator[APIUser]):
     """Renku data services self authenticator.
 
-    This authenticator can mint and verify its own tokens.
+    This authenticator authenticates requests based on internal access tokens.
     """
 
     secret_key: bytes = field(repr=False)
@@ -53,7 +52,6 @@ class RenkuSelfAuthenticator(Authenticator[APIUser]):
 
     async def authenticate(self, access_token: str, request: Request) -> APIUser:
         """Authenticate using internal tokens."""
-
         header_value = str(request.headers.get(self.token_field)) or ""
         user: AuthenticatedAPIUser | AnonymousAPIUser | None = None
 
@@ -68,6 +66,10 @@ class RenkuSelfAuthenticator(Authenticator[APIUser]):
                     message="Your credentials are invalid or expired, please log in again."
                 ) from None
 
+            token_type = parsed.get("typ")
+            if str(token_type).lower() != "bearer":
+                raise errors.UnauthorizedError() from None
+
             user = AuthenticatedAPIUser(
                 is_admin=False,
                 id=id,
@@ -79,12 +81,9 @@ class RenkuSelfAuthenticator(Authenticator[APIUser]):
                 access_token_expires_at=datetime.fromtimestamp(exp) if exp is not None else None,
                 roles=[],
             )
-            request.ctx.renku_authenticator = f"{self.__class__.__module__}.{self.__class__.__qualname__}"
-            request.ctx.renku_user = user
-            request.ctx.renku_parsed_access_token = parsed
             return user
 
-        # Try to get an anonymous user ID if the validation of keycloak credentials failed
+        # Try to get an anonymous user ID from headers
         anon_id = request.headers.get(self.anon_id_header_key)
         if anon_id is None:
             anon_id = request.cookies.get(self.anon_id_cookie_name)
@@ -103,6 +102,26 @@ class RenkuSelfAuthenticator(Authenticator[APIUser]):
             audience=self.audience,
         )
 
+    async def verify_refresh_token(self, refresh_token: str) -> dict[str, Any] | None:
+        """Verify the given refresh token.
+
+        Returns parsed token claims if successful and None if the token is invalid.
+        """
+        with suppress(errors.UnauthorizedError, jwt.InvalidTokenError):
+            parsed = self._validate(refresh_token)
+            id = parsed.get("sub")
+            email = parsed.get("email")
+            if id is None or email is None:
+                raise errors.UnauthorizedError(
+                    message="Your credentials are invalid or expired, please log in again."
+                ) from None
+            token_type = parsed.get("typ")
+            if str(token_type).lower() != "refresh":
+                raise errors.UnauthorizedError() from None
+            return parsed
+
+        return None
+
 
 @dataclass(frozen=True, kw_only=True)
 class RenkuSelfTokenMint:
@@ -112,8 +131,9 @@ class RenkuSelfTokenMint:
     """
 
     secret_key: bytes = field(repr=False)
-    default_token_expiration: timedelta
-    refresh_token_expiration: timedelta
+    default_access_token_expiration: timedelta
+    default_refresh_token_expiration: timedelta
+    long_refresh_token_expiration: timedelta
     issuer: str
     audience: str
     algorithm: str = "HS512"
@@ -123,26 +143,38 @@ class RenkuSelfTokenMint:
         """Create an instance from a configuration object."""
         return cls(
             secret_key=config.secret_key,
-            default_token_expiration=config.default_token_expiration,
-            refresh_token_expiration=config.refresh_token_expiration,
+            default_access_token_expiration=config.default_access_token_expiration,
+            default_refresh_token_expiration=config.default_refresh_token_expiration,
+            long_refresh_token_expiration=config.long_refresh_token_expiration,
             issuer=config.issuer,
             audience=config.audience,
         )
 
-    def create_token(self, user: APIUser, scope: str | None = None, expires_in: timedelta | None = None) -> str:
-        """Create a new internal token for a given user."""
-        payload = self._make_payload(user=user, scope=scope, expires_in=expires_in)
+    def create_access_token(self, user: APIUser, scope: str | None = None, expires_in: timedelta | None = None) -> str:
+        """Create a new internal access token for a given user."""
+        payload = self._make_payload(user=user, token_type="Bearer", scope=scope, expires_in=expires_in)  # nosec B106
         return _strict_jwt.encode(payload, key=self.secret_key, algorithm=self.algorithm)
 
-    # def get_expires_in(self) -> int:
-    #     """Get the value in seconds for the 'expires_in' claim."""
-    #     return int(_EXPIRATION.total_seconds())
+    def create_refresh_token(
+        self, user: APIUser, scope: str | None = None, refresh_expires_in: timedelta | None = None
+    ) -> str:
+        """Create a new internal refresh token for a given user."""
+        payload = self._make_payload(user=user, token_type="Refresh", scope=scope, expires_in=refresh_expires_in)  # nosec B106
+        return _strict_jwt.encode(payload, key=self.secret_key, algorithm=self.algorithm)
 
     def _make_payload(
-        self, user: APIUser, scope: str | None = None, expires_in: timedelta | None = None
+        self,
+        user: APIUser,
+        token_type: TokenType | None = None,
+        scope: str | None = None,
+        expires_in: timedelta | None = None,
     ) -> dict[str, str | int]:
         """Generate the payload for a new token."""
-        expires_in = expires_in if expires_in is not None else self.default_token_expiration
+        token_type = token_type if token_type else "Bearer"  # nosec B106
+        if expires_in is None and token_type == "Refresh":  # nosec B105
+            expires_in = self.default_refresh_token_expiration
+        elif expires_in is None:
+            expires_in = self.default_access_token_expiration
         result: dict[str, str | int] = dict()
         user_claims = RenkuSelfTokenMint._make_user_claims(user=user)
         result.update(user_claims)
@@ -154,6 +186,7 @@ class RenkuSelfTokenMint:
         result["iss"] = self.issuer
         result["aud"] = self.audience
         result["jti"] = str(token_id)
+        result["typ"] = token_type
         if scope:
             result["scope"] = scope
         return result

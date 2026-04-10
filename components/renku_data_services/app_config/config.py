@@ -113,25 +113,32 @@ class InternalAuthenticationConfig:
     """
 
     secret_key: bytes = field(repr=False)
-    default_token_expiration: timedelta
-    refresh_token_expiration: timedelta
+    default_access_token_expiration: timedelta
+    default_refresh_token_expiration: timedelta
+    long_refresh_token_expiration: timedelta
     issuer: str
     audience: str
 
     @classmethod
     def from_env(cls) -> InternalAuthenticationConfig:
         """Create a config from environment variables."""
-        default_token_expiration_str = os.environ.get("INTERNAL_AUTHN_DEFAULT_TOKEN_EXPIRATION_SECONDS")
-        default_token_expiration = (
-            timedelta(seconds=int(default_token_expiration_str))
-            if default_token_expiration_str
+        default_access_token_expiration_str = os.environ.get("INTERNAL_AUTHN_DEFAULT_ACCESS_TOKEN_EXPIRATION_SECONDS")
+        default_access_token_expiration = (
+            timedelta(seconds=int(default_access_token_expiration_str))
+            if default_access_token_expiration_str
             else timedelta(minutes=15)
         )
-        refresh_token_expiration_str = os.environ.get("INTERNAL_AUTHN_REFRESH_TOKEN_EXPIRATION_SECONDS")
-        refresh_token_expiration = (
-            timedelta(seconds=int(refresh_token_expiration_str))
-            if refresh_token_expiration_str
-            else timedelta(hours=24)
+        default_refresh_token_expiration_str = os.environ.get("INTERNAL_AUTHN_DEFAULT_REFRESH_TOKEN_EXPIRATION_SECONDS")
+        default_refresh_token_expiration = (
+            timedelta(seconds=int(default_refresh_token_expiration_str))
+            if default_refresh_token_expiration_str
+            else timedelta(hours=1)
+        )
+        long_refresh_token_expiration_str = os.environ.get("INTERNAL_AUTHN_LONG_REFRESH_TOKEN_EXPIRATION_SECONDS")
+        long_refresh_token_expiration = (
+            timedelta(seconds=int(long_refresh_token_expiration_str))
+            if long_refresh_token_expiration_str
+            else timedelta(hours=25)
         )
         issuer = os.environ.get("INTERNAL_AUTHN_ISSUER") or "renku-self"
         audience = os.environ.get("INTERNAL_AUTHN_AUDIENCE") or "renku-self"
@@ -142,8 +149,9 @@ class InternalAuthenticationConfig:
             secret_key = rand.randbytes(64)
             return cls(
                 secret_key=secret_key,
-                default_token_expiration=default_token_expiration,
-                refresh_token_expiration=refresh_token_expiration,
+                default_access_token_expiration=default_access_token_expiration,
+                default_refresh_token_expiration=default_refresh_token_expiration,
+                long_refresh_token_expiration=long_refresh_token_expiration,
                 issuer=issuer,
                 audience=audience,
             )
@@ -154,8 +162,9 @@ class InternalAuthenticationConfig:
         secret_key = base64.urlsafe_b64decode(Path(secret_key_path).read_bytes())
         return cls(
             secret_key=secret_key,
-            default_token_expiration=default_token_expiration,
-            refresh_token_expiration=refresh_token_expiration,
+            default_access_token_expiration=default_access_token_expiration,
+            default_refresh_token_expiration=default_refresh_token_expiration,
+            long_refresh_token_expiration=long_refresh_token_expiration,
             issuer=issuer,
             audience=audience,
         )
