@@ -1645,3 +1645,51 @@ async def test_resource_class_empty_patch_noop(
     assert res.json is not None
     rc = res.json
     assert rc == default_rc
+
+
+@pytest.mark.asyncio
+@pytest.mark.xdist_group("sessions")
+async def test_resource_pool_visibility_toggle(
+    sanic_client: SanicASGITestClient,
+    admin_headers: dict[str, str],
+    valid_resource_pool_payload: dict[str, Any],
+    cluster: KindCluster,
+) -> None:
+    """E2E: toggling the public flag via PATCH updates Authzed access for non-admin users."""
+    valid_resource_pool_payload["default"] = False
+    valid_resource_pool_payload["public"] = True
+
+    _, res = await create_rp(valid_resource_pool_payload, sanic_client)
+    assert res.status_code == 201
+    rp_id = res.json["id"]
+
+    # Pick a regular user (not user[0] who is admin)
+    _, res = await sanic_client.get("/api/data/users", headers=admin_headers)
+    assert res.status_code == 200
+    assert len(res.json) >= 1
+    user_id = res.json[1]["id"]
+    user_headers = {"Authorization": f"Bearer {json.dumps({'id': user_id})}"}
+
+    # Visible while public
+    _, res = await sanic_client.get(f"/api/data/resource_pools/{rp_id}", headers=user_headers)
+    assert res.status_code == 200
+
+    # PATCH → private
+    _, res = await sanic_client.patch(
+        f"/api/data/resource_pools/{rp_id}", headers=admin_headers, json={"public": False}
+    )
+    assert res.status_code == 200
+    assert res.json["public"] is False
+
+    # Hidden after going private
+    _, res = await sanic_client.get(f"/api/data/resource_pools/{rp_id}", headers=user_headers)
+    assert res.status_code == 404
+
+    # PATCH → public again
+    _, res = await sanic_client.patch(f"/api/data/resource_pools/{rp_id}", headers=admin_headers, json={"public": True})
+    assert res.status_code == 200
+    assert res.json["public"] is True
+
+    # Visible again
+    _, res = await sanic_client.get(f"/api/data/resource_pools/{rp_id}", headers=user_headers)
+    assert res.status_code == 200
