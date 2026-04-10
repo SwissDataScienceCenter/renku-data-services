@@ -815,7 +815,6 @@ class Authz:
                     result = await f(db_repo, *args, **kwargs)
                     authz_change = await _get_authz_change(db_repo, op, resource, result, *args, **kwargs)
                     await db_repo.authz.client.WriteRelationships(authz_change.apply)
-                    await session.commit()
                     return result
                 except Exception as err:
                     db_rollback_err = None
