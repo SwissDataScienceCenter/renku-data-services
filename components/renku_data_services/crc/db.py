@@ -132,8 +132,16 @@ class ResourcePoolRepository(_Base):
             res = await session.execute(stmt)
             default_rp = res.scalars().first()
             if default_rp is None:
-                orm = schemas.ResourcePoolORM.from_unsaved_model(new_resource_pool=rp, quota=None, cluster=None)
-                session.add(orm)
+                self._create_rp(rp, session=session)
+
+    @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool)
+    async def _create_rp(self, rp: models.UnsavedResourcePool, session: AsyncSession) -> models.ResourcePool:
+        default_rp = schemas.ResourcePoolORM.from_unsaved_model(new_resource_pool=rp, quota=None, cluster=None)
+        session.add(default_rp)
+        await session.flush()
+        await session.refresh(default_rp)
+        result = default_rp.dump(quota=None)
+        return result
 
     async def get_resource_pools(
         self, api_user: base_models.APIUser, id: int | None = None, name: Optional[str] = None
@@ -150,7 +158,7 @@ class ResourcePoolRepository(_Base):
             if id is not None:
                 stmt = stmt.where(schemas.ResourcePoolORM.id == id)
             # NOTE: The line below ensures that the right users can access the right resources, do not remove.
-            stmt = _resource_pool_access_control(api_user, stmt)
+            stmt = await _resource_pool_access_control(api_user, stmt, self.authz)
             res = await session.execute(stmt)
             orms = res.scalars().all()
             output: list[models.ResourcePool] = []
@@ -171,12 +179,40 @@ class ResourcePoolRepository(_Base):
                 .options(selectinload(schemas.ResourcePoolORM.cluster))
             )
             # NOTE: The line below ensures that the right users can access the right resources, do not remove.
-            stmt = _resource_pool_access_control(api_user, stmt)
+            stmt = await _resource_pool_access_control(api_user, stmt, self.authz)
             res = await session.execute(stmt)
             orm = res.scalar()
             if orm is None:
                 raise errors.MissingResourceError(
                     message=f"Could not find the resource pool where a class with ID {resource_class_id} exists."
+                )
+            quota = await self.quotas_repo.get_quota(orm.quota, orm.get_cluster_id()) if orm.quota else None
+            return orm.dump(quota)
+
+    async def get_resource_pool(
+        self, api_user: base_models.APIUser, resource_pool_id: int, name: str | None = None
+    ) -> models.ResourcePool:
+        """Get a specific resource pool by ID with Authzed permission check."""
+        if not api_user.is_admin:
+            allowed = await self.authz.has_permission(api_user, ResourceType.resource_pool, resource_pool_id, Scope.USE)
+            if not allowed:
+                raise errors.MissingResourceError(
+                    message=f"The resource pool with id {resource_pool_id} cannot be found."
+                )
+        async with self.session_maker() as session:
+            stmt = (
+                select(schemas.ResourcePoolORM)
+                .where(schemas.ResourcePoolORM.id == resource_pool_id)
+                .options(selectinload(schemas.ResourcePoolORM.classes))
+                .options(selectinload(schemas.ResourcePoolORM.cluster))
+            )
+            if name is not None:
+                stmt = stmt.where(schemas.ResourcePoolORM.name == name)
+            res = await session.execute(stmt)
+            orm = res.scalar()
+            if orm is None:
+                raise errors.MissingResourceError(
+                    message=f"The resource pool with id {resource_pool_id} cannot be found."
                 )
             quota = await self.quotas_repo.get_quota(orm.quota, orm.get_cluster_id()) if orm.quota else None
             return orm.dump(quota)
@@ -242,7 +278,7 @@ class ResourcePoolRepository(_Base):
                 )
             )
             # NOTE: The line below ensures that the right users can access the right resources, do not remove.
-            stmt = _resource_pool_access_control(api_user, stmt)
+            stmt = await _resource_pool_access_control(api_user, stmt, self.authz)
             res = await session.execute(stmt)
             output: list[models.ResourcePool] = []
             for rp in res.scalars().all():
@@ -254,6 +290,18 @@ class ResourcePoolRepository(_Base):
     async def insert_resource_pool(
         self, api_user: base_models.APIUser, new_resource_pool: models.UnsavedResourcePool
     ) -> models.ResourcePool:
+        """Insert a new resource pool."""
+        async with self.session_maker() as session, session.begin():
+            return await self._insert_resource_pool(
+                api_user=api_user,
+                new_resource_pool=new_resource_pool,
+                session=session,
+            )
+
+    @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool)
+    async def _insert_resource_pool(
+        self, api_user: base_models.APIUser, new_resource_pool: models.UnsavedResourcePool, session: AsyncSession
+    ) -> models.ResourcePool:
         """Insert resource pool into database."""
         cluster = None
         if new_resource_pool.cluster_id:
@@ -264,23 +312,23 @@ class ResourcePoolRepository(_Base):
         if new_resource_pool.quota is not None:
             quota = await self.quotas_repo.create_quota(new_quota=new_resource_pool.quota, cluster_id=cluster_id)
 
-        async with self.session_maker() as session, session.begin():
-            resource_pool = schemas.ResourcePoolORM.from_unsaved_model(
-                new_resource_pool=new_resource_pool, quota=quota, cluster=cluster
-            )
-            if resource_pool.default:
-                stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.default == true())
-                res = await session.execute(stmt)
-                default_rps = res.unique().scalars().all()
-                if len(default_rps) >= 1:
-                    raise errors.ValidationError(
-                        message="There can only be one default resource pool and one already exists."
-                    )
+        resource_pool = schemas.ResourcePoolORM.from_unsaved_model(
+            new_resource_pool=new_resource_pool, quota=quota, cluster=cluster
+        )
+        if resource_pool.default:
+            stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.default == true())
+            res = await session.execute(stmt)
+            default_rps = res.unique().scalars().all()
+            if len(default_rps) >= 1:
+                raise errors.ValidationError(
+                    message="There can only be one default resource pool and one already exists."
+                )
 
-            session.add(resource_pool)
-            await session.flush()
-            await session.refresh(resource_pool)
-            return resource_pool.dump(quota=quota)
+        session.add(resource_pool)
+        await session.flush()
+        await session.refresh(resource_pool)
+        result = resource_pool.dump(quota=quota)
+        return result
 
     async def get_classes(
         self,
@@ -304,7 +352,7 @@ class ResourcePoolRepository(_Base):
             # Apply user access control if api_user is provided
             if api_user is not None:
                 # NOTE: The line below ensures that the right users can access the right resources, do not remove.
-                stmt = _classes_user_access_control(api_user, stmt)
+                stmt = await _classes_user_access_control(api_user, stmt, self.authz)
 
             res = await session.execute(stmt)
             orms = res.scalars().all()
@@ -360,125 +408,154 @@ class ResourcePoolRepository(_Base):
     async def update_resource_pool(
         self, api_user: base_models.APIUser, resource_pool_id: int, update: models.ResourcePoolPatch
     ) -> models.ResourcePool:
-        """Update an existing resource pool in the database."""
+        """Insert a new resource pool."""
         async with self.session_maker() as session, session.begin():
-            stmt = (
-                select(schemas.ResourcePoolORM)
-                .where(schemas.ResourcePoolORM.id == resource_pool_id)
-                .options(selectinload(schemas.ResourcePoolORM.classes))
+            return await self._update_resource_pool(
+                api_user=api_user,
+                resource_pool_id=resource_pool_id,
+                update=update,
+                session=session,
             )
-            res = await session.scalars(stmt)
-            rp = res.one_or_none()
-            if rp is None:
-                raise errors.MissingResourceError(message=f"Resource pool with id {resource_pool_id} cannot be found")
-            quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id()) if rp.quota else None
 
-            validate_resource_pool_update(existing=rp.dump(quota=quota), update=update)
+    @Authz.authz_change(op=AuthzOperation.update, resource=ResourceType.resource_pool)
+    async def _update_resource_pool(
+        self,
+        api_user: base_models.APIUser,
+        resource_pool_id: int,
+        update: models.ResourcePoolPatch,
+        session: AsyncSession,
+    ) -> models.ResourcePool:
+        """Update an existing resource pool in the database."""
+        stmt = (
+            select(schemas.ResourcePoolORM)
+            .where(schemas.ResourcePoolORM.id == resource_pool_id)
+            .options(selectinload(schemas.ResourcePoolORM.classes))
+        )
+        res = await session.scalars(stmt)
+        rp = res.one_or_none()
+        if rp is None:
+            raise errors.MissingResourceError(message=f"Resource pool with id {resource_pool_id} cannot be found")
+        quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id()) if rp.quota else None
 
-            if update.name is not None:
-                rp.name = update.name
-            if update.public is not None:
-                rp.public = update.public
-            if update.default is not None:
-                rp.default = update.default
-            if update.idle_threshold == 0 or update.idle_threshold is RESET:
-                # Using "0" removes the value
-                rp.idle_threshold = None
-            elif isinstance(update.idle_threshold, int):
-                rp.idle_threshold = update.idle_threshold
-            if update.hibernation_threshold == 0 or update.hibernation_threshold is RESET:
-                # Using "0" removes the value
-                rp.hibernation_threshold = None
-            elif isinstance(update.hibernation_threshold, int):
-                rp.hibernation_threshold = update.hibernation_threshold
-            if update.hibernation_warning_period == 0 or update.hibernation_warning_period is RESET:
-                rp.hibernation_warning_period = None
-            elif isinstance(update.hibernation_warning_period, int):
-                rp.hibernation_warning_period = update.hibernation_warning_period
-            if update.platform is not None:
-                rp.platform = update.platform
+        validate_resource_pool_update(existing=rp.dump(quota=quota), update=update)
 
-            match (update.cluster_id, rp.cluster_id):
-                case ResetType.Reset, x if x is not None:
+        if update.name is not None:
+            rp.name = update.name
+        if update.public is not None:
+            rp.public = update.public
+        if update.default is not None:
+            rp.default = update.default
+        if update.idle_threshold == 0 or update.idle_threshold is RESET:
+            # Using "0" removes the value
+            rp.idle_threshold = None
+        elif isinstance(update.idle_threshold, int):
+            rp.idle_threshold = update.idle_threshold
+        if update.hibernation_threshold == 0 or update.hibernation_threshold is RESET:
+            # Using "0" removes the value
+            rp.hibernation_threshold = None
+        elif isinstance(update.hibernation_threshold, int):
+            rp.hibernation_threshold = update.hibernation_threshold
+        if update.hibernation_warning_period == 0 or update.hibernation_warning_period is RESET:
+            rp.hibernation_warning_period = None
+        elif isinstance(update.hibernation_warning_period, int):
+            rp.hibernation_warning_period = update.hibernation_warning_period
+        if update.platform is not None:
+            rp.platform = update.platform
+
+        match (update.cluster_id, rp.cluster_id):
+            case ResetType.Reset, x if x is not None:
+                raise errors.ValidationError(
+                    message="Resetting the cluster of an existing resource pool is not supported."
+                )
+            case ULID(), ULID():
+                if update.cluster_id != rp.cluster_id:
                     raise errors.ValidationError(
-                        message="Resetting the cluster of an existing resource pool is not supported."
-                    )
-                case ULID(), ULID():
-                    if update.cluster_id != rp.cluster_id:
-                        raise errors.ValidationError(
-                            message="Changing the cluster of an existing resource pool is not supported."
-                        )
-
-            cluster_id = rp.get_cluster_id()
-            if update.quota is RESET and rp.quota:
-                # Remove the existing quota
-                await self.quotas_repo.delete_quota(name=rp.quota, cluster_id=cluster_id)
-            elif isinstance(update.quota, models.QuotaPatch) and rp.quota is None:
-                # Create a new quota, the `update.quota` object has already been validated
-                assert update.quota.cpu is not None
-                assert update.quota.memory is not None
-                assert update.quota.gpu is not None
-                new_quota = models.UnsavedQuota(
-                    cpu=update.quota.cpu,
-                    memory=update.quota.memory,
-                    gpu=update.quota.gpu,
-                )
-                quota = await self.quotas_repo.create_quota(new_quota=new_quota, cluster_id=cluster_id)
-                rp.quota = quota.id
-            elif isinstance(update.quota, models.QuotaPatch):
-                assert rp.quota is not None
-                assert quota is not None
-                # Update the existing quota
-                updated_quota = models.Quota(
-                    cpu=update.quota.cpu if update.quota.cpu is not None else quota.cpu,
-                    memory=update.quota.memory if update.quota.memory is not None else quota.memory,
-                    gpu=update.quota.gpu if update.quota.gpu is not None else quota.gpu,
-                    gpu_kind=update.quota.gpu_kind if update.quota.gpu_kind is not None else quota.gpu_kind,
-                    id=quota.id,
-                )
-                quota = await self.quotas_repo.update_quota(quota=updated_quota, cluster_id=cluster_id)
-                rp.quota = quota.id
-
-            new_classes_coroutines = []
-            if update.classes is not None:
-                for rc in update.classes:
-                    new_classes_coroutines.append(
-                        self.update_resource_class(
-                            api_user=api_user, resource_pool_id=resource_pool_id, resource_class_id=rc.id, update=rc
-                        )
+                        message="Changing the cluster of an existing resource pool is not supported."
                     )
 
-            if update.remote is RESET:
-                rp.remote_provider_id = None
-                rp.remote_json = None
-            elif update.remote is not None:
-                rp.remote_provider_id = (
-                    update.remote.provider_id if update.remote.provider_id is not None else rp.remote_provider_id
-                )
-                remote_json = rp.remote_json if rp.remote_json is not None else dict()
-                remote_json.update(update.remote.to_dict())
-                del remote_json["provider_id"]
-                rp.remote_json = remote_json
+        cluster_id = rp.get_cluster_id()
+        if update.quota is RESET and rp.quota:
+            # Remove the existing quota
+            await self.quotas_repo.delete_quota(name=rp.quota, cluster_id=cluster_id)
+        elif isinstance(update.quota, models.QuotaPatch) and rp.quota is None:
+            # Create a new quota, the `update.quota` object has already been validated
+            assert update.quota.cpu is not None
+            assert update.quota.memory is not None
+            assert update.quota.gpu is not None
+            new_quota = models.UnsavedQuota(
+                cpu=update.quota.cpu,
+                memory=update.quota.memory,
+                gpu=update.quota.gpu,
+            )
+            quota = await self.quotas_repo.create_quota(new_quota=new_quota, cluster_id=cluster_id)
+            rp.quota = quota.id
+        elif isinstance(update.quota, models.QuotaPatch):
+            assert rp.quota is not None
+            assert quota is not None
+            # Update the existing quota
+            updated_quota = models.Quota(
+                cpu=update.quota.cpu if update.quota.cpu is not None else quota.cpu,
+                memory=update.quota.memory if update.quota.memory is not None else quota.memory,
+                gpu=update.quota.gpu if update.quota.gpu is not None else quota.gpu,
+                gpu_kind=update.quota.gpu_kind if update.quota.gpu_kind is not None else quota.gpu_kind,
+                id=quota.id,
+            )
+            quota = await self.quotas_repo.update_quota(quota=updated_quota, cluster_id=cluster_id)
+            rp.quota = quota.id
 
-            await gather(*new_classes_coroutines)
-            await session.flush()
-            await session.refresh(rp)
-            return rp.dump(quota=quota)
+        new_classes_coroutines = []
+        if update.classes is not None:
+            for rc in update.classes:
+                new_classes_coroutines.append(
+                    self.update_resource_class(
+                        api_user=api_user, resource_pool_id=resource_pool_id, resource_class_id=rc.id, update=rc
+                    )
+                )
+
+        if update.remote is RESET:
+            rp.remote_provider_id = None
+            rp.remote_json = None
+        elif update.remote is not None:
+            rp.remote_provider_id = (
+                update.remote.provider_id if update.remote.provider_id is not None else rp.remote_provider_id
+            )
+            remote_json = rp.remote_json if rp.remote_json is not None else dict()
+            remote_json.update(update.remote.to_dict())
+            del remote_json["provider_id"]
+            rp.remote_json = remote_json
+
+        await gather(*new_classes_coroutines)
+        await session.flush()
+        await session.refresh(rp)
+        result = rp.dump(quota=quota)
+        return result
 
     @_only_admins
     async def delete_resource_pool(self, api_user: base_models.APIUser, id: int) -> None:
-        """Delete a resource pool from the database."""
+        """Insert a new resource pool."""
         async with self.session_maker() as session, session.begin():
-            stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == id)
-            res = await session.execute(stmt)
-            rp = res.scalars().first()
-            if rp is not None:
-                if rp.default:
-                    raise errors.ValidationError(message="The default resource pool cannot be deleted.")
-                await session.delete(rp)
-                if rp.quota:
-                    await self.quotas_repo.delete_quota(rp.quota, rp.get_cluster_id())
-            return None
+            await self._delete_resource_pool(
+                api_user=api_user,
+                id=id,
+                session=session,
+            )
+
+    @Authz.authz_change(op=AuthzOperation.delete, resource=ResourceType.resource_pool)
+    async def _delete_resource_pool(
+        self, api_user: base_models.APIUser, id: int, session: AsyncSession
+    ) -> models.DeletedResourcePool | None:
+        """Delete a resource pool from the database."""
+        stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == id)
+        res = await session.execute(stmt)
+        rp = res.scalars().first()
+        if rp is not None:
+            if rp.default:
+                raise errors.ValidationError(message="The default resource pool cannot be deleted.")
+            await session.delete(rp)
+            if rp.quota:
+                await self.quotas_repo.delete_quota(rp.quota, rp.get_cluster_id())
+            return models.DeletedResourcePool(id=id)
+        return None
 
     @_only_admins
     async def delete_resource_class(
@@ -720,9 +797,13 @@ class UserRepository(_Base):
     """The adapter used for accessing resource pool users with SQLAlchemy."""
 
     def __init__(
-        self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository, user_repo: UserRepo
+        self,
+        session_maker: Callable[..., AsyncSession],
+        quotas_repo: QuotaRepository,
+        user_repo: UserRepo,
+        authz: Authz,
     ) -> None:
-        super().__init__(session_maker, quotas_repo)
+        super().__init__(session_maker, quotas_repo, authz)
         self.kc_user_repo = user_repo
 
     @_only_admins
@@ -801,7 +882,7 @@ class UserRepository(_Base):
             if resource_pool_id is not None:
                 stmt = stmt.where(schemas.ResourcePoolORM.id == resource_pool_id)
             # NOTE: The line below ensures that the right users can access the right resources, do not remove.
-            stmt = _resource_pool_access_control(api_user, stmt)
+            stmt = await _resource_pool_access_control(api_user, stmt, self.authz)
             res = await session.execute(stmt)
             rps: Sequence[schemas.ResourcePoolORM] = res.scalars().all()
             output: list[models.ResourcePool] = []
@@ -852,12 +933,23 @@ class UserRepository(_Base):
                     raise errors.ForbiddenError(
                         message=f"User with keycloak id {keycloak_id} cannot access the default resource pool"
                     )
+            existing_rp_ids = {rp.id for rp in user.resource_pools}
+            new_rp_ids = {rp.id for rp in rps_to_add}
             if append:
-                user_rp_ids = {rp.id for rp in user.resource_pools}
-                rps_to_add = [rp for rp in rps_to_add if rp.id not in user_rp_ids]
+                rps_to_add = [rp for rp in rps_to_add if rp.id not in existing_rp_ids]
                 user.resource_pools.extend(rps_to_add)
+                removed_rps: list[schemas.ResourcePoolORM] = []
             else:
+                removed_rps = [rp for rp in user.resource_pools if rp.id not in new_rp_ids]
                 user.resource_pools = list(rps_to_add)
+            for rp in rps_to_add:
+                await self._grant_resource_pool_members(api_user, rp.id, [keycloak_id], session=session)
+                if rp.default or rp.public:
+                    await self._unprohibit_resource_pool_users(api_user, rp.id, [keycloak_id], session=session)
+            for rp in removed_rps:
+                await self._revoke_resource_pool_member(api_user, rp.id, keycloak_id, session=session)
+                if rp.default or rp.public:
+                    await self._prohibit_resource_pool_user(api_user, rp.id, keycloak_id, session=session)
             output: list[models.ResourcePool] = []
             for rp in rps_to_add:
                 quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id()) if rp.quota else None
@@ -870,6 +962,13 @@ class UserRepository(_Base):
     ) -> None:
         """Remove a user from a specific resource pool."""
         async with self.session_maker() as session, session.begin():
+            rp_stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == resource_pool_id)
+            rp_res = await session.execute(rp_stmt)
+            rp = rp_res.scalars().first()
+            if rp is None:
+                raise errors.MissingResourceError(message=f"Resource pool with id {resource_pool_id} does not exist")
+
+            # SQL removal (existing logic)
             sub = (
                 select(schemas.UserORM.id)
                 .join(schemas.ResourcePoolORM, schemas.UserORM.resource_pools)
@@ -878,6 +977,21 @@ class UserRepository(_Base):
             )
             stmt = delete(schemas.resource_pools_users).where(schemas.resource_pools_users.c.user_id.in_(sub))
             await session.execute(stmt)
+            await self._revoke_resource_pool_member(api_user, resource_pool_id, keycloak_id, session=session)
+            if rp.default or rp.public:
+                await self._prohibit_resource_pool_user(api_user, resource_pool_id, keycloak_id, session=session)
+
+    @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool_prohibited)
+    async def _prohibit_resource_pool_user(
+        self, api_user: base_models.APIUser, resource_pool_id: int, keycloak_id: str, session: AsyncSession
+    ) -> models.ResourcePoolMembershipChange:
+        return models.ResourcePoolMembershipChange(resource_pool_id=resource_pool_id, user_ids=[keycloak_id])
+
+    @Authz.authz_change(op=AuthzOperation.delete, resource=ResourceType.resource_pool_member)
+    async def _revoke_resource_pool_member(
+        self, api_user: base_models.APIUser, resource_pool_id: int, keycloak_id: str, session: AsyncSession
+    ) -> models.ResourcePoolMembershipChange:
+        return models.ResourcePoolMembershipChange(resource_pool_id=resource_pool_id, user_ids=[keycloak_id])
 
     @_only_admins
     async def update_resource_pool_users(
@@ -906,6 +1020,8 @@ class UserRepository(_Base):
                     api_user=api_user, resource_pool_id=resource_pool_id
                 )
                 users_to_modify = [user for user in all_existing_users.disallowed if user.keycloak_id in user_ids]
+                re_allowed_ids = [u.keycloak_id for u in users_to_modify]
+                await self._unprohibit_resource_pool_users(api_user, resource_pool_id, re_allowed_ids, session=session)
                 return await gather(
                     *[
                         self.update_user(
@@ -925,9 +1041,26 @@ class UserRepository(_Base):
                 rp_user_ids = {rp.id for rp in rp.users}
                 users_to_add = [u for u in list(users_to_add_exist) + users_to_add_missing if u.id not in rp_user_ids]
                 rp.users.extend(users_to_add)
+                await self._grant_resource_pool_members(api_user, resource_pool_id, user_ids, session=session)
             else:
                 rp.users = list(users_to_add_exist) + users_to_add_missing
             return [usr.dump() for usr in rp.users]
+
+    @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool_member)
+    async def _grant_resource_pool_members(
+        self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: Collection[str], session: AsyncSession
+    ) -> models.ResourcePoolMembershipChange | None:
+        if not user_ids:
+            return None
+        return models.ResourcePoolMembershipChange(resource_pool_id=resource_pool_id, user_ids=user_ids)
+
+    @Authz.authz_change(op=AuthzOperation.delete, resource=ResourceType.resource_pool_prohibited)
+    async def _unprohibit_resource_pool_users(
+        self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: Collection[str], session: AsyncSession
+    ) -> models.ResourcePoolMembershipChange | None:
+        if not user_ids:
+            return None
+        return models.ResourcePoolMembershipChange(resource_pool_id=resource_pool_id, user_ids=user_ids)
 
     @_only_admins
     async def update_user(self, api_user: base_models.APIUser, keycloak_id: str, **kwargs: Any) -> base_models.User:
@@ -946,6 +1079,15 @@ class UserRepository(_Base):
                 )
             if (no_default_access := kwargs.get("no_default_access")) is not None:
                 user.no_default_access = no_default_access
+                default_rps_stmt = select(schemas.ResourcePoolORM.id).where(schemas.ResourcePoolORM.default == true())
+                default_rps_res = await session.execute(default_rps_stmt)
+                default_rp_ids = [row[0] for row in default_rps_res.all()]
+
+                for rp_id in default_rp_ids:
+                    if no_default_access:
+                        await self._prohibit_resource_pool_user(api_user, rp_id, keycloak_id, session=session)
+                    else:
+                        await self._unprohibit_resource_pool_users(api_user, rp_id, [keycloak_id], session=session)
             return user.dump()
 
 
