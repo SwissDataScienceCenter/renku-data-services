@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from math import ceil
@@ -472,3 +472,18 @@ class RemoteConfigurationRunaiPatch:
 
 
 RemoteConfigurationPatch = ResetType | RemoteConfigurationFirecrestPatch | RemoteConfigurationRunaiPatch
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class DeletedResourcePool:
+    """A resource pool that has been deleted."""
+
+    id: int
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
+class ResourcePoolMembershipChange:
+    """Returned by user-management methods so the authz_change decorator knows what to sync to SpiceDB."""
+
+    resource_pool_id: int
+    user_ids: Collection[str]
