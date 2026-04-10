@@ -156,8 +156,8 @@ class InternalAuthenticationConfig:
                 audience=audience,
             )
 
-        secret_key_path = os.environ.get("INTERNAL_AUTHN_SECRET_KEY_PATH")
-        if secret_key_path is None:
+        secret_key_path = os.environ.get("INTERNAL_AUTHN_SECRET_KEY_PATH", "")
+        if not secret_key_path:
             raise errors.ConfigurationError(message="The secret key for internal authentication has to be specified.")
         secret_key = base64.urlsafe_b64decode(Path(secret_key_path).read_bytes())
         return cls(
