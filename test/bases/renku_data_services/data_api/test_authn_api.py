@@ -80,6 +80,7 @@ async def test_post_internal_token_valid_refresh_token(
     assert isinstance(response.json, dict)
     assert isinstance(response.json.get("access_token"), str)
     assert response.json["access_token"] != ""
+    assert response.json["access_token"] != new_access_token
 
 
 @pytest.mark.asyncio
