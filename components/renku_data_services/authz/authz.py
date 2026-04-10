@@ -624,17 +624,22 @@ class Authz:
                 if len(args) == 0:
                     user_kwarg = kwargs.get("user")
                     requested_by_kwarg = kwargs.get("requested_by")
-                    if isinstance(user_kwarg, base_models.APIUser) and isinstance(
-                        requested_by_kwarg, base_models.APIUser
-                    ):
+                    api_user_kwarg = kwargs.get("api_user")
+                    found_users = [
+                        u
+                        for u in (user_kwarg, requested_by_kwarg, api_user_kwarg)
+                        if isinstance(u, base_models.APIUser)
+                    ]
+
+                    if len(found_users) > 1:
                         raise errors.ProgrammingError(
                             message="The decorator for authorization database changes found two APIUser parameters in"
                             " the 'user' and 'requested_by' keyword arguments but expected only one of them to be "
                             "present."
                         )
-                    potential_user = user_kwarg if isinstance(user_kwarg, base_models.APIUser) else requested_by_kwarg
+                    potential_user = found_users[0] if found_users else None
                 else:
-                    potential_user = args[0]
+                    potential_user = args[0] if isinstance(args[0], base_models.APIUser) else None
                 if not isinstance(potential_user, base_models.APIUser):
                     raise errors.ProgrammingError(
                         message="The decorator for authorization database changes could not find APIUser in the "
