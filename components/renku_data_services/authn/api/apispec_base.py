@@ -1,12 +1,9 @@
 """Base models for API specifications."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class BaseAPISpec(BaseModel):
     """Base API specification."""
 
-    class Config:
-        """Enables orm mode for pydantic."""
-
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
