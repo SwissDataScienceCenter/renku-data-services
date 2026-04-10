@@ -138,7 +138,7 @@ class InternalAuthenticationConfig:
         long_refresh_token_expiration = (
             timedelta(seconds=int(long_refresh_token_expiration_str))
             if long_refresh_token_expiration_str
-            else timedelta(hours=25)
+            else timedelta(hours=24)
         )
         issuer = os.environ.get("INTERNAL_AUTHN_ISSUER") or "renku-self"
         audience = os.environ.get("INTERNAL_AUTHN_AUDIENCE") or "renku-self"
