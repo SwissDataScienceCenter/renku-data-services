@@ -1,8 +1,8 @@
 """Business logic for connected services."""
 
 import math
-from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from datetime import UTC, datetime
+from typing import Any
 from urllib.parse import urlparse
 
 import jwt
@@ -11,12 +11,11 @@ from ulid import ULID
 
 from renku_data_services import base_models, errors
 from renku_data_services.app_config import logging
-from renku_data_services.authn.renku import RenkuSelfTokenMint
+from renku_data_services.authn.renku import RenkuSelfAuthenticator, RenkuSelfTokenMint
 from renku_data_services.connected_services import apispec, models
 from renku_data_services.connected_services.oauth_http import (
     OAuthHttpClientFactory,
 )
-from renku_data_services.notebooks.config import NotebooksConfig
 
 logger = logging.getLogger(__name__)
 
@@ -116,9 +115,8 @@ async def handle_oauth2_token_refresh(
     body: apispec.PostTokenRequest,
     connection_id: ULID,
     oauth_client_factory: OAuthHttpClientFactory,
-    authenticator: base_models.Authenticator,
+    internal_authenticator: RenkuSelfAuthenticator,
     internal_token_mint: RenkuSelfTokenMint,
-    nb_config: NotebooksConfig,
 ) -> dict[str, str | int]:
     """OAuth 2.0 token endpoint to support applications running in sessions.
 
@@ -135,41 +133,63 @@ async def handle_oauth2_token_refresh(
     # request.headers[authenticator.token_field] = renku_tokens.access_token
     # request.headers[authenticator.token_field] = body.refresh_token
 
-    user: base_models.APIUser | None = None
+    user: base_models.AuthenticatedAPIUser | None = None
+    parsed_renku_refresh_token: dict[str, Any] | None = None
     try:
-        _user = cast(
-            base_models.APIUser,
-            await authenticator.authenticate(access_token=body.refresh_token or "", request=request),
+        parsed_renku_refresh_token = await internal_authenticator.verify_refresh_token(refresh_token=body.refresh_token)
+        if parsed_renku_refresh_token is None:
+            raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
+        user = base_models.AuthenticatedAPIUser(
+            is_admin=False,
+            id=parsed_renku_refresh_token["sub"],
+            access_token="",  # nosec B106
+            full_name=parsed_renku_refresh_token.get("name"),
+            first_name=parsed_renku_refresh_token.get("given_name"),
+            last_name=parsed_renku_refresh_token.get("family_name"),
+            email=parsed_renku_refresh_token["email"],
+            access_token_expires_at=None,
+            roles=[],
         )
-        if _user.is_authenticated and _user.access_token:
-            user = _user
+        # _user = cast(
+        #     base_models.APIUser,
+        #     await authenticator.authenticate(access_token=body.refresh_token or "", request=request),
+        # )
+        # if _user.is_authenticated and _user.access_token:
+        #     user = _user
     except Exception as err:
         logger.error(f"Got authenticate error: {err.__class__}.")
         raise
 
-    if user is None or not user.is_authenticated:
-        raise errors.UnauthorizedError()
+    scope = str(parsed_renku_refresh_token.get("scope", ""))
+    scopes = scope.split(" ")
+
+    # TODO: verify session if scope found
+    logger.info(f"Got scopes = {scopes}")
+
+    # if user is None or not user.is_authenticated:
+    #     raise errors.UnauthorizedError()
 
     client = await oauth_client_factory.for_user_connection_raise(user, connection_id)
     oauth_token = await client.get_token()
     access_token = oauth_token.access_token
     if access_token is None:
         raise errors.ProgrammingError(message="Unexpected error: access token not present.")
-    # TODO: scope
-    new_renku_token = internal_token_mint.create_token(user=user, expires_in=timedelta(hours=24))
+    expires_in_td = internal_token_mint.long_refresh_token_expiration
+    new_renku_refresh_token = internal_token_mint.create_refresh_token(
+        user=user, scope=scope, refresh_expires_in=expires_in_td
+    )
     result: dict[str, str | int] = {
         "access_token": access_token,
         "token_type": str(oauth_token.get("token_type")) or "Bearer",
         # "refresh_token": renku_tokens.encode(),
-        # TODO: scope
-        "refresh_token": new_renku_token,
+        "refresh_token": new_renku_refresh_token,
     }
     if oauth_token.get("scope"):
         result["scope"] = oauth_token["scope"]
     # NOTE: Set "expires_in" according to whichever of the OAuth 2.0 access token or the Renku refresh
     # token expires first.
     try:
-        refresh_decoded: dict[str, Any] = jwt.decode(new_renku_token, options={"verify_signature": False})
+        refresh_decoded: dict[str, Any] = jwt.decode(new_renku_refresh_token, options={"verify_signature": False})
         refresh_exp: int | None = refresh_decoded.get("exp")
         if refresh_exp is not None and refresh_exp > 0:
             exp = datetime.fromtimestamp(refresh_exp, UTC)

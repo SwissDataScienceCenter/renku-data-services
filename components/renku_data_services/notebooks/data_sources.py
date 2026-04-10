@@ -251,10 +251,11 @@ class DataSourceRepository:
         #         refresh_token=user.refresh_token,
         #     )
         #     token_config["refresh_token"] = renku_tokens.encode()
-        # TODO: scope
-        expires_in_td = self.internal_token_mint.refresh_token_expiration
-        expires_in = math.floor(expires_in_td.total_seconds())
-        renku_token = self.internal_token_mint.create_token(user=user, scope=scope, expires_in=expires_in_td)
+        expires_in_td = self.internal_token_mint.long_refresh_token_expiration
+        expires_in = int(expires_in_td.total_seconds())
+        renku_token = self.internal_token_mint.create_refresh_token(
+            user=user, scope=scope, refresh_expires_in=expires_in_td
+        )
         token_config["refresh_token"] = renku_token
 
         if token_set.expires_at:

@@ -34,7 +34,8 @@ async def main_container(
     )
 
     internal_token_scope = f"session:{server_name}"
-    internal_token = internal_token_mint.create_token(user=user, scope=internal_token_scope)
+    internal_access_token = internal_token_mint.create_access_token(user=user, scope=internal_token_scope)
+    internal_refresh_token = internal_token_mint.create_refresh_token(user=user, scope=internal_token_scope)
 
     prefix = "GIT_PROXY_"
     env = [
@@ -68,7 +69,8 @@ async def main_container(
         ),
         # TODO: internal token
         client.V1EnvVar(name=f"{prefix}RENKU_AUTHENTICATION_VERSION", value="v2"),
-        client.V1EnvVar(name=f"{prefix}RENKU_ACCESS_TOKEN", value=internal_token),
+        client.V1EnvVar(name=f"{prefix}RENKU_ACCESS_TOKEN", value=internal_access_token),
+        client.V1EnvVar(name=f"{prefix}RENKU_REFRESH_TOKEN", value=internal_refresh_token),
         # TODO: can we use a sanic method to derive this URL?
         client.V1EnvVar(
             name=f"{prefix}RENKU_TOKEN_URL",

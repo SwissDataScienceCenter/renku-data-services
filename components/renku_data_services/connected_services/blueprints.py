@@ -13,7 +13,7 @@ import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.app_config import logging
 from renku_data_services.authn.chained import ChainedAuthenticator
-from renku_data_services.authn.renku import RenkuSelfTokenMint
+from renku_data_services.authn.renku import RenkuSelfAuthenticator, RenkuSelfTokenMint
 from renku_data_services.base_api.auth import authenticate, only_admins, only_authenticated
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_query
@@ -166,7 +166,7 @@ class OAuth2ConnectionsBP(CustomBlueprint):
     connected_services_repo: ConnectedServicesRepository
     oauth_client_factory: OAuthHttpClientFactory
     authenticator: base_models.Authenticator[base_models.APIUser]
-    internal_authenticator: base_models.Authenticator[base_models.APIUser]
+    internal_authenticator: RenkuSelfAuthenticator
     internal_token_mint: RenkuSelfTokenMint
     nb_config: NotebooksConfig
 
@@ -273,20 +273,13 @@ class OAuth2ConnectionsBP(CustomBlueprint):
         async def _post_token_endpoint(
             request: Request, body: apispec.PostTokenRequest, connection_id: ULID
         ) -> JSONResponse:
-            # NOTE: inject the access token in the headers so that we can use `self.authenticator`
-            request.headers[self.internal_authenticator.token_field] = body.refresh_token
-            request.headers[self.authenticator.token_field] = body.refresh_token
-            # request.headers[authenticator.token_field] = body.refresh_token
-
             result = await handle_oauth2_token_refresh(
                 request=request,
                 body=body,
                 connection_id=connection_id,
                 oauth_client_factory=self.oauth_client_factory,
-                # authenticator=self.authenticator,
-                authenticator=ChainedAuthenticator(chain=[self.internal_authenticator, self.authenticator]),
+                internal_authenticator=self.internal_authenticator,
                 internal_token_mint=self.internal_token_mint,
-                nb_config=self.nb_config,
             )
 
             return validated_json(apispec.PostTokenResponse, result)

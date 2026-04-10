@@ -701,7 +701,8 @@ def get_remote_secret(
     # renku_base_url = renku_base_url.rstrip("/")
     # renku_auth_token_uri = f"{renku_base_url}/auth/realms/{config.keycloak_realm}/protocol/openid-connect/token"
     internal_token_scope = f"session:{server_name}"
-    internal_token = internal_token_mint.create_token(user=user, scope=internal_token_scope)
+    internal_access_token = internal_token_mint.create_access_token(user=user, scope=internal_token_scope)
+    internal_refresh_token = internal_token_mint.create_refresh_token(user=user, scope=internal_token_scope)
     secret_data = {
         "RSC_AUTH_KIND": "renku_v2",
         "RSC_AUTH_TOKEN_URI": remote_provider.access_token_url,
@@ -713,7 +714,8 @@ def get_remote_secret(
         "RSC_AUTH_RENKU_TOKEN_URI": "https://"
         + config.sessions.ingress.host
         + "/api/data/internal/authentication/token",
-        "RSC_AUTH_RENKU_ACCESS_TOKEN": internal_token,
+        "RSC_AUTH_RENKU_ACCESS_TOKEN": internal_access_token,
+        "RSC_AUTH_RENKU_REFRESH_TOKEN": internal_refresh_token,
     }
     secret_name = f"{server_name}-remote-secret"
     secret = V1Secret(metadata=V1ObjectMeta(name=secret_name), string_data=secret_data)
