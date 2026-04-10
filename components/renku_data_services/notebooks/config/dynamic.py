@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from io import StringIO
-from typing import Any, ClassVar, Self, Union
+from typing import Any, ClassVar, Literal, Self, Union
 
 import yaml
 from kubernetes import client
@@ -256,6 +256,16 @@ class _SessionIngress:
             annotations=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__INGRESS__ANNOTATIONS", "{}"))),
         )
 
+    @property
+    def scheme(self) -> Literal["https"] | Literal["http"]:
+        if self.tls_secret or self.use_default_cluster_tls_cert:
+            return "https"
+        return "http"
+
+    @property
+    def renku_url(self) -> str:
+        return f"{self.scheme}::{self.host}"
+
 
 @dataclass
 class _GenericCullingConfig:
@@ -356,6 +366,11 @@ class _SessionSshConfig:
         )
 
 
+def _get_renku_url_fallback(ingress_config: _SessionIngress) -> str:
+    scheme = "https" if ingress_config.tls_secret or ingress_config.use_default_cluster_tls_cert else "http"
+    return f"{scheme}::{ingress_config.host}"
+
+
 @dataclass
 class _SessionConfig:
     culling: _SessionCullingConfig
@@ -368,6 +383,7 @@ class _SessionConfig:
     storage: _SessionStorageConfig
     containers: _SessionContainers
     ssh: _SessionSshConfig
+    renku_url: str
     default_image: str = "renku/singleuser:latest"
     enforce_cpu_limits: CPUEnforcement = CPUEnforcement.OFF
     termination_warning_duration_seconds: int = 12 * 60 * 60
@@ -386,12 +402,13 @@ class _SessionConfig:
 
     @classmethod
     def from_env(cls) -> Self:
+        ingress = _SessionIngress.from_env()
         return cls(
             culling=_SessionCullingConfig.from_env(),
             git_proxy=_GitProxyConfig.from_env(),
             git_rpc_server=_GitRpcServerConfig.from_env(),
             git_clone=_GitCloneConfig.from_env(),
-            ingress=_SessionIngress.from_env(),
+            ingress=ingress,
             ca_certs=_CustomCaCertsConfig.from_env(),
             oidc=_SessionOidcConfig.from_env(),
             storage=_SessionStorageConfig.from_env(),
@@ -404,16 +421,18 @@ class _SessionConfig:
             node_selector=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__NODE_SELECTOR", "{}"))),
             affinity=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__AFFINITY", "{}"))),
             tolerations=yaml.safe_load(StringIO(os.environ.get("NB_SESSIONS__TOLERATIONS", "[]"))),
+            renku_url=os.environ.get("RENKU_URL") or _get_renku_url_fallback(ingress),
         )
 
     @classmethod
     def _for_testing(cls) -> Self:
+        ingress = _SessionIngress(host="localhost", tls_secret="some-secret")  # nosec: B106
         return cls(
             culling=_SessionCullingConfig.from_env(),
             git_proxy=_GitProxyConfig(renku_client_secret="not-defined"),  # nosec B106
             git_rpc_server=_GitRpcServerConfig.from_env(),
             git_clone=_GitCloneConfig.from_env(),
-            ingress=_SessionIngress(host="localhost", tls_secret="some-secret"),  # nosec: B106
+            ingress=ingress,
             ca_certs=_CustomCaCertsConfig.from_env(),
             oidc=_SessionOidcConfig(
                 client_id="not-defined",
@@ -432,6 +451,7 @@ class _SessionConfig:
             node_selector=yaml.safe_load(StringIO(os.environ.get("", "{}"))),
             affinity=yaml.safe_load(StringIO(os.environ.get("", "{}"))),
             tolerations=yaml.safe_load(StringIO(os.environ.get("", "[]"))),
+            renku_url=os.environ.get("RENKU_URL") or _get_renku_url_fallback(ingress),
         )
 
     @property
