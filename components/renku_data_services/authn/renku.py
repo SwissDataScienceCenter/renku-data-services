@@ -81,9 +81,6 @@ class RenkuSelfAuthenticator(Authenticator[APIUser]):
                 access_token_expires_at=datetime.fromtimestamp(exp) if exp is not None else None,
                 roles=[],
             )
-            request.ctx.renku_authenticator = f"{self.__class__.__module__}.{self.__class__.__qualname__}"
-            request.ctx.renku_user = user
-            request.ctx.renku_parsed_access_token = parsed
             return user
 
         # Try to get an anonymous user ID if the validation of keycloak credentials failed
