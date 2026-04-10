@@ -737,6 +737,33 @@ class Authz:
                     case AuthzOperation.delete, ResourceType.resource_pool if isinstance(result, DeletedResourcePool):
                         user = _extract_user_from_args(*func_args, **func_kwargs)
                         authz_change = await db_repo.authz._remove_resource_pool(user, result)
+                    case AuthzOperation.create, ResourceType.resource_pool_member if isinstance(
+                        result, ResourcePoolMembershipChange
+                    ):
+                        authz_change = await db_repo.authz._add_resource_pool_members(
+                            result.resource_pool_id, result.user_ids
+                        )
+                    case AuthzOperation.delete, ResourceType.resource_pool_member if isinstance(
+                        result, ResourcePoolMembershipChange
+                    ):
+                        authz_change = await db_repo.authz._remove_resource_pool_members(
+                            result.resource_pool_id, result.user_ids
+                        )
+                    case AuthzOperation.create, ResourceType.resource_pool_prohibited if isinstance(
+                        result, ResourcePoolMembershipChange
+                    ):
+                        authz_change = await db_repo.authz._add_resource_pool_prohibited(
+                            result.resource_pool_id, result.user_ids
+                        )
+                    case AuthzOperation.delete, ResourceType.resource_pool_prohibited if isinstance(
+                        result, ResourcePoolMembershipChange
+                    ):
+                        authz_change = await db_repo.authz._remove_resource_pool_prohibited(
+                            result.resource_pool_id, result.user_ids
+                        )
+                    case (
+                        (AuthzOperation.create | AuthzOperation.delete),
+                        (ResourceType.resource_pool_member | ResourceType.resource_pool_prohibited),
                     ) if result is None:
                         # Handle None returns (nothing to sync)
                         pass
@@ -1426,6 +1453,78 @@ class Authz:
 
         apply = WriteRelationshipsRequest(updates=apply_updates)
         undo = WriteRelationshipsRequest(updates=undo_updates)
+        return _AuthzChange(apply=apply, undo=undo)
+
+    async def _add_resource_pool_members(self, resource_pool_id: int, user_ids: Collection[str]) -> _AuthzChange:
+        """Grant member access to users on a resource pool."""
+        rels = [
+            Relationship(
+                resource=_AuthzConverter.resource_pool(resource_pool_id),
+                relation=_Relation.member.value,
+                subject=_AuthzConverter.user_subject(uid),
+            )
+            for uid in user_ids
+        ]
+        apply = WriteRelationshipsRequest(
+            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=r) for r in rels]
+        )
+        undo = WriteRelationshipsRequest(
+            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=r) for r in rels]
+        )
+        return _AuthzChange(apply=apply, undo=undo)
+
+    async def _remove_resource_pool_members(self, resource_pool_id: int, user_ids: Collection[str]) -> _AuthzChange:
+        """Revoke member access from users on a resource pool."""
+        rels = [
+            Relationship(
+                resource=_AuthzConverter.resource_pool(resource_pool_id),
+                relation=_Relation.member.value,
+                subject=_AuthzConverter.user_subject(uid),
+            )
+            for uid in user_ids
+        ]
+        apply = WriteRelationshipsRequest(
+            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=r) for r in rels]
+        )
+        undo = WriteRelationshipsRequest(
+            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=r) for r in rels]
+        )
+        return _AuthzChange(apply=apply, undo=undo)
+
+    async def _add_resource_pool_prohibited(self, resource_pool_id: int, user_ids: Collection[str]) -> _AuthzChange:
+        """Mark users as prohibited from accessing a resource pool (overrides public_user wildcard)."""
+        rels = [
+            Relationship(
+                resource=_AuthzConverter.resource_pool(resource_pool_id),
+                relation=_Relation.prohibited.value,
+                subject=_AuthzConverter.user_subject(uid),
+            )
+            for uid in user_ids
+        ]
+        apply = WriteRelationshipsRequest(
+            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=r) for r in rels]
+        )
+        undo = WriteRelationshipsRequest(
+            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=r) for r in rels]
+        )
+        return _AuthzChange(apply=apply, undo=undo)
+
+    async def _remove_resource_pool_prohibited(self, resource_pool_id: int, user_ids: Collection[str]) -> _AuthzChange:
+        """Un-prohibit users from a resource pool."""
+        rels = [
+            Relationship(
+                resource=_AuthzConverter.resource_pool(resource_pool_id),
+                relation=_Relation.prohibited.value,
+                subject=_AuthzConverter.user_subject(uid),
+            )
+            for uid in user_ids
+        ]
+        apply = WriteRelationshipsRequest(
+            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=r) for r in rels]
+        )
+        undo = WriteRelationshipsRequest(
+            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=r) for r in rels]
+        )
         return _AuthzChange(apply=apply, undo=undo)
 
     async def _remove_admin(self, user_id: str) -> _AuthzChange:
