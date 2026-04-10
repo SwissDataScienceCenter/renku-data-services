@@ -548,8 +548,8 @@ async def test_restricted_default_resource_pool_access(
     existing_users = res.json
     assert res.status_code == 200
     assert len(existing_users) >= 2
-    # Restrict one user to not have access to the default pool
-    no_default_user = existing_users[0]
+    # Restrict one user to not have access to the default pool (not user[0] who is admin)
+    no_default_user = existing_users[1]
     no_default_user_id = no_default_user["id"]
     no_default_access_token = json.dumps({"id": no_default_user_id})
     _, res = await sanic_client.delete(
@@ -558,7 +558,7 @@ async def test_restricted_default_resource_pool_access(
     )
     assert res.status_code == 204
     # The other user in the db should be able to access the default pool
-    default_access_user = existing_users[1]
+    default_access_user = existing_users[2]
     user_id = default_access_user["id"]
     access_token = json.dumps({"id": user_id})
     # Ensure non-authenticated users have access to the default pool
@@ -618,8 +618,8 @@ async def test_restricted_default_resource_pool_access_changes(
     existing_users = res.json
     assert res.status_code == 200
     assert len(existing_users) >= 2
-    # Restrict one user to not have access to the default pool
-    no_default_user = existing_users[0]
+    # Restrict one user to not have access to the default pool (not user[0] who is admin)
+    no_default_user = existing_users[1]
     no_default_user_id = no_default_user["id"]
     no_default_access_token = json.dumps({"id": no_default_user_id})
     _, res = await sanic_client.delete(
@@ -665,8 +665,8 @@ async def test_private_resource_pool_access(
     existing_users = res.json
     assert res.status_code == 200
     assert len(existing_users) >= 2
-    # Select one user that has no access
-    restricted_user = existing_users[0]
+    # Select one user that has no access (not user[0] who is admin)
+    restricted_user = existing_users[3]
     restricted_user_id = restricted_user["id"]
     restricted_access_token = json.dumps({"id": restricted_user_id})
     # Give another user access to the private pool
@@ -801,7 +801,8 @@ async def test_user_resource_pools(
     existing_users = res.json
     assert res.status_code == 200
     assert len(existing_users) >= 1
-    user = existing_users[0]
+    # not user[0] who is admin
+    user = existing_users[1]
     user_id = user["id"]
     user_access_token = json.dumps({"id": user_id})
     user_headers = {"Authorization": f"Bearer {user_access_token}"}
