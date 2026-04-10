@@ -17,8 +17,9 @@ if TYPE_CHECKING:
     from pytest import MonkeyPatch
 
 
-def test_make_user_claims() -> None:
-    user = AuthenticatedAPIUser(
+@pytest.fixture
+def local_test_user() -> AuthenticatedAPIUser:
+    return AuthenticatedAPIUser(
         id="some-user-id",
         is_admin=False,
         access_token="some-access-token",
@@ -29,7 +30,9 @@ def test_make_user_claims() -> None:
         roles=[],
     )
 
-    user_claims = RenkuSelfTokenMint._make_user_claims(user=user)
+
+def test_make_user_claims(local_test_user: AuthenticatedAPIUser) -> None:
+    user_claims = RenkuSelfTokenMint._make_user_claims(user=local_test_user)
 
     expected_claims = {
         "sub": "some-user-id",
@@ -48,21 +51,11 @@ async def internal_token_mint(monkeypatch: "MonkeyPatch") -> RenkuSelfTokenMint:
     return RenkuSelfTokenMint.from_config(config=internal_authn_config)
 
 
-def test_make_payload(internal_token_mint: RenkuSelfTokenMint) -> None:
-    user = AuthenticatedAPIUser(
-        id="some-user-id",
-        is_admin=False,
-        access_token="some-access-token",
-        full_name="Jane Doe",
-        first_name="Jane",
-        last_name="Doe",
-        email="jane.doe@example.org",
-        roles=[],
-    )
+def test_make_payload(local_test_user: AuthenticatedAPIUser, internal_token_mint: RenkuSelfTokenMint) -> None:
     expires_in = timedelta(minutes=10)
 
     payload = internal_token_mint._make_payload(
-        user=user, token_type="Bearer", scope="test_scope", expires_in=expires_in
+        user=local_test_user, token_type="Bearer", scope="test_scope", expires_in=expires_in
     )
 
     expected_keys = {
@@ -106,19 +99,8 @@ def test_make_payload(internal_token_mint: RenkuSelfTokenMint) -> None:
     assert payload.get("family_name") == "Doe"
 
 
-def test_create_access_token(internal_token_mint: RenkuSelfTokenMint) -> None:
-    user = AuthenticatedAPIUser(
-        id="some-user-id",
-        is_admin=False,
-        access_token="some-access-token",
-        full_name="Jane Doe",
-        first_name="Jane",
-        last_name="Doe",
-        email="jane.doe@example.org",
-        roles=[],
-    )
-
-    token = internal_token_mint.create_access_token(user=user, scope="test_scope")
+def test_create_access_token(local_test_user: AuthenticatedAPIUser, internal_token_mint: RenkuSelfTokenMint) -> None:
+    token = internal_token_mint.create_access_token(user=local_test_user, scope="test_scope")
 
     strict_jwt = jwt.PyJWT({"enforce_minimum_key_length": True})
     parsed_token = strict_jwt.decode(
@@ -135,19 +117,8 @@ def test_create_access_token(internal_token_mint: RenkuSelfTokenMint) -> None:
     assert parsed_token.get("scope") == "test_scope"
 
 
-def test_create_refresh_token(internal_token_mint: RenkuSelfTokenMint) -> None:
-    user = AuthenticatedAPIUser(
-        id="some-user-id",
-        is_admin=False,
-        access_token="some-access-token",
-        full_name="Jane Doe",
-        first_name="Jane",
-        last_name="Doe",
-        email="jane.doe@example.org",
-        roles=[],
-    )
-
-    token = internal_token_mint.create_refresh_token(user=user, scope="test_scope")
+def test_create_refresh_token(local_test_user: AuthenticatedAPIUser, internal_token_mint: RenkuSelfTokenMint) -> None:
+    token = internal_token_mint.create_refresh_token(user=local_test_user, scope="test_scope")
 
     strict_jwt = jwt.PyJWT({"enforce_minimum_key_length": True})
     parsed_token = strict_jwt.decode(
@@ -221,19 +192,11 @@ async def test_authenticator_anonymous(shared_sanic_client: SanicReusableASGITes
 
 @pytest.mark.asyncio
 async def test_authenticator_valid_access_token(
-    shared_sanic_client: SanicReusableASGITestClient, shared_internal_token_mint: RenkuSelfTokenMint
+    local_test_user: AuthenticatedAPIUser,
+    shared_sanic_client: SanicReusableASGITestClient,
+    shared_internal_token_mint: RenkuSelfTokenMint,
 ) -> None:
-    user = AuthenticatedAPIUser(
-        id="some-user-id",
-        is_admin=False,
-        access_token="some-access-token",
-        full_name="Jane Doe",
-        first_name="Jane",
-        last_name="Doe",
-        email="jane.doe@example.org",
-        roles=[],
-    )
-    access_token = shared_internal_token_mint.create_access_token(user=user)
+    access_token = shared_internal_token_mint.create_access_token(user=local_test_user)
 
     headers = {"Authorization": f"Bearer {access_token}"}
     _, response = await shared_sanic_client.get("/test", headers=headers)
