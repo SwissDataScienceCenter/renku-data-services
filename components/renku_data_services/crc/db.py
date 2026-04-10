@@ -18,13 +18,15 @@ from uuid import uuid4
 from sqlalchemy import NullPool, delete, false, select, true
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import selectinload
-from sqlalchemy.sql import Select, and_, not_, or_
+from sqlalchemy.sql import Select, or_
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
+from renku_data_services.authz.authz import Authz, AuthzOperation
+from renku_data_services.authz.models import Scope
 from renku_data_services.base_models import RESET
-from renku_data_services.base_models.core import ResetType
+from renku_data_services.base_models.core import ResetType, ResourceType
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
 from renku_data_services.crc.core import validate_resource_class_update, validate_resource_pool_update
@@ -37,84 +39,43 @@ from renku_data_services.users.db import UserRepo
 
 
 class _Base:
-    def __init__(self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository) -> None:
+    def __init__(self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository, authz: Authz) -> None:
         self.session_maker = session_maker
         self.quotas_repo = quotas_repo
+        self.authz: Authz = authz
 
 
-def _resource_pool_access_control(
+async def _resource_pool_access_control(
     api_user: base_models.APIUser,
     stmt: Select[tuple[schemas.ResourcePoolORM]],
+    authz: Authz,
 ) -> Select[tuple[schemas.ResourcePoolORM]]:
     """Modifies a select query to list resource pools based on whether the user is logged in or not."""
     output = stmt
-    match (api_user.is_authenticated, api_user.is_admin):
-        case True, False:
-            # The user is logged in but not an admin
-            api_user_has_default_pool_access = not_(
-                # NOTE: The only way to check that a user is allowed to access the default pool is that such a
-                # record does NOT EXIST in the database
-                select(schemas.UserORM.no_default_access)
-                .where(and_(schemas.UserORM.keycloak_id == api_user.id, schemas.UserORM.no_default_access == true()))
-                .exists()
-            )
-            output = output.join(schemas.UserORM, schemas.ResourcePoolORM.users, isouter=True).where(
-                or_(
-                    schemas.UserORM.keycloak_id == api_user.id,  # the user is part of the pool
-                    and_(  # the pool is not default but is public
-                        schemas.ResourcePoolORM.default != true(), schemas.ResourcePoolORM.public == true()
-                    ),
-                    and_(  # the pool is default and the user is not prohibited from accessing it
-                        schemas.ResourcePoolORM.default == true(),
-                        api_user_has_default_pool_access,
-                    ),
-                )
-            )
-        case True, True:
-            # The user is logged in and is an admin, they can see all resource pools
-            pass
-        case False, _:
-            # The user is not logged in, they can see only the public resource pools
-            output = output.where(schemas.ResourcePoolORM.public == true())
+    if api_user.is_admin:
+        return output
+    allowed_resource_pools = await authz.resources_with_permission(
+        api_user, api_user.id, ResourceType.resource_pool, Scope.USE
+    )
+    allowed_ids = [int(id) for id in allowed_resource_pools]
+    output = output.where(schemas.ResourcePoolORM.id.in_(allowed_ids))
     return output
 
 
-def _classes_user_access_control(
+async def _classes_user_access_control(
     api_user: base_models.APIUser,
     stmt: Select[tuple[schemas.ResourceClassORM]],
+    authz: Authz,
 ) -> Select[tuple[schemas.ResourceClassORM]]:
     """Adjust the select statement for classes based on whether the user is logged in or not."""
     output = stmt
-    match (api_user.is_authenticated, api_user.is_admin):
-        case True, False:
-            # The user is logged in but is not an admin
-            api_user_has_default_pool_access = not_(
-                # NOTE: The only way to check that a user is allowed to access the default pool is that such a
-                # record does NOT EXIST in the database
-                select(schemas.UserORM.no_default_access)
-                .where(and_(schemas.UserORM.keycloak_id == api_user.id, schemas.UserORM.no_default_access == true()))
-                .exists()
-            )
-            output = output.join(schemas.UserORM, schemas.ResourcePoolORM.users, isouter=True).where(
-                or_(
-                    schemas.UserORM.keycloak_id == api_user.id,  # the user is part of the pool
-                    and_(  # the pool is not default but is public
-                        schemas.ResourcePoolORM.default != true(), schemas.ResourcePoolORM.public == true()
-                    ),
-                    and_(  # the pool is default and the user is not prohibited from accessing it
-                        schemas.ResourcePoolORM.default == true(),
-                        api_user_has_default_pool_access,
-                    ),
-                )
-            )
-        case True, True:
-            # The user is logged in and is an admin, they can see all resource classes
-            pass
-        case False, _:
-            # The user is not logged in, they can see only the classes from public resource pools
-            output = output.join(schemas.UserORM, schemas.ResourcePoolORM.users, isouter=True).where(
-                schemas.ResourcePoolORM.public == true(),
-            )
+    if api_user.is_admin:
+        return output
+    allowed_resource_pools = await authz.resources_with_permission(
+        api_user, api_user.id, ResourceType.resource_pool, Scope.USE
+    )
+    allowed_ids = [int(id) for id in allowed_resource_pools]
+    output = output.where(schemas.ResourcePoolORM.id.in_(allowed_ids))
     return output
 
 
@@ -155,8 +116,8 @@ def _only_admins(
 class ResourcePoolRepository(_Base):
     """The adapter used for accessing resource pools with SQLAlchemy."""
 
-    def __init__(self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository):
-        super().__init__(session_maker, quotas_repo)
+    def __init__(self, session_maker: Callable[..., AsyncSession], quotas_repo: QuotaRepository, authz: Authz):
+        super().__init__(session_maker, quotas_repo, authz)
         self.__cluster_repo = ClusterRepository(session_maker=self.session_maker)
 
     async def initialize(self, async_connection_url: str, rp: models.UnsavedResourcePool) -> None:
