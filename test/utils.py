@@ -333,8 +333,11 @@ class TestDependencyManager(DependencyManager):
             session_maker=config.db.async_session_maker,
             quotas_repo=quota_repo,
             user_repo=kc_user_repo,
+            authz=authz,
         )
-        rp_repo = ResourcePoolRepository(session_maker=config.db.async_session_maker, quotas_repo=quota_repo)
+        rp_repo = ResourcePoolRepository(
+            session_maker=config.db.async_session_maker, quotas_repo=quota_repo, authz=authz
+        )
         storage_repo = StorageRepository(
             session_maker=config.db.async_session_maker,
             gitlab_client=gitlab_client,
