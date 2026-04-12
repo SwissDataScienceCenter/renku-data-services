@@ -7,7 +7,7 @@ from typing import Any
 
 from ulid import ULID
 
-from renku_data_services.users.db import APIUser
+from renku_data_services.base_models import APIUser
 
 
 class ProviderKind(StrEnum):
@@ -18,6 +18,7 @@ class ProviderKind(StrEnum):
     github = "github"
     gitlab = "gitlab"
     google = "google"
+    zenodo = "zenodo"
 
 
 class ConnectionStatus(StrEnum):
