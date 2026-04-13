@@ -290,7 +290,7 @@ class ResourcePoolRepository(_Base):
     async def insert_resource_pool(
         self, api_user: base_models.APIUser, new_resource_pool: models.UnsavedResourcePool
     ) -> models.ResourcePool:
-        """Insert a new resource pool."""
+        """Insert resource pool into database."""
         async with self.session_maker() as session, session.begin():
             return await self._insert_resource_pool(
                 api_user=api_user,
@@ -302,7 +302,6 @@ class ResourcePoolRepository(_Base):
     async def _insert_resource_pool(
         self, api_user: base_models.APIUser, new_resource_pool: models.UnsavedResourcePool, session: AsyncSession
     ) -> models.ResourcePool:
-        """Insert resource pool into database."""
         cluster = None
         if new_resource_pool.cluster_id:
             cluster = await self.__cluster_repo.select(cluster_id=new_resource_pool.cluster_id)
@@ -408,7 +407,7 @@ class ResourcePoolRepository(_Base):
     async def update_resource_pool(
         self, api_user: base_models.APIUser, resource_pool_id: int, update: models.ResourcePoolPatch
     ) -> models.ResourcePool:
-        """Insert a new resource pool."""
+        """Update an existing resource pool in the database."""
         async with self.session_maker() as session, session.begin():
             return await self._update_resource_pool(
                 api_user=api_user,
@@ -425,7 +424,6 @@ class ResourcePoolRepository(_Base):
         update: models.ResourcePoolPatch,
         session: AsyncSession,
     ) -> models.ResourcePool:
-        """Update an existing resource pool in the database."""
         stmt = (
             select(schemas.ResourcePoolORM)
             .where(schemas.ResourcePoolORM.id == resource_pool_id)
@@ -532,7 +530,7 @@ class ResourcePoolRepository(_Base):
 
     @_only_admins
     async def delete_resource_pool(self, api_user: base_models.APIUser, id: int) -> None:
-        """Insert a new resource pool."""
+        """Delete a resource pool from the database."""
         async with self.session_maker() as session, session.begin():
             await self._delete_resource_pool(
                 api_user=api_user,
@@ -544,7 +542,6 @@ class ResourcePoolRepository(_Base):
     async def _delete_resource_pool(
         self, api_user: base_models.APIUser, id: int, session: AsyncSession
     ) -> models.DeletedResourcePool | None:
-        """Delete a resource pool from the database."""
         stmt = select(schemas.ResourcePoolORM).where(schemas.ResourcePoolORM.id == id)
         res = await session.execute(stmt)
         rp = res.scalars().first()
