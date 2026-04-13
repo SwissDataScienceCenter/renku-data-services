@@ -193,14 +193,6 @@ class ResourcePoolRepository(_Base):
         self, api_user: base_models.APIUser, resource_pool_id: int, name: str | None = None
     ) -> models.ResourcePool:
         """Get a specific resource pool by ID with Authzed permission check."""
-        if not api_user.is_admin:
-            allowed = await self.authz.has_permission(
-                api_user, ResourceType.resource_pool, resource_pool_id, Scope.READ
-            )
-            if not allowed:
-                raise errors.MissingResourceError(
-                    message=f"The resource pool with id {resource_pool_id} cannot be found."
-                )
         async with self.session_maker() as session:
             stmt = (
                 select(schemas.ResourcePoolORM)
@@ -208,6 +200,7 @@ class ResourcePoolRepository(_Base):
                 .options(selectinload(schemas.ResourcePoolORM.classes))
                 .options(selectinload(schemas.ResourcePoolORM.cluster))
             )
+            stmt = await _resource_pool_access_control(api_user, stmt, self.authz)
             if name is not None:
                 stmt = stmt.where(schemas.ResourcePoolORM.name == name)
             res = await session.execute(stmt)
