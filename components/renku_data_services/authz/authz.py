@@ -1397,19 +1397,6 @@ class Authz:
         undo_updates: list[RelationshipUpdate] = []
 
         if resource_pool.public:
-            # Ensure public_viewer wildcards exist (operation is idempotent)
-            apply_updates.extend(
-                [
-                    RelationshipUpdate(
-                        operation=RelationshipUpdate.OPERATION_TOUCH,
-                        relationship=all_users_are_public,
-                    ),
-                    RelationshipUpdate(
-                        operation=RelationshipUpdate.OPERATION_TOUCH,
-                        relationship=anon_users_are_public,
-                    ),
-                ]
-            )
             # For undo, only remove wildcards if they didn't exist before
             # existing_ids = {rel.subject.object.object_id for rel in existing_rels}
             existing_subjects = {
@@ -1417,6 +1404,12 @@ class Authz:
             }
             # if "all-users" in existing_ids or "*" in existing_ids:
             if ("user", "*") not in existing_subjects:
+                apply_updates.append(
+                    RelationshipUpdate(
+                        operation=RelationshipUpdate.OPERATION_TOUCH,
+                        relationship=all_users_are_public,
+                    )
+                )
                 undo_updates.append(
                     RelationshipUpdate(
                         operation=RelationshipUpdate.OPERATION_DELETE,
@@ -1425,6 +1418,12 @@ class Authz:
                 )
             # if "anonymous-user:*" in existing_ids or "*" in existing_ids:
             if ("anonymous_user", "*") not in existing_subjects:
+                apply_updates.append(
+                    RelationshipUpdate(
+                        operation=RelationshipUpdate.OPERATION_TOUCH,
+                        relationship=anon_users_are_public,
+                    )
+                )
                 undo_updates.append(
                     RelationshipUpdate(
                         operation=RelationshipUpdate.OPERATION_DELETE,
@@ -1440,19 +1439,19 @@ class Authz:
                         relationship=existing_rel,
                     )
                 )
-            undo_updates.append(
-                RelationshipUpdate(
-                    operation=RelationshipUpdate.OPERATION_TOUCH,
-                    relationship=all_users_are_public,
+            if existing_rels:
+                undo_updates.append(
+                    RelationshipUpdate(
+                        operation=RelationshipUpdate.OPERATION_TOUCH,
+                        relationship=all_users_are_public,
+                    )
                 )
-            )
-            undo_updates.append(
-                RelationshipUpdate(
-                    operation=RelationshipUpdate.OPERATION_TOUCH,
-                    relationship=anon_users_are_public,
+                undo_updates.append(
+                    RelationshipUpdate(
+                        operation=RelationshipUpdate.OPERATION_TOUCH,
+                        relationship=anon_users_are_public,
+                    )
                 )
-            )
-
         apply = WriteRelationshipsRequest(updates=apply_updates)
         undo = WriteRelationshipsRequest(updates=undo_updates)
         return _AuthzChange(apply=apply, undo=undo)

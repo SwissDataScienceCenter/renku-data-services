@@ -55,7 +55,7 @@ async def _resource_pool_access_control(
     if api_user.is_admin:
         return output
     allowed_resource_pools = await authz.resources_with_permission(
-        api_user, api_user.id, ResourceType.resource_pool, Scope.USE
+        api_user, api_user.id, ResourceType.resource_pool, Scope.READ
     )
     allowed_ids = [int(id) for id in allowed_resource_pools]
     output = output.where(schemas.ResourcePoolORM.id.in_(allowed_ids))
@@ -72,7 +72,7 @@ async def _classes_user_access_control(
     if api_user.is_admin:
         return output
     allowed_resource_pools = await authz.resources_with_permission(
-        api_user, api_user.id, ResourceType.resource_pool, Scope.USE
+        api_user, api_user.id, ResourceType.resource_pool, Scope.READ
     )
     allowed_ids = [int(id) for id in allowed_resource_pools]
     output = output.where(schemas.ResourcePoolORM.id.in_(allowed_ids))
@@ -194,7 +194,9 @@ class ResourcePoolRepository(_Base):
     ) -> models.ResourcePool:
         """Get a specific resource pool by ID with Authzed permission check."""
         if not api_user.is_admin:
-            allowed = await self.authz.has_permission(api_user, ResourceType.resource_pool, resource_pool_id, Scope.USE)
+            allowed = await self.authz.has_permission(
+                api_user, ResourceType.resource_pool, resource_pool_id, Scope.READ
+            )
             if not allowed:
                 raise errors.MissingResourceError(
                     message=f"The resource pool with id {resource_pool_id} cannot be found."

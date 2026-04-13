@@ -654,6 +654,13 @@ async def test_resource_pool_visibility_update(
 
     await _assert_pool_access(authz, pool_id, user_use=new_public, anon_use=new_public)
 
+    if initial_public == new_public:
+        assert len(vis_change.apply.updates) == 0, "No-op transition should produce no apply ops"
+        assert len(vis_change.undo.updates) == 0, (
+            f"No-op transition ({initial_public}->{new_public}) produced "
+            f"{len(vis_change.undo.updates)} undo op(s) that would corrupt state on rollback"
+        )
+
 
 @pytest.mark.asyncio
 async def test_resource_pool_lookup_resources(app_manager_instance: DependencyManager, bootstrap_admins) -> None:
