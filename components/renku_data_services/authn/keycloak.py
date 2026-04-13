@@ -110,7 +110,6 @@ class KeycloakAuthenticator(Authenticator):
         """Checks the validity of the access token."""
         header_value = str(request.headers.get(self.token_field))
         refresh_token = request.headers.get(self.refresh_token_header)
-        user: base_models.AuthenticatedAPIUser | base_models.AnonymousAPIUser | None = None
 
         # Try to get the authorization header for a fully authenticated user
         with suppress(errors.UnauthorizedError, jwt.InvalidTokenError):
@@ -127,16 +126,12 @@ class KeycloakAuthenticator(Authenticator):
                 if client_id:
                     email = f"service-account-{client_id}@renku.local"
                 else:
-                    raise errors.UnauthorizedError(
-                        message="Your credentials are invalid or expired, please log in again."
-                    ) from None
+                    raise errors.UnauthorizedError() from None
 
             if id is None:
-                raise errors.UnauthorizedError(
-                    message="Your credentials are invalid or expired, please log in again."
-                ) from None
+                raise errors.UnauthorizedError() from None
 
-            user = base_models.AuthenticatedAPIUser(
+            return base_models.AuthenticatedAPIUser(
                 is_admin=is_admin,
                 id=id,
                 access_token=token,
@@ -148,8 +143,6 @@ class KeycloakAuthenticator(Authenticator):
                 access_token_expires_at=datetime.fromtimestamp(exp) if exp is not None else None,
                 roles=roles,
             )
-        if user is not None:
-            return user
 
         # Try to get an anonymous user ID if the validation of keycloak credentials failed
         anon_id = request.headers.get(self.anon_id_header_key)
@@ -157,6 +150,4 @@ class KeycloakAuthenticator(Authenticator):
             anon_id = request.cookies.get(self.anon_id_cookie_name)
         if anon_id is None:
             anon_id = f"anon-{str(ULID())}"
-        user = base_models.AnonymousAPIUser(id=str(anon_id))
-
-        return user
+        return base_models.AnonymousAPIUser(id=str(anon_id))

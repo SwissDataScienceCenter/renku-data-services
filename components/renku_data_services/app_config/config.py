@@ -138,7 +138,7 @@ class InternalAuthenticationConfig:
         long_refresh_token_expiration = (
             timedelta(seconds=int(long_refresh_token_expiration_str))
             if long_refresh_token_expiration_str
-            else timedelta(hours=25)
+            else timedelta(hours=24)
         )
         issuer = os.environ.get("INTERNAL_AUTHN_ISSUER") or "renku-self"
         audience = os.environ.get("INTERNAL_AUTHN_AUDIENCE") or "renku-self"
@@ -156,8 +156,8 @@ class InternalAuthenticationConfig:
                 audience=audience,
             )
 
-        secret_key_path = os.environ.get("INTERNAL_AUTHN_SECRET_KEY_PATH")
-        if secret_key_path is None:
+        secret_key_path = os.environ.get("INTERNAL_AUTHN_SECRET_KEY_PATH", "")
+        if not secret_key_path:
             raise errors.ConfigurationError(message="The secret key for internal authentication has to be specified.")
         secret_key = base64.urlsafe_b64decode(Path(secret_key_path).read_bytes())
         return cls(

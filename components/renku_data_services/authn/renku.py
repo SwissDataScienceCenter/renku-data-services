@@ -53,7 +53,6 @@ class RenkuSelfAuthenticator(Authenticator[APIUser]):
     async def authenticate(self, access_token: str, request: Request) -> APIUser:
         """Authenticate using internal tokens."""
         header_value = str(request.headers.get(self.token_field)) or ""
-        user: AuthenticatedAPIUser | AnonymousAPIUser | None = None
 
         with suppress(errors.UnauthorizedError, jwt.InvalidTokenError):
             token = header_value.removeprefix("Bearer ").removeprefix("bearer ")
@@ -62,15 +61,13 @@ class RenkuSelfAuthenticator(Authenticator[APIUser]):
             id = parsed.get("sub")
             email = parsed.get("email")
             if id is None or email is None:
-                raise errors.UnauthorizedError(
-                    message="Your credentials are invalid or expired, please log in again."
-                ) from None
+                raise errors.UnauthorizedError() from None
 
             token_type = parsed.get("typ")
             if str(token_type).lower() != "bearer":
                 raise errors.UnauthorizedError() from None
 
-            user = AuthenticatedAPIUser(
+            return AuthenticatedAPIUser(
                 is_admin=False,
                 id=id,
                 access_token=token,
@@ -81,7 +78,6 @@ class RenkuSelfAuthenticator(Authenticator[APIUser]):
                 access_token_expires_at=datetime.fromtimestamp(exp) if exp is not None else None,
                 roles=[],
             )
-            return user
 
         # Try to get an anonymous user ID from headers
         anon_id = request.headers.get(self.anon_id_header_key)
@@ -89,9 +85,7 @@ class RenkuSelfAuthenticator(Authenticator[APIUser]):
             anon_id = request.cookies.get(self.anon_id_cookie_name)
         if anon_id is None:
             anon_id = f"anon-{str(ULID())}"
-        user = AnonymousAPIUser(id=str(anon_id))
-
-        return user
+        return AnonymousAPIUser(id=str(anon_id))
 
     def _validate(self, token: str) -> dict[str, Any]:
         return _strict_jwt.decode(
