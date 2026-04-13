@@ -633,7 +633,7 @@ class Authz:
                     if len(found_users) > 1:
                         raise errors.ProgrammingError(
                             message="The decorator for authorization database changes found two APIUser parameters in"
-                            " the 'user' and 'requested_by' keyword arguments but expected only one of them to be "
+                            " the 'user', 'requested_by' and 'api_user' keyword arguments but expected only one of them to be "
                             "present."
                         )
                     potential_user = found_users[0] if found_users else None
