@@ -404,124 +404,128 @@ class ResourcePoolRepository(_Base):
     ) -> models.ResourcePool:
         """Update an existing resource pool in the database."""
         async with self.session_maker() as session, session.begin():
-            return await self._update_resource_pool(
-                api_user=api_user,
-                resource_pool_id=resource_pool_id,
-                update=update,
-                session=session,
+            stmt = (
+                select(schemas.ResourcePoolORM)
+                .where(schemas.ResourcePoolORM.id == resource_pool_id)
+                .options(selectinload(schemas.ResourcePoolORM.classes))
             )
+            res = await session.scalars(stmt)
+            rp = res.one_or_none()
+            if rp is None:
+                raise errors.MissingResourceError(message=f"Resource pool with id {resource_pool_id} cannot be found")
+            quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id()) if rp.quota else None
+
+            validate_resource_pool_update(existing=rp.dump(quota=quota), update=update)
+
+            update_authz = False
+
+            if update.name is not None:
+                rp.name = update.name
+            if update.public is not None:
+                rp.public = update.public
+                update_authz = True
+            if update.default is not None:
+                rp.default = update.default
+                update_authz = True
+            if update.idle_threshold == 0 or update.idle_threshold is RESET:
+                # Using "0" removes the value
+                rp.idle_threshold = None
+            elif isinstance(update.idle_threshold, int):
+                rp.idle_threshold = update.idle_threshold
+            if update.hibernation_threshold == 0 or update.hibernation_threshold is RESET:
+                # Using "0" removes the value
+                rp.hibernation_threshold = None
+            elif isinstance(update.hibernation_threshold, int):
+                rp.hibernation_threshold = update.hibernation_threshold
+            if update.hibernation_warning_period == 0 or update.hibernation_warning_period is RESET:
+                rp.hibernation_warning_period = None
+            elif isinstance(update.hibernation_warning_period, int):
+                rp.hibernation_warning_period = update.hibernation_warning_period
+            if update.platform is not None:
+                rp.platform = update.platform
+
+            match (update.cluster_id, rp.cluster_id):
+                case ResetType.Reset, x if x is not None:
+                    raise errors.ValidationError(
+                        message="Resetting the cluster of an existing resource pool is not supported."
+                    )
+                case ULID(), ULID():
+                    if update.cluster_id != rp.cluster_id:
+                        raise errors.ValidationError(
+                            message="Changing the cluster of an existing resource pool is not supported."
+                        )
+
+            cluster_id = rp.get_cluster_id()
+            if update.quota is RESET and rp.quota:
+                # Remove the existing quota
+                await self.quotas_repo.delete_quota(name=rp.quota, cluster_id=cluster_id)
+            elif isinstance(update.quota, models.QuotaPatch) and rp.quota is None:
+                # Create a new quota, the `update.quota` object has already been validated
+                assert update.quota.cpu is not None
+                assert update.quota.memory is not None
+                assert update.quota.gpu is not None
+                new_quota = models.UnsavedQuota(
+                    cpu=update.quota.cpu,
+                    memory=update.quota.memory,
+                    gpu=update.quota.gpu,
+                )
+                quota = await self.quotas_repo.create_quota(new_quota=new_quota, cluster_id=cluster_id)
+                rp.quota = quota.id
+            elif isinstance(update.quota, models.QuotaPatch):
+                assert rp.quota is not None
+                assert quota is not None
+                # Update the existing quota
+                updated_quota = models.Quota(
+                    cpu=update.quota.cpu if update.quota.cpu is not None else quota.cpu,
+                    memory=update.quota.memory if update.quota.memory is not None else quota.memory,
+                    gpu=update.quota.gpu if update.quota.gpu is not None else quota.gpu,
+                    gpu_kind=update.quota.gpu_kind if update.quota.gpu_kind is not None else quota.gpu_kind,
+                    id=quota.id,
+                )
+                quota = await self.quotas_repo.update_quota(quota=updated_quota, cluster_id=cluster_id)
+                rp.quota = quota.id
+
+            new_classes_coroutines = []
+            if update.classes is not None:
+                for rc in update.classes:
+                    new_classes_coroutines.append(
+                        self.update_resource_class(
+                            api_user=api_user, resource_pool_id=resource_pool_id, resource_class_id=rc.id, update=rc
+                        )
+                    )
+
+            if update.remote is RESET:
+                rp.remote_provider_id = None
+                rp.remote_json = None
+            elif update.remote is not None:
+                rp.remote_provider_id = (
+                    update.remote.provider_id if update.remote.provider_id is not None else rp.remote_provider_id
+                )
+                remote_json = rp.remote_json if rp.remote_json is not None else dict()
+                remote_json.update(update.remote.to_dict())
+                del remote_json["provider_id"]
+                rp.remote_json = remote_json
+
+            await gather(*new_classes_coroutines)
+            await session.flush()
+            await session.refresh(rp)
+            result = rp.dump(quota=quota)
+            if update_authz:
+                return await self._update_resource_pool(
+                    api_user=api_user,
+                    rp=result,
+                    session=session,
+                )
+            return result
 
     @Authz.authz_change(op=AuthzOperation.update, resource=ResourceType.resource_pool)
     async def _update_resource_pool(
         self,
         api_user: base_models.APIUser,
-        resource_pool_id: int,
-        update: models.ResourcePoolPatch,
+        rp: models.ResourcePool,
         session: AsyncSession,
     ) -> models.ResourcePool:
-        stmt = (
-            select(schemas.ResourcePoolORM)
-            .where(schemas.ResourcePoolORM.id == resource_pool_id)
-            .options(selectinload(schemas.ResourcePoolORM.classes))
-        )
-        res = await session.scalars(stmt)
-        rp = res.one_or_none()
-        if rp is None:
-            raise errors.MissingResourceError(message=f"Resource pool with id {resource_pool_id} cannot be found")
-        quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id()) if rp.quota else None
-
-        validate_resource_pool_update(existing=rp.dump(quota=quota), update=update)
-
-        if update.name is not None:
-            rp.name = update.name
-        if update.public is not None:
-            rp.public = update.public
-        if update.default is not None:
-            rp.default = update.default
-        if update.idle_threshold == 0 or update.idle_threshold is RESET:
-            # Using "0" removes the value
-            rp.idle_threshold = None
-        elif isinstance(update.idle_threshold, int):
-            rp.idle_threshold = update.idle_threshold
-        if update.hibernation_threshold == 0 or update.hibernation_threshold is RESET:
-            # Using "0" removes the value
-            rp.hibernation_threshold = None
-        elif isinstance(update.hibernation_threshold, int):
-            rp.hibernation_threshold = update.hibernation_threshold
-        if update.hibernation_warning_period == 0 or update.hibernation_warning_period is RESET:
-            rp.hibernation_warning_period = None
-        elif isinstance(update.hibernation_warning_period, int):
-            rp.hibernation_warning_period = update.hibernation_warning_period
-        if update.platform is not None:
-            rp.platform = update.platform
-
-        match (update.cluster_id, rp.cluster_id):
-            case ResetType.Reset, x if x is not None:
-                raise errors.ValidationError(
-                    message="Resetting the cluster of an existing resource pool is not supported."
-                )
-            case ULID(), ULID():
-                if update.cluster_id != rp.cluster_id:
-                    raise errors.ValidationError(
-                        message="Changing the cluster of an existing resource pool is not supported."
-                    )
-
-        cluster_id = rp.get_cluster_id()
-        if update.quota is RESET and rp.quota:
-            # Remove the existing quota
-            await self.quotas_repo.delete_quota(name=rp.quota, cluster_id=cluster_id)
-        elif isinstance(update.quota, models.QuotaPatch) and rp.quota is None:
-            # Create a new quota, the `update.quota` object has already been validated
-            assert update.quota.cpu is not None
-            assert update.quota.memory is not None
-            assert update.quota.gpu is not None
-            new_quota = models.UnsavedQuota(
-                cpu=update.quota.cpu,
-                memory=update.quota.memory,
-                gpu=update.quota.gpu,
-            )
-            quota = await self.quotas_repo.create_quota(new_quota=new_quota, cluster_id=cluster_id)
-            rp.quota = quota.id
-        elif isinstance(update.quota, models.QuotaPatch):
-            assert rp.quota is not None
-            assert quota is not None
-            # Update the existing quota
-            updated_quota = models.Quota(
-                cpu=update.quota.cpu if update.quota.cpu is not None else quota.cpu,
-                memory=update.quota.memory if update.quota.memory is not None else quota.memory,
-                gpu=update.quota.gpu if update.quota.gpu is not None else quota.gpu,
-                gpu_kind=update.quota.gpu_kind if update.quota.gpu_kind is not None else quota.gpu_kind,
-                id=quota.id,
-            )
-            quota = await self.quotas_repo.update_quota(quota=updated_quota, cluster_id=cluster_id)
-            rp.quota = quota.id
-
-        new_classes_coroutines = []
-        if update.classes is not None:
-            for rc in update.classes:
-                new_classes_coroutines.append(
-                    self.update_resource_class(
-                        api_user=api_user, resource_pool_id=resource_pool_id, resource_class_id=rc.id, update=rc
-                    )
-                )
-
-        if update.remote is RESET:
-            rp.remote_provider_id = None
-            rp.remote_json = None
-        elif update.remote is not None:
-            rp.remote_provider_id = (
-                update.remote.provider_id if update.remote.provider_id is not None else rp.remote_provider_id
-            )
-            remote_json = rp.remote_json if rp.remote_json is not None else dict()
-            remote_json.update(update.remote.to_dict())
-            del remote_json["provider_id"]
-            rp.remote_json = remote_json
-
-        await gather(*new_classes_coroutines)
-        await session.flush()
-        await session.refresh(rp)
-        result = rp.dump(quota=quota)
-        return result
+        return rp
 
     @_only_admins
     async def delete_resource_pool(self, api_user: base_models.APIUser, id: int) -> None:
