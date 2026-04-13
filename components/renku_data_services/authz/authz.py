@@ -729,7 +729,6 @@ class Authz:
                         user = _extract_user_from_args(*func_args, **func_kwargs)
                         authz_change = await db_repo.authz._remove_data_connector_to_project_link(user, result)
                     case AuthzOperation.create, ResourceType.resource_pool if isinstance(result, ResourcePool):
-                        print("yup RP")
                         authz_change = db_repo.authz._add_resource_pool(result)
                     case AuthzOperation.update, ResourceType.resource_pool if isinstance(result, ResourcePool):
                         user = _extract_user_from_args(*func_args, **func_kwargs)
