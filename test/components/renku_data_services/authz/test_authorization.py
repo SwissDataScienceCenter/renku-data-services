@@ -9,7 +9,7 @@ from authzed.api.v1 import (
 )
 from ulid import ULID
 
-from renku_data_services.authz.authz import _AuthzConverter
+from renku_data_services.authz.authz import _AuthzConverter, _Relation
 from renku_data_services.authz.models import Member, Role, Scope, Visibility
 from renku_data_services.base_models import APIUser
 from renku_data_services.base_models.core import NamespacePath, ResourceType
@@ -44,7 +44,7 @@ def _pool_updates(pool_id: int, *, public: bool) -> list[RelationshipUpdate]:
         ),
     ]
     if public:
-        for obj_type in ("user", "anonymous_user"):
+        for obj_type in (ResourceType.user, ResourceType.anonymous_user):
             updates.append(
                 RelationshipUpdate(
                     operation=RelationshipUpdate.OPERATION_TOUCH,
@@ -445,7 +445,7 @@ async def test_resource_pool_member_access(
 ) -> None:
     """An explicit member can use a pool regardless of visibility; non-members still follow public rules."""
     authz = app_manager_instance.authz
-    updates = _pool_updates(POOL_ID, public=public_pool) + [_rel(POOL_ID, "member", regular_user1.id)]
+    updates = _pool_updates(POOL_ID, public=public_pool) + [_rel(POOL_ID, _Relation.member.value, regular_user1.id)]
     await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=updates))
 
     # Member can always use
@@ -464,9 +464,9 @@ async def test_resource_pool_prohibited_blocks_access(
 ) -> None:
     """A prohibited user is blocked regardless of public visibility or membership."""
     authz = app_manager_instance.authz
-    updates = _pool_updates(POOL_ID, public=public_pool) + [_rel(POOL_ID, "prohibited", regular_user1.id)]
+    updates = _pool_updates(POOL_ID, public=public_pool) + [_rel(POOL_ID, _Relation.prohibited.value, regular_user1.id)]
     if is_member:
-        updates.append(_rel(POOL_ID, "member", regular_user1.id))
+        updates.append(_rel(POOL_ID, _Relation.member.value, regular_user1.id))
     await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=updates))
 
     assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.USE)
@@ -478,7 +478,7 @@ async def test_resource_pool_admin_bypasses_prohibited(
 ) -> None:
     """Admin bypasses the prohibited flag via the platform->is_admin union."""
     authz = app_manager_instance.authz
-    updates = _pool_updates(POOL_ID, public=True) + [_rel(POOL_ID, "prohibited", admin_user.id)]
+    updates = _pool_updates(POOL_ID, public=True) + [_rel(POOL_ID, _Relation.prohibited.value, admin_user.id)]
     await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=updates))
 
     assert await authz.has_permission(admin_user, ResourceType.resource_pool, POOL_ID, Scope.USE)
@@ -493,13 +493,13 @@ async def test_resource_pool_add_remove_member(app_manager_instance: DependencyM
     assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.USE)
 
     await authz.client.WriteRelationships(
-        WriteRelationshipsRequest(updates=[_rel(POOL_ID, "member", regular_user1.id)])
+        WriteRelationshipsRequest(updates=[_rel(POOL_ID, _Relation.member.value, regular_user1.id)])
     )
     assert await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.USE)
 
     await authz.client.WriteRelationships(
         WriteRelationshipsRequest(
-            updates=[_rel(POOL_ID, "member", regular_user1.id, op=RelationshipUpdate.OPERATION_DELETE)]
+            updates=[_rel(POOL_ID, _Relation.member.value, regular_user1.id, op=RelationshipUpdate.OPERATION_DELETE)]
         )
     )
     assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.USE)
@@ -514,13 +514,15 @@ async def test_resource_pool_add_remove_prohibited(app_manager_instance: Depende
     assert await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.USE)
 
     await authz.client.WriteRelationships(
-        WriteRelationshipsRequest(updates=[_rel(POOL_ID, "prohibited", regular_user1.id)])
+        WriteRelationshipsRequest(updates=[_rel(POOL_ID, _Relation.prohibited.value, regular_user1.id)])
     )
     assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.USE)
 
     await authz.client.WriteRelationships(
         WriteRelationshipsRequest(
-            updates=[_rel(POOL_ID, "prohibited", regular_user1.id, op=RelationshipUpdate.OPERATION_DELETE)]
+            updates=[
+                _rel(POOL_ID, _Relation.prohibited.value, regular_user1.id, op=RelationshipUpdate.OPERATION_DELETE)
+            ]
         )
     )
     assert await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.USE)
@@ -536,8 +538,8 @@ async def test_resource_pool_isolation(app_manager_instance: DependencyManager, 
             updates=_pool_updates(pool_a, public=False)
             + _pool_updates(pool_b, public=True)
             + [
-                _rel(pool_a, "member", regular_user1.id),
-                _rel(pool_b, "prohibited", regular_user1.id),
+                _rel(pool_a, _Relation.member.value, regular_user1.id),
+                _rel(pool_b, _Relation.prohibited.value, regular_user1.id),
             ]
         )
     )

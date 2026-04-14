@@ -18,9 +18,10 @@ from authzed.api.v1 import (
 from sqlalchemy.sql import text
 
 from renku_data_services.app_config import logging
-from renku_data_services.authz.authz import _AuthzConverter
+from renku_data_services.authz.authz import _AuthzConverter, _Relation
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.authz.schemas import v9
+from renku_data_services.base_models.core import ResourceType
 
 logger = logging.getLogger(__name__)
 
@@ -51,8 +52,8 @@ def upgrade() -> None:
         return
 
     platform_ref = _AuthzConverter.platform()
-    user_wildcard = SubjectReference(object=ObjectReference(object_type="user", object_id="*"))
-    anon_wildcard = SubjectReference(object=ObjectReference(object_type="anonymous_user", object_id="*"))
+    user_wildcard = SubjectReference(object=ObjectReference(object_type=ResourceType.user, object_id="*"))
+    anon_wildcard = SubjectReference(object=ObjectReference(object_type=ResourceType.anonymous_user, object_id="*"))
 
     pools = conn.execute(text('SELECT id, public, "default" FROM resource_pools.resource_pools')).fetchall()
 
@@ -106,11 +107,11 @@ def upgrade() -> None:
 
     for row in members:
         pool_ref = _AuthzConverter.resource_pool(int(row[0]))
-        user_ref = SubjectReference(object=ObjectReference(object_type="user", object_id=row[1]))
+        user_ref = SubjectReference(object=ObjectReference(object_type=ResourceType.user, object_id=row[1]))
         updates.append(
             RelationshipUpdate(
                 operation=RelationshipUpdate.OPERATION_TOUCH,
-                relationship=Relationship(resource=pool_ref, relation="member", subject=user_ref),
+                relationship=Relationship(resource=pool_ref, relation=_Relation.member.value, subject=user_ref),
             )
         )
 
@@ -124,13 +125,13 @@ def upgrade() -> None:
 
         default_pool_ref = _AuthzConverter.resource_pool(default_pool_id)
         for user_row in no_access_users:
-            user_ref = SubjectReference(object=ObjectReference(object_type="user", object_id=user_row[0]))
+            user_ref = SubjectReference(object=ObjectReference(object_type=ResourceType.user, object_id=user_row[0]))
             updates.append(
                 RelationshipUpdate(
                     operation=RelationshipUpdate.OPERATION_TOUCH,
                     relationship=Relationship(
                         resource=default_pool_ref,
-                        relation="prohibited",
+                        relation=_Relation.prohibited.value,
                         subject=user_ref,
                     ),
                 )
