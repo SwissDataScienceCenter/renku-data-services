@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import renku_data_services.base_models as base_models
 from renku_data_services.authn.dummy import DummyAuthenticator, DummyUserStore
+from renku_data_services.authn.renku import RenkuSelfAuthenticator, RenkuSelfTokenMint
 from renku_data_services.authz.authz import Authz
 from renku_data_services.authz.config import AuthzConfig
 from renku_data_services.base_models.metrics import MetricsService
@@ -222,6 +223,8 @@ class TestDependencyManager(DependencyManager):
         kc_api = DummyKeycloakAPI(users=[i.to_keycloak_dict() for i in dummy_users])
 
         authz = NonCachingAuthz(config.authz_config)
+        internal_authenticator = RenkuSelfAuthenticator.from_config(config=config.internal_authn_config)
+        internal_token_mint = RenkuSelfTokenMint.from_config(config=config.internal_authn_config)
         search_updates_repo = SearchUpdatesRepo(session_maker=config.db.async_session_maker)
         oauth_client_factory = DefaultOAuthHttpClientFactory(
             config.secrets.encryption_key, config.db.async_session_maker
@@ -358,6 +361,7 @@ class TestDependencyManager(DependencyManager):
             k8s_client=client,
             authenticator=authenticator,
             gitlab_authenticator=gitlab_authenticator,
+            internal_authenticator=internal_authenticator,
             gitlab_client=gitlab_client,
             user_store=user_store,
             quota_repo=quota_repo,
@@ -401,6 +405,7 @@ class TestDependencyManager(DependencyManager):
             zenodo_client=ZenodoAPIClient(),
             job_client=job_client,
             secret_client=secret_client,
+            internal_token_mint=internal_token_mint,
         )
 
     def __post_init__(self) -> None:
