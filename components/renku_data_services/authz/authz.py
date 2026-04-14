@@ -1392,11 +1392,9 @@ class Authz:
 
         if resource_pool.public:
             # For undo, only remove wildcards if they didn't exist before
-            # existing_ids = {rel.subject.object.object_id for rel in existing_rels}
             existing_subjects = {
                 (rel.subject.object.object_type, rel.subject.object.object_id) for rel in existing_rels
             }
-            # if "all-users" in existing_ids or "*" in existing_ids:
             if ("user", "*") not in existing_subjects:
                 apply_updates.append(
                     RelationshipUpdate(
@@ -1410,7 +1408,6 @@ class Authz:
                         relationship=all_users_are_public,
                     )
                 )
-            # if "anonymous-user:*" in existing_ids or "*" in existing_ids:
             if ("anonymous_user", "*") not in existing_subjects:
                 apply_updates.append(
                     RelationshipUpdate(
