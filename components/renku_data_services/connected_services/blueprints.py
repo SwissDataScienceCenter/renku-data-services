@@ -129,15 +129,15 @@ class OAuth2ClientsBP(CustomBlueprint):
         """OAuth2 authorization callback."""
 
         async def _callback(request: Request) -> HTTPResponse:
-            params = CallbackParams.model_validate(dict(request.query_args))
-            callback_query = dict(request.query_args)
+            callback_query_args = dict(request.query_args)
+            params = CallbackParams.model_validate(callback_query_args)
 
             callback_url = self._get_callback_url(request)
 
-            if callback_query.get("error"):
+            if callback_query_args.get("error"):
                 next_url = await self.connected_services_repo.get_oauth2_connection_next_url_by_state(params.state)
                 if next_url:
-                    return redirect(to=self._append_query_params(next_url, callback_query))
+                    return redirect(to=self._append_query_params(next_url, callback_query_args))
                 logger.info(
                     "OAuth callback returned an error but no pending connection next_url was found "
                     f"for state={params.state!r}"
@@ -168,14 +168,14 @@ class OAuth2ClientsBP(CustomBlueprint):
         return https_callback_url
 
     @staticmethod
-    def _append_query_params(url: str, query: dict[str, str]) -> str:
+    def _append_query_params(url: str, query_args: dict[str, str]) -> str:
         allowed_keys = ("error", "error_description", "state", "error_uri", "code", "iss")
-        params = [(k, v) for k, v in query.items() if k in allowed_keys and v]
-        if not params:
+        allowed_params = [(k, v) for k, v in query_args.items() if k in allowed_keys and v]
+        if not allowed_params:
             return url
         parsed = urlparse(url)
         existing_params = parse_qsl(parsed.query, keep_blank_values=True)
-        merged_query = urlencode([*existing_params, *params])
+        merged_query = urlencode([*existing_params, *allowed_params])
         return urlunparse(parsed._replace(query=merged_query))
 
 
