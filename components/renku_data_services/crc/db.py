@@ -45,29 +45,15 @@ class _Base:
         self.authz: Authz = authz
 
 
-async def _resource_pool_access_control(
+_ORM = TypeVar("_ORM", schemas.ResourcePoolORM, schemas.ResourceClassORM)
+
+
+async def _filter_by_authz(
     api_user: base_models.APIUser,
-    stmt: Select[tuple[schemas.ResourcePoolORM]],
+    stmt: Select[tuple[_ORM]],
     authz: Authz,
-) -> Select[tuple[schemas.ResourcePoolORM]]:
+) -> Select[tuple[_ORM]]:
     """Modifies a select query to list resource pools based on whether the user is logged in or not."""
-    output = stmt
-    if api_user.is_admin:
-        return output
-    allowed_resource_pools = await authz.resources_with_permission(
-        api_user, api_user.id, ResourceType.resource_pool, Scope.READ
-    )
-    allowed_ids = [int(id) for id in allowed_resource_pools]
-    output = output.where(schemas.ResourcePoolORM.id.in_(allowed_ids))
-    return output
-
-
-async def _classes_user_access_control(
-    api_user: base_models.APIUser,
-    stmt: Select[tuple[schemas.ResourceClassORM]],
-    authz: Authz,
-) -> Select[tuple[schemas.ResourceClassORM]]:
-    """Adjust the select statement for classes based on whether the user is logged in or not."""
     output = stmt
     if api_user.is_admin:
         return output
@@ -158,7 +144,7 @@ class ResourcePoolRepository(_Base):
             if id is not None:
                 stmt = stmt.where(schemas.ResourcePoolORM.id == id)
             # NOTE: The line below ensures that the right users can access the right resources, do not remove.
-            stmt = await _resource_pool_access_control(api_user, stmt, self.authz)
+            stmt = await _filter_by_authz(api_user, stmt, self.authz)
             res = await session.execute(stmt)
             orms = res.scalars().all()
             output: list[models.ResourcePool] = []
@@ -179,7 +165,7 @@ class ResourcePoolRepository(_Base):
                 .options(selectinload(schemas.ResourcePoolORM.cluster))
             )
             # NOTE: The line below ensures that the right users can access the right resources, do not remove.
-            stmt = await _resource_pool_access_control(api_user, stmt, self.authz)
+            stmt = await _filter_by_authz(api_user, stmt, self.authz)
             res = await session.execute(stmt)
             orm = res.scalar()
             if orm is None:
@@ -200,7 +186,7 @@ class ResourcePoolRepository(_Base):
                 .options(selectinload(schemas.ResourcePoolORM.classes))
                 .options(selectinload(schemas.ResourcePoolORM.cluster))
             )
-            stmt = await _resource_pool_access_control(api_user, stmt, self.authz)
+            stmt = await _filter_by_authz(api_user, stmt, self.authz)
             if name is not None:
                 stmt = stmt.where(schemas.ResourcePoolORM.name == name)
             res = await session.execute(stmt)
@@ -273,7 +259,7 @@ class ResourcePoolRepository(_Base):
                 )
             )
             # NOTE: The line below ensures that the right users can access the right resources, do not remove.
-            stmt = await _resource_pool_access_control(api_user, stmt, self.authz)
+            stmt = await _filter_by_authz(api_user, stmt, self.authz)
             res = await session.execute(stmt)
             output: list[models.ResourcePool] = []
             for rp in res.scalars().all():
@@ -346,7 +332,7 @@ class ResourcePoolRepository(_Base):
             # Apply user access control if api_user is provided
             if api_user is not None:
                 # NOTE: The line below ensures that the right users can access the right resources, do not remove.
-                stmt = await _classes_user_access_control(api_user, stmt, self.authz)
+                stmt = await _filter_by_authz(api_user, stmt, self.authz)
 
             res = await session.execute(stmt)
             orms = res.scalars().all()
@@ -878,7 +864,7 @@ class UserRepository(_Base):
             if resource_pool_id is not None:
                 stmt = stmt.where(schemas.ResourcePoolORM.id == resource_pool_id)
             # NOTE: The line below ensures that the right users can access the right resources, do not remove.
-            stmt = await _resource_pool_access_control(api_user, stmt, self.authz)
+            stmt = await _filter_by_authz(api_user, stmt, self.authz)
             res = await session.execute(stmt)
             rps: Sequence[schemas.ResourcePoolORM] = res.scalars().all()
             output: list[models.ResourcePool] = []
@@ -943,9 +929,9 @@ class UserRepository(_Base):
                 if rp.default or rp.public:
                     await self._unprohibit_resource_pool_users(api_user, rp.id, [keycloak_id], session=session)
             for rp in removed_rps:
-                await self._revoke_resource_pool_member(api_user, rp.id, keycloak_id, session=session)
+                await self._revoke_resource_pool_member(api_user, rp.id, [keycloak_id], session=session)
                 if rp.default or rp.public:
-                    await self._prohibit_resource_pool_user(api_user, rp.id, keycloak_id, session=session)
+                    await self._prohibit_resource_pool_user(api_user, rp.id, [keycloak_id], session=session)
             output: list[models.ResourcePool] = []
             for rp in rps_to_add:
                 quota = await self.quotas_repo.get_quota(rp.quota, rp.get_cluster_id()) if rp.quota else None
@@ -973,21 +959,9 @@ class UserRepository(_Base):
             )
             stmt = delete(schemas.resource_pools_users).where(schemas.resource_pools_users.c.user_id.in_(sub))
             await session.execute(stmt)
-            await self._revoke_resource_pool_member(api_user, resource_pool_id, keycloak_id, session=session)
+            await self._revoke_resource_pool_member(api_user, resource_pool_id, [keycloak_id], session=session)
             if rp.default or rp.public:
-                await self._prohibit_resource_pool_user(api_user, resource_pool_id, keycloak_id, session=session)
-
-    @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool_prohibited)
-    async def _prohibit_resource_pool_user(
-        self, api_user: base_models.APIUser, resource_pool_id: int, keycloak_id: str, session: AsyncSession
-    ) -> models.ResourcePoolMembershipChange:
-        return models.ResourcePoolMembershipChange(resource_pool_id=resource_pool_id, user_ids=[keycloak_id])
-
-    @Authz.authz_change(op=AuthzOperation.delete, resource=ResourceType.resource_pool_member)
-    async def _revoke_resource_pool_member(
-        self, api_user: base_models.APIUser, resource_pool_id: int, keycloak_id: str, session: AsyncSession
-    ) -> models.ResourcePoolMembershipChange:
-        return models.ResourcePoolMembershipChange(resource_pool_id=resource_pool_id, user_ids=[keycloak_id])
+                await self._prohibit_resource_pool_user(api_user, resource_pool_id, [keycloak_id], session=session)
 
     @_only_admins
     async def update_resource_pool_users(
@@ -1042,21 +1016,36 @@ class UserRepository(_Base):
                 rp.users = list(users_to_add_exist) + users_to_add_missing
             return [usr.dump() for usr in rp.users]
 
-    @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool_member)
-    async def _grant_resource_pool_members(
+    async def _write_resource_pool_user_relationship(
         self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: Collection[str], session: AsyncSession
     ) -> models.ResourcePoolMembershipChange | None:
         if not user_ids:
             return None
         return models.ResourcePoolMembershipChange(resource_pool_id=resource_pool_id, user_ids=user_ids)
 
+    @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool_member)
+    async def _grant_resource_pool_members(
+        self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: Collection[str], session: AsyncSession
+    ) -> models.ResourcePoolMembershipChange | None:
+        return await self._write_resource_pool_user_relationship(api_user, resource_pool_id, user_ids, session=session)
+
     @Authz.authz_change(op=AuthzOperation.delete, resource=ResourceType.resource_pool_prohibited)
     async def _unprohibit_resource_pool_users(
         self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: Collection[str], session: AsyncSession
     ) -> models.ResourcePoolMembershipChange | None:
-        if not user_ids:
-            return None
-        return models.ResourcePoolMembershipChange(resource_pool_id=resource_pool_id, user_ids=user_ids)
+        return await self._write_resource_pool_user_relationship(api_user, resource_pool_id, user_ids, session=session)
+
+    @Authz.authz_change(op=AuthzOperation.create, resource=ResourceType.resource_pool_prohibited)
+    async def _prohibit_resource_pool_user(
+        self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: Collection[str], session: AsyncSession
+    ) -> models.ResourcePoolMembershipChange | None:
+        return await self._write_resource_pool_user_relationship(api_user, resource_pool_id, user_ids, session=session)
+
+    @Authz.authz_change(op=AuthzOperation.delete, resource=ResourceType.resource_pool_member)
+    async def _revoke_resource_pool_member(
+        self, api_user: base_models.APIUser, resource_pool_id: int, user_ids: Collection[str], session: AsyncSession
+    ) -> models.ResourcePoolMembershipChange | None:
+        return await self._write_resource_pool_user_relationship(api_user, resource_pool_id, user_ids, session=session)
 
     @_only_admins
     async def update_user(self, api_user: base_models.APIUser, keycloak_id: str, **kwargs: Any) -> base_models.User:
@@ -1081,7 +1070,7 @@ class UserRepository(_Base):
 
                 for rp_id in default_rp_ids:
                     if no_default_access:
-                        await self._prohibit_resource_pool_user(api_user, rp_id, keycloak_id, session=session)
+                        await self._prohibit_resource_pool_user(api_user, rp_id, [keycloak_id], session=session)
                     else:
                         await self._unprohibit_resource_pool_users(api_user, rp_id, [keycloak_id], session=session)
             return user.dump()

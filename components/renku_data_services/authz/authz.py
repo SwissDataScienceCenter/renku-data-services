@@ -633,8 +633,8 @@ class Authz:
                     if len(found_users) > 1:
                         raise errors.ProgrammingError(
                             message="The decorator for authorization database changes found two APIUser parameters in"
-                            " the 'user', 'requested_by' and 'api_user' keyword arguments but expected only one of them to be "
-                            "present."
+                            " the 'user', 'requested_by' and 'api_user' keyword arguments but expected only one of "
+                            "them to be present."
                         )
                     potential_user = found_users[0] if found_users else None
                 else:
@@ -740,29 +740,23 @@ class Authz:
                     case AuthzOperation.delete, ResourceType.resource_pool if isinstance(result, DeletedResourcePool):
                         user = _extract_user_from_args(*func_args, **func_kwargs)
                         authz_change = await db_repo.authz._remove_resource_pool(user, result)
-                    case AuthzOperation.create, ResourceType.resource_pool_member if isinstance(
-                        result, ResourcePoolMembershipChange
-                    ):
-                        authz_change = await db_repo.authz._add_resource_pool_members(
-                            result.resource_pool_id, result.user_ids
-                        )
-                    case AuthzOperation.delete, ResourceType.resource_pool_member if isinstance(
-                        result, ResourcePoolMembershipChange
-                    ):
-                        authz_change = await db_repo.authz._remove_resource_pool_members(
-                            result.resource_pool_id, result.user_ids
-                        )
-                    case AuthzOperation.create, ResourceType.resource_pool_prohibited if isinstance(
-                        result, ResourcePoolMembershipChange
-                    ):
-                        authz_change = await db_repo.authz._add_resource_pool_prohibited(
-                            result.resource_pool_id, result.user_ids
-                        )
-                    case AuthzOperation.delete, ResourceType.resource_pool_prohibited if isinstance(
-                        result, ResourcePoolMembershipChange
-                    ):
-                        authz_change = await db_repo.authz._remove_resource_pool_prohibited(
-                            result.resource_pool_id, result.user_ids
+                    case (
+                        (AuthzOperation.create | AuthzOperation.delete),
+                        (ResourceType.resource_pool_member | ResourceType.resource_pool_prohibited),
+                    ) if isinstance(result, ResourcePoolMembershipChange):
+                        authz_operation = {
+                            AuthzOperation.create: RelationshipUpdate.OPERATION_TOUCH,
+                            AuthzOperation.delete: RelationshipUpdate.OPERATION_DELETE,
+                        }[operation]
+                        relation = {
+                            ResourceType.resource_pool_member: _Relation.viewer.value,
+                            ResourceType.resource_pool_prohibited: _Relation.prohibited.value,
+                        }[resource]
+                        authz_change = await db_repo.authz._update_resource_pool_user_relationships(
+                            resource_pool_id=result.resource_pool_id,
+                            user_ids=result.user_ids,
+                            relation=relation,
+                            operation=authz_operation,
                         )
                     case (
                         (AuthzOperation.create | AuthzOperation.delete),
@@ -1456,77 +1450,44 @@ class Authz:
         undo = WriteRelationshipsRequest(updates=undo_updates)
         return _AuthzChange(apply=apply, undo=undo)
 
-    async def _add_resource_pool_members(self, resource_pool_id: int, user_ids: Collection[str]) -> _AuthzChange:
-        """Grant member access to users on a resource pool."""
-        rels = [
-            Relationship(
-                resource=_AuthzConverter.resource_pool(resource_pool_id),
-                relation=_Relation.viewer.value,
-                subject=_AuthzConverter.user_subject(uid),
-            )
-            for uid in user_ids
-        ]
-        apply = WriteRelationshipsRequest(
-            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=r) for r in rels]
-        )
-        undo = WriteRelationshipsRequest(
-            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=r) for r in rels]
-        )
-        return _AuthzChange(apply=apply, undo=undo)
+    async def _update_resource_pool_user_relationships(
+        self,
+        resource_pool_id: int,
+        user_ids: Collection[str],
+        relation: str,
+        operation: RelationshipUpdate.Operation.ValueType,
+    ) -> _AuthzChange:
+        """Create an AuthzChange for resource pool user relationships.
 
-    async def _remove_resource_pool_members(self, resource_pool_id: int, user_ids: Collection[str]) -> _AuthzChange:
-        """Revoke member access from users on a resource pool."""
-        rels = [
-            Relationship(
-                resource=_AuthzConverter.resource_pool(resource_pool_id),
-                relation=_Relation.viewer.value,
-                subject=_AuthzConverter.user_subject(uid),
-            )
-            for uid in user_ids
-        ]
-        apply = WriteRelationshipsRequest(
-            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=r) for r in rels]
-        )
-        undo = WriteRelationshipsRequest(
-            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=r) for r in rels]
-        )
-        return _AuthzChange(apply=apply, undo=undo)
+        Args:
+            resource_pool_id: The ID of the resource pool.
+            user_ids: Keycloak IDs of the users to update.
+            relation: The SpiceDB relation name (e.g. "member", "prohibited").
+            operation: OPERATION_TOUCH to add, OPERATION_DELETE to remove.
 
-    async def _add_resource_pool_prohibited(self, resource_pool_id: int, user_ids: Collection[str]) -> _AuthzChange:
-        """Mark users as prohibited from accessing a resource pool (overrides public_viewer wildcard)."""
-        rels = [
-            Relationship(
-                resource=_AuthzConverter.resource_pool(resource_pool_id),
-                relation=_Relation.prohibited.value,
-                subject=_AuthzConverter.user_subject(uid),
-            )
-            for uid in user_ids
-        ]
-        apply = WriteRelationshipsRequest(
-            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=r) for r in rels]
-        )
-        undo = WriteRelationshipsRequest(
-            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=r) for r in rels]
-        )
-        return _AuthzChange(apply=apply, undo=undo)
+        Returns:
+            An _AuthzChange with apply and undo WriteRelationshipsRequests.
+        """
+        inverse_operation = {
+            RelationshipUpdate.OPERATION_TOUCH: RelationshipUpdate.OPERATION_DELETE,
+            RelationshipUpdate.OPERATION_DELETE: RelationshipUpdate.OPERATION_TOUCH,
+        }[operation]
+        apply_updates: list[RelationshipUpdate] = []
+        undo_updates: list[RelationshipUpdate] = []
 
-    async def _remove_resource_pool_prohibited(self, resource_pool_id: int, user_ids: Collection[str]) -> _AuthzChange:
-        """Un-prohibit users from a resource pool."""
-        rels = [
-            Relationship(
+        for uid in user_ids:
+            rel = Relationship(
                 resource=_AuthzConverter.resource_pool(resource_pool_id),
-                relation=_Relation.prohibited.value,
+                relation=relation,
                 subject=_AuthzConverter.user_subject(uid),
             )
-            for uid in user_ids
-        ]
-        apply = WriteRelationshipsRequest(
-            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_DELETE, relationship=r) for r in rels]
+            apply_updates.append(RelationshipUpdate(operation=operation, relationship=rel))
+            undo_updates.append(RelationshipUpdate(operation=inverse_operation, relationship=rel))
+
+        return _AuthzChange(
+            apply=WriteRelationshipsRequest(updates=apply_updates),
+            undo=WriteRelationshipsRequest(updates=undo_updates),
         )
-        undo = WriteRelationshipsRequest(
-            updates=[RelationshipUpdate(operation=RelationshipUpdate.OPERATION_TOUCH, relationship=r) for r in rels]
-        )
-        return _AuthzChange(apply=apply, undo=undo)
 
     async def _remove_admin(self, user_id: str) -> _AuthzChange:
         """Add a deployment-wide administrator in the authorization database."""
