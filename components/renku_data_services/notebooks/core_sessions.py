@@ -1097,10 +1097,9 @@ async def patch_session(
     ):
         # Session is being resumed
         patch.spec.hibernated = False
-        await metrics.user_requested_session_resume(user, metadata={"session_id": session_id})
 
     rp: ResourcePool | None = None
-    # Resource class
+    # Resource class is being changed
     if body.resource_class_id is not None:
         new_cluster = await nb_config.k8s_v2_client.cluster_by_class_id(body.resource_class_id, user)
         if new_cluster.id != cluster.id:
@@ -1116,6 +1115,21 @@ async def patch_session(
             raise errors.MissingResourceError(
                 message=f"The resource class you requested with ID {body.resource_class_id} does not exist"
             )
+    # Resource class is not being changed but we still need to get the resource pool and class for patching
+    # in case they changed since the session was created
+    else:
+        rp = await rp_repo.get_resource_pool_from_class(user, session.resource_class_id())
+        rc = rp.get_resource_class(session.resource_class_id())
+
+    # If the session is being hibernated we do not need to patch anything else that is
+    # not specifically called for in the request body, we can refresh things when the user resumes.
+    if is_getting_hibernated:
+        return await nb_config.k8s_v2_client.patch_session(session_id, user.id, patch.to_rfc7386())
+
+    # If the session is being resumed, we need to patch the resource requests/limits to match the current
+    # values of the resource class since they might have changed since the session was created.
+    # We also patch the annotations for the resource pool and class to make sure they are up to date.
+    else:
         if not patch.metadata:
             patch.metadata = AmaltheaSessionV1Alpha1MetadataPatch()
         # Patch the resource pool and class ID in the annotations
@@ -1137,13 +1151,20 @@ async def patch_session(
             patch.spec.service_account_name = (
                 rp.cluster.service_account_name if rp.cluster.service_account_name is not None else RESET
             )
+        await metrics.user_requested_session_resume(
+            user,
+            metadata={
+                "cpu": int(rc.cpu * 1000),
+                "memory": rc.memory,
+                "gpu": rc.gpu,
+                "resource_class_id": str(rc.id),
+                "resource_pool_id": str(rp.id) or "",
+                "resource_class_name": f"{rp.name}.{rc.name}",
+                "session_id": session_id,
+            }
+        )
 
     patch.spec.culling = get_culling_patch(user, rp, nb_config, body.lastInteraction)
-
-    # If the session is being hibernated we do not need to patch anything else that is
-    # not specifically called for in the request body, we can refresh things when the user resumes.
-    if is_getting_hibernated:
-        return await nb_config.k8s_v2_client.patch_session(session_id, user.id, patch.to_rfc7386())
 
     server_name = session.metadata.name
     launcher = await session_repo.get_launcher(user, session.launcher_id)
