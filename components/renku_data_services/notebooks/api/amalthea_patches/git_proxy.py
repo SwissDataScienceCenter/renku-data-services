@@ -45,17 +45,6 @@ async def main_container(
             name=f"{prefix}ANONYMOUS_SESSION",
             value="false" if user.is_authenticated else "true",
         ),
-        # client.V1EnvVar(name=f"{prefix}RENKU_ACCESS_TOKEN", value=str(user.access_token)),
-        # client.V1EnvVar(name=f"{prefix}RENKU_REFRESH_TOKEN", value=str(user.refresh_token)),
-        # client.V1EnvVar(name=f"{prefix}RENKU_REALM", value=config.keycloak_realm),
-        # client.V1EnvVar(
-        #     name=f"{prefix}RENKU_CLIENT_ID",
-        #     value=str(config.sessions.git_proxy.renku_client_id),
-        # ),
-        # client.V1EnvVar(
-        #     name=f"{prefix}RENKU_CLIENT_SECRET",
-        #     value=str(config.sessions.git_proxy.renku_client_secret),
-        # ),
         client.V1EnvVar(name=f"{prefix}RENKU_URL", value="https://" + config.sessions.ingress.host),
         client.V1EnvVar(
             name=f"{prefix}REPOSITORIES",
@@ -67,7 +56,6 @@ async def main_container(
                 [dict(id=provider.id, access_token_url=provider.access_token_url) for provider in git_providers]
             ),
         ),
-        # TODO: internal token
         client.V1EnvVar(name=f"{prefix}RENKU_AUTHENTICATION_VERSION", value="v2"),
         client.V1EnvVar(name=f"{prefix}RENKU_ACCESS_TOKEN", value=internal_access_token),
         client.V1EnvVar(name=f"{prefix}RENKU_REFRESH_TOKEN", value=internal_refresh_token),

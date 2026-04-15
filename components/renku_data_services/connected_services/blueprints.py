@@ -221,7 +221,6 @@ class OAuth2ConnectionsBP(CustomBlueprint):
     def get_token(self) -> BlueprintFactoryResponse:
         """Get the access token for a specific OAuth2 connection."""
 
-        # @authenticate(self.authenticator)
         @authenticate(ChainedAuthenticator(chain=[self.internal_authenticator, self.authenticator]))
         async def _get_token(_: Request, user: base_models.APIUser, connection_id: ULID) -> JSONResponse:
             client = await self.oauth_client_factory.for_user_connection_raise(user, connection_id)

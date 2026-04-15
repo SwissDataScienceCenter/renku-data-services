@@ -245,12 +245,6 @@ class DataSourceRepository:
             "access_token": token_set.access_token,
             "token_type": "Bearer",
         }
-        # if user.access_token and user.refresh_token:
-        #     renku_tokens = RenkuTokens(
-        #         access_token=user.access_token,
-        #         refresh_token=user.refresh_token,
-        #     )
-        #     token_config["refresh_token"] = renku_tokens.encode()
         expires_in_td = self.internal_token_mint.long_refresh_token_expiration
         expires_in = int(expires_in_td.total_seconds())
         renku_token = self.internal_token_mint.create_refresh_token(

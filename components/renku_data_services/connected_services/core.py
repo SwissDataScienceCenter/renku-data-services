@@ -128,11 +128,6 @@ async def handle_oauth2_token_refresh(
         3. Send back the refreshed OAuth 2.0 access token and a the encoded value
         of the current RenkuTokens
     """
-    # renku_tokens = apispec_extras.RenkuTokens.decode(body.refresh_token)
-    # NOTE: inject the access token in the headers so that we can use `self.authenticator`
-    # request.headers[authenticator.token_field] = renku_tokens.access_token
-    # request.headers[authenticator.token_field] = body.refresh_token
-
     user: base_models.AuthenticatedAPIUser | None = None
     parsed_renku_refresh_token: dict[str, Any] | None = None
     try:
@@ -150,12 +145,6 @@ async def handle_oauth2_token_refresh(
             access_token_expires_at=None,
             roles=[],
         )
-        # _user = cast(
-        #     base_models.APIUser,
-        #     await authenticator.authenticate(access_token=body.refresh_token or "", request=request),
-        # )
-        # if _user.is_authenticated and _user.access_token:
-        #     user = _user
     except Exception as err:
         logger.error(f"Got authenticate error: {err.__class__}.")
         raise
@@ -165,9 +154,6 @@ async def handle_oauth2_token_refresh(
 
     # TODO: verify session if scope found
     logger.info(f"Got scopes = {scopes}")
-
-    # if user is None or not user.is_authenticated:
-    #     raise errors.UnauthorizedError()
 
     client = await oauth_client_factory.for_user_connection_raise(user, connection_id)
     oauth_token = await client.get_token()
@@ -181,7 +167,6 @@ async def handle_oauth2_token_refresh(
     result: dict[str, str | int] = {
         "access_token": access_token,
         "token_type": str(oauth_token.get("token_type")) or "Bearer",
-        # "refresh_token": renku_tokens.encode(),
         "refresh_token": new_renku_refresh_token,
     }
     if oauth_token.get("scope"):
