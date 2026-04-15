@@ -193,7 +193,7 @@ class NotebookK8sClient(SecretClient):
                     user_id=safe_username,
                     label_selector={
                         self.__username_label: safe_username,
-                        # "app.kubernetes.io/session-type": "Interactive",
+                        "app.kubernetes.io/session-type": "Interactive",
                     },
                 )
             )
