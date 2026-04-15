@@ -607,7 +607,7 @@ components:
       example: https://renkulab.io/auth/realms/Renku
     PostTokenGrantType:
       type: string
-      description: A grant type for OAuth 2.0 (see RFC 6749)
+      description: A grant type for OAuth 2.0 (see RFC 6749).
       enum:
         - refresh_token
     ErrorResponse:
