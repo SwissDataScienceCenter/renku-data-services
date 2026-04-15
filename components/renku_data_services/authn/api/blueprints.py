@@ -9,6 +9,7 @@ from sanic_ext import validate
 from renku_data_services import base_models, errors
 from renku_data_services.app_config import logging
 from renku_data_services.authn.api import apispec
+from renku_data_services.authn.api.core import ScopeVerifier
 from renku_data_services.authn.renku import RenkuSelfAuthenticator, RenkuSelfTokenMint, TokenType
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_models.validation import validated_json
@@ -22,6 +23,7 @@ class InternalAuthenticationBP(CustomBlueprint):
 
     internal_authenticator: RenkuSelfAuthenticator
     internal_token_mint: RenkuSelfTokenMint
+    internal_scope_verifier: ScopeVerifier
 
     def post_token(self) -> BlueprintFactoryResponse:
         """Token endpoint for internal authentication.
@@ -47,11 +49,9 @@ class InternalAuthenticationBP(CustomBlueprint):
                 roles=[],
             )
 
+            # Verify the scope claim
             scope = str(parsed_token.get("scope", ""))
-            scopes = scope.split(" ")
-
-            # TODO: verify session if scope found
-            logger.info(f"Got scopes = {scopes}")
+            await self.internal_scope_verifier.verify_scope(user=user, scope=scope)
 
             new_access_token = self.internal_token_mint.create_access_token(user=user, scope=scope)
             new_refresh_token = self.internal_token_mint.create_refresh_token(user=user, scope=scope)
