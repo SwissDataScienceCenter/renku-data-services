@@ -121,12 +121,8 @@ async def handle_oauth2_token_refresh(
     """OAuth 2.0 token endpoint to support applications running in sessions.
 
     Details:
-        1. Decode the refresh_token value into an instance of RenkuTokens
-        2. Validate the access_token
-            -> if the access_token is invalid (expired), use the renku refresh_token
-            to get a fresh set of tokens
-        3. Send back the refreshed OAuth 2.0 access token and a the encoded value
-        of the current RenkuTokens
+        1. Check that `body.refresh_token` is a valid internal refresh token
+        2. Send back the refreshed OAuth 2.0 access token and a new internal refresh token
     """
     user: base_models.AuthenticatedAPIUser | None = None
     parsed_renku_refresh_token: dict[str, Any] | None = None
