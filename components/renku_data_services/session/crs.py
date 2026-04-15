@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field, RootModel
+from pydantic import BaseModel, ConfigDict, Field, RootModel
 
 from renku_data_services.session.cr_shipwright_buildrun import Build, Git, ParamValue, Strategy, Toleration
 from renku_data_services.session.cr_shipwright_buildrun import Model as _BuildRun
@@ -17,10 +17,10 @@ from renku_data_services.session.cr_tekton_taskrun import TaskRunBase as _TaskRu
 class Metadata(BaseModel):
     """Basic k8s metadata spec."""
 
-    class Config:
-        """Do not exclude unknown properties."""
-
-        extra = "allow"
+    model_config = ConfigDict(
+        # Do not exclude unknown properties.
+        extra="allow",
+    )
 
     name: str
     namespace: str | None = None

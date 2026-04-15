@@ -314,8 +314,8 @@ async def test_migration_to_75c83dd9d619(app_manager_instance: DependencyManager
 
     def find_by_col(data: Sequence[sa.Row[Any]], id_value: Any, id_index: int) -> tuple | None:
         for row in data:
-            if row.tuple()[id_index] == id_value:
-                return cast(tuple, row.tuple())
+            if row._tuple()[id_index] == id_value:
+                return cast(tuple, row._tuple())
         return None
 
     run_migrations_for_app("common", "450ae3930996")
@@ -588,12 +588,12 @@ async def test_migration_to_dcb9648c3c15(app_manager_instance: DependencyManager
     async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
         k8s_objs = (await session.execute(sa.text('SELECT "group", version, kind FROM common.k8s_objects'))).all()
     assert len(k8s_objs) == 2
-    assert k8s_objs[0].tuple()[0] is None
-    assert k8s_objs[0].tuple()[1] == "v1"
-    assert k8s_objs[0].tuple()[2] == "pod"
-    assert k8s_objs[1].tuple()[0] == "amalthea.dev"
-    assert k8s_objs[1].tuple()[1] == "v1alpha1"
-    assert k8s_objs[1].tuple()[2] == "jupyterserver"
+    assert k8s_objs[0]._tuple()[0] is None
+    assert k8s_objs[0]._tuple()[1] == "v1"
+    assert k8s_objs[0]._tuple()[2] == "pod"
+    assert k8s_objs[1]._tuple()[0] == "amalthea.dev"
+    assert k8s_objs[1]._tuple()[1] == "v1alpha1"
+    assert k8s_objs[1]._tuple()[2] == "jupyterserver"
 
 
 @pytest.mark.asyncio
@@ -619,8 +619,8 @@ async def test_migration_to_c8061499b966(app_manager_instance: DependencyManager
         k8s_objs = (await session.execute(sa.text("SELECT name, cluster FROM common.k8s_objects"))).all()
     assert len(k8s_objs) == 2
     # Check that the cluster name was changed
-    assert k8s_objs[0].tuple()[1] == "0RENK1RENK2RENK3RENK4RENK5"
-    assert k8s_objs[1].tuple()[1] == "0RENK1RENK2RENK3RENK4RENK5"
+    assert k8s_objs[0]._tuple()[1] == "0RENK1RENK2RENK3RENK4RENK5"
+    assert k8s_objs[1]._tuple()[1] == "0RENK1RENK2RENK3RENK4RENK5"
     id = ULID()
     async with app_manager_instance.config.db.async_session_maker() as session, session.begin():
         await session.execute(

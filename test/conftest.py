@@ -31,6 +31,7 @@ from renku_data_services.data_api.dependencies import DependencyManager
 from renku_data_services.data_connectors.doi.models import DOIMetadata, SchemaOrgDataset
 from renku_data_services.db_config.config import DBConfig
 from renku_data_services.secrets_storage_api.dependencies import DependencyManager as SecretsDependencyManager
+from renku_data_services.session import constants
 from renku_data_services.solr import entity_schema
 from renku_data_services.solr.solr_client import SolrClientConfig
 from renku_data_services.solr.solr_migrate import SchemaMigrator
@@ -214,9 +215,24 @@ async def dummy_users():
     ]
 
 
+def pytest_addoption(parser):
+    parser.addoption("--disable-cluster-creation", action="store_true", default=False, help="Disable cluster creation")
+    parser.addoption("--enable-builds", action="store_true", default=False, help="Enable builds")
+
+
+@pytest.fixture(scope="session")
+def builds_enabled(request):
+    return request.config.getoption("--enable-builds")
+
+
+@pytest_asyncio.fixture(scope="session")
+def disable_cluster_creation(request):
+    return request.config.getoption("--disable-cluster-creation")
+
+
 @pytest_asyncio.fixture(scope="session")
 async def app_manager(
-    authz_setup, monkeysession, worker_id, secrets_key_pair, dummy_users, kubeconfig_path: Path
+    authz_setup, monkeysession, worker_id, secrets_key_pair, dummy_users, kubeconfig_path: Path, builds_enabled
 ) -> AsyncGenerator[DependencyManager, None]:
     monkeysession.setenv("DUMMY_STORES", "true")
     monkeysession.setenv("MAX_PINNED_PROJECTS", "5")
@@ -227,6 +243,14 @@ async def app_manager(
     monkeysession.setenv("DATA_DEPOSITS_JOB_IMAGE", "test-deposit-image")
     monkeysession.setenv("RENKU_URL", "http://test-renku-url.io")
     monkeysession.setenv("KUBERNETES_NAMESPACE", "default")
+    monkeysession.setenv("BUILD_PUSH_SECRET_NAME", constants.BUILD_DEFAULT_PUSH_SECRET_NAME)
+
+    monkeysession.setenv("CREATE_BUILDS_CLIENT", str(builds_enabled))
+    if builds_enabled:
+        monkeysession.setenv("BUILD_OUTPUT_IMAGE_PREFIX", constants.BUILD_DEFAULT_OUTPUT_IMAGE_PREFIX)
+        monkeysession.setenv("BUILD_OUTPUT_PRIVATE_IMAGE_PREFIX", constants.BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX)
+        monkeysession.setenv("BUILD_OUTPUT_PRIVATE_IMAGE_PREFIX", constants.BUILD_DEFAULT_OUTPUT_PRIVATE_IMAGE_PREFIX)
+        monkeysession.setenv("BUILD_PUSH_PRIVATE_SECRET_NAME", constants.BUILD_DEFAULT_PUSH_PRIVATE_SECRET_NAME)
 
     dm = TestDependencyManager.from_env(dummy_users)
 
@@ -509,16 +533,25 @@ def cluster_name():
 
 
 @pytest.fixture(scope="session")
-def kubeconfig_path(monkeysession):
-    kconf = ".kind-kubeconfig.yaml"
-    monkeysession.setenv("KUBECONFIG", kconf)
+def kubeconfig_path(monkeysession, disable_cluster_creation, tmpdir_factory):
+    if disable_cluster_creation:
+        kconf = Path("~/.kube/config").expanduser()
+    else:
+        tmp_path = tmpdir_factory.mktemp("kube")
+        kconf = tmp_path / ".kind-kubeconfig.yaml"
+    monkeysession.setenv("KUBECONFIG", str(kconf))
     return Path(kconf)
 
 
 @pytest.fixture(scope="session")
-def cluster(cluster_name, kubeconfig_path: Path, monkeysession):
+def cluster(cluster_name, kubeconfig_path: Path, monkeysession, disable_cluster_creation, builds_enabled):
     # NOTE: The config_name of the cluster has to match the name of the
     # kubeconfig file in the K8S_CONFIGS_ROOT folder
     monkeysession.setenv("K8S_CONFIGS_ROOT", kubeconfig_path.parent.absolute().as_posix())
-    with KindCluster(cluster_name, kubeconfig=str(kubeconfig_path)) as cluster:
+    with KindCluster(
+        cluster_name,
+        kubeconfig=str(kubeconfig_path),
+        create_cluster=not disable_cluster_creation,
+        setup_shipwright=builds_enabled,
+    ) as cluster:
         yield cluster

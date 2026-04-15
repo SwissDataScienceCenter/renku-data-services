@@ -291,7 +291,6 @@ class DependencyManager:
             )
             if config.builds.enabled:
                 k8s_db_cache = K8sDbCache(config.db.async_session_maker)
-                default_kubeconfig = KubeConfigEnv()
                 shipwright_client = ShipwrightClient(
                     client=K8sClusterClientsPool(
                         lambda: get_clusters(
@@ -342,12 +341,21 @@ class DependencyManager:
             group_repo=group_repo,
             search_updates_repo=search_updates_repo,
         )
+
+        git_repositories_repo = GitRepositoriesRepository(
+            session_maker=config.db.async_session_maker,
+            oauth_client_factory=oauth_http_client_factory,
+            internal_gitlab_url=config.gitlab_url,
+            enable_internal_gitlab=config.enable_internal_gitlab,
+        )
+
         session_repo = SessionRepository(
             session_maker=config.db.async_session_maker,
             project_authz=authz,
             resource_pools=rp_repo,
             shipwright_client=shipwright_client,
             builds_config=config.builds,
+            git_repositories_repo=git_repositories_repo,
         )
         project_migration_repo = ProjectMigrationRepository(
             session_maker=config.db.async_session_maker,
@@ -377,12 +385,6 @@ class DependencyManager:
             low_level_repo=low_level_user_secrets_repo,
             user_repo=kc_user_repo,
             secret_service_public_key=config.secrets.public_key,
-        )
-        git_repositories_repo = GitRepositoriesRepository(
-            session_maker=config.db.async_session_maker,
-            oauth_client_factory=oauth_http_client_factory,
-            internal_gitlab_url=config.gitlab_url,
-            enable_internal_gitlab=config.enable_internal_gitlab,
         )
         platform_repo = PlatformRepository(
             session_maker=config.db.async_session_maker,

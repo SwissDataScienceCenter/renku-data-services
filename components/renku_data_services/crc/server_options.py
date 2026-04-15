@@ -8,7 +8,7 @@ is added.
 from collections.abc import Generator
 from typing import Any, Union
 
-from pydantic import BaseModel, ByteSize, Field, validator
+from pydantic import BaseModel, ByteSize, ConfigDict, Field, validator
 
 from renku_data_services.crc import models
 from renku_data_services.crc.constants import DEFAULT_RUNTIME_PLATFORM
@@ -28,17 +28,13 @@ class ServerOptionsDefaults(BaseModel):
     disk_request: ByteSize
     gpu_request: int = Field(ge=0, default=0)
 
-    class Config:
-        """Configuration."""
-
-        extra = "ignore"
+    model_config = ConfigDict(extra="ignore")
 
 
 class _ServerOptionsCpu(BaseModel):
     options: list[float] = Field(min_length=1)
 
-    class Config:
-        extra = "ignore"
+    model_config = ConfigDict(extra="ignore")
 
     @validator("options", pre=False, each_item=True)
     def greater_than_zero(cls, val: Union[float, int]) -> Union[float, int]:
@@ -61,8 +57,7 @@ class _ServerOptionsGpu(BaseModel):
 class _ServerOptionsBytes(BaseModel):
     options: list[ByteSize] = Field(min_length=1)
 
-    class Config:
-        extra = "ignore"
+    model_config = ConfigDict(extra="ignore")
 
     @validator("options", pre=True)
     def convert_units(cls, vals: list[str]) -> list[str]:
@@ -84,10 +79,7 @@ class ServerOptions(BaseModel):
     disk_request: _ServerOptionsBytes
     gpu_request: _ServerOptionsGpu = Field(default_factory=lambda: _ServerOptionsGpu(options=[0]))
 
-    class Config:
-        """Configuration."""
-
-        extra = "ignore"
+    model_config = ConfigDict(extra="ignore")
 
     def find_largest_attribute(self) -> str:
         """Find the attribute with the largest number of choices."""

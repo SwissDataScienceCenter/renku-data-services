@@ -103,6 +103,8 @@ from renku_data_services.notebooks.utils import (
 )
 from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
 from renku_data_services.project.models import Project, SessionSecret
+from renku_data_services.repositories.db import GitRepositoriesRepository
+from renku_data_services.repositories.models import Metadata as RepoMetadata
 from renku_data_services.session.db import SessionRepository
 from renku_data_services.session.models import SessionLauncher
 from renku_data_services.users.db import UserRepo
@@ -737,6 +739,7 @@ async def start_session(
     metrics: MetricsService,
     image_check_repo: ImageCheckRepository,
     data_source_repo: DataSourceRepository,
+    git_repositories_repo: GitRepositoriesRepository,
 ) -> tuple[AmaltheaSessionV1Alpha1, bool]:
     """Start an Amalthea session.
 
@@ -797,6 +800,21 @@ async def start_session(
     data_connectors_stream = data_connector_secret_repo.get_data_connectors_with_secrets(user, project.id)
     git_providers = await git_provider_helper.get_providers(user=user)
     repositories = repositories_from_project(project, git_providers)
+
+    if environment.build_parameters is not None:
+        build_repository = environment.build_parameters.repository
+        if build_repository not in [repository.url for repository in repositories]:
+            raise errors.ValidationError(message="Image was not built from a repository in this project")
+
+        repo_data = await git_repositories_repo.get_repository(
+            repository_url=build_repository, user=user, etag=None, internal_gitlab_user=internal_gitlab_user
+        )
+        if repo_data.is_error:
+            raise errors.ValidationError(message=str(repo_data.error))
+        if isinstance(repo_data.metadata, RepoMetadata):
+            metadata: RepoMetadata = repo_data.metadata
+            if not metadata.pull_permission:
+                raise errors.ValidationError(message="User does not have access to image repository")
 
     # User secrets
     session_extras = SessionExtraResources()
