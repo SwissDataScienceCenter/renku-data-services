@@ -12,6 +12,7 @@ from ulid import ULID
 import renku_data_services.base_models as base_models
 from renku_data_services import errors
 from renku_data_services.app_config import logging
+from renku_data_services.authn.api.core import ScopeVerifier
 from renku_data_services.authn.chained import ChainedAuthenticator
 from renku_data_services.authn.renku import RenkuSelfAuthenticator, RenkuSelfTokenMint
 from renku_data_services.base_api.auth import authenticate, only_admins, only_authenticated
@@ -32,7 +33,6 @@ from renku_data_services.connected_services.oauth_http import (
     OAuthHttpError,
     OAuthHttpFactoryError,
 )
-from renku_data_services.notebooks.config import NotebooksConfig
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +168,7 @@ class OAuth2ConnectionsBP(CustomBlueprint):
     authenticator: base_models.Authenticator[base_models.APIUser]
     internal_authenticator: RenkuSelfAuthenticator
     internal_token_mint: RenkuSelfTokenMint
-    nb_config: NotebooksConfig
+    internal_scope_verifier: ScopeVerifier
 
     def get_all(self) -> BlueprintFactoryResponse:
         """List all OAuth2 connections."""
@@ -265,16 +265,14 @@ class OAuth2ConnectionsBP(CustomBlueprint):
         """
 
         @validate(form=apispec.PostTokenRequest)
-        async def _post_token_endpoint(
-            request: Request, body: apispec.PostTokenRequest, connection_id: ULID
-        ) -> JSONResponse:
+        async def _post_token_endpoint(_: Request, body: apispec.PostTokenRequest, connection_id: ULID) -> JSONResponse:
             result = await handle_oauth2_token_refresh(
-                request=request,
                 body=body,
                 connection_id=connection_id,
                 oauth_client_factory=self.oauth_client_factory,
                 internal_authenticator=self.internal_authenticator,
                 internal_token_mint=self.internal_token_mint,
+                internal_scope_verifier=self.internal_scope_verifier,
             )
 
             return validated_json(apispec.PostTokenResponse, result)

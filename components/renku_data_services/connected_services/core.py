@@ -6,11 +6,11 @@ from typing import Any
 from urllib.parse import urlparse
 
 import jwt
-from sanic import Request
 from ulid import ULID
 
 from renku_data_services import base_models, errors
 from renku_data_services.app_config import logging
+from renku_data_services.authn.api.core import ScopeVerifier
 from renku_data_services.authn.renku import RenkuSelfAuthenticator, RenkuSelfTokenMint
 from renku_data_services.connected_services import apispec, models
 from renku_data_services.connected_services.oauth_http import (
@@ -111,12 +111,12 @@ def validate_oidc_issuer_url(url: str) -> None:
 
 
 async def handle_oauth2_token_refresh(
-    request: Request,
     body: apispec.PostTokenRequest,
     connection_id: ULID,
     oauth_client_factory: OAuthHttpClientFactory,
     internal_authenticator: RenkuSelfAuthenticator,
     internal_token_mint: RenkuSelfTokenMint,
+    internal_scope_verifier: ScopeVerifier,
 ) -> dict[str, str | int]:
     """OAuth 2.0 token endpoint to support applications running in sessions.
 
@@ -139,11 +139,9 @@ async def handle_oauth2_token_refresh(
         roles=[],
     )
 
+    # Verify the scope claim
     scope = str(parsed_renku_refresh_token.get("scope", ""))
-    scopes = scope.split(" ")
-
-    # TODO: verify session if scope found
-    logger.info(f"Got scopes = {scopes}")
+    await internal_scope_verifier.verify_scope(user=user, scope=scope)
 
     client = await oauth_client_factory.for_user_connection_raise(user, connection_id)
     oauth_token = await client.get_token()
