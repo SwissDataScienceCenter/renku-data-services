@@ -29,6 +29,7 @@ from renku_data_services.k8s.models import (
 )
 from renku_data_services.notebooks.api.classes.auth import GitlabToken, RenkuTokens
 from renku_data_services.notebooks.crs import AmaltheaSessionV1Alpha1
+from renku_data_services.notebooks.models import SessionMode
 from renku_data_services.notebooks.util.kubernetes_ import find_env_var
 from renku_data_services.notebooks.util.retries import retry_with_exponential_backoff_async
 
@@ -192,7 +193,7 @@ class NotebookK8sClient(SecretClient):
                     user_id=safe_username,
                     label_selector={
                         self.__username_label: safe_username,
-                        "app.kubernetes.io/session-type": "Interactive",
+                        #"app.kubernetes.io/session-type": "Interactive",
                     },
                 )
             )
@@ -311,6 +312,26 @@ class NotebookK8sClient(SecretClient):
         await self.patch_statefulset_tokens(session_name, renku_tokens, safe_username)
         await self.patch_image_pull_secret(session_name, gitlab_token, safe_username)
 
+    async def _get_pod_for_session(self, session: AmaltheaSessionV1Alpha1) -> Pod | None:
+        """Get the pod associated to the given session."""
+        sess_mode = SessionMode.from_amalthea_name(session.spec.sessionType)
+        pod_name = f"{session.metadata.name}-0"
+        pod_gvk = GVK.from_kr8s_object(Pod)
+        result: K8sObject | None = None
+        if sess_mode == SessionMode.non_interactive:
+            job_name = session.metadata.name
+            async for j in self.__client.list(K8sObjectFilter(gvk=pod_gvk, label_selector={"job-name":job_name})):
+                result = j
+                break
+        else:
+            pod_name = f"{session.metadata.name}-0"
+            result = await self._get(pod_name, pod_gvk, None)
+
+        if result is None:
+            return None
+        cluster = await self.__client.cluster_by_id(result.cluster)
+        return Pod(resource=result.to_api_object(cluster.api), namespace=result.namespace, api=cluster.api)
+
     async def get_session_logs(
         self, session_name: str, safe_username: str, max_log_lines: int | None = None
     ) -> dict[str, str]:
@@ -322,16 +343,13 @@ class NotebookK8sClient(SecretClient):
             raise errors.MissingResourceError(
                 message=f"Cannot find session {session_name} for user {safe_username} to retrieve logs."
             )
-        pod_name = f"{session_name}-0"
-        result = await self._get(pod_name, GVK.from_kr8s_object(Pod), None)
+        pod = await self._get_pod_for_session(session)
 
         logs: dict[str, str] = {}
-        if result is None:
+        if pod is None:
             return logs
 
-        cluster = await self.__client.cluster_by_id(result.cluster)
-
-        pod = Pod(resource=result.to_api_object(cluster.api), namespace=result.namespace, api=cluster.api)
+        pod_name = pod.name
 
         containers = [container.name for container in pod.spec.containers + pod.spec.get("initContainers", [])]
         for container in containers:
