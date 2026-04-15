@@ -193,7 +193,7 @@ class NotebookK8sClient(SecretClient):
                     user_id=safe_username,
                     label_selector={
                         self.__username_label: safe_username,
-                        #"app.kubernetes.io/session-type": "Interactive",
+                        # "app.kubernetes.io/session-type": "Interactive",
                     },
                 )
             )
@@ -320,7 +320,7 @@ class NotebookK8sClient(SecretClient):
         result: K8sObject | None = None
         if sess_mode == SessionMode.non_interactive:
             job_name = session.metadata.name
-            async for j in self.__client.list(K8sObjectFilter(gvk=pod_gvk, label_selector={"job-name":job_name})):
+            async for j in self.__client.list(K8sObjectFilter(gvk=pod_gvk, label_selector={"job-name": job_name})):
                 result = j
                 break
         else:

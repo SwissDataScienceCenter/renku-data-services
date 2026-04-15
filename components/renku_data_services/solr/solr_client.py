@@ -800,7 +800,7 @@ class DefaultSolrAdminClient(SolrAdminClient):
         data = {"name": coll, "numShards": 1}
         resp = await self.delegate.post("/api/collections", json=data)
         if not resp.is_success:
-            raise SolrClientCreateCoreException(core, resp)
+            raise SolrClientCreateCoreException(coll, resp)
         else:
             return None
 
