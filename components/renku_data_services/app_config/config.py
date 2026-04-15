@@ -126,15 +126,13 @@ class InternalAuthenticationConfig:
         default_access_token_expiration = (
             timedelta(seconds=int(default_access_token_expiration_str))
             if default_access_token_expiration_str
-            # else timedelta(minutes=15)
-            else timedelta(minutes=1)
+            else timedelta(minutes=15)
         )
         default_refresh_token_expiration_str = os.environ.get("INTERNAL_AUTHN_DEFAULT_REFRESH_TOKEN_EXPIRATION_SECONDS")
         default_refresh_token_expiration = (
             timedelta(seconds=int(default_refresh_token_expiration_str))
             if default_refresh_token_expiration_str
-            # else timedelta(hours=1)
-            else timedelta(minutes=5)
+            else timedelta(hours=1)
         )
         long_refresh_token_expiration_str = os.environ.get("INTERNAL_AUTHN_LONG_REFRESH_TOKEN_EXPIRATION_SECONDS")
         long_refresh_token_expiration = (
