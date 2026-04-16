@@ -862,6 +862,7 @@ async def create_deposit_upload(
     extras = await data_source_repo.get_data_sources(
         request=request,
         user=user,
+        resource_type="deposit_job",
         base_name=deposit_job.name,
         data_connectors_stream=dc_iter(),
         work_dir=PurePosixPath(),

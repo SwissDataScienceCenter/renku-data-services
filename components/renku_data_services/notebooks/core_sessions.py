@@ -828,6 +828,7 @@ async def start_session(
         await data_source_repo.get_data_sources(
             request=request,
             user=user,
+            resource_type="session",
             base_name=server_name,
             data_connectors_stream=data_connectors_stream,
             work_dir=work_dir,

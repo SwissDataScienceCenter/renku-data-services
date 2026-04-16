@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from io import StringIO
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from sanic import Request
 from ulid import ULID
@@ -259,6 +259,9 @@ class DataSourceRepository:
 
         token_config["expiry"] = (datetime.now(UTC) + timedelta(seconds=expires_in)).isoformat()
 
+        # TODO: remove, this is for debug (forcing immediate refresh)
+        token_config["expiry"] = (datetime.now(UTC) - timedelta(days=1)).isoformat()
+
         token = json.dumps(token_config)
         token_url = request.url_for("oauth2_connections.post_token_endpoint", connection_id=connection.id)
         return _OAuth2ConfigPartial(token=token, token_url=token_url)
@@ -267,6 +270,7 @@ class DataSourceRepository:
         self,
         request: Request,
         user: AnonymousAPIUser | AuthenticatedAPIUser,
+        resource_type: Literal["session", "deposit_job"],
         base_name: str,
         data_connectors_stream: AsyncIterator[DataConnectorWithSecrets],
         work_dir: PurePosixPath,
@@ -280,7 +284,7 @@ class DataSourceRepository:
         dcs: dict[str, RCloneStorage] = {}
         dcs_secrets: dict[str, list[DataConnectorSecret]] = {}
         user_secret_key: str | None = None
-        internal_token_scope = f"session:{base_name}"  # TODO: handle session vs job
+        internal_token_scope = f"{resource_type}:{base_name}"
         async for dc in data_connectors_stream:
             configuration = await self.handle_configuration(
                 request=request,
