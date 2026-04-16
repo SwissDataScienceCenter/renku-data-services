@@ -315,6 +315,22 @@ class BuildPatch:
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)
+class AuthenticationSecret:
+    """Model to represent the secret to be created/used for private repositories."""
+
+    username: str
+    password: str
+
+    def to_string_data(self) -> dict:
+        """Returns the raw data as is to be used as Secret stringData."""
+
+        return {
+            "username": self.username,
+            "password": self.password,
+        }
+
+
+@dataclass(frozen=True, eq=True, kw_only=True)
 class ShipwrightBuildRunParams:
     """Model to represent the parameters used to create a new Shipwright BuildRun."""
 
@@ -324,6 +340,7 @@ class ShipwrightBuildRunParams:
     output_image: str
     build_strategy_name: str
     push_secret_name: str
+    authentication_secret: AuthenticationSecret | None = None
     retention_after_failed: timedelta | None = None
     retention_after_succeeded: timedelta | None = None
     build_timeout: timedelta | None = None
@@ -346,6 +363,7 @@ class ShipwrightBuildRunParams:
             run_image=overrides.run_image or self.run_image,
             output_image=self.output_image,
             build_strategy_name=overrides.strategy_name or self.build_strategy_name,
+            authentication_secret=self.authentication_secret,
             push_secret_name=self.push_secret_name,
             retention_after_failed=self.retention_after_failed,
             retention_after_succeeded=self.retention_after_succeeded,

@@ -1,15 +1,23 @@
 from __future__ import annotations
 
+import base64
+import json
 import os
 import subprocess
 import typing
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any, Self
 from unittest.mock import MagicMock
 
+import yaml
 from authzed.api.v1 import AsyncClient, SyncClient
+from kubernetes import client as k8s_client
+from kubernetes import config as k8s_config
+from kubernetes import watch
+from kubernetes.client import V1ObjectMeta
 from sanic import Request
 from sanic_testing.testing import ASGI_HOST, ASGI_PORT, SanicASGITestClient, TestingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -54,7 +62,9 @@ from renku_data_services.project.db import (
     ProjectRepository,
     ProjectSessionSecretRepository,
 )
+from renku_data_services.repositories import models as repositories_models
 from renku_data_services.repositories.db import GitRepositoriesRepository
+from renku_data_services.repositories.git_url import GitUrl, GitUrlError
 from renku_data_services.resource_usage.core import ResourceUsageService
 from renku_data_services.resource_usage.db import ResourceRequestsRepo
 from renku_data_services.search.db import SearchUpdatesRepo
@@ -62,6 +72,7 @@ from renku_data_services.search.reprovision import SearchReprovision
 from renku_data_services.secrets.db import LowLevelUserSecretsRepo, UserSecretsRepo
 from renku_data_services.session.constants import BUILD_RUN_GVK, TASK_RUN_GVK
 from renku_data_services.session.db import SessionRepository
+from renku_data_services.session.k8s_client import ShipwrightClient
 from renku_data_services.storage import models as storage_models
 from renku_data_services.storage.db import StorageRepository
 from renku_data_services.users import models as user_preferences_models
@@ -179,6 +190,62 @@ class NonCachingAuthz(Authz):
         return self.authz_config.authz_async_client()
 
 
+class FakeGitRepositoriesRepository(GitRepositoriesRepository):
+    """Test class to simulate repository visibility checks and token retrieval"""
+
+    async def get_token(self, repository_url, user) -> dict[str, Any] | None:
+        """Get token for repository provider."""
+        return {"access_token": "dummy token"}
+
+    async def get_repository(
+        self,
+        repository_url,
+        user,
+        etag,
+        internal_gitlab_user,
+    ) -> repositories_models.RepositoryDataResult:
+        """Get metadata about one repository."""
+
+        match GitUrl.parse(repository_url):
+            case GitUrlError() as err:
+                return repositories_models.RepositoryDataResult(error=err)
+            case url:
+                valid_url = url
+                result = repositories_models.RepositoryDataResult()
+
+        match valid_url.parsed_url.path:
+            case "/SwissDataScienceCenter/renku":
+                result = result.with_metadata(
+                    repositories_models.Metadata(
+                        git_url=valid_url.render(),
+                        pull_permission=True,
+                        visibility=repositories_models.RepositoryVisibility.public,
+                    )
+                )
+            case "/SwissDataScienceCenter/private":
+                result = result.with_metadata(
+                    repositories_models.Metadata(
+                        git_url=valid_url.render(),
+                        pull_permission=True,
+                        visibility=repositories_models.RepositoryVisibility.private,
+                    )
+                )
+            case "/SwissDataScienceCenter/other-private":
+                result = result.with_metadata(
+                    repositories_models.Metadata(
+                        git_url=valid_url.render(),
+                        pull_permission=False,
+                        visibility=repositories_models.RepositoryVisibility.private,
+                    )
+                )
+            case "/some/repo":
+                result = result.with_error(GitUrlError.no_git_repo)
+            case _:
+                result = await super().get_repository(repository_url, user, etag, internal_gitlab_user)
+
+        return result
+
+
 @dataclass
 class TestDependencyManager(DependencyManager):
     """Test class that can handle isolated dbs and authz instances."""
@@ -210,8 +277,29 @@ class TestDependencyManager(DependencyManager):
                 kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
             ),
         )
+
         job_client = DepositUploadJobClient(client)
         secret_client = K8sSecretClient(client)
+
+        shipwright_client = None
+        gitrepositoriesrepository_class = GitRepositoriesRepository
+
+        if os.environ.get("CREATE_BUILDS_CLIENT", "false").lower() == "true":
+            shipwright_client = ShipwrightClient(
+                client=K8sClusterClientsPool(
+                    lambda: get_clusters(
+                        kube_conf_root_dir=config.k8s_config_root,
+                        default_kubeconfig=default_kubeconfig,
+                        cluster_repo=cluster_repo,
+                        cache=k8s_db_cache,
+                        kinds_to_cache=[AMALTHEA_SESSION_GVK, JUPYTER_SESSION_GVK, BUILD_RUN_GVK, TASK_RUN_GVK],
+                    ),
+                ),
+                namespace=config.k8s_namespace,
+            )
+
+            gitrepositoriesrepository_class = FakeGitRepositoriesRepository
+
         quota_repo = QuotaRepository(K8sResourceQuotaClient(client), K8sPriorityClassClient(client))
 
         authenticator = DummyAuthenticator()
@@ -260,12 +348,21 @@ class TestDependencyManager(DependencyManager):
             group_repo=group_repo,
             search_updates_repo=search_updates_repo,
         )
+
+        git_repositories_repo = gitrepositoriesrepository_class(
+            session_maker=config.db.async_session_maker,
+            internal_gitlab_url=config.gitlab_url,
+            enable_internal_gitlab=config.enable_internal_gitlab,
+            oauth_client_factory=oauth_client_factory,
+        )
+
         session_repo = SessionRepository(
             session_maker=config.db.async_session_maker,
             project_authz=authz,
             resource_pools=rp_repo,
-            shipwright_client=None,
+            shipwright_client=shipwright_client,
             builds_config=config.builds,
+            git_repositories_repo=git_repositories_repo,
         )
         project_migration_repo = ProjectMigrationRepository(
             session_maker=config.db.async_session_maker,
@@ -299,12 +396,6 @@ class TestDependencyManager(DependencyManager):
         connected_services_repo = ConnectedServicesRepository(
             session_maker=config.db.async_session_maker,
             encryption_key=config.secrets.encryption_key,
-            oauth_client_factory=oauth_client_factory,
-        )
-        git_repositories_repo = GitRepositoriesRepository(
-            session_maker=config.db.async_session_maker,
-            internal_gitlab_url=config.gitlab_url,
-            enable_internal_gitlab=config.enable_internal_gitlab,
             oauth_client_factory=oauth_client_factory,
         )
         platform_repo = PlatformRepository(
@@ -353,6 +444,7 @@ class TestDependencyManager(DependencyManager):
         occurrence_repo = OccurrenceRepository(session_maker=config.db.async_session_maker)
         resource_requests_repo = ResourceRequestsRepo(session_maker=config.db.async_session_maker)
         resource_usage_service = ResourceUsageService(resource_requests_repo)
+
         return cls(
             config=config,
             k8s_client=client,
@@ -387,7 +479,7 @@ class TestDependencyManager(DependencyManager):
             image_check_repo=image_check_repo,
             metrics_repo=metrics_repo,
             metrics=metrics_mock,
-            shipwright_client=None,
+            shipwright_client=shipwright_client,
             authz=authz,
             low_level_user_secrets_repo=low_level_user_secrets_repo,
             url_redirect_repo=url_redirect_repo,
@@ -545,6 +637,115 @@ async def create_user_preferences(
     return user_preferences
 
 
+def setup_shipwright(cluster: KindCluster) -> None:
+    """Setup shipwright and dependencies"""
+
+    shipwright_version = "v0.19.2"
+
+    root = Path(__file__).parents[1]
+
+    k8s_config.load_kube_config_from_dict(yaml.safe_load(cluster.config_yaml()))
+
+    core_api = k8s_client.CoreV1Api()
+
+    cmds = [
+        [
+            "curl",
+            "--silent",
+            "--location",
+            f"https://raw.githubusercontent.com/shipwright-io/build/{shipwright_version}/hack/install-tekton.sh",
+            "-O",
+        ],
+        ["bash", "install-tekton.sh"],
+        [
+            "kubectl",
+            "apply",
+            "--filename",
+            f"https://github.com/shipwright-io/build/releases/download/{shipwright_version}/release.yaml",
+            "--server-side",
+        ],
+        [
+            "kubectl",
+            "apply",
+            "--filename",
+            f"https://github.com/shipwright-io/build/releases/download/{shipwright_version}/sample-strategies.yaml",
+            "--server-side",
+        ],
+        [
+            "curl",
+            "--silent",
+            "--location",
+            f"https://raw.githubusercontent.com/shipwright-io/build/{shipwright_version}/hack/setup-webhook-cert.sh",
+            "-O",
+        ],
+        ["bash", "setup-webhook-cert.sh"],
+        [
+            "curl",
+            "--silent",
+            "--location",
+            "https://raw.githubusercontent.com/shipwright-io/build/main/hack/storage-version-migration.sh",
+            "-O",
+        ],
+        ["bash", "storage-version-migration.sh"],
+        [
+            "kubectl",
+            "apply",
+            "--filename",
+            str(root / "components/renku_pack_builder/manifests/buildstrategy.yaml"),
+            "--server-side",
+        ],
+    ]
+
+    # Setup tekton and shipwright
+    for cmd in cmds[0:-1]:
+        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=cluster.env, check=True)
+
+    watcher = watch.Watch()
+
+    for event in watcher.stream(
+        core_api.list_namespaced_pod,
+        label_selector="name=shipwright-build",
+        namespace="shipwright-build",
+        timeout_seconds=3 * 60,
+    ):
+        if event["object"].status.phase == "Running":
+            watcher.stop()
+            break
+    else:
+        raise AssertionError("Timeout waiting on shipwright to run") from None
+
+    for event in watcher.stream(
+        core_api.list_namespaced_pod,
+        label_selector="name=shp-build-webhook",
+        namespace="shipwright-build",
+        timeout_seconds=3 * 60,
+    ):
+        if event["object"].status.phase == "Running":
+            watcher.stop()
+            break
+    else:
+        raise AssertionError("Timeout waiting on shp-build-webhook to run") from None
+
+    # Add our build strategy
+    subprocess.run(cmds[-1], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=cluster.env, check=True)
+
+    # Create a dummy secret to push to registry (we wont in the tests, it's for the BuildRun registration)
+    docker_config = {
+        "auths": {
+            "https://registry.localhost/": {
+                "username": "test",
+                "password": "test",
+                "auth": base64.b64encode(b"test:test").decode(),
+            }
+        }
+    }
+    secret_data = {".dockerconfigjson": base64.b64encode(json.dumps(docker_config).encode()).decode()}
+    secret = k8s_client.V1Secret(metadata=V1ObjectMeta(name="renku-build-secret"), data=secret_data)
+    core_api.create_namespaced_secret(namespace="default", body=secret)
+    secret = k8s_client.V1Secret(metadata=V1ObjectMeta(name="renku-build-private-secret"), data=secret_data)
+    core_api.create_namespaced_secret(namespace="default", body=secret)
+
+
 class KindCluster(AbstractContextManager):
     """Context manager that will create and tear down a k3s cluster"""
 
@@ -553,6 +754,8 @@ class KindCluster(AbstractContextManager):
         cluster_name: str,
         kubeconfig=".kind-kubeconfig.yaml",
         extra_images: list[str] | None = None,
+        create_cluster: bool = True,
+        setup_shipwright: bool = False,
     ):
         self.cluster_name = cluster_name
         if extra_images is None:
@@ -561,9 +764,14 @@ class KindCluster(AbstractContextManager):
         self.kubeconfig = kubeconfig
         self.env = os.environ.copy()
         self.env["KUBECONFIG"] = self.kubeconfig
+        self.create_cluster = create_cluster
+        self.setup_shipwright = setup_shipwright
 
     def __enter__(self):
         """create kind cluster"""
+
+        if not self.create_cluster:
+            return self
 
         create_cluster = [
             "kind",
@@ -584,12 +792,16 @@ class KindCluster(AbstractContextManager):
                 print(err)
             raise
 
+        if self.setup_shipwright:
+            setup_shipwright(self)
+
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """delete kind cluster"""
 
-        self._delete_cluster()
+        if self.create_cluster:
+            self._delete_cluster()
         return False
 
     def _delete_cluster(self):

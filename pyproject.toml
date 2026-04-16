@@ -197,7 +197,10 @@ exclude_dirs = [
 addopts = "--cov components/ --cov bases/ --cov-report=term-missing -v"
 doctest_optionflags = "ALLOW_UNICODE"
 testpaths = ["bases", "components", "test"]
-markers = ["integration: mark a test as a integration."]
+markers = [
+  "integration: mark a test as a integration.",
+  "sessions",
+]
 filterwarnings = [
   "ignore:<class 'pytest_black.BlackItem'> is not using a cooperative constructor:pytest.PytestDeprecationWarning",
   "ignore:distutils Version classes are deprecated. Use packaging.version instead:DeprecationWarning",

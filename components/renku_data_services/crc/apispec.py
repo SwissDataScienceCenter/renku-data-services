@@ -250,6 +250,8 @@ class UsersUserIdResourcePoolsGetParametersQuery(BaseAPISpec):
     user_resource_params: Optional[UserResourceParams] = None
 
 
+config_name_pattern = r"^[a-zA-Z0-9._-]+(\.yaml)?$"
+
 class Cluster(BaseAPISpec):
     model_config = ConfigDict(
         extra="forbid",
@@ -264,7 +266,7 @@ class Cluster(BaseAPISpec):
         ...,
         description="The name of the Kubernetes configuration to use to connect to the remote cluster. This is currently used to find a file named `<KubeConfigRoot>/<config_name>`.\n\nThis configuration is expected to have a default namespace defined. It will be used for all remote operations requiring a namespace, as well for namespaced objects.\n",
         examples=["a-remote-cluster.yaml"],
-        pattern="^[a-zA-Z0-9._-]+[.]yaml$",
+        pattern=config_name_pattern,
     )
     session_protocol: Protocol
     session_host: str = Field(
@@ -301,7 +303,7 @@ class ClusterPatch(BaseAPISpec):
         None,
         description="The name of the Kubernetes configuration to use to connect to the remote cluster. This is currently used to find a file named `<KubeConfigRoot>/<config_name>`.\n\nThis configuration is expected to have a default namespace defined. It will be used for all remote operations requiring a namespace, as well for namespaced objects.\n",
         examples=["a-remote-cluster.yaml"],
-        pattern="^[a-zA-Z0-9._-]+[.]yaml$",
+        pattern=config_name_pattern,
     )
     session_protocol: Optional[Protocol] = None
     session_host: Optional[str] = Field(
@@ -338,7 +340,7 @@ class ClusterWithId(BaseAPISpec):
         ...,
         description="The name of the Kubernetes configuration to use to connect to the remote cluster. This is currently used to find a file named `<KubeConfigRoot>/<config_name>`.\n\nThis configuration is expected to have a default namespace defined. It will be used for all remote operations requiring a namespace, as well for namespaced objects.\n",
         examples=["a-remote-cluster.yaml"],
-        pattern="^[a-zA-Z0-9._-]+[.]yaml$",
+        pattern=config_name_pattern,
     )
     id: str = Field(
         ...,

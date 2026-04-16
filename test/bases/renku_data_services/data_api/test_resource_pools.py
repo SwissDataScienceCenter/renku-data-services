@@ -91,6 +91,7 @@ async def test_resource_pool_creation_with_cluster_ids(
     cluster: KindCluster,
     kubeconfig_path: Path,
     monkeypatch,
+    admin_headers,
 ) -> None:
     payload = deepcopy(payload)
     monkeypatch.setenv("ALWAYS_READ_CLUSTERS", "true")
@@ -107,7 +108,7 @@ async def test_resource_pool_creation_with_cluster_ids(
                 "session_ingress_annotations": {},
                 "session_tls_secret_name": "a-domain-name-tls",
             },
-            headers={"Authorization": 'Bearer {"is_admin": true}'},
+            headers=admin_headers,
         )
         assert res.status_code == 201, res.text
         payload["cluster_id"] = res.json["id"]
