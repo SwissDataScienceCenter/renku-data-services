@@ -77,5 +77,5 @@ class ScopeVerifier:
             )
         )
         if job is None or get_deposit_job_status(job).value.lower() != DepositStatus.in_progress.lower():
-            raise errors.ForbiddenError(detail=f"Failed to verify deposit job scope '{job}'.")
+            raise errors.ForbiddenError(detail=f"Failed to verify deposit job scope '{job_name}'.")
         return None
