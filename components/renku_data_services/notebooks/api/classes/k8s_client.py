@@ -189,9 +189,9 @@ class NotebookK8sClient(SecretClient):
         """Get a list of sessions that belong to a user."""
         session_filter = {self.__username_label: safe_username}
         if session_mode == SessionMode.interactive:
-            session_filter.update({"app.kubernetes.io/session-type": "Interactive"})
+            session_filter.update({"renku.io/session-type": str(SessionMode.interactive)})
         if session_mode == SessionMode.non_interactive:
-            session_filter.update({"app.kubernetes.io/session-type": "NonInteractive"})
+            session_filter.update({"renku.io/session-type": str(SessionMode.non_interactive)})
         sessions = [
             self.__session_type.model_validate(s.manifest)
             async for s in self.__client.list(
