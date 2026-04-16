@@ -1187,6 +1187,7 @@ class SessionRepository(SessionEnvironmentRepositoryProtocol):
             frontend=build_parameters.frontend_variant,
             git_repository_revision=git_repository_revision,
             context_dir=context_dir,
+            insecure_registries=self.builds_config.build_insecure_registries,
         )
 
         platform = models.Platform.linux_amd64
