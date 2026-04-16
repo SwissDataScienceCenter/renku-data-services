@@ -1229,10 +1229,10 @@ components:
           $ref: "#/components/schemas/K8sLabelList"
         node_affinities:
           $ref: "#/components/schemas/NodeAffinityList"
-        resource_available:
-          $ref: "#/components/schemas/ResourceAvailable"
-        resource_available_percentage:
-          $ref: "#/components/schemas/ResourceAvailablePercentage"
+        usage_available:
+          $ref: "#/components/schemas/UsageAvailable"
+        usage_available_percentage:
+          $ref: "#/components/schemas/UsageAvailablePercentage"
       required: ["cpu", "memory", "gpu", "max_storage", "name", "id", "default", "default_storage"]
       example:
         name: "resource class"
@@ -1701,13 +1701,13 @@ components:
       minimum: 0
       # Max value for int64 in postgres
       maximum: 9223372036854775807
-    ResourceAvailable:
+    UsageAvailable:
       type: number
       format: double
       description: Amount of a resource available (in hours)
       example: 3.141
       minimum: 0
-    ResourceAvailablePercentage:
+    UsageAvailablePercentage:
       type: number
       format: float
       description: Percentage of available resources based on quota

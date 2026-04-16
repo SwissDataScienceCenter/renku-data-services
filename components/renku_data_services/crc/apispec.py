@@ -799,13 +799,13 @@ class ResourceClassWithIdFiltered(BaseAPISpec):
         examples=[[{"key": "test-label-1", "required_during_scheduling": False}]],
         min_length=0,
     )
-    resource_available: Optional[float] = Field(
+    usage_available: Optional[float] = Field(
         None,
         description="Amount of a resource available (in hours)",
         examples=[3.141],
         ge=0.0,
     )
-    resource_available_percentage: Optional[float] = Field(
+    usage_available_percentage: Optional[float] = Field(
         None,
         description="Percentage of available resources based on quota",
         examples=[75.5],

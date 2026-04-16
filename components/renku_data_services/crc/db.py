@@ -28,7 +28,7 @@ from renku_data_services.base_models.core import ResetType
 from renku_data_services.crc import models
 from renku_data_services.crc import orm as schemas
 from renku_data_services.crc.core import (
-    calculate_available_resources,
+    calculate_available_usage,
     validate_resource_class_update,
     validate_resource_pool_update,
 )
@@ -315,13 +315,13 @@ class ResourcePoolRepository(_Base):
                 if self.resource_requests_repo:
                     updated_classes = []
                     for resource_class in rp_model.classes:
-                        resource_available, resource_available_percentage = await calculate_available_resources(
+                        usage_available, usage_available_percentage = await calculate_available_usage(
                             self.resource_requests_repo, rp.id, resource_class.id, resource_usage
                         )
                         updated_class = replace(
                             resource_class,
-                            resource_available=resource_available,
-                            resource_available_percentage=resource_available_percentage,
+                            usage_available=usage_available,
+                            usage_available_percentage=usage_available_percentage,
                         )
                         updated_classes.append(updated_class)
 
