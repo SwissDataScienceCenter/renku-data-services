@@ -1051,7 +1051,7 @@ async def start_session(
     logger.debug(f"Setting session labels: {labels}")
 
     session = AmaltheaSessionV1Alpha1(
-        metadata=Metadata(name=server_name, annotations=annotations),
+        metadata=Metadata(name=server_name, annotations=annotations, labels=labels),
         spec=AmaltheaSessionSpec(
             location=session_location,
             imagePullSecrets=[ImagePullSecret(name=image_secret.name, adopt=image_secret.adopt)]
