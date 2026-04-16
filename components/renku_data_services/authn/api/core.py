@@ -33,6 +33,7 @@ class ScopeVerifier:
         """Verify that the scope claim is valid.
 
         * For "session:{server_name}", check that the corresponding session is running
+        * For "deposit_job:{job_name}", check that the corresponding job is running
         """
         scopes = scope.split(" ")
         logger.info(f"Verifying scopes: {scopes}")
