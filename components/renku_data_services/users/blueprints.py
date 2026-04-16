@@ -44,9 +44,9 @@ class KCUsersBP(CustomBlueprint):
                     dict(
                         id=user.id,
                         username=user.namespace.path.first.value,
-                        email=user.email,
-                        first_name=user.first_name,
-                        last_name=user.last_name,
+                        email=user.email if user.email else None,
+                        first_name=user.first_name if user.first_name else None,
+                        last_name=user.last_name if user.last_name else None,
                     )
                     for user in users
                 ],
@@ -70,10 +70,9 @@ class KCUsersBP(CustomBlueprint):
                 dict(
                     id=user_info.id,
                     username=user_info.namespace.path.first.value,
-                    email=user_info.email,
-                    first_name=user_info.first_name,
-                    last_name=user_info.last_name,
-                    is_admin=user.is_admin,
+                    email=user_info.email if user_info.email else None,
+                    first_name=user_info.first_name if user_info.first_name else None,
+                    last_name=user_info.last_name if user_info.last_name else None,
                 ),
             )
 
@@ -106,9 +105,9 @@ class KCUsersBP(CustomBlueprint):
                 dict(
                     id=user_info.id,
                     username=user_info.namespace.path.first.value,
-                    email=user_info.email,
-                    first_name=user_info.first_name,
-                    last_name=user_info.last_name,
+                    email=user_info.email if user_info.email else None,
+                    first_name=user_info.first_name if user_info.first_name else None,
+                    last_name=user_info.last_name if user_info.last_name else None,
                 ),
             )
 
