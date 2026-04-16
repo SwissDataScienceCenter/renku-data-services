@@ -807,10 +807,10 @@ class DefaultSolrAdminClient(SolrAdminClient):
     async def create(self, core_name: str | None) -> None:
         """Create a core with the given `core_name` or the name provided in the config object."""
         core = core_name or self.config.core
-        data = {"create": {"name": core, "configSet": self.config.configset}}
+        data: dict[str, Any] = {"create": {"name": core, "configSet": self.config.configset}}
         if self.config.major_version == "10":
             await self.create_collection(core)
-            data = {"name": core}
+            data = data["create"]
         resp = await self.delegate.post("/api/cores", json=data)
         if not resp.is_success:
             raise SolrClientCreateCoreException(core, resp)
