@@ -984,7 +984,8 @@ async def create_deposit_upload(
         raise
 
 
-def _get_deposit_job_status(job: V1Job) -> models.DepositStatus:
+def get_deposit_job_status(job: V1Job) -> models.DepositStatus:
+    """Returns the job status."""
     if not isinstance(job.status, V1JobStatus):
         raise errors.ProgrammingError(
             message="Cannot get the status of a deposit job if the status property is fully missing."
@@ -1015,7 +1016,7 @@ async def update_deposit_status(
     dep_k8s_job = await job_client.get(deposit_job.to_meta(user_id=user.id, namespace=namespace))
     if dep_k8s_job is None or dep_k8s_job.status is None:
         return deposit_job
-    latest_status = _get_deposit_job_status(dep_k8s_job)
+    latest_status = get_deposit_job_status(dep_k8s_job)
     if latest_status != deposit_job.deposit.status:
         deposit_job = await dc_repo.update_deposit(
             user,

@@ -314,7 +314,9 @@ class DependencyManager:
         authz = Authz(config.authz_config)
         internal_authenticator = RenkuSelfAuthenticator.from_config(config=config.internal_authn_config)
         internal_token_mint = RenkuSelfTokenMint.from_config(config=config.internal_authn_config)
-        internal_scope_verifier = ScopeVerifier(k8s_client=config.nb_config.k8s_v2_client)
+        internal_scope_verifier = ScopeVerifier(
+            deposit_config=config.deposit_config, k8s_client=config.nb_config.k8s_v2_client, job_client=job_client
+        )
         search_updates_repo = SearchUpdatesRepo(session_maker=config.db.async_session_maker)
         metrics_repo = MetricsRepository(session_maker=config.db.async_session_maker)
         metrics = StagingMetricsService(enabled=config.posthog.enabled, metrics_repo=metrics_repo)
