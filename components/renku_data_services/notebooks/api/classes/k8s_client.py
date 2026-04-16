@@ -226,7 +226,7 @@ class NotebookK8sClient(SecretClient):
 
         cluster = await self.cluster_by_class_id(manifest.resource_class_id(), api_user)
 
-        manifest.metadata.labels[self.__username_label] = api_user.id
+        ### todo        manifest.metadata.labels[self.__username_label] = api_user.id
         session = await self.__client.create(
             K8sObject(
                 name=session_name,
