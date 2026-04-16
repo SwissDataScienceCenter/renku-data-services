@@ -1040,8 +1040,10 @@ async def start_session(
     launcher_env_variables = get_launcher_env_variables(launcher, launch_request)
     env.extend(launcher_env_variables)
 
-    labels = {"renku.io/safe-username": user.id}
-    labels["renku.io/session-type"] = str(launch_request.session_mode)
+    labels: dict[str, str] = {
+        "renku.io/safe-username": user.id,
+        "renku.io/session-type": str(launch_request.session_mode),
+    }
 
     if user.is_anonymous:
         labels["renku.io/anonymous-session"] = "true"
