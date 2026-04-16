@@ -7,7 +7,7 @@ spec:
   parameters:
     - name: platform-api-version
       description: The referenced version is the minimum version that all relevant buildpack implementations support.
-      default: "0.12"
+      default: "0.15"
     - name: run-image
       description: The image to use as the base for all session images built with this strategy
       default: "ghcr.io/swissdatasciencecenter/renku-frontend-buildpacks/base-image:0.1.0"
@@ -22,6 +22,8 @@ spec:
       image: $(params.builder-image)
       imagePullPolicy: IfNotPresent
       env:
+        - name: CNB_EXPERIMENTAL_MODE
+          value: "warn"
         - name: CNB_PLATFORM_API
           value: $(params.platform-api-version)
         - name: BP_RENKU_FRONTENDS
@@ -67,10 +69,57 @@ spec:
             fi
           done
 
-          /cnb/lifecycle/creator \
+          LAYERS_DIR=/layers
+          GENERATED_DIR="${LAYERS_DIR}/generated"
+
+          echo "> Running analyzer..."
+          /cnb/lifecycle/analyzer \
+            -run-image=${PARAM_RUN_IMAGE} \
+            ${PARAM_OUTPUT_IMAGE}
+
+          echo "> Running detector..."
+          /cnb/lifecycle/detector \
+            -app=${PARAM_SOURCE_CONTEXT}
+
+          echo "> Running restorer..."
+          /cnb/lifecycle/restorer
+
+          # Check if any extensions generated Dockerfiles
+          HAS_BUILD_EXT=false
+          HAS_RUN_EXT=false
+
+          if [ -d "${GENERATED_DIR}/build" ] && \
+             find "${GENERATED_DIR}/build" -name "Dockerfile" -print -quit | grep -q .; then
+            HAS_BUILD_EXT=true
+          fi
+
+          if [ -d "${GENERATED_DIR}/run" ] && \
+             find "${GENERATED_DIR}/run" -name "Dockerfile" -print -quit | grep -q .; then
+            HAS_RUN_EXT=true
+          fi
+
+          if [ "${HAS_BUILD_EXT}" == "true" ]; then
+            echo "> Extensions detected for build image. Running extender (build)..."
+            /cnb/lifecycle/extender \
+              -app=${PARAM_SOURCE_CONTEXT} \
+              -kind=build
+          else
+            echo "> No build extensions detected. Running builder..."
+            /cnb/lifecycle/builder \
+              -app=${PARAM_SOURCE_CONTEXT}
+          fi
+
+          if [ "${HAS_RUN_EXT}" == "true" ]; then
+            echo "> Extensions detected for run image. Running extender (run)..."
+            /cnb/lifecycle/extender \
+              -app=${PARAM_SOURCE_CONTEXT} \
+              -kind=run
+          fi
+
+          echo "> Running exporter..."
+          /cnb/lifecycle/exporter \
             -app=${PARAM_SOURCE_CONTEXT} \
             -report=/tmp/report.toml \
-            -run-image=${PARAM_RUN_IMAGE} \
             ${PARAM_OUTPUT_IMAGE}
       volumeMounts:
         - mountPath: /platform/env
