@@ -9,6 +9,7 @@ from sanic_ext import validate
 from ulid import ULID
 
 import renku_data_services.base_models as base_models
+from renku_data_services.app_config import logging
 from renku_data_services.base_api.auth import authenticate, only_admins, only_authenticated, validate_path_user_id
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
 from renku_data_services.base_api.misc import validate_query
@@ -19,6 +20,8 @@ from renku_data_services.secrets.models import Secret, SecretKind
 from renku_data_services.users import apispec, models
 from renku_data_services.users.core import validate_secret_patch, validate_unsaved_secret
 from renku_data_services.users.db import UserPreferencesRepository, UserRepo
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(kw_only=True)
@@ -97,6 +100,7 @@ class KCUsersBP(CustomBlueprint):
             user_info = await self.repo.get_or_create_user(requested_by=user, id=user_id)
             if not user_info:
                 raise errors.MissingResourceError(message=f"The user with ID {user_id} cannot be found.")
+            logger.info(f"user last_name: {user_info.last_name}")
             return validated_json(
                 apispec.UserWithId,
                 dict(
