@@ -70,6 +70,7 @@ class KCUsersBP(CustomBlueprint):
                     email=user_info.email if user_info.email else None,
                     first_name=user_info.first_name if user_info.first_name else None,
                     last_name=user_info.last_name if user_info.last_name else None,
+                    is_admin=user.is_admin,
                 ),
             )
 
