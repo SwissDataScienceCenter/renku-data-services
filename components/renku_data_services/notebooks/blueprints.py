@@ -11,6 +11,7 @@ from renku_data_services.app_config import logging
 from renku_data_services.authn.renku import RenkuSelfTokenMint
 from renku_data_services.base_api.auth import authenticate, authenticate_2
 from renku_data_services.base_api.blueprint import BlueprintFactoryResponse, CustomBlueprint
+from renku_data_services.base_api.misc import validate_query
 from renku_data_services.base_models import AnonymousAPIUser, APIUser, AuthenticatedAPIUser
 from renku_data_services.base_models.metrics import MetricsService
 from renku_data_services.connected_services.models import ConnectionStatus
@@ -31,6 +32,7 @@ from renku_data_services.notebooks.core_sessions import (
 )
 from renku_data_services.notebooks.data_sources import DataSourceRepository
 from renku_data_services.notebooks.image_check import ImageCheckRepository
+from renku_data_services.notebooks.models import SessionMode
 from renku_data_services.project.db import ProjectRepository, ProjectSessionSecretRepository
 from renku_data_services.repositories.db import GitRepositoriesRepository
 from renku_data_services.session.config import BuildsConfig
@@ -108,8 +110,16 @@ class NotebooksNewBP(CustomBlueprint):
         """Get all sessions for a user."""
 
         @authenticate(self.authenticator)
-        async def _handler(_: Request, user: AuthenticatedAPIUser | AnonymousAPIUser) -> HTTPResponse:
-            sessions = await self.nb_config.k8s_v2_client.list_sessions(user.id)
+        @validate_query(query=apispec.SessionsGetParametersQuery)
+        async def _handler(
+            _: Request, user: AuthenticatedAPIUser | AnonymousAPIUser, query: apispec.SessionsGetParametersQuery
+        ) -> HTTPResponse:
+            session_mode = (
+                SessionMode.non_interactive
+                if query.session_type == apispec.SessionType.non_interactive
+                else SessionMode.interactive
+            )
+            sessions = await self.nb_config.k8s_v2_client.list_sessions(user.id, session_mode)
             output: list[dict] = []
             for session in sessions:
                 output.append(session.as_apispec().model_dump(exclude_none=True, mode="json"))
