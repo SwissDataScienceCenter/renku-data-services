@@ -1111,16 +1111,16 @@ async def patch_session(
             )
         rp = await rp_repo.get_resource_pool_from_class(user, body.resource_class_id)
         rc = rp.get_resource_class(body.resource_class_id)
-        if not rc:
-            raise errors.MissingResourceError(
-                message=f"The resource class you requested with ID {body.resource_class_id} does not exist"
-            )
     # Resource class is not being changed but we still need to get the resource pool and class for patching
     # in case they changed since the session was created
     else:
         rp = await rp_repo.get_resource_pool_from_class(user, session.resource_class_id())
         rc = rp.get_resource_class(session.resource_class_id())
 
+    if not rc:
+        raise errors.MissingResourceError(
+            message=f"The resource class you requested with ID {body.resource_class_id} does not exist"
+        )
     # If the session is being hibernated we do not need to patch anything else that is
     # not specifically called for in the request body, we can refresh things when the user resumes.
     if is_getting_hibernated:
@@ -1161,7 +1161,7 @@ async def patch_session(
                 "resource_pool_id": str(rp.id) or "",
                 "resource_class_name": f"{rp.name}.{rc.name}",
                 "session_id": session_id,
-            }
+            },
         )
 
     patch.spec.culling = get_culling_patch(user, rp, nb_config, body.lastInteraction)
