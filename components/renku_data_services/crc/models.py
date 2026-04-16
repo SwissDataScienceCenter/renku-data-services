@@ -110,8 +110,8 @@ class ResourceClass(ResourcesCompareMixin):
     node_affinities: list[NodeAffinity] = field(default_factory=list)
     tolerations: list[str] = field(default_factory=list)
     quota: str | None = None
-    resource_available: float | None = None
-    resource_available_percentage: float | None = None
+    usage_available: float | None = None
+    usage_available_percentage: float | None = None
 
 
 @dataclass(frozen=True, eq=True, kw_only=True)

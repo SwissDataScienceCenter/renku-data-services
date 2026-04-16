@@ -1656,7 +1656,7 @@ async def test_resource_class_empty_patch_noop(
 async def test_resource_pools_quota_with_partial_usage(
     sanic_client, admin_headers, user_headers, regular_user, valid_resource_pool_payload, cluster, app_manager_instance
 ) -> None:
-    """Test resource pools endpoint returns correct resource_usage and resource_available."""
+    """Test resource pools endpoint returns correct resource_usage and usage_available."""
     payload = valid_resource_pool_payload.copy()
     payload["classes"] = [
         {
@@ -1723,9 +1723,9 @@ async def test_resource_pools_quota_with_partial_usage(
 
     resource_class = resource_pool["classes"][0]
 
-    # resource_available should be 3 hours which is 75 percent of the total 4 hours available
-    assert resource_class["resource_available"] == 3.0
-    assert resource_class["resource_available_percentage"] == 75.0
+    # usage_available should be 3 hours which is 75 percent of the total 4 hours available
+    assert resource_class["usage_available"] == 3.0
+    assert resource_class["usage_available_percentage"] == 75.0
 
 
 @pytest.mark.asyncio
@@ -1739,7 +1739,7 @@ async def test_resource_pools_quota_with_no_usage(
     cluster: KindCluster,
     app_manager_instance,
 ) -> None:
-    """Test resource pools endpoint returns correct resource_available when user has no usage."""
+    """Test resource pools endpoint returns correct usage_available when user has no usage."""
     from renku_data_services.resource_usage.db import ResourceRequestsRepo
     from renku_data_services.resource_usage.model import Credit, ResourceClassCost, ResourcePoolLimits
 
@@ -1793,10 +1793,10 @@ async def test_resource_pools_quota_with_no_usage(
 
     resource_class = resource_pool["classes"][0]
 
-    # resource_available should be full quota: 200/50 = 4.0 hours
-    assert resource_class["resource_available"] == 4.0
-    # resource_available_percentage should be 100%
-    assert resource_class["resource_available_percentage"] == 100.0
+    # usage_available should be full quota: 200/50 = 4.0 hours
+    assert resource_class["usage_available"] == 4.0
+    # usage_available_percentage should be 100%
+    assert resource_class["usage_available_percentage"] == 100.0
 
 
 @pytest.mark.asyncio
@@ -1876,10 +1876,10 @@ async def test_resource_pools_quota_exceeded(
 
     resource_class = resource_pool["classes"][0]
 
-    # resource_available should be 0 (quota exceeded)
-    assert resource_class["resource_available"] == 0.0
-    # resource_available_percentage should be 0%
-    assert resource_class["resource_available_percentage"] == 0.0
+    # usage_available should be 0 (quota exceeded)
+    assert resource_class["usage_available"] == 0.0
+    # usage_available_percentage should be 0%
+    assert resource_class["usage_available_percentage"] == 0.0
 
 
 @pytest.mark.asyncio
@@ -1893,7 +1893,7 @@ async def test_resource_pools_quota_with_no_limits(
     cluster: KindCluster,
     app_manager_instance,
 ) -> None:
-    """Test resource pools endpoint returns null for resource_available when no limits are set."""
+    """Test resource pools endpoint returns null for usage_available when no limits are set."""
     payload = valid_resource_pool_payload.copy()
     payload["classes"] = [
         {
@@ -1951,10 +1951,10 @@ async def test_resource_pools_quota_with_no_limits(
 
     resource_class = resource_pool["classes"][0]
 
-    # resource_available should not exist in the response since it's None
-    assert "resource_available" not in resource_class
-    # resource_available_percentage should not exist in the response since it's None
-    assert "resource_available_percentage" not in resource_class
+    # usage_available should not exist in the response since it's None
+    assert "usage_available" not in resource_class
+    # usage_available_percentage should not exist in the response since it's None
+    assert "usage_available_percentage" not in resource_class
 
 
 @pytest.mark.asyncio
@@ -1968,7 +1968,7 @@ async def test_resource_pools_quota_with_no_costs(
     cluster: KindCluster,
     app_manager_instance,
 ) -> None:
-    """Test resource pools endpoint returns null for resource_available when no costs are defined."""
+    """Test resource pools endpoint returns null for usage_available when no costs are defined."""
     payload = valid_resource_pool_payload.copy()
     payload["classes"] = [
         {
@@ -2030,7 +2030,7 @@ async def test_resource_pools_quota_with_no_costs(
 
     resource_class = resource_pool["classes"][0]
 
-    # resource_available should not exist in the response since it's None
-    assert "resource_available" not in resource_class
-    # resource_available_percentage should not exist in the response since it's None
-    assert "resource_available_percentage" not in resource_class
+    # usage_available should not exist in the response since it's None
+    assert "usage_available" not in resource_class
+    # usage_available_percentage should not exist in the response since it's None
+    assert "usage_available_percentage" not in resource_class

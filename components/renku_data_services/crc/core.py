@@ -631,7 +631,7 @@ def __validate_runtime_platform(body: apispec.RuntimePlatform | None) -> models.
     return models.RuntimePlatform(platform_str)
 
 
-async def calculate_available_resources(
+async def calculate_available_usage(
     resource_requests_repo: ResourceRequestsRepo,
     resource_pool_id: int,
     resource_class_id: int,
