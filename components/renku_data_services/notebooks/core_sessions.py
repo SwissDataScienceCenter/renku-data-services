@@ -703,9 +703,7 @@ def get_remote_secret(
     secret_data = {
         "RSC_AUTH_KIND": "renku_v2",
         "RSC_AUTH_TOKEN_URI": remote_provider.access_token_url,
-        "RSC_AUTH_RENKU_TOKEN_URI": "https://"
-        + config.sessions.ingress.host
-        + "/api/data/internal/authentication/token",
+        "RSC_AUTH_RENKU_TOKEN_URI": f"https://{config.sessions.ingress.host}/api/data/internal/authentication/token",
         "RSC_AUTH_RENKU_ACCESS_TOKEN": internal_access_token,
         "RSC_AUTH_RENKU_REFRESH_TOKEN": internal_refresh_token,
     }
