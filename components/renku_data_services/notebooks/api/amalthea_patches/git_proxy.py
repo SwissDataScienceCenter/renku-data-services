@@ -63,10 +63,9 @@ async def main_container(
         client.V1EnvVar(name=f"{prefix}RENKU_AUTHENTICATION_VERSION", value="v2"),
         client.V1EnvVar(name=f"{prefix}RENKU_ACCESS_TOKEN", value=internal_access_token),
         client.V1EnvVar(name=f"{prefix}RENKU_REFRESH_TOKEN", value=internal_refresh_token),
-        # TODO: can we use a sanic method to derive this URL?
         client.V1EnvVar(
             name=f"{prefix}RENKU_TOKEN_URL",
-            value="https://" + config.sessions.ingress.host + "/api/data/internal/authentication/token",
+            value=f"https://{config.sessions.ingress.host}/api/data/internal/authentication/token",
         ),
         client.V1EnvVar(
             name=f"{prefix}REFRESH_CHECK_PERIOD_SECONDS",
