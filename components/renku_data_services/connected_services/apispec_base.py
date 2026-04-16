@@ -36,3 +36,8 @@ class CallbackParams(BaseAPISpec):
     model_config = ConfigDict(extra="ignore")
 
     state: str = Field(default="")
+    error: str | None = Field(default=None)
+    error_description: str | None = Field(default=None)
+    error_uri: str | None = Field(default=None)
+    code: str | None = Field(default=None)
+    iss: str | None = Field(default=None)

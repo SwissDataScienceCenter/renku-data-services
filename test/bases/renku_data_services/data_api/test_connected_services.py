@@ -8,6 +8,8 @@ import pytest_asyncio
 from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 
+from renku_data_services.connected_services.apispec_base import CallbackParams
+from renku_data_services.connected_services.blueprints import OAuth2ClientsBP
 from renku_data_services.data_api.app import register_all_handlers
 from renku_data_services.data_api.dependencies import DependencyManager
 from test.bases.renku_data_services.data_api.utils import create_dummy_oauth_client
@@ -429,6 +431,62 @@ async def test_callback_oauth2_authorization_flow_error_preserves_next_url_query
     assert redirected_query.get("error_description", [None])[0] == "User canceled"
     assert redirected_query.get("error_uri", [None])[0] == "https://example.org/oauth/errors/access_denied"
     assert redirected_query.get("state", [None])[0] == state
+
+
+@pytest.mark.asyncio
+async def test_callback_oauth2_authorization_flow_error_redirects_with_all_optional_params(
+    oauth2_test_client: SanicASGITestClient, user_headers, create_oauth2_provider
+):
+    provider = await create_oauth2_provider("provider_1")
+    provider_id = provider["id"]
+
+    next_url = "https://example.org/my-ui/callback"
+    qs = f"next_url={quote(next_url)}"
+
+    _, res = await oauth2_test_client.get(
+        f"/api/data/oauth2/providers/{provider_id}/authorize?{qs}", headers=user_headers
+    )
+    assert res.status_code == 302, res.text
+    state = parse_qs(urlparse(res.headers["location"]).query).get("state", [None])[0]
+    assert state
+
+    callback_qs = (
+        f"state={quote(state)}"
+        "&error=access_denied"
+        f"&error_description={quote('User canceled')}"
+        f"&error_uri={quote('https://example.org/oauth/errors/access_denied')}"
+        "&code=auth-code-123"
+        "&iss=https%3A%2F%2Fissuer.example.org"
+    )
+    _, res = await oauth2_test_client.get(f"/api/data/oauth2/callback?{callback_qs}")
+
+    assert res.status_code == 302, res.text
+    redirected_query = parse_qs(urlparse(res.headers["location"]).query)
+    assert redirected_query.get("state", [None])[0] == state
+    assert redirected_query.get("error", [None])[0] == "access_denied"
+    assert redirected_query.get("error_description", [None])[0] == "User canceled"
+    assert redirected_query.get("error_uri", [None])[0] == "https://example.org/oauth/errors/access_denied"
+    assert redirected_query.get("code", [None])[0] == "auth-code-123"
+    assert redirected_query.get("iss", [None])[0] == "https://issuer.example.org"
+
+
+def test_append_query_params_returns_original_url_when_no_allowed_values() -> None:
+    next_url = "https://example.org/my-ui/callback?existing=1"
+    params = CallbackParams(state="")
+
+    result = OAuth2ClientsBP._append_query_params(next_url, params)
+
+    assert result == next_url
+
+
+@pytest.mark.asyncio
+async def test_callback_oauth2_authorization_flow_error_without_pending_connection_forbidden(
+    oauth2_test_client: SanicASGITestClient,
+):
+    callback_qs = "state=missing-state&error=access_denied&error_description=No+pending+connection"
+    _, res = await oauth2_test_client.get(f"/api/data/oauth2/callback?{callback_qs}")
+
+    assert res.status_code == 403, res.text
 
 
 @pytest.mark.asyncio
