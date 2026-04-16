@@ -145,7 +145,7 @@ class ResourceClassORM(BaseORM):
     def dump(
         self,
         matching_criteria: models.ResourceClass | models.UnsavedResourceClass | None = None,
-        resource_available: float | None = None,
+        usage_available: float | None = None,
     ) -> models.ResourceClass:
         """Create a resource class model from the ORM object."""
         matching: bool | None = None
@@ -169,7 +169,7 @@ class ResourceClassORM(BaseORM):
             tolerations=[toleration.key for toleration in self.tolerations],
             matching=matching,
             quota=self.resource_pool.quota if self.resource_pool else None,
-            resource_available=resource_available,
+            usage_available=usage_available,
         )
 
 
