@@ -183,18 +183,22 @@ class NotebookK8sClient(SecretClient):
 
         return await self.__client.cluster_by_id(cluster_id)
 
-    async def list_sessions(self, safe_username: str) -> list[AmaltheaSessionV1Alpha1]:
+    async def list_sessions(
+        self, safe_username: str, session_mode: SessionMode | None
+    ) -> list[AmaltheaSessionV1Alpha1]:
         """Get a list of sessions that belong to a user."""
+        session_filter = {self.__username_label: safe_username}
+        if session_mode == SessionMode.interactive:
+            session_filter.update({"app.kubernetes.io/session-type": "Interactive"})
+        if session_mode == SessionMode.non_interactive:
+            session_filter.update({"app.kubernetes.io/session-type": "NonInteractive"})
         sessions = [
             self.__session_type.model_validate(s.manifest)
             async for s in self.__client.list(
                 K8sObjectFilter(
                     gvk=self.__session_gvk,
                     user_id=safe_username,
-                    label_selector={
-                        self.__username_label: safe_username,
-                        "app.kubernetes.io/session-type": "Interactive",
-                    },
+                    label_selector=session_filter,
                 )
             )
         ]
