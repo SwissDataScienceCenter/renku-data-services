@@ -20,8 +20,6 @@ from renku_data_services.users import apispec, models
 from renku_data_services.users.core import validate_secret_patch, validate_unsaved_secret
 from renku_data_services.users.db import UserPreferencesRepository, UserRepo
 
-logger = logging.getLogger(__name__)
-
 
 @dataclass(kw_only=True)
 class KCUsersBP(CustomBlueprint):
