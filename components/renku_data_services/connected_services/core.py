@@ -124,26 +124,20 @@ async def handle_oauth2_token_refresh(
         1. Check that `body.refresh_token` is a valid internal refresh token
         2. Send back the refreshed OAuth 2.0 access token and a new internal refresh token
     """
-    user: base_models.AuthenticatedAPIUser | None = None
-    parsed_renku_refresh_token: dict[str, Any] | None = None
-    try:
-        parsed_renku_refresh_token = await internal_authenticator.verify_refresh_token(refresh_token=body.refresh_token)
-        if parsed_renku_refresh_token is None:
-            raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
-        user = base_models.AuthenticatedAPIUser(
-            is_admin=False,
-            id=parsed_renku_refresh_token["sub"],
-            access_token="",  # nosec B106
-            full_name=parsed_renku_refresh_token.get("name"),
-            first_name=parsed_renku_refresh_token.get("given_name"),
-            last_name=parsed_renku_refresh_token.get("family_name"),
-            email=parsed_renku_refresh_token["email"],
-            access_token_expires_at=None,
-            roles=[],
-        )
-    except Exception as err:
-        logger.error(f"Got authenticate error: {err.__class__}.")
-        raise
+    parsed_renku_refresh_token = await internal_authenticator.verify_refresh_token(refresh_token=body.refresh_token)
+    if parsed_renku_refresh_token is None:
+        raise errors.UnauthorizedError(message="You have to be authenticated to perform this operation.")
+    user = base_models.AuthenticatedAPIUser(
+        is_admin=False,
+        id=parsed_renku_refresh_token["sub"],
+        access_token="",  # nosec B106
+        full_name=parsed_renku_refresh_token.get("name"),
+        first_name=parsed_renku_refresh_token.get("given_name"),
+        last_name=parsed_renku_refresh_token.get("family_name"),
+        email=parsed_renku_refresh_token["email"],
+        access_token_expires_at=None,
+        roles=[],
+    )
 
     scope = str(parsed_renku_refresh_token.get("scope", ""))
     scopes = scope.split(" ")

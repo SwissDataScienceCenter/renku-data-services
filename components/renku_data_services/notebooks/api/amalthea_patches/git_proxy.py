@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
+from typing import Final
 
 from kubernetes import client
 
@@ -12,6 +13,9 @@ from renku_data_services.base_models.core import AnonymousAPIUser, Authenticated
 from renku_data_services.notebooks.api.amalthea_patches.utils import get_certificates_volume_mounts
 from renku_data_services.notebooks.api.classes.repository import GitProvider, Repository
 from renku_data_services.notebooks.config import NotebooksConfig
+
+REFRESH_CHECK_PERIOD_SECONDS: Final[int] = 60
+"""The refresh period used for keeping the Renku refresh token alive."""
 
 
 async def main_container(
@@ -66,7 +70,7 @@ async def main_container(
         ),
         client.V1EnvVar(
             name=f"{prefix}REFRESH_CHECK_PERIOD_SECONDS",
-            value="60",
+            value=f"{REFRESH_CHECK_PERIOD_SECONDS}",
         ),
     ]
     container = client.V1Container(
