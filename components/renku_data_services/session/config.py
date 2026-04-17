@@ -54,6 +54,10 @@ class BuildsConfig:
         build_run_image = os.environ.get("BUILD_RUN_IMAGE")
         build_strategy_name = os.environ.get("BUILD_STRATEGY_NAME")
         build_insecure_registries = os.environ.get("BUILD_INSECURE_REGISTRIES", "")
+        if build_insecure_registries:
+            logger.warn(
+                f"Trusting insecure registries, this is not recommended in production: {build_insecure_registries}"
+            )
         push_secret_name = os.environ.get("BUILD_PUSH_SECRET_NAME")
         push_private_secret_name = os.environ.get("BUILD_PUSH_PRIVATE_SECRET_NAME")
         buildrun_retention_after_failed_seconds = int(os.environ.get("BUILD_RUN_RETENTION_AFTER_FAILED_SECONDS") or "0")
