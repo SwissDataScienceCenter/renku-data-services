@@ -50,7 +50,7 @@ def _pool_updates(pool_id: int, *, public: bool) -> list[RelationshipUpdate]:
                     operation=RelationshipUpdate.OPERATION_TOUCH,
                     relationship=Relationship(
                         resource=pool_ref,
-                        relation="public_user",
+                        relation="public_viewer",
                         subject=SubjectReference(object=ObjectReference(object_type=obj_type, object_id="*")),
                     ),
                 )
@@ -428,12 +428,12 @@ async def test_resource_pool_base_access(
     await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=_pool_updates(POOL_ID, public=public_pool)))
 
     # Admin can always use and write
-    assert await authz.has_permission(admin_user, ResourceType.resource_pool, POOL_ID, Scope.USE)
+    assert await authz.has_permission(admin_user, ResourceType.resource_pool, POOL_ID, Scope.READ)
     assert await authz.has_permission(admin_user, ResourceType.resource_pool, POOL_ID, Scope.WRITE)
 
     # Regular user and anon: use depends on public, write is always denied
-    assert public_pool == await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.USE)
-    assert public_pool == await authz.has_permission(anon_user, ResourceType.resource_pool, POOL_ID, Scope.USE)
+    assert public_pool == await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.READ)
+    assert public_pool == await authz.has_permission(anon_user, ResourceType.resource_pool, POOL_ID, Scope.READ)
     assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.WRITE)
     assert not await authz.has_permission(anon_user, ResourceType.resource_pool, POOL_ID, Scope.WRITE)
 
@@ -445,15 +445,15 @@ async def test_resource_pool_member_access(
 ) -> None:
     """An explicit member can use a pool regardless of visibility; non-members still follow public rules."""
     authz = app_manager_instance.authz
-    updates = _pool_updates(POOL_ID, public=public_pool) + [_rel(POOL_ID, _Relation.member.value, regular_user1.id)]
+    updates = _pool_updates(POOL_ID, public=public_pool) + [_rel(POOL_ID, _Relation.viewer.value, regular_user1.id)]
     await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=updates))
 
     # Member can always use
-    assert await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.USE)
+    assert await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.READ)
     # Member still cannot write
     assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.WRITE)
     # Non-member follows public rules
-    assert public_pool == await authz.has_permission(regular_user2, ResourceType.resource_pool, POOL_ID, Scope.USE)
+    assert public_pool == await authz.has_permission(regular_user2, ResourceType.resource_pool, POOL_ID, Scope.READ)
 
 
 @pytest.mark.asyncio
@@ -466,10 +466,10 @@ async def test_resource_pool_prohibited_blocks_access(
     authz = app_manager_instance.authz
     updates = _pool_updates(POOL_ID, public=public_pool) + [_rel(POOL_ID, _Relation.prohibited.value, regular_user1.id)]
     if is_member:
-        updates.append(_rel(POOL_ID, _Relation.member.value, regular_user1.id))
+        updates.append(_rel(POOL_ID, _Relation.viewer.value, regular_user1.id))
     await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=updates))
 
-    assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.USE)
+    assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.READ)
 
 
 @pytest.mark.asyncio
@@ -481,7 +481,7 @@ async def test_resource_pool_admin_bypasses_prohibited(
     updates = _pool_updates(POOL_ID, public=True) + [_rel(POOL_ID, _Relation.prohibited.value, admin_user.id)]
     await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=updates))
 
-    assert await authz.has_permission(admin_user, ResourceType.resource_pool, POOL_ID, Scope.USE)
+    assert await authz.has_permission(admin_user, ResourceType.resource_pool, POOL_ID, Scope.READ)
 
 
 @pytest.mark.asyncio
@@ -490,19 +490,19 @@ async def test_resource_pool_add_remove_member(app_manager_instance: DependencyM
     authz = app_manager_instance.authz
     await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=_pool_updates(POOL_ID, public=False)))
 
-    assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.USE)
+    assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.READ)
 
     await authz.client.WriteRelationships(
-        WriteRelationshipsRequest(updates=[_rel(POOL_ID, _Relation.member.value, regular_user1.id)])
+        WriteRelationshipsRequest(updates=[_rel(POOL_ID, _Relation.viewer.value, regular_user1.id)])
     )
-    assert await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.USE)
+    assert await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.READ)
 
     await authz.client.WriteRelationships(
         WriteRelationshipsRequest(
-            updates=[_rel(POOL_ID, _Relation.member.value, regular_user1.id, op=RelationshipUpdate.OPERATION_DELETE)]
+            updates=[_rel(POOL_ID, _Relation.viewer.value, regular_user1.id, op=RelationshipUpdate.OPERATION_DELETE)]
         )
     )
-    assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.USE)
+    assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.READ)
 
 
 @pytest.mark.asyncio
@@ -511,12 +511,12 @@ async def test_resource_pool_add_remove_prohibited(app_manager_instance: Depende
     authz = app_manager_instance.authz
     await authz.client.WriteRelationships(WriteRelationshipsRequest(updates=_pool_updates(POOL_ID, public=True)))
 
-    assert await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.USE)
+    assert await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.READ)
 
     await authz.client.WriteRelationships(
         WriteRelationshipsRequest(updates=[_rel(POOL_ID, _Relation.prohibited.value, regular_user1.id)])
     )
-    assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.USE)
+    assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.READ)
 
     await authz.client.WriteRelationships(
         WriteRelationshipsRequest(
@@ -525,7 +525,7 @@ async def test_resource_pool_add_remove_prohibited(app_manager_instance: Depende
             ]
         )
     )
-    assert await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.USE)
+    assert await authz.has_permission(regular_user1, ResourceType.resource_pool, POOL_ID, Scope.READ)
 
 
 @pytest.mark.asyncio
@@ -538,11 +538,11 @@ async def test_resource_pool_isolation(app_manager_instance: DependencyManager, 
             updates=_pool_updates(pool_a, public=False)
             + _pool_updates(pool_b, public=True)
             + [
-                _rel(pool_a, _Relation.member.value, regular_user1.id),
+                _rel(pool_a, _Relation.viewer.value, regular_user1.id),
                 _rel(pool_b, _Relation.prohibited.value, regular_user1.id),
             ]
         )
     )
 
-    assert await authz.has_permission(regular_user1, ResourceType.resource_pool, pool_a, Scope.USE)
-    assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, pool_b, Scope.USE)
+    assert await authz.has_permission(regular_user1, ResourceType.resource_pool, pool_a, Scope.READ)
+    assert not await authz.has_permission(regular_user1, ResourceType.resource_pool, pool_b, Scope.READ)

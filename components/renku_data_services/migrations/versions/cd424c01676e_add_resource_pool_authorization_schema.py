@@ -86,18 +86,18 @@ def upgrade() -> None:
                 [
                     RelationshipUpdate(
                         operation=RelationshipUpdate.OPERATION_TOUCH,
-                        relationship=Relationship(resource=pool_ref, relation="public_user", subject=user_wildcard),
+                        relationship=Relationship(resource=pool_ref, relation="public_viewer", subject=user_wildcard),
                     ),
                     RelationshipUpdate(
                         operation=RelationshipUpdate.OPERATION_TOUCH,
-                        relationship=Relationship(resource=pool_ref, relation="public_user", subject=anon_wildcard),
+                        relationship=Relationship(resource=pool_ref, relation="public_viewer", subject=anon_wildcard),
                     ),
                 ]
             )
 
-    # Migrate existing pool members via the resource_pools_users join table
+    # Migrate existing pool viewers via the resource_pools_users join table
     # keycloak_id is the user identifier used in Authzed
-    members = conn.execute(
+    viewers = conn.execute(
         text("""
         SELECT rpu.resource_pool_id, u.keycloak_id
         FROM resource_pools.resource_pools_users rpu
@@ -105,19 +105,19 @@ def upgrade() -> None:
     """)
     ).fetchall()
 
-    for row in members:
+    for row in viewers:
         pool_ref = _AuthzConverter.resource_pool(int(row[0]))
         user_ref = SubjectReference(object=ObjectReference(object_type=ResourceType.user, object_id=row[1]))
         updates.append(
             RelationshipUpdate(
                 operation=RelationshipUpdate.OPERATION_TOUCH,
-                relationship=Relationship(resource=pool_ref, relation=_Relation.member.value, subject=user_ref),
+                relationship=Relationship(resource=pool_ref, relation=_Relation.viewer.value, subject=user_ref),
             )
         )
 
     # Users with no_default_access must be prohibited from the default pool.
     # The default pool is public, so without a "prohibited" relation these
-    # users would still pass the public_user wildcard check.
+    # users would still pass the public_viewer wildcard check.
     if default_pool_id is not None:
         no_access_users = conn.execute(
             text("SELECT keycloak_id FROM resource_pools.users WHERE no_default_access = true")
@@ -151,7 +151,7 @@ def upgrade() -> None:
             )
             raise e
 
-    logger.info(f"Migrated {len(pools)} resource pools and {len(members)} memberships to Authzed")
+    logger.info(f"Migrated {len(pools)} resource pools and {len(viewers)} memberships to Authzed")
 
 
 def downgrade() -> None:

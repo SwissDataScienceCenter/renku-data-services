@@ -520,49 +520,49 @@ def v9_schema() -> SpiceDBSchema:
         relationships=[
             "platform:renku#admin@user:admin1",
             # pool1: public
-            "resource_pool:pool1#public_user@user:*",
-            "resource_pool:pool1#public_user@anonymous_user:*",
+            "resource_pool:pool1#public_viewer@user:*",
+            "resource_pool:pool1#public_viewer@anonymous_user:*",
             "resource_pool:pool1#prohibited@user:user2",
             "resource_pool:pool1#resource_pool_platform@platform:renku",
-            # pool2: private, only user3 is a member
-            "resource_pool:pool2#member@user:user3",
+            # pool2: private, only user3 is a viewer
+            "resource_pool:pool2#viewer@user:user3",
             "resource_pool:pool2#resource_pool_platform@platform:renku",
             "resource_pool:pool2#prohibited@user:user2",
         ],
         assertions={
             "assertTrue": [
                 # pool1 public: prove the pool is public
-                "resource_pool:pool1#use@user:user1",
-                "resource_pool:pool1#use@anonymous_user:anon1",
-                "resource_pool:pool1#use@user:admin1",
+                "resource_pool:pool1#read@user:user1",
+                "resource_pool:pool1#read@anonymous_user:anon1",
+                "resource_pool:pool1#read@user:admin1",
                 # pool2: pool is only usable by select users
-                "resource_pool:pool2#use@user:user3",
-                "resource_pool:pool2#use@user:admin1",
+                "resource_pool:pool2#read@user:user3",
+                "resource_pool:pool2#read@user:admin1",
                 # admin can write
                 "resource_pool:pool1#write@user:admin1",
             ],
             "assertFalse": [
                 # prohibited user blocked
-                "resource_pool:pool1#use@user:user2",
-                "resource_pool:pool2#use@user:user2",
-                # non-member or anon can't use private pool
-                "resource_pool:pool2#use@user:user1",
-                "resource_pool:pool2#use@anonymous_user:anon1",
-                # member and random can't write
+                "resource_pool:pool1#read@user:user2",
+                "resource_pool:pool2#read@user:user2",
+                # non-viewer or anon can't use private pool
+                "resource_pool:pool2#read@user:user1",
+                "resource_pool:pool2#read@anonymous_user:anon1",
+                # viewer and random can't write
                 "resource_pool:pool2#write@user:user3",
                 "resource_pool:pool1#write@user:user1",
             ],
         },
         validation={
             # pool1: (public) list all resolution paths
-            "resource_pool:pool1#use": [
-                "[user:* - {user:user2}] is <resource_pool:pool1#public_user>",
-                "[anonymous_user:*] is <resource_pool:pool1#public_user>",
+            "resource_pool:pool1#read": [
+                "[user:* - {user:user2}] is <resource_pool:pool1#public_viewer>",
+                "[anonymous_user:*] is <resource_pool:pool1#public_viewer>",
                 "[user:admin1] is <platform:renku#admin>",
             ],
-            # pool2: (private) only member + admin, no wildcards
-            "resource_pool:pool2#use": [
-                "[user:user3] is <resource_pool:pool2#member>",
+            # pool2: (private) only viewer + admin, no wildcards
+            "resource_pool:pool2#read": [
+                "[user:user3] is <resource_pool:pool2#viewer>",
                 "[user:admin1] is <platform:renku#admin>",
             ],
             "resource_pool:pool1#write": [

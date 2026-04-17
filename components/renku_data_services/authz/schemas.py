@@ -846,10 +846,10 @@ definition data_connector {
 
 definition resource_pool {
     relation resource_pool_platform: platform
-    relation member: user
+    relation viewer: user
     relation prohibited: user
-    relation public_user: user:* | anonymous_user:*
-    permission use = (member + public_user - prohibited) + resource_pool_platform->is_admin
+    relation public_viewer: user:* | anonymous_user:*
+    permission read = (viewer + public_viewer - prohibited) + resource_pool_platform->is_admin
     permission write = resource_pool_platform->is_admin
 }"""
 """Adds the resource_pool definition for Authzed authorization."""

@@ -50,7 +50,6 @@ class Scope(Enum):
     """Types of permissions - i.e. scope."""
 
     READ = "read"
-    USE = "use"
     WRITE = "write"
     DELETE = "delete"
     CHANGE_MEMBERSHIP = "change_membership"

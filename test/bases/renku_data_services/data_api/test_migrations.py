@@ -930,9 +930,9 @@ async def test_migration_cd424c01676e_resource_pool_authz(
 
     assert _count_seeded_relationships(relationships, "resource_pool_platform", seeded) == len(seeded["pool_ids"])
 
-    assert _count_seeded_user_relationships(relationships, "member", seeded) == seeded["membership_count"]
+    assert _count_seeded_user_relationships(relationships, "viewer", seeded) == seeded["membership_count"]
 
-    assert _count_seeded_relationships(relationships, "public_user", seeded) == 2 * len(seeded["public_pool_ids"])
+    assert _count_seeded_relationships(relationships, "public_viewer", seeded) == 2 * len(seeded["public_pool_ids"])
 
     prohibited = [
         row
