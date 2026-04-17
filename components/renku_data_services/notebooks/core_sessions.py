@@ -576,11 +576,10 @@ def _get_non_interactive_culling(
     resource_pool: ResourcePool,
     nb_config: NotebooksConfig,
 ) -> Culling:
-    hibernation_threshold: timedelta = timedelta(hours=1)
-    if resource_pool.hibernation_threshold:
-        hibernation_threshold = timedelta(seconds=resource_pool.hibernation_threshold)
-
-    max_age: timedelta = timedelta(hours=5)  ## TODO this will be a new field on resource pool
+    # currently hard code max job runtime (=max_age) and maximum time a
+    # finished job stays around for logs (hibernation_threshold)
+    hibernation_threshold: timedelta = timedelta(hours=24)
+    max_age: timedelta = timedelta(hours=8)  ## TODO this will be a new field on resource pool
 
     return Culling(
         maxAge=max_age,
