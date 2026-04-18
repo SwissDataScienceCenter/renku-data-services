@@ -102,9 +102,10 @@ async def test_session_metrics_are_stored(
             "resource_class_id": resource_class_id,
         },
     )
-    assert res.status_code == 201
+    assert res.status_code == 201, f"Expected 201, got {res.status_code}. Response: {res.json}"
     session_data = res.json
-    session_id = session_data["id"]
+    # The session response uses 'name' as the identifier, not 'id'
+    session_id = session_data["name"]
 
     events = [e async for e in app_manager.metrics_repo.get_unprocessed_metrics()]
     events.sort(key=lambda e: e.timestamp)
