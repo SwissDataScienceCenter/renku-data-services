@@ -806,6 +806,6 @@ class DefaultSolrAdminClient(SolrAdminClient):
         """Reload a core with the given `core_name` or the name provided in the config object."""
         core = core_name or self.config.core
         return await self.delegate.post(
-            f"/v2/cores/{core}/reload",
+            f"/api/cores/{core}/reload",
             headers={"Content-Type": "application/json"},
         )
