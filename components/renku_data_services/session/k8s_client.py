@@ -221,6 +221,7 @@ class ShipwrightClient:
                             crs.ParamValue(name="frontend", value=params.frontend),
                             crs.ParamValue(name="run-image", value=params.run_image),
                             crs.ParamValue(name="builder-image", value=params.builder_image),
+                            crs.ParamValue(name="insecure-registries", value=params.insecure_registries),
                         ],
                         output=crs.BuildOutput(
                             image=params.output_image,
