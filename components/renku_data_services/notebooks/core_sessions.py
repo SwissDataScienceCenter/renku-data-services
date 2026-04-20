@@ -1086,6 +1086,7 @@ async def patch_session(
     image_check_repo: ImageCheckRepository,
     data_source_repo: DataSourceRepository,
     metrics: MetricsService,
+    builds_config: BuildsConfig,
 ) -> AmaltheaSessionV1Alpha1:
     """Patch an Amalthea session."""
     session = await nb_config.k8s_v2_client.get_session(session_id, user.id)
@@ -1237,6 +1238,7 @@ async def patch_session(
         image_check_repo=image_check_repo,
         user=user,
         internal_gitlab_user=internal_gitlab_user,
+        builds_config=builds_config,
     )
     if image_pull_secret:
         session_extras = session_extras.concat(SessionExtraResources(secrets=[image_pull_secret]))

@@ -167,6 +167,7 @@ class NotebooksNewBP(CustomBlueprint):
                 metrics=self.metrics,
                 image_check_repo=self.image_check_repo,
                 data_source_repo=self.data_source_repo,
+                builds_config=self.builds_config,
             )
             return json(new_session.as_apispec().model_dump(exclude_none=True, mode="json"))
 
