@@ -659,7 +659,11 @@ async def get_image_pull_secret(
     if v2_secret:
         return v2_secret
 
-    if builds_config.enabled and image.startswith(builds_config.build_output_private_image_prefix):
+    if (
+        builds_config.enabled
+        and builds_config.build_output_private_image_prefix is not None
+        and image.startswith(builds_config.build_output_private_image_prefix)
+    ):
         v2_secret = ExtraSecret(
             V1Secret(
                 metadata=V1ObjectMeta(name=builds_config.pull_private_image_secret_name),
