@@ -482,7 +482,9 @@ def test_append_query_params_returns_original_url_when_no_allowed_values() -> No
 @pytest.mark.asyncio
 async def test_callback_oauth2_authorization_flow_error_without_pending_connection_forbidden(
     oauth2_test_client: SanicASGITestClient,
+    sanic_client: SanicASGITestClient,
 ):
+    _ = sanic_client
     callback_qs = "state=missing-state&error=access_denied&error_description=No+pending+connection"
     _, res = await oauth2_test_client.get(f"/api/data/oauth2/callback?{callback_qs}")
 
