@@ -575,6 +575,138 @@ def v9_schema() -> SpiceDBSchema:
     )
 
 
+@pytest.fixture
+def v10_schema() -> SpiceDBSchema:
+    return SpiceDBSchema(
+        schemas._v10,
+        relationships=[
+            "platform:renku#admin@user:admin1",
+            # pool1: public
+            "resource_pool:pool1#public_viewer@user:*",
+            "resource_pool:pool1#public_viewer@anonymous_user:*",
+            "resource_pool:pool1#prohibited@user:user2",
+            "resource_pool:pool1#resource_pool_platform@platform:renku",
+            # pool2: private, only user3 is a direct viewer
+            "resource_pool:pool2#viewer@user:user3",
+            "resource_pool:pool2#resource_pool_platform@platform:renku",
+            "resource_pool:pool2#prohibited@user:user2",
+            # pool3: private, accessible via a group
+            "resource_pool:pool3#resource_pool_platform@platform:renku",
+            "resource_pool:pool3#group_viewer@group:group1",
+            "resource_pool:pool3#prohibited@user:user2",
+            # group1 members: user4 (owner), user5 (editor), user6 (viewer)
+            # user2 is also a viewer of the group, but prohibited on the pool
+            "group:group1#owner@user:user4",
+            "group:group1#editor@user:user5",
+            "group:group1#viewer@user:user6",
+            "group:group1#viewer@user:user2",
+            # pool4: private, accessible via a project
+            "resource_pool:pool4#resource_pool_platform@platform:renku",
+            "resource_pool:pool4#project_viewer@project:project1",
+            "resource_pool:pool4#prohibited@user:user2",
+            # project1 members: user7 (owner), user8 (editor), user9 (viewer)
+            # user2 is also a viewer on the project, but prohibited on the pool
+            "project:project1#owner@user:user7",
+            "project:project1#editor@user:user8",
+            "project:project1#viewer@user:user9",
+            "project:project1#viewer@user:user2",
+            # project1 is in a namespace where user10 is the owner; note that
+            # namespace-inherited membership must NOT grant pool access because
+            # resource_pool uses direct_member (not exclusive_member).
+            "user_namespace:ns1#owner@user:user10",
+            "project:project1#project_namespace@user_namespace:ns1",
+        ],
+        assertions={
+            "assertTrue": [
+                # pool1 public: prove the pool is public
+                "resource_pool:pool1#read@user:user1",
+                "resource_pool:pool1#read@anonymous_user:anon1",
+                "resource_pool:pool1#read@user:admin1",
+                # pool2: pool is only usable by select users
+                "resource_pool:pool2#read@user:user3",
+                "resource_pool:pool2#read@user:admin1",
+                # pool3: group members get access via group_viewer->direct_member
+                "resource_pool:pool3#read@user:user4",
+                "resource_pool:pool3#read@user:user5",
+                "resource_pool:pool3#read@user:user6",
+                "resource_pool:pool3#read@user:admin1",
+                # pool4: project members get access via project_viewer->direct_member
+                "resource_pool:pool4#read@user:user7",
+                "resource_pool:pool4#read@user:user8",
+                "resource_pool:pool4#read@user:user9",
+                "resource_pool:pool4#read@user:admin1",
+                # admin can write
+                "resource_pool:pool1#write@user:admin1",
+                "resource_pool:pool3#write@user:admin1",
+                "resource_pool:pool4#write@user:admin1",
+            ],
+            "assertFalse": [
+                # prohibited user blocked on all pools
+                "resource_pool:pool1#read@user:user2",
+                "resource_pool:pool2#read@user:user2",
+                "resource_pool:pool3#read@user:user2",
+                "resource_pool:pool4#read@user:user2",
+                # non-viewer or anon can't use private pool
+                "resource_pool:pool2#read@user:user1",
+                "resource_pool:pool2#read@anonymous_user:anon1",
+                # non-group-member can't access pool3
+                "resource_pool:pool3#read@user:user1",
+                "resource_pool:pool3#read@anonymous_user:anon1",
+                # non-project-member can't access pool4
+                "resource_pool:pool4#read@user:user1",
+                "resource_pool:pool4#read@anonymous_user:anon1",
+                # namespace owner is not a direct_member of the project,
+                # so they do NOT get pool4 access
+                "resource_pool:pool4#read@user:user10",
+                # viewer and random can't write
+                "resource_pool:pool2#write@user:user3",
+                "resource_pool:pool1#write@user:user1",
+                "resource_pool:pool3#write@user:user4",
+                "resource_pool:pool4#write@user:user7",
+            ],
+        },
+        validation={
+            # pool1: (public) list all resolution paths
+            "resource_pool:pool1#read": [
+                "[user:* - {user:user2}] is <resource_pool:pool1#public_viewer>",
+                "[anonymous_user:*] is <resource_pool:pool1#public_viewer>",
+                "[user:admin1] is <platform:renku#admin>",
+            ],
+            # pool2: (private) only viewer + admin, no wildcards
+            "resource_pool:pool2#read": [
+                "[user:user3] is <resource_pool:pool2#viewer>",
+                "[user:admin1] is <platform:renku#admin>",
+            ],
+            # pool3: (private) access via group_viewer->direct_member + admin
+            "resource_pool:pool3#read": [
+                "[user:user4] is <group:group1#owner>",
+                "[user:user5] is <group:group1#editor>",
+                "[user:user6] is <group:group1#viewer>",
+                "[user:admin1] is <platform:renku#admin>",
+            ],
+            # pool4: (private) access via project_viewer->direct_member + admin
+            "resource_pool:pool4#read": [
+                "[user:user7] is <project:project1#owner>",
+                "[user:user8] is <project:project1#editor>",
+                "[user:user9] is <project:project1#viewer>",
+                "[user:admin1] is <platform:renku#admin>",
+            ],
+            "resource_pool:pool1#write": [
+                "[user:admin1] is <platform:renku#admin>",
+            ],
+            "resource_pool:pool2#write": [
+                "[user:admin1] is <platform:renku#admin>",
+            ],
+            "resource_pool:pool3#write": [
+                "[user:admin1] is <platform:renku#admin>",
+            ],
+            "resource_pool:pool4#write": [
+                "[user:admin1] is <platform:renku#admin>",
+            ],
+        },
+    )
+
+
 def test_v1_schema(tmp_path: Path, v1_schema: SpiceDBSchema) -> None:
     validation_file = tmp_path / "validate.yaml"
     v1_schema.to_yaml(validation_file)
@@ -608,4 +740,10 @@ def test_v7_schema(tmp_path: Path, v7_schema: SpiceDBSchema) -> None:
 def test_v9_schema(tmp_path: Path, v9_schema: SpiceDBSchema) -> None:
     validation_file = tmp_path / "validate.yaml"
     v9_schema.to_yaml(validation_file)
+    check_call(["zed", "validate", validation_file.as_uri()])
+
+
+def test_v10_schema(tmp_path: Path, v10_schema: SpiceDBSchema) -> None:
+    validation_file = tmp_path / "validate.yaml"
+    v10_schema.to_yaml(validation_file)
     check_call(["zed", "validate", validation_file.as_uri()])
